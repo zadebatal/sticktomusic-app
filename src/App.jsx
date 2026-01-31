@@ -1,0 +1,2409 @@
+import React, { useState } from 'react';
+
+// Late API Configuration
+const LATE_API_BASE = 'https://getlate.dev/api/v1';
+const LATE_API_KEY = 'sk_935df1a3c3948565f7134328d45b5ad2dff3234d4b3209a2c7a32d408dbd2236';
+
+// Late Account ID Mapping (handle -> { tiktok: id, instagram: id })
+const LATE_ACCOUNT_IDS = {
+  '@sarahs.ipodnano': { tiktok: '697b3cac77637c5c857cc26b', instagram: '697b3d2477637c5c857cc272' },
+  '@margiela.mommy': { tiktok: '697b3dbb77637c5c857cc279', instagram: '697b3e2a77637c5c857cc284' },
+  '@yumabestfriend': { tiktok: '697b3ea177637c5c857cc2c0', instagram: '697b448877637c5c857cc458' },
+  '@hedislimanerickowens': { tiktok: '697b3f8f77637c5c857cc332', instagram: '697b400977637c5c857cc35d' },
+  '@princessvamp2016': { tiktok: '697b40e677637c5c857cc37a', instagram: '697b413c77637c5c857cc384' },
+  '@2016iscalling': { tiktok: '697b41dc77637c5c857cc38a', instagram: '697b421c77637c5c857cc38b' },
+  '@xxshadowskiesxx': { tiktok: '697b42b377637c5c857cc3ad', instagram: '697b42f277637c5c857cc3c9' },
+  '@neonphoebe': { tiktok: '697b43be77637c5c857cc41c', instagram: '697b442777637c5c857cc447' }
+};
+
+// Late API Functions
+const lateApi = {
+  async fetchAccounts() {
+    try {
+      const response = await fetch(`${LATE_API_BASE}/accounts`, {
+        headers: { 'Authorization': `Bearer ${LATE_API_KEY}` }
+      });
+      if (!response.ok) throw new Error(`Failed: ${response.status}`);
+      return { success: true, accounts: await response.json() };
+    } catch (error) {
+      console.error('Late API error:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  async schedulePost({ platforms, caption, videoUrl, scheduledFor }) {
+    try {
+      // Format matches Late's expected structure - both platforms in one call
+      const payload = {
+        content: caption,
+        mediaItems: [{ type: 'video', url: videoUrl }],
+        platforms: platforms.map(p => ({
+          platform: p.platform,
+          accountId: p.accountId,
+          customContent: caption,
+          scheduledFor
+        })),
+        scheduledFor,
+        timezone: 'America/Los_Angeles'
+      };
+
+      console.log('Sending to Late:', JSON.stringify(payload, null, 2));
+
+      const response = await fetch(`${LATE_API_BASE}/posts`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LATE_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || err.message || `Failed: ${response.status}`);
+      }
+      return { success: true, post: await response.json() };
+    } catch (error) {
+      console.error('Late API error:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  async fetchScheduledPosts() {
+    try {
+      const response = await fetch(`${LATE_API_BASE}/posts`, {
+        headers: { 'Authorization': `Bearer ${LATE_API_KEY}` }
+      });
+      if (!response.ok) throw new Error(`Failed: ${response.status}`);
+      return { success: true, posts: await response.json() };
+    } catch (error) {
+      console.error('Late API error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+};
+
+const StickToMusic = () => {
+  const [currentPage, setCurrentPage] = useState('home');
+  const [openFaq, setOpenFaq] = useState(null);
+
+  // Dashboard state
+  const [dateRange, setDateRange] = useState({ start: '2025-01-01', end: '2025-01-30' });
+  const [dashboardTab, setDashboardTab] = useState('overview');
+
+  // Operator dashboard state
+  const [operatorTab, setOperatorTab] = useState('artists');
+  const [selectedArtist, setSelectedArtist] = useState('all');
+  const [selectedPlatform, setSelectedPlatform] = useState('all');
+  const [contentArtist, setContentArtist] = useState('all');
+  const [contentStatus, setContentStatus] = useState('all');
+
+  // Batch Schedule modal state
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [batchForm, setBatchForm] = useState({
+    artist: 'Boon',
+    category: 'Fashion',  // Must select specific category - videos are aesthetic-specific
+    artistVideos: '',     // Videos featuring the artist's music (~30%)
+    adjacentVideos: '',   // Videos featuring adjacent artists' music (~70%)
+    weekStart: '',        // Start date
+    numDays: 7,           // How many days to schedule
+    step: 1               // 1 = setup, 2 = preview
+  });
+  const [generatedSchedule, setGeneratedSchedule] = useState([]);
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState(null);
+  const [lateAccounts, setLateAccounts] = useState([]);
+  const [showLateAccounts, setShowLateAccounts] = useState(false);
+
+  // Fetch Late accounts on demand
+  const fetchLateAccounts = async () => {
+    setSyncing(true);
+    setSyncStatus('Fetching Late accounts...');
+    const result = await lateApi.fetchAccounts();
+    setSyncing(false);
+    if (result.success) {
+      const accounts = Array.isArray(result.accounts) ? result.accounts : [];
+      setLateAccounts(accounts);
+      setShowLateAccounts(true);
+      setSyncStatus(`Found ${accounts.length} accounts`);
+    } else {
+      setSyncStatus(`Error: ${result.error}`);
+    }
+    setTimeout(() => setSyncStatus(null), 3000);
+  };
+
+  // Intake form state
+  const [formStep, setFormStep] = useState(0);
+  const [formData, setFormData] = useState({
+    artistName: '',
+    email: '',
+    phone: '',
+    managerContact: '',
+    spotify: '',
+    instagram: '',
+    tiktok: '',
+    youtube: '',
+    otherPlatforms: '',
+    projectType: '',
+    releaseDate: '',
+    genre: '',
+    projectDescription: '',
+    aestheticWords: '',
+    vibes: [],
+    otherVibes: '',
+    adjacentArtists: '',
+    ageRanges: [],
+    idealListener: '',
+    contentAssets: [],
+    contentFolder: '',
+    pageTier: '',
+    cdTier: '',
+    spotifyForArtists: '',
+    duration: '',
+    anythingElse: ''
+  });
+  const [submitted, setSubmitted] = useState(false);
+
+  const faqs = [
+    {
+      q: "How is this different from paying for views?",
+      a: "Services that blast your song through random accounts are buying you numbers, not fans. We build ecosystems—pages with real audiences who engage because the content fits their taste."
+    },
+    {
+      q: "Will I see which accounts are posting my music?",
+      a: "We keep our methodology under the hood. You'll get aggregate performance data and monthly reports, but the world pages operate independently. This is what makes them feel organic."
+    },
+    {
+      q: "How long until I see results?",
+      a: "World pages compound over time. Most artists start seeing traction in 4-6 weeks, with significant growth by month 3."
+    },
+    {
+      q: "What do I need to provide?",
+      a: "Your music, any existing visual assets, and 15 minutes to fill out our intake form. We handle everything else."
+    },
+    {
+      q: "Can I cancel anytime?",
+      a: "Yes. No long-term contracts. We earn your business every month."
+    }
+  ];
+
+  const tiers = [
+    {
+      name: "Starter",
+      pages: 5,
+      price: 800,
+      description: "Testing the waters",
+      detail: "Perfect for indie artists or anyone wanting to test the world page approach before committing to a larger campaign.",
+      features: ["5 world pages", "TikTok, Instagram, Facebook, YouTube", "Monthly performance report"]
+    },
+    {
+      name: "Standard",
+      pages: 15,
+      price: 1500,
+      description: "Ready to scale",
+      detail: "For artists serious about building cultural presence. Enough coverage to hit multiple niches simultaneously.",
+      features: ["15 world pages", "TikTok, Instagram, Facebook, YouTube", "Monthly performance report"]
+    },
+    {
+      name: "Scale",
+      pages: 30,
+      price: 2500,
+      description: "Major campaigns",
+      detail: "Album rollouts, tour promotion, or artists who want comprehensive coverage. Serious infrastructure.",
+      features: ["30 world pages", "TikTok, Instagram, Facebook, YouTube", "Monthly performance report"]
+    },
+    {
+      name: "Sensation",
+      pages: 50,
+      price: 3500,
+      description: "Maximum coverage",
+      detail: "The full ecosystem. 50 world pages means your music is everywhere your target fans spend time.",
+      features: ["50 world pages", "TikTok, Instagram, Facebook, YouTube", "Monthly performance report"]
+    }
+  ];
+
+  const cdTiers = [
+    {
+      name: "CD Lite",
+      price: 2500,
+      description: "Content partnership",
+      features: ["Main account content creation", "Content strategy & planning"]
+    },
+    {
+      name: "CD Standard",
+      price: 5000,
+      description: "Full creative direction",
+      features: [
+        "Everything in CD Lite",
+        "Rollout planning & campaign calendar",
+        "Visual direction & mood boards",
+        "Asset briefs (covers, visuals, videos)",
+        "Social content templates",
+        "Analytics & performance insights"
+      ]
+    }
+  ];
+
+  const vibeOptions = [
+    'Dark / Moody', 'Ethereal / Dreamy', 'High Fashion', 'Street / Urban',
+    'Y2K / Nostalgic', 'Minimalist / Clean', 'Cinematic', 'Anime / Manga',
+    'Nature / Organic', 'EDM / Rave', 'Romantic / Soft', 'Chaotic / Glitchy'
+  ];
+
+  const assetOptions = [
+    'Music videos', 'Behind-the-scenes footage', 'Live performance clips',
+    'Lyric videos', 'Photo/video shoots', 'Visualizers', 'Interview clips',
+    'Studio sessions', 'None yet'
+  ];
+
+  // Dashboard data (mock - would come from API)
+  const artistData = {
+    name: "Boon",
+    tier: "Scale",
+    cdTier: "CD Lite",
+    activeSince: "November 2024",
+    totalPages: 30
+  };
+
+  const dashboardMetrics = {
+    reach: {
+      totalViews: 2847000,
+      totalImpressions: 4120000,
+      uniqueReach: 1890000,
+      change: 23.4
+    },
+    engagement: {
+      likes: 284700,
+      comments: 18420,
+      shares: 42300,
+      saves: 67800,
+      engagementRate: 4.2,
+      change: 18.7
+    },
+    platforms: {
+      tiktok: { views: 1840000, engagement: 89400 },
+      instagram: { views: 620000, engagement: 34200 },
+      facebook: { views: 287000, engagement: 12100 },
+      youtube: { views: 100000, engagement: 8400 }
+    }
+  };
+
+  const monthlyReports = [
+    { month: "January 2025", status: "current", highlights: "Best performing month yet" },
+    { month: "December 2024", status: "available", highlights: "Holiday content surge" },
+    { month: "November 2024", status: "available", highlights: "Campaign launch" }
+  ];
+
+  // Operator dashboard data
+  const operatorArtists = [
+    {
+      id: 1,
+      name: "Boon",
+      tier: "Scale",
+      cdTier: "CD Lite",
+      status: "active",
+      activeSince: "Nov 2024",
+      totalPages: 8,
+      metrics: { views: 2847000, engagement: 413220, rate: 4.2 }
+    },
+    {
+      id: 2,
+      name: "Camylio",
+      tier: "Standard",
+      cdTier: null,
+      status: "active",
+      activeSince: "Dec 2024",
+      totalPages: 4,
+      metrics: { views: 1240000, engagement: 186000, rate: 3.8 }
+    }
+  ];
+
+  const worldPages = [
+    // Boon - 8 real accounts
+    { id: 1, handle: "@sarahs.ipodnano", platform: "tiktok", artist: "Boon", niche: "Fashion", followers: 42000, views: 890000, status: "active", postTime: "14:00" },
+    { id: 2, handle: "@sarahs.ipodnano", platform: "instagram", artist: "Boon", niche: "Fashion", followers: 38000, views: 340000, status: "active", postTime: "14:00" },
+    { id: 3, handle: "@margiela.mommy", platform: "tiktok", artist: "Boon", niche: "Fashion", followers: 67000, views: 1200000, status: "active", postTime: "15:00" },
+    { id: 4, handle: "@margiela.mommy", platform: "instagram", artist: "Boon", niche: "Fashion", followers: 53000, views: 980000, status: "active", postTime: "15:00" },
+    { id: 5, handle: "@yumabestfriend", platform: "tiktok", artist: "Boon", niche: "EDM", followers: 38000, views: 620000, status: "active", postTime: "16:00" },
+    { id: 6, handle: "@yumabestfriend", platform: "instagram", artist: "Boon", niche: "EDM", followers: 24000, views: 290000, status: "active", postTime: "16:00" },
+    { id: 7, handle: "@hedislimanerickowens", platform: "tiktok", artist: "Boon", niche: "Runway", followers: 71000, views: 1450000, status: "active", postTime: "17:00" },
+    { id: 8, handle: "@hedislimanerickowens", platform: "instagram", artist: "Boon", niche: "Runway", followers: 45000, views: 870000, status: "active", postTime: "17:00" },
+    { id: 9, handle: "@princessvamp2016", platform: "tiktok", artist: "Boon", niche: "Fashion", followers: 31000, views: 410000, status: "active", postTime: "18:00" },
+    { id: 10, handle: "@princessvamp2016", platform: "instagram", artist: "Boon", niche: "Fashion", followers: 28000, views: 380000, status: "active", postTime: "18:00" },
+    { id: 11, handle: "@2016iscalling", platform: "tiktok", artist: "Boon", niche: "Fashion", followers: 58000, views: 1100000, status: "active", postTime: "19:00" },
+    { id: 12, handle: "@2016iscalling", platform: "instagram", artist: "Boon", niche: "Fashion", followers: 44000, views: 720000, status: "active", postTime: "19:00" },
+    { id: 13, handle: "@xxshadowskiesxx", platform: "tiktok", artist: "Boon", niche: "EDM", followers: 89000, views: 2100000, status: "active", postTime: "20:00" },
+    { id: 14, handle: "@xxshadowskiesxx", platform: "instagram", artist: "Boon", niche: "EDM", followers: 62000, views: 1400000, status: "active", postTime: "20:00" },
+    { id: 15, handle: "@neonphoebe", platform: "tiktok", artist: "Boon", niche: "Fashion", followers: 112000, views: 3400000, status: "active", postTime: "21:00" },
+    { id: 16, handle: "@neonphoebe", platform: "instagram", artist: "Boon", niche: "Fashion", followers: 78000, views: 1800000, status: "active", postTime: "21:00" },
+    // Camylio - 4 pages
+    { id: 17, handle: "@midnightfeels", platform: "tiktok", artist: "Camylio", niche: "Romantic/Soft", followers: 34000, views: 560000, status: "active" },
+    { id: 18, handle: "@ethereal.edits", platform: "instagram", artist: "Camylio", niche: "Ethereal/Dreamy", followers: 19000, views: 180000, status: "active" },
+    { id: 19, handle: "@softglow.mp4", platform: "tiktok", artist: "Camylio", niche: "Romantic/Soft", followers: 27000, views: 340000, status: "active" },
+    { id: 20, handle: "@dreamstate.visuals", platform: "tiktok", artist: "Camylio", niche: "Ethereal/Dreamy", followers: 41000, views: 520000, status: "active" },
+  ];
+
+  // Content Banks - hashtags and captions per aesthetic category
+  const [contentBanks, setContentBanks] = useState({
+    Fashion: {
+      hashtags: {
+        always: ['#fashion', '#style', '#aesthetic'],
+        pool: ['#ootd', '#archive', '#vibes', '#mood', '#runway', '#designer', '#vintage', '#y2k', '#grunge', '#minimalist', '#streetwear', '#haute']
+      },
+      captions: {
+        always: [],
+        pool: ['mood', 'vibe', 'forever', 'dreaming', '✨', 'archive', 'aesthetic', 'core', 'obsessed', 'iconic', 'serving', 'the blueprint']
+      }
+    },
+    EDM: {
+      hashtags: {
+        always: ['#edm', '#music', '#electronic'],
+        pool: ['#rave', '#bass', '#dubstep', '#house', '#techno', '#festival', '#dj', '#beats', '#wub', '#plur', '#underground']
+      },
+      captions: {
+        always: [],
+        pool: ['wub', 'wub wub', '<3', 'dancedancedance', 'bass drop', 'feel it', '🖤', 'lost in sound', 'the drop', 'vibrations']
+      }
+    },
+    Runway: {
+      hashtags: {
+        always: ['#runway', '#fashion', '#couture'],
+        pool: ['#highfashion', '#model', '#designer', '#fashionweek', '#avantgarde', '#editorial', '#vogue', '#luxury', '#catwalk', '#style']
+      },
+      captions: {
+        always: [],
+        pool: ['walk', 'serve', 'iconic', 'the moment', 'couture', 'editorial', 'pretty', 'elegance', 'grace', 'timeless']
+      }
+    },
+    'Romantic/Soft': {
+      hashtags: {
+        always: ['#aesthetic', '#dreamy', '#soft'],
+        pool: ['#romantic', '#ethereal', '#gentle', '#pastel', '#love', '#tender', '#serene', '#delicate', '#whimsical']
+      },
+      captions: {
+        always: [],
+        pool: ['dreaming', 'soft', 'gentle', '🤍', 'floating', 'whisper', 'tender', 'in bloom', 'softly', 'daydream']
+      }
+    },
+    'Ethereal/Dreamy': {
+      hashtags: {
+        always: ['#ethereal', '#dreamy', '#aesthetic'],
+        pool: ['#celestial', '#mystical', '#fairycore', '#angelic', '#heavenly', '#magical', '#otherworldly', '#fantasy']
+      },
+      captions: {
+        always: [],
+        pool: ['floating', 'celestial', 'otherworldly', '✧', 'dreamscape', 'beyond', 'transcend', 'ethereal', 'magic']
+      }
+    }
+  });
+
+  // Helper function to generate hashtags and caption for a post
+  const generatePostContent = (category, platform) => {
+    const bank = contentBanks[category];
+    if (!bank) return { hashtags: '', caption: '' };
+
+    // Get always-use hashtags
+    const alwaysHashtags = bank.hashtags.always || [];
+
+    // Pick 3-5 random hashtags from pool
+    const poolHashtags = [...(bank.hashtags.pool || [])];
+    const randomCount = Math.floor(Math.random() * 3) + 3; // 3-5 random
+    const selectedRandom = [];
+    for (let i = 0; i < randomCount && poolHashtags.length > 0; i++) {
+      const idx = Math.floor(Math.random() * poolHashtags.length);
+      selectedRandom.push(poolHashtags.splice(idx, 1)[0]);
+    }
+
+    // Combine hashtags (platform-specific limits)
+    const allHashtags = [...alwaysHashtags, ...selectedRandom];
+    const maxHashtags = platform === 'tiktok' ? 5 : 10; // TikTok likes fewer
+    const finalHashtags = allHashtags.slice(0, maxHashtags).join(' ');
+
+    // Pick random caption from pool
+    const captions = bank.captions.pool || [];
+    const caption = captions.length > 0
+      ? captions[Math.floor(Math.random() * captions.length)]
+      : '';
+
+    return { hashtags: finalHashtags, caption };
+  };
+
+  const contentQueue = [
+    // Boon - Jan 31 posts
+    { id: 1, artist: "Boon", page: "@sarahs.ipodnano", platform: "tiktok", type: "Video", song: "Late", caption: "4:3, winter mood ✨", scheduledFor: "2026-01-31 14:00", status: "scheduled" },
+    { id: 2, artist: "Boon", page: "@sarahs.ipodnano", platform: "instagram", type: "Reel", song: "Late", caption: "4:3, winter mood ✨", scheduledFor: "2026-01-31 14:00", status: "scheduled" },
+    { id: 3, artist: "Boon", page: "@margiela.mommy", platform: "tiktok", type: "Video", song: "Late", caption: "we're forever.", scheduledFor: "2026-01-31 15:00", status: "scheduled" },
+    { id: 4, artist: "Boon", page: "@margiela.mommy", platform: "instagram", type: "Reel", song: "Late", caption: "we're forever.", scheduledFor: "2026-01-31 15:00", status: "scheduled" },
+    { id: 5, artist: "Boon", page: "@yumabestfriend", platform: "tiktok", type: "Video", song: "Late", caption: "wub 🖤", scheduledFor: "2026-01-31 16:00", status: "scheduled" },
+    { id: 6, artist: "Boon", page: "@yumabestfriend", platform: "instagram", type: "Reel", song: "Late", caption: "wub 🖤", scheduledFor: "2026-01-31 16:00", status: "scheduled" },
+    { id: 7, artist: "Boon", page: "@hedislimanerickowens", platform: "tiktok", type: "Video", song: "Late", caption: "electroclash clean girl", scheduledFor: "2026-01-31 17:00", status: "scheduled" },
+    { id: 8, artist: "Boon", page: "@hedislimanerickowens", platform: "instagram", type: "Reel", song: "Late", caption: "electroclash clean girl", scheduledFor: "2026-01-31 17:00", status: "scheduled" },
+    { id: 9, artist: "Boon", page: "@princessvamp2016", platform: "tiktok", type: "Video", song: "Late", caption: "mood", scheduledFor: "2026-01-31 18:00", status: "scheduled" },
+    { id: 10, artist: "Boon", page: "@princessvamp2016", platform: "instagram", type: "Reel", song: "Late", caption: "mood", scheduledFor: "2026-01-31 18:00", status: "scheduled" },
+    { id: 11, artist: "Boon", page: "@2016iscalling", platform: "tiktok", type: "Video", song: "Late", caption: "archive", scheduledFor: "2026-01-31 19:00", status: "scheduled" },
+    { id: 12, artist: "Boon", page: "@2016iscalling", platform: "instagram", type: "Reel", song: "Late", caption: "archive", scheduledFor: "2026-01-31 19:00", status: "scheduled" },
+    { id: 13, artist: "Boon", page: "@xxshadowskiesxx", platform: "tiktok", type: "Video", song: "Late", caption: "dancedancedance <3", scheduledFor: "2026-01-31 20:00", status: "scheduled" },
+    { id: 14, artist: "Boon", page: "@xxshadowskiesxx", platform: "instagram", type: "Reel", song: "Late", caption: "dancedancedance <3", scheduledFor: "2026-01-31 20:00", status: "scheduled" },
+    { id: 15, artist: "Boon", page: "@neonphoebe", platform: "tiktok", type: "Video", song: "Late", caption: "vibe ✨", scheduledFor: "2026-01-31 21:00", status: "scheduled" },
+    { id: 16, artist: "Boon", page: "@neonphoebe", platform: "instagram", type: "Reel", song: "Late", caption: "vibe ✨", scheduledFor: "2026-01-31 21:00", status: "scheduled" },
+    // Feb 1 posts
+    { id: 17, artist: "Boon", page: "@sarahs.ipodnano", platform: "tiktok", type: "Video", song: "Late", caption: "aesthetic", scheduledFor: "2026-02-01 14:00", status: "scheduled" },
+    { id: 18, artist: "Boon", page: "@sarahs.ipodnano", platform: "instagram", type: "Reel", song: "Late", caption: "aesthetic", scheduledFor: "2026-02-01 14:00", status: "scheduled" },
+    { id: 19, artist: "Boon", page: "@margiela.mommy", platform: "tiktok", type: "Video", song: "Late", caption: "forever", scheduledFor: "2026-02-01 15:00", status: "scheduled" },
+    { id: 20, artist: "Boon", page: "@margiela.mommy", platform: "instagram", type: "Reel", song: "Late", caption: "forever", scheduledFor: "2026-02-01 15:00", status: "scheduled" },
+    { id: 21, artist: "Boon", page: "@yumabestfriend", platform: "tiktok", type: "Video", song: "Late", caption: "wub wub", scheduledFor: "2026-02-01 16:00", status: "scheduled" },
+    { id: 22, artist: "Boon", page: "@yumabestfriend", platform: "instagram", type: "Reel", song: "Late", caption: "wub wub", scheduledFor: "2026-02-01 16:00", status: "scheduled" },
+    { id: 23, artist: "Boon", page: "@hedislimanerickowens", platform: "tiktok", type: "Video", song: "Late", caption: "pretty", scheduledFor: "2026-02-01 17:00", status: "scheduled" },
+    { id: 24, artist: "Boon", page: "@hedislimanerickowens", platform: "instagram", type: "Reel", song: "Late", caption: "pretty", scheduledFor: "2026-02-01 17:00", status: "scheduled" },
+    { id: 25, artist: "Boon", page: "@princessvamp2016", platform: "tiktok", type: "Video", song: "Late", caption: "dreaming", scheduledFor: "2026-02-01 18:00", status: "scheduled" },
+    { id: 26, artist: "Boon", page: "@princessvamp2016", platform: "instagram", type: "Reel", song: "Late", caption: "dreaming", scheduledFor: "2026-02-01 18:00", status: "scheduled" },
+    { id: 27, artist: "Boon", page: "@2016iscalling", platform: "tiktok", type: "Video", song: "Late", caption: "core", scheduledFor: "2026-02-01 19:00", status: "scheduled" },
+    { id: 28, artist: "Boon", page: "@2016iscalling", platform: "instagram", type: "Reel", song: "Late", caption: "core", scheduledFor: "2026-02-01 19:00", status: "scheduled" },
+    { id: 29, artist: "Boon", page: "@xxshadowskiesxx", platform: "tiktok", type: "Video", song: "Late", caption: "<3", scheduledFor: "2026-02-01 20:00", status: "scheduled" },
+    { id: 30, artist: "Boon", page: "@xxshadowskiesxx", platform: "instagram", type: "Reel", song: "Late", caption: "<3", scheduledFor: "2026-02-01 20:00", status: "scheduled" },
+    { id: 31, artist: "Boon", page: "@neonphoebe", platform: "tiktok", type: "Video", song: "Late", caption: "inspo", scheduledFor: "2026-02-01 21:00", status: "scheduled" },
+    { id: 32, artist: "Boon", page: "@neonphoebe", platform: "instagram", type: "Reel", song: "Late", caption: "inspo", scheduledFor: "2026-02-01 21:00", status: "scheduled" },
+    // Camylio
+    { id: 33, artist: "Camylio", page: "@midnightfeels", platform: "tiktok", type: "Video", song: "Soft Landing", caption: "late night feels", scheduledFor: "2026-02-01 12:00", status: "scheduled" },
+  ];
+
+  const applications = [
+    { id: 1, name: "Luna Park", email: "luna@email.com", tier: "Standard", submitted: "2025-01-30", status: "pending" },
+    { id: 2, name: "The Velvet", email: "velvet@band.com", tier: "Scale", submitted: "2025-01-29", status: "pending" },
+  ];
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'active': return 'bg-green-500/20 text-green-400';
+      case 'onboarding': return 'bg-yellow-500/20 text-yellow-400';
+      case 'paused': return 'bg-zinc-500/20 text-zinc-400';
+      case 'building': return 'bg-blue-500/20 text-blue-400';
+      case 'scheduled': return 'bg-purple-500/20 text-purple-400';
+      case 'posted': return 'bg-green-500/20 text-green-400';
+      case 'draft': return 'bg-zinc-500/20 text-zinc-400';
+      case 'pending': return 'bg-yellow-500/20 text-yellow-400';
+      default: return 'bg-zinc-500/20 text-zinc-400';
+    }
+  };
+
+  const getPlatformIcon = (platform) => {
+    switch (platform) {
+      case 'tiktok': return '♪';
+      case 'instagram': return '◐';
+      case 'facebook': return 'f';
+      case 'youtube': return '▶';
+      default: return '•';
+    }
+  };
+
+  const formatNumber = (num) => {
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    return num.toString();
+  };
+
+  // Form helpers
+  const updateField = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const toggleArrayField = (field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: prev[field].includes(value)
+        ? prev[field].filter(v => v !== value)
+        : [...prev[field], value]
+    }));
+  };
+
+  const nextFormStep = () => setFormStep(s => s + 1);
+  const prevFormStep = () => setFormStep(s => s - 1);
+
+  const handleSubmit = () => {
+    console.log('Form submitted:', formData);
+    setSubmitted(true);
+  };
+
+  const goToIntake = () => {
+    setCurrentPage('intake');
+  };
+
+  // Form components
+  const InputField = ({ label, field, type = 'text', required = false, placeholder = '' }) => (
+    <div className="mb-6">
+      <label className="block text-sm font-medium text-zinc-400 mb-2">
+        {label} {required && <span className="text-red-400">*</span>}
+      </label>
+      <input
+        type={type}
+        value={formData[field]}
+        onChange={(e) => updateField(field, e.target.value)}
+        placeholder={placeholder}
+        className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition"
+      />
+    </div>
+  );
+
+  const TextArea = ({ label, field, required = false, placeholder = '' }) => (
+    <div className="mb-6">
+      <label className="block text-sm font-medium text-zinc-400 mb-2">
+        {label} {required && <span className="text-red-400">*</span>}
+      </label>
+      <textarea
+        value={formData[field]}
+        onChange={(e) => updateField(field, e.target.value)}
+        placeholder={placeholder}
+        rows={4}
+        className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition resize-none"
+      />
+    </div>
+  );
+
+  const CheckboxGroup = ({ label, field, options, required = false }) => (
+    <div className="mb-6">
+      <label className="block text-sm font-medium text-zinc-400 mb-3">
+        {label} {required && <span className="text-red-400">*</span>}
+      </label>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        {options.map(option => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => toggleArrayField(field, option)}
+            className={`px-4 py-2 rounded-lg text-sm text-left transition ${
+              formData[field].includes(option)
+                ? 'bg-white text-black'
+                : 'bg-zinc-900 border border-zinc-700 text-zinc-300 hover:border-zinc-500'
+            }`}
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  const RadioGroup = ({ label, field, options, required = false }) => (
+    <div className="mb-6">
+      <label className="block text-sm font-medium text-zinc-400 mb-3">
+        {label} {required && <span className="text-red-400">*</span>}
+      </label>
+      <div className="space-y-2">
+        {options.map(option => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => updateField(field, option.value)}
+            className={`w-full px-4 py-3 rounded-xl text-left transition flex justify-between items-center ${
+              formData[field] === option.value
+                ? 'bg-white text-black'
+                : 'bg-zinc-900 border border-zinc-700 text-zinc-300 hover:border-zinc-500'
+            }`}
+          >
+            <div>
+              <div className="font-medium">{option.label}</div>
+              {option.desc && <div className={`text-sm ${formData[field] === option.value ? 'text-zinc-600' : 'text-zinc-500'}`}>{option.desc}</div>}
+            </div>
+            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+              formData[field] === option.value ? 'border-black bg-black' : 'border-zinc-600'
+            }`}>
+              {formData[field] === option.value && <div className="w-2 h-2 rounded-full bg-white" />}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  const FormNavButtons = ({ canContinue = true, isLast = false }) => (
+    <div className="flex justify-between mt-8">
+      {formStep > 0 ? (
+        <button type="button" onClick={prevFormStep} className="px-6 py-3 text-zinc-400 hover:text-white transition">
+          ← Back
+        </button>
+      ) : (
+        <button type="button" onClick={() => setCurrentPage('home')} className="px-6 py-3 text-zinc-400 hover:text-white transition">
+          ← Back to site
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={isLast ? handleSubmit : nextFormStep}
+        disabled={!canContinue}
+        className={`px-8 py-3 rounded-full font-semibold transition ${
+          canContinue ? 'bg-white text-black hover:bg-zinc-200' : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
+        }`}
+      >
+        {isLast ? 'Submit →' : 'Continue →'}
+      </button>
+    </div>
+  );
+
+  // Dashboard components
+  const StatCard = ({ label, value, change, prefix = '', suffix = '' }) => (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+      <p className="text-zinc-500 text-sm mb-1">{label}</p>
+      <p className="text-3xl font-bold">{prefix}{typeof value === 'number' ? formatNumber(value) : value}{suffix}</p>
+      {change !== undefined && (
+        <p className={`text-sm mt-1 ${change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          {change >= 0 ? '↑' : '↓'} {Math.abs(change)}% vs previous period
+        </p>
+      )}
+    </div>
+  );
+
+  const PlatformBar = ({ platform, views, engagement, maxViews }) => {
+    const percentage = (views / maxViews) * 100;
+    const platformColors = {
+      tiktok: 'bg-pink-500',
+      instagram: 'bg-purple-500',
+      facebook: 'bg-blue-500',
+      youtube: 'bg-red-500'
+    };
+    const platformNames = {
+      tiktok: 'TikTok',
+      instagram: 'Instagram',
+      facebook: 'Facebook',
+      youtube: 'YouTube'
+    };
+
+    return (
+      <div className="mb-4">
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-sm font-medium">{platformNames[platform]}</span>
+          <span className="text-sm text-zinc-400">{formatNumber(views)} views</span>
+        </div>
+        <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+          <div className={`h-full ${platformColors[platform]} rounded-full transition-all`} style={{ width: `${percentage}%` }} />
+        </div>
+        <p className="text-xs text-zinc-500 mt-1">{formatNumber(engagement)} engagements</p>
+      </div>
+    );
+  };
+
+  // Navigation
+  const Nav = () => (
+    <nav className="fixed top-0 w-full z-50 bg-zinc-950/95 backdrop-blur border-b border-zinc-800">
+      <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
+        <button onClick={() => setCurrentPage('home')} className="text-xl font-bold hover:text-zinc-300 transition">
+          StickToMusic
+        </button>
+        <div className="flex items-center gap-6">
+          <button
+            onClick={() => setCurrentPage('how')}
+            className={`px-3 py-1 rounded transition font-medium ${currentPage === 'how' ? 'text-white bg-zinc-800' : 'text-zinc-400 hover:text-white'}`}
+          >
+            How It Works
+          </button>
+          <button
+            onClick={() => setCurrentPage('pricing')}
+            className={`px-3 py-1 rounded transition font-medium ${currentPage === 'pricing' ? 'text-white bg-zinc-800' : 'text-zinc-400 hover:text-white'}`}
+          >
+            Pricing
+          </button>
+          <button onClick={goToIntake} className="px-5 py-2 bg-white text-black rounded-full font-semibold hover:bg-zinc-200 transition">
+            Apply
+          </button>
+          <button
+            onClick={() => setCurrentPage('dashboard')}
+            className="text-zinc-500 hover:text-white transition text-sm"
+          >
+            Login
+          </button>
+          <button
+            onClick={() => setCurrentPage('operator')}
+            className="text-zinc-600 hover:text-zinc-400 transition text-xs"
+          >
+            •
+          </button>
+        </div>
+      </div>
+    </nav>
+  );
+
+  // INTAKE FORM PAGE
+  if (currentPage === 'intake') {
+    if (submitted) {
+      return (
+        <div className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center px-6">
+          <div className="max-w-md text-center">
+            <div className="text-6xl mb-6">✓</div>
+            <h1 className="text-3xl font-bold mb-4">You're in.</h1>
+            <p className="text-zinc-400 mb-8">We'll review your submission and get back to you within 24 hours.</p>
+            <button onClick={() => { setCurrentPage('home'); setSubmitted(false); setFormStep(0); }} className="px-8 py-4 bg-white text-black rounded-full font-semibold hover:bg-zinc-200 transition">
+              Back to StickToMusic
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-h-screen bg-zinc-950 text-zinc-100 py-12 px-6">
+        <div className="max-w-2xl mx-auto">
+          <div className="mb-8">
+            <button onClick={() => setCurrentPage('home')} className="text-xl font-bold hover:text-zinc-300 transition">StickToMusic</button>
+          </div>
+
+          {/* Progress */}
+          <div className="mb-8">
+            <div className="flex justify-between text-xs text-zinc-500 mb-2">
+              <span>Step {formStep + 1} of 9</span>
+              <span>{Math.round(((formStep + 1) / 9) * 100)}%</span>
+            </div>
+            <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
+              <div className="h-full bg-white transition-all duration-300" style={{ width: `${((formStep + 1) / 9) * 100}%` }} />
+            </div>
+          </div>
+
+          {/* Step 0 */}
+          {formStep === 0 && (
+            <div>
+              <h1 className="text-4xl font-bold mb-4">Let's build your world.</h1>
+              <p className="text-xl text-zinc-400 mb-8">Takes about 10 minutes.</p>
+              <InputField label="Artist or project name" field="artistName" required />
+              <InputField label="Email" field="email" type="email" required />
+              <InputField label="Phone (optional)" field="phone" type="tel" />
+              <InputField label="Manager or team contact (optional)" field="managerContact" />
+              <FormNavButtons canContinue={formData.artistName && formData.email} />
+            </div>
+          )}
+
+          {/* Step 1 */}
+          {formStep === 1 && (
+            <div>
+              <h2 className="text-2xl font-bold mb-2">Where can we find you?</h2>
+              <p className="text-zinc-400 mb-8">Links to your current profiles.</p>
+              <InputField label="Spotify" field="spotify" type="url" required placeholder="https://open.spotify.com/artist/..." />
+              <InputField label="Instagram" field="instagram" type="url" placeholder="https://instagram.com/..." />
+              <InputField label="TikTok" field="tiktok" type="url" placeholder="https://tiktok.com/@..." />
+              <InputField label="YouTube" field="youtube" type="url" placeholder="https://youtube.com/..." />
+              <FormNavButtons canContinue={formData.spotify} />
+            </div>
+          )}
+
+          {/* Step 2 */}
+          {formStep === 2 && (
+            <div>
+              <h2 className="text-2xl font-bold mb-2">What are you promoting?</h2>
+              <p className="text-zinc-400 mb-8">Tell us about the release.</p>
+              <InputField label="Project type" field="projectType" required placeholder="Single, EP, Album..." />
+              <InputField label="Release date (if scheduled)" field="releaseDate" type="date" />
+              <InputField label="Genre / subgenre" field="genre" required placeholder="e.g., Alt R&B, Hyperpop" />
+              <TextArea label="Describe the project" field="projectDescription" required placeholder="Sound, story, theme..." />
+              <FormNavButtons canContinue={formData.projectType && formData.genre && formData.projectDescription} />
+            </div>
+          )}
+
+          {/* Step 3 */}
+          {formStep === 3 && (
+            <div>
+              <h2 className="text-2xl font-bold mb-2">What's your vibe?</h2>
+              <p className="text-zinc-400 mb-8">This shapes your world pages.</p>
+              <TextArea label="Describe your visual aesthetic in 3-5 words" field="aestheticWords" required placeholder="e.g., dark, cinematic, emotional" />
+              <CheckboxGroup label="Select vibes that resonate" field="vibes" options={vibeOptions} required />
+              <FormNavButtons canContinue={formData.aestheticWords && formData.vibes.length > 0} />
+            </div>
+          )}
+
+          {/* Step 4 */}
+          {formStep === 4 && (
+            <div>
+              <h2 className="text-2xl font-bold mb-2">Who are you reaching?</h2>
+              <p className="text-zinc-400 mb-8">Your target audience.</p>
+              <TextArea label="3-5 artists whose fans might love you" field="adjacentArtists" required placeholder="e.g., The Weeknd, Frank Ocean" />
+              <CheckboxGroup label="Target age range" field="ageRanges" options={['13-17', '18-24', '25-34', '35+']} required />
+              <TextArea label="Describe your ideal listener" field="idealListener" required placeholder="What are they into?" />
+              <FormNavButtons canContinue={formData.adjacentArtists && formData.ageRanges.length > 0 && formData.idealListener} />
+            </div>
+          )}
+
+          {/* Step 5 */}
+          {formStep === 5 && (
+            <div>
+              <h2 className="text-2xl font-bold mb-2">What content do you have?</h2>
+              <p className="text-zinc-400 mb-8">Existing assets we can work with.</p>
+              <CheckboxGroup label="Select all that apply" field="contentAssets" options={assetOptions} required />
+              <InputField label="Link to content folder (optional)" field="contentFolder" type="url" placeholder="Google Drive, Dropbox..." />
+              <FormNavButtons canContinue={formData.contentAssets.length > 0} />
+            </div>
+          )}
+
+          {/* Step 6 */}
+          {formStep === 6 && (
+            <div>
+              <h2 className="text-2xl font-bold mb-2">Choose your plan</h2>
+              <p className="text-zinc-400 mb-8">Page Builder tier + optional Creative Direction.</p>
+              <RadioGroup label="Page Builder tier" field="pageTier" required options={[
+                { value: 'starter', label: 'Starter — $800/mo', desc: '5 world pages' },
+                { value: 'standard', label: 'Standard — $1,500/mo', desc: '15 world pages' },
+                { value: 'scale', label: 'Scale — $2,500/mo', desc: '30 world pages' },
+                { value: 'sensation', label: 'Sensation — $3,500/mo', desc: '50 world pages' },
+                { value: 'discuss', label: 'Not sure yet', desc: "Let's discuss" }
+              ]} />
+              <RadioGroup label="Add Creative Direction?" field="cdTier" required options={[
+                { value: 'none', label: 'No thanks', desc: 'Just world pages' },
+                { value: 'lite', label: 'CD Lite — +$2,500/mo', desc: 'Content creation & strategy' },
+                { value: 'standard', label: 'CD Standard — +$5,000/mo', desc: 'Full creative direction' },
+                { value: 'discuss', label: 'Not sure yet', desc: "Let's discuss" }
+              ]} />
+              <FormNavButtons canContinue={formData.pageTier && formData.cdTier} />
+            </div>
+          )}
+
+          {/* Step 7 */}
+          {formStep === 7 && (
+            <div>
+              <h2 className="text-2xl font-bold mb-2">Spotify for Artists</h2>
+              <p className="text-zinc-400 mb-8">Optional — connect for deeper insights.</p>
+
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 mb-6">
+                <h3 className="font-semibold mb-3">What you'd get with Spotify connected:</h3>
+                <ul className="space-y-2 text-sm text-zinc-400">
+                  <li className="flex items-center gap-2"><span className="text-green-400">✓</span> Monthly listener growth tracking</li>
+                  <li className="flex items-center gap-2"><span className="text-green-400">✓</span> Playlist add notifications</li>
+                  <li className="flex items-center gap-2"><span className="text-green-400">✓</span> Stream count correlation with campaigns</li>
+                  <li className="flex items-center gap-2"><span className="text-green-400">✓</span> Listener demographics & top cities</li>
+                </ul>
+              </div>
+
+              <RadioGroup label="Would you like to connect Spotify for Artists?" field="spotifyForArtists" required options={[
+                { value: 'yes', label: "Yes, I'll connect it", desc: "We'll send instructions after signup" },
+                { value: 'later', label: 'Maybe later', desc: 'You can connect anytime from your dashboard' },
+                { value: 'no', label: 'No thanks', desc: 'Dashboard will show world page metrics only' }
+              ]} />
+              <FormNavButtons canContinue={formData.spotifyForArtists} />
+            </div>
+          )}
+
+          {/* Step 8 */}
+          {formStep === 8 && (
+            <div>
+              <h2 className="text-2xl font-bold mb-2">Timeline</h2>
+              <p className="text-zinc-400 mb-8">How long are you thinking?</p>
+              <RadioGroup label="Campaign duration" field="duration" required options={[
+                { value: '1month', label: '1 month', desc: 'Minimum' },
+                { value: '3months', label: '3 months', desc: '' },
+                { value: '6months', label: '6 months', desc: '' },
+                { value: '12months', label: '12 months / ongoing', desc: '' },
+                { value: 'discuss', label: 'Not sure yet', desc: '' }
+              ]} />
+              <TextArea label="Anything else? (optional)" field="anythingElse" />
+              <FormNavButtons canContinue={formData.duration} isLast />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // OPERATOR DASHBOARD PAGE
+  if (currentPage === 'operator') {
+    return (
+      <div className="min-h-screen bg-zinc-950 text-zinc-100">
+        {/* Header */}
+        <header className="border-b border-zinc-800 bg-zinc-950/95 backdrop-blur sticky top-0 z-50">
+          <div className="max-w-7xl mx-auto px-6 py-4">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-6">
+                <button onClick={() => setCurrentPage('home')} className="text-xl font-bold hover:text-zinc-300 transition">StickToMusic</button>
+                <span className="text-zinc-600">|</span>
+                <span className="text-zinc-400">Operator</span>
+              </div>
+              <button onClick={() => setCurrentPage('home')} className="text-sm text-zinc-500 hover:text-white transition">Log out</button>
+            </div>
+          </div>
+        </header>
+
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          {/* Tab Navigation */}
+          <div className="flex gap-2 mb-8 border-b border-zinc-800 pb-4">
+            {['artists', 'pages', 'content', 'banks', 'applications'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => setOperatorTab(tab)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                  operatorTab === tab ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                }`}
+              >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {/* Artists Tab */}
+          {operatorTab === 'artists' && (
+            <div className="space-y-4">
+              {operatorArtists.map((artist) => (
+                <div key={artist.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                  <div className="flex flex-col md:flex-row justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center text-lg font-bold">
+                        {artist.name[0]}
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold">{artist.name}</h3>
+                        <div className="flex gap-2 text-sm text-zinc-500">
+                          <span>{artist.tier}</span>
+                          {artist.cdTier && <><span>•</span><span>{artist.cdTier}</span></>}
+                          <span>•</span>
+                          <span>Since {artist.activeSince}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold">{artist.totalPages}</p>
+                        <p className="text-xs text-zinc-500">Pages</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold">{formatNumber(artist.metrics.views)}</p>
+                        <p className="text-xs text-zinc-500">Views</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold">{artist.metrics.rate}%</p>
+                        <p className="text-xs text-zinc-500">Eng. Rate</p>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-xs ${getStatusColor(artist.status)}`}>
+                        {artist.status}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Pages Tab */}
+          {operatorTab === 'pages' && (() => {
+            const filteredPages = worldPages.filter(p =>
+              (selectedArtist === 'all' || p.artist === selectedArtist) &&
+              (selectedPlatform === 'all' || p.platform === selectedPlatform)
+            );
+            // Group by artist for display
+            const artistsWithPages = operatorArtists.filter(a =>
+              selectedArtist === 'all' || a.name === selectedArtist
+            );
+
+            return (
+              <div>
+                <div className="flex gap-4 mb-6">
+                  <div>
+                    <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Artist</label>
+                    <div className="flex gap-1">
+                      <button onClick={() => setSelectedArtist('all')} className={`px-3 py-1.5 rounded-lg text-sm transition ${selectedArtist === 'all' ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>All</button>
+                      {operatorArtists.map(a => (
+                        <button key={a.id} onClick={() => setSelectedArtist(a.name)} className={`px-3 py-1.5 rounded-lg text-sm transition ${selectedArtist === a.name ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>{a.name}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Platform</label>
+                    <div className="flex gap-1">
+                      {['all', 'tiktok', 'instagram'].map(p => (
+                        <button key={p} onClick={() => setSelectedPlatform(p)} className={`px-3 py-1.5 rounded-lg text-sm transition ${selectedPlatform === p ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>{p === 'all' ? 'All' : p.charAt(0).toUpperCase() + p.slice(1)}</button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  {artistsWithPages.map(artist => {
+                    const artistPages = filteredPages.filter(p => p.artist === artist.name);
+                    if (artistPages.length === 0) return null;
+                    // Group by handle
+                    const grouped = {};
+                    artistPages.forEach(page => {
+                      if (!grouped[page.handle]) {
+                        grouped[page.handle] = { ...page, platforms: [page.platform], totalFollowers: page.followers, totalViews: page.views };
+                      } else {
+                        grouped[page.handle].platforms.push(page.platform);
+                        grouped[page.handle].totalFollowers += page.followers;
+                        grouped[page.handle].totalViews += page.views;
+                      }
+                    });
+                    const uniquePages = Object.values(grouped);
+
+                    return (
+                      <div key={artist.id}>
+                        <h3 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">{artist.name}</h3>
+                        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="border-b border-zinc-800">
+                                <th className="text-left p-4 text-sm font-medium text-zinc-500">Handle</th>
+                                <th className="text-left p-4 text-sm font-medium text-zinc-500">Platforms</th>
+                                <th className="text-left p-4 text-sm font-medium text-zinc-500">Niche</th>
+                                <th className="text-left p-4 text-sm font-medium text-zinc-500">Followers</th>
+                                <th className="text-left p-4 text-sm font-medium text-zinc-500">Views</th>
+                                <th className="text-left p-4 text-sm font-medium text-zinc-500">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {uniquePages.map((page) => (
+                                <tr key={page.handle} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition">
+                                  <td className="p-4 font-mono text-sm">{page.handle}</td>
+                                  <td className="p-4">
+                                    <div className="flex gap-1">
+                                      {page.platforms.map(p => (
+                                        <span key={p} className={`px-2 py-0.5 rounded text-xs ${p === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                                          {p === 'tiktok' ? 'TT' : 'IG'}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </td>
+                                  <td className="p-4 text-zinc-500 text-sm">{page.niche}</td>
+                                  <td className="p-4 text-zinc-300">{formatNumber(page.totalFollowers)}</td>
+                                  <td className="p-4 text-zinc-300">{formatNumber(page.totalViews)}</td>
+                                  <td className="p-4">
+                                    <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(page.status)}`}>{page.status}</span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Content Tab */}
+          {operatorTab === 'content' && (() => {
+            const groupPosts = (posts) => {
+              const grouped = {};
+              posts.forEach(post => {
+                const key = `${post.page}-${post.scheduledFor}`;
+                if (!grouped[key]) {
+                  grouped[key] = { ...post, platforms: [post.platform] };
+                } else {
+                  grouped[key].platforms.push(post.platform);
+                }
+              });
+              return Object.values(grouped).sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor));
+            };
+
+            const allPosts = groupPosts(contentQueue.filter(c =>
+              (contentStatus === 'all' || c.status === contentStatus) &&
+              (contentArtist === 'all' || c.artist === contentArtist)
+            ));
+
+            const todayPostsCount = contentQueue.filter(c => c.scheduledFor.startsWith('2026-01-31')).length / 2;
+
+            // Get unique accounts and categories for selected artist
+            const artistPages = worldPages.filter(p => p.artist === batchForm.artist);
+            const uniqueAccounts = artistPages.reduce((acc, p) => {
+              const existing = acc.find(a => a.handle === p.handle);
+              if (!existing) {
+                acc.push({ handle: p.handle, niche: p.niche, postTime: p.postTime });
+              }
+              return acc;
+            }, []);
+            const categories = [...new Set(artistPages.map(p => p.niche))];
+
+            // Filter accounts by selected category (must pick specific category)
+            const filteredAccounts = uniqueAccounts.filter(a => a.niche === batchForm.category);
+
+            // Calculate required videos with 30/70 split
+            const totalSlots = filteredAccounts.length * batchForm.numDays;
+            const artistSlotsNeeded = Math.ceil(totalSlots * 0.3);  // 30% artist music
+            const adjacentSlotsNeeded = totalSlots - artistSlotsNeeded;  // 70% adjacent music
+
+            // Parse provided videos (split by newlines, commas, or detect URLs)
+            const parseUrls = (text) => {
+              return text.trim()
+                .split(/[\n\r,]+/)
+                .map(url => url.trim())
+                .filter(url => url.startsWith('http'));
+            };
+            const artistVideosList = parseUrls(batchForm.artistVideos);
+            const adjacentVideosList = parseUrls(batchForm.adjacentVideos);
+
+            // Generate schedule preview - mixing artist and adjacent videos
+            const generateSchedule = () => {
+              const totalVideos = artistVideosList.length + adjacentVideosList.length;
+              if (totalVideos === 0 || !batchForm.weekStart) return [];
+
+              const schedule = [];
+              const startDate = new Date(batchForm.weekStart);
+
+              // Create a pool of videos tagged by type
+              let artistPool = [...artistVideosList].map((url, i) => ({ url, type: 'artist', num: i + 1 }));
+              let adjacentPool = [...adjacentVideosList].map((url, i) => ({ url, type: 'adjacent', num: i + 1 }));
+
+              // For each day
+              for (let dayOffset = 0; dayOffset < batchForm.numDays; dayOffset++) {
+                const currentDate = new Date(startDate);
+                currentDate.setDate(startDate.getDate() + dayOffset);
+                const dateStr = currentDate.toISOString().split('T')[0];
+                const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][currentDate.getDay()];
+
+                // Each account gets a video - distribute to maintain ~30% artist ratio
+                filteredAccounts.forEach((account, accountIndex) => {
+                  // Determine if this slot should be artist or adjacent
+                  // Spread artist videos evenly: roughly every 3rd post is artist music
+                  const slotIndex = dayOffset * filteredAccounts.length + accountIndex;
+                  const shouldBeArtist = (slotIndex % 3 === 0) && artistPool.length > 0;
+
+                  let video;
+                  if (shouldBeArtist && artistPool.length > 0) {
+                    video = artistPool.shift();
+                  } else if (adjacentPool.length > 0) {
+                    video = adjacentPool.shift();
+                  } else if (artistPool.length > 0) {
+                    video = artistPool.shift();
+                  }
+
+                  if (video) {
+                    // Generate content from banks for this category
+                    const content = generatePostContent(account.niche, 'tiktok');
+
+                    schedule.push({
+                      date: dateStr,
+                      dayName,
+                      handle: account.handle,
+                      niche: account.niche,
+                      time: account.postTime,
+                      videoUrl: video.url,
+                      videoNum: video.num,
+                      videoType: video.type,
+                      caption: content.caption,
+                      hashtags: content.hashtags,
+                      platforms: ['tiktok', 'instagram']
+                    });
+                  }
+                });
+              }
+
+              return schedule.sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+            };
+
+            const handleGeneratePreview = () => {
+              const totalVideos = artistVideosList.length + adjacentVideosList.length;
+
+              // If we have fewer videos than slots, confirm with user
+              if (totalVideos < totalSlots && totalVideos > 0) {
+                const proceed = window.confirm(
+                  `You've uploaded ${totalVideos} video(s) but have ${totalSlots} slots.\n\n` +
+                  `Only ${totalVideos} post(s) will be scheduled.\n\n` +
+                  `Continue anyway?`
+                );
+                if (!proceed) return;
+              }
+
+              const schedule = generateSchedule();
+              setGeneratedSchedule(schedule);
+              setBatchForm(prev => ({ ...prev, step: 2 }));
+            };
+
+            const handleScheduleSubmit = async () => {
+              setSyncing(true);
+              setSyncStatus('Scheduling posts to Late...');
+
+              let successCount = 0;
+              let failCount = 0;
+              const errors = [];
+
+              for (const post of generatedSchedule) {
+                const scheduledFor = `${post.date}T${post.time}:00`;
+                const fullCaption = `${post.caption} ${post.hashtags}`;
+
+                // Get account IDs for this handle
+                const accountIds = LATE_ACCOUNT_IDS[post.handle];
+                if (!accountIds) {
+                  console.error(`No Late account mapping for ${post.handle}`);
+                  failCount++;
+                  errors.push(`${post.handle}: No account mapping found`);
+                  continue;
+                }
+
+                // Build platforms array with both TikTok and Instagram
+                const platformsPayload = post.platforms
+                  .filter(p => accountIds[p]) // Only include platforms that have account IDs
+                  .map(p => ({
+                    platform: p,
+                    accountId: accountIds[p]
+                  }));
+
+                if (platformsPayload.length === 0) {
+                  failCount++;
+                  errors.push(`${post.handle}: No platform accounts found`);
+                  continue;
+                }
+
+                console.log('Scheduling post:', {
+                  handle: post.handle,
+                  platforms: platformsPayload,
+                  caption: fullCaption,
+                  videoUrl: post.videoUrl,
+                  scheduledFor
+                });
+
+                // Schedule via Late API - both platforms in one call
+                const result = await lateApi.schedulePost({
+                  platforms: platformsPayload,
+                  caption: fullCaption,
+                  videoUrl: post.videoUrl,
+                  scheduledFor
+                });
+
+                if (result.success) {
+                  successCount += platformsPayload.length; // Count each platform
+                } else {
+                  failCount += platformsPayload.length;
+                  errors.push(`${post.handle}: ${result.error}`);
+                }
+
+                // Small delay to avoid rate limiting
+                await new Promise(r => setTimeout(r, 200));
+              }
+
+              setSyncing(false);
+
+              const artistCount = generatedSchedule.filter(p => p.videoType === 'artist').length;
+              const adjacentCount = generatedSchedule.filter(p => p.videoType === 'adjacent').length;
+
+              const postWord = (n) => n === 1 ? 'post' : 'posts';
+
+              if (failCount > 0) {
+                setSyncStatus(`⚠️ ${successCount} scheduled, ${failCount} failed`);
+                console.error('Scheduling errors:', errors);
+                alert(`Scheduled ${successCount} ${postWord(successCount)}, ${failCount} failed.\n\nErrors:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? `\n...and ${errors.length - 5} more` : ''}`);
+              } else {
+                setSyncStatus(`✓ ${successCount} ${postWord(successCount)} scheduled!`);
+                alert(`${successCount} ${postWord(successCount)} scheduled to Late!\n\n${batchForm.category} category:\n• ${artistCount} artist music ${postWord(artistCount)} (${Math.round(artistCount/generatedSchedule.length*100)}%)\n• ${adjacentCount} adjacent artist ${postWord(adjacentCount)} (${Math.round(adjacentCount/generatedSchedule.length*100)}%)`);
+              }
+
+              setTimeout(() => setSyncStatus(null), 5000);
+              setShowScheduleModal(false);
+              setBatchForm({
+                artist: 'Boon',
+                category: 'Fashion',
+                artistVideos: '',
+                adjacentVideos: '',
+                weekStart: '',
+                numDays: 7,
+                step: 1
+              });
+              setGeneratedSchedule([]);
+            };
+
+            const handleSync = async () => {
+              setSyncing(true);
+              setSyncStatus(null);
+              // This would call the Late API
+              // const result = await fetchScheduledPosts();
+              setTimeout(() => {
+                setSyncing(false);
+                setSyncStatus('Synced 33 posts from Late');
+                setTimeout(() => setSyncStatus(null), 3000);
+              }, 1500);
+            };
+
+            return (
+              <div>
+                {/* Batch Schedule Modal */}
+                {showScheduleModal && (
+                  <div
+                    className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 cursor-pointer"
+                    onClick={() => { setShowScheduleModal(false); setBatchForm(prev => ({ ...prev, step: 1 })); setGeneratedSchedule([]); }}
+                  >
+                    <div
+                      className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col cursor-default"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="p-6 border-b border-zinc-800 flex justify-between items-center shrink-0">
+                        <div>
+                          <h2 className="text-xl font-bold">Batch Schedule</h2>
+                          <p className="text-sm text-zinc-500 mt-1">
+                            {batchForm.step === 1 ? 'Step 1: Setup' : 'Step 2: Preview & Confirm'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => { setShowScheduleModal(false); setBatchForm(prev => ({ ...prev, step: 1 })); setGeneratedSchedule([]); }}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 transition"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {batchForm.step === 1 ? (
+                        <>
+                          <div className="p-6 space-y-5 overflow-y-auto flex-1">
+                            {/* Artist & Category Row */}
+                            <div className="grid grid-cols-3 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-zinc-400 mb-2">Artist</label>
+                                <select
+                                  value={batchForm.artist}
+                                  onChange={(e) => setBatchForm(prev => ({ ...prev, artist: e.target.value }))}
+                                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-zinc-500"
+                                >
+                                  {operatorArtists.map(a => (
+                                    <option key={a.id} value={a.name}>{a.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-zinc-400 mb-2">Aesthetic Category</label>
+                                <select
+                                  value={batchForm.category}
+                                  onChange={(e) => setBatchForm(prev => ({ ...prev, category: e.target.value }))}
+                                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-zinc-500"
+                                >
+                                  {categories.map(cat => {
+                                    const count = uniqueAccounts.filter(a => a.niche === cat).length;
+                                    return <option key={cat} value={cat}>{cat} ({count} accounts)</option>;
+                                  })}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-zinc-400 mb-2">Days</label>
+                                <select
+                                  value={batchForm.numDays}
+                                  onChange={(e) => setBatchForm(prev => ({ ...prev, numDays: parseInt(e.target.value) }))}
+                                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-zinc-500"
+                                >
+                                  {[1, 2, 3, 4, 5, 6, 7, 14].map(d => (
+                                    <option key={d} value={d}>{d} day{d > 1 ? 's' : ''}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+
+                            {/* Selected Accounts Preview */}
+                            <div className="bg-zinc-800/50 rounded-xl p-4">
+                              <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">{batchForm.category} Accounts ({filteredAccounts.length})</p>
+                              <div className="flex flex-wrap gap-2">
+                                {filteredAccounts.map(acc => (
+                                  <span key={acc.handle} className="px-3 py-1.5 bg-zinc-800 rounded-lg text-sm">
+                                    {acc.handle} <span className="text-zinc-500">@ {acc.postTime}</span>
+                                  </span>
+                                ))}
+                                {filteredAccounts.length === 0 && (
+                                  <span className="text-zinc-500 text-sm">No accounts in this category</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Start Date */}
+                            <div>
+                              <label className="block text-sm font-medium text-zinc-400 mb-2">Start Date</label>
+                              <input
+                                type="date"
+                                value={batchForm.weekStart}
+                                onChange={(e) => setBatchForm(prev => ({ ...prev, weekStart: e.target.value }))}
+                                className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-zinc-500"
+                              />
+                            </div>
+
+                            {/* Videos Required - 30/70 Split */}
+                            <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <p className="text-sm font-medium text-zinc-300">Videos Needed</p>
+                                <p className="text-2xl font-bold text-white">{totalSlots}</p>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3">
+                                  <p className="text-emerald-400 font-medium">{artistSlotsNeeded} Artist Videos</p>
+                                  <p className="text-xs text-zinc-500">~30% {batchForm.artist}'s music</p>
+                                </div>
+                                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                                  <p className="text-blue-400 font-medium">{adjacentSlotsNeeded} Adjacent Videos</p>
+                                  <p className="text-xs text-zinc-500">~70% similar artists</p>
+                                </div>
+                              </div>
+                              <p className="text-xs text-zinc-500 mt-3">
+                                {filteredAccounts.length} accounts × {batchForm.numDays} days = {totalSlots} unique videos
+                              </p>
+                            </div>
+
+                            {/* Two-Column Video Input */}
+                            <div className="grid grid-cols-2 gap-4">
+                              {/* Artist Videos */}
+                              <div>
+                                <label className="block text-sm font-medium text-emerald-400 mb-2">
+                                  🎵 {batchForm.artist}'s Music ({artistSlotsNeeded} needed)
+                                </label>
+                                <textarea
+                                  value={batchForm.artistVideos}
+                                  onChange={(e) => setBatchForm(prev => ({ ...prev, artistVideos: e.target.value }))}
+                                  placeholder={`Paste ${artistSlotsNeeded} Google Drive links...\n\nhttps://drive.google.com/...\nhttps://drive.google.com/...`}
+                                  rows={5}
+                                  className="w-full px-4 py-3 bg-zinc-800 border border-emerald-500/30 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 font-mono text-xs resize-none"
+                                />
+                                {(() => {
+                                  const provided = artistVideosList.length;
+                                  const isEnough = provided >= artistSlotsNeeded;
+                                  return provided > 0 && (
+                                    <p className={`text-xs mt-2 ${isEnough ? 'text-emerald-400' : 'text-red-400'}`}>
+                                      {provided} of {artistSlotsNeeded} {isEnough ? '✓' : `— need ${artistSlotsNeeded - provided} more`}
+                                    </p>
+                                  );
+                                })()}
+                              </div>
+
+                              {/* Adjacent Videos */}
+                              <div>
+                                <label className="block text-sm font-medium text-blue-400 mb-2">
+                                  🎶 Adjacent Artists ({adjacentSlotsNeeded} needed)
+                                </label>
+                                <textarea
+                                  value={batchForm.adjacentVideos}
+                                  onChange={(e) => setBatchForm(prev => ({ ...prev, adjacentVideos: e.target.value }))}
+                                  placeholder={`Paste ${adjacentSlotsNeeded} Google Drive links...\n\nhttps://drive.google.com/...\nhttps://drive.google.com/...`}
+                                  rows={5}
+                                  className="w-full px-4 py-3 bg-zinc-800 border border-blue-500/30 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500/50 font-mono text-xs resize-none"
+                                />
+                                {(() => {
+                                  const provided = adjacentVideosList.length;
+                                  const isEnough = provided >= adjacentSlotsNeeded;
+                                  return provided > 0 && (
+                                    <p className={`text-xs mt-2 ${isEnough ? 'text-blue-400' : 'text-red-400'}`}>
+                                      {provided} of {adjacentSlotsNeeded} {isEnough ? '✓' : `— need ${adjacentSlotsNeeded - provided} more`}
+                                    </p>
+                                  );
+                                })()}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="p-6 border-t border-zinc-800 flex justify-between items-center shrink-0">
+                            <p className="text-sm text-zinc-500">
+                              {artistVideosList.length + adjacentVideosList.length} of {totalSlots} videos provided
+                            </p>
+                            <div className="flex gap-3">
+                              <button onClick={() => setShowScheduleModal(false)} className="px-4 py-2 text-zinc-400 hover:text-white transition">Cancel</button>
+                              <button
+                                onClick={handleGeneratePreview}
+                                disabled={
+                                  !batchForm.weekStart ||
+                                  filteredAccounts.length === 0 ||
+                                  (artistVideosList.length + adjacentVideosList.length) === 0
+                                }
+                                className="px-6 py-2 bg-white text-black rounded-lg font-medium hover:bg-zinc-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                Preview Schedule →
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {/* Step 2: Preview */}
+                          <div className="p-6 overflow-y-auto flex-1">
+                            <div className="mb-4 flex items-center justify-between">
+                              <p className="text-sm text-zinc-400">
+                                {generatedSchedule.length} {generatedSchedule.length === 1 ? 'post' : 'posts'} to {[...new Set(generatedSchedule.map(p => p.handle))].length} {[...new Set(generatedSchedule.map(p => p.handle))].length === 1 ? 'account' : 'accounts'}
+                              </p>
+                              <button onClick={() => setBatchForm(prev => ({ ...prev, step: 1 }))} className="text-sm text-zinc-500 hover:text-white">
+                                ← Back to Edit
+                              </button>
+                            </div>
+
+                            {/* Stats Summary */}
+                            <div className="grid grid-cols-3 gap-4 mb-4">
+                              <div className="bg-zinc-800/50 rounded-lg p-3 text-center">
+                                <p className="text-2xl font-bold">{generatedSchedule.length}</p>
+                                <p className="text-xs text-zinc-500">Total Posts</p>
+                              </div>
+                              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3 text-center">
+                                <p className="text-2xl font-bold text-emerald-400">{generatedSchedule.filter(p => p.videoType === 'artist').length}</p>
+                                <p className="text-xs text-zinc-500">Artist Music ({Math.round(generatedSchedule.filter(p => p.videoType === 'artist').length / generatedSchedule.length * 100)}%)</p>
+                              </div>
+                              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 text-center">
+                                <p className="text-2xl font-bold text-blue-400">{generatedSchedule.filter(p => p.videoType === 'adjacent').length}</p>
+                                <p className="text-xs text-zinc-500">Adjacent Artists ({Math.round(generatedSchedule.filter(p => p.videoType === 'adjacent').length / generatedSchedule.length * 100)}%)</p>
+                              </div>
+                            </div>
+
+                            {/* Schedule Grid */}
+                            <div className="bg-zinc-800/50 rounded-xl overflow-hidden">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b border-zinc-700">
+                                    <th className="text-left p-3 text-zinc-500 font-medium">Day</th>
+                                    <th className="text-left p-3 text-zinc-500 font-medium">Account</th>
+                                    <th className="text-left p-3 text-zinc-500 font-medium">Time</th>
+                                    <th className="text-left p-3 text-zinc-500 font-medium">Type</th>
+                                    <th className="text-left p-3 text-zinc-500 font-medium">Caption</th>
+                                    <th className="text-left p-3 text-zinc-500 font-medium">Video</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {generatedSchedule.slice(0, 21).map((post, i) => (
+                                    <tr key={i} className="border-b border-zinc-800/50 hover:bg-zinc-800/30">
+                                      <td className="p-3 text-zinc-400">{post.dayName} {post.date.slice(5)}</td>
+                                      <td className="p-3 font-mono text-sm">{post.handle}</td>
+                                      <td className="p-3 text-zinc-400">{post.time}</td>
+                                      <td className="p-3">
+                                        <span className={`px-2 py-1 rounded text-xs ${
+                                          post.videoType === 'artist'
+                                            ? 'bg-emerald-500/20 text-emerald-400'
+                                            : 'bg-blue-500/20 text-blue-400'
+                                        }`}>
+                                          {post.videoType === 'artist' ? '🎵' : '🎶'}
+                                        </span>
+                                      </td>
+                                      <td className="p-3 text-zinc-400 text-xs max-w-[150px] truncate" title={`${post.caption} ${post.hashtags}`}>
+                                        {post.caption}
+                                      </td>
+                                      <td className="p-3">
+                                        <span className="px-2 py-1 bg-zinc-700 rounded text-xs">
+                                          {post.videoType === 'artist' ? 'A' : 'Adj'}-{post.videoNum}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                              {generatedSchedule.length > 21 && (
+                                <p className="text-center py-3 text-sm text-zinc-500">
+                                  + {generatedSchedule.length - 21} more posts...
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Sample Post Preview */}
+                            {generatedSchedule.length > 0 && (
+                              <div className="mt-4 bg-zinc-800/30 border border-zinc-700/50 rounded-xl p-4">
+                                <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Sample Post Content</p>
+                                <p className="text-sm text-white mb-1">{generatedSchedule[0].caption}</p>
+                                <p className="text-xs text-zinc-500 font-mono">{generatedSchedule[0].hashtags}</p>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="p-6 border-t border-zinc-800 flex justify-between items-center shrink-0">
+                            <p className="text-sm text-zinc-500">
+                              Each post goes to both TikTok & Instagram
+                            </p>
+                            <div className="flex gap-3">
+                              <button onClick={() => setBatchForm(prev => ({ ...prev, step: 1 }))} className="px-4 py-2 text-zinc-400 hover:text-white transition">Back</button>
+                              <button
+                                onClick={handleScheduleSubmit}
+                                className="px-6 py-2 bg-white text-black rounded-lg font-medium hover:bg-zinc-200 transition"
+                              >
+                                Schedule {generatedSchedule.length * 2} {generatedSchedule.length * 2 === 1 ? 'Post' : 'Posts'} to Late
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                  <div className="flex flex-wrap gap-4">
+                    <div>
+                      <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Artist</label>
+                      <div className="flex gap-1">
+                        <button onClick={() => setContentArtist('all')} className={`px-3 py-1.5 rounded-lg text-sm transition ${contentArtist === 'all' ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>All</button>
+                        {operatorArtists.map(a => (
+                          <button key={a.id} onClick={() => setContentArtist(a.name)} className={`px-3 py-1.5 rounded-lg text-sm transition ${contentArtist === a.name ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>{a.name}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Status</label>
+                      <div className="flex gap-1">
+                        {['all', 'scheduled', 'posted'].map(s => (
+                          <button key={s} onClick={() => setContentStatus(s)} className={`px-3 py-1.5 rounded-lg text-sm transition ${contentStatus === s ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>{s.charAt(0).toUpperCase() + s.slice(1)}</button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSync}
+                      disabled={syncing}
+                      className="px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg text-sm font-medium hover:bg-zinc-700 transition disabled:opacity-50"
+                    >
+                      {syncing ? '↻ Syncing...' : '↻ Sync from Late'}
+                    </button>
+                    <button
+                      onClick={() => setShowScheduleModal(true)}
+                      className="px-4 py-2 bg-white text-black rounded-lg text-sm font-medium hover:bg-zinc-200 transition"
+                    >
+                      + Schedule Post
+                    </button>
+                    <button
+                      onClick={fetchLateAccounts}
+                      className="px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg text-sm font-medium hover:bg-zinc-700 transition"
+                    >
+                      View Late Accounts
+                    </button>
+                  </div>
+                </div>
+
+                {/* Late Accounts Modal */}
+                {showLateAccounts && (
+                  <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowLateAccounts(false)}>
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+                      <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+                        <h2 className="text-xl font-bold">Late Accounts</h2>
+                        <button onClick={() => setShowLateAccounts(false)} className="text-zinc-500 hover:text-white">✕</button>
+                      </div>
+                      <div className="p-6 overflow-y-auto max-h-[60vh]">
+                        {!Array.isArray(lateAccounts) || lateAccounts.length === 0 ? (
+                          <p className="text-zinc-500">No accounts found. Make sure your Late API key is correct.</p>
+                        ) : (
+                          <div className="space-y-3">
+                            <p className="text-sm text-zinc-500 mb-4">Use these account IDs to map your world pages:</p>
+                            {lateAccounts.map((acc, i) => (
+                              <div key={i} className="bg-zinc-800 rounded-lg p-4">
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <p className="font-medium">{acc.username || acc.name || 'Unknown'}</p>
+                                    <p className="text-sm text-zinc-500">{acc.platform}</p>
+                                  </div>
+                                  <code className="text-xs bg-zinc-900 px-2 py-1 rounded">{acc.id || acc._id}</code>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sync Status */}
+                {syncStatus && (
+                  <div className="mb-4 px-4 py-2 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-sm">
+                    ✓ {syncStatus}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                    <p className="text-zinc-500 text-xs mb-1">Posting Today</p>
+                    <p className="text-2xl font-bold">{todayPostsCount}</p>
+                  </div>
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                    <p className="text-zinc-500 text-xs mb-1">Total Scheduled</p>
+                    <p className="text-2xl font-bold text-purple-400">{allPosts.length}</p>
+                  </div>
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                    <p className="text-zinc-500 text-xs mb-1">Late Status</p>
+                    <p className="text-sm font-medium text-green-400">● Connected</p>
+                  </div>
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                    <p className="text-zinc-500 text-xs mb-1">Accounts</p>
+                    <p className="text-2xl font-bold">8</p>
+                  </div>
+                </div>
+
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-zinc-800">
+                        <th className="text-left p-4 text-sm font-medium text-zinc-500">Date & Time</th>
+                        <th className="text-left p-4 text-sm font-medium text-zinc-500">Account</th>
+                        <th className="text-left p-4 text-sm font-medium text-zinc-500">Platforms</th>
+                        <th className="text-left p-4 text-sm font-medium text-zinc-500">Caption</th>
+                        <th className="text-left p-4 text-sm font-medium text-zinc-500">Song</th>
+                        <th className="text-left p-4 text-sm font-medium text-zinc-500">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allPosts.length > 0 ? (
+                        allPosts.map(item => (
+                          <tr key={item.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition">
+                            <td className="p-4 text-sm text-zinc-400">{item.scheduledFor}</td>
+                            <td className="p-4 font-mono text-sm">{item.page}</td>
+                            <td className="p-4">
+                              <div className="flex gap-1">
+                                {item.platforms.map(p => (
+                                  <span key={p} className={`px-2 py-0.5 rounded text-xs ${p === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                                    {p === 'tiktok' ? 'TT' : 'IG'}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="p-4 text-sm max-w-[150px] truncate">{item.caption}</td>
+                            <td className="p-4 text-sm text-zinc-400">{item.song}</td>
+                            <td className="p-4">
+                              <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(item.status)}`}>{item.status}</span>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr><td colSpan={6} className="p-8 text-center text-zinc-500">No content</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Content Banks Tab */}
+          {operatorTab === 'banks' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-xl font-bold">Content Banks</h2>
+                  <p className="text-sm text-zinc-500">Hashtags and captions per aesthetic category</p>
+                </div>
+              </div>
+
+              {Object.entries(contentBanks).map(([category, bank]) => (
+                <div key={category} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+                  <div className="p-4 border-b border-zinc-800 bg-zinc-800/50">
+                    <h3 className="font-semibold">{category}</h3>
+                  </div>
+                  <div className="p-4 grid md:grid-cols-2 gap-6">
+                    {/* Hashtags */}
+                    <div>
+                      <label className="block text-sm font-medium text-zinc-400 mb-3">Hashtags</label>
+
+                      {/* Always Use */}
+                      <div className="mb-3">
+                        <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Always Include</p>
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {bank.hashtags.always.map((tag, i) => (
+                            <span key={i} className="px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded text-xs font-mono">
+                              {tag}
+                              <button
+                                onClick={() => {
+                                  setContentBanks(prev => ({
+                                    ...prev,
+                                    [category]: {
+                                      ...prev[category],
+                                      hashtags: {
+                                        ...prev[category].hashtags,
+                                        always: prev[category].hashtags.always.filter((_, idx) => idx !== i)
+                                      }
+                                    }
+                                  }));
+                                }}
+                                className="ml-1 text-emerald-600 hover:text-emerald-300"
+                              >×</button>
+                            </span>
+                          ))}
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Add always-use hashtag..."
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-600"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && e.target.value.trim()) {
+                              const newTag = e.target.value.trim().startsWith('#') ? e.target.value.trim() : '#' + e.target.value.trim();
+                              setContentBanks(prev => ({
+                                ...prev,
+                                [category]: {
+                                  ...prev[category],
+                                  hashtags: {
+                                    ...prev[category].hashtags,
+                                    always: [...prev[category].hashtags.always, newTag]
+                                  }
+                                }
+                              }));
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                      </div>
+
+                      {/* Pool */}
+                      <div>
+                        <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Random Pool (3-5 selected per post)</p>
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {bank.hashtags.pool.map((tag, i) => (
+                            <span key={i} className="px-2 py-1 bg-zinc-800 text-zinc-400 rounded text-xs font-mono">
+                              {tag}
+                              <button
+                                onClick={() => {
+                                  setContentBanks(prev => ({
+                                    ...prev,
+                                    [category]: {
+                                      ...prev[category],
+                                      hashtags: {
+                                        ...prev[category].hashtags,
+                                        pool: prev[category].hashtags.pool.filter((_, idx) => idx !== i)
+                                      }
+                                    }
+                                  }));
+                                }}
+                                className="ml-1 text-zinc-600 hover:text-zinc-300"
+                              >×</button>
+                            </span>
+                          ))}
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Add to pool..."
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-600"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && e.target.value.trim()) {
+                              const newTag = e.target.value.trim().startsWith('#') ? e.target.value.trim() : '#' + e.target.value.trim();
+                              setContentBanks(prev => ({
+                                ...prev,
+                                [category]: {
+                                  ...prev[category],
+                                  hashtags: {
+                                    ...prev[category].hashtags,
+                                    pool: [...prev[category].hashtags.pool, newTag]
+                                  }
+                                }
+                              }));
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Captions */}
+                    <div>
+                      <label className="block text-sm font-medium text-zinc-400 mb-3">Captions</label>
+
+                      {/* Always Use */}
+                      <div className="mb-3">
+                        <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Always Include</p>
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {bank.captions.always.map((cap, i) => (
+                            <span key={i} className="px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded text-xs">
+                              {cap}
+                              <button
+                                onClick={() => {
+                                  setContentBanks(prev => ({
+                                    ...prev,
+                                    [category]: {
+                                      ...prev[category],
+                                      captions: {
+                                        ...prev[category].captions,
+                                        always: prev[category].captions.always.filter((_, idx) => idx !== i)
+                                      }
+                                    }
+                                  }));
+                                }}
+                                className="ml-1 text-emerald-600 hover:text-emerald-300"
+                              >×</button>
+                            </span>
+                          ))}
+                          {bank.captions.always.length === 0 && (
+                            <span className="text-xs text-zinc-600">None</span>
+                          )}
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Add always-use caption..."
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-600"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && e.target.value.trim()) {
+                              setContentBanks(prev => ({
+                                ...prev,
+                                [category]: {
+                                  ...prev[category],
+                                  captions: {
+                                    ...prev[category].captions,
+                                    always: [...prev[category].captions.always, e.target.value.trim()]
+                                  }
+                                }
+                              }));
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                      </div>
+
+                      {/* Pool */}
+                      <div>
+                        <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Random Pool (1 selected per post)</p>
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {bank.captions.pool.map((cap, i) => (
+                            <span key={i} className="px-2 py-1 bg-zinc-800 text-zinc-400 rounded text-xs">
+                              {cap}
+                              <button
+                                onClick={() => {
+                                  setContentBanks(prev => ({
+                                    ...prev,
+                                    [category]: {
+                                      ...prev[category],
+                                      captions: {
+                                        ...prev[category].captions,
+                                        pool: prev[category].captions.pool.filter((_, idx) => idx !== i)
+                                      }
+                                    }
+                                  }));
+                                }}
+                                className="ml-1 text-zinc-600 hover:text-zinc-300"
+                              >×</button>
+                            </span>
+                          ))}
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Add to pool..."
+                          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-600"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && e.target.value.trim()) {
+                              setContentBanks(prev => ({
+                                ...prev,
+                                [category]: {
+                                  ...prev[category],
+                                  captions: {
+                                    ...prev[category].captions,
+                                    pool: [...prev[category].captions.pool, e.target.value.trim()]
+                                  }
+                                }
+                              }));
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Applications Tab */}
+          {operatorTab === 'applications' && (
+            <div>
+              {applications.length === 0 ? (
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-12 text-center">
+                  <p className="text-zinc-500">No pending applications</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {applications.map((app) => (
+                    <div key={app.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                      <div className="flex flex-col md:flex-row justify-between gap-4">
+                        <div>
+                          <h3 className="text-lg font-semibold">{app.name}</h3>
+                          <p className="text-zinc-500 text-sm">{app.email}</p>
+                          <div className="flex gap-2 mt-2">
+                            <span className="px-2 py-1 bg-zinc-800 rounded text-xs">{app.tier}</span>
+                            <span className="text-xs text-zinc-500">Submitted {app.submitted}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button className="px-4 py-2 bg-white text-black rounded-lg text-sm font-medium hover:bg-zinc-200 transition">Review</button>
+                          <button className="px-4 py-2 bg-green-500/20 text-green-400 rounded-lg text-sm font-medium hover:bg-green-500/30 transition">Approve</button>
+                          <button className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm font-medium hover:bg-red-500/30 transition">Decline</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <footer className="border-t border-zinc-800 mt-12">
+          <div className="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center">
+            <span className="text-zinc-600 text-sm">StickToMusic Operator © 2025</span>
+          </div>
+        </footer>
+      </div>
+    );
+  }
+
+  // DASHBOARD PAGE
+  if (currentPage === 'dashboard') {
+    return (
+      <div className="min-h-screen bg-zinc-950 text-zinc-100">
+        {/* Dashboard Header */}
+        <header className="border-b border-zinc-800 bg-zinc-950/95 backdrop-blur sticky top-0 z-50">
+          <div className="max-w-7xl mx-auto px-6 py-4">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-6">
+                <button onClick={() => setCurrentPage('home')} className="text-xl font-bold hover:text-zinc-300 transition">StickToMusic</button>
+                <span className="text-zinc-600">|</span>
+                <span className="text-zinc-400">Artist Dashboard</span>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-zinc-400">{artistData.name}</span>
+                <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold">
+                  {artistData.name[0]}
+                </div>
+                <button onClick={() => setCurrentPage('home')} className="text-sm text-zinc-500 hover:text-white transition">Log out</button>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          {/* Welcome + Date Range */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+            <div>
+              <h1 className="text-3xl font-bold mb-1">Welcome back, {artistData.name}</h1>
+              <p className="text-zinc-400">
+                {artistData.tier} plan • {artistData.totalPages} world pages active • Since {artistData.activeSince}
+              </p>
+            </div>
+            <div className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-xl p-2">
+              <input
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                className="bg-transparent border-none text-sm text-zinc-300 focus:outline-none"
+              />
+              <span className="text-zinc-600">→</span>
+              <input
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                className="bg-transparent border-none text-sm text-zinc-300 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Tab Navigation */}
+          <div className="flex gap-2 mb-8 border-b border-zinc-800 pb-4">
+            {['overview', 'engagement', 'reports'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => setDashboardTab(tab)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                  dashboardTab === tab
+                    ? 'bg-white text-black'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                }`}
+              >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {/* Overview Tab */}
+          {dashboardTab === 'overview' && (
+            <div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <StatCard label="Total Views" value={dashboardMetrics.reach.totalViews} change={dashboardMetrics.reach.change} />
+                <StatCard label="Total Engagements" value={dashboardMetrics.engagement.likes + dashboardMetrics.engagement.comments + dashboardMetrics.engagement.shares + dashboardMetrics.engagement.saves} change={dashboardMetrics.engagement.change} />
+                <StatCard label="Unique Reach" value={dashboardMetrics.reach.uniqueReach} />
+                <StatCard label="Engagement Rate" value={dashboardMetrics.engagement.engagementRate} suffix="%" />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold mb-6">Views by Platform</h3>
+                  {Object.entries(dashboardMetrics.platforms).map(([platform, data]) => (
+                    <PlatformBar
+                      key={platform}
+                      platform={platform}
+                      views={data.views}
+                      engagement={data.engagement}
+                      maxViews={Math.max(...Object.values(dashboardMetrics.platforms).map(p => p.views))}
+                    />
+                  ))}
+                </div>
+
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold mb-6">Reach Stats</h3>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center py-3 border-b border-zinc-800">
+                      <span className="text-zinc-400">Total Impressions</span>
+                      <span className="font-semibold">{formatNumber(dashboardMetrics.reach.totalImpressions)}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-3 border-b border-zinc-800">
+                      <span className="text-zinc-400">Unique Reach</span>
+                      <span className="font-semibold">{formatNumber(dashboardMetrics.reach.uniqueReach)}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-3 border-b border-zinc-800">
+                      <span className="text-zinc-400">Avg. Views per Post</span>
+                      <span className="font-semibold">{formatNumber(Math.round(dashboardMetrics.reach.totalViews / 142))}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-3">
+                      <span className="text-zinc-400">Active World Pages</span>
+                      <span className="font-semibold">{artistData.totalPages}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Engagement Tab */}
+          {dashboardTab === 'engagement' && (
+            <div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <StatCard label="Likes" value={dashboardMetrics.engagement.likes} />
+                <StatCard label="Comments" value={dashboardMetrics.engagement.comments} />
+                <StatCard label="Shares" value={dashboardMetrics.engagement.shares} />
+                <StatCard label="Saves" value={dashboardMetrics.engagement.saves} />
+              </div>
+
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                <h3 className="text-lg font-semibold mb-4">Engagement Breakdown</h3>
+                <p className="text-zinc-400 mb-6">How audiences are interacting with your content across all world pages.</p>
+
+                <div className="grid md:grid-cols-2 gap-8">
+                  <div>
+                    <h4 className="text-sm font-medium text-zinc-500 uppercase tracking-wider mb-4">By Action Type</h4>
+                    <div className="space-y-4">
+                      {[
+                        { label: 'Likes', value: dashboardMetrics.engagement.likes, color: 'bg-pink-500' },
+                        { label: 'Saves', value: dashboardMetrics.engagement.saves, color: 'bg-yellow-500' },
+                        { label: 'Shares', value: dashboardMetrics.engagement.shares, color: 'bg-green-500' },
+                        { label: 'Comments', value: dashboardMetrics.engagement.comments, color: 'bg-blue-500' }
+                      ].map(item => {
+                        const total = dashboardMetrics.engagement.likes + dashboardMetrics.engagement.saves + dashboardMetrics.engagement.shares + dashboardMetrics.engagement.comments;
+                        const pct = (item.value / total) * 100;
+                        return (
+                          <div key={item.label}>
+                            <div className="flex justify-between text-sm mb-1">
+                              <span>{item.label}</span>
+                              <span className="text-zinc-400">{pct.toFixed(1)}%</span>
+                            </div>
+                            <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                              <div className={`h-full ${item.color} rounded-full`} style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-medium text-zinc-500 uppercase tracking-wider mb-4">Key Insights</h4>
+                    <div className="space-y-3">
+                      <div className="p-4 bg-zinc-800/50 rounded-lg">
+                        <p className="text-sm"><span className="text-green-400 font-semibold">↑ 41%</span> increase in saves this period</p>
+                        <p className="text-xs text-zinc-500 mt-1">Saves indicate strong intent to return</p>
+                      </div>
+                      <div className="p-4 bg-zinc-800/50 rounded-lg">
+                        <p className="text-sm"><span className="font-semibold">4.2%</span> engagement rate</p>
+                        <p className="text-xs text-zinc-500 mt-1">Above industry average of 2.5%</p>
+                      </div>
+                      <div className="p-4 bg-zinc-800/50 rounded-lg">
+                        <p className="text-sm"><span className="font-semibold">TikTok</span> driving most shares</p>
+                        <p className="text-xs text-zinc-500 mt-1">Content is resonating with discovery behavior</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Reports Tab */}
+          {dashboardTab === 'reports' && (
+            <div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 mb-6">
+                <h3 className="text-lg font-semibold mb-2">Monthly Reports</h3>
+                <p className="text-zinc-400 mb-6">Detailed breakdowns delivered at the end of each month.</p>
+
+                <div className="space-y-3">
+                  {monthlyReports.map((report, i) => (
+                    <div key={i} className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-xl">
+                      <div>
+                        <p className="font-medium">{report.month}</p>
+                        <p className="text-sm text-zinc-500">{report.highlights}</p>
+                      </div>
+                      {report.status === 'current' ? (
+                        <span className="px-3 py-1 bg-zinc-700 text-zinc-300 rounded-full text-sm">In Progress</span>
+                      ) : (
+                        <button className="px-4 py-2 bg-white text-black rounded-full text-sm font-medium hover:bg-zinc-200 transition">
+                          Download PDF
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                <h3 className="text-lg font-semibold mb-4">What's in each report?</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {[
+                    "Full performance breakdown by platform",
+                    "Top performing content themes",
+                    "Audience demographic insights",
+                    "Engagement trend analysis",
+                    "Recommendations for next month",
+                    "World page growth metrics"
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <span className="text-green-400">✓</span>
+                      <span className="text-zinc-300 text-sm">{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Dashboard Footer */}
+        <footer className="border-t border-zinc-800 mt-12">
+          <div className="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center">
+            <span className="text-zinc-600 text-sm">StickToMusic © 2025</span>
+          </div>
+        </footer>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans">
+      <Nav />
+
+      {/* HOME */}
+      {currentPage === 'home' && (
+        <div className="min-h-screen flex flex-col justify-center items-center text-center px-6">
+          <h1 className="text-5xl md:text-7xl font-bold max-w-4xl leading-tight mb-6">Your music deserves to live in culture.</h1>
+          <p className="text-xl md:text-2xl text-zinc-400 max-w-xl mb-12">World pages that seed your sound where fans actually discover music.</p>
+          <div className="flex gap-4 flex-wrap justify-center">
+            <button onClick={goToIntake} className="px-8 py-4 bg-white text-black rounded-full text-lg font-semibold hover:bg-zinc-200 transition">Apply →</button>
+            <button onClick={() => setCurrentPage('how')} className="px-8 py-4 border border-zinc-600 rounded-full text-lg font-semibold hover:bg-zinc-900 transition">How It Works</button>
+          </div>
+        </div>
+      )}
+
+      {/* HOW IT WORKS */}
+      {currentPage === 'how' && (
+        <div className="min-h-screen pt-28 pb-20 px-6">
+          <div className="max-w-4xl mx-auto">
+            <div className="mb-16">
+              <h1 className="text-4xl md:text-5xl font-bold mb-4">How It Works</h1>
+              <p className="text-xl text-zinc-400">The system behind organic music discovery.</p>
+            </div>
+            <section className="mb-20">
+              <h2 className="text-lg font-semibold text-zinc-500 uppercase tracking-wider mb-4">The Problem</h2>
+              <div className="border-l-2 border-zinc-700 pl-8">
+                <p className="text-2xl md:text-3xl font-semibold leading-relaxed mb-4">The algorithm isn't broken. Your distribution is.</p>
+                <p className="text-lg text-zinc-400 leading-relaxed">Posting on your main account and hoping TikTok picks it up isn't a strategy. The artists breaking through are showing up in the feeds of people who haven't heard of them yet. That takes more than one page. It takes an ecosystem.</p>
+              </div>
+            </section>
+            <section className="mb-20">
+              <h2 className="text-lg font-semibold text-zinc-500 uppercase tracking-wider mb-4">World Pages</h2>
+              <div className="border-l-2 border-zinc-700 pl-8">
+                <p className="text-2xl md:text-3xl font-semibold leading-relaxed mb-4">Niche accounts that plant your music where fans already live.</p>
+                <p className="text-lg text-zinc-400 leading-relaxed mb-8">A world page is a niche aesthetic account—fashion edits, cinematic clips, mood content—that builds its own audience. Your music gets seeded naturally.</p>
+                <div className="grid md:grid-cols-3 gap-4">
+                  {[
+                    { title: "Organic Reach", desc: "Shows up in feeds without feeling like a promotion." },
+                    { title: "Cultural Grafting", desc: "Your sound attached to visuals fans already love." },
+                    { title: "Compounding Growth", desc: "The ecosystem expands with every post." }
+                  ].map((item, i) => (
+                    <div key={i} className="p-5 rounded-xl bg-zinc-900 border border-zinc-800">
+                      <h3 className="font-semibold mb-2">{item.title}</h3>
+                      <p className="text-zinc-500 text-sm">{item.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+            <section className="mb-16">
+              <h2 className="text-lg font-semibold text-zinc-500 uppercase tracking-wider mb-4">The Process</h2>
+              <div className="border-l-2 border-zinc-700 pl-8 space-y-8">
+                {[
+                  { num: "01", title: "Intake", desc: "Tell us about your sound, aesthetic, and target audience." },
+                  { num: "02", title: "World Building", desc: "We identify and build niche pages aligned with your music." },
+                  { num: "03", title: "Content Seeding", desc: "Your music woven into content across TikTok, Instagram, Facebook, and YouTube." },
+                  { num: "04", title: "Growth", desc: "Watch your reach expand with monthly performance data." }
+                ].map((step, i) => (
+                  <div key={i} className="flex gap-6">
+                    <span className="text-3xl font-bold text-zinc-700">{step.num}</span>
+                    <div>
+                      <h3 className="text-lg font-semibold mb-1">{step.title}</h3>
+                      <p className="text-zinc-400">{step.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <div className="text-center pt-8 border-t border-zinc-800">
+              <button onClick={() => setCurrentPage('pricing')} className="px-8 py-4 bg-white text-black rounded-full text-lg font-semibold hover:bg-zinc-200 transition">See Pricing →</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PRICING */}
+      {currentPage === 'pricing' && (
+        <div className="min-h-screen pt-28 pb-20 px-6">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-12">
+              <h1 className="text-4xl md:text-5xl font-bold mb-4">Pricing</h1>
+              <p className="text-xl text-zinc-400">World page packages and creative direction add-ons</p>
+            </div>
+            <div className="mb-12">
+              <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">Page Builder Tiers</h2>
+              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {tiers.map((tier) => (
+                  <div key={tier.name} className="p-6 rounded-2xl border border-zinc-800 bg-zinc-900/50">
+                    <div className="mb-3">
+                      <h3 className="text-xl font-bold">{tier.name}</h3>
+                      <p className="text-zinc-500 text-sm">{tier.description}</p>
+                    </div>
+                    <div className="mb-3">
+                      <span className="text-3xl font-bold">${tier.price.toLocaleString()}</span>
+                      <span className="text-zinc-500">/mo</span>
+                    </div>
+                    <div className="text-3xl font-bold text-zinc-600 mb-3">{tier.pages} pages</div>
+                    <p className="text-sm text-zinc-500 mb-4">{tier.detail}</p>
+                    <ul className="space-y-1">
+                      {tier.features.map((f, i) => (<li key={i} className="text-xs text-zinc-400">• {f}</li>))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="mb-12">
+              <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">Creative Direction Add-Ons</h2>
+              <div className="grid md:grid-cols-2 gap-4">
+                {cdTiers.map((cd) => (
+                  <div key={cd.name} className="p-6 rounded-2xl border border-zinc-800 bg-zinc-900/50">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h3 className="text-xl font-bold">{cd.name}</h3>
+                        <p className="text-zinc-500 text-sm">{cd.description}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-2xl font-bold">+${cd.price.toLocaleString()}</span>
+                        <span className="text-zinc-500">/mo</span>
+                      </div>
+                    </div>
+                    <ul className="space-y-2">
+                      {cd.features.map((f, i) => (<li key={i} className="text-sm text-zinc-400 flex items-center gap-2"><span className="text-green-400">✓</span>{f}</li>))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="text-center mb-16">
+              <button onClick={goToIntake} className="px-8 py-4 bg-white text-black rounded-full text-lg font-semibold hover:bg-zinc-200 transition">Apply Now →</button>
+              <p className="text-zinc-500 text-sm mt-3">You'll select your preferred tier in the application</p>
+            </div>
+            <div className="max-w-3xl mx-auto">
+              <h2 className="text-xl font-bold mb-6 text-center">Questions</h2>
+              <div className="space-y-2">
+                {faqs.map((faq, i) => (
+                  <div key={i} className="border border-zinc-800 rounded-xl overflow-hidden">
+                    <button className="w-full p-4 text-left flex justify-between items-center hover:bg-zinc-900 transition" onClick={() => setOpenFaq(openFaq === i ? null : i)}>
+                      <span className="font-medium text-sm">{faq.q}</span>
+                      <span className="text-zinc-500">{openFaq === i ? '−' : '+'}</span>
+                    </button>
+                    {openFaq === i && (<div className="px-4 pb-4 text-zinc-400 text-sm">{faq.a}</div>)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FOOTER */}
+      <footer className="py-8 px-6 border-t border-zinc-900">
+        <div className="max-w-6xl mx-auto flex justify-between items-center">
+          <span className="font-bold">StickToMusic</span>
+          <span className="text-zinc-600 text-sm">© 2025</span>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+export default StickToMusic;
