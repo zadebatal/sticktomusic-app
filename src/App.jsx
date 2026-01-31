@@ -70,12 +70,33 @@ const lateApi = {
 
   async fetchScheduledPosts() {
     try {
-      const response = await fetch(`${LATE_API_BASE}/posts`, {
-        headers: { 'Authorization': `Bearer ${LATE_API_KEY}` }
-      });
-      if (!response.ok) throw new Error(`Failed: ${response.status}`);
-      const data = await response.json();
-      return { success: true, posts: data.posts || data };
+      // Fetch all pages of posts
+      let allPosts = [];
+      let page = 1;
+      let hasMore = true;
+
+      while (hasMore) {
+        const response = await fetch(`${LATE_API_BASE}/posts?page=${page}&limit=50`, {
+          headers: { 'Authorization': `Bearer ${LATE_API_KEY}` }
+        });
+        if (!response.ok) throw new Error(`Failed: ${response.status}`);
+        const data = await response.json();
+        const posts = data.posts || data || [];
+
+        if (Array.isArray(posts) && posts.length > 0) {
+          allPosts = [...allPosts, ...posts];
+          page++;
+          // Stop if we got fewer than the limit (last page)
+          if (posts.length < 50) hasMore = false;
+        } else {
+          hasMore = false;
+        }
+
+        // Safety limit to prevent infinite loops
+        if (page > 20) hasMore = false;
+      }
+
+      return { success: true, posts: allPosts };
     } catch (error) {
       console.error('Late API error:', error);
       return { success: false, error: error.message };
