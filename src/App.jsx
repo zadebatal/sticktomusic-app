@@ -74,7 +74,25 @@ const lateApi = {
         headers: { 'Authorization': `Bearer ${LATE_API_KEY}` }
       });
       if (!response.ok) throw new Error(`Failed: ${response.status}`);
-      return { success: true, posts: await response.json() };
+      const data = await response.json();
+      return { success: true, posts: data.posts || data };
+    } catch (error) {
+      console.error('Late API error:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  async deletePost(postId) {
+    try {
+      const response = await fetch(`${LATE_API_BASE}/posts/${postId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${LATE_API_KEY}` }
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || `Failed: ${response.status}`);
+      }
+      return { success: true };
     } catch (error) {
       console.error('Late API error:', error);
       return { success: false, error: error.message };
@@ -113,6 +131,10 @@ const StickToMusic = () => {
   const [syncStatus, setSyncStatus] = useState(null);
   const [lateAccounts, setLateAccounts] = useState([]);
   const [showLateAccounts, setShowLateAccounts] = useState(false);
+  const [latePosts, setLatePosts] = useState([]);
+  const [contentView, setContentView] = useState('list'); // 'list' or 'calendar'
+  const [deletingPostId, setDeletingPostId] = useState(null);
+  const [lastSynced, setLastSynced] = useState(null);
 
   // Fetch Late accounts on demand
   const fetchLateAccounts = async () => {
@@ -1292,14 +1314,33 @@ const StickToMusic = () => {
 
             const handleSync = async () => {
               setSyncing(true);
-              setSyncStatus(null);
-              // This would call the Late API
-              // const result = await fetchScheduledPosts();
-              setTimeout(() => {
-                setSyncing(false);
-                setSyncStatus('Synced 33 posts from Late');
-                setTimeout(() => setSyncStatus(null), 3000);
-              }, 1500);
+              setSyncStatus('Syncing with Late...');
+              const result = await lateApi.fetchScheduledPosts();
+              setSyncing(false);
+              if (result.success) {
+                const posts = Array.isArray(result.posts) ? result.posts : [];
+                setLatePosts(posts);
+                setLastSynced(new Date());
+                const postWord = posts.length === 1 ? 'post' : 'posts';
+                setSyncStatus(`✓ Synced ${posts.length} ${postWord} from Late`);
+              } else {
+                setSyncStatus(`Error: ${result.error}`);
+              }
+              setTimeout(() => setSyncStatus(null), 3000);
+            };
+
+            const handleDeletePost = async (postId) => {
+              if (!window.confirm('Delete this post from Late? This cannot be undone.')) return;
+              setDeletingPostId(postId);
+              const result = await lateApi.deletePost(postId);
+              setDeletingPostId(null);
+              if (result.success) {
+                setLatePosts(prev => prev.filter(p => p._id !== postId));
+                setSyncStatus('✓ Post deleted');
+                setTimeout(() => setSyncStatus(null), 2000);
+              } else {
+                alert(`Failed to delete: ${result.error}`);
+              }
             };
 
             return (
@@ -1620,9 +1661,20 @@ const StickToMusic = () => {
                     <button
                       onClick={handleSync}
                       disabled={syncing}
-                      className="px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg text-sm font-medium hover:bg-zinc-700 transition disabled:opacity-50"
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
+                        syncing
+                          ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                          : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                      } disabled:cursor-not-allowed`}
                     >
-                      {syncing ? '↻ Syncing...' : '↻ Sync from Late'}
+                      {syncing ? (
+                        <>
+                          <span className="animate-spin">↻</span>
+                          Syncing...
+                        </>
+                      ) : (
+                        <>↻ Sync from Late</>
+                      )}
                     </button>
                     <button
                       onClick={() => setShowScheduleModal(true)}
@@ -1632,9 +1684,10 @@ const StickToMusic = () => {
                     </button>
                     <button
                       onClick={fetchLateAccounts}
-                      className="px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg text-sm font-medium hover:bg-zinc-700 transition"
+                      disabled={syncing}
+                      className="px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg text-sm font-medium hover:bg-zinc-700 transition disabled:opacity-50"
                     >
-                      View Late Accounts
+                      View Accounts
                     </button>
                   </div>
                 </div>
@@ -1674,22 +1727,49 @@ const StickToMusic = () => {
                 {/* Sync Status */}
                 {syncStatus && (
                   <div className="mb-4 px-4 py-2 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-sm">
-                    ✓ {syncStatus}
+                    {syncStatus}
                   </div>
                 )}
 
+                {/* View Toggle */}
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-sm text-zinc-500">View:</span>
+                  <div className="flex bg-zinc-800 rounded-lg p-1">
+                    <button
+                      onClick={() => setContentView('list')}
+                      className={`px-3 py-1.5 rounded-md text-sm transition ${contentView === 'list' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}
+                    >
+                      List
+                    </button>
+                    <button
+                      onClick={() => setContentView('calendar')}
+                      className={`px-3 py-1.5 rounded-md text-sm transition ${contentView === 'calendar' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}
+                    >
+                      Calendar
+                    </button>
+                  </div>
+                  {latePosts.length === 0 && (
+                    <span className="text-xs text-zinc-500 ml-2">Click "Sync from Late" to load posts</span>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                   <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                    <p className="text-zinc-500 text-xs mb-1">Posting Today</p>
-                    <p className="text-2xl font-bold">{todayPostsCount}</p>
+                    <p className="text-zinc-500 text-xs mb-1">From Late API</p>
+                    <p className="text-2xl font-bold text-purple-400">{latePosts.length}</p>
                   </div>
                   <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                    <p className="text-zinc-500 text-xs mb-1">Total Scheduled</p>
-                    <p className="text-2xl font-bold text-purple-400">{allPosts.length}</p>
+                    <p className="text-zinc-500 text-xs mb-1">Scheduled</p>
+                    <p className="text-2xl font-bold">{latePosts.filter(p => p.status === 'scheduled').length}</p>
                   </div>
                   <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
                     <p className="text-zinc-500 text-xs mb-1">Late Status</p>
                     <p className="text-sm font-medium text-green-400">● Connected</p>
+                    {lastSynced && (
+                      <p className="text-xs text-zinc-500 mt-1">
+                        Synced {lastSynced.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                      </p>
+                    )}
                   </div>
                   <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
                     <p className="text-zinc-500 text-xs mb-1">Accounts</p>
@@ -1697,46 +1777,167 @@ const StickToMusic = () => {
                   </div>
                 </div>
 
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-zinc-800">
-                        <th className="text-left p-4 text-sm font-medium text-zinc-500">Date & Time</th>
-                        <th className="text-left p-4 text-sm font-medium text-zinc-500">Account</th>
-                        <th className="text-left p-4 text-sm font-medium text-zinc-500">Platforms</th>
-                        <th className="text-left p-4 text-sm font-medium text-zinc-500">Caption</th>
-                        <th className="text-left p-4 text-sm font-medium text-zinc-500">Song</th>
-                        <th className="text-left p-4 text-sm font-medium text-zinc-500">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {allPosts.length > 0 ? (
-                        allPosts.map(item => (
-                          <tr key={item.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition">
-                            <td className="p-4 text-sm text-zinc-400">{item.scheduledFor}</td>
-                            <td className="p-4 font-mono text-sm">{item.page}</td>
-                            <td className="p-4">
-                              <div className="flex gap-1">
-                                {item.platforms.map(p => (
-                                  <span key={p} className={`px-2 py-0.5 rounded text-xs ${p === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
-                                    {p === 'tiktok' ? 'TT' : 'IG'}
-                                  </span>
+                {/* Loading State */}
+                {syncing && (
+                  <div className="space-y-4">
+                    {[1, 2, 3].map(i => (
+                      <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden animate-pulse">
+                        <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-800/50">
+                          <div className="h-6 bg-zinc-700 rounded w-32"></div>
+                        </div>
+                        <div className="p-4 space-y-3">
+                          <div className="flex items-center gap-4">
+                            <div className="h-4 bg-zinc-800 rounded w-16"></div>
+                            <div className="h-4 bg-zinc-800 rounded w-48"></div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="h-4 bg-zinc-800 rounded w-16"></div>
+                            <div className="h-4 bg-zinc-800 rounded w-64"></div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Calendar View */}
+                {!syncing && contentView === 'calendar' && (() => {
+                  // Group posts by date
+                  const postsByDate = latePosts.reduce((acc, post) => {
+                    const date = post.scheduledFor ? post.scheduledFor.split('T')[0] : 'Unknown';
+                    if (!acc[date]) acc[date] = [];
+                    acc[date].push(post);
+                    return acc;
+                  }, {});
+
+                  const sortedDates = Object.keys(postsByDate).sort();
+
+                  return (
+                    <div className="space-y-4">
+                      {sortedDates.length === 0 ? (
+                        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center text-zinc-500">
+                          No posts synced. Click "Sync from Late" to load your scheduled posts.
+                        </div>
+                      ) : (
+                        sortedDates.map(date => {
+                          const datePosts = postsByDate[date];
+                          const dateObj = new Date(date + 'T12:00:00');
+                          const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dateObj.getDay()];
+                          const monthDay = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+                          return (
+                            <div key={date} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+                              <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-800/50 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="text-center">
+                                    <p className="text-xs text-zinc-500 uppercase">{dayName}</p>
+                                    <p className="text-lg font-bold">{monthDay}</p>
+                                  </div>
+                                  <span className="text-sm text-zinc-500">{datePosts.length} post{datePosts.length === 1 ? '' : 's'}</span>
+                                </div>
+                              </div>
+                              <div className="divide-y divide-zinc-800/50">
+                                {datePosts.map(post => (
+                                  <div key={post._id} className="p-4 flex items-center justify-between hover:bg-zinc-800/30 transition">
+                                    <div className="flex items-center gap-4">
+                                      <div className="text-sm text-zinc-400 w-16">
+                                        {post.scheduledFor ? new Date(post.scheduledFor).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '-'}
+                                      </div>
+                                      <div>
+                                        <div className="flex items-center gap-2">
+                                          {(post.platforms || []).map(p => (
+                                            <span key={p.platform || p} className={`px-2 py-0.5 rounded text-xs ${(p.platform || p) === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                                              {(p.platform || p) === 'tiktok' ? 'TikTok' : 'Instagram'}
+                                            </span>
+                                          ))}
+                                        </div>
+                                        <p className="text-sm text-zinc-300 mt-1 max-w-md truncate">{post.content || 'No caption'}</p>
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() => handleDeletePost(post._id)}
+                                      disabled={deletingPostId === post._id}
+                                      className="px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/20 rounded-lg transition disabled:opacity-50"
+                                    >
+                                      {deletingPostId === post._id ? 'Deleting...' : 'Delete'}
+                                    </button>
+                                  </div>
                                 ))}
                               </div>
-                            </td>
-                            <td className="p-4 text-sm max-w-[150px] truncate">{item.caption}</td>
-                            <td className="p-4 text-sm text-zinc-400">{item.song}</td>
-                            <td className="p-4">
-                              <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(item.status)}`}>{item.status}</span>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* List View */}
+                {!syncing && contentView === 'list' && (
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-zinc-800">
+                          <th className="text-left p-4 text-sm font-medium text-zinc-500">Date & Time</th>
+                          <th className="text-left p-4 text-sm font-medium text-zinc-500">Platforms</th>
+                          <th className="text-left p-4 text-sm font-medium text-zinc-500">Caption</th>
+                          <th className="text-left p-4 text-sm font-medium text-zinc-500">Status</th>
+                          <th className="text-left p-4 text-sm font-medium text-zinc-500">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {latePosts.length > 0 ? (
+                          latePosts
+                            .sort((a, b) => (a.scheduledFor || '').localeCompare(b.scheduledFor || ''))
+                            .map(post => (
+                              <tr key={post._id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition">
+                                <td className="p-4 text-sm text-zinc-400">
+                                  {post.scheduledFor ? new Date(post.scheduledFor).toLocaleString('en-US', {
+                                    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+                                  }) : '-'}
+                                </td>
+                                <td className="p-4">
+                                  <div className="flex gap-1">
+                                    {(post.platforms || []).map((p, i) => (
+                                      <span key={i} className={`px-2 py-0.5 rounded text-xs ${(p.platform || p) === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                                        {(p.platform || p) === 'tiktok' ? 'TT' : 'IG'}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td className="p-4 text-sm max-w-[200px] truncate">{post.content || 'No caption'}</td>
+                                <td className="p-4">
+                                  <span className={`px-2 py-1 rounded-full text-xs ${
+                                    post.status === 'scheduled' ? 'bg-yellow-500/20 text-yellow-400' :
+                                    post.status === 'posted' ? 'bg-green-500/20 text-green-400' :
+                                    post.status === 'failed' ? 'bg-red-500/20 text-red-400' :
+                                    'bg-zinc-500/20 text-zinc-400'
+                                  }`}>
+                                    {post.status || 'unknown'}
+                                  </span>
+                                </td>
+                                <td className="p-4">
+                                  <button
+                                    onClick={() => handleDeletePost(post._id)}
+                                    disabled={deletingPostId === post._id}
+                                    className="px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/20 rounded-lg transition disabled:opacity-50"
+                                  >
+                                    {deletingPostId === post._id ? '...' : 'Delete'}
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                        ) : (
+                          <tr>
+                            <td colSpan={5} className="p-8 text-center text-zinc-500">
+                              No posts synced. Click "Sync from Late" to load your scheduled posts.
                             </td>
                           </tr>
-                        ))
-                      ) : (
-                        <tr><td colSpan={6} className="p-8 text-center text-zinc-500">No content</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             );
           })()}
