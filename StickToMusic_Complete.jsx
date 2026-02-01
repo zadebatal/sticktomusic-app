@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 
 // Late API Configuration
 const LATE_API_BASE = 'https://getlate.dev/api/v1';
@@ -24,10 +24,7 @@ const lateApi = {
         headers: { 'Authorization': `Bearer ${LATE_API_KEY}` }
       });
       if (!response.ok) throw new Error(`Failed: ${response.status}`);
-      const data = await response.json();
-      // Handle different response formats
-      const accounts = data.accounts || data.data || (Array.isArray(data) ? data : []);
-      return { success: true, accounts };
+      return { success: true, accounts: await response.json() };
     } catch (error) {
       console.error('Late API error:', error);
       return { success: false, error: error.message };
@@ -124,118 +121,9 @@ const lateApi = {
   }
 };
 
-// Mock user database (in production, this would be a real backend)
-const USERS_DB = {
-  'zade@sticktomusic.com': { password: 'admin123', role: 'operator', name: 'Zade', artistId: null },
-  'boon@artist.com': { password: 'boon123', role: 'artist', name: 'Boon', artistId: 'boon' },
-  'camylio@artist.com': { password: 'camylio123', role: 'artist', name: 'Camylio', artistId: 'camylio' },
-};
-
-// Campaign data structure
-const CAMPAIGNS_DATA = [
-  {
-    id: 'camp-1',
-    artistId: 'boon',
-    name: 'Boon January Push',
-    status: 'active',
-    startDate: '2026-01-15',
-    endDate: '2026-02-15',
-    budget: 5000,
-    spent: 2340,
-    postsScheduled: 56,
-    postsPublished: 12,
-    categories: ['Fashion', 'Y2K'],
-    goals: { views: 500000, followers: 5000 },
-    achieved: { views: 234000, followers: 1820 }
-  },
-  {
-    id: 'camp-2',
-    artistId: 'camylio',
-    name: 'Camylio Soft Launch',
-    status: 'planning',
-    startDate: '2026-02-01',
-    endDate: '2026-03-01',
-    budget: 3000,
-    spent: 0,
-    postsScheduled: 0,
-    postsPublished: 0,
-    categories: ['Emo'],
-    goals: { views: 250000, followers: 2500 },
-    achieved: { views: 0, followers: 0 }
-  }
-];
-
 const StickToMusic = () => {
   const [currentPage, setCurrentPage] = useState('home');
   const [openFaq, setOpenFaq] = useState(null);
-
-  // Authentication state
-  const [user, setUser] = useState(null); // { email, role, name, artistId }
-  const [showLoginModal, setShowLoginModal] = useState(false);
-  const [loginForm, setLoginForm] = useState({ email: '', password: '', error: null });
-  const [showSignupModal, setShowSignupModal] = useState(false);
-  const [signupForm, setSignupForm] = useState({ email: '', password: '', name: '', role: 'artist', error: null });
-
-  // Campaign management state
-  const [campaigns, setCampaigns] = useState(CAMPAIGNS_DATA);
-  const [selectedCampaign, setSelectedCampaign] = useState(null);
-  const [showCampaignModal, setShowCampaignModal] = useState(false);
-  const [campaignForm, setCampaignForm] = useState({
-    name: '',
-    startDate: '',
-    endDate: '',
-    budget: '',
-    categories: [],
-    goalViews: '',
-    goalFollowers: ''
-  });
-
-  // Calendar navigation state
-  const [calendarMonth, setCalendarMonth] = useState(new Date());
-
-  // Search/filter state
-  const [postSearch, setPostSearch] = useState('');
-  const [postPlatformFilter, setPostPlatformFilter] = useState('all'); // 'all', 'tiktok', 'instagram'
-  const [applicationFilter, setApplicationFilter] = useState('all'); // 'all', 'pending', 'approved', 'declined'
-
-  // Toast notification state
-  const [toasts, setToasts] = useState([]);
-
-  const showToast = (message, type = 'success') => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 4000);
-  };
-
-  // Toast component
-  const ToastContainer = () => (
-    <div className="fixed bottom-4 right-4 z-[100] space-y-2">
-      {toasts.map(toast => (
-        <div
-          key={toast.id}
-          className={`px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-slide-up ${
-            toast.type === 'success' ? 'bg-green-600 text-white' :
-            toast.type === 'error' ? 'bg-red-600 text-white' :
-            toast.type === 'info' ? 'bg-blue-600 text-white' :
-            'bg-zinc-800 text-white'
-          }`}
-        >
-          <span>
-            {toast.type === 'success' ? '✓' : toast.type === 'error' ? '✕' : 'ℹ'}
-          </span>
-          <span className="text-sm">{toast.message}</span>
-          <button
-            onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
-            className="ml-2 opacity-70 hover:opacity-100"
-          >
-            ✕
-          </button>
-        </div>
-      ))}
-    </div>
-  );
 
   // Dashboard state
   const [dateRange, setDateRange] = useState({ start: '2025-01-01', end: '2025-01-30' });
@@ -268,174 +156,6 @@ const StickToMusic = () => {
   const [contentView, setContentView] = useState('list'); // 'list' or 'calendar'
   const [deletingPostId, setDeletingPostId] = useState(null);
   const [lastSynced, setLastSynced] = useState(null);
-
-  // Loading states for better UX
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [isSigningUp, setIsSigningUp] = useState(false);
-  const [isScheduling, setIsScheduling] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
-  const [isCreatingCampaign, setIsCreatingCampaign] = useState(false);
-
-  // Delete confirmation modal
-  const [deleteConfirmModal, setDeleteConfirmModal] = useState({ show: false, postId: null, caption: '' });
-
-  // Quick search modal (Cmd+K)
-  const [showQuickSearch, setShowQuickSearch] = useState(false);
-  const [quickSearchQuery, setQuickSearchQuery] = useState('');
-  const quickSearchRef = useRef(null);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      // Cmd+K or Ctrl+K to open quick search
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setShowQuickSearch(true);
-        setQuickSearchQuery('');
-      }
-      // Escape to close modals
-      if (e.key === 'Escape') {
-        setShowQuickSearch(false);
-        setDeleteConfirmModal({ show: false, postId: null, caption: '' });
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  // Focus quick search input when opened
-  useEffect(() => {
-    if (showQuickSearch && quickSearchRef.current) {
-      quickSearchRef.current.focus();
-    }
-  }, [showQuickSearch]);
-
-  // Authentication functions
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setIsLoggingIn(true);
-    // Simulate network delay for realism
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const userRecord = USERS_DB[loginForm.email.toLowerCase()];
-    if (userRecord && userRecord.password === loginForm.password) {
-      setUser({
-        email: loginForm.email.toLowerCase(),
-        role: userRecord.role,
-        name: userRecord.name,
-        artistId: userRecord.artistId
-      });
-      setShowLoginModal(false);
-      setLoginForm({ email: '', password: '', error: null });
-      showToast(`Welcome back, ${userRecord.name}!`, 'success');
-      // Redirect based on role
-      if (userRecord.role === 'artist') {
-        setCurrentPage('artist-portal');
-      } else {
-        setCurrentPage('operator');
-      }
-    } else {
-      setLoginForm(prev => ({ ...prev, error: 'Invalid email or password' }));
-    }
-    setIsLoggingIn(false);
-  };
-
-  const handleSignup = async (e) => {
-    e.preventDefault();
-    setIsSigningUp(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    if (USERS_DB[signupForm.email.toLowerCase()]) {
-      setSignupForm(prev => ({ ...prev, error: 'Email already exists' }));
-      setIsSigningUp(false);
-      return;
-    }
-    // In production, this would call an API
-    USERS_DB[signupForm.email.toLowerCase()] = {
-      password: signupForm.password,
-      role: signupForm.role,
-      name: signupForm.name,
-      artistId: signupForm.role === 'artist' ? signupForm.name.toLowerCase() : null
-    };
-    setUser({
-      email: signupForm.email.toLowerCase(),
-      role: signupForm.role,
-      name: signupForm.name,
-      artistId: signupForm.role === 'artist' ? signupForm.name.toLowerCase() : null
-    });
-    setShowSignupModal(false);
-    setSignupForm({ email: '', password: '', name: '', role: 'artist', error: null });
-    showToast(`Welcome to StickToMusic, ${signupForm.name}!`, 'success');
-    if (signupForm.role === 'artist') {
-      setCurrentPage('artist-portal');
-    } else {
-      setCurrentPage('operator');
-    }
-    setIsSigningUp(false);
-  };
-
-  const handleLogout = () => {
-    setUser(null);
-    setCurrentPage('home');
-  };
-
-  // Campaign functions
-  const handleCreateCampaign = async (e) => {
-    e.preventDefault();
-    setIsCreatingCampaign(true);
-    await new Promise(resolve => setTimeout(resolve, 600));
-    const newCampaign = {
-      id: `camp-${Date.now()}`,
-      artistId: user?.artistId || 'boon',
-      name: campaignForm.name,
-      status: 'planning',
-      startDate: campaignForm.startDate,
-      endDate: campaignForm.endDate,
-      budget: parseFloat(campaignForm.budget) || 0,
-      spent: 0,
-      postsScheduled: 0,
-      postsPublished: 0,
-      categories: campaignForm.categories,
-      goals: {
-        views: parseInt(campaignForm.goalViews) || 0,
-        followers: parseInt(campaignForm.goalFollowers) || 0
-      },
-      achieved: { views: 0, followers: 0 }
-    };
-    setCampaigns(prev => [...prev, newCampaign]);
-    setShowCampaignModal(false);
-    setCampaignForm({ name: '', startDate: '', endDate: '', budget: '', categories: [], goalViews: '', goalFollowers: '' });
-    showToast('Campaign created successfully!', 'success');
-    setIsCreatingCampaign(false);
-  };
-
-  // Export to CSV function
-  const exportToCSV = async () => {
-    if (latePosts.length === 0) return;
-    setIsExporting(true);
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    const headers = ['Date', 'Time', 'Platforms', 'Caption', 'Status'];
-    const rows = latePosts.map(post => {
-      const date = post.scheduledFor ? new Date(post.scheduledFor) : null;
-      return [
-        date ? date.toLocaleDateString() : '',
-        date ? date.toLocaleTimeString() : '',
-        (post.platforms || []).map(p => p.platform || p).join(', '),
-        `"${(post.content || '').replace(/"/g, '""')}"`,
-        post.status || ''
-      ].join(',');
-    });
-
-    const csv = [headers.join(','), ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `sticktomusic-schedule-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast('Schedule exported to CSV', 'success');
-    setIsExporting(false);
-  };
 
   // Fetch Late accounts on demand
   const fetchLateAccounts = async () => {
@@ -789,11 +509,10 @@ const StickToMusic = () => {
     { id: 33, artist: "Camylio", page: "@midnightfeels", platform: "tiktok", type: "Video", song: "Soft Landing", caption: "late night feels", scheduledFor: "2026-02-01 12:00", status: "scheduled" },
   ];
 
-  // Applications state - stores intake form submissions
-  const [applications, setApplications] = useState([
-    { id: 1, name: "Luna Park", email: "luna@email.com", tier: "Standard", submitted: "2025-01-30", status: "pending", genre: "Indie Pop", vibes: ["Dreamy", "Nostalgic"], phone: "", managerContact: "" },
-    { id: 2, name: "The Velvet", email: "velvet@band.com", tier: "Scale", submitted: "2025-01-29", status: "pending", genre: "Alt Rock", vibes: ["Dark", "Cinematic"], phone: "", managerContact: "" },
-  ]);
+  const applications = [
+    { id: 1, name: "Luna Park", email: "luna@email.com", tier: "Standard", submitted: "2025-01-30", status: "pending" },
+    { id: 2, name: "The Velvet", email: "velvet@band.com", tier: "Scale", submitted: "2025-01-29", status: "pending" },
+  ];
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -844,39 +563,7 @@ const StickToMusic = () => {
 
   const handleSubmit = () => {
     console.log('Form submitted:', formData);
-    // Store the application
-    const tierMap = {
-      'starter': 'Starter',
-      'standard': 'Standard',
-      'scale': 'Scale',
-      'sensation': 'Sensation',
-      'discuss': 'To Discuss'
-    };
-    const newApplication = {
-      id: Date.now(),
-      name: formData.artistName,
-      email: formData.email,
-      tier: tierMap[formData.pageTier] || formData.pageTier,
-      submitted: new Date().toISOString().split('T')[0],
-      status: 'pending',
-      genre: formData.genre,
-      vibes: formData.vibes || [],
-      phone: formData.phone || '',
-      managerContact: formData.managerContact || '',
-      spotify: formData.spotify,
-      instagram: formData.instagram,
-      tiktok: formData.tiktok,
-      projectType: formData.projectType,
-      projectDescription: formData.projectDescription,
-      aestheticWords: formData.aestheticWords,
-      adjacentArtists: formData.adjacentArtists,
-      idealListener: formData.idealListener,
-      cdTier: formData.cdTier,
-      duration: formData.duration
-    };
-    setApplications(prev => [newApplication, ...prev]);
     setSubmitted(true);
-    showToast('Application submitted successfully!', 'success');
   };
 
   const goToIntake = () => {
@@ -1059,29 +746,18 @@ const StickToMusic = () => {
           <button onClick={goToIntake} className="px-5 py-2 bg-white text-black rounded-full font-semibold hover:bg-zinc-200 transition">
             Apply
           </button>
-          {user ? (
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setCurrentPage(user.role === 'artist' ? 'artist-portal' : 'operator')}
-                className="flex items-center gap-2 text-zinc-300 hover:text-white transition"
-              >
-                <div className="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold">
-                  {user.name[0]}
-                </div>
-                <span className="text-sm">{user.name}</span>
-              </button>
-              <button onClick={handleLogout} className="text-zinc-500 hover:text-white transition text-sm">
-                Logout
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowLoginModal(true)}
-              className="text-zinc-400 hover:text-white transition text-sm font-medium"
-            >
-              Login
-            </button>
-          )}
+          <button
+            onClick={() => setCurrentPage('dashboard')}
+            className="text-zinc-500 hover:text-white transition text-sm"
+          >
+            Login
+          </button>
+          <button
+            onClick={() => setCurrentPage('operator')}
+            className="text-zinc-600 hover:text-zinc-400 transition text-xs"
+          >
+            •
+          </button>
         </div>
       </div>
     </nav>
@@ -1263,264 +939,6 @@ const StickToMusic = () => {
     );
   }
 
-  // ARTIST PORTAL PAGE
-  if (currentPage === 'artist-portal') {
-    const artistCampaigns = campaigns.filter(c => c.artistId === user?.artistId || c.artistId === 'boon');
-    const activeCampaign = artistCampaigns.find(c => c.status === 'active') || artistCampaigns[0];
-
-    return (
-      <div className="min-h-screen bg-zinc-950 text-zinc-100">
-        {/* Header */}
-        <header className="border-b border-zinc-800 bg-zinc-950/95 backdrop-blur sticky top-0 z-50">
-          <div className="max-w-6xl mx-auto px-6 py-4">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-6">
-                <button onClick={() => setCurrentPage('home')} className="text-xl font-bold hover:text-zinc-300 transition">StickToMusic</button>
-                <span className="text-zinc-600">|</span>
-                <span className="text-zinc-400">Artist Portal</span>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-sm font-bold">
-                    {user?.name?.[0] || 'A'}
-                  </div>
-                  <span className="text-sm text-zinc-400">{user?.name || 'Artist'}</span>
-                </div>
-                <button onClick={handleLogout} className="text-sm text-zinc-500 hover:text-white transition">Log out</button>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <div className="max-w-6xl mx-auto px-6 py-8">
-          {/* Welcome Section */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-2">Welcome back, {user?.name || 'Artist'}</h1>
-            <p className="text-zinc-500">Here's how your music is performing across our world pages.</p>
-          </div>
-
-          {/* Quick Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <div className="bg-gradient-to-br from-purple-900/50 to-purple-800/30 border border-purple-700/50 rounded-xl p-5">
-              <p className="text-purple-300 text-sm mb-1">Total Views</p>
-              <p className="text-3xl font-bold">{activeCampaign ? (activeCampaign.achieved.views / 1000).toFixed(0) + 'K' : '0'}</p>
-              <p className="text-xs text-purple-400 mt-1">↑ 23% this week</p>
-            </div>
-            <div className="bg-gradient-to-br from-pink-900/50 to-pink-800/30 border border-pink-700/50 rounded-xl p-5">
-              <p className="text-pink-300 text-sm mb-1">New Followers</p>
-              <p className="text-3xl font-bold">{activeCampaign ? activeCampaign.achieved.followers.toLocaleString() : '0'}</p>
-              <p className="text-xs text-pink-400 mt-1">↑ 18% this week</p>
-            </div>
-            <div className="bg-gradient-to-br from-blue-900/50 to-blue-800/30 border border-blue-700/50 rounded-xl p-5">
-              <p className="text-blue-300 text-sm mb-1">Posts Live</p>
-              <p className="text-3xl font-bold">{activeCampaign?.postsPublished || 0}</p>
-              <p className="text-xs text-blue-400 mt-1">{activeCampaign?.postsScheduled || 0} scheduled</p>
-            </div>
-            <div className="bg-gradient-to-br from-green-900/50 to-green-800/30 border border-green-700/50 rounded-xl p-5">
-              <p className="text-green-300 text-sm mb-1">Engagement Rate</p>
-              <p className="text-3xl font-bold">4.7%</p>
-              <p className="text-xs text-green-400 mt-1">Above average</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Active Campaign */}
-            <div className="lg:col-span-2 space-y-6">
-              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h2 className="text-lg font-semibold mb-1">{activeCampaign?.name || 'No Active Campaign'}</h2>
-                    <p className="text-sm text-zinc-500">
-                      {activeCampaign ? `${new Date(activeCampaign.startDate).toLocaleDateString()} - ${new Date(activeCampaign.endDate).toLocaleDateString()}` : 'Contact your manager to start a campaign'}
-                    </p>
-                  </div>
-                  {activeCampaign && (
-                    <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Active</span>
-                  )}
-                </div>
-
-                {activeCampaign && (
-                  <>
-                    {/* Progress Bars */}
-                    <div className="space-y-4 mb-6">
-                      <div>
-                        <div className="flex justify-between text-sm mb-2">
-                          <span className="text-zinc-400">Views Progress</span>
-                          <span>{Math.round((activeCampaign.achieved.views / activeCampaign.goals.views) * 100)}%</span>
-                        </div>
-                        <div className="h-3 bg-zinc-800 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"
-                            style={{ width: `${Math.min((activeCampaign.achieved.views / activeCampaign.goals.views) * 100, 100)}%` }}
-                          />
-                        </div>
-                        <p className="text-xs text-zinc-500 mt-1">
-                          {(activeCampaign.achieved.views / 1000).toFixed(0)}K of {(activeCampaign.goals.views / 1000).toFixed(0)}K goal
-                        </p>
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between text-sm mb-2">
-                          <span className="text-zinc-400">Follower Growth</span>
-                          <span>{Math.round((activeCampaign.achieved.followers / activeCampaign.goals.followers) * 100)}%</span>
-                        </div>
-                        <div className="h-3 bg-zinc-800 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full"
-                            style={{ width: `${Math.min((activeCampaign.achieved.followers / activeCampaign.goals.followers) * 100, 100)}%` }}
-                          />
-                        </div>
-                        <p className="text-xs text-zinc-500 mt-1">
-                          {activeCampaign.achieved.followers.toLocaleString()} of {activeCampaign.goals.followers.toLocaleString()} goal
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Categories */}
-                    <div>
-                      <p className="text-sm text-zinc-400 mb-2">Active Categories</p>
-                      <div className="flex gap-2">
-                        {activeCampaign.categories.map(cat => (
-                          <span key={cat} className="px-3 py-1.5 bg-zinc-800 rounded-lg text-sm">{cat}</span>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Recent Performance Chart Placeholder */}
-              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-                <h3 className="font-semibold mb-4">Views Over Time</h3>
-                <div className="h-48 flex items-end justify-between gap-2">
-                  {[35, 42, 38, 55, 48, 62, 58, 75, 68, 82, 78, 95, 88, 102].map((val, i) => (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                      <div
-                        className="w-full bg-gradient-to-t from-purple-600 to-purple-400 rounded-t"
-                        style={{ height: `${val}%` }}
-                      />
-                      {i % 2 === 0 && <span className="text-[10px] text-zinc-600">{i + 18}</span>}
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs text-zinc-500 text-center mt-2">January 2026</p>
-              </div>
-            </div>
-
-            {/* Sidebar */}
-            <div className="space-y-6">
-              {/* Upcoming Posts - Real Late Data */}
-              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="font-semibold">Upcoming Posts</h3>
-                  {latePosts.length > 0 && (
-                    <span className="text-xs text-zinc-500">{latePosts.filter(p => p.status === 'scheduled').length} scheduled</span>
-                  )}
-                </div>
-                {latePosts.length === 0 ? (
-                  <div className="text-center py-4">
-                    <p className="text-sm text-zinc-500 mb-3">No posts loaded yet</p>
-                    <button
-                      onClick={async () => {
-                        setSyncing(true);
-                        const result = await lateApi.fetchScheduledPosts();
-                        setSyncing(false);
-                        if (result.success) {
-                          setLatePosts(Array.isArray(result.posts) ? result.posts : []);
-                        }
-                      }}
-                      disabled={syncing}
-                      className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-500 transition disabled:opacity-50"
-                    >
-                      {syncing ? 'Loading...' : 'Load Posts'}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {latePosts
-                      .filter(p => p.status === 'scheduled')
-                      .sort((a, b) => (a.scheduledFor || '').localeCompare(b.scheduledFor || ''))
-                      .slice(0, 5)
-                      .map((post, i) => {
-                        const date = post.scheduledFor ? new Date(post.scheduledFor) : null;
-                        const isToday = date && date.toDateString() === new Date().toDateString();
-                        const isTomorrow = date && date.toDateString() === new Date(Date.now() + 86400000).toDateString();
-                        const timeStr = date ? date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
-                        const dayStr = isToday ? 'Today' : isTomorrow ? 'Tomorrow' : date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                        const platforms = (post.platforms || []).map(p => p.platform || p);
-
-                        return (
-                          <div key={post._id || i} className="flex items-center justify-between py-2 border-b border-zinc-800 last:border-0">
-                            <div>
-                              <p className="text-sm font-medium truncate max-w-[150px]">{post.content?.slice(0, 30) || 'Scheduled post'}</p>
-                              <p className="text-xs text-zinc-500">{dayStr} {timeStr}</p>
-                            </div>
-                            <div className="flex gap-1">
-                              {platforms.includes('tiktok') && <span className="px-2 py-0.5 rounded text-xs bg-pink-500/20 text-pink-400">TT</span>}
-                              {platforms.includes('instagram') && <span className="px-2 py-0.5 rounded text-xs bg-purple-500/20 text-purple-400">IG</span>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                  </div>
-                )}
-                {latePosts.length > 0 && (
-                  <button
-                    onClick={() => setCurrentPage('operator')}
-                    className="w-full mt-4 py-2 text-sm text-purple-400 hover:text-purple-300 transition"
-                  >
-                    View All {latePosts.length} Posts →
-                  </button>
-                )}
-              </div>
-
-              {/* Top Performing Pages */}
-              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-                <h3 className="font-semibold mb-4">Top Pages</h3>
-                <div className="space-y-3">
-                  {[
-                    { page: '@sarahs.ipodnano', views: '45K', growth: '+12%' },
-                    { page: '@neonphoebe', views: '38K', growth: '+8%' },
-                    { page: '@2016iscalling', views: '32K', growth: '+15%' },
-                  ].map((page, i) => (
-                    <div key={i} className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold">
-                          {i + 1}
-                        </div>
-                        <span className="text-sm">{page.page}</span>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium">{page.views}</p>
-                        <p className="text-xs text-green-400">{page.growth}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Quick Actions */}
-              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-                <h3 className="font-semibold mb-4">Quick Actions</h3>
-                <div className="space-y-2">
-                  <button className="w-full py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm text-left transition">
-                    📊 Download Report
-                  </button>
-                  <button className="w-full py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm text-left transition">
-                    📧 Contact Manager
-                  </button>
-                  <button className="w-full py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm text-left transition">
-                    📁 Upload Content
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // OPERATOR DASHBOARD PAGE
   if (currentPage === 'operator') {
     return (
@@ -1532,29 +950,21 @@ const StickToMusic = () => {
               <div className="flex items-center gap-6">
                 <button onClick={() => setCurrentPage('home')} className="text-xl font-bold hover:text-zinc-300 transition">StickToMusic</button>
                 <span className="text-zinc-600">|</span>
-                <span className="text-zinc-400">Operator Dashboard</span>
+                <span className="text-zinc-400">Operator</span>
               </div>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-sm font-bold">
-                    {user?.name?.[0] || 'O'}
-                  </div>
-                  <span className="text-sm text-zinc-400">{user?.name || 'Operator'}</span>
-                </div>
-                <button onClick={handleLogout} className="text-sm text-zinc-500 hover:text-white transition">Log out</button>
-              </div>
+              <button onClick={() => setCurrentPage('home')} className="text-sm text-zinc-500 hover:text-white transition">Log out</button>
             </div>
           </div>
         </header>
 
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
+        <div className="max-w-7xl mx-auto px-6 py-8">
           {/* Tab Navigation */}
-          <div className="flex gap-2 mb-8 border-b border-zinc-800 pb-4 overflow-x-auto">
-            {['artists', 'pages', 'content', 'campaigns', 'banks', 'applications'].map(tab => (
+          <div className="flex gap-2 mb-8 border-b border-zinc-800 pb-4">
+            {['artists', 'pages', 'content', 'banks', 'applications'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setOperatorTab(tab)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
                   operatorTab === tab ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
                 }`}
               >
@@ -1934,28 +1344,23 @@ const StickToMusic = () => {
                 setLastSynced(new Date());
                 const postWord = posts.length === 1 ? 'post' : 'posts';
                 setSyncStatus(`✓ Synced ${posts.length} ${postWord} from Late`);
-                showToast(`Synced ${posts.length} ${postWord} from Late`, 'success');
               } else {
                 setSyncStatus(`Error: ${result.error}`);
-                showToast(`Sync failed: ${result.error}`, 'error');
               }
               setTimeout(() => setSyncStatus(null), 3000);
             };
 
-            const confirmDeletePost = (postId, caption) => {
-              setDeleteConfirmModal({ show: true, postId, caption: caption || 'this post' });
-            };
-
             const handleDeletePost = async (postId) => {
-              setDeleteConfirmModal({ show: false, postId: null, caption: '' });
+              if (!window.confirm('Delete this post from Late? This cannot be undone.')) return;
               setDeletingPostId(postId);
               const result = await lateApi.deletePost(postId);
               setDeletingPostId(null);
               if (result.success) {
                 setLatePosts(prev => prev.filter(p => p._id !== postId));
-                showToast('Post deleted successfully', 'success');
+                setSyncStatus('✓ Post deleted');
+                setTimeout(() => setSyncStatus(null), 2000);
               } else {
-                showToast(`Failed to delete: ${result.error}`, 'error');
+                alert(`Failed to delete: ${result.error}`);
               }
             };
 
@@ -2305,18 +1710,6 @@ const StickToMusic = () => {
                     >
                       View Accounts
                     </button>
-                    <button
-                      onClick={exportToCSV}
-                      disabled={latePosts.length === 0 || isExporting}
-                      className="px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg text-sm font-medium hover:bg-zinc-700 transition disabled:opacity-50 flex items-center gap-2"
-                    >
-                      {isExporting ? (
-                        <>
-                          <span className="animate-spin">⟳</span>
-                          Exporting...
-                        </>
-                      ) : '↓ Export CSV'}
-                    </button>
                   </div>
                 </div>
 
@@ -2325,31 +1718,28 @@ const StickToMusic = () => {
                   <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowLateAccounts(false)}>
                     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
                       <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
-                        <h2 className="text-xl font-bold">Connected Accounts</h2>
+                        <h2 className="text-xl font-bold">Late Accounts</h2>
                         <button onClick={() => setShowLateAccounts(false)} className="text-zinc-500 hover:text-white">✕</button>
                       </div>
                       <div className="p-6 overflow-y-auto max-h-[60vh]">
-                        <p className="text-sm text-zinc-500 mb-4">8 accounts connected via Late API:</p>
-                        <div className="space-y-3">
-                          {Object.entries(LATE_ACCOUNT_IDS).map(([handle, ids]) => (
-                            <div key={handle} className="bg-zinc-800 rounded-lg p-4">
-                              <p className="font-medium text-white mb-2">{handle}</p>
-                              <div className="grid grid-cols-2 gap-2 text-xs">
-                                <div className="flex items-center gap-2">
-                                  <span className="px-2 py-0.5 bg-pink-500/20 text-pink-400 rounded">TikTok</span>
-                                  <code className="text-zinc-400 truncate">{ids.tiktok}</code>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded">Instagram</span>
-                                  <code className="text-zinc-400 truncate">{ids.instagram}</code>
+                        {!Array.isArray(lateAccounts) || lateAccounts.length === 0 ? (
+                          <p className="text-zinc-500">No accounts found. Make sure your Late API key is correct.</p>
+                        ) : (
+                          <div className="space-y-3">
+                            <p className="text-sm text-zinc-500 mb-4">Use these account IDs to map your world pages:</p>
+                            {lateAccounts.map((acc, i) => (
+                              <div key={i} className="bg-zinc-800 rounded-lg p-4">
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <p className="font-medium">{acc.username || acc.name || 'Unknown'}</p>
+                                    <p className="text-sm text-zinc-500">{acc.platform}</p>
+                                  </div>
+                                  <code className="text-xs bg-zinc-900 px-2 py-1 rounded">{acc.id || acc._id}</code>
                                 </div>
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="mt-4 pt-4 border-t border-zinc-700">
-                          <p className="text-xs text-zinc-500">Total: 16 platform connections (8 TikTok + 8 Instagram)</p>
-                        </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2363,100 +1753,26 @@ const StickToMusic = () => {
                 )}
 
                 {/* View Toggle */}
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-zinc-500">View:</span>
-                    <div className="flex bg-zinc-800 rounded-lg p-1">
-                      <button
-                        onClick={() => setContentView('list')}
-                        className={`px-3 py-1.5 rounded-md text-sm transition ${contentView === 'list' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}
-                      >
-                        List
-                      </button>
-                      <button
-                        onClick={() => setContentView('calendar')}
-                        className={`px-3 py-1.5 rounded-md text-sm transition ${contentView === 'calendar' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}
-                      >
-                        Timeline
-                      </button>
-                      <button
-                        onClick={() => setContentView('month')}
-                        className={`px-3 py-1.5 rounded-md text-sm transition ${contentView === 'month' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}
-                      >
-                        Month
-                      </button>
-                    </div>
-                    {latePosts.length === 0 && (
-                      <span className="text-xs text-zinc-500 ml-2">Click "Sync from Late" to load posts</span>
-                    )}
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-sm text-zinc-500">View:</span>
+                  <div className="flex bg-zinc-800 rounded-lg p-1">
+                    <button
+                      onClick={() => setContentView('list')}
+                      className={`px-3 py-1.5 rounded-md text-sm transition ${contentView === 'list' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}
+                    >
+                      List
+                    </button>
+                    <button
+                      onClick={() => setContentView('calendar')}
+                      className={`px-3 py-1.5 rounded-md text-sm transition ${contentView === 'calendar' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}
+                    >
+                      Calendar
+                    </button>
                   </div>
-                  {contentView === 'month' && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setCalendarMonth(new Date())}
-                        className="px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-500 transition text-sm"
-                      >
-                        Today
-                      </button>
-                      <button
-                        onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1))}
-                        className="px-3 py-1.5 bg-zinc-800 rounded-lg hover:bg-zinc-700 transition"
-                      >
-                        ←
-                      </button>
-                      <span className="text-sm font-medium w-32 text-center">
-                        {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                      </span>
-                      <button
-                        onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1))}
-                        className="px-3 py-1.5 bg-zinc-800 rounded-lg hover:bg-zinc-700 transition"
-                      >
-                        →
-                      </button>
-                    </div>
+                  {latePosts.length === 0 && (
+                    <span className="text-xs text-zinc-500 ml-2">Click "Sync from Late" to load posts</span>
                   )}
                 </div>
-
-                {/* Search and Filter Bar */}
-                {latePosts.length > 0 && (
-                  <div className="flex flex-wrap gap-3 mb-4">
-                    <div className="relative flex-1 min-w-[200px]">
-                      <input
-                        type="text"
-                        value={postSearch}
-                        onChange={e => setPostSearch(e.target.value)}
-                        placeholder="Search posts by caption..."
-                        className="w-full px-4 py-2 pl-10 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
-                      />
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">🔍</span>
-                    </div>
-                    <div className="flex bg-zinc-800 rounded-lg p-1">
-                      {['all', 'tiktok', 'instagram'].map(platform => (
-                        <button
-                          key={platform}
-                          onClick={() => setPostPlatformFilter(platform)}
-                          className={`px-3 py-1.5 rounded-md text-sm transition ${
-                            postPlatformFilter === platform
-                              ? platform === 'tiktok' ? 'bg-pink-500/20 text-pink-400'
-                              : platform === 'instagram' ? 'bg-purple-500/20 text-purple-400'
-                              : 'bg-zinc-700 text-white'
-                              : 'text-zinc-400 hover:text-white'
-                          }`}
-                        >
-                          {platform === 'all' ? 'All' : platform === 'tiktok' ? 'TikTok' : 'Instagram'}
-                        </button>
-                      ))}
-                    </div>
-                    {(postSearch || postPlatformFilter !== 'all') && (
-                      <button
-                        onClick={() => { setPostSearch(''); setPostPlatformFilter('all'); }}
-                        className="px-3 py-2 text-sm text-zinc-400 hover:text-white transition"
-                      >
-                        Clear filters
-                      </button>
-                    )}
-                  </div>
-                )}
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                   <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
@@ -2560,7 +1876,7 @@ const StickToMusic = () => {
                                       </div>
                                     </div>
                                     <button
-                                      onClick={() => confirmDeletePost(post._id, post.content?.substring(0, 50))}
+                                      onClick={() => handleDeletePost(post._id)}
                                       disabled={deletingPostId === post._id}
                                       className="px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/20 rounded-lg transition disabled:opacity-50"
                                     >
@@ -2573,100 +1889,6 @@ const StickToMusic = () => {
                           );
                         })
                       )}
-                    </div>
-                  );
-                })()}
-
-                {/* Month View */}
-                {!syncing && contentView === 'month' && (() => {
-                  // Get calendar grid for the month
-                  const year = calendarMonth.getFullYear();
-                  const month = calendarMonth.getMonth();
-                  const firstDay = new Date(year, month, 1);
-                  const lastDay = new Date(year, month + 1, 0);
-                  const startPadding = firstDay.getDay();
-                  const totalDays = lastDay.getDate();
-
-                  // Group posts by date
-                  const postsByDate = latePosts.reduce((acc, post) => {
-                    if (!post.scheduledFor) return acc;
-                    const date = post.scheduledFor.split('T')[0];
-                    if (!acc[date]) acc[date] = [];
-                    acc[date].push(post);
-                    return acc;
-                  }, {});
-
-                  // Generate calendar grid
-                  const days = [];
-                  for (let i = 0; i < startPadding; i++) {
-                    days.push(null);
-                  }
-                  for (let d = 1; d <= totalDays; d++) {
-                    days.push(d);
-                  }
-
-                  return (
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-                      {/* Day headers */}
-                      <div className="grid grid-cols-7 border-b border-zinc-800">
-                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                          <div key={day} className="p-3 text-center text-sm font-medium text-zinc-500 border-r border-zinc-800 last:border-r-0">
-                            {day}
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Calendar grid */}
-                      <div className="grid grid-cols-7">
-                        {days.map((day, i) => {
-                          if (day === null) {
-                            return <div key={`empty-${i}`} className="min-h-[120px] bg-zinc-950/50 border-r border-b border-zinc-800" />;
-                          }
-
-                          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                          const dayPosts = postsByDate[dateStr] || [];
-                          const isToday = new Date().toISOString().split('T')[0] === dateStr;
-
-                          return (
-                            <div
-                              key={day}
-                              className={`min-h-[120px] p-2 border-r border-b border-zinc-800 last:border-r-0 ${isToday ? 'bg-purple-900/20' : ''}`}
-                            >
-                              <div className={`text-sm font-medium mb-2 ${isToday ? 'text-purple-400' : 'text-zinc-400'}`}>
-                                {day}
-                                {dayPosts.length > 0 && (
-                                  <span className="ml-2 px-1.5 py-0.5 bg-purple-500/20 text-purple-400 rounded text-xs">
-                                    {dayPosts.length}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="space-y-1 max-h-[80px] overflow-y-auto">
-                                {dayPosts.slice(0, 3).map((post, idx) => {
-                                  const time = post.scheduledFor ? new Date(post.scheduledFor).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
-                                  const platforms = (post.platforms || []).map(p => p.platform || p);
-                                  return (
-                                    <div
-                                      key={post._id || idx}
-                                      className="text-xs p-1.5 bg-zinc-800 rounded truncate hover:bg-zinc-700 cursor-pointer transition"
-                                      title={post.content}
-                                    >
-                                      <span className="text-zinc-500">{time}</span>
-                                      {' '}
-                                      {platforms.includes('tiktok') && <span className="text-pink-400">TT</span>}
-                                      {platforms.includes('instagram') && <span className="text-purple-400 ml-1">IG</span>}
-                                    </div>
-                                  );
-                                })}
-                                {dayPosts.length > 3 && (
-                                  <div className="text-xs text-zinc-500 text-center">
-                                    +{dayPosts.length - 3} more
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
                     </div>
                   );
                 })()}
@@ -2685,24 +1907,10 @@ const StickToMusic = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {(() => {
-                          const filteredPosts = latePosts
-                            .filter(post => {
-                              // Search filter
-                              if (postSearch && !(post.content || '').toLowerCase().includes(postSearch.toLowerCase())) {
-                                return false;
-                              }
-                              // Platform filter
-                              if (postPlatformFilter !== 'all') {
-                                const platforms = (post.platforms || []).map(p => p.platform || p);
-                                if (!platforms.includes(postPlatformFilter)) return false;
-                              }
-                              return true;
-                            })
-                            .sort((a, b) => (a.scheduledFor || '').localeCompare(b.scheduledFor || ''));
-
-                          return filteredPosts.length > 0 ? (
-                            filteredPosts.map(post => (
+                        {latePosts.length > 0 ? (
+                          latePosts
+                            .sort((a, b) => (a.scheduledFor || '').localeCompare(b.scheduledFor || ''))
+                            .map(post => (
                               <tr key={post._id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition">
                                 <td className="p-4 text-sm text-zinc-400">
                                   {post.scheduledFor ? new Date(post.scheduledFor).toLocaleString('en-US', {
@@ -2731,7 +1939,7 @@ const StickToMusic = () => {
                                 </td>
                                 <td className="p-4">
                                   <button
-                                    onClick={() => confirmDeletePost(post._id, post.content?.substring(0, 50))}
+                                    onClick={() => handleDeletePost(post._id)}
                                     disabled={deletingPostId === post._id}
                                     className="px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/20 rounded-lg transition disabled:opacity-50"
                                   >
@@ -2740,16 +1948,13 @@ const StickToMusic = () => {
                                 </td>
                               </tr>
                             ))
-                          ) : (
-                            <tr>
-                              <td colSpan={5} className="p-8 text-center text-zinc-500">
-                                {postSearch || postPlatformFilter !== 'all'
-                                  ? 'No posts match your filters.'
-                                  : 'No posts synced. Click "Sync from Late" to load your scheduled posts.'}
-                              </td>
-                            </tr>
-                          );
-                        })()}
+                        ) : (
+                          <tr>
+                            <td colSpan={5} className="p-8 text-center text-zinc-500">
+                              No posts synced. Click "Sync from Late" to load your scheduled posts.
+                            </td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -2757,253 +1962,6 @@ const StickToMusic = () => {
               </div>
             );
           })()}
-
-          {/* Campaigns Tab */}
-          {operatorTab === 'campaigns' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-xl font-bold">Campaigns</h2>
-                  <p className="text-sm text-zinc-500">Track budgets, timelines, and goals for each campaign</p>
-                </div>
-                <button
-                  onClick={() => setShowCampaignModal(true)}
-                  className="px-4 py-2 bg-white text-black rounded-lg text-sm font-medium hover:bg-zinc-200 transition"
-                >
-                  + New Campaign
-                </button>
-              </div>
-
-              {/* Campaign Stats */}
-              <div className="grid grid-cols-4 gap-4">
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                  <p className="text-zinc-500 text-xs mb-1">Active Campaigns</p>
-                  <p className="text-2xl font-bold text-green-400">{campaigns.filter(c => c.status === 'active').length}</p>
-                </div>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                  <p className="text-zinc-500 text-xs mb-1">Total Budget</p>
-                  <p className="text-2xl font-bold">${campaigns.reduce((sum, c) => sum + c.budget, 0).toLocaleString()}</p>
-                </div>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                  <p className="text-zinc-500 text-xs mb-1">Total Spent</p>
-                  <p className="text-2xl font-bold text-purple-400">${campaigns.reduce((sum, c) => sum + c.spent, 0).toLocaleString()}</p>
-                </div>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                  <p className="text-zinc-500 text-xs mb-1">Posts Scheduled</p>
-                  <p className="text-2xl font-bold">{campaigns.reduce((sum, c) => sum + c.postsScheduled, 0)}</p>
-                </div>
-              </div>
-
-              {/* Campaign Cards */}
-              <div className="grid gap-4">
-                {campaigns.map(campaign => {
-                  const progress = campaign.budget > 0 ? (campaign.spent / campaign.budget) * 100 : 0;
-                  const viewProgress = campaign.goals.views > 0 ? (campaign.achieved.views / campaign.goals.views) * 100 : 0;
-                  const followerProgress = campaign.goals.followers > 0 ? (campaign.achieved.followers / campaign.goals.followers) * 100 : 0;
-
-                  return (
-                    <div key={campaign.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <div className="flex items-center gap-3 mb-1">
-                            <h3 className="text-lg font-semibold">{campaign.name}</h3>
-                            <span className={`px-2 py-0.5 rounded-full text-xs ${
-                              campaign.status === 'active' ? 'bg-green-500/20 text-green-400' :
-                              campaign.status === 'planning' ? 'bg-yellow-500/20 text-yellow-400' :
-                              'bg-zinc-500/20 text-zinc-400'
-                            }`}>
-                              {campaign.status}
-                            </span>
-                          </div>
-                          <p className="text-sm text-zinc-500">
-                            {new Date(campaign.startDate).toLocaleDateString()} - {new Date(campaign.endDate).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          {campaign.categories.map(cat => (
-                            <span key={cat} className="px-2 py-1 bg-zinc-800 rounded text-xs">{cat}</span>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-6">
-                        {/* Budget */}
-                        <div>
-                          <div className="flex justify-between text-sm mb-2">
-                            <span className="text-zinc-500">Budget</span>
-                            <span>${campaign.spent.toLocaleString()} / ${campaign.budget.toLocaleString()}</span>
-                          </div>
-                          <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-purple-500 rounded-full transition-all"
-                              style={{ width: `${Math.min(progress, 100)}%` }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Views Goal */}
-                        <div>
-                          <div className="flex justify-between text-sm mb-2">
-                            <span className="text-zinc-500">Views</span>
-                            <span>{(campaign.achieved.views / 1000).toFixed(0)}K / {(campaign.goals.views / 1000).toFixed(0)}K</span>
-                          </div>
-                          <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-blue-500 rounded-full transition-all"
-                              style={{ width: `${Math.min(viewProgress, 100)}%` }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Followers Goal */}
-                        <div>
-                          <div className="flex justify-between text-sm mb-2">
-                            <span className="text-zinc-500">Followers</span>
-                            <span>{campaign.achieved.followers.toLocaleString()} / {campaign.goals.followers.toLocaleString()}</span>
-                          </div>
-                          <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-green-500 rounded-full transition-all"
-                              style={{ width: `${Math.min(followerProgress, 100)}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex justify-between items-center mt-4 pt-4 border-t border-zinc-800">
-                        <div className="flex gap-4 text-sm">
-                          <span className="text-zinc-500">{campaign.postsScheduled} posts scheduled</span>
-                          <span className="text-zinc-500">{campaign.postsPublished} published</span>
-                        </div>
-                        <button className="text-sm text-purple-400 hover:text-purple-300">View Details →</button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* New Campaign Modal */}
-              {showCampaignModal && (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowCampaignModal(false)}>
-                  <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
-                    <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
-                      <h2 className="text-xl font-bold">New Campaign</h2>
-                      <button onClick={() => setShowCampaignModal(false)} className="text-zinc-500 hover:text-white">✕</button>
-                    </div>
-                    <form onSubmit={handleCreateCampaign} className="p-6 space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-2">Campaign Name</label>
-                        <input
-                          type="text"
-                          value={campaignForm.name}
-                          onChange={e => setCampaignForm(prev => ({ ...prev, name: e.target.value }))}
-                          className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white"
-                          placeholder="e.g., Boon February Push"
-                          required
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-zinc-400 mb-2">Start Date</label>
-                          <input
-                            type="date"
-                            value={campaignForm.startDate}
-                            onChange={e => setCampaignForm(prev => ({ ...prev, startDate: e.target.value }))}
-                            className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white"
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-zinc-400 mb-2">End Date</label>
-                          <input
-                            type="date"
-                            value={campaignForm.endDate}
-                            onChange={e => setCampaignForm(prev => ({ ...prev, endDate: e.target.value }))}
-                            className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white"
-                            required
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-2">Budget ($)</label>
-                        <input
-                          type="number"
-                          value={campaignForm.budget}
-                          onChange={e => setCampaignForm(prev => ({ ...prev, budget: e.target.value }))}
-                          className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white"
-                          placeholder="5000"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-2">Target Categories</label>
-                        <div className="grid grid-cols-3 gap-2">
-                          {['Fashion', 'Y2K', 'Emo'].map(cat => (
-                            <label
-                              key={cat}
-                              className={`flex items-center justify-center gap-2 p-3 rounded-lg cursor-pointer transition border ${
-                                campaignForm.categories.includes(cat)
-                                  ? 'bg-purple-500/20 border-purple-500 text-purple-300'
-                                  : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-600'
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={campaignForm.categories.includes(cat)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setCampaignForm(prev => ({ ...prev, categories: [...prev.categories, cat] }));
-                                  } else {
-                                    setCampaignForm(prev => ({ ...prev, categories: prev.categories.filter(c => c !== cat) }));
-                                  }
-                                }}
-                                className="sr-only"
-                              />
-                              <span className="text-sm font-medium">{cat}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-zinc-400 mb-2">Views Goal</label>
-                          <input
-                            type="number"
-                            value={campaignForm.goalViews}
-                            onChange={e => setCampaignForm(prev => ({ ...prev, goalViews: e.target.value }))}
-                            className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white"
-                            placeholder="500000"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-zinc-400 mb-2">Followers Goal</label>
-                          <input
-                            type="number"
-                            value={campaignForm.goalFollowers}
-                            onChange={e => setCampaignForm(prev => ({ ...prev, goalFollowers: e.target.value }))}
-                            className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white"
-                            placeholder="5000"
-                          />
-                        </div>
-                      </div>
-                      <button
-                        type="submit"
-                        disabled={isCreatingCampaign || !campaignForm.name || !campaignForm.startDate || !campaignForm.endDate || !campaignForm.budget || campaignForm.categories.length === 0}
-                        className="w-full py-3 bg-white text-black rounded-xl font-medium hover:bg-zinc-200 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                      >
-                        {isCreatingCampaign ? (
-                          <>
-                            <span className="animate-spin">⟳</span>
-                            Creating...
-                          </>
-                        ) : 'Create Campaign'}
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Content Banks Tab */}
           {operatorTab === 'banks' && (
@@ -3232,149 +2190,28 @@ const StickToMusic = () => {
           {/* Applications Tab */}
           {operatorTab === 'applications' && (
             <div>
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h2 className="text-xl font-bold">Applications</h2>
-                  <p className="text-sm text-zinc-500">{applications.filter(a => a.status === 'pending').length} pending review</p>
-                </div>
-                <div className="flex gap-2">
-                  {['all', 'pending', 'approved', 'declined'].map(filter => (
-                    <button
-                      key={filter}
-                      onClick={() => setApplicationFilter && setApplicationFilter(filter)}
-                      className={`px-3 py-1.5 rounded-lg text-sm transition ${
-                        (!applicationFilter || applicationFilter === 'all') && filter === 'all'
-                          ? 'bg-white text-black'
-                          : applicationFilter === filter
-                            ? 'bg-white text-black'
-                            : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-                      }`}
-                    >
-                      {filter.charAt(0).toUpperCase() + filter.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {applications.length === 0 ? (
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-12 text-center">
-                  <p className="text-zinc-500 text-lg mb-2">No applications yet</p>
-                  <p className="text-zinc-600 text-sm">Applications will appear here when artists submit the intake form</p>
+                  <p className="text-zinc-500">No pending applications</p>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {applications
-                    .filter(app => !applicationFilter || applicationFilter === 'all' || app.status === applicationFilter)
-                    .map((app) => (
-                    <div key={app.id} className={`bg-zinc-900 border rounded-xl overflow-hidden ${
-                      app.status === 'approved' ? 'border-green-500/30' :
-                      app.status === 'declined' ? 'border-red-500/30' : 'border-zinc-800'
-                    }`}>
-                      <div className="p-6">
-                        <div className="flex flex-col md:flex-row justify-between gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <h3 className="text-lg font-semibold">{app.name}</h3>
-                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                app.status === 'approved' ? 'bg-green-500/20 text-green-400' :
-                                app.status === 'declined' ? 'bg-red-500/20 text-red-400' :
-                                'bg-yellow-500/20 text-yellow-400'
-                              }`}>
-                                {app.status}
-                              </span>
-                            </div>
-                            <p className="text-zinc-400 text-sm mb-3">{app.email}</p>
-                            <div className="flex flex-wrap gap-2 mb-3">
-                              <span className="px-2 py-1 bg-purple-500/20 text-purple-300 rounded text-xs">{app.tier}</span>
-                              {app.genre && <span className="px-2 py-1 bg-zinc-800 text-zinc-400 rounded text-xs">{app.genre}</span>}
-                              {app.vibes && app.vibes.slice(0, 3).map((vibe, i) => (
-                                <span key={i} className="px-2 py-1 bg-zinc-800 text-zinc-500 rounded text-xs">{vibe}</span>
-                              ))}
-                            </div>
-                            <div className="text-xs text-zinc-500">
-                              Submitted {app.submitted}
-                              {app.spotify && <span className="ml-3">• Has Spotify</span>}
-                              {app.adjacentArtists && <span className="ml-3">• Provided adjacent artists</span>}
-                            </div>
+                  {applications.map((app) => (
+                    <div key={app.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                      <div className="flex flex-col md:flex-row justify-between gap-4">
+                        <div>
+                          <h3 className="text-lg font-semibold">{app.name}</h3>
+                          <p className="text-zinc-500 text-sm">{app.email}</p>
+                          <div className="flex gap-2 mt-2">
+                            <span className="px-2 py-1 bg-zinc-800 rounded text-xs">{app.tier}</span>
+                            <span className="text-xs text-zinc-500">Submitted {app.submitted}</span>
                           </div>
-                          {app.status === 'pending' && (
-                            <div className="flex items-start gap-2">
-                              <button
-                                onClick={() => {
-                                  setApplications(prev => prev.map(a =>
-                                    a.id === app.id ? { ...a, status: 'approved' } : a
-                                  ));
-                                  showToast(`${app.name} approved!`, 'success');
-                                }}
-                                className="px-4 py-2 bg-green-500/20 text-green-400 rounded-lg text-sm font-medium hover:bg-green-500/30 transition"
-                              >
-                                ✓ Approve
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setApplications(prev => prev.map(a =>
-                                    a.id === app.id ? { ...a, status: 'declined' } : a
-                                  ));
-                                  showToast(`${app.name} declined`, 'info');
-                                }}
-                                className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm font-medium hover:bg-red-500/30 transition"
-                              >
-                                ✕ Decline
-                              </button>
-                            </div>
-                          )}
                         </div>
-
-                        {/* Expandable details */}
-                        {app.projectDescription && (
-                          <details className="mt-4 pt-4 border-t border-zinc-800">
-                            <summary className="text-sm text-zinc-400 cursor-pointer hover:text-white">View full application details</summary>
-                            <div className="mt-4 grid md:grid-cols-2 gap-4 text-sm">
-                              {app.projectType && (
-                                <div>
-                                  <span className="text-zinc-500">Project Type:</span>
-                                  <span className="ml-2 text-zinc-300">{app.projectType}</span>
-                                </div>
-                              )}
-                              {app.cdTier && (
-                                <div>
-                                  <span className="text-zinc-500">Creative Direction:</span>
-                                  <span className="ml-2 text-zinc-300">{app.cdTier}</span>
-                                </div>
-                              )}
-                              {app.duration && (
-                                <div>
-                                  <span className="text-zinc-500">Duration:</span>
-                                  <span className="ml-2 text-zinc-300">{app.duration}</span>
-                                </div>
-                              )}
-                              {app.aestheticWords && (
-                                <div className="md:col-span-2">
-                                  <span className="text-zinc-500">Aesthetic:</span>
-                                  <span className="ml-2 text-zinc-300">{app.aestheticWords}</span>
-                                </div>
-                              )}
-                              {app.adjacentArtists && (
-                                <div className="md:col-span-2">
-                                  <span className="text-zinc-500">Adjacent Artists:</span>
-                                  <span className="ml-2 text-zinc-300">{app.adjacentArtists}</span>
-                                </div>
-                              )}
-                              {app.idealListener && (
-                                <div className="md:col-span-2">
-                                  <span className="text-zinc-500">Ideal Listener:</span>
-                                  <span className="ml-2 text-zinc-300">{app.idealListener}</span>
-                                </div>
-                              )}
-                              {app.projectDescription && (
-                                <div className="md:col-span-2">
-                                  <span className="text-zinc-500">Project Description:</span>
-                                  <p className="mt-1 text-zinc-300">{app.projectDescription}</p>
-                                </div>
-                              )}
-                            </div>
-                          </details>
-                        )}
+                        <div className="flex items-center gap-3">
+                          <button className="px-4 py-2 bg-white text-black rounded-lg text-sm font-medium hover:bg-zinc-200 transition">Review</button>
+                          <button className="px-4 py-2 bg-green-500/20 text-green-400 rounded-lg text-sm font-medium hover:bg-green-500/30 transition">Approve</button>
+                          <button className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm font-medium hover:bg-red-500/30 transition">Decline</button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -3393,18 +2230,8 @@ const StickToMusic = () => {
     );
   }
 
-  // DASHBOARD PAGE - Redirect to Artist Portal
+  // DASHBOARD PAGE
   if (currentPage === 'dashboard') {
-    // Auto-login as demo artist if not logged in
-    if (!user) {
-      setUser({ email: 'boon@artist.com', role: 'artist', name: 'Boon', artistId: 'boon' });
-    }
-    setCurrentPage('artist-portal');
-    return null;
-  }
-
-  // OLD DASHBOARD PAGE (kept for reference, redirects above)
-  if (currentPage === 'old-dashboard-disabled') {
     return (
       <div className="min-h-screen bg-zinc-950 text-zinc-100">
         {/* Dashboard Header */}
@@ -3768,53 +2595,6 @@ const StickToMusic = () => {
                 ))}
               </div>
             </div>
-            {/* Feature Comparison Table */}
-            <div className="mb-16 overflow-x-auto">
-              <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">Feature Comparison</h2>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-zinc-800">
-                    <th className="text-left py-4 px-4 text-zinc-400 font-medium">Feature</th>
-                    <th className="text-center py-4 px-2 text-zinc-400 font-medium">Starter</th>
-                    <th className="text-center py-4 px-2 text-zinc-400 font-medium">Standard</th>
-                    <th className="text-center py-4 px-2 text-zinc-400 font-medium">Scale</th>
-                    <th className="text-center py-4 px-2 text-zinc-400 font-medium">Sensation</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    { feature: 'World Pages', starter: '5', standard: '15', scale: '30', sensation: '50' },
-                    { feature: 'Posts per Week', starter: '10', standard: '30', scale: '60', sensation: '100+' },
-                    { feature: 'Aesthetic Categories', starter: '1', standard: '2', scale: '3', sensation: 'All' },
-                    { feature: 'Artist Dashboard', starter: true, standard: true, scale: true, sensation: true },
-                    { feature: 'Real-time Analytics', starter: true, standard: true, scale: true, sensation: true },
-                    { feature: 'Dedicated Manager', starter: false, standard: true, scale: true, sensation: true },
-                    { feature: 'Priority Support', starter: false, standard: false, scale: true, sensation: true },
-                    { feature: 'Custom Strategy Call', starter: false, standard: false, scale: true, sensation: true },
-                    { feature: 'Campaign Reports', starter: 'Monthly', standard: 'Bi-weekly', scale: 'Weekly', sensation: 'Daily' },
-                    { feature: 'Adjacent Artist Mix', starter: '70/30', standard: '70/30', scale: '60/40', sensation: 'Custom' },
-                  ].map((row, i) => (
-                    <tr key={i} className="border-b border-zinc-800/50">
-                      <td className="py-3 px-4 text-zinc-300">{row.feature}</td>
-                      {['starter', 'standard', 'scale', 'sensation'].map(tier => (
-                        <td key={tier} className="py-3 px-2 text-center">
-                          {typeof row[tier] === 'boolean' ? (
-                            row[tier] ? (
-                              <span className="text-green-400">✓</span>
-                            ) : (
-                              <span className="text-zinc-600">—</span>
-                            )
-                          ) : (
-                            <span className="text-zinc-400">{row[tier]}</span>
-                          )}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
             <div className="text-center mb-16">
               <button onClick={goToIntake} className="px-8 py-4 bg-white text-black rounded-full text-lg font-semibold hover:bg-zinc-200 transition">Apply Now →</button>
               <p className="text-zinc-500 text-sm mt-3">You'll select your preferred tier in the application</p>
@@ -3844,285 +2624,6 @@ const StickToMusic = () => {
           <span className="text-zinc-600 text-sm">© 2025</span>
         </div>
       </footer>
-
-      {/* LOGIN MODAL */}
-      {showLoginModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowLoginModal(false)}>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
-              <h2 className="text-xl font-bold">Welcome Back</h2>
-              <button onClick={() => setShowLoginModal(false)} className="text-zinc-500 hover:text-white">✕</button>
-            </div>
-            <form onSubmit={handleLogin} className="p-6 space-y-4">
-              {loginForm.error && (
-                <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
-                  {loginForm.error}
-                </div>
-              )}
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Email</label>
-                <input
-                  type="email"
-                  value={loginForm.email}
-                  onChange={e => setLoginForm(prev => ({ ...prev, email: e.target.value, error: null }))}
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-purple-500"
-                  placeholder="you@example.com"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Password</label>
-                <input
-                  type="password"
-                  value={loginForm.password}
-                  onChange={e => setLoginForm(prev => ({ ...prev, password: e.target.value, error: null }))}
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-purple-500"
-                  placeholder="••••••••"
-                  required
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={isLoggingIn}
-                className="w-full py-3 bg-white text-black rounded-xl font-semibold hover:bg-zinc-200 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isLoggingIn ? (
-                  <>
-                    <span className="animate-spin">⟳</span>
-                    Logging in...
-                  </>
-                ) : 'Log In'}
-              </button>
-              <p className="text-center text-sm text-zinc-500">
-                Don't have an account?{' '}
-                <button
-                  type="button"
-                  onClick={() => { setShowLoginModal(false); setShowSignupModal(true); }}
-                  className="text-purple-400 hover:text-purple-300"
-                >
-                  Sign up
-                </button>
-              </p>
-              <div className="pt-4 border-t border-zinc-800">
-                <p className="text-xs text-zinc-600 text-center mb-3">Demo Accounts:</p>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setLoginForm({ email: 'zade@sticktomusic.com', password: 'admin123', error: null })}
-                    className="p-2 bg-zinc-800 rounded-lg hover:bg-zinc-700 transition"
-                  >
-                    <span className="text-purple-400">Operator</span><br/>
-                    <span className="text-zinc-500">zade@sticktomusic.com</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setLoginForm({ email: 'boon@artist.com', password: 'boon123', error: null })}
-                    className="p-2 bg-zinc-800 rounded-lg hover:bg-zinc-700 transition"
-                  >
-                    <span className="text-pink-400">Artist</span><br/>
-                    <span className="text-zinc-500">boon@artist.com</span>
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* SIGNUP MODAL */}
-      {showSignupModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowSignupModal(false)}>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
-              <h2 className="text-xl font-bold">Create Account</h2>
-              <button onClick={() => setShowSignupModal(false)} className="text-zinc-500 hover:text-white">✕</button>
-            </div>
-            <form onSubmit={handleSignup} className="p-6 space-y-4">
-              {signupForm.error && (
-                <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
-                  {signupForm.error}
-                </div>
-              )}
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Name</label>
-                <input
-                  type="text"
-                  value={signupForm.name}
-                  onChange={e => setSignupForm(prev => ({ ...prev, name: e.target.value, error: null }))}
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white"
-                  placeholder="Your name"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Email</label>
-                <input
-                  type="email"
-                  value={signupForm.email}
-                  onChange={e => setSignupForm(prev => ({ ...prev, email: e.target.value, error: null }))}
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white"
-                  placeholder="you@example.com"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Password</label>
-                <input
-                  type="password"
-                  value={signupForm.password}
-                  onChange={e => setSignupForm(prev => ({ ...prev, password: e.target.value, error: null }))}
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white"
-                  placeholder="••••••••"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Account Type</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSignupForm(prev => ({ ...prev, role: 'artist' }))}
-                    className={`p-3 rounded-xl border transition ${signupForm.role === 'artist' ? 'border-purple-500 bg-purple-500/20' : 'border-zinc-700 bg-zinc-800'}`}
-                  >
-                    <span className="block font-medium">Artist</span>
-                    <span className="text-xs text-zinc-500">View your campaigns</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSignupForm(prev => ({ ...prev, role: 'operator' }))}
-                    className={`p-3 rounded-xl border transition ${signupForm.role === 'operator' ? 'border-purple-500 bg-purple-500/20' : 'border-zinc-700 bg-zinc-800'}`}
-                  >
-                    <span className="block font-medium">Operator</span>
-                    <span className="text-xs text-zinc-500">Manage all artists</span>
-                  </button>
-                </div>
-              </div>
-              <button
-                type="submit"
-                disabled={isSigningUp}
-                className="w-full py-3 bg-white text-black rounded-xl font-semibold hover:bg-zinc-200 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isSigningUp ? (
-                  <>
-                    <span className="animate-spin">⟳</span>
-                    Creating account...
-                  </>
-                ) : 'Create Account'}
-              </button>
-              <p className="text-center text-sm text-zinc-500">
-                Already have an account?{' '}
-                <button
-                  type="button"
-                  onClick={() => { setShowSignupModal(false); setShowLoginModal(true); }}
-                  className="text-purple-400 hover:text-purple-300"
-                >
-                  Log in
-                </button>
-              </p>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Quick Search Modal (Cmd+K) */}
-      {showQuickSearch && (
-        <div className="fixed inset-0 bg-black/80 flex items-start justify-center pt-[20vh] z-[60] p-4" onClick={() => setShowQuickSearch(false)}>
-          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-xl shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="p-4 flex items-center gap-3 border-b border-zinc-800">
-              <span className="text-zinc-500">🔍</span>
-              <input
-                ref={quickSearchRef}
-                type="text"
-                value={quickSearchQuery}
-                onChange={e => setQuickSearchQuery(e.target.value)}
-                placeholder="Quick navigation..."
-                className="flex-1 bg-transparent text-lg text-white placeholder-zinc-500 focus:outline-none"
-              />
-              <kbd className="px-2 py-1 bg-zinc-800 text-zinc-500 rounded text-xs">esc</kbd>
-            </div>
-            <div className="p-2 max-h-80 overflow-y-auto">
-              {/* Quick navigation */}
-              {[
-                { label: 'Home', action: () => { setCurrentPage('home'); setShowQuickSearch(false); }, icon: '🏠', category: 'Pages' },
-                { label: 'Pricing', action: () => { setCurrentPage('pricing'); setShowQuickSearch(false); }, icon: '💰', category: 'Pages' },
-                { label: 'How It Works', action: () => { setCurrentPage('how-it-works'); setShowQuickSearch(false); }, icon: '📖', category: 'Pages' },
-                { label: 'Apply / Intake Form', action: () => { setCurrentPage('intake'); setShowQuickSearch(false); }, icon: '📝', category: 'Pages' },
-                { label: 'Operator Dashboard', action: () => { setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '⚙️', category: 'Dashboards' },
-                { label: 'Artist Portal', action: () => { setCurrentPage('artist-portal'); setShowQuickSearch(false); }, icon: '🎵', category: 'Dashboards' },
-                { label: 'Artists Tab', action: () => { setOperatorTab('artists'); setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '👥', category: 'Operator' },
-                { label: 'Pages Tab', action: () => { setOperatorTab('pages'); setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '📱', category: 'Operator' },
-                { label: 'Content / Schedule', action: () => { setOperatorTab('content'); setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '📅', category: 'Operator' },
-                { label: 'Campaigns', action: () => { setOperatorTab('campaigns'); setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '🎯', category: 'Operator' },
-                { label: 'Content Banks', action: () => { setOperatorTab('banks'); setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '📦', category: 'Operator' },
-                { label: 'Applications', action: () => { setOperatorTab('applications'); setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '📋', category: 'Operator' },
-                { label: 'New Campaign', action: () => { setShowCampaignModal(true); setCurrentPage('operator'); setOperatorTab('campaigns'); setShowQuickSearch(false); }, icon: '➕', category: 'Actions' },
-                { label: 'New Schedule', action: () => { setShowScheduleModal(true); setCurrentPage('operator'); setOperatorTab('content'); setShowQuickSearch(false); }, icon: '➕', category: 'Actions' },
-                { label: 'Login', action: () => { setShowLoginModal(true); setShowQuickSearch(false); }, icon: '🔑', category: 'Actions' },
-              ].filter(item =>
-                !quickSearchQuery || item.label.toLowerCase().includes(quickSearchQuery.toLowerCase())
-              ).map((item, i) => (
-                <button
-                  key={i}
-                  onClick={item.action}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-zinc-800 rounded-lg transition text-left"
-                >
-                  <span>{item.icon}</span>
-                  <span className="text-zinc-200">{item.label}</span>
-                  <span className="ml-auto text-xs text-zinc-600">{item.category}</span>
-                </button>
-              ))}
-              {quickSearchQuery && [].filter(item =>
-                item.label.toLowerCase().includes(quickSearchQuery.toLowerCase())
-              ).length === 0 && (
-                <div className="px-4 py-3 text-sm text-zinc-500 text-center">
-                  No results for "{quickSearchQuery}"
-                </div>
-              )}
-            </div>
-            <div className="p-3 border-t border-zinc-800 text-xs text-zinc-600 text-center">
-              Press <kbd className="px-1 py-0.5 bg-zinc-800 rounded">⌘</kbd> + <kbd className="px-1 py-0.5 bg-zinc-800 rounded">K</kbd> anywhere to open
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {deleteConfirmModal.show && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4" onClick={() => setDeleteConfirmModal({ show: false, postId: null, caption: '' })}>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="p-6">
-              <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mb-4 mx-auto">
-                <span className="text-red-400 text-2xl">🗑</span>
-              </div>
-              <h2 className="text-xl font-bold text-center mb-2">Delete Post?</h2>
-              <p className="text-zinc-400 text-center text-sm mb-2">This will remove the post from Late's schedule.</p>
-              {deleteConfirmModal.caption && (
-                <p className="text-zinc-500 text-center text-xs mb-4 truncate">
-                  "{deleteConfirmModal.caption}..."
-                </p>
-              )}
-              <p className="text-red-400 text-center text-sm mb-6">This action cannot be undone.</p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setDeleteConfirmModal({ show: false, postId: null, caption: '' })}
-                  className="flex-1 py-3 bg-zinc-800 text-white rounded-xl font-medium hover:bg-zinc-700 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => handleDeletePost(deleteConfirmModal.postId)}
-                  className="flex-1 py-3 bg-red-500 text-white rounded-xl font-medium hover:bg-red-600 transition"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Toast Notifications */}
-      <ToastContainer />
     </div>
   );
 };
