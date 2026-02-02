@@ -1455,7 +1455,7 @@ const StickToMusic = () => {
   const nextFormStep = () => setFormStep(s => s + 1);
   const prevFormStep = () => setFormStep(s => s - 1);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     console.log('Form submitted:', formData);
     // Store the application
     const tierMap = {
