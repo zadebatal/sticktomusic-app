@@ -4215,7 +4215,7 @@ const StickToMusic = () => {
                     <div className="flex items-center justify-between py-3 border-b border-zinc-800">
                       <div>
                         <p className="font-medium">Email</p>
-                        <p className="text-sm text-zinc-500">{user?.email}</p>
+                        <p className="text-sm text-zinc-500">{user?.email || auth.currentUser?.email || 'Not available'}</p>
                       </div>
                     </div>
                     <div className="flex items-center justify-between py-3 border-b border-zinc-800">
