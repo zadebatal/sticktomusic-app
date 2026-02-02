@@ -1,5 +1,52 @@
 import React, { useState, useEffect, useRef } from 'react';
 
+// Firebase imports
+import { initializeApp } from 'firebase/app';
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut,
+  onAuthStateChanged
+} from 'firebase/auth';
+
+// Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyDIw9xCnMVpDHW36vyxsNtwvmOfVlIHa0Y",
+  authDomain: "sticktomusic-c8b23.firebaseapp.com",
+  projectId: "sticktomusic-c8b23",
+  storageBucket: "sticktomusic-c8b23.firebasestorage.app",
+  messagingSenderId: "621559911733",
+  appId: "1:621559911733:web:4fe5066433967245ada87c"
+};
+
+// Initialize Firebase
+const firebaseApp = initializeApp(firebaseConfig);
+const auth = getAuth(firebaseApp);
+const googleProvider = new GoogleAuthProvider();
+
+// Operator emails (these users get operator access)
+const OPERATOR_EMAILS = ['zade@sticktomusic.com', 'zadebatal@gmail.com'];
+
+// Artist email to ID mapping (for existing artists)
+const ARTIST_EMAIL_MAP = {
+  'booneasonmusic@gmail.com': { artistId: 'boon', name: 'Boon' },
+  'camyliomusic@gmail.com': { artistId: 'camylio', name: 'Camylio' }
+};
+
+// Allowed emails whitelist - only these users can sign in
+// Add new paid users here
+const ALLOWED_EMAILS = [
+  // Operators
+  'zade@sticktomusic.com',
+  'zadebatal@gmail.com',
+  // Artists
+  'booneasonmusic@gmail.com',
+  'camyliomusic@gmail.com'
+];
+
 // Late API Configuration
 const LATE_API_BASE = 'https://getlate.dev/api/v1';
 const LATE_API_KEY = 'sk_935df1a3c3948565f7134328d45b5ad2dff3234d4b3209a2c7a32d408dbd2236';
@@ -124,10 +171,17 @@ const lateApi = {
   }
 };
 
-// Mock user database (in production, this would be a real backend with OAuth)
-const USERS_DB = {
-  'zade@sticktomusic.com': { password: 'admin123', role: 'operator', name: 'Zade', artistId: null },
-  'boon@artist.com': { password: 'boon123', role: 'artist', name: 'Boon', artistId: 'boon', lateConnected: true },
+// Helper to determine user role from email
+const getUserRole = (email) => {
+  if (OPERATOR_EMAILS.includes(email?.toLowerCase())) {
+    return 'operator';
+  }
+  return 'artist';
+};
+
+// Helper to get artist info from email
+const getArtistInfo = (email) => {
+  return ARTIST_EMAIL_MAP[email?.toLowerCase()] || null;
 };
 
 // Campaign data structure - starts empty, campaigns are created via the UI
@@ -278,31 +332,148 @@ const StickToMusic = () => {
     }
   }, [showQuickSearch]);
 
-  // Authentication functions
+  // Helper functions for user roles
+  const getUserRole = (email) => {
+    if (OPERATOR_EMAILS.includes(email?.toLowerCase())) {
+      return 'operator';
+    }
+    return 'artist';
+  };
+
+  const getArtistInfo = (email) => {
+    return ARTIST_EMAIL_MAP[email?.toLowerCase()] || null;
+  };
+
+  // Check if email is allowed to access the app
+  const isEmailAllowed = (email) => {
+    return ALLOWED_EMAILS.includes(email?.toLowerCase());
+  };
+
+  // Firebase Auth state listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const email = firebaseUser.email;
+
+        // Check whitelist - sign out if not allowed
+        if (!isEmailAllowed(email)) {
+          await signOut(auth);
+          setUser(null);
+          return;
+        }
+
+        const role = getUserRole(email);
+        const artistInfo = getArtistInfo(email);
+        setUser({
+          email: email,
+          role: role,
+          name: firebaseUser.displayName || artistInfo?.name || email.split('@')[0],
+          artistId: artistInfo?.artistId || null
+        });
+      } else {
+        setUser(null);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoggingIn(true);
-    // Simulate network delay for realism
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const userRecord = USERS_DB[loginForm.email.toLowerCase()];
-    if (userRecord && userRecord.password === loginForm.password) {
+    try {
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        loginForm.email,
+        loginForm.password
+      );
+      const email = userCredential.user.email;
+
+      // Check whitelist
+      if (!isEmailAllowed(email)) {
+        await signOut(auth);
+        setLoginForm(prev => ({ ...prev, error: 'Access denied. Please contact us to get access.' }));
+        setIsLoggingIn(false);
+        return;
+      }
+
+      const role = getUserRole(email);
+      const artistInfo = getArtistInfo(email);
+
       setUser({
-        email: loginForm.email.toLowerCase(),
-        role: userRecord.role,
-        name: userRecord.name,
-        artistId: userRecord.artistId
+        email: email,
+        role: role,
+        name: userCredential.user.displayName || artistInfo?.name || email.split('@')[0],
+        artistId: artistInfo?.artistId || null
       });
       setShowLoginModal(false);
       setLoginForm({ email: '', password: '', error: null });
-      showToast(`Welcome back, ${userRecord.name}!`, 'success');
+      showToast(`Welcome back!`, 'success');
+
       // Redirect based on role
-      if (userRecord.role === 'artist') {
+      if (role === 'artist') {
         setCurrentPage('artist-portal');
       } else {
         setCurrentPage('operator');
       }
-    } else {
-      setLoginForm(prev => ({ ...prev, error: 'Invalid email or password' }));
+    } catch (error) {
+      let errorMessage = 'Invalid email or password';
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'No account found with this email';
+      } else if (error.code === 'auth/wrong-password') {
+        errorMessage = 'Incorrect password';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'Too many attempts. Please try again later';
+      }
+      setLoginForm(prev => ({ ...prev, error: errorMessage }));
+    }
+    setIsLoggingIn(false);
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsLoggingIn(true);
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const email = result.user.email;
+
+      // Check whitelist
+      if (!isEmailAllowed(email)) {
+        await signOut(auth);
+        setLoginForm(prev => ({ ...prev, error: 'Access denied. Please contact us to get access.' }));
+        setShowLoginModal(true);
+        setShowSignupModal(false);
+        setIsLoggingIn(false);
+        return;
+      }
+
+      const role = getUserRole(email);
+      const artistInfo = getArtistInfo(email);
+
+      setUser({
+        email: email,
+        role: role,
+        name: result.user.displayName || email.split('@')[0],
+        artistId: artistInfo?.artistId || null
+      });
+      setShowLoginModal(false);
+      setShowSignupModal(false);
+      showToast(`Welcome, ${result.user.displayName || 'there'}!`, 'success');
+
+      if (role === 'artist') {
+        setCurrentPage('artist-portal');
+      } else {
+        setCurrentPage('operator');
+      }
+    } catch (error) {
+      console.error('Google sign-in error:', error);
+      let errorMessage = 'Google sign-in failed';
+      if (error.code === 'auth/popup-closed-by-user') {
+        errorMessage = 'Sign-in cancelled';
+      } else if (error.code === 'auth/popup-blocked') {
+        errorMessage = 'Popup blocked. Please allow popups for this site';
+      }
+      setLoginForm(prev => ({ ...prev, error: errorMessage }));
     }
     setIsLoggingIn(false);
   };
@@ -310,39 +481,63 @@ const StickToMusic = () => {
   const handleSignup = async (e) => {
     e.preventDefault();
     setIsSigningUp(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    if (USERS_DB[signupForm.email.toLowerCase()]) {
-      setSignupForm(prev => ({ ...prev, error: 'Email already exists' }));
+
+    // Check whitelist before creating account
+    if (!isEmailAllowed(signupForm.email)) {
+      setSignupForm(prev => ({ ...prev, error: 'Access denied. Please contact us to get access or use Google Sign-in if you already have access.' }));
       setIsSigningUp(false);
       return;
     }
-    // In production, this would call an API
-    USERS_DB[signupForm.email.toLowerCase()] = {
-      password: signupForm.password,
-      role: signupForm.role,
-      name: signupForm.name,
-      artistId: signupForm.role === 'artist' ? signupForm.name.toLowerCase() : null
-    };
-    setUser({
-      email: signupForm.email.toLowerCase(),
-      role: signupForm.role,
-      name: signupForm.name,
-      artistId: signupForm.role === 'artist' ? signupForm.name.toLowerCase() : null
-    });
-    setShowSignupModal(false);
-    setSignupForm({ email: '', password: '', name: '', role: 'artist', error: null });
-    showToast(`Welcome to StickToMusic, ${signupForm.name}!`, 'success');
-    if (signupForm.role === 'artist') {
-      setCurrentPage('artist-portal');
-    } else {
-      setCurrentPage('operator');
+
+    try {
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        signupForm.email,
+        signupForm.password
+      );
+      const email = userCredential.user.email;
+      const role = getUserRole(email); // Use role based on email, not form selection
+      const artistInfo = getArtistInfo(email);
+
+      setUser({
+        email: email,
+        role: role,
+        name: artistInfo?.name || signupForm.name,
+        artistId: artistInfo?.artistId || null
+      });
+      setShowSignupModal(false);
+      setSignupForm({ email: '', password: '', name: '', role: 'artist', error: null });
+      showToast(`Welcome to StickToMusic, ${artistInfo?.name || signupForm.name}!`, 'success');
+
+      if (role === 'artist') {
+        setCurrentPage('artist-portal');
+      } else {
+        setCurrentPage('operator');
+      }
+    } catch (error) {
+      let errorMessage = 'Signup failed';
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'Email already exists. Try logging in instead';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'Password should be at least 6 characters';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address';
+      }
+      setSignupForm(prev => ({ ...prev, error: errorMessage }));
     }
     setIsSigningUp(false);
   };
 
-  const handleLogout = () => {
-    setUser(null);
-    setCurrentPage('home');
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setUser(null);
+      setCurrentPage('home');
+      showToast('Logged out successfully', 'success');
+    } catch (error) {
+      console.error('Logout error:', error);
+      showToast('Logout failed', 'error');
+    }
   };
 
   // Campaign functions
@@ -3923,6 +4118,31 @@ const StickToMusic = () => {
                   </>
                 ) : 'Log In'}
               </button>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-zinc-700"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-zinc-900 text-zinc-500">or</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={isLoggingIn}
+                className="w-full py-3 bg-zinc-800 border border-zinc-700 text-white rounded-xl font-semibold hover:bg-zinc-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Continue with Google
+              </button>
+
               <p className="text-center text-sm text-zinc-500">
                 Don't have an account?{' '}
                 <button
@@ -3934,25 +4154,9 @@ const StickToMusic = () => {
                 </button>
               </p>
               <div className="pt-4 border-t border-zinc-800">
-                <p className="text-xs text-zinc-600 text-center mb-3">Demo Accounts:</p>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setLoginForm({ email: 'zade@sticktomusic.com', password: 'admin123', error: null })}
-                    className="p-2 bg-zinc-800 rounded-lg hover:bg-zinc-700 transition"
-                  >
-                    <span className="text-purple-400">Operator</span><br/>
-                    <span className="text-zinc-500">zade@sticktomusic.com</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setLoginForm({ email: 'boon@artist.com', password: 'boon123', error: null })}
-                    className="p-2 bg-zinc-800 rounded-lg hover:bg-zinc-700 transition"
-                  >
-                    <span className="text-pink-400">Artist</span><br/>
-                    <span className="text-zinc-500">boon@artist.com</span>
-                  </button>
-                </div>
+                <p className="text-xs text-zinc-500 text-center">
+                  💡 Quick start: Use Google Sign-in above
+                </p>
               </div>
             </form>
           </div>
@@ -4039,6 +4243,31 @@ const StickToMusic = () => {
                   </>
                 ) : 'Create Account'}
               </button>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-zinc-700"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-zinc-900 text-zinc-500">or</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={isSigningUp}
+                className="w-full py-3 bg-zinc-800 border border-zinc-700 text-white rounded-xl font-semibold hover:bg-zinc-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Continue with Google
+              </button>
+
               <p className="text-center text-sm text-zinc-500">
                 Already have an account?{' '}
                 <button
