@@ -313,7 +313,9 @@ const StickToMusic = () => {
   // Search/filter state
   const [postSearch, setPostSearch] = useState('');
   const [postPlatformFilter, setPostPlatformFilter] = useState('all'); // 'all', 'tiktok', 'instagram'
+  const [postAccountFilter, setPostAccountFilter] = useState('all'); // 'all' or specific username
   const [applicationFilter, setApplicationFilter] = useState('all'); // 'all', 'pending', 'approved', 'declined'
+  const [selectedAccountDashboard, setSelectedAccountDashboard] = useState(null); // For account dashboard modal
 
   // Toast notification state
   const [toasts, setToasts] = useState([]);
@@ -1467,6 +1469,28 @@ const StickToMusic = () => {
     });
 
     return urls;
+  };
+
+  // Helper to get account username from a post
+  const getPostAccount = (post) => {
+    const platform = post.platforms?.[0];
+    return platform?.accountId?.username || platform?.accountId?.displayName || null;
+  };
+
+  // Helper to get unique accounts from all posts
+  const getUniqueAccounts = (posts) => {
+    const accounts = new Set();
+    posts.forEach(post => {
+      const account = getPostAccount(post);
+      if (account) accounts.add(account);
+    });
+    return Array.from(accounts).sort();
+  };
+
+  // Helper to get post thumbnail URL
+  const getPostThumbnail = (post) => {
+    const mediaItem = post.mediaItems?.[0];
+    return mediaItem?.thumbnail || mediaItem?.url || null;
   };
 
   const getStatusColor = (status) => {
@@ -3165,6 +3189,119 @@ const StickToMusic = () => {
                   </div>
                 )}
 
+                {/* Account Dashboard Modal */}
+                {selectedAccountDashboard && (
+                  <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setSelectedAccountDashboard(null)}>
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+                      <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+                        <div>
+                          <h2 className="text-xl font-bold">@{selectedAccountDashboard}</h2>
+                          <p className="text-sm text-zinc-500">Account Dashboard</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <a
+                            href={`https://tiktok.com/@${selectedAccountDashboard}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 bg-pink-500/20 text-pink-400 rounded-lg text-sm hover:bg-pink-500/30 transition"
+                          >
+                            TikTok ↗
+                          </a>
+                          <a
+                            href={`https://instagram.com/${selectedAccountDashboard}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-sm hover:bg-purple-500/30 transition"
+                          >
+                            Instagram ↗
+                          </a>
+                          <button onClick={() => setSelectedAccountDashboard(null)} className="text-zinc-500 hover:text-white text-xl">✕</button>
+                        </div>
+                      </div>
+                      <div className="p-6 overflow-y-auto max-h-[70vh]">
+                        {/* Account Stats */}
+                        {(() => {
+                          const accountPosts = latePosts.filter(p => getPostAccount(p) === selectedAccountDashboard);
+                          const scheduled = accountPosts.filter(p => p.status === 'scheduled').length;
+                          const published = accountPosts.filter(p => p.status === 'published').length;
+                          return (
+                            <>
+                              <div className="grid grid-cols-3 gap-4 mb-6">
+                                <div className="bg-zinc-800 rounded-xl p-4 text-center">
+                                  <p className="text-2xl font-bold text-white">{accountPosts.length}</p>
+                                  <p className="text-xs text-zinc-500">Total Posts</p>
+                                </div>
+                                <div className="bg-zinc-800 rounded-xl p-4 text-center">
+                                  <p className="text-2xl font-bold text-yellow-400">{scheduled}</p>
+                                  <p className="text-xs text-zinc-500">Scheduled</p>
+                                </div>
+                                <div className="bg-zinc-800 rounded-xl p-4 text-center">
+                                  <p className="text-2xl font-bold text-green-400">{published}</p>
+                                  <p className="text-xs text-zinc-500">Published</p>
+                                </div>
+                              </div>
+
+                              {/* Posts List */}
+                              <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Posts</h3>
+                              <div className="space-y-2">
+                                {accountPosts
+                                  .sort((a, b) => (b.scheduledFor || '').localeCompare(a.scheduledFor || ''))
+                                  .map(post => (
+                                    <div key={post._id} className="bg-zinc-800 rounded-lg p-4 flex items-center gap-4">
+                                      {/* Thumbnail */}
+                                      <div className="w-12 h-12 rounded overflow-hidden bg-zinc-700 flex-shrink-0">
+                                        {getPostThumbnail(post) ? (
+                                          <img src={getPostThumbnail(post)} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
+                                        ) : (
+                                          <div className="w-full h-full flex items-center justify-center text-zinc-500">🎬</div>
+                                        )}
+                                      </div>
+                                      {/* Info */}
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm text-white truncate">{post.content || 'No caption'}</p>
+                                        <p className="text-xs text-zinc-500">
+                                          {post.scheduledFor ? new Date(post.scheduledFor).toLocaleString('en-US', {
+                                            month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+                                          }) : '-'}
+                                        </p>
+                                      </div>
+                                      {/* Status & Links */}
+                                      <div className="flex items-center gap-2">
+                                        <span className={`px-2 py-1 rounded-full text-xs ${
+                                          post.status === 'scheduled' ? 'bg-yellow-500/20 text-yellow-400' :
+                                          post.status === 'published' ? 'bg-green-500/20 text-green-400' :
+                                          'bg-zinc-500/20 text-zinc-400'
+                                        }`}>
+                                          {post.status}
+                                        </span>
+                                        {getPostUrls(post).map((pu, idx) => (
+                                          <a
+                                            key={idx}
+                                            href={pu.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className={`px-2 py-1 rounded text-xs ${
+                                              pu.platform === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'
+                                            }`}
+                                          >
+                                            {pu.label} ↗
+                                          </a>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                {accountPosts.length === 0 && (
+                                  <p className="text-center text-zinc-500 py-8">No posts for this account</p>
+                                )}
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Sync Status */}
                 {syncStatus && (
                   <div className="mb-4 px-4 py-2 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-sm">
@@ -3240,6 +3377,18 @@ const StickToMusic = () => {
                       />
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">🔍</span>
                     </div>
+                    {/* Account Filter Dropdown */}
+                    <select
+                      value={postAccountFilter}
+                      onChange={e => setPostAccountFilter(e.target.value)}
+                      className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500 min-w-[160px]"
+                    >
+                      <option value="all">All Accounts</option>
+                      {getUniqueAccounts(latePosts).map(account => (
+                        <option key={account} value={account}>@{account}</option>
+                      ))}
+                    </select>
+                    {/* Platform Filter */}
                     <div className="flex bg-zinc-800 rounded-lg p-1">
                       {['all', 'tiktok', 'instagram'].map(platform => (
                         <button
@@ -3257,9 +3406,9 @@ const StickToMusic = () => {
                         </button>
                       ))}
                     </div>
-                    {(postSearch || postPlatformFilter !== 'all') && (
+                    {(postSearch || postPlatformFilter !== 'all' || postAccountFilter !== 'all') && (
                       <button
-                        onClick={() => { setPostSearch(''); setPostPlatformFilter('all'); }}
+                        onClick={() => { setPostSearch(''); setPostPlatformFilter('all'); setPostAccountFilter('all'); }}
                         className="px-3 py-2 text-sm text-zinc-400 hover:text-white transition"
                       >
                         Clear filters
@@ -3504,8 +3653,9 @@ const StickToMusic = () => {
                     <table className="w-full">
                       <thead>
                         <tr className="border-b border-zinc-800">
+                          <th className="text-left p-4 text-sm font-medium text-zinc-500 w-12"></th>
                           <th className="text-left p-4 text-sm font-medium text-zinc-500">Date & Time</th>
-                          <th className="text-left p-4 text-sm font-medium text-zinc-500">Platforms</th>
+                          <th className="text-left p-4 text-sm font-medium text-zinc-500">Account</th>
                           <th className="text-left p-4 text-sm font-medium text-zinc-500">Caption</th>
                           <th className="text-left p-4 text-sm font-medium text-zinc-500">Status</th>
                           <th className="text-left p-4 text-sm font-medium text-zinc-500">View</th>
@@ -3525,6 +3675,11 @@ const StickToMusic = () => {
                                 const platforms = (post.platforms || []).map(p => p.platform || p);
                                 if (!platforms.includes(postPlatformFilter)) return false;
                               }
+                              // Account filter
+                              if (postAccountFilter !== 'all') {
+                                const account = getPostAccount(post);
+                                if (account !== postAccountFilter) return false;
+                              }
                               return true;
                             })
                             .sort((a, b) => (a.scheduledFor || '').localeCompare(b.scheduledFor || ''));
@@ -3532,20 +3687,45 @@ const StickToMusic = () => {
                           return filteredPosts.length > 0 ? (
                             filteredPosts.map(post => (
                               <tr key={post._id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition">
+                                {/* Thumbnail */}
+                                <td className="p-2 w-12">
+                                  {getPostThumbnail(post) ? (
+                                    <div className="w-10 h-10 rounded overflow-hidden bg-zinc-800">
+                                      <img
+                                        src={getPostThumbnail(post)}
+                                        alt=""
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => { e.target.style.display = 'none'; }}
+                                      />
+                                    </div>
+                                  ) : (
+                                    <div className="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center text-zinc-600 text-xs">
+                                      🎬
+                                    </div>
+                                  )}
+                                </td>
+                                {/* Date & Time */}
                                 <td className="p-4 text-sm text-zinc-400">
                                   {post.scheduledFor ? new Date(post.scheduledFor).toLocaleString('en-US', {
                                     month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
                                   }) : '-'}
                                 </td>
+                                {/* Account */}
                                 <td className="p-4">
-                                  <div className="flex gap-1">
-                                    {(post.platforms || []).map((p, i) => (
-                                      <span key={i} className={`px-2 py-0.5 rounded text-xs ${(p.platform || p) === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
-                                        {(p.platform || p) === 'tiktok' ? 'TT' : 'IG'}
-                                      </span>
-                                    ))}
-                                  </div>
+                                  <button
+                                    onClick={() => setSelectedAccountDashboard(getPostAccount(post))}
+                                    className="text-sm font-medium text-zinc-300 hover:text-purple-400 transition flex items-center gap-2"
+                                  >
+                                    <span className="text-zinc-500">@</span>
+                                    {getPostAccount(post) || 'Unknown'}
+                                    <div className="flex gap-0.5">
+                                      {(post.platforms || []).map((p, i) => (
+                                        <span key={i} className={`w-1.5 h-1.5 rounded-full ${(p.platform || p) === 'tiktok' ? 'bg-pink-400' : 'bg-purple-400'}`} />
+                                      ))}
+                                    </div>
+                                  </button>
                                 </td>
+                                {/* Caption */}
                                 <td className="p-4 text-sm max-w-[200px] truncate">{post.content || 'No caption'}</td>
                                 <td className="p-4">
                                   <span className={`px-2 py-1 rounded-full text-xs ${
