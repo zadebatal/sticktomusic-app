@@ -4221,10 +4221,10 @@ const StickToMusic = () => {
                     <div className="flex items-center justify-between py-3 border-b border-zinc-800">
                       <div>
                         <p className="font-medium">Role</p>
-                        <p className="text-sm text-zinc-500 capitalize">{user?.role}</p>
+                        <p className="text-sm text-zinc-500 capitalize">{OPERATOR_EMAILS.includes(user?.email?.toLowerCase()) ? 'operator' : user?.role}</p>
                       </div>
                       <span className="px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full text-sm">
-                        {user?.role === 'operator' ? 'Admin' : 'Artist'}
+                        {OPERATOR_EMAILS.includes(user?.email?.toLowerCase()) ? 'Admin' : 'Artist'}
                       </span>
                     </div>
                   </div>
