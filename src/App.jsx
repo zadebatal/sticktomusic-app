@@ -11,6 +11,17 @@ import {
   signOut,
   onAuthStateChanged
 } from 'firebase/auth';
+import {
+  getFirestore,
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  updateDoc,
+  doc,
+  onSnapshot
+} from 'firebase/firestore';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -25,27 +36,14 @@ const firebaseConfig = {
 // Initialize Firebase
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
+const db = getFirestore(firebaseApp);
 const googleProvider = new GoogleAuthProvider();
+
+// Stripe Configuration
+const STRIPE_PUBLISHABLE_KEY = 'pk_live_51SwClT6Yzynsfn3ImqR6SMOHy1EgQoTeQ7o7i3iMBRWSTTaYo2WrIq6G5ZpOMrhGCmEwuKc9mpKFMZXKFn9TLfUv00lfBRoJyl';
 
 // Operator emails (these users get operator access)
 const OPERATOR_EMAILS = ['zade@sticktomusic.com', 'zadebatal@gmail.com'];
-
-// Artist email to ID mapping (for existing artists)
-const ARTIST_EMAIL_MAP = {
-  'booneasonmusic@gmail.com': { artistId: 'boon', name: 'Boon' },
-  'camyliomusic@gmail.com': { artistId: 'camylio', name: 'Camylio' }
-};
-
-// Allowed emails whitelist - only these users can sign in
-// Add new paid users here
-const ALLOWED_EMAILS = [
-  // Operators
-  'zade@sticktomusic.com',
-  'zadebatal@gmail.com',
-  // Artists
-  'booneasonmusic@gmail.com',
-  'camyliomusic@gmail.com'
-];
 
 // Late API Configuration
 const LATE_API_BASE = 'https://getlate.dev/api/v1';
@@ -171,19 +169,6 @@ const lateApi = {
   }
 };
 
-// Helper to determine user role from email
-const getUserRole = (email) => {
-  if (OPERATOR_EMAILS.includes(email?.toLowerCase())) {
-    return 'operator';
-  }
-  return 'artist';
-};
-
-// Helper to get artist info from email
-const getArtistInfo = (email) => {
-  return ARTIST_EMAIL_MAP[email?.toLowerCase()] || null;
-};
-
 // Campaign data structure - starts empty, campaigns are created via the UI
 const CAMPAIGNS_DATA = [];
 
@@ -197,6 +182,63 @@ const StickToMusic = () => {
   const [loginForm, setLoginForm] = useState({ email: '', password: '', error: null });
   const [showSignupModal, setShowSignupModal] = useState(false);
   const [signupForm, setSignupForm] = useState({ email: '', password: '', name: '', role: 'artist', error: null });
+
+  // Firestore data - allowed users loaded from database
+  const [allowedUsers, setAllowedUsers] = useState([]);
+  const [firestoreLoaded, setFirestoreLoaded] = useState(false);
+
+  // Load allowed users from Firestore
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      collection(db, 'allowedUsers'),
+      (snapshot) => {
+        const users = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setAllowedUsers(users);
+        setFirestoreLoaded(true);
+        console.log('Loaded allowed users:', users);
+      },
+      (error) => {
+        console.error('Error loading allowed users:', error);
+        setFirestoreLoaded(true); // Still set loaded to prevent infinite loading
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  // Helper to check if email is allowed (from Firestore)
+  const isEmailAllowed = (email) => {
+    const normalizedEmail = email?.toLowerCase();
+    return allowedUsers.some(u => u.email?.toLowerCase() === normalizedEmail && u.status === 'active');
+  };
+
+  // Helper to get user data from Firestore
+  const getAllowedUserData = (email) => {
+    const normalizedEmail = email?.toLowerCase();
+    return allowedUsers.find(u => u.email?.toLowerCase() === normalizedEmail);
+  };
+
+  // Helper to determine user role from email
+  const getUserRole = (email) => {
+    const userData = getAllowedUserData(email);
+    if (userData?.role) return userData.role;
+    if (OPERATOR_EMAILS.includes(email?.toLowerCase())) return 'operator';
+    return 'artist';
+  };
+
+  // Helper to get artist info from Firestore
+  const getArtistInfo = (email) => {
+    const userData = getAllowedUserData(email);
+    if (userData) {
+      return {
+        artistId: userData.artistId || null,
+        name: userData.name || email?.split('@')[0]
+      };
+    }
+    return null;
+  };
 
   // Campaign management state
   const [campaigns, setCampaigns] = useState(CAMPAIGNS_DATA);
@@ -332,30 +374,15 @@ const StickToMusic = () => {
     }
   }, [showQuickSearch]);
 
-  // Helper functions for user roles
-  const getUserRole = (email) => {
-    if (OPERATOR_EMAILS.includes(email?.toLowerCase())) {
-      return 'operator';
-    }
-    return 'artist';
-  };
-
-  const getArtistInfo = (email) => {
-    return ARTIST_EMAIL_MAP[email?.toLowerCase()] || null;
-  };
-
-  // Check if email is allowed to access the app
-  const isEmailAllowed = (email) => {
-    return ALLOWED_EMAILS.includes(email?.toLowerCase());
-  };
-
-  // Firebase Auth state listener
+  // Firebase Auth state listener - waits for Firestore to load
   useEffect(() => {
+    if (!firestoreLoaded) return; // Wait for Firestore data
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const email = firebaseUser.email;
 
-        // Check whitelist - sign out if not allowed
+        // Check whitelist from Firestore - sign out if not allowed
         if (!isEmailAllowed(email)) {
           await signOut(auth);
           setUser(null);
@@ -375,7 +402,7 @@ const StickToMusic = () => {
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [firestoreLoaded, allowedUsers]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -938,6 +965,72 @@ const StickToMusic = () => {
 
   // Applications state - stores intake form submissions (starts empty)
   const [applications, setApplications] = useState([]);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedApplication, setSelectedApplication] = useState(null);
+  const [paymentLinkLoading, setPaymentLinkLoading] = useState(false);
+
+  // Stripe Payment Link - You can create this in Stripe Dashboard
+  // Go to: Stripe Dashboard > Products > + Add Product > Create a Payment Link
+  const STRIPE_PAYMENT_LINK_BASE = 'https://buy.stripe.com/'; // Add your payment link here
+
+  // Handle application approval - shows payment modal
+  const handleApproveApplication = (app) => {
+    setSelectedApplication(app);
+    setShowPaymentModal(true);
+  };
+
+  // Send payment link and update application status
+  const handleSendPaymentLink = async (app, paymentLink) => {
+    setPaymentLinkLoading(true);
+    try {
+      // Update application status to pending_payment
+      setApplications(prev => prev.map(a =>
+        a.id === app.id ? { ...a, status: 'pending_payment', paymentLink } : a
+      ));
+
+      // In production, you would send an email here with the payment link
+      // For now, we'll copy the link to clipboard
+      await navigator.clipboard.writeText(paymentLink);
+
+      showToast(`Payment link copied! Send to ${app.email}`, 'success');
+      setShowPaymentModal(false);
+      setSelectedApplication(null);
+    } catch (error) {
+      console.error('Error:', error);
+      showToast('Failed to process. Try again.', 'error');
+    }
+    setPaymentLinkLoading(false);
+  };
+
+  // Add user to Firestore allowedUsers (called after payment confirmed)
+  const addUserToAllowed = async (email, name, role = 'artist', artistId = null) => {
+    try {
+      await addDoc(collection(db, 'allowedUsers'), {
+        email: email.toLowerCase(),
+        name: name,
+        role: role,
+        artistId: artistId || name.toLowerCase().replace(/\s+/g, '-'),
+        status: 'active',
+        createdAt: new Date().toISOString()
+      });
+      showToast(`${name} added to allowed users!`, 'success');
+      return true;
+    } catch (error) {
+      console.error('Error adding user:', error);
+      showToast('Failed to add user', 'error');
+      return false;
+    }
+  };
+
+  // Manually mark payment as complete (for testing or manual verification)
+  const handleMarkPaymentComplete = async (app) => {
+    const success = await addUserToAllowed(app.email, app.name, 'artist');
+    if (success) {
+      setApplications(prev => prev.map(a =>
+        a.id === app.id ? { ...a, status: 'approved' } : a
+      ));
+    }
+  };
 
   // Helper to get social media URLs for posts
   const getPostUrls = (post) => {
@@ -3492,9 +3585,10 @@ const StickToMusic = () => {
                               <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                                 app.status === 'approved' ? 'bg-green-500/20 text-green-400' :
                                 app.status === 'declined' ? 'bg-red-500/20 text-red-400' :
+                                app.status === 'pending_payment' ? 'bg-blue-500/20 text-blue-400' :
                                 'bg-yellow-500/20 text-yellow-400'
                               }`}>
-                                {app.status}
+                                {app.status === 'pending_payment' ? 'Awaiting Payment' : app.status}
                               </span>
                             </div>
                             <p className="text-zinc-400 text-sm mb-3">{app.email}</p>
@@ -3514,15 +3608,10 @@ const StickToMusic = () => {
                           {app.status === 'pending' && (
                             <div className="flex items-start gap-2">
                               <button
-                                onClick={() => {
-                                  setApplications(prev => prev.map(a =>
-                                    a.id === app.id ? { ...a, status: 'approved' } : a
-                                  ));
-                                  showToast(`${app.name} approved!`, 'success');
-                                }}
+                                onClick={() => handleApproveApplication(app)}
                                 className="px-4 py-2 bg-green-500/20 text-green-400 rounded-lg text-sm font-medium hover:bg-green-500/30 transition"
                               >
-                                ✓ Approve
+                                ✓ Approve & Send Payment
                               </button>
                               <button
                                 onClick={() => {
@@ -3534,6 +3623,25 @@ const StickToMusic = () => {
                                 className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm font-medium hover:bg-red-500/30 transition"
                               >
                                 ✕ Decline
+                              </button>
+                            </div>
+                          )}
+                          {app.status === 'pending_payment' && (
+                            <div className="flex items-start gap-2">
+                              <button
+                                onClick={() => handleMarkPaymentComplete(app)}
+                                className="px-4 py-2 bg-blue-500/20 text-blue-400 rounded-lg text-sm font-medium hover:bg-blue-500/30 transition"
+                              >
+                                💳 Mark as Paid
+                              </button>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(app.paymentLink || '');
+                                  showToast('Payment link copied!', 'success');
+                                }}
+                                className="px-4 py-2 bg-zinc-800 text-zinc-400 rounded-lg text-sm font-medium hover:bg-zinc-700 transition"
+                              >
+                                📋 Copy Link
                               </button>
                             </div>
                           )}
@@ -4279,6 +4387,67 @@ const StickToMusic = () => {
                 </button>
               </p>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Link Modal */}
+      {showPaymentModal && selectedApplication && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowPaymentModal(false)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+              <h2 className="text-xl font-bold">Send Payment Link</h2>
+              <button onClick={() => setShowPaymentModal(false)} className="text-zinc-500 hover:text-white">✕</button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-zinc-800 rounded-xl p-4">
+                <p className="text-sm text-zinc-400 mb-1">Applicant</p>
+                <p className="text-white font-medium">{selectedApplication.name}</p>
+                <p className="text-zinc-400 text-sm">{selectedApplication.email}</p>
+                <p className="text-purple-400 text-sm mt-2">{selectedApplication.tier}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">Stripe Payment Link</label>
+                <input
+                  type="url"
+                  id="paymentLinkInput"
+                  placeholder="https://buy.stripe.com/your-link"
+                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                />
+                <p className="text-xs text-zinc-500 mt-2">
+                  Create a payment link in <a href="https://dashboard.stripe.com/payment-links" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">Stripe Dashboard</a> for this tier's price
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  const link = document.getElementById('paymentLinkInput')?.value;
+                  if (link) {
+                    handleSendPaymentLink(selectedApplication, link);
+                  } else {
+                    showToast('Please enter a payment link', 'error');
+                  }
+                }}
+                disabled={paymentLinkLoading}
+                className="w-full py-3 bg-white text-black rounded-xl font-semibold hover:bg-zinc-200 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {paymentLinkLoading ? (
+                  <>
+                    <span className="animate-spin">⟳</span>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    📋 Copy Link & Approve
+                  </>
+                )}
+              </button>
+
+              <p className="text-xs text-zinc-500 text-center">
+                The payment link will be copied to your clipboard. Send it to the applicant via email.
+              </p>
+            </div>
           </div>
         </div>
       )}
