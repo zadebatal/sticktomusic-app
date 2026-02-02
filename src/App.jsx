@@ -1412,28 +1412,60 @@ const StickToMusic = () => {
   const getPostUrls = (post) => {
     const urls = [];
     const platforms = post.platforms || [];
+
     platforms.forEach(p => {
       const platform = p.platform || p;
-      const accountId = p.accountId;
-      // Try to find the handle from our mapping
-      const handleEntry = Object.entries(LATE_ACCOUNT_IDS).find(([handle, ids]) =>
-        ids.tiktok === accountId || ids.instagram === accountId
-      );
-      if (handleEntry) {
-        const handle = handleEntry[0].replace('@', '');
+      // Late API returns accountId as an object with username property
+      const username = p.accountId?.username || p.accountId?.displayName;
+
+      // Priority 1: Direct post URL from Late (Instagram has this for published posts)
+      if (p.platformPostUrl) {
+        urls.push({
+          platform,
+          url: p.platformPostUrl,
+          label: platform === 'tiktok' ? 'TikTok' : 'IG'
+        });
+        return;
+      }
+
+      // Priority 2: Construct URL from platformPostId + username (for published posts)
+      if (p.platformPostId && username && p.status === 'published') {
         if (platform === 'tiktok') {
-          urls.push({ platform: 'tiktok', url: `https://tiktok.com/@${handle}`, label: 'TikTok' });
+          // Late returns TikTok IDs like "v_pub_url~v2-1.7602051149071468575"
+          // Extract the numeric video ID after the last dot
+          let videoId = p.platformPostId;
+          if (videoId.includes('.')) {
+            videoId = videoId.split('.').pop();
+          }
+          // Only use if it looks like a valid TikTok video ID (15+ digits)
+          if (/^\d{15,}$/.test(videoId)) {
+            urls.push({
+              platform: 'tiktok',
+              url: `https://www.tiktok.com/@${username}/video/${videoId}`,
+              label: 'TikTok'
+            });
+            return;
+          }
         } else if (platform === 'instagram') {
-          urls.push({ platform: 'instagram', url: `https://instagram.com/${handle}`, label: 'Instagram' });
+          urls.push({
+            platform: 'instagram',
+            url: `https://www.instagram.com/reel/${p.platformPostId}/`,
+            label: 'IG'
+          });
+          return;
+        }
+      }
+
+      // Priority 3: Link to profile if we have username
+      if (username) {
+        if (platform === 'tiktok') {
+          urls.push({ platform: 'tiktok', url: `https://tiktok.com/@${username}`, label: 'TT' });
+        } else if (platform === 'instagram') {
+          urls.push({ platform: 'instagram', url: `https://instagram.com/${username}`, label: 'IG' });
         }
       }
     });
-    // If post has direct URLs from Late API (for published posts)
-    if (post.postUrls) {
-      post.postUrls.forEach(pu => urls.push(pu));
-    }
-    if (post.tiktokUrl) urls.push({ platform: 'tiktok', url: post.tiktokUrl, label: 'TikTok' });
-    if (post.instagramUrl) urls.push({ platform: 'instagram', url: post.instagramUrl, label: 'Instagram' });
+
     return urls;
   };
 
