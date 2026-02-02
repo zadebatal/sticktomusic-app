@@ -712,22 +712,28 @@ const StickToMusic = () => {
     if (currentAuthUser) {
       const email = currentAuthUser.email;
       console.log('Setting user from auth:', email);
+      console.log('isEmailAllowed result:', isEmailAllowed(email));
+      console.log('OPERATOR_EMAILS:', OPERATOR_EMAILS);
+      console.log('Email in OPERATOR_EMAILS:', OPERATOR_EMAILS.includes(email?.toLowerCase()));
 
-      // Check whitelist from Firestore - sign out if not allowed
+      // Check whitelist - but DON'T sign out here (only in login handlers)
+      // This prevents race conditions with allowedUsers loading
       if (!isEmailAllowed(email)) {
-        signOut(auth);
+        console.log('Email not in allowed list, setting user to null but NOT signing out');
         setUser(null);
         return;
       }
 
       const role = getUserRole(email);
       const artistInfo = getArtistInfo(email);
-      setUser({
+      const newUser = {
         email: email,
         role: role,
         name: currentAuthUser.displayName || artistInfo?.name || email.split('@')[0],
         artistId: artistInfo?.artistId || null
-      });
+      };
+      console.log('Setting user:', newUser);
+      setUser(newUser);
     } else {
       setUser(null);
     }
@@ -4238,7 +4244,7 @@ const StickToMusic = () => {
                     <div className="flex items-center justify-between py-3 border-b border-zinc-800">
                       <div>
                         <p className="font-medium">Email</p>
-                        <p className="text-sm text-zinc-500">{user?.email || auth.currentUser?.email || 'Not available'}</p>
+                        <p className="text-sm text-zinc-500">{user?.email || currentAuthUser?.email || auth.currentUser?.email || 'Not available'}</p>
                       </div>
                     </div>
                     <div className="flex items-center justify-between py-3 border-b border-zinc-800">
