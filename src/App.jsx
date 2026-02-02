@@ -23,6 +23,9 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 
+// Video Studio - Flowstage-inspired workflow
+import { VideoStudio } from './components/VideoEditor';
+
 // Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyDIw9xCnMVpDHW36vyxsNtwvmOfVlIHa0Y",
@@ -627,6 +630,12 @@ const StickToMusic = () => {
   const [selectedPosts, setSelectedPosts] = useState(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  // Account Dashboard modal state
+  const [selectedAccountDashboard, setSelectedAccountDashboard] = useState(null);
+
+  // Post Preview modal state
+  const [previewPost, setPreviewPost] = useState(null);
+
   // Settings state
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState({
@@ -637,6 +646,11 @@ const StickToMusic = () => {
     theme: 'dark',
     timezone: 'America/Los_Angeles'
   });
+
+  // Video Editor state
+  const [showVideoEditor, setShowVideoEditor] = useState(false);
+  const [currentVideoProject, setCurrentVideoProject] = useState(null);
+  const [contentLibraries, setContentLibraries] = useState([]);
 
   // Toggle post selection
   const togglePostSelection = (postId) => {
@@ -1432,10 +1446,16 @@ const StickToMusic = () => {
     return Array.from(accounts).sort();
   };
 
-  // Helper to get post thumbnail
+  // Helper to get post thumbnail (falls back to account profile picture)
   const getPostThumbnail = (post) => {
+    // Try media items first
     const mediaItem = post.mediaItems?.[0];
-    return mediaItem?.thumbnail || mediaItem?.url || null;
+    if (mediaItem?.thumbnail || mediaItem?.url) {
+      return mediaItem.thumbnail || mediaItem.url;
+    }
+    // Fall back to account profile picture
+    const platform = post.platforms?.[0];
+    return platform?.accountId?.profilePicture || platform?.profilePicture || null;
   };
 
   // Helper to get social media URLs for posts
@@ -1564,7 +1584,7 @@ const StickToMusic = () => {
   const nextFormStep = () => setFormStep(s => s + 1);
   const prevFormStep = () => setFormStep(s => s - 1);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     console.log('Form submitted:', formData);
     // Store the application
     const tierMap = {
@@ -2367,6 +2387,18 @@ const StickToMusic = () => {
                 <span className="text-zinc-400">Operator Dashboard</span>
               </div>
               <div className="flex items-center gap-4">
+                {/* Video Editor Button */}
+                <button
+                  onClick={() => {
+                    console.log('Video Editor button clicked!');
+                    console.log('Current showVideoEditor:', showVideoEditor);
+                    setShowVideoEditor(true);
+                    console.log('Set showVideoEditor to true');
+                  }}
+                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium rounded-lg transition flex items-center gap-2"
+                >
+                  🎬 Video Editor
+                </button>
                 <button
                   onClick={() => setOperatorTab('settings')}
                   className="p-2 text-zinc-500 hover:text-white transition rounded-lg hover:bg-zinc-800"
@@ -3342,8 +3374,8 @@ const StickToMusic = () => {
                   const filteredStatsData = latePosts.filter(post => {
                     if (postSearch && !(post.content || '').toLowerCase().includes(postSearch.toLowerCase())) return false;
                     if (postPlatformFilter !== 'all') {
-                      const platforms = (post.platforms || []).map(p => p.platform || p);
-                      if (!platforms.includes(postPlatformFilter)) return false;
+                      const platforms = (post.platforms || []).map(p => (p.platform || p || '').toLowerCase());
+                      if (!platforms.includes(postPlatformFilter.toLowerCase())) return false;
                     }
                     if (contentStatus !== 'all') {
                       const postStatus = post.status === 'published' ? 'posted' : post.status;
@@ -3415,8 +3447,8 @@ const StickToMusic = () => {
                     }
                     // Platform filter
                     if (postPlatformFilter !== 'all') {
-                      const platforms = (post.platforms || []).map(p => p.platform || p);
-                      if (!platforms.includes(postPlatformFilter)) return false;
+                      const platforms = (post.platforms || []).map(p => (p.platform || p || '').toLowerCase());
+                      if (!platforms.includes(postPlatformFilter.toLowerCase())) return false;
                     }
                     // Status filter - map 'published' to 'posted' for UI
                     if (contentStatus !== 'all') {
@@ -3527,8 +3559,8 @@ const StickToMusic = () => {
                     }
                     // Platform filter
                     if (postPlatformFilter !== 'all') {
-                      const platforms = (post.platforms || []).map(p => p.platform || p);
-                      if (!platforms.includes(postPlatformFilter)) return false;
+                      const platforms = (post.platforms || []).map(p => (p.platform || p || '').toLowerCase());
+                      if (!platforms.includes(postPlatformFilter.toLowerCase())) return false;
                     }
                     // Status filter - map 'published' to 'posted' for UI
                     if (contentStatus !== 'all') {
@@ -3606,7 +3638,7 @@ const StickToMusic = () => {
                               <div className="space-y-1 max-h-[80px] overflow-y-auto">
                                 {dayPosts.slice(0, 3).map((post, idx) => {
                                   const time = post.scheduledFor ? new Date(post.scheduledFor).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
-                                  const platforms = (post.platforms || []).map(p => p.platform || p);
+                                  const platforms = (post.platforms || []).map(p => (p.platform || p || '').toLowerCase());
                                   return (
                                     <div
                                       key={post._id || idx}
@@ -3640,7 +3672,22 @@ const StickToMusic = () => {
                     <table className="w-full">
                       <thead>
                         <tr className="border-b border-zinc-800">
+                          <th className="p-4 w-10">
+                            <input
+                              type="checkbox"
+                              checked={selectedPosts.size > 0 && selectedPosts.size === latePosts.length}
+                              onChange={() => {
+                                if (selectedPosts.size === latePosts.length) {
+                                  setSelectedPosts(new Set());
+                                } else {
+                                  setSelectedPosts(new Set(latePosts.map(p => p._id)));
+                                }
+                              }}
+                              className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500"
+                            />
+                          </th>
                           <th className="text-left p-4 text-sm font-medium text-zinc-500">Date & Time</th>
+                          <th className="text-left p-4 text-sm font-medium text-zinc-500">Account</th>
                           <th className="text-left p-4 text-sm font-medium text-zinc-500">Platforms</th>
                           <th className="text-left p-4 text-sm font-medium text-zinc-500">Caption</th>
                           <th className="text-left p-4 text-sm font-medium text-zinc-500">Status</th>
@@ -3656,10 +3703,10 @@ const StickToMusic = () => {
                               if (postSearch && !(post.content || '').toLowerCase().includes(postSearch.toLowerCase())) {
                                 return false;
                               }
-                              // Platform filter
+                              // Platform filter (case-insensitive)
                               if (postPlatformFilter !== 'all') {
-                                const platforms = (post.platforms || []).map(p => p.platform || p);
-                                if (!platforms.includes(postPlatformFilter)) return false;
+                                const platforms = (post.platforms || []).map(p => (p.platform || p || '').toLowerCase());
+                                if (!platforms.includes(postPlatformFilter.toLowerCase())) return false;
                               }
                               // Status filter - map 'published' to 'posted' for UI
                               if (contentStatus !== 'all') {
@@ -3676,21 +3723,46 @@ const StickToMusic = () => {
 
                           return filteredPosts.length > 0 ? (
                             filteredPosts.map(post => (
-                              <tr key={post._id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition">
+                              <tr key={post._id} className={`border-b border-zinc-800/50 hover:bg-zinc-800/30 transition ${selectedPosts.has(post._id) ? 'bg-purple-500/10' : ''}`}>
+                                {/* Checkbox */}
+                                <td className="p-4">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedPosts.has(post._id)}
+                                    onChange={() => togglePostSelection(post._id)}
+                                    className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500"
+                                  />
+                                </td>
+                                {/* Date & Time */}
                                 <td className="p-4 text-sm text-zinc-400">
                                   {post.scheduledFor ? new Date(post.scheduledFor).toLocaleString('en-US', {
                                     month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
                                   }) : '-'}
                                 </td>
+                                {/* Account */}
+                                <td className="p-4">
+                                  {getPostAccount(post) ? (
+                                    <button
+                                      onClick={() => setSelectedAccountDashboard(getPostAccount(post))}
+                                      className="text-sm text-purple-400 hover:text-purple-300 transition"
+                                    >
+                                      @{getPostAccount(post)}
+                                    </button>
+                                  ) : (
+                                    <span className="text-sm text-zinc-600">—</span>
+                                  )}
+                                </td>
+                                {/* Platforms */}
                                 <td className="p-4">
                                   <div className="flex gap-1">
                                     {(post.platforms || []).map((p, i) => (
-                                      <span key={i} className={`px-2 py-0.5 rounded text-xs ${(p.platform || p) === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
-                                        {(p.platform || p) === 'tiktok' ? 'TT' : 'IG'}
+                                      <span key={i} className={`px-2 py-0.5 rounded text-xs ${(p.platform || p).toLowerCase() === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                                        {(p.platform || p).toLowerCase() === 'tiktok' ? 'TT' : 'IG'}
                                       </span>
                                     ))}
                                   </div>
                                 </td>
+                                {/* Caption */}
                                 <td className="p-4 text-sm max-w-[200px] truncate">{post.content || 'No caption'}</td>
                                 <td className="p-4">
                                   <span className={`px-2 py-1 rounded-full text-xs ${
@@ -3738,7 +3810,7 @@ const StickToMusic = () => {
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={6} className="p-8 text-center text-zinc-500">
+                              <td colSpan={8} className="p-8 text-center text-zinc-500">
                                 {postSearch || postPlatformFilter !== 'all'
                                   ? 'No posts match your filters.'
                                   : 'No posts synced. Click "Sync from Late" to load your scheduled posts.'}
@@ -4650,6 +4722,16 @@ const StickToMusic = () => {
             <span className="text-zinc-600 text-sm">StickToMusic Operator © 2025</span>
           </div>
         </footer>
+
+        {/* Video Studio - Flowstage-inspired workflow */}
+        {showVideoEditor && (
+          <VideoStudio
+            onClose={() => setShowVideoEditor(false)}
+            artists={operatorArtists.map(a => ({ id: a.id, name: a.name }))}
+            lateAccounts={lateAccounts}
+            onSchedulePost={lateApi.schedulePost}
+          />
+        )}
       </div>
     );
   }
@@ -5488,10 +5570,198 @@ const StickToMusic = () => {
         </div>
       )}
 
+      {/* Post Preview Modal */}
+      {previewPost && (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[60] p-4" onClick={() => setPreviewPost(null)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-bold">Post Preview</h2>
+                <span className={`px-2 py-0.5 rounded text-xs ${
+                  previewPost.status === 'scheduled' ? 'bg-yellow-500/20 text-yellow-400' :
+                  previewPost.status === 'posted' || previewPost.status === 'published' ? 'bg-green-500/20 text-green-400' :
+                  'bg-zinc-500/20 text-zinc-400'
+                }`}>
+                  {previewPost.status === 'published' ? 'posted' : previewPost.status}
+                </span>
+              </div>
+              <button onClick={() => setPreviewPost(null)} className="text-zinc-400 hover:text-white text-xl">×</button>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[calc(90vh-120px)]">
+              {/* Media Preview */}
+              <div className="mb-4">
+                {getPostThumbnail(previewPost) ? (
+                  <img
+                    src={getPostThumbnail(previewPost)}
+                    alt="Post media"
+                    className="w-full max-h-[400px] object-contain rounded-lg bg-black"
+                  />
+                ) : (
+                  <div className="w-full h-48 bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-500">
+                    No preview available
+                  </div>
+                )}
+              </div>
+              {/* Post Details */}
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-zinc-500 mb-1">Caption</p>
+                  <p className="text-sm text-zinc-300 whitespace-pre-wrap">{previewPost.content || 'No caption'}</p>
+                </div>
+                <div className="flex gap-4">
+                  <div>
+                    <p className="text-xs text-zinc-500 mb-1">Scheduled For</p>
+                    <p className="text-sm">{previewPost.scheduledFor ? new Date(previewPost.scheduledFor).toLocaleString('en-US', {
+                      weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+                    }) : '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-zinc-500 mb-1">Account</p>
+                    <p className="text-sm text-purple-400">@{getPostAccount(previewPost) || 'Unknown'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-zinc-500 mb-1">Platform</p>
+                    <div className="flex gap-1">
+                      {(previewPost.platforms || []).map((p, i) => (
+                        <span key={i} className={`px-2 py-0.5 rounded text-xs ${(p.platform || p).toLowerCase() === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                          {(p.platform || p).toLowerCase() === 'tiktok' ? 'TikTok' : 'Instagram'}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                {/* Action Links */}
+                {getPostUrls(previewPost).length > 0 && (
+                  <div className="pt-3 border-t border-zinc-800">
+                    <p className="text-xs text-zinc-500 mb-2">View on Platform</p>
+                    <div className="flex gap-2">
+                      {getPostUrls(previewPost).map((pu, idx) => (
+                        <a
+                          key={idx}
+                          href={pu.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                            pu.platform === 'tiktok'
+                              ? 'bg-pink-500/20 text-pink-400 hover:bg-pink-500/30'
+                              : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
+                          }`}
+                        >
+                          Open in {pu.label}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Account Dashboard Modal */}
+      {selectedAccountDashboard && (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[60] p-4" onClick={() => setSelectedAccountDashboard(null)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-zinc-800 flex justify-between items-center">
+              <div>
+                <h2 className="text-lg font-bold">@{selectedAccountDashboard}</h2>
+                <p className="text-sm text-zinc-500">Account Dashboard</p>
+              </div>
+              <button onClick={() => setSelectedAccountDashboard(null)} className="text-zinc-400 hover:text-white text-xl">×</button>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[calc(90vh-80px)]">
+              {(() => {
+                const accountPosts = latePosts.filter(p => getPostAccount(p) === selectedAccountDashboard);
+                const scheduled = accountPosts.filter(p => p.status === 'scheduled').length;
+                const posted = accountPosts.filter(p => p.status === 'posted' || p.status === 'published').length;
+                const platforms = [...new Set(accountPosts.flatMap(p => (p.platforms || []).map(pl => (pl.platform || pl).toLowerCase())))];
+
+                return (
+                  <>
+                    {/* Stats */}
+                    <div className="grid grid-cols-4 gap-4 mb-6">
+                      <div className="bg-zinc-800/50 rounded-xl p-4 text-center">
+                        <p className="text-2xl font-bold text-purple-400">{accountPosts.length}</p>
+                        <p className="text-xs text-zinc-500">Total Posts</p>
+                      </div>
+                      <div className="bg-zinc-800/50 rounded-xl p-4 text-center">
+                        <p className="text-2xl font-bold text-yellow-400">{scheduled}</p>
+                        <p className="text-xs text-zinc-500">Scheduled</p>
+                      </div>
+                      <div className="bg-zinc-800/50 rounded-xl p-4 text-center">
+                        <p className="text-2xl font-bold text-green-400">{posted}</p>
+                        <p className="text-xs text-zinc-500">Posted</p>
+                      </div>
+                      <div className="bg-zinc-800/50 rounded-xl p-4 text-center">
+                        <div className="flex gap-1 justify-center">
+                          {platforms.map(p => (
+                            <span key={p} className={`px-2 py-0.5 rounded text-xs ${p === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                              {p === 'tiktok' ? 'TT' : 'IG'}
+                            </span>
+                          ))}
+                        </div>
+                        <p className="text-xs text-zinc-500 mt-1">Platforms</p>
+                      </div>
+                    </div>
+
+                    {/* Recent Posts */}
+                    <h3 className="text-sm font-medium text-zinc-400 mb-3">Recent Posts</h3>
+                    <div className="space-y-2">
+                      {accountPosts.slice(0, 10).map(post => (
+                        <div
+                          key={post._id}
+                          className="flex items-center gap-3 p-3 bg-zinc-800/30 rounded-lg hover:bg-zinc-800/50 transition cursor-pointer"
+                          onClick={() => { setSelectedAccountDashboard(null); setPreviewPost(post); }}
+                        >
+                          {getPostThumbnail(post) ? (
+                            <img src={getPostThumbnail(post)} alt="" className="w-10 h-10 object-cover rounded" />
+                          ) : (
+                            <div className="w-10 h-10 bg-zinc-700 rounded flex items-center justify-center text-zinc-500">📷</div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm truncate">{post.content || 'No caption'}</p>
+                            <p className="text-xs text-zinc-500">
+                              {post.scheduledFor ? new Date(post.scheduledFor).toLocaleString('en-US', {
+                                month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+                              }) : '—'}
+                            </p>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-xs ${
+                            post.status === 'scheduled' ? 'bg-yellow-500/20 text-yellow-400' :
+                            post.status === 'posted' || post.status === 'published' ? 'bg-green-500/20 text-green-400' :
+                            'bg-zinc-500/20 text-zinc-400'
+                          }`}>
+                            {post.status === 'published' ? 'posted' : post.status}
+                          </span>
+                        </div>
+                      ))}
+                      {accountPosts.length === 0 && (
+                        <p className="text-center text-zinc-500 py-4">No posts found for this account</p>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toast Notifications */}
       <ToastContainer />
       <UndoToast />
       <OnboardingTooltip />
+
+      {/* Video Studio - Flowstage-inspired workflow */}
+      {showVideoEditor && (
+        <VideoStudio
+          onClose={() => setShowVideoEditor(false)}
+          artists={operatorArtists.map(a => ({ id: a.id, name: a.name }))}
+          lateAccounts={lateAccounts}
+          onSchedulePost={lateApi.schedulePost}
+        />
+      )}
     </div>
   );
 };

@@ -1,0 +1,909 @@
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+
+/**
+ * AudioClipSelector - Professional dual-playhead audio region selector
+ * Like Premiere Pro / Final Cut - drag IN (green) and OUT (orange) points
+ *
+ * Features:
+ * - Draggable IN/OUT playheads
+ * - Drag region to move entire selection
+ * - Click waveform to position scrub playhead
+ * - Keyboard shortcuts: I=IN, O=OUT, Space=play, arrows to scrub
+ * - Click time displays to type exact timestamps
+ * - Quick presets for common durations
+ */
+const AudioClipSelector = ({
+  audioFile,
+  audioUrl,
+  onSave,
+  onCancel,
+  initialStart = 0,
+  initialEnd = null
+}) => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [duration, setDuration] = useState(0);
+  const [inPoint, setInPoint] = useState(initialStart);
+  const [outPoint, setOutPoint] = useState(initialEnd || 30);
+  const [playheadTime, setPlayheadTime] = useState(initialStart);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [waveformData, setWaveformData] = useState([]);
+  const [dragging, setDragging] = useState(null); // 'in' | 'out' | 'region' | null
+  const [dragStartX, setDragStartX] = useState(0);
+  const [dragStartIn, setDragStartIn] = useState(0);
+  const [dragStartOut, setDragStartOut] = useState(0);
+  const [editingTime, setEditingTime] = useState(null); // 'in' | 'out' | null
+  const [editTimeValue, setEditTimeValue] = useState('');
+
+  const audioRef = useRef(null);
+  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const animationRef = useRef(null);
+
+  // Load audio
+  useEffect(() => {
+    if (!audioUrl) return;
+
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+
+    audio.addEventListener('loadedmetadata', () => {
+      const dur = audio.duration;
+      setDuration(dur);
+      const newOut = initialEnd || Math.min(30, dur);
+      setOutPoint(newOut);
+      setIsLoading(false);
+    });
+
+    audio.addEventListener('ended', () => {
+      setIsPlaying(false);
+    });
+
+    generateWaveform(audioUrl);
+
+    return () => {
+      audio.pause();
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [audioUrl, initialEnd]);
+
+  // Generate waveform visualization
+  const generateWaveform = async (url) => {
+    try {
+      const response = await fetch(url);
+      const arrayBuffer = await response.arrayBuffer();
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+      const rawData = audioBuffer.getChannelData(0);
+      const samples = 300;
+      const blockSize = Math.floor(rawData.length / samples);
+      const filteredData = [];
+
+      for (let i = 0; i < samples; i++) {
+        let sum = 0;
+        for (let j = 0; j < blockSize; j++) {
+          sum += Math.abs(rawData[i * blockSize + j]);
+        }
+        filteredData.push(sum / blockSize);
+      }
+
+      const maxVal = Math.max(...filteredData);
+      const normalizedData = filteredData.map(n => n / maxVal);
+      setWaveformData(normalizedData);
+
+      audioContext.close();
+    } catch (err) {
+      console.error('Waveform generation failed:', err);
+      setWaveformData(Array(300).fill(0).map(() => Math.random() * 0.5 + 0.2));
+    }
+  };
+
+  // Draw waveform on canvas
+  useEffect(() => {
+    if (!canvasRef.current || waveformData.length === 0 || duration === 0) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+
+    ctx.clearRect(0, 0, width, height);
+
+    // Background
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, width, height);
+
+    // Calculate positions
+    const inX = (inPoint / duration) * width;
+    const outX = (outPoint / duration) * width;
+    const playheadX = (playheadTime / duration) * width;
+
+    // Draw dimmed regions (outside selection)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(0, 0, inX, height);
+    ctx.fillRect(outX, 0, width - outX, height);
+
+    // Draw selected region background
+    ctx.fillStyle = 'rgba(124, 58, 237, 0.15)';
+    ctx.fillRect(inX, 0, outX - inX, height);
+
+    // Draw waveform
+    const barWidth = width / waveformData.length;
+    const barGap = 1;
+
+    waveformData.forEach((value, index) => {
+      const x = index * barWidth;
+      const barHeight = value * (height - 30);
+      const y = (height - barHeight) / 2;
+
+      const barTime = (index / waveformData.length) * duration;
+      const inSelection = barTime >= inPoint && barTime <= outPoint;
+
+      ctx.fillStyle = inSelection ? '#7c3aed' : '#4b5563';
+      ctx.fillRect(x + barGap / 2, y, barWidth - barGap, barHeight);
+    });
+
+    // Draw time markers
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '10px monospace';
+    for (let t = 0; t <= duration; t += Math.max(5, Math.floor(duration / 10))) {
+      const x = (t / duration) * width;
+      ctx.fillText(formatTimeShort(t), x + 2, height - 4);
+      ctx.fillRect(x, height - 15, 1, 5);
+    }
+
+    // Draw scrub playhead (white)
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(playheadX, 0);
+    ctx.lineTo(playheadX, height);
+    ctx.stroke();
+
+    // Draw IN marker (green)
+    ctx.fillStyle = '#22c55e';
+    ctx.strokeStyle = '#22c55e';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(inX, 0);
+    ctx.lineTo(inX, height);
+    ctx.stroke();
+
+    // IN handle (triangle pointing right)
+    ctx.beginPath();
+    ctx.moveTo(inX, 0);
+    ctx.lineTo(inX + 14, 0);
+    ctx.lineTo(inX + 14, 20);
+    ctx.lineTo(inX, 30);
+    ctx.closePath();
+    ctx.fill();
+
+    // "I" label
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText('I', inX + 4, 16);
+
+    // Draw OUT marker (orange)
+    ctx.fillStyle = '#f97316';
+    ctx.strokeStyle = '#f97316';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(outX, 0);
+    ctx.lineTo(outX, height);
+    ctx.stroke();
+
+    // OUT handle (triangle pointing left)
+    ctx.beginPath();
+    ctx.moveTo(outX, 0);
+    ctx.lineTo(outX - 14, 0);
+    ctx.lineTo(outX - 14, 20);
+    ctx.lineTo(outX, 30);
+    ctx.closePath();
+    ctx.fill();
+
+    // "O" label
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText('O', outX - 11, 16);
+
+  }, [waveformData, inPoint, outPoint, playheadTime, duration]);
+
+  // Get time from X position
+  const getTimeFromX = useCallback((clientX) => {
+    if (!containerRef.current || duration === 0) return 0;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    return Math.max(0, Math.min(duration, (x / rect.width) * duration));
+  }, [duration]);
+
+  // Determine what was clicked
+  const getClickTarget = useCallback((clientX) => {
+    if (!containerRef.current || duration === 0) return 'none';
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const inX = (inPoint / duration) * rect.width;
+    const outX = (outPoint / duration) * rect.width;
+
+    // Check if near IN handle (within 15px)
+    if (Math.abs(x - inX) < 15) return 'in';
+    // Check if near OUT handle
+    if (Math.abs(x - outX) < 15) return 'out';
+    // Check if inside region
+    if (x > inX && x < outX) return 'region';
+    return 'none';
+  }, [inPoint, outPoint, duration]);
+
+  // Mouse handlers
+  const handleMouseDown = useCallback((e) => {
+    const target = getClickTarget(e.clientX);
+    const time = getTimeFromX(e.clientX);
+
+    if (target === 'in' || target === 'out') {
+      setDragging(target);
+      e.preventDefault();
+    } else if (target === 'region') {
+      setDragging('region');
+      setDragStartX(e.clientX);
+      setDragStartIn(inPoint);
+      setDragStartOut(outPoint);
+      e.preventDefault();
+    } else {
+      // Click outside - move scrub playhead
+      setPlayheadTime(time);
+      if (audioRef.current) {
+        audioRef.current.currentTime = time;
+      }
+    }
+  }, [getClickTarget, getTimeFromX, inPoint, outPoint]);
+
+  useEffect(() => {
+    if (!dragging) return;
+
+    const handleMouseMove = (e) => {
+      const time = getTimeFromX(e.clientX);
+
+      if (dragging === 'in') {
+        setInPoint(Math.max(0, Math.min(time, outPoint - 0.5)));
+      } else if (dragging === 'out') {
+        setOutPoint(Math.min(duration, Math.max(time, inPoint + 0.5)));
+      } else if (dragging === 'region') {
+        const deltaX = e.clientX - dragStartX;
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const deltaTime = (deltaX / rect.width) * duration;
+        const regionDuration = dragStartOut - dragStartIn;
+
+        let newIn = dragStartIn + deltaTime;
+        let newOut = dragStartOut + deltaTime;
+
+        // Clamp to bounds
+        if (newIn < 0) {
+          newIn = 0;
+          newOut = regionDuration;
+        }
+        if (newOut > duration) {
+          newOut = duration;
+          newIn = duration - regionDuration;
+        }
+
+        setInPoint(newIn);
+        setOutPoint(newOut);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setDragging(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [dragging, dragStartX, dragStartIn, dragStartOut, inPoint, outPoint, duration, getTimeFromX]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (editingTime) return; // Don't capture when editing time
+
+      switch (e.key.toLowerCase()) {
+        case 'i':
+          setInPoint(Math.min(playheadTime, outPoint - 0.5));
+          break;
+        case 'o':
+          setOutPoint(Math.max(playheadTime, inPoint + 0.5));
+          break;
+        case ' ':
+          e.preventDefault();
+          togglePlayback();
+          break;
+        case 'arrowleft':
+          e.preventDefault();
+          const newTimeL = Math.max(0, playheadTime - (e.shiftKey ? 1 : 0.1));
+          setPlayheadTime(newTimeL);
+          if (audioRef.current) audioRef.current.currentTime = newTimeL;
+          break;
+        case 'arrowright':
+          e.preventDefault();
+          const newTimeR = Math.min(duration, playheadTime + (e.shiftKey ? 1 : 0.1));
+          setPlayheadTime(newTimeR);
+          if (audioRef.current) audioRef.current.currentTime = newTimeR;
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [playheadTime, inPoint, outPoint, duration, editingTime]);
+
+  // Playback
+  const togglePlayback = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (isPlaying) {
+      audio.pause();
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      setIsPlaying(false);
+    } else {
+      audio.currentTime = inPoint;
+      setPlayheadTime(inPoint);
+
+      audio.play().then(() => {
+        setIsPlaying(true);
+
+        const updateLoop = () => {
+          if (!audioRef.current) return;
+          const time = audioRef.current.currentTime;
+          setPlayheadTime(time);
+
+          if (time >= outPoint) {
+            audioRef.current.pause();
+            setIsPlaying(false);
+            return;
+          }
+
+          animationRef.current = requestAnimationFrame(updateLoop);
+        };
+        animationRef.current = requestAnimationFrame(updateLoop);
+      }).catch(err => {
+        console.error('Playback failed:', err);
+        setIsPlaying(false);
+      });
+    }
+  }, [isPlaying, inPoint, outPoint]);
+
+  // Format time
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    const ms = Math.floor((seconds % 1) * 100);
+    return `${mins}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+  };
+
+  const formatTimeShort = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Parse time input
+  const parseTimeInput = (str) => {
+    const parts = str.split(':');
+    if (parts.length === 2) {
+      const mins = parseInt(parts[0]) || 0;
+      const secs = parseFloat(parts[1]) || 0;
+      return mins * 60 + secs;
+    }
+    return parseFloat(str) || 0;
+  };
+
+  // Handle time input
+  const handleTimeEdit = (type) => {
+    setEditingTime(type);
+    setEditTimeValue(formatTime(type === 'in' ? inPoint : outPoint));
+  };
+
+  const handleTimeInputConfirm = () => {
+    const newTime = parseTimeInput(editTimeValue);
+    if (editingTime === 'in') {
+      setInPoint(Math.max(0, Math.min(newTime, outPoint - 0.5)));
+    } else {
+      setOutPoint(Math.min(duration, Math.max(newTime, inPoint + 0.5)));
+    }
+    setEditingTime(null);
+  };
+
+  // Presets
+  const applyPreset = (type) => {
+    if (type === 'full') {
+      setInPoint(0);
+      setOutPoint(duration);
+    } else {
+      const dur = parseFloat(type);
+      setOutPoint(Math.min(playheadTime + dur, duration));
+      setInPoint(playheadTime);
+    }
+  };
+
+  const selectedDuration = outPoint - inPoint;
+
+  return (
+    <div style={styles.overlay}>
+      <div style={styles.modal}>
+        {/* Header */}
+        <div style={styles.header}>
+          <div style={styles.headerLeft}>
+            <span style={styles.headerIcon}>🎵</span>
+            <div>
+              <h2 style={styles.title}>Select Audio Region</h2>
+              <p style={styles.subtitle}>Drag the green (IN) and orange (OUT) markers, or press I/O keys</p>
+            </div>
+          </div>
+          <button style={styles.closeButton} onClick={onCancel}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Quick Presets */}
+        <div style={styles.presets}>
+          <span style={styles.presetLabel}>Quick select from playhead:</span>
+          <button style={styles.preset} onClick={() => applyPreset('15')}>15s</button>
+          <button style={styles.preset} onClick={() => applyPreset('30')}>30s</button>
+          <button style={styles.preset} onClick={() => applyPreset('60')}>60s</button>
+          <button style={styles.presetFull} onClick={() => applyPreset('full')}>Full Track</button>
+        </div>
+
+        {/* Waveform */}
+        <div style={styles.waveformSection}>
+          {isLoading ? (
+            <div style={styles.loading}>
+              <div style={styles.spinner} />
+              <span>Loading audio...</span>
+            </div>
+          ) : (
+            <div
+              ref={containerRef}
+              style={styles.canvasContainer}
+              onMouseDown={handleMouseDown}
+            >
+              <canvas
+                ref={canvasRef}
+                width={700}
+                height={140}
+                style={styles.canvas}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Time Display */}
+        <div style={styles.timeRow}>
+          {/* IN Point */}
+          <div style={styles.timeBlock}>
+            <div style={styles.timeLabel}>
+              <span style={styles.inDot} />
+              IN POINT
+            </div>
+            {editingTime === 'in' ? (
+              <input
+                type="text"
+                value={editTimeValue}
+                onChange={(e) => setEditTimeValue(e.target.value)}
+                onBlur={handleTimeInputConfirm}
+                onKeyDown={(e) => e.key === 'Enter' && handleTimeInputConfirm()}
+                style={styles.timeInput}
+                autoFocus
+              />
+            ) : (
+              <button style={styles.timeValue} onClick={() => handleTimeEdit('in')}>
+                {formatTime(inPoint)}
+              </button>
+            )}
+            <span style={styles.timeHint}>Press I to set</span>
+          </div>
+
+          {/* Duration */}
+          <div style={styles.durationBlock}>
+            <div style={styles.durationLabel}>DURATION</div>
+            <div style={styles.durationValue}>{formatTime(selectedDuration)}</div>
+            <div style={styles.durationSub}>{selectedDuration.toFixed(1)} seconds</div>
+          </div>
+
+          {/* OUT Point */}
+          <div style={styles.timeBlock}>
+            <div style={styles.timeLabel}>
+              <span style={styles.outDot} />
+              OUT POINT
+            </div>
+            {editingTime === 'out' ? (
+              <input
+                type="text"
+                value={editTimeValue}
+                onChange={(e) => setEditTimeValue(e.target.value)}
+                onBlur={handleTimeInputConfirm}
+                onKeyDown={(e) => e.key === 'Enter' && handleTimeInputConfirm()}
+                style={styles.timeInput}
+                autoFocus
+              />
+            ) : (
+              <button style={styles.timeValue} onClick={() => handleTimeEdit('out')}>
+                {formatTime(outPoint)}
+              </button>
+            )}
+            <span style={styles.timeHint}>Press O to set</span>
+          </div>
+        </div>
+
+        {/* Playback Controls */}
+        <div style={styles.playbackRow}>
+          <button style={styles.playButton} onClick={togglePlayback}>
+            {isPlaying ? (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="4" width="4" height="16" rx="1"/>
+                <rect x="14" y="4" width="4" height="16" rx="1"/>
+              </svg>
+            ) : (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5,3 19,12 5,21"/>
+              </svg>
+            )}
+          </button>
+          <div style={styles.playbackInfo}>
+            <span style={styles.playbackTime}>{formatTime(playheadTime)}</span>
+            <span style={styles.playbackSep}>/</span>
+            <span style={styles.playbackDuration}>{formatTime(duration)}</span>
+          </div>
+          <div style={styles.shortcuts}>
+            <span style={styles.shortcut}><kbd>Space</kbd> Play</span>
+            <span style={styles.shortcut}><kbd>I</kbd> Set IN</span>
+            <span style={styles.shortcut}><kbd>O</kbd> Set OUT</span>
+            <span style={styles.shortcut}><kbd>←→</kbd> Scrub</span>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={styles.footer}>
+          <div style={styles.footerInfo}>
+            Selected: <strong>{formatTime(selectedDuration)}</strong> of {formatTime(duration)}
+          </div>
+          <div style={styles.footerActions}>
+            <button style={styles.cancelButton} onClick={onCancel}>Cancel</button>
+            <button
+              style={styles.saveButton}
+              onClick={() => onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration })}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Use This Clip
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const styles = {
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2000,
+    padding: '20px'
+  },
+  modal: {
+    width: '100%',
+    maxWidth: '780px',
+    backgroundColor: '#111118',
+    borderRadius: '16px',
+    overflow: 'hidden',
+    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+  },
+  header: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '20px 24px',
+    borderBottom: '1px solid #1f1f2e'
+  },
+  headerLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px'
+  },
+  headerIcon: {
+    fontSize: '28px'
+  },
+  title: {
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#fff',
+    margin: 0
+  },
+  subtitle: {
+    fontSize: '13px',
+    color: '#9ca3af',
+    margin: '4px 0 0 0'
+  },
+  closeButton: {
+    width: '36px',
+    height: '36px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1f1f2e',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#9ca3af',
+    cursor: 'pointer'
+  },
+  presets: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '12px 24px',
+    backgroundColor: '#0a0a0f',
+    borderBottom: '1px solid #1f1f2e'
+  },
+  presetLabel: {
+    fontSize: '13px',
+    color: '#6b7280',
+    marginRight: '8px'
+  },
+  preset: {
+    padding: '6px 14px',
+    backgroundColor: '#1f1f2e',
+    border: '1px solid #2d2d3d',
+    borderRadius: '6px',
+    color: '#e5e7eb',
+    fontSize: '13px',
+    cursor: 'pointer'
+  },
+  presetFull: {
+    padding: '6px 14px',
+    backgroundColor: '#7c3aed',
+    border: 'none',
+    borderRadius: '6px',
+    color: '#fff',
+    fontSize: '13px',
+    cursor: 'pointer',
+    marginLeft: 'auto'
+  },
+  waveformSection: {
+    padding: '24px'
+  },
+  loading: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '12px',
+    padding: '60px',
+    color: '#9ca3af'
+  },
+  spinner: {
+    width: '32px',
+    height: '32px',
+    border: '3px solid #2d2d3d',
+    borderTopColor: '#7c3aed',
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite'
+  },
+  canvasContainer: {
+    cursor: 'crosshair',
+    borderRadius: '8px',
+    overflow: 'hidden'
+  },
+  canvas: {
+    display: 'block',
+    width: '100%',
+    height: '140px'
+  },
+  timeRow: {
+    display: 'flex',
+    alignItems: 'stretch',
+    padding: '0 24px 24px',
+    gap: '16px'
+  },
+  timeBlock: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '16px',
+    backgroundColor: '#0a0a0f',
+    borderRadius: '12px'
+  },
+  timeLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    marginBottom: '8px'
+  },
+  inDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    backgroundColor: '#22c55e'
+  },
+  outDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    backgroundColor: '#f97316'
+  },
+  timeValue: {
+    fontSize: '24px',
+    fontWeight: '600',
+    color: '#fff',
+    fontFamily: 'monospace',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '4px 8px',
+    borderRadius: '4px'
+  },
+  timeInput: {
+    fontSize: '24px',
+    fontWeight: '600',
+    color: '#fff',
+    fontFamily: 'monospace',
+    backgroundColor: '#1f1f2e',
+    border: '2px solid #7c3aed',
+    borderRadius: '4px',
+    padding: '4px 8px',
+    textAlign: 'center',
+    width: '140px',
+    outline: 'none'
+  },
+  timeHint: {
+    fontSize: '11px',
+    color: '#4b5563',
+    marginTop: '6px'
+  },
+  durationBlock: {
+    flex: 1.2,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '16px',
+    backgroundColor: '#7c3aed',
+    borderRadius: '12px'
+  },
+  durationLabel: {
+    fontSize: '11px',
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.7)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    marginBottom: '4px'
+  },
+  durationValue: {
+    fontSize: '32px',
+    fontWeight: '700',
+    color: '#fff',
+    fontFamily: 'monospace'
+  },
+  durationSub: {
+    fontSize: '12px',
+    color: 'rgba(255,255,255,0.6)',
+    marginTop: '4px'
+  },
+  playbackRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    padding: '16px 24px',
+    backgroundColor: '#0a0a0f',
+    borderTop: '1px solid #1f1f2e'
+  },
+  playButton: {
+    width: '48px',
+    height: '48px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#7c3aed',
+    border: 'none',
+    borderRadius: '50%',
+    color: '#fff',
+    cursor: 'pointer'
+  },
+  playbackInfo: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '4px'
+  },
+  playbackTime: {
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#fff',
+    fontFamily: 'monospace'
+  },
+  playbackSep: {
+    color: '#4b5563'
+  },
+  playbackDuration: {
+    fontSize: '14px',
+    color: '#6b7280',
+    fontFamily: 'monospace'
+  },
+  shortcuts: {
+    display: 'flex',
+    gap: '16px',
+    marginLeft: 'auto'
+  },
+  shortcut: {
+    fontSize: '11px',
+    color: '#6b7280'
+  },
+  footer: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '16px 24px',
+    borderTop: '1px solid #1f1f2e'
+  },
+  footerInfo: {
+    fontSize: '13px',
+    color: '#9ca3af'
+  },
+  footerActions: {
+    display: 'flex',
+    gap: '8px'
+  },
+  cancelButton: {
+    padding: '10px 20px',
+    backgroundColor: '#1f1f2e',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#e5e7eb',
+    fontSize: '14px',
+    cursor: 'pointer'
+  },
+  saveButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 20px',
+    backgroundColor: '#22c55e',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#fff',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer'
+  }
+};
+
+// Add keyframes for spinner
+if (typeof document !== 'undefined' && !document.getElementById('audio-clip-selector-styles')) {
+  const style = document.createElement('style');
+  style.id = 'audio-clip-selector-styles';
+  style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
+  document.head.appendChild(style);
+}
+
+export default AudioClipSelector;
