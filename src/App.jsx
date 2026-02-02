@@ -3417,29 +3417,48 @@ const StickToMusic = () => {
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                    <p className="text-zinc-500 text-xs mb-1">From Late API</p>
-                    <p className="text-2xl font-bold text-purple-400">{latePosts.length}</p>
-                  </div>
-                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                    <p className="text-zinc-500 text-xs mb-1">Scheduled</p>
-                    <p className="text-2xl font-bold">{latePosts.filter(p => p.status === 'scheduled').length}</p>
-                  </div>
-                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                    <p className="text-zinc-500 text-xs mb-1">Late Status</p>
-                    <p className="text-sm font-medium text-green-400">● Connected</p>
-                    {lastSynced && (
-                      <p className="text-xs text-zinc-500 mt-1">
-                        Synced {lastSynced.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                      </p>
-                    )}
-                  </div>
-                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                    <p className="text-zinc-500 text-xs mb-1">Accounts</p>
-                    <p className="text-2xl font-bold">8</p>
-                  </div>
-                </div>
+                {/* Stats Cards - reflect filtered data when filters active */}
+                {(() => {
+                  const hasFilters = postSearch || postPlatformFilter !== 'all' || postAccountFilter !== 'all';
+                  const displayPosts = hasFilters ? latePosts.filter(post => {
+                    if (postSearch && !(post.content || '').toLowerCase().includes(postSearch.toLowerCase())) return false;
+                    if (postPlatformFilter !== 'all') {
+                      const platforms = (post.platforms || []).map(p => p.platform || p);
+                      if (!platforms.includes(postPlatformFilter)) return false;
+                    }
+                    if (postAccountFilter !== 'all') {
+                      if (getPostAccount(post) !== postAccountFilter) return false;
+                    }
+                    return true;
+                  }) : latePosts;
+
+                  return (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                        <p className="text-zinc-500 text-xs mb-1">{hasFilters ? 'Filtered Posts' : 'From Late API'}</p>
+                        <p className="text-2xl font-bold text-purple-400">{displayPosts.length}</p>
+                        {hasFilters && <p className="text-xs text-zinc-600 mt-1">of {latePosts.length} total</p>}
+                      </div>
+                      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                        <p className="text-zinc-500 text-xs mb-1">Scheduled</p>
+                        <p className="text-2xl font-bold">{displayPosts.filter(p => p.status === 'scheduled').length}</p>
+                      </div>
+                      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                        <p className="text-zinc-500 text-xs mb-1">Late Status</p>
+                        <p className="text-sm font-medium text-green-400">● Connected</p>
+                        {lastSynced && (
+                          <p className="text-xs text-zinc-500 mt-1">
+                            Synced {lastSynced.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                          </p>
+                        )}
+                      </div>
+                      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                        <p className="text-zinc-500 text-xs mb-1">{hasFilters && postAccountFilter !== 'all' ? 'Viewing' : 'Accounts'}</p>
+                        <p className="text-2xl font-bold">{postAccountFilter !== 'all' ? `@${postAccountFilter.substring(0, 8)}${postAccountFilter.length > 8 ? '...' : ''}` : getUniqueAccounts(latePosts).length}</p>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Loading State */}
                 {syncing && (
@@ -3466,8 +3485,21 @@ const StickToMusic = () => {
 
                 {/* Calendar View */}
                 {!syncing && contentView === 'calendar' && (() => {
+                  // Apply all filters consistently
+                  const filteredPosts = latePosts.filter(post => {
+                    if (postSearch && !(post.content || '').toLowerCase().includes(postSearch.toLowerCase())) return false;
+                    if (postPlatformFilter !== 'all') {
+                      const platforms = (post.platforms || []).map(p => p.platform || p);
+                      if (!platforms.includes(postPlatformFilter)) return false;
+                    }
+                    if (postAccountFilter !== 'all') {
+                      if (getPostAccount(post) !== postAccountFilter) return false;
+                    }
+                    return true;
+                  });
+
                   // Group posts by date
-                  const postsByDate = latePosts.reduce((acc, post) => {
+                  const postsByDate = filteredPosts.reduce((acc, post) => {
                     const date = post.scheduledFor ? post.scheduledFor.split('T')[0] : 'Unknown';
                     if (!acc[date]) acc[date] = [];
                     acc[date].push(post);
@@ -3507,11 +3539,18 @@ const StickToMusic = () => {
                                       <div className="text-sm text-zinc-400 w-16">
                                         {post.scheduledFor ? new Date(post.scheduledFor).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '-'}
                                       </div>
+                                      {/* Account name */}
+                                      <button
+                                        onClick={() => setSelectedAccountDashboard(getPostAccount(post))}
+                                        className="text-sm text-zinc-400 hover:text-purple-400 transition w-32 text-left truncate"
+                                      >
+                                        @{getPostAccount(post) || 'Unknown'}
+                                      </button>
                                       <div>
                                         <div className="flex items-center gap-2">
                                           {(post.platforms || []).map(p => (
                                             <span key={p.platform || p} className={`px-2 py-0.5 rounded text-xs ${(p.platform || p) === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
-                                              {(p.platform || p) === 'tiktok' ? 'TikTok' : 'Instagram'}
+                                              {(p.platform || p) === 'tiktok' ? 'TT' : 'IG'}
                                             </span>
                                           ))}
                                         </div>
@@ -3555,6 +3594,19 @@ const StickToMusic = () => {
 
                 {/* Month View */}
                 {!syncing && contentView === 'month' && (() => {
+                  // Apply all filters consistently
+                  const filteredPosts = latePosts.filter(post => {
+                    if (postSearch && !(post.content || '').toLowerCase().includes(postSearch.toLowerCase())) return false;
+                    if (postPlatformFilter !== 'all') {
+                      const platforms = (post.platforms || []).map(p => p.platform || p);
+                      if (!platforms.includes(postPlatformFilter)) return false;
+                    }
+                    if (postAccountFilter !== 'all') {
+                      if (getPostAccount(post) !== postAccountFilter) return false;
+                    }
+                    return true;
+                  });
+
                   // Get calendar grid for the month
                   const year = calendarMonth.getFullYear();
                   const month = calendarMonth.getMonth();
@@ -3564,7 +3616,7 @@ const StickToMusic = () => {
                   const totalDays = lastDay.getDate();
 
                   // Group posts by date
-                  const postsByDate = latePosts.reduce((acc, post) => {
+                  const postsByDate = filteredPosts.reduce((acc, post) => {
                     if (!post.scheduledFor) return acc;
                     const date = post.scheduledFor.split('T')[0];
                     if (!acc[date]) acc[date] = [];
