@@ -208,6 +208,29 @@ const StickToMusic = () => {
     return () => unsubscribe();
   }, []);
 
+  // Load applications from Firestore for operators
+  useEffect(() => {
+    if (user?.role === 'operator') {
+      const unsubscribe = onSnapshot(
+        collection(db, 'applications'),
+        (snapshot) => {
+          const apps = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          // Sort by submitted date, newest first
+          apps.sort((a, b) => new Date(b.submitted) - new Date(a.submitted));
+          setApplications(apps);
+          console.log('Loaded applications from Firestore:', apps.length);
+        },
+        (error) => {
+          console.error('Error loading applications:', error);
+        }
+      );
+      return () => unsubscribe();
+    }
+  }, [user?.role]);
+
   // Helper to check if email is allowed (from Firestore + operator fallback)
   const isEmailAllowed = (email) => {
     const normalizedEmail = email?.toLowerCase();
@@ -1266,13 +1289,17 @@ const StickToMusic = () => {
   const handleSendPaymentLink = async (app, paymentLink) => {
     setPaymentLinkLoading(true);
     try {
-      // Update application status to pending_payment
-      setApplications(prev => prev.map(a =>
-        a.id === app.id ? { ...a, status: 'pending_payment', paymentLink } : a
-      ));
+      // Update in Firestore
+      const appRef = doc(db, 'applications', app.id);
+      await updateDoc(appRef, {
+        status: 'pending_payment',
+        paymentLink,
+        updatedAt: new Date().toISOString()
+      });
 
-      // In production, you would send an email here with the payment link
-      // For now, we'll copy the link to clipboard
+      // Local state will update via onSnapshot listener
+
+      // Copy link to clipboard
       await navigator.clipboard.writeText(paymentLink);
 
       showToast(`Payment link copied! Send to ${app.email}`, 'success');
@@ -1286,16 +1313,45 @@ const StickToMusic = () => {
   };
 
   // Add user to Firestore allowedUsers (called after payment confirmed)
-  const addUserToAllowed = async (email, name, role = 'artist', artistId = null) => {
+  // Also creates full artist profile with application data
+  const addUserToAllowed = async (email, name, role = 'artist', artistId = null, applicationData = null) => {
     try {
-      await addDoc(collection(db, 'allowedUsers'), {
+      // Build artist profile from application data
+      const artistProfile = {
         email: email.toLowerCase(),
         name: name,
         role: role,
         artistId: artistId || name.toLowerCase().replace(/\s+/g, '-'),
         status: 'active',
         createdAt: new Date().toISOString()
-      });
+      };
+
+      // If we have application data, add all the profile fields
+      if (applicationData) {
+        artistProfile.genre = applicationData.genre || '';
+        artistProfile.vibes = applicationData.vibes || [];
+        artistProfile.phone = applicationData.phone || '';
+        artistProfile.managerContact = applicationData.managerContact || '';
+        artistProfile.spotify = applicationData.spotify || '';
+        artistProfile.instagram = applicationData.instagram || '';
+        artistProfile.tiktok = applicationData.tiktok || '';
+        artistProfile.youtube = applicationData.youtube || '';
+        artistProfile.tier = applicationData.tier || '';
+        artistProfile.projectType = applicationData.projectType || '';
+        artistProfile.projectDescription = applicationData.projectDescription || '';
+        artistProfile.releaseDate = applicationData.releaseDate || '';
+        artistProfile.aestheticWords = applicationData.aestheticWords || '';
+        artistProfile.adjacentArtists = applicationData.adjacentArtists || '';
+        artistProfile.ageRanges = applicationData.ageRanges || [];
+        artistProfile.idealListener = applicationData.idealListener || '';
+        artistProfile.contentTypes = applicationData.contentTypes || [];
+        artistProfile.cdTier = applicationData.cdTier || '';
+        artistProfile.duration = applicationData.duration || '';
+        artistProfile.referral = applicationData.referral || '';
+        artistProfile.applicationId = applicationData.id || null;
+      }
+
+      await addDoc(collection(db, 'allowedUsers'), artistProfile);
       showToast(`${name} added to allowed users!`, 'success');
       return true;
     } catch (error) {
@@ -1307,11 +1363,19 @@ const StickToMusic = () => {
 
   // Manually mark payment as complete (for testing or manual verification)
   const handleMarkPaymentComplete = async (app) => {
-    const success = await addUserToAllowed(app.email, app.name, 'artist');
+    const success = await addUserToAllowed(app.email, app.name, 'artist', null, app);
     if (success) {
-      setApplications(prev => prev.map(a =>
-        a.id === app.id ? { ...a, status: 'approved' } : a
-      ));
+      // Update in Firestore
+      try {
+        const appRef = doc(db, 'applications', app.id);
+        await updateDoc(appRef, {
+          status: 'approved',
+          approvedAt: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('Error updating application status:', error);
+      }
+      // Local state will update via onSnapshot listener
     }
   };
 
@@ -1402,11 +1466,10 @@ const StickToMusic = () => {
       'discuss': 'To Discuss'
     };
     const newApplication = {
-      id: Date.now(),
       name: formData.artistName,
       email: formData.email,
       tier: tierMap[formData.pageTier] || formData.pageTier,
-      submitted: new Date().toISOString().split('T')[0],
+      submitted: new Date().toISOString(),
       status: 'pending',
       genre: formData.genre,
       vibes: formData.vibes || [],
@@ -1415,56 +1478,78 @@ const StickToMusic = () => {
       spotify: formData.spotify,
       instagram: formData.instagram,
       tiktok: formData.tiktok,
+      youtube: formData.youtube || '',
       projectType: formData.projectType,
       projectDescription: formData.projectDescription,
+      releaseDate: formData.releaseDate || '',
       aestheticWords: formData.aestheticWords,
       adjacentArtists: formData.adjacentArtists,
+      ageRanges: formData.ageRanges || [],
       idealListener: formData.idealListener,
+      contentTypes: formData.contentTypes || [],
       cdTier: formData.cdTier,
-      duration: formData.duration
+      duration: formData.duration,
+      referral: formData.referral || ''
     };
-    setApplications(prev => [newApplication, ...prev]);
-    setSubmitted(true);
-    showToast('Application submitted successfully!', 'success');
+
+    // Save to Firestore
+    try {
+      const docRef = await addDoc(collection(db, 'applications'), newApplication);
+      setApplications(prev => [{ id: docRef.id, ...newApplication }, ...prev]);
+      setSubmitted(true);
+      showToast('Application submitted successfully!', 'success');
+    } catch (error) {
+      console.error('Error saving application:', error);
+      // Still add locally even if Firestore fails
+      setApplications(prev => [{ id: Date.now().toString(), ...newApplication }, ...prev]);
+      setSubmitted(true);
+      showToast('Application submitted!', 'success');
+    }
   };
 
   const goToIntake = () => {
     setCurrentPage('intake');
   };
 
-  // Form components
-  const InputField = ({ label, field, type = 'text', required = false, placeholder = '' }) => (
-    <div className="mb-6">
-      <label className="block text-sm font-medium text-zinc-400 mb-2">
+  // Form field renderer - inline to prevent re-creation
+  const renderInput = (label, field, type = 'text', required = false, placeholder = '') => (
+    <div className="mb-6" key={field}>
+      <label htmlFor={field} className="block text-sm font-medium text-zinc-400 mb-2">
         {label} {required && <span className="text-red-400">*</span>}
       </label>
       <input
+        id={field}
+        name={field}
         type={type}
-        value={formData[field]}
+        value={formData[field] || ''}
         onChange={(e) => updateField(field, e.target.value)}
         placeholder={placeholder}
         className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition"
+        autoComplete="off"
       />
     </div>
   );
 
-  const TextArea = ({ label, field, required = false, placeholder = '' }) => (
-    <div className="mb-6">
-      <label className="block text-sm font-medium text-zinc-400 mb-2">
+  const renderTextArea = (label, field, required = false, placeholder = '') => (
+    <div className="mb-6" key={field}>
+      <label htmlFor={field} className="block text-sm font-medium text-zinc-400 mb-2">
         {label} {required && <span className="text-red-400">*</span>}
       </label>
       <textarea
-        value={formData[field]}
+        id={field}
+        name={field}
+        value={formData[field] || ''}
         onChange={(e) => updateField(field, e.target.value)}
         placeholder={placeholder}
         rows={4}
         className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 transition resize-none"
+        autoComplete="off"
       />
     </div>
   );
 
-  const CheckboxGroup = ({ label, field, options, required = false }) => (
-    <div className="mb-6">
+  const renderCheckboxGroup = (label, field, options, required = false) => (
+    <div className="mb-6" key={field}>
       <label className="block text-sm font-medium text-zinc-400 mb-3">
         {label} {required && <span className="text-red-400">*</span>}
       </label>
@@ -1475,7 +1560,7 @@ const StickToMusic = () => {
             type="button"
             onClick={() => toggleArrayField(field, option)}
             className={`px-4 py-2 rounded-lg text-sm text-left transition ${
-              formData[field].includes(option)
+              formData[field]?.includes(option)
                 ? 'bg-white text-black'
                 : 'bg-zinc-900 border border-zinc-700 text-zinc-300 hover:border-zinc-500'
             }`}
@@ -1486,6 +1571,16 @@ const StickToMusic = () => {
       </div>
     </div>
   );
+
+  // Keep old component names for backward compatibility
+  const InputField = ({ label, field, type = 'text', required = false, placeholder = '' }) =>
+    renderInput(label, field, type, required, placeholder);
+
+  const TextArea = ({ label, field, required = false, placeholder = '' }) =>
+    renderTextArea(label, field, required, placeholder);
+
+  const CheckboxGroup = ({ label, field, options, required = false }) =>
+    renderCheckboxGroup(label, field, options, required);
 
   const RadioGroup = ({ label, field, options, required = false }) => (
     <div className="mb-6">
@@ -4002,11 +4097,22 @@ const StickToMusic = () => {
                                 ✓ Approve & Send Payment
                               </button>
                               <button
-                                onClick={() => {
-                                  setApplications(prev => prev.map(a =>
-                                    a.id === app.id ? { ...a, status: 'declined' } : a
-                                  ));
-                                  showToast(`${app.name} declined`, 'info');
+                                onClick={async () => {
+                                  try {
+                                    const appRef = doc(db, 'applications', app.id);
+                                    await updateDoc(appRef, {
+                                      status: 'declined',
+                                      declinedAt: new Date().toISOString()
+                                    });
+                                    showToast(`${app.name} declined`, 'info');
+                                  } catch (error) {
+                                    console.error('Error declining application:', error);
+                                    // Fallback to local update
+                                    setApplications(prev => prev.map(a =>
+                                      a.id === app.id ? { ...a, status: 'declined' } : a
+                                    ));
+                                    showToast(`${app.name} declined`, 'info');
+                                  }
                                 }}
                                 className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm font-medium hover:bg-red-500/30 transition"
                               >
@@ -4206,6 +4312,106 @@ const StickToMusic = () => {
                         <option value="America/New_York">Eastern Time (ET)</option>
                         <option value="UTC">UTC</option>
                       </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* User Management Section */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold mb-4">User Management</h3>
+                  <div className="space-y-4">
+                    {/* Add New User Form */}
+                    <div className="border-b border-zinc-800 pb-4 mb-4">
+                      <p className="font-medium mb-3">Add New User</p>
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          const formData = new FormData(e.target);
+                          const email = formData.get('newUserEmail')?.trim();
+                          const name = formData.get('newUserName')?.trim();
+                          if (email && name) {
+                            const success = await addUserToAllowed(email, name, 'artist');
+                            if (success) {
+                              e.target.reset();
+                            }
+                          } else {
+                            showToast('Please enter both email and name', 'error');
+                          }
+                        }}
+                        className="flex flex-col sm:flex-row gap-3"
+                      >
+                        <input
+                          type="email"
+                          name="newUserEmail"
+                          placeholder="artist@email.com"
+                          className="flex-1 px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                          required
+                        />
+                        <input
+                          type="text"
+                          name="newUserName"
+                          placeholder="Artist Name"
+                          className="flex-1 px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                          required
+                        />
+                        <button
+                          type="submit"
+                          className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 transition whitespace-nowrap"
+                        >
+                          Add User
+                        </button>
+                      </form>
+                    </div>
+
+                    {/* User List */}
+                    <div>
+                      <p className="font-medium mb-3">Allowed Users ({allowedUsers.length})</p>
+                      <div className="max-h-64 overflow-y-auto space-y-2">
+                        {allowedUsers.length === 0 ? (
+                          <p className="text-sm text-zinc-500 py-2">No users yet. Add one above or wait for Stripe payments.</p>
+                        ) : (
+                          allowedUsers.map((u) => (
+                            <div key={u.id} className="flex items-center justify-between py-2 px-3 bg-zinc-800 rounded-lg">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{u.name}</p>
+                                <p className="text-xs text-zinc-500 truncate">{u.email}</p>
+                              </div>
+                              <div className="flex items-center gap-2 ml-3">
+                                <span className={`px-2 py-0.5 rounded text-xs ${
+                                  u.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                                  u.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                                  'bg-zinc-700 text-zinc-400'
+                                }`}>
+                                  {u.status || 'active'}
+                                </span>
+                                <span className="px-2 py-0.5 rounded text-xs bg-purple-500/20 text-purple-400">
+                                  {u.role || 'artist'}
+                                </span>
+                                {!OPERATOR_EMAILS.includes(u.email?.toLowerCase()) && (
+                                  <button
+                                    onClick={async () => {
+                                      if (window.confirm(`Remove ${u.name} from allowed users?`)) {
+                                        try {
+                                          const userRef = doc(db, 'allowedUsers', u.id);
+                                          await updateDoc(userRef, { status: 'inactive' });
+                                          showToast(`${u.name} deactivated`, 'success');
+                                        } catch (error) {
+                                          console.error('Error deactivating user:', error);
+                                          showToast('Failed to deactivate user', 'error');
+                                        }
+                                      }
+                                    }}
+                                    className="p-1 text-zinc-500 hover:text-red-400 transition"
+                                    title="Deactivate user"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
