@@ -301,6 +301,204 @@ const StickToMusic = () => {
     </div>
   );
 
+  // Skeleton Loading Component
+  const Skeleton = ({ className = '', variant = 'default' }) => {
+    const baseClass = 'animate-pulse bg-zinc-800 rounded';
+    const variants = {
+      default: '',
+      circle: 'rounded-full',
+      text: 'h-4',
+      title: 'h-6',
+      card: 'h-32',
+      row: 'h-12',
+    };
+    return <div className={`${baseClass} ${variants[variant]} ${className}`} />;
+  };
+
+  // Empty State Component
+  const EmptyState = ({ icon, title, description, action, actionLabel }) => (
+    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+      <div className="text-4xl mb-4">{icon}</div>
+      <h3 className="text-lg font-semibold text-white mb-2">{title}</h3>
+      <p className="text-zinc-500 text-sm mb-6 max-w-sm">{description}</p>
+      {action && (
+        <button
+          onClick={action}
+          className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition"
+        >
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  );
+
+  // Table Loading Skeleton
+  const TableSkeleton = ({ rows = 5, cols = 4 }) => (
+    <div className="space-y-2">
+      {[...Array(rows)].map((_, i) => (
+        <div key={i} className="flex gap-4 p-4 bg-zinc-900 rounded-lg">
+          {[...Array(cols)].map((_, j) => (
+            <Skeleton key={j} className="flex-1 h-4" />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+
+  // Card Loading Skeleton
+  const CardSkeleton = () => (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4">
+      <div className="flex items-center gap-3">
+        <Skeleton variant="circle" className="w-10 h-10" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-4 w-1/3" />
+          <Skeleton className="h-3 w-1/2" />
+        </div>
+      </div>
+      <Skeleton className="h-20" />
+    </div>
+  );
+
+  // Undo Toast state
+  const [undoAction, setUndoAction] = useState(null);
+
+  // Show undo toast
+  const showUndoToast = (message, onUndo, duration = 5000) => {
+    const id = Date.now();
+    setUndoAction({ id, message, onUndo });
+    setTimeout(() => {
+      setUndoAction(prev => prev?.id === id ? null : prev);
+    }, duration);
+  };
+
+  // Undo Toast Component
+  const UndoToast = () => undoAction && (
+    <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[100] bg-zinc-800 text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-4 animate-slide-up">
+      <span className="text-sm">{undoAction.message}</span>
+      <button
+        onClick={() => {
+          undoAction.onUndo();
+          setUndoAction(null);
+        }}
+        className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-sm font-medium transition"
+      >
+        Undo
+      </button>
+      <button
+        onClick={() => setUndoAction(null)}
+        className="text-zinc-500 hover:text-white"
+      >
+        ✕
+      </button>
+    </div>
+  );
+
+  // Onboarding state
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
+
+  // Check if first time user (would normally check localStorage)
+  useEffect(() => {
+    if (user && user.role === 'operator') {
+      const hasSeenOnboarding = localStorage.getItem('stm_onboarding_complete');
+      if (!hasSeenOnboarding) {
+        setShowOnboarding(true);
+      }
+    }
+  }, [user]);
+
+  // Onboarding steps
+  const onboardingSteps = [
+    {
+      title: 'Welcome to StickToMusic! 🎵',
+      description: 'Let\'s take a quick tour of your operator dashboard.',
+      target: null
+    },
+    {
+      title: 'Artists Tab',
+      description: 'View and manage all your artists here. See their stats, pages, and campaign progress.',
+      target: 'artists'
+    },
+    {
+      title: 'Content Tab',
+      description: 'Schedule and manage posts across all world pages. Sync with Late to see scheduled content.',
+      target: 'content'
+    },
+    {
+      title: 'Applications Tab',
+      description: 'Review new artist applications, approve them, and send payment links.',
+      target: 'applications'
+    },
+    {
+      title: 'You\'re all set! 🚀',
+      description: 'Start by clicking "Sync from Late" in the Content tab to load your scheduled posts.',
+      target: null
+    }
+  ];
+
+  const completeOnboarding = () => {
+    localStorage.setItem('stm_onboarding_complete', 'true');
+    setShowOnboarding(false);
+    setOnboardingStep(0);
+  };
+
+  // Onboarding Tooltip Component
+  const OnboardingTooltip = () => {
+    if (!showOnboarding) return null;
+    const step = onboardingSteps[onboardingStep];
+
+    return (
+      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60">
+        <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 max-w-md mx-4 shadow-xl animate-slide-up">
+          <div className="text-center mb-4">
+            <h3 className="text-xl font-bold mb-2">{step.title}</h3>
+            <p className="text-zinc-400">{step.description}</p>
+          </div>
+
+          <div className="flex items-center justify-between mt-6">
+            <div className="flex gap-1">
+              {onboardingSteps.map((_, i) => (
+                <div
+                  key={i}
+                  className={`w-2 h-2 rounded-full transition ${i === onboardingStep ? 'bg-purple-500' : 'bg-zinc-700'}`}
+                />
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={completeOnboarding}
+                className="px-4 py-2 text-zinc-400 hover:text-white text-sm transition"
+              >
+                Skip
+              </button>
+              {onboardingStep < onboardingSteps.length - 1 ? (
+                <button
+                  onClick={() => {
+                    setOnboardingStep(prev => prev + 1);
+                    if (onboardingSteps[onboardingStep + 1]?.target) {
+                      setOperatorTab(onboardingSteps[onboardingStep + 1].target);
+                    }
+                  }}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition"
+                >
+                  Next
+                </button>
+              ) : (
+                <button
+                  onClick={completeOnboarding}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition"
+                >
+                  Get Started
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Dashboard state
   const [dateRange, setDateRange] = useState({ start: '2025-01-01', end: '2025-01-30' });
   const [dashboardTab, setDashboardTab] = useState('overview');
@@ -332,6 +530,86 @@ const StickToMusic = () => {
   const [contentView, setContentView] = useState('list'); // 'list' or 'calendar'
   const [deletingPostId, setDeletingPostId] = useState(null);
   const [lastSynced, setLastSynced] = useState(null);
+
+  // Bulk selection state
+  const [selectedPosts, setSelectedPosts] = useState(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  // Settings state
+  const [showSettings, setShowSettings] = useState(false);
+  const [settings, setSettings] = useState({
+    notifications: true,
+    emailAlerts: true,
+    autoSync: false,
+    syncInterval: 30,
+    theme: 'dark',
+    timezone: 'America/Los_Angeles'
+  });
+
+  // Toggle post selection
+  const togglePostSelection = (postId) => {
+    setSelectedPosts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(postId)) {
+        newSet.delete(postId);
+      } else {
+        newSet.add(postId);
+      }
+      return newSet;
+    });
+  };
+
+  // Select all posts
+  const selectAllPosts = () => {
+    if (selectedPosts.size === latePosts.length) {
+      setSelectedPosts(new Set());
+    } else {
+      setSelectedPosts(new Set(latePosts.map(p => p.id)));
+    }
+  };
+
+  // Bulk delete posts
+  const handleBulkDelete = async () => {
+    if (selectedPosts.size === 0) return;
+
+    const confirmDelete = window.confirm(`Delete ${selectedPosts.size} selected post(s)?`);
+    if (!confirmDelete) return;
+
+    setBulkDeleting(true);
+    const deletedPosts = latePosts.filter(p => selectedPosts.has(p.id));
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const postId of selectedPosts) {
+      const result = await lateApi.deletePost(postId);
+      if (result.success) {
+        successCount++;
+      } else {
+        failCount++;
+      }
+    }
+
+    setBulkDeleting(false);
+    setSelectedPosts(new Set());
+
+    if (failCount > 0) {
+      showToast(`Deleted ${successCount}, failed ${failCount}`, 'error');
+    } else {
+      showUndoToast(
+        `Deleted ${successCount} post(s)`,
+        () => {
+          // Undo is complex for bulk - just show message
+          showToast('Please sync from Late to restore', 'info');
+        }
+      );
+    }
+
+    // Refresh posts
+    const result = await lateApi.fetchScheduledPosts();
+    if (result.success) {
+      setLatePosts(result.posts || []);
+    }
+  };
 
   // Loading states for better UX
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -1302,14 +1580,19 @@ const StickToMusic = () => {
     );
   };
 
+  // Mobile menu state
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   // Navigation
   const Nav = () => (
     <nav className="fixed top-0 w-full z-50 bg-zinc-950/95 backdrop-blur border-b border-zinc-800">
-      <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
-        <button onClick={() => setCurrentPage('home')} className="text-xl font-bold hover:text-zinc-300 transition">
+      <div className="max-w-6xl mx-auto px-4 md:px-6 py-3 md:py-4 flex justify-between items-center">
+        <button onClick={() => { setCurrentPage('home'); setMobileMenuOpen(false); }} className="text-lg md:text-xl font-bold hover:text-zinc-300 transition">
           StickToMusic
         </button>
-        <div className="flex items-center gap-6">
+
+        {/* Desktop Navigation */}
+        <div className="hidden md:flex items-center gap-6">
           <button
             onClick={() => setCurrentPage('how')}
             className={`px-3 py-1 rounded transition font-medium ${currentPage === 'how' ? 'text-white bg-zinc-800' : 'text-zinc-400 hover:text-white'}`}
@@ -1349,7 +1632,81 @@ const StickToMusic = () => {
             </button>
           )}
         </div>
+
+        {/* Mobile Menu Button */}
+        <div className="flex md:hidden items-center gap-3">
+          {user && (
+            <button
+              onClick={() => setCurrentPage(user.role === 'artist' ? 'artist-portal' : 'operator')}
+              className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold"
+            >
+              {user.name[0]}
+            </button>
+          )}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="p-2 text-zinc-400 hover:text-white"
+            aria-label="Toggle menu"
+          >
+            {mobileMenuOpen ? (
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
+          </button>
+        </div>
       </div>
+
+      {/* Mobile Menu Dropdown */}
+      {mobileMenuOpen && (
+        <div className="md:hidden bg-zinc-900 border-t border-zinc-800 px-4 py-4 space-y-3">
+          <button
+            onClick={() => { setCurrentPage('how'); setMobileMenuOpen(false); }}
+            className="block w-full text-left px-3 py-2 rounded-lg text-zinc-300 hover:bg-zinc-800 transition"
+          >
+            How It Works
+          </button>
+          <button
+            onClick={() => { setCurrentPage('pricing'); setMobileMenuOpen(false); }}
+            className="block w-full text-left px-3 py-2 rounded-lg text-zinc-300 hover:bg-zinc-800 transition"
+          >
+            Pricing
+          </button>
+          <button
+            onClick={() => { goToIntake(); setMobileMenuOpen(false); }}
+            className="block w-full text-center px-4 py-2 bg-white text-black rounded-full font-semibold"
+          >
+            Apply
+          </button>
+          {user ? (
+            <>
+              <button
+                onClick={() => { setCurrentPage(user.role === 'artist' ? 'artist-portal' : 'operator'); setMobileMenuOpen(false); }}
+                className="block w-full text-left px-3 py-2 rounded-lg text-zinc-300 hover:bg-zinc-800 transition"
+              >
+                Dashboard
+              </button>
+              <button
+                onClick={() => { handleLogout(); setMobileMenuOpen(false); }}
+                className="block w-full text-left px-3 py-2 rounded-lg text-red-400 hover:bg-zinc-800 transition"
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => { setShowLoginModal(true); setMobileMenuOpen(false); }}
+              className="block w-full text-left px-3 py-2 rounded-lg text-purple-400 hover:bg-zinc-800 transition"
+            >
+              Login
+            </button>
+          )}
+        </div>
+      )}
     </nav>
   );
 
@@ -1801,11 +2158,21 @@ const StickToMusic = () => {
                 <span className="text-zinc-400">Operator Dashboard</span>
               </div>
               <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setOperatorTab('settings')}
+                  className="p-2 text-zinc-500 hover:text-white transition rounded-lg hover:bg-zinc-800"
+                  aria-label="Settings"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </button>
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-sm font-bold">
                     {user?.name?.[0] || 'O'}
                   </div>
-                  <span className="text-sm text-zinc-400">{user?.name || 'Operator'}</span>
+                  <span className="text-sm text-zinc-400 hidden md:inline">{user?.name || 'Operator'}</span>
                 </div>
                 <button onClick={handleLogout} className="text-sm text-zinc-500 hover:text-white transition">Log out</button>
               </div>
@@ -1816,7 +2183,7 @@ const StickToMusic = () => {
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
           {/* Tab Navigation */}
           <div className="flex gap-2 mb-8 border-b border-zinc-800 pb-4 overflow-x-auto">
-            {['artists', 'pages', 'content', 'campaigns', 'banks', 'applications'].map(tab => (
+            {['artists', 'pages', 'content', 'campaigns', 'banks', 'applications', 'settings'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setOperatorTab(tab)}
@@ -1824,7 +2191,7 @@ const StickToMusic = () => {
                   operatorTab === tab ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
                 }`}
               >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab === 'settings' ? '⚙️ Settings' : tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
           </div>
@@ -2539,7 +2906,23 @@ const StickToMusic = () => {
                       </div>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    {selectedPosts.size > 0 && (
+                      <button
+                        onClick={handleBulkDelete}
+                        disabled={bulkDeleting}
+                        className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm font-medium hover:bg-red-500/30 transition flex items-center gap-2"
+                      >
+                        {bulkDeleting ? (
+                          <>
+                            <span className="animate-spin">⟳</span>
+                            Deleting...
+                          </>
+                        ) : (
+                          <>🗑 Delete {selectedPosts.size} selected</>
+                        )}
+                      </button>
+                    )}
                     <button
                       onClick={handleSync}
                       disabled={syncing}
@@ -3704,6 +4087,145 @@ const StickToMusic = () => {
               )}
             </div>
           )}
+
+          {/* Settings Tab */}
+          {operatorTab === 'settings' && (
+            <div className="max-w-2xl">
+              <div className="mb-6">
+                <h2 className="text-xl font-bold">Settings</h2>
+                <p className="text-sm text-zinc-500">Manage your account and preferences</p>
+              </div>
+
+              <div className="space-y-6">
+                {/* Account Section */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold mb-4">Account</h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between py-3 border-b border-zinc-800">
+                      <div>
+                        <p className="font-medium">Email</p>
+                        <p className="text-sm text-zinc-500">{user?.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between py-3 border-b border-zinc-800">
+                      <div>
+                        <p className="font-medium">Role</p>
+                        <p className="text-sm text-zinc-500 capitalize">{user?.role}</p>
+                      </div>
+                      <span className="px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full text-sm">
+                        {user?.role === 'operator' ? 'Admin' : 'Artist'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notifications Section */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold mb-4">Notifications</h3>
+                  <div className="space-y-4">
+                    <label className="flex items-center justify-between py-3 border-b border-zinc-800 cursor-pointer">
+                      <div>
+                        <p className="font-medium">Push Notifications</p>
+                        <p className="text-sm text-zinc-500">Get notified about new applications</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={settings.notifications}
+                        onChange={(e) => setSettings(prev => ({ ...prev, notifications: e.target.checked }))}
+                        className="w-5 h-5 rounded bg-zinc-800 border-zinc-700 text-purple-600 focus:ring-purple-500"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between py-3 border-b border-zinc-800 cursor-pointer">
+                      <div>
+                        <p className="font-medium">Email Alerts</p>
+                        <p className="text-sm text-zinc-500">Receive email for important updates</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={settings.emailAlerts}
+                        onChange={(e) => setSettings(prev => ({ ...prev, emailAlerts: e.target.checked }))}
+                        className="w-5 h-5 rounded bg-zinc-800 border-zinc-700 text-purple-600 focus:ring-purple-500"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Late Integration Section */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold mb-4">Late Integration</h3>
+                  <div className="space-y-4">
+                    <label className="flex items-center justify-between py-3 border-b border-zinc-800 cursor-pointer">
+                      <div>
+                        <p className="font-medium">Auto-Sync</p>
+                        <p className="text-sm text-zinc-500">Automatically sync with Late every hour</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={settings.autoSync}
+                        onChange={(e) => setSettings(prev => ({ ...prev, autoSync: e.target.checked }))}
+                        className="w-5 h-5 rounded bg-zinc-800 border-zinc-700 text-purple-600 focus:ring-purple-500"
+                      />
+                    </label>
+                    <div className="flex items-center justify-between py-3">
+                      <div>
+                        <p className="font-medium">Connected Accounts</p>
+                        <p className="text-sm text-zinc-500">8 accounts connected via Late API</p>
+                      </div>
+                      <button
+                        onClick={() => setShowLateAccounts(true)}
+                        className="px-4 py-2 bg-zinc-800 text-zinc-300 rounded-lg text-sm hover:bg-zinc-700 transition"
+                      >
+                        View Accounts
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Timezone Section */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold mb-4">Preferences</h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between py-3">
+                      <div>
+                        <p className="font-medium">Timezone</p>
+                        <p className="text-sm text-zinc-500">Used for scheduling posts</p>
+                      </div>
+                      <select
+                        value={settings.timezone}
+                        onChange={(e) => setSettings(prev => ({ ...prev, timezone: e.target.value }))}
+                        className="px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                      >
+                        <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                        <option value="America/Denver">Mountain Time (MT)</option>
+                        <option value="America/Chicago">Central Time (CT)</option>
+                        <option value="America/New_York">Eastern Time (ET)</option>
+                        <option value="UTC">UTC</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Danger Zone */}
+                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold mb-4 text-red-400">Danger Zone</h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between py-3">
+                      <div>
+                        <p className="font-medium">Delete Account</p>
+                        <p className="text-sm text-zinc-500">Permanently delete your account and all data</p>
+                      </div>
+                      <button
+                        className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm hover:bg-red-500/30 transition"
+                        onClick={() => showToast('Contact support to delete account', 'info')}
+                      >
+                        Delete Account
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <footer className="border-t border-zinc-800 mt-12">
@@ -4180,13 +4702,13 @@ const StickToMusic = () => {
 
       {/* LOGIN MODAL */}
       {showLoginModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowLoginModal(false)}>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
-              <h2 className="text-xl font-bold">Welcome Back</h2>
-              <button onClick={() => setShowLoginModal(false)} className="text-zinc-500 hover:text-white">✕</button>
+        <div className="fixed inset-0 bg-black/80 flex items-start md:items-center justify-center z-50 p-4 pt-16 md:pt-4 overflow-y-auto" onClick={() => setShowLoginModal(false)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md my-auto" onClick={e => e.stopPropagation()}>
+            <div className="p-4 md:p-6 border-b border-zinc-800 flex justify-between items-center">
+              <h2 className="text-lg md:text-xl font-bold">Welcome Back</h2>
+              <button onClick={() => setShowLoginModal(false)} className="text-zinc-500 hover:text-white p-2 -mr-2" aria-label="Close modal">✕</button>
             </div>
-            <form onSubmit={handleLogin} className="p-6 space-y-4">
+            <form onSubmit={handleLogin} className="p-4 md:p-6 space-y-4">
               {loginForm.error && (
                 <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
                   {loginForm.error}
@@ -4273,13 +4795,13 @@ const StickToMusic = () => {
 
       {/* SIGNUP MODAL */}
       {showSignupModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowSignupModal(false)}>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
-              <h2 className="text-xl font-bold">Create Account</h2>
-              <button onClick={() => setShowSignupModal(false)} className="text-zinc-500 hover:text-white">✕</button>
+        <div className="fixed inset-0 bg-black/80 flex items-start md:items-center justify-center z-50 p-4 pt-8 md:pt-4 overflow-y-auto" onClick={() => setShowSignupModal(false)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md my-auto" onClick={e => e.stopPropagation()}>
+            <div className="p-4 md:p-6 border-b border-zinc-800 flex justify-between items-center">
+              <h2 className="text-lg md:text-xl font-bold">Create Account</h2>
+              <button onClick={() => setShowSignupModal(false)} className="text-zinc-500 hover:text-white p-2 -mr-2" aria-label="Close modal">✕</button>
             </div>
-            <form onSubmit={handleSignup} className="p-6 space-y-4">
+            <form onSubmit={handleSignup} className="p-4 md:p-6 space-y-3 md:space-y-4">
               {signupForm.error && (
                 <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
                   {signupForm.error}
@@ -4551,6 +5073,8 @@ const StickToMusic = () => {
 
       {/* Toast Notifications */}
       <ToastContainer />
+      <UndoToast />
+      <OnboardingTooltip />
     </div>
   );
 };
