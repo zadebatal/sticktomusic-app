@@ -193,27 +193,45 @@ const StickToMusic = () => {
   // Firestore data - allowed users loaded from database
   const [allowedUsers, setAllowedUsers] = useState([]);
   const [firestoreLoaded, setFirestoreLoaded] = useState(false);
+  const [currentAuthUser, setCurrentAuthUser] = useState(null);
 
-  // Load allowed users from Firestore
+  // Master auth listener - tracks Firebase auth state
   useEffect(() => {
-    const unsubscribe = onSnapshot(
-      collection(db, 'allowedUsers'),
-      (snapshot) => {
-        const users = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setAllowedUsers(users);
-        setFirestoreLoaded(true);
-        console.log('Loaded allowed users:', users);
-      },
-      (error) => {
-        console.error('Error loading allowed users:', error);
-        setFirestoreLoaded(true); // Still set loaded to prevent infinite loading
-      }
-    );
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      console.log('Auth state changed:', firebaseUser?.email);
+      setCurrentAuthUser(firebaseUser);
+    });
     return () => unsubscribe();
   }, []);
+
+  // Load allowed users from Firestore (only when logged in)
+  useEffect(() => {
+    // If user is logged in, load from Firestore
+    if (currentAuthUser) {
+      console.log('Loading allowedUsers for:', currentAuthUser.email);
+      const unsubscribe = onSnapshot(
+        collection(db, 'allowedUsers'),
+        (snapshot) => {
+          const users = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          setAllowedUsers(users);
+          setFirestoreLoaded(true);
+          console.log('Loaded allowed users:', users.length);
+        },
+        (error) => {
+          console.error('Error loading allowed users:', error);
+          setFirestoreLoaded(true);
+        }
+      );
+      return () => unsubscribe();
+    } else {
+      // Not logged in - set loaded to allow login flow
+      setFirestoreLoaded(true);
+      setAllowedUsers([]);
+    }
+  }, [currentAuthUser]);
 
   // Load applications from Firestore for operators
   useEffect(() => {
@@ -687,35 +705,33 @@ const StickToMusic = () => {
     }
   }, [showQuickSearch]);
 
-  // Firebase Auth state listener - waits for Firestore to load
+  // Set user state based on currentAuthUser and firestoreLoaded
   useEffect(() => {
     if (!firestoreLoaded) return; // Wait for Firestore data
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const email = firebaseUser.email;
+    if (currentAuthUser) {
+      const email = currentAuthUser.email;
+      console.log('Setting user from auth:', email);
 
-        // Check whitelist from Firestore - sign out if not allowed
-        if (!isEmailAllowed(email)) {
-          await signOut(auth);
-          setUser(null);
-          return;
-        }
-
-        const role = getUserRole(email);
-        const artistInfo = getArtistInfo(email);
-        setUser({
-          email: email,
-          role: role,
-          name: firebaseUser.displayName || artistInfo?.name || email.split('@')[0],
-          artistId: artistInfo?.artistId || null
-        });
-      } else {
+      // Check whitelist from Firestore - sign out if not allowed
+      if (!isEmailAllowed(email)) {
+        signOut(auth);
         setUser(null);
+        return;
       }
-    });
-    return () => unsubscribe();
-  }, [firestoreLoaded, allowedUsers]);
+
+      const role = getUserRole(email);
+      const artistInfo = getArtistInfo(email);
+      setUser({
+        email: email,
+        role: role,
+        name: currentAuthUser.displayName || artistInfo?.name || email.split('@')[0],
+        artistId: artistInfo?.artistId || null
+      });
+    } else {
+      setUser(null);
+    }
+  }, [firestoreLoaded, currentAuthUser, allowedUsers]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
