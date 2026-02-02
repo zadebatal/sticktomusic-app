@@ -124,46 +124,14 @@ const lateApi = {
   }
 };
 
-// Mock user database (in production, this would be a real backend)
+// Mock user database (in production, this would be a real backend with OAuth)
 const USERS_DB = {
   'zade@sticktomusic.com': { password: 'admin123', role: 'operator', name: 'Zade', artistId: null },
-  'boon@artist.com': { password: 'boon123', role: 'artist', name: 'Boon', artistId: 'boon' },
-  'camylio@artist.com': { password: 'camylio123', role: 'artist', name: 'Camylio', artistId: 'camylio' },
+  'boon@artist.com': { password: 'boon123', role: 'artist', name: 'Boon', artistId: 'boon', lateConnected: true },
 };
 
-// Campaign data structure
-const CAMPAIGNS_DATA = [
-  {
-    id: 'camp-1',
-    artistId: 'boon',
-    name: 'Boon January Push',
-    status: 'active',
-    startDate: '2026-01-15',
-    endDate: '2026-02-15',
-    budget: 5000,
-    spent: 2340,
-    postsScheduled: 56,
-    postsPublished: 12,
-    categories: ['Fashion', 'Y2K'],
-    goals: { views: 500000, followers: 5000 },
-    achieved: { views: 234000, followers: 1820 }
-  },
-  {
-    id: 'camp-2',
-    artistId: 'camylio',
-    name: 'Camylio Soft Launch',
-    status: 'planning',
-    startDate: '2026-02-01',
-    endDate: '2026-03-01',
-    budget: 3000,
-    spent: 0,
-    postsScheduled: 0,
-    postsPublished: 0,
-    categories: ['Emo'],
-    goals: { views: 250000, followers: 2500 },
-    achieved: { views: 0, followers: 0 }
-  }
-];
+// Campaign data structure - starts empty, campaigns are created via the UI
+const CAMPAIGNS_DATA = [];
 
 const StickToMusic = () => {
   const [currentPage, setCurrentPage] = useState('home');
@@ -616,7 +584,7 @@ const StickToMusic = () => {
     { month: "November 2024", status: "available", highlights: "Campaign launch" }
   ];
 
-  // Operator dashboard data
+  // Operator dashboard data - artists with their Late connection status
   const operatorArtists = [
     {
       id: 1,
@@ -626,17 +594,8 @@ const StickToMusic = () => {
       status: "active",
       activeSince: "Nov 2024",
       totalPages: 8,
-      metrics: { views: 2847000, engagement: 413220, rate: 4.2 }
-    },
-    {
-      id: 2,
-      name: "Camylio",
-      tier: "Standard",
-      cdTier: null,
-      status: "active",
-      activeSince: "Dec 2024",
-      totalPages: 4,
-      metrics: { views: 1240000, engagement: 186000, rate: 3.8 }
+      lateConnected: true, // Has Late account connected
+      metrics: { views: 0, engagement: 0, rate: 0 } // Will be populated from Late API
     }
   ];
 
@@ -658,11 +617,6 @@ const StickToMusic = () => {
     { id: 14, handle: "@xxshadowskiesxx", platform: "instagram", artist: "Boon", niche: "EDM", followers: 62000, views: 1400000, status: "active", postTime: "20:00" },
     { id: 15, handle: "@neonphoebe", platform: "tiktok", artist: "Boon", niche: "Fashion", followers: 112000, views: 3400000, status: "active", postTime: "21:00" },
     { id: 16, handle: "@neonphoebe", platform: "instagram", artist: "Boon", niche: "Fashion", followers: 78000, views: 1800000, status: "active", postTime: "21:00" },
-    // Camylio - 4 pages
-    { id: 17, handle: "@midnightfeels", platform: "tiktok", artist: "Camylio", niche: "Romantic/Soft", followers: 34000, views: 560000, status: "active" },
-    { id: 18, handle: "@ethereal.edits", platform: "instagram", artist: "Camylio", niche: "Ethereal/Dreamy", followers: 19000, views: 180000, status: "active" },
-    { id: 19, handle: "@softglow.mp4", platform: "tiktok", artist: "Camylio", niche: "Romantic/Soft", followers: 27000, views: 340000, status: "active" },
-    { id: 20, handle: "@dreamstate.visuals", platform: "tiktok", artist: "Camylio", niche: "Ethereal/Dreamy", followers: 41000, views: 520000, status: "active" },
   ];
 
   // Content Banks - hashtags and captions per aesthetic category
@@ -785,15 +739,39 @@ const StickToMusic = () => {
     { id: 30, artist: "Boon", page: "@xxshadowskiesxx", platform: "instagram", type: "Reel", song: "Late", caption: "<3", scheduledFor: "2026-02-01 20:00", status: "scheduled" },
     { id: 31, artist: "Boon", page: "@neonphoebe", platform: "tiktok", type: "Video", song: "Late", caption: "inspo", scheduledFor: "2026-02-01 21:00", status: "scheduled" },
     { id: 32, artist: "Boon", page: "@neonphoebe", platform: "instagram", type: "Reel", song: "Late", caption: "inspo", scheduledFor: "2026-02-01 21:00", status: "scheduled" },
-    // Camylio
-    { id: 33, artist: "Camylio", page: "@midnightfeels", platform: "tiktok", type: "Video", song: "Soft Landing", caption: "late night feels", scheduledFor: "2026-02-01 12:00", status: "scheduled" },
   ];
 
-  // Applications state - stores intake form submissions
-  const [applications, setApplications] = useState([
-    { id: 1, name: "Luna Park", email: "luna@email.com", tier: "Standard", submitted: "2025-01-30", status: "pending", genre: "Indie Pop", vibes: ["Dreamy", "Nostalgic"], phone: "", managerContact: "" },
-    { id: 2, name: "The Velvet", email: "velvet@band.com", tier: "Scale", submitted: "2025-01-29", status: "pending", genre: "Alt Rock", vibes: ["Dark", "Cinematic"], phone: "", managerContact: "" },
-  ]);
+  // Applications state - stores intake form submissions (starts empty)
+  const [applications, setApplications] = useState([]);
+
+  // Helper to get social media URLs for posts
+  const getPostUrls = (post) => {
+    const urls = [];
+    const platforms = post.platforms || [];
+    platforms.forEach(p => {
+      const platform = p.platform || p;
+      const accountId = p.accountId;
+      // Try to find the handle from our mapping
+      const handleEntry = Object.entries(LATE_ACCOUNT_IDS).find(([handle, ids]) =>
+        ids.tiktok === accountId || ids.instagram === accountId
+      );
+      if (handleEntry) {
+        const handle = handleEntry[0].replace('@', '');
+        if (platform === 'tiktok') {
+          urls.push({ platform: 'tiktok', url: `https://tiktok.com/@${handle}`, label: 'TikTok' });
+        } else if (platform === 'instagram') {
+          urls.push({ platform: 'instagram', url: `https://instagram.com/${handle}`, label: 'Instagram' });
+        }
+      }
+    });
+    // If post has direct URLs from Late API (for published posts)
+    if (post.postUrls) {
+      post.postUrls.forEach(pu => urls.push(pu));
+    }
+    if (post.tiktokUrl) urls.push({ platform: 'tiktok', url: post.tiktokUrl, label: 'TikTok' });
+    if (post.instagramUrl) urls.push({ platform: 'instagram', url: post.instagramUrl, label: 'Instagram' });
+    return urls;
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -1108,7 +1086,7 @@ const StickToMusic = () => {
       <div className="min-h-screen bg-zinc-950 text-zinc-100 py-12 px-6">
         <div className="max-w-2xl mx-auto">
           <div className="mb-8">
-            <button onClick={() => setCurrentPage('home')} className="text-xl font-bold hover:text-zinc-300 transition">StickToMusic</button>
+            <button onClick={() => setCurrentPage(user ? (user.role === 'artist' ? 'artist-portal' : 'operator') : 'home')} className="text-xl font-bold hover:text-zinc-300 transition">StickToMusic</button>
           </div>
 
           {/* Progress */}
@@ -1275,7 +1253,7 @@ const StickToMusic = () => {
           <div className="max-w-6xl mx-auto px-6 py-4">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-6">
-                <button onClick={() => setCurrentPage('home')} className="text-xl font-bold hover:text-zinc-300 transition">StickToMusic</button>
+                <button onClick={() => setCurrentPage(user ? (user.role === 'artist' ? 'artist-portal' : 'operator') : 'home')} className="text-xl font-bold hover:text-zinc-300 transition">StickToMusic</button>
                 <span className="text-zinc-600">|</span>
                 <span className="text-zinc-400">Artist Portal</span>
               </div>
@@ -1530,7 +1508,7 @@ const StickToMusic = () => {
           <div className="max-w-7xl mx-auto px-6 py-4">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-6">
-                <button onClick={() => setCurrentPage('home')} className="text-xl font-bold hover:text-zinc-300 transition">StickToMusic</button>
+                <button onClick={() => setCurrentPage(user ? (user.role === 'artist' ? 'artist-portal' : 'operator') : 'home')} className="text-xl font-bold hover:text-zinc-300 transition">StickToMusic</button>
                 <span className="text-zinc-600">|</span>
                 <span className="text-zinc-400">Operator Dashboard</span>
               </div>
@@ -2559,13 +2537,30 @@ const StickToMusic = () => {
                                         <p className="text-sm text-zinc-300 mt-1 max-w-md truncate">{post.content || 'No caption'}</p>
                                       </div>
                                     </div>
-                                    <button
-                                      onClick={() => confirmDeletePost(post._id, post.content?.substring(0, 50))}
-                                      disabled={deletingPostId === post._id}
-                                      className="px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/20 rounded-lg transition disabled:opacity-50"
-                                    >
-                                      {deletingPostId === post._id ? 'Deleting...' : 'Delete'}
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                      {getPostUrls(post).map((pu, idx) => (
+                                        <a
+                                          key={idx}
+                                          href={pu.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className={`px-2 py-1 rounded text-xs font-medium transition ${
+                                            pu.platform === 'tiktok'
+                                              ? 'bg-pink-500/20 text-pink-400 hover:bg-pink-500/30'
+                                              : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
+                                          }`}
+                                        >
+                                          ↗
+                                        </a>
+                                      ))}
+                                      <button
+                                        onClick={() => confirmDeletePost(post._id, post.content?.substring(0, 50))}
+                                        disabled={deletingPostId === post._id}
+                                        className="px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/20 rounded-lg transition disabled:opacity-50"
+                                      >
+                                        {deletingPostId === post._id ? 'Deleting...' : 'Delete'}
+                                      </button>
+                                    </div>
                                   </div>
                                 ))}
                               </div>
@@ -2681,6 +2676,7 @@ const StickToMusic = () => {
                           <th className="text-left p-4 text-sm font-medium text-zinc-500">Platforms</th>
                           <th className="text-left p-4 text-sm font-medium text-zinc-500">Caption</th>
                           <th className="text-left p-4 text-sm font-medium text-zinc-500">Status</th>
+                          <th className="text-left p-4 text-sm font-medium text-zinc-500">View</th>
                           <th className="text-left p-4 text-sm font-medium text-zinc-500">Actions</th>
                         </tr>
                       </thead>
@@ -2730,6 +2726,29 @@ const StickToMusic = () => {
                                   </span>
                                 </td>
                                 <td className="p-4">
+                                  <div className="flex gap-2">
+                                    {getPostUrls(post).length > 0 ? (
+                                      getPostUrls(post).map((pu, idx) => (
+                                        <a
+                                          key={idx}
+                                          href={pu.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className={`px-2 py-1 rounded text-xs font-medium transition ${
+                                            pu.platform === 'tiktok'
+                                              ? 'bg-pink-500/20 text-pink-400 hover:bg-pink-500/30'
+                                              : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
+                                          }`}
+                                        >
+                                          View {pu.label}
+                                        </a>
+                                      ))
+                                    ) : (
+                                      <span className="text-xs text-zinc-600">—</span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="p-4">
                                   <button
                                     onClick={() => confirmDeletePost(post._id, post.content?.substring(0, 50))}
                                     disabled={deletingPostId === post._id}
@@ -2742,7 +2761,7 @@ const StickToMusic = () => {
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={5} className="p-8 text-center text-zinc-500">
+                              <td colSpan={6} className="p-8 text-center text-zinc-500">
                                 {postSearch || postPlatformFilter !== 'all'
                                   ? 'No posts match your filters.'
                                   : 'No posts synced. Click "Sync from Late" to load your scheduled posts.'}
@@ -3412,7 +3431,7 @@ const StickToMusic = () => {
           <div className="max-w-7xl mx-auto px-6 py-4">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-6">
-                <button onClick={() => setCurrentPage('home')} className="text-xl font-bold hover:text-zinc-300 transition">StickToMusic</button>
+                <button onClick={() => setCurrentPage(user ? (user.role === 'artist' ? 'artist-portal' : 'operator') : 'home')} className="text-xl font-bold hover:text-zinc-300 transition">StickToMusic</button>
                 <span className="text-zinc-600">|</span>
                 <span className="text-zinc-400">Artist Dashboard</span>
               </div>
@@ -3840,8 +3859,19 @@ const StickToMusic = () => {
       {/* FOOTER */}
       <footer className="py-8 px-6 border-t border-zinc-900">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <span className="font-bold">StickToMusic</span>
-          <span className="text-zinc-600 text-sm">© 2025</span>
+          <button
+            onClick={() => {
+              if (user) {
+                setCurrentPage(user.role === 'artist' ? 'artist-portal' : 'operator');
+              } else {
+                setCurrentPage('home');
+              }
+            }}
+            className="font-bold hover:text-zinc-300 transition cursor-pointer"
+          >
+            StickToMusic
+          </button>
+          <span className="text-zinc-600 text-sm">© 2026</span>
         </div>
       </footer>
 
