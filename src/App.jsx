@@ -208,9 +208,14 @@ const StickToMusic = () => {
     return () => unsubscribe();
   }, []);
 
-  // Helper to check if email is allowed (from Firestore)
+  // Helper to check if email is allowed (from Firestore + operator fallback)
   const isEmailAllowed = (email) => {
     const normalizedEmail = email?.toLowerCase();
+    // Always allow operator emails (fallback if Firestore has issues)
+    if (OPERATOR_EMAILS.includes(normalizedEmail)) {
+      return true;
+    }
+    // Check Firestore allowedUsers
     return allowedUsers.some(u => u.email?.toLowerCase() === normalizedEmail && u.status === 'active');
   };
 
