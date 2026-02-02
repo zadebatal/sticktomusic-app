@@ -178,6 +178,13 @@ const StickToMusic = () => {
 
   // Authentication state
   const [user, setUser] = useState(null); // { email, role, name, artistId }
+
+  // Debug: Log user state changes
+  useEffect(() => {
+    console.log('USER STATE CHANGED:', user);
+    console.log('AUTH CURRENT USER:', auth.currentUser?.email);
+  }, [user]);
+
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginForm, setLoginForm] = useState({ email: '', password: '', error: null });
   const [showSignupModal, setShowSignupModal] = useState(false);
