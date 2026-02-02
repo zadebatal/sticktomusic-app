@@ -178,13 +178,8 @@ const StickToMusic = () => {
 
   // Authentication state
   const [user, setUser] = useState(null); // { email, role, name, artistId }
-
-  // Debug: Log user state changes
-  useEffect(() => {
-    console.log('USER STATE CHANGED:', user);
-    console.log('AUTH CURRENT USER:', auth.currentUser?.email);
-  }, [user]);
-
+  const [currentAuthUser, setCurrentAuthUser] = useState(null); // Firebase auth user object
+  const [authChecked, setAuthChecked] = useState(false); // True once initial auth check completes
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginForm, setLoginForm] = useState({ email: '', password: '', error: null });
   const [showSignupModal, setShowSignupModal] = useState(false);
@@ -193,45 +188,88 @@ const StickToMusic = () => {
   // Firestore data - allowed users loaded from database
   const [allowedUsers, setAllowedUsers] = useState([]);
   const [firestoreLoaded, setFirestoreLoaded] = useState(false);
-  const [currentAuthUser, setCurrentAuthUser] = useState(null);
 
   // Master auth listener - tracks Firebase auth state
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      console.log('Auth state changed:', firebaseUser?.email);
+      console.log('🔐 Auth state changed:', firebaseUser?.email || 'null');
       setCurrentAuthUser(firebaseUser);
+      setAuthChecked(true);
     });
     return () => unsubscribe();
   }, []);
 
-  // Load allowed users from Firestore (only when logged in)
+  // Load allowed users from Firestore (ONLY when authenticated)
   useEffect(() => {
-    // If user is logged in, load from Firestore
-    if (currentAuthUser) {
-      console.log('Loading allowedUsers for:', currentAuthUser.email);
-      const unsubscribe = onSnapshot(
-        collection(db, 'allowedUsers'),
-        (snapshot) => {
-          const users = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
-          setAllowedUsers(users);
-          setFirestoreLoaded(true);
-          console.log('Loaded allowed users:', users.length);
-        },
-        (error) => {
-          console.error('Error loading allowed users:', error);
-          setFirestoreLoaded(true);
-        }
-      );
-      return () => unsubscribe();
-    } else {
-      // Not logged in - set loaded to allow login flow
+    // Don't subscribe to Firestore until auth is checked
+    if (!authChecked) {
+      console.log('⏳ Waiting for auth check...');
+      return;
+    }
+
+    // If not authenticated, set loaded and clear users
+    if (!currentAuthUser) {
+      console.log('👤 No auth user, skipping Firestore load');
       setFirestoreLoaded(true);
       setAllowedUsers([]);
+      return;
     }
-  }, [currentAuthUser]);
+
+    console.log('📥 Loading allowedUsers from Firestore for:', currentAuthUser.email);
+    const unsubscribe = onSnapshot(
+      collection(db, 'allowedUsers'),
+      (snapshot) => {
+        const users = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setAllowedUsers(users);
+        setFirestoreLoaded(true);
+        console.log('✅ Loaded allowed users:', users.length);
+      },
+      (error) => {
+        console.error('❌ Error loading allowed users:', error);
+        setFirestoreLoaded(true); // Still set loaded to prevent infinite loading
+      }
+    );
+    return () => unsubscribe();
+  }, [authChecked, currentAuthUser]);
+
+  // Set the app-level user state based on currentAuthUser and allowedUsers
+  useEffect(() => {
+    if (!authChecked || !firestoreLoaded) return;
+
+    if (currentAuthUser) {
+      const email = currentAuthUser.email;
+
+      // Check if user is allowed (operators always allowed)
+      if (OPERATOR_EMAILS.includes(email?.toLowerCase())) {
+        const newUser = {
+          email: email,
+          role: 'operator',
+          name: currentAuthUser.displayName || email.split('@')[0],
+          artistId: null
+        };
+        console.log('👑 Setting operator user:', newUser);
+        setUser(newUser);
+      } else if (allowedUsers.some(u => u.email?.toLowerCase() === email?.toLowerCase() && u.status === 'active')) {
+        const userData = allowedUsers.find(u => u.email?.toLowerCase() === email?.toLowerCase());
+        const newUser = {
+          email: email,
+          role: userData?.role || 'artist',
+          name: userData?.name || currentAuthUser.displayName || email.split('@')[0],
+          artistId: userData?.artistId || null
+        };
+        console.log('🎨 Setting allowed user:', newUser);
+        setUser(newUser);
+      } else {
+        console.log('🚫 User not in allowed list:', email);
+        setUser(null);
+      }
+    } else {
+      setUser(null);
+    }
+  }, [authChecked, firestoreLoaded, currentAuthUser, allowedUsers]);
 
   // Load applications from Firestore for operators
   useEffect(() => {
@@ -315,7 +353,6 @@ const StickToMusic = () => {
   const [postPlatformFilter, setPostPlatformFilter] = useState('all'); // 'all', 'tiktok', 'instagram'
   const [postAccountFilter, setPostAccountFilter] = useState('all'); // 'all' or specific username
   const [applicationFilter, setApplicationFilter] = useState('all'); // 'all', 'pending', 'approved', 'declined'
-  const [selectedAccountDashboard, setSelectedAccountDashboard] = useState(null); // For account dashboard modal
 
   // Toast notification state
   const [toasts, setToasts] = useState([]);
@@ -707,39 +744,8 @@ const StickToMusic = () => {
     }
   }, [showQuickSearch]);
 
-  // Set user state based on currentAuthUser and firestoreLoaded
-  useEffect(() => {
-    if (!firestoreLoaded) return; // Wait for Firestore data
-
-    if (currentAuthUser) {
-      const email = currentAuthUser.email;
-      console.log('Setting user from auth:', email);
-      console.log('isEmailAllowed result:', isEmailAllowed(email));
-      console.log('OPERATOR_EMAILS:', OPERATOR_EMAILS);
-      console.log('Email in OPERATOR_EMAILS:', OPERATOR_EMAILS.includes(email?.toLowerCase()));
-
-      // Check whitelist - but DON'T sign out here (only in login handlers)
-      // This prevents race conditions with allowedUsers loading
-      if (!isEmailAllowed(email)) {
-        console.log('Email not in allowed list, setting user to null but NOT signing out');
-        setUser(null);
-        return;
-      }
-
-      const role = getUserRole(email);
-      const artistInfo = getArtistInfo(email);
-      const newUser = {
-        email: email,
-        role: role,
-        name: currentAuthUser.displayName || artistInfo?.name || email.split('@')[0],
-        artistId: artistInfo?.artistId || null
-      };
-      console.log('Setting user:', newUser);
-      setUser(newUser);
-    } else {
-      setUser(null);
-    }
-  }, [firestoreLoaded, currentAuthUser, allowedUsers]);
+  // NOTE: Auth state listener has been consolidated into the master auth listener above (around line 193)
+  // The user state is now set by the useEffect at line 238 which handles auth + Firestore data together
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -1410,74 +1416,13 @@ const StickToMusic = () => {
     }
   };
 
-  // Helper to get social media URLs for posts
-  const getPostUrls = (post) => {
-    const urls = [];
-    const platforms = post.platforms || [];
-
-    platforms.forEach(p => {
-      const platform = p.platform || p;
-      // Late API returns accountId as an object with username property
-      const username = p.accountId?.username || p.accountId?.displayName;
-
-      // Priority 1: Direct post URL from Late (Instagram has this for published posts)
-      if (p.platformPostUrl) {
-        urls.push({
-          platform,
-          url: p.platformPostUrl,
-          label: platform === 'tiktok' ? 'TikTok' : 'IG'
-        });
-        return;
-      }
-
-      // Priority 2: Construct URL from platformPostId + username (for published posts)
-      if (p.platformPostId && username && p.status === 'published') {
-        if (platform === 'tiktok') {
-          // Late returns TikTok IDs like "v_pub_url~v2-1.7602051149071468575"
-          // Extract the numeric video ID after the last dot
-          let videoId = p.platformPostId;
-          if (videoId.includes('.')) {
-            videoId = videoId.split('.').pop();
-          }
-          // Only use if it looks like a valid TikTok video ID (15+ digits)
-          if (/^\d{15,}$/.test(videoId)) {
-            urls.push({
-              platform: 'tiktok',
-              url: `https://www.tiktok.com/@${username}/video/${videoId}`,
-              label: 'TikTok'
-            });
-            return;
-          }
-        } else if (platform === 'instagram') {
-          urls.push({
-            platform: 'instagram',
-            url: `https://www.instagram.com/reel/${p.platformPostId}/`,
-            label: 'IG'
-          });
-          return;
-        }
-      }
-
-      // Priority 3: Link to profile if we have username
-      if (username) {
-        if (platform === 'tiktok') {
-          urls.push({ platform: 'tiktok', url: `https://tiktok.com/@${username}`, label: 'TT' });
-        } else if (platform === 'instagram') {
-          urls.push({ platform: 'instagram', url: `https://instagram.com/${username}`, label: 'IG' });
-        }
-      }
-    });
-
-    return urls;
-  };
-
-  // Helper to get account username from a post
+  // Helper to extract account username from a post
   const getPostAccount = (post) => {
     const platform = post.platforms?.[0];
     return platform?.accountId?.username || platform?.accountId?.displayName || null;
   };
 
-  // Helper to get unique accounts from all posts
+  // Helper to get unique accounts from posts
   const getUniqueAccounts = (posts) => {
     const accounts = new Set();
     posts.forEach(post => {
@@ -1487,10 +1432,89 @@ const StickToMusic = () => {
     return Array.from(accounts).sort();
   };
 
-  // Helper to get post thumbnail URL
+  // Helper to get post thumbnail
   const getPostThumbnail = (post) => {
     const mediaItem = post.mediaItems?.[0];
     return mediaItem?.thumbnail || mediaItem?.url || null;
+  };
+
+  // Helper to get social media URLs for posts
+  const getPostUrls = (post) => {
+    const urls = [];
+    const platforms = post.platforms || [];
+
+    platforms.forEach(p => {
+      const platform = p.platform || p;
+      // Get username from accountId object (Late API returns accountId as object with username)
+      const username = p.accountId?.username || p.accountId?.displayName;
+
+      // Priority 1: Direct post URL from Late (Instagram has this for published posts)
+      if (p.platformPostUrl) {
+        urls.push({
+          platform,
+          url: p.platformPostUrl,
+          label: platform === 'tiktok' ? 'TikTok' : 'IG',
+          isActualPost: true
+        });
+        return;
+      }
+
+      // Priority 2: Construct URL from platformPostId + username
+      if (p.platformPostId && username && p.status === 'published') {
+        if (platform === 'tiktok') {
+          // Late returns TikTok IDs like "v_pub_url~v2-1.7602051149071468575"
+          // Extract the numeric video ID after the last dot or use as-is if numeric
+          let videoId = p.platformPostId;
+          if (videoId.includes('.')) {
+            videoId = videoId.split('.').pop();
+          }
+          // Only use if it looks like a valid TikTok video ID (numeric, 19 digits)
+          if (/^\d{15,}$/.test(videoId)) {
+            urls.push({
+              platform: 'tiktok',
+              url: `https://www.tiktok.com/@${username}/video/${videoId}`,
+              label: 'TikTok',
+              isActualPost: true
+            });
+            return;
+          }
+        } else if (platform === 'instagram') {
+          urls.push({
+            platform: 'instagram',
+            url: `https://www.instagram.com/reel/${p.platformPostId}/`,
+            label: 'IG',
+            isActualPost: true
+          });
+          return;
+        }
+      }
+
+      // Priority 3: Link to profile if we have username
+      if (username) {
+        if (platform === 'tiktok') {
+          urls.push({ platform: 'tiktok', url: `https://tiktok.com/@${username}`, label: 'TT', isActualPost: false });
+        } else if (platform === 'instagram') {
+          urls.push({ platform: 'instagram', url: `https://instagram.com/${username}`, label: 'IG', isActualPost: false });
+        }
+        return;
+      }
+
+      // Priority 4: Fallback to our local account ID mapping
+      const accountIdStr = typeof p.accountId === 'string' ? p.accountId : p.accountId?._id;
+      const handleEntry = Object.entries(LATE_ACCOUNT_IDS).find(([handle, ids]) =>
+        ids.tiktok === accountIdStr || ids.instagram === accountIdStr
+      );
+      if (handleEntry) {
+        const handle = handleEntry[0].replace('@', '');
+        if (platform === 'tiktok') {
+          urls.push({ platform: 'tiktok', url: `https://tiktok.com/@${handle}`, label: 'TT', isActualPost: false });
+        } else if (platform === 'instagram') {
+          urls.push({ platform: 'instagram', url: `https://instagram.com/${handle}`, label: 'IG', isActualPost: false });
+        }
+      }
+    });
+
+    return urls;
   };
 
   const getStatusColor = (status) => {
@@ -1540,7 +1564,7 @@ const StickToMusic = () => {
   const nextFormStep = () => setFormStep(s => s + 1);
   const prevFormStep = () => setFormStep(s => s - 1);
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     console.log('Form submitted:', formData);
     // Store the application
     const tierMap = {
@@ -2748,6 +2772,15 @@ const StickToMusic = () => {
               setSyncing(false);
               if (result.success) {
                 const posts = Array.isArray(result.posts) ? result.posts : [];
+                // Log full post structure to understand what Late returns
+                if (posts.length > 0) {
+                  console.log('📬 Sample Late post structure:', JSON.stringify(posts[0], null, 2));
+                  console.log('📬 All post keys:', Object.keys(posts[0]));
+                  // Log platform structure specifically
+                  if (posts[0].platforms?.length > 0) {
+                    console.log('📬 Platform entry:', JSON.stringify(posts[0].platforms[0], null, 2));
+                  }
+                }
                 setLatePosts(posts);
                 setLastSynced(new Date());
                 const postWord = posts.length === 1 ? 'post' : 'posts';
@@ -3189,119 +3222,6 @@ const StickToMusic = () => {
                   </div>
                 )}
 
-                {/* Account Dashboard Modal */}
-                {selectedAccountDashboard && (
-                  <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setSelectedAccountDashboard(null)}>
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-                      <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
-                        <div>
-                          <h2 className="text-xl font-bold">@{selectedAccountDashboard}</h2>
-                          <p className="text-sm text-zinc-500">Account Dashboard</p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <a
-                            href={`https://tiktok.com/@${selectedAccountDashboard}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-3 py-1.5 bg-pink-500/20 text-pink-400 rounded-lg text-sm hover:bg-pink-500/30 transition"
-                          >
-                            TikTok ↗
-                          </a>
-                          <a
-                            href={`https://instagram.com/${selectedAccountDashboard}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-sm hover:bg-purple-500/30 transition"
-                          >
-                            Instagram ↗
-                          </a>
-                          <button onClick={() => setSelectedAccountDashboard(null)} className="text-zinc-500 hover:text-white text-xl">✕</button>
-                        </div>
-                      </div>
-                      <div className="p-6 overflow-y-auto max-h-[70vh]">
-                        {/* Account Stats */}
-                        {(() => {
-                          const accountPosts = latePosts.filter(p => getPostAccount(p) === selectedAccountDashboard);
-                          const scheduled = accountPosts.filter(p => p.status === 'scheduled').length;
-                          const published = accountPosts.filter(p => p.status === 'published').length;
-                          return (
-                            <>
-                              <div className="grid grid-cols-3 gap-4 mb-6">
-                                <div className="bg-zinc-800 rounded-xl p-4 text-center">
-                                  <p className="text-2xl font-bold text-white">{accountPosts.length}</p>
-                                  <p className="text-xs text-zinc-500">Total Posts</p>
-                                </div>
-                                <div className="bg-zinc-800 rounded-xl p-4 text-center">
-                                  <p className="text-2xl font-bold text-yellow-400">{scheduled}</p>
-                                  <p className="text-xs text-zinc-500">Scheduled</p>
-                                </div>
-                                <div className="bg-zinc-800 rounded-xl p-4 text-center">
-                                  <p className="text-2xl font-bold text-green-400">{published}</p>
-                                  <p className="text-xs text-zinc-500">Published</p>
-                                </div>
-                              </div>
-
-                              {/* Posts List */}
-                              <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Posts</h3>
-                              <div className="space-y-2">
-                                {accountPosts
-                                  .sort((a, b) => (b.scheduledFor || '').localeCompare(a.scheduledFor || ''))
-                                  .map(post => (
-                                    <div key={post._id} className="bg-zinc-800 rounded-lg p-4 flex items-center gap-4">
-                                      {/* Thumbnail */}
-                                      <div className="w-12 h-12 rounded overflow-hidden bg-zinc-700 flex-shrink-0">
-                                        {getPostThumbnail(post) ? (
-                                          <img src={getPostThumbnail(post)} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
-                                        ) : (
-                                          <div className="w-full h-full flex items-center justify-center text-zinc-500">🎬</div>
-                                        )}
-                                      </div>
-                                      {/* Info */}
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-sm text-white truncate">{post.content || 'No caption'}</p>
-                                        <p className="text-xs text-zinc-500">
-                                          {post.scheduledFor ? new Date(post.scheduledFor).toLocaleString('en-US', {
-                                            month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
-                                          }) : '-'}
-                                        </p>
-                                      </div>
-                                      {/* Status & Links */}
-                                      <div className="flex items-center gap-2">
-                                        <span className={`px-2 py-1 rounded-full text-xs ${
-                                          post.status === 'scheduled' ? 'bg-yellow-500/20 text-yellow-400' :
-                                          post.status === 'published' ? 'bg-green-500/20 text-green-400' :
-                                          'bg-zinc-500/20 text-zinc-400'
-                                        }`}>
-                                          {post.status}
-                                        </span>
-                                        {getPostUrls(post).map((pu, idx) => (
-                                          <a
-                                            key={idx}
-                                            href={pu.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className={`px-2 py-1 rounded text-xs ${
-                                              pu.platform === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'
-                                            }`}
-                                          >
-                                            {pu.label} ↗
-                                          </a>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  ))}
-                                {accountPosts.length === 0 && (
-                                  <p className="text-center text-zinc-500 py-8">No posts for this account</p>
-                                )}
-                              </div>
-                            </>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 {/* Sync Status */}
                 {syncStatus && (
                   <div className="mb-4 px-4 py-2 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-sm">
@@ -3377,18 +3297,6 @@ const StickToMusic = () => {
                       />
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">🔍</span>
                     </div>
-                    {/* Account Filter Dropdown */}
-                    <select
-                      value={postAccountFilter}
-                      onChange={e => setPostAccountFilter(e.target.value)}
-                      className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500 min-w-[160px]"
-                    >
-                      <option value="all">All Accounts</option>
-                      {getUniqueAccounts(latePosts).map(account => (
-                        <option key={account} value={account}>@{account}</option>
-                      ))}
-                    </select>
-                    {/* Platform Filter */}
                     <div className="flex bg-zinc-800 rounded-lg p-1">
                       {['all', 'tiktok', 'instagram'].map(platform => (
                         <button
@@ -3406,9 +3314,20 @@ const StickToMusic = () => {
                         </button>
                       ))}
                     </div>
-                    {(postSearch || postPlatformFilter !== 'all' || postAccountFilter !== 'all') && (
+                    {/* Account Filter Dropdown */}
+                    <select
+                      value={postAccountFilter}
+                      onChange={e => setPostAccountFilter(e.target.value)}
+                      className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                    >
+                      <option value="all">All Accounts</option>
+                      {getUniqueAccounts(latePosts).map(account => (
+                        <option key={account} value={account}>@{account}</option>
+                      ))}
+                    </select>
+                    {(postSearch || postPlatformFilter !== 'all' || contentStatus !== 'all' || postAccountFilter !== 'all') && (
                       <button
-                        onClick={() => { setPostSearch(''); setPostPlatformFilter('all'); setPostAccountFilter('all'); }}
+                        onClick={() => { setPostSearch(''); setPostPlatformFilter('all'); setContentStatus('all'); setPostAccountFilter('all'); }}
                         className="px-3 py-2 text-sm text-zinc-400 hover:text-white transition"
                       >
                         Clear filters
@@ -3417,31 +3336,38 @@ const StickToMusic = () => {
                   </div>
                 )}
 
-                {/* Stats Cards - reflect filtered data when filters active */}
+                {/* Stats Cards - with filtered data */}
                 {(() => {
-                  const hasFilters = postSearch || postPlatformFilter !== 'all' || postAccountFilter !== 'all';
-                  const displayPosts = hasFilters ? latePosts.filter(post => {
+                  // Apply the same filtering to stats
+                  const filteredStatsData = latePosts.filter(post => {
                     if (postSearch && !(post.content || '').toLowerCase().includes(postSearch.toLowerCase())) return false;
                     if (postPlatformFilter !== 'all') {
                       const platforms = (post.platforms || []).map(p => p.platform || p);
                       if (!platforms.includes(postPlatformFilter)) return false;
                     }
+                    if (contentStatus !== 'all') {
+                      const postStatus = post.status === 'published' ? 'posted' : post.status;
+                      if (postStatus !== contentStatus) return false;
+                    }
                     if (postAccountFilter !== 'all') {
                       if (getPostAccount(post) !== postAccountFilter) return false;
                     }
                     return true;
-                  }) : latePosts;
-
+                  });
+                  const hasFilters = postSearch || postPlatformFilter !== 'all' || contentStatus !== 'all' || postAccountFilter !== 'all';
                   return (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
                         <p className="text-zinc-500 text-xs mb-1">{hasFilters ? 'Filtered Posts' : 'From Late API'}</p>
-                        <p className="text-2xl font-bold text-purple-400">{displayPosts.length}</p>
-                        {hasFilters && <p className="text-xs text-zinc-600 mt-1">of {latePosts.length} total</p>}
+                        <p className="text-2xl font-bold text-purple-400">{filteredStatsData.length}{hasFilters && <span className="text-sm text-zinc-500 ml-1">/ {latePosts.length}</span>}</p>
                       </div>
                       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
                         <p className="text-zinc-500 text-xs mb-1">Scheduled</p>
-                        <p className="text-2xl font-bold">{displayPosts.filter(p => p.status === 'scheduled').length}</p>
+                        <p className="text-2xl font-bold">{filteredStatsData.filter(p => p.status === 'scheduled').length}</p>
+                      </div>
+                      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                        <p className="text-zinc-500 text-xs mb-1">Posted</p>
+                        <p className="text-2xl font-bold text-green-400">{filteredStatsData.filter(p => p.status === 'posted' || p.status === 'published').length}</p>
                       </div>
                       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
                         <p className="text-zinc-500 text-xs mb-1">Late Status</p>
@@ -3451,10 +3377,6 @@ const StickToMusic = () => {
                             Synced {lastSynced.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
                           </p>
                         )}
-                      </div>
-                      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                        <p className="text-zinc-500 text-xs mb-1">{hasFilters && postAccountFilter !== 'all' ? 'Viewing' : 'Accounts'}</p>
-                        <p className="text-2xl font-bold">{postAccountFilter !== 'all' ? `@${postAccountFilter.substring(0, 8)}${postAccountFilter.length > 8 ? '...' : ''}` : getUniqueAccounts(latePosts).length}</p>
                       </div>
                     </div>
                   );
@@ -3485,13 +3407,23 @@ const StickToMusic = () => {
 
                 {/* Calendar View */}
                 {!syncing && contentView === 'calendar' && (() => {
-                  // Apply all filters consistently
-                  const filteredPosts = latePosts.filter(post => {
-                    if (postSearch && !(post.content || '').toLowerCase().includes(postSearch.toLowerCase())) return false;
+                  // Filter posts first
+                  const filteredLatePosts = latePosts.filter(post => {
+                    // Search filter
+                    if (postSearch && !(post.content || '').toLowerCase().includes(postSearch.toLowerCase())) {
+                      return false;
+                    }
+                    // Platform filter
                     if (postPlatformFilter !== 'all') {
                       const platforms = (post.platforms || []).map(p => p.platform || p);
                       if (!platforms.includes(postPlatformFilter)) return false;
                     }
+                    // Status filter - map 'published' to 'posted' for UI
+                    if (contentStatus !== 'all') {
+                      const postStatus = post.status === 'published' ? 'posted' : post.status;
+                      if (postStatus !== contentStatus) return false;
+                    }
+                    // Account filter
                     if (postAccountFilter !== 'all') {
                       if (getPostAccount(post) !== postAccountFilter) return false;
                     }
@@ -3499,7 +3431,7 @@ const StickToMusic = () => {
                   });
 
                   // Group posts by date
-                  const postsByDate = filteredPosts.reduce((acc, post) => {
+                  const postsByDate = filteredLatePosts.reduce((acc, post) => {
                     const date = post.scheduledFor ? post.scheduledFor.split('T')[0] : 'Unknown';
                     if (!acc[date]) acc[date] = [];
                     acc[date].push(post);
@@ -3539,18 +3471,11 @@ const StickToMusic = () => {
                                       <div className="text-sm text-zinc-400 w-16">
                                         {post.scheduledFor ? new Date(post.scheduledFor).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '-'}
                                       </div>
-                                      {/* Account name */}
-                                      <button
-                                        onClick={() => setSelectedAccountDashboard(getPostAccount(post))}
-                                        className="text-sm text-zinc-400 hover:text-purple-400 transition w-32 text-left truncate"
-                                      >
-                                        @{getPostAccount(post) || 'Unknown'}
-                                      </button>
                                       <div>
                                         <div className="flex items-center gap-2">
                                           {(post.platforms || []).map(p => (
                                             <span key={p.platform || p} className={`px-2 py-0.5 rounded text-xs ${(p.platform || p) === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
-                                              {(p.platform || p) === 'tiktok' ? 'TT' : 'IG'}
+                                              {(p.platform || p) === 'tiktok' ? 'TikTok' : 'Instagram'}
                                             </span>
                                           ))}
                                         </div>
@@ -3594,13 +3519,23 @@ const StickToMusic = () => {
 
                 {/* Month View */}
                 {!syncing && contentView === 'month' && (() => {
-                  // Apply all filters consistently
-                  const filteredPosts = latePosts.filter(post => {
-                    if (postSearch && !(post.content || '').toLowerCase().includes(postSearch.toLowerCase())) return false;
+                  // Filter posts first
+                  const filteredLatePosts = latePosts.filter(post => {
+                    // Search filter
+                    if (postSearch && !(post.content || '').toLowerCase().includes(postSearch.toLowerCase())) {
+                      return false;
+                    }
+                    // Platform filter
                     if (postPlatformFilter !== 'all') {
                       const platforms = (post.platforms || []).map(p => p.platform || p);
                       if (!platforms.includes(postPlatformFilter)) return false;
                     }
+                    // Status filter - map 'published' to 'posted' for UI
+                    if (contentStatus !== 'all') {
+                      const postStatus = post.status === 'published' ? 'posted' : post.status;
+                      if (postStatus !== contentStatus) return false;
+                    }
+                    // Account filter
                     if (postAccountFilter !== 'all') {
                       if (getPostAccount(post) !== postAccountFilter) return false;
                     }
@@ -3616,7 +3551,7 @@ const StickToMusic = () => {
                   const totalDays = lastDay.getDate();
 
                   // Group posts by date
-                  const postsByDate = filteredPosts.reduce((acc, post) => {
+                  const postsByDate = filteredLatePosts.reduce((acc, post) => {
                     if (!post.scheduledFor) return acc;
                     const date = post.scheduledFor.split('T')[0];
                     if (!acc[date]) acc[date] = [];
@@ -3705,9 +3640,8 @@ const StickToMusic = () => {
                     <table className="w-full">
                       <thead>
                         <tr className="border-b border-zinc-800">
-                          <th className="text-left p-4 text-sm font-medium text-zinc-500 w-12"></th>
                           <th className="text-left p-4 text-sm font-medium text-zinc-500">Date & Time</th>
-                          <th className="text-left p-4 text-sm font-medium text-zinc-500">Account</th>
+                          <th className="text-left p-4 text-sm font-medium text-zinc-500">Platforms</th>
                           <th className="text-left p-4 text-sm font-medium text-zinc-500">Caption</th>
                           <th className="text-left p-4 text-sm font-medium text-zinc-500">Status</th>
                           <th className="text-left p-4 text-sm font-medium text-zinc-500">View</th>
@@ -3727,10 +3661,14 @@ const StickToMusic = () => {
                                 const platforms = (post.platforms || []).map(p => p.platform || p);
                                 if (!platforms.includes(postPlatformFilter)) return false;
                               }
+                              // Status filter - map 'published' to 'posted' for UI
+                              if (contentStatus !== 'all') {
+                                const postStatus = post.status === 'published' ? 'posted' : post.status;
+                                if (postStatus !== contentStatus) return false;
+                              }
                               // Account filter
                               if (postAccountFilter !== 'all') {
-                                const account = getPostAccount(post);
-                                if (account !== postAccountFilter) return false;
+                                if (getPostAccount(post) !== postAccountFilter) return false;
                               }
                               return true;
                             })
@@ -3739,45 +3677,20 @@ const StickToMusic = () => {
                           return filteredPosts.length > 0 ? (
                             filteredPosts.map(post => (
                               <tr key={post._id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition">
-                                {/* Thumbnail */}
-                                <td className="p-2 w-12">
-                                  {getPostThumbnail(post) ? (
-                                    <div className="w-10 h-10 rounded overflow-hidden bg-zinc-800">
-                                      <img
-                                        src={getPostThumbnail(post)}
-                                        alt=""
-                                        className="w-full h-full object-cover"
-                                        onError={(e) => { e.target.style.display = 'none'; }}
-                                      />
-                                    </div>
-                                  ) : (
-                                    <div className="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center text-zinc-600 text-xs">
-                                      🎬
-                                    </div>
-                                  )}
-                                </td>
-                                {/* Date & Time */}
                                 <td className="p-4 text-sm text-zinc-400">
                                   {post.scheduledFor ? new Date(post.scheduledFor).toLocaleString('en-US', {
                                     month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
                                   }) : '-'}
                                 </td>
-                                {/* Account */}
                                 <td className="p-4">
-                                  <button
-                                    onClick={() => setSelectedAccountDashboard(getPostAccount(post))}
-                                    className="text-sm font-medium text-zinc-300 hover:text-purple-400 transition flex items-center gap-2"
-                                  >
-                                    <span className="text-zinc-500">@</span>
-                                    {getPostAccount(post) || 'Unknown'}
-                                    <div className="flex gap-0.5">
-                                      {(post.platforms || []).map((p, i) => (
-                                        <span key={i} className={`w-1.5 h-1.5 rounded-full ${(p.platform || p) === 'tiktok' ? 'bg-pink-400' : 'bg-purple-400'}`} />
-                                      ))}
-                                    </div>
-                                  </button>
+                                  <div className="flex gap-1">
+                                    {(post.platforms || []).map((p, i) => (
+                                      <span key={i} className={`px-2 py-0.5 rounded text-xs ${(p.platform || p) === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                                        {(p.platform || p) === 'tiktok' ? 'TT' : 'IG'}
+                                      </span>
+                                    ))}
+                                  </div>
                                 </td>
-                                {/* Caption */}
                                 <td className="p-4 text-sm max-w-[200px] truncate">{post.content || 'No caption'}</td>
                                 <td className="p-4">
                                   <span className={`px-2 py-1 rounded-full text-xs ${
@@ -4514,10 +4427,10 @@ const StickToMusic = () => {
                     <div className="flex items-center justify-between py-3 border-b border-zinc-800">
                       <div>
                         <p className="font-medium">Role</p>
-                        <p className="text-sm text-zinc-500 capitalize">operator</p>
+                        <p className="text-sm text-zinc-500 capitalize">{user?.role || 'operator'}</p>
                       </div>
                       <span className="px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full text-sm">
-                        Admin
+                        {user?.role === 'operator' ? 'Admin' : user?.role === 'artist' ? 'Artist' : 'Admin'}
                       </span>
                     </div>
                   </div>
