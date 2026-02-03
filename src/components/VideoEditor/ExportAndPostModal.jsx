@@ -78,12 +78,12 @@ const ExportAndPostModal = ({
 
     try {
       // Step 1: Render video
-      const blob = await renderVideo(video, (p) => setProgress(p * 0.5)); // 0-50% for rendering
+      const blob = await renderVideo(video, (p) => setProgress(Math.round(p * 0.5))); // 0-50% for rendering
 
       // Step 2: Upload to Firebase
       setStage(EXPORT_STAGE.UPLOADING);
       const url = await uploadVideo(blob, `video_${video.id}`, (p) => {
-        setProgress(50 + p * 0.5); // 50-100% for uploading
+        setProgress(Math.round(50 + p * 0.5)); // 50-100% for uploading
       });
 
       setVideoUrl(url);
@@ -344,9 +344,18 @@ const ExportAndPostModal = ({
 
               {/* Post Actions */}
               <div style={styles.postActions}>
-                <p style={styles.helpText}>
-                  Copy this URL and paste it in the posting module to schedule your post
-                </p>
+                {onSchedulePost ? (
+                  <button
+                    style={styles.postButton}
+                    onClick={handleSchedulePost}
+                  >
+                    Schedule Post
+                  </button>
+                ) : (
+                  <p style={styles.helpText}>
+                    Video ready! Copy the URL above to use in your social media scheduler.
+                  </p>
+                )}
                 <button style={styles.doneButton} onClick={onClose}>
                   Done
                 </button>

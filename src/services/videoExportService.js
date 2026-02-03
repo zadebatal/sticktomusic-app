@@ -58,7 +58,7 @@ export const renderVideo = async (videoData, onProgress = () => {}) => {
     const source = audioCtx.createMediaElementSource(audioElement);
     const destination = audioCtx.createMediaStreamDestination();
     source.connect(destination);
-    source.connect(audioCtx.destination); // Also play through speakers for timing
+    // NOTE: Do NOT connect to audioCtx.destination - that plays through speakers during rendering
 
     destination.stream.getAudioTracks().forEach(track => {
       stream.addTrack(track);
