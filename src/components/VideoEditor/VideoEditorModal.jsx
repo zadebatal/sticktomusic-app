@@ -72,6 +72,9 @@ const VideoEditorModal = ({
   const [lastSaved, setLastSaved] = useState(null);
   const autoSaveKey = `stm_autosave_${category?.id || 'default'}`;
 
+  // Close confirmation state
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+
   // Beat detection
   const { beats, bpm, isAnalyzing, analyzeAudio } = useBeatDetection();
 
@@ -279,6 +282,23 @@ const VideoEditorModal = ({
     setIsPlaying(prev => !prev);
   }, []);
 
+  // Handle close with confirmation if there's unsaved work
+  const handleCloseRequest = useCallback(() => {
+    // Check if there's any work that would be lost
+    const hasWork = clips.length > 0 || words.length > 0 || selectedAudio;
+
+    if (hasWork) {
+      setShowCloseConfirm(true);
+    } else {
+      onClose();
+    }
+  }, [clips.length, words.length, selectedAudio, onClose]);
+
+  const handleConfirmClose = useCallback(() => {
+    setShowCloseConfirm(false);
+    onClose();
+  }, [onClose]);
+
   // Clear auto-save on successful save - MUST be defined before handleSave
   const clearAutoSave = useCallback(() => {
     try {
@@ -310,10 +330,10 @@ const VideoEditorModal = ({
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // ESC to close modal
+      // ESC to close modal (with confirmation if there's work)
       if (e.code === 'Escape') {
         e.preventDefault();
-        onClose();
+        handleCloseRequest();
         return;
       }
       // Space bar to play/pause
@@ -344,7 +364,7 @@ const VideoEditorModal = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handlePlayPause, handleSeek, handleToggleMute, handleSave, currentTime, duration, onClose]);
+  }, [handlePlayPause, handleSeek, handleToggleMute, handleSave, handleCloseRequest, currentTime, duration]);
 
   // Prevent background scroll when modal is open (P0-UI-04)
   useEffect(() => {
@@ -751,7 +771,7 @@ const VideoEditorModal = ({
   return (
     <div
       style={styles.overlay}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onClick={(e) => e.target === e.currentTarget && handleCloseRequest()}
       role="dialog"
       aria-modal="true"
       aria-labelledby="video-editor-title"
@@ -762,7 +782,7 @@ const VideoEditorModal = ({
           <h2 id="video-editor-title" style={styles.title}>Preview video edit</h2>
           <button
             style={styles.closeButton}
-            onClick={onClose}
+            onClick={handleCloseRequest}
             aria-label="Close editor"
             title="Close (ESC)"
           >
@@ -1494,6 +1514,44 @@ const VideoEditorModal = ({
                   onClick={handleRestoreDraft}
                 >
                   ✨ Restore Draft
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Close Confirmation Dialog */}
+        {showCloseConfirm && (
+          <div style={styles.lyricsOverlay}>
+            <div style={{...styles.lyricsModal, maxWidth: '380px'}}>
+              <h3 style={styles.lyricsTitle}>Close Editor?</h3>
+              <p style={{ color: '#9CA3AF', fontSize: '14px', marginBottom: '16px' }}>
+                You have unsaved work. Are you sure you want to close?
+              </p>
+              <div style={{
+                backgroundColor: '#1f1f2e',
+                padding: '12px',
+                borderRadius: '8px',
+                marginBottom: '16px',
+                fontSize: '13px',
+                color: '#9ca3af'
+              }}>
+                {selectedAudio && <div>🎵 Audio selected</div>}
+                {clips.length > 0 && <div>🎬 {clips.length} clips</div>}
+                {words.length > 0 && <div>💬 {words.length} words timed</div>}
+              </div>
+              <div style={styles.lyricsActions}>
+                <button
+                  style={styles.cancelButton}
+                  onClick={() => setShowCloseConfirm(false)}
+                >
+                  Keep Editing
+                </button>
+                <button
+                  style={{...styles.confirmButton, background: 'linear-gradient(135deg, #ef4444, #dc2626)'}}
+                  onClick={handleConfirmClose}
+                >
+                  Close Anyway
                 </button>
               </div>
             </div>
