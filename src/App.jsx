@@ -2449,12 +2449,6 @@ const StickToMusic = () => {
               </div>
               <div className="flex items-center gap-4">
                 <button
-                  onClick={() => setShowVideoEditor(true)}
-                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium rounded-lg transition flex items-center gap-2"
-                >
-                  🎬 Video Editor
-                </button>
-                <button
                   onClick={() => setOperatorTab('settings')}
                   className="p-2 text-zinc-500 hover:text-white transition rounded-lg hover:bg-zinc-800"
                   aria-label="Settings"
@@ -2479,7 +2473,25 @@ const StickToMusic = () => {
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
           {/* Tab Navigation */}
           <div className="flex gap-2 mb-8 border-b border-zinc-800 pb-4 overflow-x-auto">
-            {['artists', 'pages', 'content', 'campaigns', 'banks', 'applications', 'settings'].map(tab => (
+            {['artists', 'pages', 'content', 'campaigns', 'banks'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => setOperatorTab(tab)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
+                  operatorTab === tab ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                }`}
+              >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+            {/* Video Editor - opens modal */}
+            <button
+              onClick={() => setShowVideoEditor(true)}
+              className="px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap bg-purple-600 hover:bg-purple-500 text-white"
+            >
+              🎬 Video Editor
+            </button>
+            {['applications', 'settings'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setOperatorTab(tab)}

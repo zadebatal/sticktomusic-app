@@ -796,6 +796,9 @@ const VideoStudio = ({
 
 const styles = {
   container: {
+    position: 'fixed',
+    inset: 0,
+    zIndex: 1000,
     display: 'flex',
     flexDirection: 'column',
     height: '100vh',
