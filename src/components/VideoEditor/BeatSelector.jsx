@@ -220,7 +220,7 @@ const styles = {
     width: '100%',
     maxWidth: '600px',
     maxHeight: '80vh',
-    backgroundColor: '#fff',
+    backgroundColor: '#111118',
     borderRadius: '16px',
     display: 'flex',
     flexDirection: 'column',
@@ -231,7 +231,7 @@ const styles = {
     alignItems: 'flex-start',
     gap: '12px',
     padding: '20px 20px 16px',
-    borderBottom: '1px solid #e5e7eb'
+    borderBottom: '1px solid #2d2d3d'
   },
   headerIcon: {
     fontSize: '24px'
@@ -239,7 +239,7 @@ const styles = {
   title: {
     fontSize: '18px',
     fontWeight: '600',
-    color: '#111',
+    color: '#fff',
     margin: '0 0 4px 0'
   },
   subtitle: {
@@ -255,10 +255,10 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#1f1f2e',
     border: 'none',
     borderRadius: '8px',
-    color: '#6b7280',
+    color: '#9ca3af',
     cursor: 'pointer'
   },
   presets: {
@@ -266,14 +266,14 @@ const styles = {
     flexWrap: 'wrap',
     gap: '8px',
     padding: '16px 20px',
-    borderBottom: '1px solid #e5e7eb'
+    borderBottom: '1px solid #2d2d3d'
   },
   preset: {
     padding: '8px 16px',
-    backgroundColor: '#f3f4f6',
-    border: '1px solid #e5e7eb',
+    backgroundColor: '#1f1f2e',
+    border: '1px solid #2d2d3d',
     borderRadius: '20px',
-    color: '#374151',
+    color: '#e5e7eb',
     fontSize: '13px',
     fontWeight: '500',
     cursor: 'pointer',
@@ -281,8 +281,8 @@ const styles = {
   },
   presetActive: {
     padding: '8px 16px',
-    backgroundColor: '#111',
-    border: '1px solid #111',
+    backgroundColor: '#7c3aed',
+    border: '1px solid #7c3aed',
     borderRadius: '20px',
     color: '#fff',
     fontSize: '13px',
@@ -320,16 +320,17 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     padding: '10px 16px',
-    backgroundColor: '#f9fafb',
-    border: '2px solid #e5e7eb',
+    backgroundColor: '#1f1f2e',
+    border: '2px solid #2d2d3d',
     borderRadius: '8px',
     cursor: 'pointer',
     transition: 'all 0.15s',
-    minWidth: '80px'
+    minWidth: '80px',
+    color: '#e5e7eb'
   },
   beatSelected: {
-    backgroundColor: '#111',
-    borderColor: '#111',
+    backgroundColor: '#7c3aed',
+    borderColor: '#7c3aed',
     color: '#fff'
   },
   beatNumber: {
@@ -345,8 +346,8 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '16px 20px',
-    borderTop: '1px solid #e5e7eb',
-    backgroundColor: '#f9fafb'
+    borderTop: '1px solid #2d2d3d',
+    backgroundColor: '#0f0f17'
   },
   beatCount: {
     fontSize: '13px',
@@ -358,10 +359,10 @@ const styles = {
   },
   cancelButton: {
     padding: '10px 20px',
-    backgroundColor: '#fff',
-    border: '1px solid #e5e7eb',
+    backgroundColor: 'transparent',
+    border: '1px solid #374151',
     borderRadius: '8px',
-    color: '#374151',
+    color: '#9ca3af',
     fontSize: '14px',
     fontWeight: '500',
     cursor: 'pointer'
@@ -371,7 +372,7 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     padding: '10px 20px',
-    backgroundColor: '#111',
+    backgroundColor: '#7c3aed',
     border: 'none',
     borderRadius: '8px',
     color: '#fff',

@@ -6,14 +6,15 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 
-// Firebase configuration (same as App.jsx)
+// Firebase configuration - uses environment variables for security
+// Create a .env.local file with these values for local development
 const firebaseConfig = {
-  apiKey: "AIzaSyDIw9xCnMVpDHW36vyxsNtwvmOfVlIHa0Y",
-  authDomain: "sticktomusic-c8b23.firebaseapp.com",
-  projectId: "sticktomusic-c8b23",
-  storageBucket: "sticktomusic-c8b23.firebasestorage.app",
-  messagingSenderId: "621559911733",
-  appId: "1:621559911733:web:4fe5066433967245ada87c"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "AIzaSyDIw9xCnMVpDHW36vyxsNtwvmOfVlIHa0Y",
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "sticktomusic-c8b23.firebaseapp.com",
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "sticktomusic-c8b23",
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || "sticktomusic-c8b23.firebasestorage.app",
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "621559911733",
+  appId: process.env.REACT_APP_FIREBASE_APP_ID || "1:621559911733:web:4fe5066433967245ada87c"
 };
 
 // Initialize Firebase (reuse if already initialized)

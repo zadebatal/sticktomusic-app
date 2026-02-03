@@ -1,3 +1,21 @@
+# Vercel
 .vercel
-.env*.local
-node_modules
+
+# Environment files (contain secrets!)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Dependencies
+node_modules/
+
+# Build
+/build
+
+# Logs
+*.log
+
+# OS
+.DS_Store
