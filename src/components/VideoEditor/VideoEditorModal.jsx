@@ -71,10 +71,11 @@ const VideoEditorModal = ({
   // Load audio and analyze beats
   useEffect(() => {
     if (selectedAudio?.url) {
-      // Analyze beats if we have the file
-      if (selectedAudio.file) {
-        analyzeAudio(selectedAudio.file);
-      }
+      // Analyze beats - use file if available, otherwise fetch from URL
+      const audioSource = selectedAudio.file || selectedAudio.url;
+      analyzeAudio(audioSource).catch(err => {
+        console.error('Beat analysis failed:', err);
+      });
 
       // Create audio element for playback
       if (audioRef.current) {

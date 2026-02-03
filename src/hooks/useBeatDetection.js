@@ -14,9 +14,10 @@ export const useBeatDetection = () => {
   const [error, setError] = useState(null);
 
   /**
-   * Analyze audio file for beats
+   * Analyze audio file or URL for beats
+   * @param {File|string} audioSource - File object or URL string
    */
-  const analyzeAudio = useCallback(async (audioFile) => {
+  const analyzeAudio = useCallback(async (audioSource) => {
     setIsAnalyzing(true);
     setError(null);
 
@@ -24,8 +25,20 @@ export const useBeatDetection = () => {
       // Create audio context
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-      // Read file as array buffer
-      const arrayBuffer = await audioFile.arrayBuffer();
+      // Get array buffer - handle both File objects and URLs
+      let arrayBuffer;
+      if (audioSource instanceof File || audioSource instanceof Blob) {
+        arrayBuffer = await audioSource.arrayBuffer();
+      } else if (typeof audioSource === 'string') {
+        // It's a URL - fetch the audio data
+        const response = await fetch(audioSource);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch audio: ${response.status}`);
+        }
+        arrayBuffer = await response.arrayBuffer();
+      } else {
+        throw new Error('Invalid audio source - must be File, Blob, or URL string');
+      }
 
       // Decode audio data
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
