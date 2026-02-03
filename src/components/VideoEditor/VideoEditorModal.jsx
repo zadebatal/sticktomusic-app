@@ -55,6 +55,10 @@ const VideoEditorModal = ({
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState(null);
 
+  // Video loading state
+  const [videoError, setVideoError] = useState(null);
+  const [videoLoading, setVideoLoading] = useState(false);
+
   // Auto-save state
   const [showRecoveryPrompt, setShowRecoveryPrompt] = useState(false);
   const [recoveryData, setRecoveryData] = useState(null);
@@ -77,21 +81,37 @@ const VideoEditorModal = ({
     return currentTime >= clip.startTime && currentTime < nextClip.startTime;
   }) || clips[0];
 
+  // Get audio trim boundaries (if trimmed) or full duration
+  const audioStartTime = selectedAudio?.startTime || 0;
+  const audioEndTime = selectedAudio?.endTime || selectedAudio?.duration || duration;
+  const trimmedDuration = audioEndTime - audioStartTime;
+
   // Load audio and analyze beats
   useEffect(() => {
-    if (selectedAudio?.url) {
-      // Analyze beats - use file if available, otherwise fetch from URL
-      const audioSource = selectedAudio.file || selectedAudio.url;
+    if (selectedAudio?.url || selectedAudio?.localUrl) {
+      // Analyze beats - use file if available, then localUrl, otherwise fetch from URL
+      // Priority: file (most reliable) > localUrl (no CORS) > url (may have CORS issues)
+      const audioSource = selectedAudio.file || selectedAudio.localUrl || selectedAudio.url;
       analyzeAudio(audioSource).catch(err => {
         console.error('Beat analysis failed:', err);
       });
 
-      // Create audio element for playback
+      // Create audio element for playback - prefer localUrl to avoid CORS
       if (audioRef.current) {
-        audioRef.current.src = selectedAudio.url;
+        audioRef.current.src = selectedAudio.localUrl || selectedAudio.url;
         audioRef.current.load();
         audioRef.current.onloadedmetadata = () => {
-          setDuration(audioRef.current.duration);
+          // Use trimmed duration if audio was trimmed, otherwise full duration
+          const start = selectedAudio.startTime || 0;
+          const end = selectedAudio.endTime || audioRef.current.duration;
+          const effectiveDuration = end - start;
+          setDuration(effectiveDuration);
+
+          // Set initial playback position to trim start
+          if (start > 0) {
+            audioRef.current.currentTime = start;
+          }
+          console.log(`Audio loaded: ${start.toFixed(1)}s - ${end.toFixed(1)}s (${effectiveDuration.toFixed(1)}s)`);
         };
         // Handle audio ended
         audioRef.current.onended = () => {
@@ -102,17 +122,30 @@ const VideoEditorModal = ({
     }
   }, [selectedAudio, analyzeAudio]);
 
-  // Handle play/pause
+  // Handle play/pause with trim boundary support
   useEffect(() => {
     if (!audioRef.current) return;
+
+    const startBoundary = selectedAudio?.startTime || 0;
+    const endBoundary = selectedAudio?.endTime || audioRef.current.duration || duration;
 
     if (isPlaying) {
       audioRef.current.play().catch(console.error);
 
-      // Update currentTime during playback
+      // Update currentTime during playback, respecting trim boundaries
       const updateTime = () => {
         if (audioRef.current) {
-          setCurrentTime(audioRef.current.currentTime);
+          const actualTime = audioRef.current.currentTime;
+
+          // Check if we've reached the end boundary
+          if (actualTime >= endBoundary) {
+            // Loop back to start boundary
+            audioRef.current.currentTime = startBoundary;
+            setCurrentTime(0); // Reset relative time to 0
+          } else {
+            // Set relative time (offset from start boundary)
+            setCurrentTime(actualTime - startBoundary);
+          }
         }
         if (isPlaying) {
           animationRef.current = requestAnimationFrame(updateTime);
@@ -131,7 +164,7 @@ const VideoEditorModal = ({
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [isPlaying]);
+  }, [isPlaying, selectedAudio, duration]);
 
   // Sync video with audio time
   useEffect(() => {
@@ -173,10 +206,12 @@ const VideoEditorModal = ({
     const clampedTime = Math.max(0, Math.min(time, duration));
     setCurrentTime(clampedTime);
     if (audioRef.current) {
-      audioRef.current.currentTime = clampedTime;
+      // Add audio start boundary offset for trimmed audio
+      const startBoundary = selectedAudio?.startTime || 0;
+      audioRef.current.currentTime = clampedTime + startBoundary;
     }
     // Video sync will happen via the useEffect
-  }, [duration]);
+  }, [duration, selectedAudio]);
 
   const handleToggleMute = useCallback(() => {
     setIsMuted(prev => {
@@ -487,7 +522,7 @@ const VideoEditorModal = ({
       return;
     }
 
-    if (!selectedAudio?.url) {
+    if (!selectedAudio?.url && !selectedAudio?.localUrl && !selectedAudio?.file) {
       setTranscriptionError('Please select an audio file first');
       return;
     }
@@ -498,21 +533,30 @@ const VideoEditorModal = ({
     try {
       let audioUrl;
 
-      // Check if URL is publicly accessible (http/https) vs local blob
-      const isPublicUrl = selectedAudio.url.startsWith('http://') || selectedAudio.url.startsWith('https://');
+      // For AI transcription, we need to upload the audio to AssemblyAI directly
+      // Firebase URLs often have CORS issues that prevent AssemblyAI from downloading
+      // Priority: file (most reliable) > localUrl (blob) > url (Firebase - may fail)
 
-      if (isPublicUrl) {
-        // Use URL directly - AssemblyAI can fetch it server-side (avoids CORS)
-        audioUrl = selectedAudio.url;
-      } else {
-        // Local blob URL - need to upload first
+      const hasLocalSource = selectedAudio.file || selectedAudio.localUrl;
+
+      if (hasLocalSource) {
+        // Upload to AssemblyAI directly for most reliable transcription
+        console.log('AI Transcribe: Uploading audio to AssemblyAI directly (avoids Firebase CORS)...');
+
+        let audioBlob;
+        if (selectedAudio.file) {
+          audioBlob = selectedAudio.file;
+        } else if (selectedAudio.localUrl) {
+          audioBlob = await fetch(selectedAudio.localUrl).then(r => r.blob());
+        }
+
         const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
           method: 'POST',
           headers: {
             'Authorization': savedKey,
             'Content-Type': 'application/octet-stream'
           },
-          body: await fetch(selectedAudio.url).then(r => r.blob())
+          body: audioBlob
         });
 
         if (!uploadResponse.ok) {
@@ -521,6 +565,12 @@ const VideoEditorModal = ({
 
         const uploadResult = await uploadResponse.json();
         audioUrl = uploadResult.upload_url;
+        console.log('AI Transcribe: Audio uploaded to AssemblyAI successfully');
+      } else {
+        // No local source - try Firebase URL directly (may fail due to CORS)
+        // AssemblyAI will try to download from server-side
+        console.log('AI Transcribe: Using Firebase URL directly (note: may fail if CORS not configured)');
+        audioUrl = selectedAudio.url;
       }
 
       // Request transcription with word-level timestamps
@@ -648,16 +698,50 @@ const VideoEditorModal = ({
                 <audio ref={audioRef} style={{ display: 'none' }} />
 
                 {/* Video preview - shows current clip or fallback */}
-                {(currentClip?.url || category?.videos?.[0]?.url) ? (
-                  <video
-                    ref={videoRef}
-                    src={currentClip?.url || category?.videos?.[0]?.url}
-                    style={styles.previewVideo}
-                    muted
-                    loop
-                    playsInline
-                    autoPlay={isPlaying}
-                  />
+                {(currentClip?.url || currentClip?.localUrl || category?.videos?.[0]?.url || category?.videos?.[0]?.localUrl) ? (
+                  <>
+                    <video
+                      ref={videoRef}
+                      src={currentClip?.localUrl || currentClip?.url || category?.videos?.[0]?.localUrl || category?.videos?.[0]?.url}
+                      style={{
+                        ...styles.previewVideo,
+                        display: videoError ? 'none' : 'block'
+                      }}
+                      muted
+                      loop
+                      playsInline
+                      autoPlay={isPlaying}
+                      crossOrigin="anonymous"
+                      onLoadStart={() => { setVideoLoading(true); setVideoError(null); }}
+                      onCanPlay={() => setVideoLoading(false)}
+                      onError={(e) => {
+                        console.error('Video load error:', e);
+                        setVideoError('Unable to load video. This may be due to CORS restrictions.');
+                        setVideoLoading(false);
+                      }}
+                    />
+                    {videoLoading && !videoError && (
+                      <div style={styles.previewPlaceholder}>
+                        <div style={{ ...styles.spinner, width: 32, height: 32 }} />
+                        <p style={{ color: '#9ca3af', marginTop: 8, fontSize: 12 }}>Loading video...</p>
+                      </div>
+                    )}
+                    {videoError && (
+                      <div style={styles.previewPlaceholder}>
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.5">
+                          <circle cx="12" cy="12" r="10"/>
+                          <line x1="12" y1="8" x2="12" y2="12"/>
+                          <line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        <p style={{ color: '#ef4444', marginTop: 8, fontSize: 12, textAlign: 'center', maxWidth: '90%' }}>
+                          {videoError}
+                        </p>
+                        <p style={{ color: '#6b7280', fontSize: 10, textAlign: 'center', maxWidth: '90%', marginTop: 4 }}>
+                          Try re-uploading the video or check Firebase CORS settings.
+                        </p>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div style={styles.previewPlaceholder}>
                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
@@ -1407,11 +1491,15 @@ const styles = {
     objectFit: 'cover'
   },
   previewPlaceholder: {
+    position: 'absolute',
+    inset: 0,
     width: '100%',
     height: '100%',
     display: 'flex',
+    flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    backgroundColor: '#0a0a0f'
   },
   textOverlayPreview: {
     position: 'absolute',

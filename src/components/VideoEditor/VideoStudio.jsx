@@ -285,13 +285,15 @@ const VideoStudio = ({ onClose, artists = [] }) => {
           console.warn('Could not generate thumbnail:', file.name, e.message);
         }
 
-        // Clean up blob URL
-        URL.revokeObjectURL(localBlobUrl);
+        // Keep blob URL for current session playback (avoids CORS issues)
+        // Note: Don't revoke - we need it for video preview in current session
+        // URL.revokeObjectURL(localBlobUrl); // Commented out to keep for playback
 
         uploadedVideos.push({
           id: `clip_${Date.now()}_${i}`,
           name: file.name,
           url,
+          localUrl: localBlobUrl, // Local blob URL for current session (no CORS issues)
           storagePath: path,
           duration,
           thumbnail,
@@ -359,13 +361,25 @@ const VideoStudio = ({ onClose, artists = [] }) => {
           setUploadProgress(prev => ({ ...prev, progress }));
         });
 
-        // Get duration from the uploaded file
-        const duration = await getMediaDuration(url, 'audio');
+        // Create local blob URL for reliable metadata access and beat detection (avoids CORS)
+        const localBlobUrl = URL.createObjectURL(file);
+
+        // Get duration from local blob (more reliable than Firebase URL due to CORS)
+        let duration = 0;
+        try {
+          duration = await getMediaDuration(localBlobUrl, 'audio');
+        } catch (e) {
+          console.warn('Could not get audio duration:', file.name, e.message);
+          // Try from Firebase URL as fallback
+          duration = await getMediaDuration(url, 'audio').catch(() => 0);
+        }
 
         uploadedAudio.push({
           id: `audio_${Date.now()}_${i}`,
           name: file.name,
           url,
+          localUrl: localBlobUrl, // Local blob URL for beat detection and playback (no CORS)
+          file: file, // Keep original file for beat detection
           storagePath: path,
           duration,
           createdAt: new Date().toISOString()
