@@ -17,6 +17,7 @@ const AestheticHome = ({
   onUploadVideos,
   onUploadAudio,
   onSaveAudioClip, // New: save trimmed clip to library
+  onEditAudio, // Edit/re-trim existing audio
   onDeleteBankVideo,
   onDeleteBankAudio,
   onRenameBankVideo,
@@ -27,6 +28,7 @@ const AestheticHome = ({
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryDesc, setNewCategoryDesc] = useState('');
   const [pendingAudio, setPendingAudio] = useState(null); // Audio waiting for clip selection
+  const [editingAudio, setEditingAudio] = useState(null); // Existing audio being edited
   const videoInputRef = useRef(null);
   const audioInputRef = useRef(null);
 
@@ -104,6 +106,28 @@ const AestheticHome = ({
         clipDuration: clipData.clipDuration
       });
     }
+  };
+
+  // Handle clicking edit on existing audio
+  const handleEditAudio = (audio) => {
+    setEditingAudio(audio);
+  };
+
+  // Handle saving edited audio trim
+  const handleEditSave = (clipData) => {
+    if (editingAudio && onEditAudio) {
+      onEditAudio(editingAudio.id, {
+        startTime: clipData.startTime,
+        endTime: clipData.endTime,
+        duration: clipData.duration || (clipData.endTime - clipData.startTime)
+      });
+    }
+    setEditingAudio(null);
+  };
+
+  // Handle cancel editing
+  const handleEditCancel = () => {
+    setEditingAudio(null);
   };
 
   return (
@@ -341,6 +365,7 @@ const AestheticHome = ({
                       <AudioItem
                         key={audio.id}
                         audio={audio}
+                        onEdit={() => handleEditAudio(audio)}
                         onDelete={() => setDeleteAudioConfirm({
                           isOpen: true,
                           audioId: audio.id,
@@ -415,7 +440,7 @@ const AestheticHome = ({
         )}
       </main>
 
-      {/* Audio Clip Selector Modal */}
+      {/* Audio Clip Selector Modal - New Upload */}
       {pendingAudio && (
         <AudioClipSelector
           audioFile={pendingAudio.file}
@@ -424,6 +449,18 @@ const AestheticHome = ({
           onSave={handleClipSave}
           onSaveClip={onSaveAudioClip ? handleSaveClipToLibrary : null}
           onCancel={handleClipCancel}
+        />
+      )}
+
+      {/* Audio Clip Selector Modal - Edit Existing */}
+      {editingAudio && (
+        <AudioClipSelector
+          audioUrl={editingAudio.url}
+          audioName={editingAudio.name}
+          initialStart={editingAudio.startTime || 0}
+          initialEnd={editingAudio.endTime || editingAudio.duration}
+          onSave={handleEditSave}
+          onCancel={handleEditCancel}
         />
       )}
 
@@ -569,9 +606,9 @@ const VideoCard = ({ video, onDelete, onRename }) => {
 };
 
 /**
- * AudioItem - Individual audio item with hover actions (rename, delete)
+ * AudioItem - Individual audio item with hover actions (edit, rename, delete)
  */
-const AudioItem = ({ audio, onDelete, onRename }) => {
+const AudioItem = ({ audio, onEdit, onDelete, onRename }) => {
   const [showActions, setShowActions] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(audio.name || '');
@@ -640,6 +677,18 @@ const AudioItem = ({ audio, onDelete, onRename }) => {
       </div>
       {showActions && !isEditing && (
         <div style={styles.audioActionBtns}>
+          {onEdit && (
+            <button
+              style={styles.editAudioBtn}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
+              title="Edit/Trim audio"
+            >
+              ✂️
+            </button>
+          )}
           <button
             style={styles.renameAudioBtn}
             onClick={(e) => {
@@ -1153,6 +1202,20 @@ const styles = {
   audioActionBtns: {
     display: 'flex',
     gap: '4px',
+    flexShrink: 0
+  },
+  editAudioBtn: {
+    width: '24px',
+    height: '24px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#7c3aed',
+    border: 'none',
+    borderRadius: '4px',
+    color: '#fff',
+    cursor: 'pointer',
+    fontSize: '12px',
     flexShrink: 0
   },
   renameAudioBtn: {

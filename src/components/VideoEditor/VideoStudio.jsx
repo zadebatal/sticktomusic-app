@@ -538,6 +538,35 @@ const VideoStudio = ({ onClose, artists = [] }) => {
     } : prev);
   }, [selectedCategory]);
 
+  // Edit/re-trim an existing audio track
+  const handleEditAudio = useCallback((audioId, trimData) => {
+    if (!selectedCategory) return;
+
+    setCategories(prev => prev.map(cat =>
+      cat.id === selectedCategory.id
+        ? {
+            ...cat,
+            audio: cat.audio.map(a => a.id === audioId ? {
+              ...a,
+              startTime: trimData.startTime,
+              endTime: trimData.endTime,
+              duration: trimData.duration
+            } : a)
+          }
+        : cat
+    ));
+
+    setSelectedCategory(prev => prev ? {
+      ...prev,
+      audio: prev.audio.map(a => a.id === audioId ? {
+        ...a,
+        startTime: trimData.startTime,
+        endTime: trimData.endTime,
+        duration: trimData.duration
+      } : a)
+    } : prev);
+  }, [selectedCategory]);
+
   const handleApproveVideo = useCallback((videoId) => {
     if (!selectedCategory) return;
 
@@ -649,6 +678,7 @@ const VideoStudio = ({ onClose, artists = [] }) => {
             onUploadVideos={handleUploadVideos}
             onUploadAudio={handleUploadAudio}
             onSaveAudioClip={handleSaveAudioClip}
+            onEditAudio={handleEditAudio}
             onDeleteBankVideo={handleDeleteBankVideo}
             onDeleteBankAudio={handleDeleteBankAudio}
             onRenameBankVideo={handleRenameBankVideo}
