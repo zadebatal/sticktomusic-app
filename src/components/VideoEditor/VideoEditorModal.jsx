@@ -183,6 +183,12 @@ const VideoEditorModal = ({
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // ESC to close modal
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
       // Space bar to play/pause
       if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
         e.preventDefault();
@@ -206,7 +212,16 @@ const VideoEditorModal = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handlePlayPause, handleSeek, handleToggleMute, currentTime, duration]);
+  }, [handlePlayPause, handleSeek, handleToggleMute, currentTime, duration, onClose]);
+
+  // Prevent background scroll when modal is open (P0-UI-04)
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
 
   // Get current visible text
   const currentText = words.find(w =>
@@ -488,12 +503,23 @@ const VideoEditorModal = ({
   };
 
   return (
-    <div style={styles.overlay}>
-      <div style={styles.modal}>
+    <div
+      style={styles.overlay}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="video-editor-title"
+    >
+      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div style={styles.header}>
-          <h2 style={styles.title}>Preview video edit</h2>
-          <button style={styles.closeButton} onClick={onClose}>
+          <h2 id="video-editor-title" style={styles.title}>Preview video edit</h2>
+          <button
+            style={styles.closeButton}
+            onClick={onClose}
+            aria-label="Close editor"
+            title="Close (ESC)"
+          >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18"/>
               <line x1="6" y1="6" x2="18" y2="18"/>
@@ -820,9 +846,11 @@ const VideoEditorModal = ({
                         <button
                           style={{
                             ...styles.editLyricsButton,
-                            background: 'linear-gradient(135deg, #8B5CF6, #6D28D9)',
-                            color: '#fff',
-                            border: 'none'
+                            background: (!selectedAudio || isTranscribing) ? '#374151' : 'linear-gradient(135deg, #8B5CF6, #6D28D9)',
+                            color: (!selectedAudio || isTranscribing) ? '#6b7280' : '#fff',
+                            border: 'none',
+                            cursor: (!selectedAudio || isTranscribing) ? 'not-allowed' : 'pointer',
+                            opacity: (!selectedAudio || isTranscribing) ? 0.6 : 1
                           }}
                           onClick={handleAITranscribe}
                           disabled={isTranscribing || !selectedAudio}
@@ -843,6 +871,11 @@ const VideoEditorModal = ({
                           🎚️ Word Timeline
                         </button>
                       </div>
+                      {!selectedAudio && !isTranscribing && (
+                        <p style={{ color: '#6b7280', fontSize: '11px', marginTop: '6px' }}>
+                          Select audio above to enable AI transcription
+                        </p>
+                      )}
                       {transcriptionError && (
                         <p style={{ color: '#EF4444', fontSize: '12px', marginTop: '8px' }}>
                           {transcriptionError}

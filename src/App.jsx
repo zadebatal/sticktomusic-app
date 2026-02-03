@@ -1,5 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 
+// Shared UI Components
+import {
+  LoadingSpinner,
+  LoadingOverlay,
+  ErrorPanel,
+  EmptyState as SharedEmptyState,
+  ConfirmDialog,
+  StatusPill,
+  PageHeader,
+  Button as UIButton,
+  HelperText
+} from './components/ui';
+
 // Video Studio - Flowstage-inspired workflow
 import { VideoStudio } from './components/VideoEditor';
 
@@ -485,6 +498,41 @@ const StickToMusic = () => {
       </button>
     </div>
   );
+
+  // Confirm Dialog state (P0-UI-05: Destructive Action Confirmation)
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Confirm',
+    confirmVariant: 'primary',
+    onConfirm: null,
+    isLoading: false
+  });
+
+  const showConfirmDialog = ({ title, message, confirmLabel, confirmVariant = 'destructive', onConfirm }) => {
+    setConfirmDialog({
+      isOpen: true,
+      title,
+      message,
+      confirmLabel,
+      confirmVariant,
+      onConfirm,
+      isLoading: false
+    });
+  };
+
+  const closeConfirmDialog = () => {
+    setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+  };
+
+  const handleConfirmDialogConfirm = async () => {
+    if (confirmDialog.onConfirm) {
+      setConfirmDialog(prev => ({ ...prev, isLoading: true }));
+      await confirmDialog.onConfirm();
+      setConfirmDialog(prev => ({ ...prev, isOpen: false, isLoading: false }));
+    }
+  };
 
   // Onboarding state
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -2415,8 +2463,22 @@ const StickToMusic = () => {
 
           {/* Artists Tab */}
           {operatorTab === 'artists' && (
-            <div className="space-y-4">
-              {operatorArtists.map((artist) => (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h1 className="text-2xl font-bold">Artists</h1>
+                  <p className="text-sm text-zinc-500">{operatorArtists.length} active artist{operatorArtists.length !== 1 ? 's' : ''}</p>
+                </div>
+              </div>
+              {operatorArtists.length === 0 ? (
+                <SharedEmptyState
+                  icon="🎵"
+                  title="No artists yet"
+                  description="Artists will appear here once they're onboarded to the platform."
+                  actionLabel="Review Applications"
+                  onAction={() => setOperatorTab('applications')}
+                />
+              ) : operatorArtists.map((artist) => (
                 <div key={artist.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
                   <div className="flex flex-col md:flex-row justify-between gap-4">
                     <div className="flex items-center gap-4">
@@ -2469,6 +2531,12 @@ const StickToMusic = () => {
 
             return (
               <div>
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h1 className="text-2xl font-bold">Pages</h1>
+                    <p className="text-sm text-zinc-500">{filteredPages.length} connected page{filteredPages.length !== 1 ? 's' : ''}</p>
+                  </div>
+                </div>
                 <div className="flex gap-4 mb-6">
                   <div>
                     <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Artist</label>
@@ -2490,7 +2558,17 @@ const StickToMusic = () => {
                 </div>
 
                 <div className="space-y-6">
-                  {artistsWithPages.map(artist => {
+                  {filteredPages.length === 0 ? (
+                    <SharedEmptyState
+                      icon="📱"
+                      title="No pages found"
+                      description={selectedArtist !== 'all' || selectedPlatform !== 'all'
+                        ? "No pages match your current filters. Try adjusting your selection."
+                        : "No social pages have been connected yet."}
+                      actionLabel={selectedArtist !== 'all' || selectedPlatform !== 'all' ? "Clear Filters" : null}
+                      onAction={selectedArtist !== 'all' || selectedPlatform !== 'all' ? () => { setSelectedArtist('all'); setSelectedPlatform('all'); } : null}
+                    />
+                  ) : artistsWithPages.map(artist => {
                     const artistPages = filteredPages.filter(p => p.artist === artist.name);
                     if (artistPages.length === 0) return null;
                     // Group by handle
@@ -2820,6 +2898,29 @@ const StickToMusic = () => {
 
             return (
               <div>
+                {/* Page Header */}
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h1 className="text-2xl font-bold">Schedule</h1>
+                    <p className="text-sm text-zinc-500">{latePosts.length} scheduled post{latePosts.length !== 1 ? 's' : ''}</p>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleSync}
+                      disabled={syncing}
+                      className="px-4 py-2 bg-zinc-800 text-white rounded-lg text-sm font-medium hover:bg-zinc-700 transition disabled:opacity-50"
+                    >
+                      {syncing ? 'Syncing...' : '🔄 Sync from Late'}
+                    </button>
+                    <button
+                      onClick={() => setShowScheduleModal(true)}
+                      className="px-4 py-2 bg-white text-black rounded-lg text-sm font-medium hover:bg-zinc-200 transition"
+                    >
+                      + Batch Schedule
+                    </button>
+                  </div>
+                </div>
+
                 {/* Batch Schedule Modal */}
                 {showScheduleModal && (
                   <div
@@ -2986,24 +3087,34 @@ const StickToMusic = () => {
                             </div>
                           </div>
 
-                          <div className="p-6 border-t border-zinc-800 flex justify-between items-center shrink-0">
-                            <p className="text-sm text-zinc-500">
-                              {artistVideosList.length + adjacentVideosList.length} of {totalSlots} videos provided
-                            </p>
-                            <div className="flex gap-3">
-                              <button onClick={() => setShowScheduleModal(false)} className="px-4 py-2 text-zinc-400 hover:text-white transition">Cancel</button>
-                              <button
-                                onClick={handleGeneratePreview}
-                                disabled={
-                                  !batchForm.weekStart ||
-                                  filteredAccounts.length === 0 ||
-                                  (artistVideosList.length + adjacentVideosList.length) === 0
-                                }
-                                className="px-6 py-2 bg-white text-black rounded-lg font-medium hover:bg-zinc-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                Preview Schedule →
-                              </button>
+                          <div className="p-6 border-t border-zinc-800 shrink-0">
+                            <div className="flex justify-between items-center">
+                              <p className="text-sm text-zinc-500">
+                                {artistVideosList.length + adjacentVideosList.length} of {totalSlots} videos provided
+                              </p>
+                              <div className="flex gap-3">
+                                <button onClick={() => setShowScheduleModal(false)} className="px-4 py-2 text-zinc-400 hover:text-white transition">Cancel</button>
+                                <button
+                                  onClick={handleGeneratePreview}
+                                  disabled={
+                                    !batchForm.weekStart ||
+                                    filteredAccounts.length === 0 ||
+                                    (artistVideosList.length + adjacentVideosList.length) === 0
+                                  }
+                                  className="px-6 py-2 bg-white text-black rounded-lg font-medium hover:bg-zinc-200 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Preview Schedule →
+                                </button>
+                              </div>
                             </div>
+                            {/* Helper text for disabled state */}
+                            {(!batchForm.weekStart || filteredAccounts.length === 0 || (artistVideosList.length + adjacentVideosList.length) === 0) && (
+                              <p className="text-xs text-zinc-500 mt-2 text-right">
+                                {!batchForm.weekStart ? 'Select a start date' :
+                                 filteredAccounts.length === 0 ? 'No accounts for selected category' :
+                                 'Add video URLs above'}
+                              </p>
+                            )}
                           </div>
                         </>
                       ) : (
@@ -3767,7 +3878,7 @@ const StickToMusic = () => {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-xl font-bold">Campaigns</h2>
+                  <h1 className="text-2xl font-bold">Campaigns</h1>
                   <p className="text-sm text-zinc-500">Track budgets, timelines, and goals for each campaign</p>
                 </div>
                 <button
@@ -3800,7 +3911,15 @@ const StickToMusic = () => {
 
               {/* Campaign Cards */}
               <div className="grid gap-4">
-                {campaigns.map(campaign => {
+                {campaigns.length === 0 ? (
+                  <SharedEmptyState
+                    icon="🎯"
+                    title="No campaigns yet"
+                    description="Create your first campaign to start tracking budgets, timelines, and performance goals."
+                    actionLabel="Create Campaign"
+                    onAction={() => setShowCampaignModal(true)}
+                  />
+                ) : campaigns.map(campaign => {
                   const progress = campaign.budget > 0 ? (campaign.spent / campaign.budget) * 100 : 0;
                   const viewProgress = campaign.goals.views > 0 ? (campaign.achieved.views / campaign.goals.views) * 100 : 0;
                   const followerProgress = campaign.goals.followers > 0 ? (campaign.achieved.followers / campaign.goals.followers) * 100 : 0;
@@ -4014,7 +4133,7 @@ const StickToMusic = () => {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="text-xl font-bold">Content Banks</h2>
+                  <h1 className="text-2xl font-bold">Content Banks</h1>
                   <p className="text-sm text-zinc-500">Hashtags and captions per aesthetic category</p>
                 </div>
               </div>
@@ -4238,7 +4357,7 @@ const StickToMusic = () => {
             <div>
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <h2 className="text-xl font-bold">Applications</h2>
+                  <h1 className="text-2xl font-bold">Applications</h1>
                   <p className="text-sm text-zinc-500">{applications.filter(a => a.status === 'pending').length} pending review</p>
                 </div>
                 <div className="flex gap-2">
@@ -4261,15 +4380,29 @@ const StickToMusic = () => {
               </div>
 
               {applications.length === 0 ? (
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-12 text-center">
-                  <p className="text-zinc-500 text-lg mb-2">No applications yet</p>
-                  <p className="text-zinc-600 text-sm">Applications will appear here when artists submit the intake form</p>
-                </div>
-              ) : (
+                <SharedEmptyState
+                  icon="📋"
+                  title="No applications yet"
+                  description="Applications will appear here when artists submit the intake form."
+                  actionLabel="Share Intake Form"
+                  onAction={() => {
+                    navigator.clipboard.writeText(window.location.origin + '?page=intake');
+                    showToast('Intake form link copied!', 'success');
+                  }}
+                />
+              ) : (() => {
+                const filteredApps = applications.filter(app => !applicationFilter || applicationFilter === 'all' || app.status === applicationFilter);
+                return filteredApps.length === 0 ? (
+                  <SharedEmptyState
+                    icon="🔍"
+                    title={`No ${applicationFilter} applications`}
+                    description="Try changing your filter to see more applications."
+                    actionLabel="Show All"
+                    onAction={() => setApplicationFilter('all')}
+                  />
+                ) : (
                 <div className="space-y-4">
-                  {applications
-                    .filter(app => !applicationFilter || applicationFilter === 'all' || app.status === applicationFilter)
-                    .map((app) => (
+                  {filteredApps.map((app) => (
                     <div key={app.id} className={`bg-zinc-900 border rounded-xl overflow-hidden ${
                       app.status === 'approved' ? 'border-green-500/30' :
                       app.status === 'declined' ? 'border-red-500/30' : 'border-zinc-800'
@@ -4409,7 +4542,8 @@ const StickToMusic = () => {
                     </div>
                   ))}
                 </div>
-              )}
+                );
+              })()}
             </div>
           )}
 
@@ -4417,7 +4551,7 @@ const StickToMusic = () => {
           {operatorTab === 'settings' && (
             <div className="max-w-2xl">
               <div className="mb-6">
-                <h2 className="text-xl font-bold">Settings</h2>
+                <h1 className="text-2xl font-bold">Settings</h1>
                 <p className="text-sm text-zinc-500">Manage your account and preferences</p>
               </div>
 
@@ -5469,15 +5603,39 @@ const StickToMusic = () => {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation Modal - P0 Compliant */}
       {deleteConfirmModal.show && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4" onClick={() => setDeleteConfirmModal({ show: false, postId: null, caption: '' })}>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="p-6">
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4"
+          onClick={() => setDeleteConfirmModal({ show: false, postId: null, caption: '' })}
+          onKeyDown={(e) => e.key === 'Escape' && setDeleteConfirmModal({ show: false, postId: null, caption: '' })}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-modal-title"
+        >
+          <div
+            className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-md shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <div className="flex justify-end p-2">
+              <button
+                onClick={() => setDeleteConfirmModal({ show: false, postId: null, caption: '' })}
+                className="p-2 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition"
+                aria-label="Close"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-6 pb-6">
               <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mb-4 mx-auto">
-                <span className="text-red-400 text-2xl">🗑</span>
+                <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
               </div>
-              <h2 className="text-xl font-bold text-center mb-2">Delete Post?</h2>
+              <h2 id="delete-modal-title" className="text-xl font-bold text-center mb-2">Delete Post?</h2>
               <p className="text-zinc-400 text-center text-sm mb-2">This will remove the post from Late's schedule.</p>
               {deleteConfirmModal.caption && (
                 <p className="text-zinc-500 text-center text-xs mb-4 truncate">
@@ -5489,20 +5647,33 @@ const StickToMusic = () => {
                 <button
                   onClick={() => setDeleteConfirmModal({ show: false, postId: null, caption: '' })}
                   className="flex-1 py-3 bg-zinc-800 text-white rounded-xl font-medium hover:bg-zinc-700 transition"
+                  autoFocus
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => handleDeletePost(deleteConfirmModal.postId)}
-                  className="flex-1 py-3 bg-red-500 text-white rounded-xl font-medium hover:bg-red-600 transition"
+                  className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-medium transition"
                 >
-                  Delete
+                  Delete Post
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Generic Confirm Dialog - for other destructive actions */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        confirmVariant={confirmDialog.confirmVariant}
+        onConfirm={handleConfirmDialogConfirm}
+        onCancel={closeConfirmDialog}
+        isLoading={confirmDialog.isLoading}
+      />
 
       {/* Toast Notifications */}
       <ToastContainer />
