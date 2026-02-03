@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import AestheticHome from './AestheticHome';
 import ContentLibrary from './ContentLibrary';
 import VideoEditorModal from './VideoEditorModal';
-import { uploadFile, getMediaDuration, generateThumbnail } from '../../services/firebaseStorage';
+import { uploadFile, deleteFile, getMediaDuration, generateThumbnail } from '../../services/firebaseStorage';
 import { saveCategories, loadCategories, savePresets, loadPresets } from '../../services/storageService';
 
 /**
@@ -373,8 +373,20 @@ const VideoStudio = ({ onClose, artists = [] }) => {
     setUploadProgress(null);
   }, [selectedCategory]);
 
-  const handleDeleteVideo = useCallback((videoId) => {
+  const handleDeleteVideo = useCallback(async (videoId) => {
     if (!selectedCategory) return;
+
+    // Find the video to get its storage path
+    const video = selectedCategory.createdVideos.find(v => v.id === videoId);
+
+    // Delete from Firebase Storage if there's a storage path
+    if (video?.storagePath) {
+      await deleteFile(video.storagePath);
+    }
+    // Also try to delete thumbnail if it has a storage path
+    if (video?.thumbnailPath) {
+      await deleteFile(video.thumbnailPath);
+    }
 
     setCategories(prev => prev.map(cat =>
       cat.id === selectedCategory.id
@@ -385,6 +397,56 @@ const VideoStudio = ({ onClose, artists = [] }) => {
     setSelectedCategory(prev => prev ? {
       ...prev,
       createdVideos: prev.createdVideos.filter(v => v.id !== videoId)
+    } : prev);
+  }, [selectedCategory]);
+
+  // Delete a video clip from the bank (source videos)
+  const handleDeleteBankVideo = useCallback(async (videoId) => {
+    if (!selectedCategory) return;
+
+    // Find the video to get its storage path
+    const video = selectedCategory.videos.find(v => v.id === videoId);
+
+    // Delete from Firebase Storage if there's a storage path
+    if (video?.storagePath) {
+      const result = await deleteFile(video.storagePath);
+      console.log('Deleted video from storage:', result);
+    }
+
+    setCategories(prev => prev.map(cat =>
+      cat.id === selectedCategory.id
+        ? { ...cat, videos: cat.videos.filter(v => v.id !== videoId) }
+        : cat
+    ));
+
+    setSelectedCategory(prev => prev ? {
+      ...prev,
+      videos: prev.videos.filter(v => v.id !== videoId)
+    } : prev);
+  }, [selectedCategory]);
+
+  // Delete an audio track from the bank
+  const handleDeleteBankAudio = useCallback(async (audioId) => {
+    if (!selectedCategory) return;
+
+    // Find the audio to get its storage path
+    const audio = selectedCategory.audio.find(a => a.id === audioId);
+
+    // Delete from Firebase Storage if there's a storage path
+    if (audio?.storagePath) {
+      const result = await deleteFile(audio.storagePath);
+      console.log('Deleted audio from storage:', result);
+    }
+
+    setCategories(prev => prev.map(cat =>
+      cat.id === selectedCategory.id
+        ? { ...cat, audio: cat.audio.filter(a => a.id !== audioId) }
+        : cat
+    ));
+
+    setSelectedCategory(prev => prev ? {
+      ...prev,
+      audio: prev.audio.filter(a => a.id !== audioId)
     } : prev);
   }, [selectedCategory]);
 
@@ -499,6 +561,8 @@ const VideoStudio = ({ onClose, artists = [] }) => {
             onUploadVideos={handleUploadVideos}
             onUploadAudio={handleUploadAudio}
             onSaveAudioClip={handleSaveAudioClip}
+            onDeleteBankVideo={handleDeleteBankVideo}
+            onDeleteBankAudio={handleDeleteBankAudio}
             onCreateContent={handleCreateContent}
           />
         )}

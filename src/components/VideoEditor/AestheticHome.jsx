@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import AudioClipSelector from './AudioClipSelector';
+import { ConfirmDialog } from '../ui';
 
 /**
  * AestheticHome - Landing page showing categories and their assets
@@ -16,6 +17,8 @@ const AestheticHome = ({
   onUploadVideos,
   onUploadAudio,
   onSaveAudioClip, // New: save trimmed clip to library
+  onDeleteBankVideo,
+  onDeleteBankAudio,
   onCreateContent
 }) => {
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
@@ -24,6 +27,10 @@ const AestheticHome = ({
   const [pendingAudio, setPendingAudio] = useState(null); // Audio waiting for clip selection
   const videoInputRef = useRef(null);
   const audioInputRef = useRef(null);
+
+  // Delete confirmation dialogs
+  const [deleteVideoConfirm, setDeleteVideoConfirm] = useState({ isOpen: false, videoId: null, videoName: '' });
+  const [deleteAudioConfirm, setDeleteAudioConfirm] = useState({ isOpen: false, audioId: null, audioName: '' });
 
   const handleCreateCategory = () => {
     if (newCategoryName.trim()) {
@@ -269,31 +276,15 @@ const AestheticHome = ({
                     </div>
                   ) : (
                     selectedCategory.videos.map(video => (
-                      <div key={video.id} style={styles.videoCard}>
-                        <div style={styles.videoThumb}>
-                          {video.thumbnail ? (
-                            <img src={video.thumbnail} alt="" style={styles.videoThumbImg} />
-                          ) : (
-                            <video
-                              src={video.url}
-                              style={styles.videoThumbVideo}
-                              muted
-                              playsInline
-                              onMouseEnter={(e) => {
-                                const playPromise = e.target.play();
-                                if (playPromise) playPromise.catch(() => {});
-                              }}
-                              onMouseLeave={(e) => {
-                                if (!e.target.paused) e.target.pause();
-                                e.target.currentTime = 0;
-                              }}
-                            />
-                          )}
-                        </div>
-                        <span style={styles.videoDuration}>
-                          {video.duration ? `${Math.floor(video.duration / 60)}:${String(Math.floor(video.duration % 60)).padStart(2, '0')}` : '0:00'}
-                        </span>
-                      </div>
+                      <VideoCard
+                        key={video.id}
+                        video={video}
+                        onDelete={() => setDeleteVideoConfirm({
+                          isOpen: true,
+                          videoId: video.id,
+                          videoName: video.name || 'this video'
+                        })}
+                      />
                     ))
                   )}
                 </div>
@@ -342,28 +333,15 @@ const AestheticHome = ({
                     </div>
                   ) : (
                     selectedCategory.audio.map(audio => (
-                      <div key={audio.id} style={{
-                        ...styles.audioItem,
-                        ...(audio.isClip ? styles.audioItemClip : {})
-                      }}>
-                        {audio.isClip ? (
-                          <span style={styles.clipIcon}>✂️</span>
-                        ) : (
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-                            <path d="M15.54 8.46a5 5 0 010 7.07"/>
-                          </svg>
-                        )}
-                        <div style={styles.audioInfo}>
-                          <span style={styles.audioName}>
-                            {audio.name}
-                            {audio.isClip && <span style={styles.clipBadge}>Saved Clip</span>}
-                          </span>
-                          <span style={styles.audioDuration}>
-                            {audio.duration ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}` : '--:--'}
-                          </span>
-                        </div>
-                      </div>
+                      <AudioItem
+                        key={audio.id}
+                        audio={audio}
+                        onDelete={() => setDeleteAudioConfirm({
+                          isOpen: true,
+                          audioId: audio.id,
+                          audioName: audio.name || 'this audio'
+                        })}
+                      />
                     ))
                   )}
                 </div>
@@ -441,6 +419,133 @@ const AestheticHome = ({
           onSaveClip={onSaveAudioClip ? handleSaveClipToLibrary : null}
           onCancel={handleClipCancel}
         />
+      )}
+
+      {/* Delete Video Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteVideoConfirm.isOpen}
+        title="Delete video?"
+        message={`This will permanently delete "${deleteVideoConfirm.videoName}" from your library and storage. This action cannot be undone.`}
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        onConfirm={() => {
+          onDeleteBankVideo?.(deleteVideoConfirm.videoId);
+          setDeleteVideoConfirm({ isOpen: false, videoId: null, videoName: '' });
+        }}
+        onCancel={() => setDeleteVideoConfirm({ isOpen: false, videoId: null, videoName: '' })}
+      />
+
+      {/* Delete Audio Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteAudioConfirm.isOpen}
+        title="Delete audio?"
+        message={`This will permanently delete "${deleteAudioConfirm.audioName}" from your library and storage. This action cannot be undone.`}
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        onConfirm={() => {
+          onDeleteBankAudio?.(deleteAudioConfirm.audioId);
+          setDeleteAudioConfirm({ isOpen: false, audioId: null, audioName: '' });
+        }}
+        onCancel={() => setDeleteAudioConfirm({ isOpen: false, audioId: null, audioName: '' })}
+      />
+    </div>
+  );
+};
+
+/**
+ * VideoCard - Individual video card with hover delete button
+ */
+const VideoCard = ({ video, onDelete }) => {
+  const [showActions, setShowActions] = useState(false);
+
+  return (
+    <div
+      style={styles.videoCard}
+      onMouseEnter={() => setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
+    >
+      <div style={styles.videoThumb}>
+        {video.thumbnail ? (
+          <img src={video.thumbnail} alt="" style={styles.videoThumbImg} />
+        ) : (
+          <video
+            src={video.url}
+            style={styles.videoThumbVideo}
+            muted
+            playsInline
+            onMouseEnter={(e) => {
+              const playPromise = e.target.play();
+              if (playPromise) playPromise.catch(() => {});
+            }}
+            onMouseLeave={(e) => {
+              if (!e.target.paused) e.target.pause();
+              e.target.currentTime = 0;
+            }}
+          />
+        )}
+      </div>
+      <span style={styles.videoDuration}>
+        {video.duration ? `${Math.floor(video.duration / 60)}:${String(Math.floor(video.duration % 60)).padStart(2, '0')}` : '0:00'}
+      </span>
+      {showActions && (
+        <button
+          style={styles.deleteVideoBtn}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          title="Delete video"
+        >
+          ✕
+        </button>
+      )}
+    </div>
+  );
+};
+
+/**
+ * AudioItem - Individual audio item with hover delete button
+ */
+const AudioItem = ({ audio, onDelete }) => {
+  const [showActions, setShowActions] = useState(false);
+
+  return (
+    <div
+      style={{
+        ...styles.audioItem,
+        ...(audio.isClip ? styles.audioItemClip : {})
+      }}
+      onMouseEnter={() => setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
+    >
+      {audio.isClip ? (
+        <span style={styles.clipIcon}>✂️</span>
+      ) : (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <path d="M15.54 8.46a5 5 0 010 7.07"/>
+        </svg>
+      )}
+      <div style={styles.audioInfo}>
+        <span style={styles.audioName}>
+          {audio.name}
+          {audio.isClip && <span style={styles.clipBadge}>Saved Clip</span>}
+        </span>
+        <span style={styles.audioDuration}>
+          {audio.duration ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}` : '--:--'}
+        </span>
+      </div>
+      {showActions && (
+        <button
+          style={styles.deleteAudioBtn}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          title="Delete audio"
+        >
+          ✕
+        </button>
       )}
     </div>
   );
@@ -797,6 +902,25 @@ const styles = {
     fontSize: '10px',
     color: '#fff'
   },
+  deleteVideoBtn: {
+    position: 'absolute',
+    top: '4px',
+    right: '4px',
+    width: '22px',
+    height: '22px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#dc2626',
+    border: 'none',
+    borderRadius: '4px',
+    color: '#fff',
+    cursor: 'pointer',
+    fontSize: '12px',
+    fontWeight: '600',
+    opacity: 0.9,
+    transition: 'opacity 0.15s'
+  },
   audioList: {
     display: 'flex',
     flexDirection: 'column',
@@ -841,6 +965,21 @@ const styles = {
     backgroundColor: '#7c3aed',
     borderRadius: '4px',
     color: '#fff'
+  },
+  deleteAudioBtn: {
+    width: '24px',
+    height: '24px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#dc2626',
+    border: 'none',
+    borderRadius: '4px',
+    color: '#fff',
+    cursor: 'pointer',
+    fontSize: '12px',
+    fontWeight: '600',
+    flexShrink: 0
   },
   createButtonContainer: {
     marginTop: '24px',
