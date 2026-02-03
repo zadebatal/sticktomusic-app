@@ -255,9 +255,23 @@ const VideoStudio = ({ onClose, artists = [] }) => {
           setUploadProgress(prev => ({ ...prev, progress }));
         });
 
-        // Get duration and thumbnail from the uploaded file
-        const duration = await getMediaDuration(url, 'video');
-        const thumbnail = await generateThumbnail(url);
+        // Get duration and thumbnail - these may fail due to CORS but shouldn't block the upload
+        let duration = 0;
+        let thumbnail = null;
+
+        try {
+          // Try to get duration from the local file first (more reliable)
+          duration = await getMediaDuration(URL.createObjectURL(file), 'video');
+        } catch (e) {
+          console.warn('Could not get video duration:', e);
+        }
+
+        try {
+          // Try to generate thumbnail from local file first
+          thumbnail = await generateThumbnail(URL.createObjectURL(file));
+        } catch (e) {
+          console.warn('Could not generate thumbnail:', e);
+        }
 
         uploadedVideos.push({
           id: `clip_${Date.now()}_${i}`,
@@ -268,20 +282,35 @@ const VideoStudio = ({ onClose, artists = [] }) => {
           thumbnail,
           createdAt: new Date().toISOString()
         });
+
+        console.log('Video uploaded successfully:', file.name, { url, duration, hasThumbnail: !!thumbnail });
       } catch (error) {
         console.error('Failed to upload video:', file.name, error);
         // Continue with other files
       }
     }
 
-    if (uploadedVideos.length > 0) {
-      setCategories(prev => prev.map(cat =>
-        cat.id === selectedCategory.id
-          ? { ...cat, videos: [...cat.videos, ...uploadedVideos] }
-          : cat
-      ));
+    console.log('Upload complete. Videos to add:', uploadedVideos.length);
 
-      setSelectedCategory(prev => prev ? { ...prev, videos: [...prev.videos, ...uploadedVideos] } : prev);
+    if (uploadedVideos.length > 0) {
+      setCategories(prev => {
+        const updated = prev.map(cat =>
+          cat.id === selectedCategory.id
+            ? { ...cat, videos: [...cat.videos, ...uploadedVideos] }
+            : cat
+        );
+        console.log('Categories updated, total videos in category:', updated.find(c => c.id === selectedCategory.id)?.videos.length);
+        return updated;
+      });
+
+      setSelectedCategory(prev => {
+        if (!prev) return prev;
+        const updated = { ...prev, videos: [...prev.videos, ...uploadedVideos] };
+        console.log('Selected category updated, videos:', updated.videos.length);
+        return updated;
+      });
+    } else {
+      console.warn('No videos were successfully uploaded');
     }
 
     setUploadProgress(null);
