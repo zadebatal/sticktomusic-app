@@ -487,6 +487,35 @@ const VideoStudio = ({ onClose, artists = [] }) => {
           />
         </EditorErrorBoundary>
       )}
+
+      {/* UI-20: Upload Progress Overlay */}
+      {uploadProgress && (
+        <div style={styles.uploadOverlay}>
+          <div style={styles.uploadModal}>
+            <div style={styles.uploadIcon}>
+              {uploadProgress.type === 'video' ? '🎬' : '🎵'}
+            </div>
+            <h3 style={styles.uploadTitle}>
+              Uploading {uploadProgress.type === 'video' ? 'Videos' : 'Audio'}
+            </h3>
+            <p style={styles.uploadStatus}>
+              {uploadProgress.current} of {uploadProgress.total}
+              {uploadProgress.name && ` — ${uploadProgress.name}`}
+            </p>
+            <div style={styles.uploadProgressBar}>
+              <div
+                style={{
+                  ...styles.uploadProgressFill,
+                  width: `${uploadProgress.progress || 0}%`
+                }}
+              />
+            </div>
+            <p style={styles.uploadPercent}>
+              {Math.round(uploadProgress.progress || 0)}%
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -572,6 +601,57 @@ const styles = {
   main: {
     flex: 1,
     overflow: 'hidden'
+  },
+  // UI-20: Upload progress overlay styles
+  uploadOverlay: {
+    position: 'fixed',
+    inset: 0,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999
+  },
+  uploadModal: {
+    backgroundColor: '#111118',
+    borderRadius: '16px',
+    padding: '32px 48px',
+    textAlign: 'center',
+    minWidth: '300px'
+  },
+  uploadIcon: {
+    fontSize: '48px',
+    marginBottom: '16px'
+  },
+  uploadTitle: {
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#fff',
+    margin: '0 0 8px 0'
+  },
+  uploadStatus: {
+    fontSize: '13px',
+    color: '#9ca3af',
+    margin: '0 0 20px 0'
+  },
+  uploadProgressBar: {
+    width: '100%',
+    height: '6px',
+    backgroundColor: '#1f1f2e',
+    borderRadius: '3px',
+    overflow: 'hidden'
+  },
+  uploadProgressFill: {
+    height: '100%',
+    backgroundColor: '#7c3aed',
+    borderRadius: '3px',
+    transition: 'width 0.3s ease'
+  },
+  uploadPercent: {
+    fontSize: '24px',
+    fontWeight: '700',
+    color: '#7c3aed',
+    margin: '16px 0 0 0'
   }
 };
 

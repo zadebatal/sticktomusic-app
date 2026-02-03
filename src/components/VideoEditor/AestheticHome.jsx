@@ -156,22 +156,25 @@ const AestheticHome = ({
 
         <div style={styles.sidebarDivider} />
 
+        {/* UI-23: Fixed sidebar links with proper states */}
         <div style={styles.sidebarSection}>
-          <button style={styles.sidebarLink}>
+          <div style={styles.sidebarLinkDisabled} title="Select a category to view all videos">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="3" y="3" width="18" height="18" rx="2"/>
               <path d="M3 9h18"/>
             </svg>
-            All Videos
-          </button>
-          <button style={styles.sidebarLink}>
+            <span>All Videos</span>
+            <span style={styles.comingSoon}>Soon</span>
+          </div>
+          <div style={styles.sidebarLinkDisabled} title="Presets are available in the video editor">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 2L2 7l10 5 10-5-10-5z"/>
               <path d="M2 17l10 5 10-5"/>
               <path d="M2 12l10 5 10-5"/>
             </svg>
-            Presets
-          </button>
+            <span>Presets</span>
+            <span style={styles.comingSoon}>Soon</span>
+          </div>
         </div>
       </aside>
 
@@ -577,6 +580,28 @@ const styles = {
     textAlign: 'left',
     width: '100%',
     fontSize: '13px'
+  },
+  // UI-23: Disabled sidebar link styles
+  sidebarLinkDisabled: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '8px',
+    backgroundColor: 'transparent',
+    borderRadius: '6px',
+    color: '#4b5563',
+    cursor: 'not-allowed',
+    textAlign: 'left',
+    width: '100%',
+    fontSize: '13px'
+  },
+  comingSoon: {
+    marginLeft: 'auto',
+    fontSize: '10px',
+    padding: '2px 6px',
+    backgroundColor: '#1f1f2e',
+    borderRadius: '4px',
+    color: '#6b7280'
   },
   main: {
     flex: 1,
