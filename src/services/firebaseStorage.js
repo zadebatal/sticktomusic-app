@@ -161,8 +161,39 @@ export function generateThumbnail(videoUrl, time = 1) {
   });
 }
 
+/**
+ * Upload a video blob to Firebase Storage (legacy API for compatibility)
+ * @param {Blob} videoBlob - The video blob to upload
+ * @param {string} fileName - The file name
+ * @param {function} onProgress - Progress callback (0-100)
+ * @returns {Promise<string>} - Download URL
+ */
+export async function uploadVideo(videoBlob, fileName, onProgress = () => {}) {
+  // Convert blob to file-like object for uploadFile
+  const file = new File([videoBlob], fileName, { type: videoBlob.type || 'video/webm' });
+  const result = await uploadFile(file, 'videos', onProgress);
+  return result.url;
+}
+
+/**
+ * Upload a thumbnail image to Firebase Storage (legacy API for compatibility)
+ * @param {string} dataUrl - Base64 data URL of the thumbnail
+ * @param {string} fileName - File name
+ * @returns {Promise<string>} - Download URL
+ */
+export async function uploadThumbnail(dataUrl, fileName) {
+  // Convert data URL to blob
+  const response = await fetch(dataUrl);
+  const blob = await response.blob();
+  const file = new File([blob], fileName, { type: 'image/jpeg' });
+  const result = await uploadFile(file, 'thumbnails', null);
+  return result.url;
+}
+
 export default {
   uploadFile,
+  uploadVideo,
+  uploadThumbnail,
   deleteFile,
   getMediaDuration,
   generateThumbnail
