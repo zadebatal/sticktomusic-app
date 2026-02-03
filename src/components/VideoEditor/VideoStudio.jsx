@@ -245,33 +245,41 @@ const VideoStudio = ({ onClose, artists = [] }) => {
     setUploadProgress({ type: 'video', current: 0, total: files.length });
 
     const uploadedVideos = [];
+    const failedUploads = [];
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      console.log(`Starting upload ${i + 1}/${files.length}: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+
       try {
-        setUploadProgress({ type: 'video', current: i + 1, total: files.length, name: file.name });
+        setUploadProgress({ type: 'video', current: i + 1, total: files.length, name: file.name, progress: 0 });
 
         // Upload to Firebase Storage
         const { url, path } = await uploadFile(file, 'videos', (progress) => {
           setUploadProgress(prev => ({ ...prev, progress }));
         });
 
-        // Get duration and thumbnail - these may fail due to CORS but shouldn't block the upload
+        console.log(`Upload complete for ${file.name}, getting metadata...`);
+
+        // Get duration and thumbnail from local blob (more reliable than Firebase URL due to CORS)
         let duration = 0;
         let thumbnail = null;
+        const localBlobUrl = URL.createObjectURL(file);
 
         try {
-          // Try to get duration from the local file first (more reliable)
-          duration = await getMediaDuration(URL.createObjectURL(file), 'video');
+          duration = await getMediaDuration(localBlobUrl, 'video');
         } catch (e) {
-          console.warn('Could not get video duration:', e);
+          console.warn('Could not get video duration:', file.name, e.message);
         }
 
         try {
-          // Try to generate thumbnail from local file first
-          thumbnail = await generateThumbnail(URL.createObjectURL(file));
+          thumbnail = await generateThumbnail(localBlobUrl);
         } catch (e) {
-          console.warn('Could not generate thumbnail:', e);
+          console.warn('Could not generate thumbnail:', file.name, e.message);
         }
+
+        // Clean up blob URL
+        URL.revokeObjectURL(localBlobUrl);
 
         uploadedVideos.push({
           id: `clip_${Date.now()}_${i}`,
@@ -283,11 +291,23 @@ const VideoStudio = ({ onClose, artists = [] }) => {
           createdAt: new Date().toISOString()
         });
 
-        console.log('Video uploaded successfully:', file.name, { url, duration, hasThumbnail: !!thumbnail });
+        console.log('✓ Video uploaded successfully:', file.name);
+
+        // Small delay between uploads to avoid rate limiting
+        if (i < files.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
       } catch (error) {
-        console.error('Failed to upload video:', file.name, error);
+        console.error('✗ Failed to upload video:', file.name, error.message || error);
+        failedUploads.push({ name: file.name, error: error.message || 'Unknown error' });
         // Continue with other files
       }
+    }
+
+    // Log summary
+    console.log(`Upload summary: ${uploadedVideos.length} succeeded, ${failedUploads.length} failed`);
+    if (failedUploads.length > 0) {
+      console.warn('Failed uploads:', failedUploads);
     }
 
     console.log('Upload complete. Videos to add:', uploadedVideos.length);
