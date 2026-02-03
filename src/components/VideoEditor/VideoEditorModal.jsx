@@ -1,16 +1,11 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useBeatDetection } from '../../hooks/useBeatDetection';
-import BeatSelector from './BeatSelector';
 import WordTimeline from './WordTimeline';
-import LyricAnalyzer from './LyricAnalyzer';
-import { generateThumbnailFromElement, generateThumbnailFromUrl } from '../../utils/thumbnailGenerator';
-import { renderVideo } from '../../services/videoExportService';
-import { uploadVideo } from '../../services/firebaseStorage';
+import { saveApiKey, loadApiKey } from '../../services/storageService';
 
 /**
  * VideoEditorModal - Flowstage-inspired video editor modal
  * Clean UI with preview, controls, and clip timeline
- * Now with integrated render, upload, and post scheduling
  */
 const VideoEditorModal = ({
   category,
@@ -18,10 +13,7 @@ const VideoEditorModal = ({
   presets = [],
   onSave,
   onSavePreset,
-  onClose,
-  // Props for direct posting
-  lateAccounts = [],
-  onSchedulePost
+  onClose
 }) => {
   // Media state
   const [selectedAudio, setSelectedAudio] = useState(existingVideo?.audio || null);
@@ -50,19 +42,14 @@ const VideoEditorModal = ({
   const [cropMode, setCropMode] = useState('9:16');
   const [selectedPreset, setSelectedPreset] = useState(null);
   const [showLyricsEditor, setShowLyricsEditor] = useState(false);
-  const [showBeatSelector, setShowBeatSelector] = useState(false);
   const [showWordTimeline, setShowWordTimeline] = useState(false);
-  const [showLyricAnalyzer, setShowLyricAnalyzer] = useState(false);
   const [selectedClips, setSelectedClips] = useState([]);
 
-  // Publishing state (for save & post flow)
-  const [publishingStage, setPublishingStage] = useState(null); // null, 'scheduling', 'rendering', 'uploading', 'posting', 'done', 'error'
-  const [publishProgress, setPublishProgress] = useState(0);
-  const [publishError, setPublishError] = useState(null);
-  const [uploadedVideoUrl, setUploadedVideoUrl] = useState(null);
-  const [postCaption, setPostCaption] = useState('');
-  const [selectedAccounts, setSelectedAccounts] = useState([]);
-  const [scheduledTime, setScheduledTime] = useState('');
+  // AI Transcription state
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcriptionError, setTranscriptionError] = useState(null);
 
   // Beat detection
   const { beats, bpm, isAnalyzing, analyzeAudio } = useBeatDetection();
@@ -76,29 +63,26 @@ const VideoEditorModal = ({
   // Get current clip based on currentTime
   const currentClip = clips.find((clip, i) => {
     const nextClip = clips[i + 1];
-    if (!nextClip) return true;
+    if (!nextClip) return true; // Last clip
     return currentTime >= clip.startTime && currentTime < nextClip.startTime;
   }) || clips[0];
-
-  // Get current clip INDEX for timeline highlighting
-  const currentClipIndex = clips.findIndex((clip, i) => {
-    const nextClip = clips[i + 1];
-    if (!nextClip) return currentTime >= clip.startTime;
-    return currentTime >= clip.startTime && currentTime < nextClip.startTime;
-  });
 
   // Load audio and analyze beats
   useEffect(() => {
     if (selectedAudio?.url) {
+      // Analyze beats if we have the file
       if (selectedAudio.file) {
         analyzeAudio(selectedAudio.file);
       }
+
+      // Create audio element for playback
       if (audioRef.current) {
         audioRef.current.src = selectedAudio.url;
         audioRef.current.load();
         audioRef.current.onloadedmetadata = () => {
           setDuration(audioRef.current.duration);
         };
+        // Handle audio ended
         audioRef.current.onended = () => {
           setIsPlaying(false);
           setCurrentTime(0);
@@ -110,8 +94,11 @@ const VideoEditorModal = ({
   // Handle play/pause
   useEffect(() => {
     if (!audioRef.current) return;
+
     if (isPlaying) {
       audioRef.current.play().catch(console.error);
+
+      // Update currentTime during playback
       const updateTime = () => {
         if (audioRef.current) {
           setCurrentTime(audioRef.current.currentTime);
@@ -127,6 +114,7 @@ const VideoEditorModal = ({
         cancelAnimationFrame(animationRef.current);
       }
     }
+
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
@@ -137,12 +125,16 @@ const VideoEditorModal = ({
   // Sync video with audio time
   useEffect(() => {
     if (videoRef.current && currentClip?.url) {
+      // Calculate position within the clip
       const clipStartTime = currentClip.startTime || 0;
       const clipDuration = currentClip.duration || 2;
       const positionInClip = (currentTime - clipStartTime) % clipDuration;
+
+      // Set video time if significantly different
       if (Math.abs(videoRef.current.currentTime - positionInClip) > 0.3) {
         videoRef.current.currentTime = positionInClip;
       }
+
       if (isPlaying) {
         videoRef.current.play().catch(() => {});
       } else {
@@ -150,6 +142,48 @@ const VideoEditorModal = ({
       }
     }
   }, [currentClip, currentTime, isPlaying]);
+
+  // Handle clip changes - load new video
+  useEffect(() => {
+    if (videoRef.current && currentClip?.url) {
+      // If video source changed, reload
+      if (videoRef.current.src !== currentClip.url) {
+        videoRef.current.src = currentClip.url;
+        videoRef.current.load();
+        if (isPlaying) {
+          videoRef.current.play().catch(() => {});
+        }
+      }
+    }
+  }, [currentClip?.url, currentClip?.id]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Space bar to play/pause
+      if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        handlePlayPause();
+      }
+      // Left/Right arrows to seek
+      if (e.code === 'ArrowLeft') {
+        e.preventDefault();
+        handleSeek(Math.max(0, currentTime - 1));
+      }
+      if (e.code === 'ArrowRight') {
+        e.preventDefault();
+        handleSeek(Math.min(duration, currentTime + 1));
+      }
+      // M to mute/unmute
+      if (e.code === 'KeyM' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        handleToggleMute();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handlePlayPause, handleSeek, handleToggleMute, currentTime, duration]);
 
   // Get current visible text
   const currentText = words.find(w =>
@@ -167,6 +201,7 @@ const VideoEditorModal = ({
     if (audioRef.current) {
       audioRef.current.currentTime = clampedTime;
     }
+    // Video sync will happen via the useEffect
   }, [duration]);
 
   const handleToggleMute = useCallback(() => {
@@ -209,48 +244,6 @@ const VideoEditorModal = ({
 
     setClips(newClips);
   }, [beats, category?.videos]);
-
-  // Open beat selector modal
-  const handleOpenBeatSelector = useCallback(() => {
-    if (!beats.length) {
-      alert('No beats detected. Please select audio first.');
-      return;
-    }
-    setShowBeatSelector(true);
-  }, [beats]);
-
-  // Apply selected beats as cut points
-  const handleApplyBeatCuts = useCallback((selectedBeatTimes) => {
-    if (!selectedBeatTimes.length || !category?.videos?.length) {
-      setShowBeatSelector(false);
-      return;
-    }
-
-    const availableClips = category.videos;
-    const newClips = [];
-
-    // Create clips between each selected beat
-    for (let i = 0; i < selectedBeatTimes.length; i++) {
-      const startTime = selectedBeatTimes[i];
-      const endTime = selectedBeatTimes[i + 1] || duration;
-      const clipDuration = endTime - startTime;
-
-      const randomClip = availableClips[Math.floor(Math.random() * availableClips.length)];
-
-      newClips.push({
-        id: `clip_${Date.now()}_${i}`,
-        sourceId: randomClip.id,
-        url: randomClip.url,
-        thumbnail: randomClip.thumbnail,
-        startTime,
-        duration: clipDuration,
-        locked: false
-      });
-    }
-
-    setClips(newClips);
-    setShowBeatSelector(false);
-  }, [category?.videos, duration]);
 
   const handleCutByWord = useCallback(() => {
     if (!words.length || !category?.videos?.length) return;
@@ -312,28 +305,7 @@ const VideoEditorModal = ({
     }
   }, []);
 
-  const handleSave = useCallback(async () => {
-    // Try to get thumbnail from first clip, or generate one
-    let thumbnail = clips[0]?.thumbnail || null;
-
-    // If no thumbnail from clip, try to generate from video element
-    if (!thumbnail && videoRef.current && videoRef.current.readyState >= 2) {
-      try {
-        thumbnail = generateThumbnailFromElement(videoRef.current);
-      } catch (error) {
-        console.warn('Failed to generate thumbnail from video element:', error);
-      }
-    }
-
-    // If still no thumbnail, try to generate from first clip URL
-    if (!thumbnail && clips[0]?.url) {
-      try {
-        thumbnail = await generateThumbnailFromUrl(clips[0].url);
-      } catch (error) {
-        console.warn('Failed to generate thumbnail from clip URL:', error);
-      }
-    }
-
+  const handleSave = useCallback(() => {
     onSave({
       id: existingVideo?.id,
       audio: selectedAudio,
@@ -344,88 +316,18 @@ const VideoEditorModal = ({
       cropMode,
       duration,
       bpm,
-      thumbnail,
+      thumbnail: clips[0]?.thumbnail || null,
       textOverlay: words[0]?.text || lyrics.split('\n')[0] || ''
     });
   }, [existingVideo, selectedAudio, clips, words, lyrics, textStyle, cropMode, duration, bpm, onSave]);
 
-  // Start the Save & Post flow - shows scheduling UI
-  const handleStartPost = useCallback(() => {
-    setPostCaption(words[0]?.text || lyrics.split('\n')[0] || '');
-    setPublishingStage('scheduling');
-  }, [words, lyrics]);
-
-  // Execute the full render, upload, and post flow
-  const handleExecutePost = useCallback(async () => {
-    if (!selectedAccounts.length) {
-      setPublishError('Please select at least one account');
-      return;
-    }
-
-    setPublishError(null);
-    setPublishingStage('rendering');
-    setPublishProgress(0);
-
-    try {
-      // Step 1: Generate thumbnail
-      let thumbnail = clips[0]?.thumbnail || null;
-      if (!thumbnail && videoRef.current?.readyState >= 2) {
-        try { thumbnail = generateThumbnailFromElement(videoRef.current); } catch (e) {}
-      }
-      if (!thumbnail && clips[0]?.url) {
-        try { thumbnail = await generateThumbnailFromUrl(clips[0].url); } catch (e) {}
-      }
-
-      // Step 2: Render video
-      const videoBlob = await renderVideo({
-        clips, audio: selectedAudio, words, textStyle, cropMode, duration
-      }, (progress) => setPublishProgress(Math.floor(progress * 0.4)));
-
-      // Step 3: Upload to Firebase
-      setPublishingStage('uploading');
-      const videoUrl = await uploadVideo(videoBlob, `video_${Date.now()}`, (progress) => {
-        setPublishProgress(40 + Math.floor(progress * 0.4));
-      });
-      setUploadedVideoUrl(videoUrl);
-
-      // Step 4: Schedule post via Late API
-      setPublishingStage('posting');
-      setPublishProgress(85);
-
-      if (onSchedulePost) {
-        await onSchedulePost({
-          platforms: selectedAccounts,
-          caption: postCaption,
-          videoUrl: videoUrl,
-          scheduledFor: scheduledTime || new Date().toISOString()
-        });
-      }
-
-      setPublishProgress(100);
-      setPublishingStage('done');
-
-      // Also save the video locally
-      onSave({
-        id: existingVideo?.id, audio: selectedAudio, clips, words, lyrics, textStyle,
-        cropMode, duration, bpm, thumbnail,
-        textOverlay: postCaption, status: 'posted', postedUrl: videoUrl, postedAt: new Date().toISOString()
-      });
-
-    } catch (error) {
-      console.error('Publishing error:', error);
-      setPublishError(error.message || 'Failed to publish video');
-      setPublishingStage('error');
-    }
-  }, [clips, selectedAudio, words, textStyle, cropMode, duration, selectedAccounts, postCaption, scheduledTime, onSchedulePost, onSave, existingVideo, lyrics, bpm]);
-
   const handleSyncLyrics = useCallback((mode) => {
-    if (!lyrics.trim()) return;
+    if (!lyrics.trim() || !beats.length) return;
 
     const lyricWords = lyrics.split(/\s+/).filter(w => w.trim());
 
     if (mode === 'beat') {
-      // One word per beat - requires beats
-      if (!beats.length) return;
+      // One word per beat
       const newWords = lyricWords.map((text, i) => ({
         id: `word_${Date.now()}_${i}`,
         text,
@@ -434,7 +336,7 @@ const VideoEditorModal = ({
       }));
       setWords(newWords);
     } else if (mode === 'even') {
-      // Evenly spread across duration - no beats required
+      // Evenly spread across duration
       const interval = duration / lyricWords.length;
       const newWords = lyricWords.map((text, i) => ({
         id: `word_${Date.now()}_${i}`,
@@ -447,6 +349,112 @@ const VideoEditorModal = ({
 
     setShowLyricsEditor(false);
   }, [lyrics, beats, duration]);
+
+  // AI Transcription with AssemblyAI
+  const handleAITranscribe = useCallback(async () => {
+    // Check for API key
+    const savedKey = loadApiKey('assemblyai');
+    if (!savedKey) {
+      setShowApiKeyModal(true);
+      return;
+    }
+
+    if (!selectedAudio?.url) {
+      setTranscriptionError('Please select an audio file first');
+      return;
+    }
+
+    setIsTranscribing(true);
+    setTranscriptionError(null);
+
+    try {
+      // Step 1: Upload audio to AssemblyAI
+      const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': savedKey,
+          'Content-Type': 'application/octet-stream'
+        },
+        body: await fetch(selectedAudio.url).then(r => r.blob())
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error('Failed to upload audio to AssemblyAI');
+      }
+
+      const { upload_url } = await uploadResponse.json();
+
+      // Step 2: Request transcription with word-level timestamps
+      const transcriptResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
+        method: 'POST',
+        headers: {
+          'Authorization': savedKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          audio_url: upload_url,
+          word_boost: [],
+          boost_param: 'high'
+        })
+      });
+
+      if (!transcriptResponse.ok) {
+        throw new Error('Failed to start transcription');
+      }
+
+      const { id: transcriptId } = await transcriptResponse.json();
+
+      // Step 3: Poll for completion
+      let transcript = null;
+      while (!transcript) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        const statusResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+          headers: { 'Authorization': savedKey }
+        });
+
+        const result = await statusResponse.json();
+
+        if (result.status === 'completed') {
+          transcript = result;
+        } else if (result.status === 'error') {
+          throw new Error(result.error || 'Transcription failed');
+        }
+        // Otherwise still processing, continue polling
+      }
+
+      // Step 4: Set the words with timestamps
+      if (transcript.words && transcript.words.length > 0) {
+        const newWords = transcript.words.map((w, i) => ({
+          id: `word_${Date.now()}_${i}`,
+          text: w.text,
+          startTime: w.start / 1000, // Convert ms to seconds
+          duration: (w.end - w.start) / 1000
+        }));
+
+        setWords(newWords);
+        setLyrics(transcript.text);
+      } else {
+        setTranscriptionError('No words detected in audio');
+      }
+
+    } catch (error) {
+      console.error('Transcription error:', error);
+      setTranscriptionError(error.message);
+    } finally {
+      setIsTranscribing(false);
+    }
+  }, [selectedAudio]);
+
+  const handleSaveApiKey = useCallback(() => {
+    if (apiKeyInput.trim()) {
+      saveApiKey('assemblyai', apiKeyInput.trim());
+      setShowApiKeyModal(false);
+      setApiKeyInput('');
+      // Trigger transcription after saving key
+      handleAITranscribe();
+    }
+  }, [apiKeyInput, handleAITranscribe]);
 
   const handleClipSelect = (index, e) => {
     if (e.shiftKey) {
@@ -486,10 +494,10 @@ const VideoEditorModal = ({
           <div style={styles.previewSection}>
             <div style={styles.previewContainer}>
               <div style={styles.preview}>
-                {/* Hidden audio element */}
+                {/* Hidden audio element for playback */}
                 <audio ref={audioRef} style={{ display: 'none' }} />
 
-                {/* Video preview */}
+                {/* Video preview - shows current clip or fallback */}
                 {(currentClip?.url || category?.videos?.[0]?.url) ? (
                   <video
                     ref={videoRef}
@@ -498,6 +506,7 @@ const VideoEditorModal = ({
                     muted
                     loop
                     playsInline
+                    autoPlay={isPlaying}
                   />
                 ) : (
                   <div style={styles.previewPlaceholder}>
@@ -540,16 +549,30 @@ const VideoEditorModal = ({
                   const rect = e.currentTarget.getBoundingClientRect();
                   const clickX = e.clientX - rect.left;
                   const percent = clickX / rect.width;
-                  handleSeek(percent * duration);
+                  const newTime = percent * duration;
+                  handleSeek(newTime);
                 }}
               >
-                <div style={{ ...styles.progressBar, width: `${(currentTime / duration) * 100}%` }} />
-                <div style={{ ...styles.progressHandle, left: `${(currentTime / duration) * 100}%` }} />
+                <div
+                  style={{
+                    ...styles.progressBar,
+                    width: `${(currentTime / duration) * 100}%`
+                  }}
+                />
+                <div
+                  style={{
+                    ...styles.progressHandle,
+                    left: `${(currentTime / duration) * 100}%`
+                  }}
+                />
               </div>
 
               {/* Playback Controls */}
               <div style={styles.playbackControls}>
-                <button style={styles.playButton} onClick={handlePlayPause}>
+                <button
+                  style={styles.playButton}
+                  onClick={handlePlayPause}
+                >
                   {isPlaying ? (
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                       <rect x="6" y="4" width="4" height="16"/>
@@ -781,16 +804,20 @@ const VideoEditorModal = ({
                           <p style={styles.noText}>No lyrics added yet</p>
                         )}
                       </div>
-                      {/* AI Analyze Button */}
-                      {selectedAudio?.file && (
-                        <button
-                          style={styles.analyzeButton}
-                          onClick={() => setShowLyricAnalyzer(true)}
-                        >
-                          🤖 Analyze Lyrics with AI
-                        </button>
-                      )}
                       <div style={styles.lyricsButtonRow}>
+                        <button
+                          style={{
+                            ...styles.editLyricsButton,
+                            background: 'linear-gradient(135deg, #8B5CF6, #6D28D9)',
+                            color: '#fff',
+                            border: 'none'
+                          }}
+                          onClick={handleAITranscribe}
+                          disabled={isTranscribing || !selectedAudio}
+                          title={!selectedAudio ? 'Select audio first' : 'Transcribe with AI'}
+                        >
+                          {isTranscribing ? '⏳ Transcribing...' : '🤖 AI Transcribe'}
+                        </button>
                         <button
                           style={styles.editLyricsButton}
                           onClick={() => setShowLyricsEditor(true)}
@@ -804,6 +831,11 @@ const VideoEditorModal = ({
                           🎚️ Word Timeline
                         </button>
                       </div>
+                      {transcriptionError && (
+                        <p style={{ color: '#EF4444', fontSize: '12px', marginTop: '8px' }}>
+                          {transcriptionError}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -902,62 +934,28 @@ const VideoEditorModal = ({
                         <p>Click clips above to add, or use Cut by beat</p>
                       </div>
                     ) : (
-                      <>
-                        {/* Timeline Header with playhead */}
-                        <div style={styles.timelineHeader}>
-                          <div style={styles.timelineSegments}>
-                            {clips.map((clip, index) => {
-                              const segmentWidth = duration > 0 ? (clip.duration / duration) * 100 : (100 / clips.length);
-                              return (
-                                <div
-                                  key={`seg-${clip.id}`}
-                                  style={{
-                                    ...styles.timelineSegment,
-                                    width: `${segmentWidth}%`,
-                                    backgroundColor: index === currentClipIndex ? '#7c3aed' : '#2d2d3d'
-                                  }}
-                                />
-                              );
-                            })}
-                          </div>
-                          {/* Playhead indicator */}
+                      <div style={styles.clipsRow}>
+                        {clips.map((clip, index) => (
                           <div
+                            key={clip.id}
                             style={{
-                              ...styles.timelinePlayhead,
-                              left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`
+                              ...styles.clipItem,
+                              ...(selectedClips.includes(index) ? styles.clipItemSelected : {})
                             }}
-                          />
-                        </div>
-
-                        {/* Clips Row */}
-                        <div style={styles.clipsRow}>
-                          {clips.map((clip, index) => (
-                            <div
-                              key={clip.id}
-                              style={{
-                                ...styles.clipItem,
-                                ...(selectedClips.includes(index) ? styles.clipItemSelected : {}),
-                                ...(index === currentClipIndex ? styles.clipItemPlaying : {})
-                              }}
-                              onClick={(e) => handleClipSelect(index, e)}
-                            >
-                              {/* NOW PLAYING badge */}
-                              {index === currentClipIndex && (
-                                <span style={styles.nowPlayingBadge}>▶ NOW</span>
-                              )}
-                              {clip.thumbnail ? (
-                                <img src={clip.thumbnail} alt="" style={styles.clipThumb} />
-                              ) : (
-                                <video src={clip.url} style={styles.clipThumb} muted />
-                              )}
-                              <span style={styles.clipDuration}>
-                                {clip.duration?.toFixed(1)}s
-                              </span>
-                              {clip.locked && <span style={styles.clipLock}>🔒</span>}
-                            </div>
-                          ))}
-                        </div>
-                      </>
+                            onClick={(e) => handleClipSelect(index, e)}
+                          >
+                            {clip.thumbnail ? (
+                              <img src={clip.thumbnail} alt="" style={styles.clipThumb} />
+                            ) : (
+                              <video src={clip.url} style={styles.clipThumb} muted />
+                            )}
+                            <span style={styles.clipDuration}>
+                              {clip.duration?.toFixed(1)}s
+                            </span>
+                            {clip.locked && <span style={styles.clipLock}>🔒</span>}
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
 
@@ -979,7 +977,7 @@ const VideoEditorModal = ({
                     <span style={styles.cutHint}>Shift + drag checkboxes to select multiple!</span>
                     <div style={styles.cutButtons}>
                       <button style={styles.cutButton} onClick={handleCutByWord}>Cut by word</button>
-                      <button style={styles.cutButton} onClick={handleOpenBeatSelector}>Cut by beat</button>
+                      <button style={styles.cutButton} onClick={handleCutByBeat}>Cut by beat</button>
                       <button style={styles.cutButton}>Record cuts</button>
                     </div>
                   </div>
@@ -994,16 +992,7 @@ const VideoEditorModal = ({
           <button style={styles.resetButton}>Reset to saved</button>
           <div style={styles.footerRight}>
             <button style={styles.cancelButton} onClick={onClose}>Cancel</button>
-            <button style={styles.confirmButton} onClick={handleSave}>Save Draft</button>
-            {onSchedulePost && (
-              <button style={styles.postButton} onClick={handleStartPost}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="22" y1="2" x2="11" y2="13"/>
-                  <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                </svg>
-                Save & Post
-              </button>
-            )}
+            <button style={styles.confirmButton} onClick={handleSave}>Confirm</button>
           </div>
         </div>
 
@@ -1039,17 +1028,6 @@ const VideoEditorModal = ({
           </div>
         )}
 
-        {/* Beat Selector Modal */}
-        {showBeatSelector && (
-          <BeatSelector
-            beats={beats}
-            bpm={bpm}
-            duration={duration}
-            onApply={handleApplyBeatCuts}
-            onCancel={() => setShowBeatSelector(false)}
-          />
-        )}
-
         {/* Word Timeline Modal */}
         {showWordTimeline && (
           <WordTimeline
@@ -1064,18 +1042,45 @@ const VideoEditorModal = ({
           />
         )}
 
-        {/* Lyric Analyzer Modal */}
-        {showLyricAnalyzer && selectedAudio?.file && (
-          <LyricAnalyzer
-            audioFile={selectedAudio.file}
-            onComplete={(result) => {
-              setLyrics(result.text);
-              setWords(result.words);
-              setShowLyricAnalyzer(false);
-              setShowWordTimeline(true);
-            }}
-            onClose={() => setShowLyricAnalyzer(false)}
-          />
+        {/* API Key Modal */}
+        {showApiKeyModal && (
+          <div style={styles.lyricsOverlay}>
+            <div style={{...styles.lyricsModal, maxWidth: '400px'}}>
+              <h3 style={styles.lyricsTitle}>🔑 AssemblyAI API Key</h3>
+              <p style={{ color: '#9CA3AF', fontSize: '14px', marginBottom: '16px' }}>
+                To use AI transcription, you need an AssemblyAI API key.
+                Get one free at <a href="https://assemblyai.com" target="_blank" rel="noopener noreferrer" style={{ color: '#8B5CF6' }}>assemblyai.com</a>
+              </p>
+              <input
+                type="password"
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+                placeholder="Enter your AssemblyAI API key..."
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  background: '#1F2937',
+                  border: '1px solid #374151',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  fontSize: '14px',
+                  marginBottom: '16px'
+                }}
+              />
+              <div style={styles.lyricsActions}>
+                <button style={styles.cancelButton} onClick={() => { setShowApiKeyModal(false); setApiKeyInput(''); }}>
+                  Cancel
+                </button>
+                <button
+                  style={{...styles.confirmButton, background: 'linear-gradient(135deg, #8B5CF6, #6D28D9)'}}
+                  onClick={handleSaveApiKey}
+                  disabled={!apiKeyInput.trim()}
+                >
+                  Save & Transcribe
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Analyzing Overlay */}
@@ -1083,103 +1088,6 @@ const VideoEditorModal = ({
           <div style={styles.analyzingOverlay}>
             <div style={styles.spinner} />
             <p>Analyzing beats...</p>
-          </div>
-        )}
-
-        {/* Publishing Overlay */}
-        {publishingStage && (
-          <div style={styles.publishingOverlay}>
-            <div style={styles.publishingModal}>
-              {/* Scheduling Stage */}
-              {publishingStage === 'scheduling' && (
-                <>
-                  <h3 style={styles.publishTitle}>Schedule Your Post</h3>
-                  <div style={styles.publishField}>
-                    <label style={styles.publishLabel}>Caption</label>
-                    <textarea value={postCaption} onChange={(e) => setPostCaption(e.target.value)}
-                      placeholder="Write your caption..." style={styles.publishTextarea} />
-                  </div>
-                  <div style={styles.publishField}>
-                    <label style={styles.publishLabel}>Post to accounts</label>
-                    <div style={styles.accountList}>
-                      {lateAccounts.length > 0 ? lateAccounts.map(account => (
-                        <label key={account.id} style={styles.accountItem}>
-                          <input type="checkbox" style={styles.accountCheckbox}
-                            checked={selectedAccounts.some(a => a.accountId === account.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedAccounts(prev => [...prev, { platform: account.platform, accountId: account.id }]);
-                              } else {
-                                setSelectedAccounts(prev => prev.filter(a => a.accountId !== account.id));
-                              }
-                            }} />
-                          <span style={styles.accountPlatform}>{account.platform === 'tiktok' ? '🎵' : '📸'}</span>
-                          <span style={styles.accountName}>{account.username || account.id}</span>
-                        </label>
-                      )) : <p style={styles.noAccounts}>No accounts connected</p>}
-                    </div>
-                  </div>
-                  <div style={styles.publishField}>
-                    <label style={styles.publishLabel}>Schedule for (optional)</label>
-                    <input type="datetime-local" value={scheduledTime} onChange={(e) => setScheduledTime(e.target.value)} style={styles.publishInput} />
-                  </div>
-                  {publishError && <div style={styles.publishError}>{publishError}</div>}
-                  <div style={styles.publishActions}>
-                    <button style={styles.publishCancel} onClick={() => setPublishingStage(null)}>Cancel</button>
-                    <button style={styles.publishConfirm} onClick={handleExecutePost}>Render & Post</button>
-                  </div>
-                </>
-              )}
-
-              {/* Progress Stage */}
-              {['rendering', 'uploading', 'posting'].includes(publishingStage) && (
-                <div style={styles.publishProgress}>
-                  <div style={styles.progressCircle}>
-                    <svg viewBox="0 0 100 100" style={styles.progressSvg}>
-                      <circle cx="50" cy="50" r="45" fill="none" stroke="#1f1f2e" strokeWidth="8"/>
-                      <circle cx="50" cy="50" r="45" fill="none" stroke="#7c3aed" strokeWidth="8"
-                        strokeLinecap="round" strokeDasharray={`${publishProgress * 2.83} 283`} transform="rotate(-90 50 50)"/>
-                    </svg>
-                    <span style={styles.progressText}>{publishProgress}%</span>
-                  </div>
-                  <h3 style={styles.publishStatusTitle}>
-                    {publishingStage === 'rendering' && '🎬 Rendering video...'}
-                    {publishingStage === 'uploading' && '☁️ Uploading...'}
-                    {publishingStage === 'posting' && '📤 Scheduling...'}
-                  </h3>
-                </div>
-              )}
-
-              {/* Done Stage */}
-              {publishingStage === 'done' && (
-                <>
-                  <div style={styles.publishSuccess}>
-                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
-                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-                    </svg>
-                    <h3 style={styles.publishSuccessTitle}>Posted Successfully!</h3>
-                  </div>
-                  <button style={styles.publishDone} onClick={onClose}>Done</button>
-                </>
-              )}
-
-              {/* Error Stage */}
-              {publishingStage === 'error' && (
-                <>
-                  <div style={styles.publishErrorState}>
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-                    </svg>
-                    <h3 style={styles.publishErrorTitle}>Failed</h3>
-                    <p style={styles.publishErrorText}>{publishError}</p>
-                  </div>
-                  <div style={styles.publishActions}>
-                    <button style={styles.publishCancel} onClick={() => setPublishingStage(null)}>Back</button>
-                    <button style={styles.publishConfirm} onClick={handleExecutePost}>Retry</button>
-                  </div>
-                </>
-              )}
-            </div>
           </div>
         )}
       </div>
@@ -1311,7 +1219,8 @@ const styles = {
     left: 0,
     height: '100%',
     backgroundColor: '#7c3aed',
-    borderRadius: '3px'
+    borderRadius: '3px',
+    transition: 'width 0.1s linear'
   },
   progressHandle: {
     position: 'absolute',
@@ -1601,18 +1510,6 @@ const styles = {
     display: 'flex',
     gap: '8px'
   },
-  analyzeButton: {
-    width: '100%',
-    padding: '12px',
-    marginBottom: '8px',
-    backgroundColor: '#7c3aed',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '13px',
-    fontWeight: '600'
-  },
   editLyricsButton: {
     flex: 1,
     padding: '10px',
@@ -1692,7 +1589,8 @@ const styles = {
     cursor: 'pointer',
     padding: '4px',
     borderRadius: '6px',
-    border: '2px solid transparent'
+    border: '2px solid transparent',
+    transition: 'border-color 0.2s'
   },
   availableClipThumb: {
     width: '60px',
@@ -1711,7 +1609,6 @@ const styles = {
     whiteSpace: 'nowrap'
   },
   noAvailableClips: {
-    gridColumn: '1 / -1',
     textAlign: 'center',
     padding: '20px',
     color: '#6b7280',
@@ -1782,52 +1679,6 @@ const styles = {
   },
   clipItemSelected: {
     border: '2px solid #7c3aed'
-  },
-  clipItemPlaying: {
-    border: '2px solid #22c55e',
-    boxShadow: '0 0 12px rgba(34, 197, 94, 0.4)'
-  },
-  nowPlayingBadge: {
-    position: 'absolute',
-    top: '4px',
-    left: '4px',
-    padding: '2px 6px',
-    backgroundColor: '#22c55e',
-    borderRadius: '4px',
-    fontSize: '8px',
-    fontWeight: '700',
-    color: '#fff',
-    zIndex: 5,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em'
-  },
-  timelineHeader: {
-    position: 'relative',
-    height: '24px',
-    marginBottom: '8px',
-    borderRadius: '4px',
-    overflow: 'hidden'
-  },
-  timelineSegments: {
-    display: 'flex',
-    height: '100%',
-    gap: '2px'
-  },
-  timelineSegment: {
-    height: '100%',
-    borderRadius: '2px',
-    transition: 'background-color 0.15s'
-  },
-  timelinePlayhead: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: '3px',
-    backgroundColor: '#ef4444',
-    borderRadius: '2px',
-    transform: 'translateX(-50%)',
-    boxShadow: '0 0 8px rgba(239, 68, 68, 0.6)',
-    zIndex: 10
   },
   clipThumb: {
     width: '100%',
@@ -2013,174 +1864,7 @@ const styles = {
     borderTopColor: '#7c3aed',
     borderRadius: '50%',
     animation: 'spin 1s linear infinite'
-  },
-  // Post button
-  postButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '10px 20px',
-    backgroundColor: '#22c55e',
-    border: 'none',
-    borderRadius: '6px',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '13px',
-    fontWeight: '600'
-  },
-  // Publishing overlay
-  publishingOverlay: {
-    position: 'absolute',
-    inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.9)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 100
-  },
-  publishingModal: {
-    width: '100%',
-    maxWidth: '420px',
-    backgroundColor: '#111118',
-    borderRadius: '12px',
-    padding: '24px'
-  },
-  publishTitle: {
-    fontSize: '18px',
-    fontWeight: '600',
-    color: '#fff',
-    margin: '0 0 20px 0',
-    textAlign: 'center'
-  },
-  publishField: { marginBottom: '16px' },
-  publishLabel: {
-    display: 'block',
-    fontSize: '13px',
-    fontWeight: '500',
-    color: '#9ca3af',
-    marginBottom: '8px'
-  },
-  publishTextarea: {
-    width: '100%',
-    minHeight: '80px',
-    padding: '12px',
-    backgroundColor: '#0a0a0f',
-    border: '1px solid #2d2d3d',
-    borderRadius: '8px',
-    color: '#fff',
-    fontSize: '14px',
-    resize: 'vertical',
-    outline: 'none'
-  },
-  publishInput: {
-    width: '100%',
-    padding: '12px',
-    backgroundColor: '#0a0a0f',
-    border: '1px solid #2d2d3d',
-    borderRadius: '8px',
-    color: '#fff',
-    fontSize: '14px',
-    outline: 'none'
-  },
-  accountList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    maxHeight: '120px',
-    overflowY: 'auto',
-    padding: '8px',
-    backgroundColor: '#0a0a0f',
-    borderRadius: '8px'
-  },
-  accountItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    padding: '8px 12px',
-    backgroundColor: '#1f1f2e',
-    borderRadius: '6px',
-    cursor: 'pointer'
-  },
-  accountCheckbox: { width: '18px', height: '18px', accentColor: '#7c3aed' },
-  accountPlatform: { fontSize: '16px' },
-  accountName: { fontSize: '13px', color: '#fff' },
-  noAccounts: { fontSize: '13px', color: '#6b7280', textAlign: 'center', padding: '12px' },
-  publishError: {
-    padding: '12px',
-    backgroundColor: 'rgba(239,68,68,0.1)',
-    border: '1px solid #dc2626',
-    borderRadius: '8px',
-    color: '#ef4444',
-    fontSize: '13px',
-    marginBottom: '16px'
-  },
-  publishActions: { display: 'flex', gap: '8px', marginTop: '20px' },
-  publishCancel: {
-    flex: 1,
-    padding: '12px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
-    borderRadius: '8px',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '14px'
-  },
-  publishConfirm: {
-    flex: 1,
-    padding: '12px',
-    backgroundColor: '#22c55e',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '600'
-  },
-  publishProgress: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    padding: '40px 0'
-  },
-  progressCircle: {
-    position: 'relative',
-    width: '120px',
-    height: '120px',
-    marginBottom: '24px'
-  },
-  progressSvg: { width: '100%', height: '100%' },
-  progressText: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    fontSize: '24px',
-    fontWeight: '700',
-    color: '#fff'
-  },
-  publishStatusTitle: { fontSize: '18px', fontWeight: '600', color: '#fff', margin: 0 },
-  publishSuccess: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    padding: '20px 0'
-  },
-  publishSuccessTitle: { fontSize: '20px', fontWeight: '600', color: '#fff', margin: '16px 0 0 0' },
-  publishDone: {
-    width: '100%',
-    padding: '14px',
-    backgroundColor: '#7c3aed',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '600',
-    marginTop: '24px'
-  },
-  publishErrorState: { display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' },
-  publishErrorTitle: { fontSize: '18px', fontWeight: '600', color: '#fff', margin: '16px 0 8px 0' },
-  publishErrorText: { fontSize: '14px', color: '#9ca3af', textAlign: 'center' }
+  }
 };
 
 export default VideoEditorModal;
