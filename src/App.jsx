@@ -2487,9 +2487,9 @@ const StickToMusic = () => {
             {/* Video Editor - opens modal */}
             <button
               onClick={() => setShowVideoEditor(true)}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap bg-purple-600 hover:bg-purple-500 text-white"
+              className="px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap text-zinc-400 hover:text-white hover:bg-zinc-900"
             >
-              🎬 Video Editor
+              Video Editor
             </button>
             {['applications', 'settings'].map(tab => (
               <button

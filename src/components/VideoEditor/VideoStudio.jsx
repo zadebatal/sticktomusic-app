@@ -802,9 +802,11 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     height: '100vh',
-    backgroundColor: '#0a0a0f',
+    backgroundColor: 'rgba(10, 10, 15, 0.98)',
+    backdropFilter: 'blur(8px)',
     color: '#e5e7eb',
-    fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    boxShadow: '0 0 60px rgba(0, 0, 0, 0.8)'
   },
   header: {
     display: 'flex',

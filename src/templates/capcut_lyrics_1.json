@@ -1,0 +1,25 @@
+{
+  "name": "CapCut Lyrics - Caption Style",
+  "source": "capcut",
+  "animation": {
+    "id": "7447459164684554768",
+    "name": "Caption",
+    "type": "caption",
+    "duration": 3.4
+  },
+  "textStyle": {
+    "fontFamily": "Helvetica Neue",
+    "fontSize": 18,
+    "color": "#ffffff",
+    "fontWeight": "400",
+    "italic": false,
+    "outline": false,
+    "outlineColor": "#000000",
+    "textCase": "default"
+  },
+  "wordTiming": {
+    "averageWordDuration": 0.547,
+    "totalWords": 96,
+    "pattern": "lyric_sync"
+  }
+}
