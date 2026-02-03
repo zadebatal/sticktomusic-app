@@ -92,9 +92,10 @@ export function assertNoBlobUrls(obj, context = '') {
   const violations = findBlobUrls(obj);
   if (violations.length > 0) {
     const msg = `Blob URLs found${context ? ` in ${context}` : ''}: ${violations.join(', ')}`;
-    if (process.env.NODE_ENV === 'development') {
-      console.error('[ASSET VIOLATION]', msg, { violations, obj });
-    }
+    // Log in all environments for observability
+    console.error('[ASSET VIOLATION]', msg, { violations });
+
+    // Always throw - blob URLs in persistence is a P0 data integrity violation
     throw new Error(msg);
   }
 }

@@ -5,6 +5,7 @@ import WordTimeline from './WordTimeline';
 import TextControls from './TextControls';
 import ContentLibrary from './ContentLibrary';
 import { useBeatDetection } from '../../hooks/useBeatDetection';
+import { VIDEO_STATUS } from '../../utils/status';
 
 const VideoEditor = ({
   onSave,
@@ -15,7 +16,7 @@ const VideoEditor = ({
 }) => {
   // Project state
   const [projectName, setProjectName] = useState(initialProject?.name || 'Untitled Project');
-  const [status, setStatus] = useState('draft'); // draft | rendering | completed
+  const [status, setStatus] = useState(VIDEO_STATUS.DRAFT);
 
   // Media state
   const [videoFile, setVideoFile] = useState(initialProject?.videoSource?.url || null);
@@ -222,7 +223,7 @@ const VideoEditor = ({
 
   // Export/render video
   const handleExport = useCallback(() => {
-    setStatus('rendering');
+    setStatus(VIDEO_STATUS.RENDERING);
     const project = {
       name: projectName,
       videoSource: { url: videoFile, duration: videoDuration },

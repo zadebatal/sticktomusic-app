@@ -49,6 +49,15 @@ const VideoEditorV2 = ({
     { id: 'boon', name: 'Boon' }
   ]
 }) => {
+  // ============ DEPRECATION WARNING ============
+  useEffect(() => {
+    console.warn(
+      '[DEPRECATED] VideoEditorV2 is deprecated and violates TIME_WINDOW_INVARIANT.\n' +
+      'Use VideoEditorModal instead, which supports audio trim boundaries.\n' +
+      'See docs/DOMAIN_INVARIANTS.md Section A for details.'
+    );
+  }, []);
+
   // ============ STATE ============
 
   // Project state

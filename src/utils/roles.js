@@ -8,13 +8,15 @@
  */
 
 /**
- * Operator emails - MUST match App.jsx OPERATOR_EMAILS
- * In production, this should come from environment or server
+ * Operator emails - loaded from environment variable or defaults
+ * Set REACT_APP_OPERATOR_EMAILS as comma-separated list in production
  */
-const OPERATOR_EMAILS = Object.freeze([
-  'zade@sticktomusic.com',
-  'zadebatal@gmail.com',
-]);
+const OPERATOR_EMAILS = Object.freeze(
+  (process.env.REACT_APP_OPERATOR_EMAILS || 'zade@sticktomusic.com,zadebatal@gmail.com')
+    .split(',')
+    .map(email => email.trim().toLowerCase())
+    .filter(Boolean)
+);
 
 /**
  * Role constants
@@ -66,9 +68,10 @@ export function getRoleForEmail(email) {
 export function assertOperator(user, operation = 'this operation') {
   if (!isUserOperator(user)) {
     const msg = `Permission denied: ${operation} requires operator access`;
-    if (process.env.NODE_ENV === 'development') {
-      console.error('[ROLE VIOLATION]', msg, { user });
-    }
+    // Log in all environments - security violations must be tracked
+    console.error('[ROLE VIOLATION]', msg, { email: user?.email });
+
+    // Always throw - permission bypass is a P0 security violation
     throw new Error(msg);
   }
 }

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import ExportAndPostModal from './ExportAndPostModal';
 import { StatusPill, ConfirmDialog, EmptyState as SharedEmptyState } from '../ui';
+import { VIDEO_STATUS } from '../../utils/status';
 
 /**
  * ContentLibrary - Shows all videos created with a category
@@ -261,7 +262,7 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
 
       {/* UI-31: Use StatusPill instead of custom badge */}
       <div style={styles.statusBadgeContainer}>
-        <StatusPill status={video.status || 'draft'} />
+        <StatusPill status={video.status || VIDEO_STATUS.DRAFT} />
       </div>
     </div>
   );
@@ -323,7 +324,7 @@ const BatchCreateModal = ({ category, onClose, onCreateDrafts }) => {
         id: `draft_${Date.now()}_${i}`,
         createdAt: new Date().toISOString(),
         title: `${namePrefix}_${(i + 1).toString().padStart(2, '0')}`,
-        status: 'draft',
+        status: VIDEO_STATUS.DRAFT,
         category: category?.name,
         audio: selectedAudio,
         clips: draftClips.map(c => ({

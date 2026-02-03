@@ -106,15 +106,19 @@ export function canTransitionTo(fromStatus, toStatus) {
 }
 
 /**
- * Assert status is valid (development helper)
+ * Assert status is valid
  * @param {string} status
  * @param {string} context - Where the check is happening
  */
 export function assertValidVideoStatus(status, context = '') {
   if (!isValidVideoStatus(status)) {
     const msg = `Invalid video status "${status}"${context ? ` in ${context}` : ''}. Valid: ${Object.values(VIDEO_STATUS).join(', ')}`;
+    // Log in all environments for observability
+    console.error('[STATUS VIOLATION]', msg);
+
+    // In development, throw to catch bugs early
     if (process.env.NODE_ENV === 'development') {
-      console.error('[STATUS VIOLATION]', msg);
+      throw new Error(msg);
     }
   }
 }

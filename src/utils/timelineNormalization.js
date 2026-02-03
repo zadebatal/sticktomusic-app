@@ -281,10 +281,13 @@ export function assertActiveRange(activeRange, context = '') {
 
   if (errors.length > 0) {
     const msg = `Invalid activeRange${context ? ` in ${context}` : ''}: ${errors.join(', ')}`;
+    // Log in all environments for observability
+    console.error('[TIME WINDOW VIOLATION]', msg, activeRange);
+
+    // In development, also throw to catch bugs early
     if (process.env.NODE_ENV === 'development') {
-      console.error('[TIME WINDOW VIOLATION]', msg, activeRange);
+      throw new Error(msg);
     }
-    // Don't throw in production - gracefully degrade
   }
 
   return errors.length === 0;

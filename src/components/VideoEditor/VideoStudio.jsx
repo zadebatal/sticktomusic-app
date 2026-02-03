@@ -4,6 +4,7 @@ import ContentLibrary from './ContentLibrary';
 import VideoEditorModal from './VideoEditorModal';
 import { uploadFile, deleteFile, getMediaDuration, generateThumbnail } from '../../services/firebaseStorage';
 import { saveCategories, loadCategories, savePresets, loadPresets, cleanupStorage } from '../../services/storageService';
+import { VIDEO_STATUS } from '../../utils/status';
 
 /**
  * ErrorBoundary - Catches errors in VideoEditorModal to prevent blank page crashes
@@ -229,7 +230,7 @@ const VideoStudio = ({ onClose, artists = [] }) => {
             ...videoData,
             id: `video_${Date.now()}`,
             createdAt: new Date().toISOString(),
-            status: 'draft'
+            status: VIDEO_STATUS.DRAFT
           }]
         };
       }
@@ -606,7 +607,7 @@ const VideoStudio = ({ onClose, artists = [] }) => {
         ? {
             ...cat,
             createdVideos: cat.createdVideos.map(v =>
-              v.id === videoId ? { ...v, status: v.status === 'approved' ? 'draft' : 'approved' } : v
+              v.id === videoId ? { ...v, status: v.status === VIDEO_STATUS.APPROVED ? VIDEO_STATUS.DRAFT : VIDEO_STATUS.APPROVED } : v
             )
           }
         : cat
@@ -615,7 +616,7 @@ const VideoStudio = ({ onClose, artists = [] }) => {
     setSelectedCategory(prev => prev ? {
       ...prev,
       createdVideos: prev.createdVideos.map(v =>
-        v.id === videoId ? { ...v, status: v.status === 'approved' ? 'draft' : 'approved' } : v
+        v.id === videoId ? { ...v, status: v.status === VIDEO_STATUS.APPROVED ? VIDEO_STATUS.DRAFT : VIDEO_STATUS.APPROVED } : v
       )
     } : prev);
   }, [selectedCategory]);

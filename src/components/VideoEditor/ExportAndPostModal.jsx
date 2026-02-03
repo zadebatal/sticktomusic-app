@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { renderVideo, exportAsPreview } from '../../services/videoExportService';
 import { uploadVideo } from '../../services/firebaseStorage';
+import { EXPORT_STAGE } from '../../utils/status';
 
 /**
  * ExportAndPostModal - Modal for exporting and posting videos
@@ -13,7 +14,7 @@ const ExportAndPostModal = ({
   onClose,
   onSchedulePost // Function to call Late API: (videoUrl, caption) => Promise
 }) => {
-  const [stage, setStage] = useState('options'); // options, rendering, uploading, ready, posting, done
+  const [stage, setStage] = useState(EXPORT_STAGE.OPTIONS);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
@@ -38,7 +39,7 @@ const ExportAndPostModal = ({
       return;
     }
 
-    setStage('rendering');
+    setStage(EXPORT_STAGE.RENDERING);
     setProgress(0);
     setError(null);
 
@@ -55,11 +56,11 @@ const ExportAndPostModal = ({
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      setStage('done');
+      setStage(EXPORT_STAGE.DONE);
     } catch (err) {
       console.error('Export error:', err);
       setError(err.message || 'Failed to export video');
-      setStage('options');
+      setStage(EXPORT_STAGE.OPTIONS);
     }
   }, [video]);
 
@@ -71,7 +72,7 @@ const ExportAndPostModal = ({
       return;
     }
 
-    setStage('rendering');
+    setStage(EXPORT_STAGE.RENDERING);
     setProgress(0);
     setError(null);
 
@@ -80,17 +81,17 @@ const ExportAndPostModal = ({
       const blob = await renderVideo(video, (p) => setProgress(p * 0.5)); // 0-50% for rendering
 
       // Step 2: Upload to Firebase
-      setStage('uploading');
+      setStage(EXPORT_STAGE.UPLOADING);
       const url = await uploadVideo(blob, `video_${video.id}`, (p) => {
         setProgress(50 + p * 0.5); // 50-100% for uploading
       });
 
       setVideoUrl(url);
-      setStage('ready');
+      setStage(EXPORT_STAGE.READY);
     } catch (err) {
       console.error('Export/upload error:', err);
       setError(err.message || 'Failed to export or upload video');
-      setStage('options');
+      setStage(EXPORT_STAGE.OPTIONS);
     }
   }, [video]);
 
@@ -98,16 +99,16 @@ const ExportAndPostModal = ({
   const handleSchedulePost = useCallback(async () => {
     if (!videoUrl || !onSchedulePost) return;
 
-    setStage('posting');
+    setStage(EXPORT_STAGE.POSTING);
     setError(null);
 
     try {
       await onSchedulePost(videoUrl, caption);
-      setStage('done');
+      setStage(EXPORT_STAGE.DONE);
     } catch (err) {
       console.error('Posting error:', err);
       setError(err.message || 'Failed to schedule post');
-      setStage('ready');
+      setStage(EXPORT_STAGE.READY);
     }
   }, [videoUrl, caption, onSchedulePost]);
 
@@ -124,12 +125,12 @@ const ExportAndPostModal = ({
         {/* Header */}
         <div style={styles.header}>
           <h2 style={styles.title}>
-            {stage === 'options' && 'Export Video'}
-            {stage === 'rendering' && 'Rendering Video...'}
-            {stage === 'uploading' && 'Uploading to Cloud...'}
-            {stage === 'ready' && 'Ready to Post'}
-            {stage === 'posting' && 'Scheduling Post...'}
-            {stage === 'done' && 'Done!'}
+            {stage === EXPORT_STAGE.OPTIONS && 'Export Video'}
+            {stage === EXPORT_STAGE.RENDERING && 'Rendering Video...'}
+            {stage === EXPORT_STAGE.UPLOADING && 'Uploading to Cloud...'}
+            {stage === EXPORT_STAGE.READY && 'Ready to Post'}
+            {stage === EXPORT_STAGE.POSTING && 'Scheduling Post...'}
+            {stage === EXPORT_STAGE.DONE && 'Done!'}
           </h2>
           <button style={styles.closeButton} onClick={onClose}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -146,33 +147,33 @@ const ExportAndPostModal = ({
               <div style={styles.stepperStep}>
                 <div style={{
                   ...styles.stepperDot,
-                  backgroundColor: stage === 'options' ? '#7c3aed' : (stage === 'rendering' || stage === 'uploading' || stage === 'ready' || stage === 'posting') ? '#22c55e' : '#3f3f46'
+                  backgroundColor: stage === EXPORT_STAGE.OPTIONS ? '#7c3aed' : (stage === EXPORT_STAGE.RENDERING || stage === EXPORT_STAGE.UPLOADING || stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING) ? '#22c55e' : '#3f3f46'
                 }}>
-                  {(stage === 'rendering' || stage === 'uploading' || stage === 'ready' || stage === 'posting') ? '✓' : '1'}
+                  {(stage === EXPORT_STAGE.RENDERING || stage === EXPORT_STAGE.UPLOADING || stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING) ? '✓' : '1'}
                 </div>
                 <span style={styles.stepperLabel}>Export</span>
               </div>
               <div style={{
                 ...styles.stepperLine,
-                backgroundColor: (stage === 'uploading' || stage === 'ready' || stage === 'posting') ? '#22c55e' : '#3f3f46'
+                backgroundColor: (stage === EXPORT_STAGE.UPLOADING || stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING) ? '#22c55e' : '#3f3f46'
               }} />
               <div style={styles.stepperStep}>
                 <div style={{
                   ...styles.stepperDot,
-                  backgroundColor: (stage === 'uploading') ? '#7c3aed' : (stage === 'ready' || stage === 'posting') ? '#22c55e' : '#3f3f46'
+                  backgroundColor: (stage === EXPORT_STAGE.UPLOADING) ? '#7c3aed' : (stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING) ? '#22c55e' : '#3f3f46'
                 }}>
-                  {(stage === 'ready' || stage === 'posting') ? '✓' : '2'}
+                  {(stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING) ? '✓' : '2'}
                 </div>
                 <span style={styles.stepperLabel}>Upload</span>
               </div>
               <div style={{
                 ...styles.stepperLine,
-                backgroundColor: stage === 'ready' || stage === 'posting' ? '#22c55e' : '#3f3f46'
+                backgroundColor: stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING ? '#22c55e' : '#3f3f46'
               }} />
               <div style={styles.stepperStep}>
                 <div style={{
                   ...styles.stepperDot,
-                  backgroundColor: stage === 'ready' || stage === 'posting' ? '#7c3aed' : '#3f3f46'
+                  backgroundColor: stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING ? '#7c3aed' : '#3f3f46'
                 }}>
                   3
                 </div>
@@ -182,7 +183,7 @@ const ExportAndPostModal = ({
           )}
 
           {/* Options Stage - Already Exported */}
-          {stage === 'options' && alreadyExported && (
+          {stage === EXPORT_STAGE.OPTIONS && alreadyExported && (
             <>
               <div style={styles.successIcon}>
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
@@ -207,7 +208,7 @@ const ExportAndPostModal = ({
           )}
 
           {/* Options Stage - Not Yet Exported */}
-          {stage === 'options' && !alreadyExported && (
+          {stage === EXPORT_STAGE.OPTIONS && !alreadyExported && (
             <>
               {/* Preview */}
               <div style={styles.previewSection}>
@@ -271,7 +272,7 @@ const ExportAndPostModal = ({
           )}
 
           {/* Rendering/Uploading Stage */}
-          {(stage === 'rendering' || stage === 'uploading' || stage === 'posting') && (
+          {(stage === EXPORT_STAGE.RENDERING || stage === EXPORT_STAGE.UPLOADING || stage === EXPORT_STAGE.POSTING) && (
             <div style={styles.progressSection}>
               <div style={styles.progressCircle}>
                 <svg viewBox="0 0 100 100" style={styles.progressSvg}>
@@ -298,15 +299,15 @@ const ExportAndPostModal = ({
                 <span style={styles.progressText}>{progress}%</span>
               </div>
               <p style={styles.progressLabel}>
-                {stage === 'rendering' && 'Rendering video frames...'}
-                {stage === 'uploading' && 'Uploading to cloud storage...'}
-                {stage === 'posting' && 'Scheduling post...'}
+                {stage === EXPORT_STAGE.RENDERING && 'Rendering video frames...'}
+                {stage === EXPORT_STAGE.UPLOADING && 'Uploading to cloud storage...'}
+                {stage === EXPORT_STAGE.POSTING && 'Scheduling post...'}
               </p>
             </div>
           )}
 
           {/* Ready Stage */}
-          {stage === 'ready' && (
+          {stage === EXPORT_STAGE.READY && (
             <>
               <div style={styles.successIcon}>
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
@@ -354,7 +355,7 @@ const ExportAndPostModal = ({
           )}
 
           {/* Done Stage */}
-          {stage === 'done' && (
+          {stage === EXPORT_STAGE.DONE && (
             <>
               <div style={styles.successIcon}>
                 <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
@@ -387,7 +388,7 @@ const ExportAndPostModal = ({
                   style={styles.retryButton}
                   onClick={() => {
                     setError(null);
-                    setStage('options');
+                    setStage(EXPORT_STAGE.OPTIONS);
                   }}
                 >
                   ← Back to Options

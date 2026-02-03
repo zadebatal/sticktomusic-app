@@ -67,7 +67,11 @@ const googleProvider = new GoogleAuthProvider();
 const STRIPE_PUBLISHABLE_KEY = 'pk_live_51SwClT6Yzynsfn3ImqR6SMOHy1EgQoTeQ7o7i3iMBRWSTTaYo2WrIq6G5ZpOMrhGCmEwuKc9mpKFMZXKFn9TLfUv00lfBRoJyl';
 
 // Operator emails (these users get operator access)
-const OPERATOR_EMAILS = ['zade@sticktomusic.com', 'zadebatal@gmail.com'];
+// Can be overridden via REACT_APP_OPERATOR_EMAILS environment variable (comma-separated)
+const OPERATOR_EMAILS = (process.env.REACT_APP_OPERATOR_EMAILS || 'zade@sticktomusic.com,zadebatal@gmail.com')
+  .split(',')
+  .map(email => email.trim().toLowerCase())
+  .filter(Boolean);
 
 // Late API Configuration - API key is now stored securely in Vercel environment variables
 // The /api/late serverless function proxies requests with the key
