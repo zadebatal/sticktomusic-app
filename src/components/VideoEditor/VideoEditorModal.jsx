@@ -1,9 +1,16 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useBeatDetection } from '../../hooks/useBeatDetection';
 import WordTimeline from './WordTimeline';
 import BeatSelector from './BeatSelector';
 import { saveApiKey, loadApiKey } from '../../services/storageService';
 import { ErrorPanel, EmptyState as SharedEmptyState } from '../ui';
+import {
+  getTrimHash,
+  getTrimBoundaries,
+  validateLocalTimeData,
+  normalizeWordsToTrimRange,
+  normalizeBeatsToTrimRange
+} from '../../utils/timelineNormalization';
 
 /**
  * VideoEditorModal - Flowstage-inspired video editor modal
@@ -73,6 +80,42 @@ const VideoEditorModal = ({
   const videoRef = useRef(null);
   const timelineRef = useRef(null);
   const animationRef = useRef(null);
+  const previousTrimHashRef = useRef(null);
+
+  // Trim change detection - invalidate dependent data when trim boundaries change
+  // INVARIANT: Words and clips are in LOCAL time, so they become invalid if trim changes
+  useEffect(() => {
+    const { trimStart, trimEnd } = getTrimBoundaries(selectedAudio, duration);
+    const currentHash = getTrimHash(trimStart, trimEnd);
+
+    // Skip on initial mount
+    if (previousTrimHashRef.current === null) {
+      previousTrimHashRef.current = currentHash;
+      return;
+    }
+
+    // Check if trim boundaries changed
+    if (previousTrimHashRef.current !== currentHash) {
+      console.log('[TrimChange] Trim boundaries changed, invalidating dependent data');
+      console.log(`  Old: ${previousTrimHashRef.current}`);
+      console.log(`  New: ${currentHash}`);
+
+      // Clear words (they were timed to the old trim range)
+      if (words.length > 0) {
+        console.log(`  Clearing ${words.length} words`);
+        setWords([]);
+        setLyrics('');
+      }
+
+      // Note: We don't clear clips automatically because user may have manually curated them
+      // But we should warn them if clips exist
+      if (clips.length > 0) {
+        console.warn('[TrimChange] Clips may be out of sync with new trim range');
+      }
+
+      previousTrimHashRef.current = currentHash;
+    }
+  }, [selectedAudio, duration, words.length, clips.length]);
 
   // Get current clip based on currentTime
   const currentClip = clips.find((clip, i) => {
@@ -85,6 +128,14 @@ const VideoEditorModal = ({
   const audioStartTime = selectedAudio?.startTime || 0;
   const audioEndTime = selectedAudio?.endTime || selectedAudio?.duration || duration;
   const trimmedDuration = audioEndTime - audioStartTime;
+
+  // Filter beats to only those within the trimmed range and normalize to local time
+  // INVARIANT: All beat timestamps shown to user and used for clip creation must be in LOCAL time (0 to trimmedDuration)
+  const filteredBeats = useMemo(() => {
+    if (!beats.length) return [];
+    // Use centralized normalization utility
+    return normalizeBeatsToTrimRange(beats, audioStartTime, audioEndTime);
+  }, [beats, audioStartTime, audioEndTime]);
 
   // Load audio and analyze beats
   useEffect(() => {
@@ -203,7 +254,9 @@ const VideoEditorModal = ({
 
   // Handlers - MUST be defined before useEffect that references them (TDZ fix)
   const handleSeek = useCallback((time) => {
-    const clampedTime = Math.max(0, Math.min(time, duration));
+    // Use trimmed duration for clamping
+    const effectiveDuration = (selectedAudio?.endTime || selectedAudio?.duration || duration) - (selectedAudio?.startTime || 0);
+    const clampedTime = Math.max(0, Math.min(time, effectiveDuration));
     setCurrentTime(clampedTime);
     if (audioRef.current) {
       // Add audio start boundary offset for trimmed audio
@@ -384,27 +437,30 @@ const VideoEditorModal = ({
 
   // Show the beat selector modal
   const handleCutByBeat = useCallback(() => {
-    if (!beats.length) {
-      console.warn('No beats detected - cannot open beat selector');
+    if (!filteredBeats.length) {
+      console.warn('No beats detected in trimmed range - cannot open beat selector');
       return;
     }
     setShowBeatSelector(true);
-  }, [beats]);
+  }, [filteredBeats]);
 
   // Handle when user selects beats from the BeatSelector modal
+  // Note: selectedBeatTimes are now in LOCAL time (0 to trimmedDuration)
   const handleBeatSelectionApply = useCallback((selectedBeatTimes) => {
     if (!selectedBeatTimes.length || !category?.videos?.length) {
       setShowBeatSelector(false);
       return;
     }
 
+    // Calculate trimmed duration for the end boundary
+    const effectiveDuration = (selectedAudio?.endTime || selectedAudio?.duration || duration) - (selectedAudio?.startTime || 0);
     const availableClips = category.videos;
     const newClips = [];
 
-    // Create clips for each selected beat (cut points)
+    // Create clips for each selected beat (cut points) - all times are LOCAL
     for (let i = 0; i < selectedBeatTimes.length; i++) {
       const startTime = selectedBeatTimes[i];
-      const endTime = selectedBeatTimes[i + 1] || duration; // Use next beat or end of audio
+      const endTime = selectedBeatTimes[i + 1] || effectiveDuration; // Use next beat or end of trimmed audio
       const clipDuration = endTime - startTime;
 
       const randomClip = availableClips[Math.floor(Math.random() * availableClips.length)];
@@ -423,7 +479,7 @@ const VideoEditorModal = ({
 
     setClips(newClips);
     setShowBeatSelector(false);
-  }, [category?.videos, duration]);
+  }, [category?.videos, duration, selectedAudio]);
 
   const handleCutByWord = useCallback(() => {
     if (!words.length || !category?.videos?.length) return;
@@ -494,22 +550,24 @@ const VideoEditorModal = ({
   }, []);
 
   const handleSyncLyrics = useCallback((mode) => {
-    if (!lyrics.trim() || !beats.length) return;
+    if (!lyrics.trim() || !filteredBeats.length) return;
 
     const lyricWords = lyrics.split(/\s+/).filter(w => w.trim());
+    // Use trimmed duration for timing calculations
+    const effectiveDuration = (selectedAudio?.endTime || selectedAudio?.duration || duration) - (selectedAudio?.startTime || 0);
 
     if (mode === 'beat') {
-      // One word per beat
+      // One word per beat - uses LOCAL time from filteredBeats
       const newWords = lyricWords.map((text, i) => ({
         id: `word_${Date.now()}_${i}`,
         text,
-        startTime: beats[i % beats.length] || i * 0.5,
+        startTime: filteredBeats[i % filteredBeats.length] || i * 0.5,
         duration: 0.4
       }));
       setWords(newWords);
     } else if (mode === 'even') {
-      // Evenly spread across duration
-      const interval = duration / lyricWords.length;
+      // Evenly spread across trimmed duration
+      const interval = effectiveDuration / lyricWords.length;
       const newWords = lyricWords.map((text, i) => ({
         id: `word_${Date.now()}_${i}`,
         text,
@@ -520,7 +578,7 @@ const VideoEditorModal = ({
     }
 
     setShowLyricsEditor(false);
-  }, [lyrics, beats, duration]);
+  }, [lyrics, filteredBeats, duration, selectedAudio]);
 
   // AI Transcription with AssemblyAI
   const handleAITranscribe = useCallback(async () => {
@@ -622,16 +680,33 @@ const VideoEditorModal = ({
       }
 
       // Step 4: Set the words with timestamps
+      // Use the normalization utility to filter and convert to LOCAL time
       if (transcript.words && transcript.words.length > 0) {
-        const newWords = transcript.words.map((w, i) => ({
-          id: `word_${Date.now()}_${i}`,
-          text: w.text,
-          startTime: w.start / 1000, // Convert ms to seconds
-          duration: (w.end - w.start) / 1000
-        }));
+        const { trimStart, trimEnd } = getTrimBoundaries(selectedAudio, duration);
 
-        setWords(newWords);
-        setLyrics(transcript.text);
+        // Use centralized normalization utility
+        // AssemblyAI returns timestamps in milliseconds
+        const newWords = normalizeWordsToTrimRange(
+          transcript.words,
+          trimStart,
+          trimEnd,
+          { inputInMs: true }
+        );
+
+        if (newWords.length > 0) {
+          // Validate the normalized data in development
+          if (process.env.NODE_ENV === 'development') {
+            const trimmedDuration = trimEnd - trimStart;
+            validateLocalTimeData({ words: newWords }, trimmedDuration);
+          }
+
+          setWords(newWords);
+          // Rebuild lyrics text from filtered words
+          const filteredLyrics = newWords.map(w => w.text).join(' ');
+          setLyrics(filteredLyrics);
+        } else {
+          setTranscriptionError('No words detected in the selected audio range');
+        }
       } else {
         setTranscriptionError('No words detected in audio');
       }
@@ -792,20 +867,20 @@ const VideoEditorModal = ({
                   const rect = e.currentTarget.getBoundingClientRect();
                   const clickX = e.clientX - rect.left;
                   const percent = clickX / rect.width;
-                  const newTime = percent * duration;
+                  const newTime = percent * trimmedDuration;
                   handleSeek(newTime);
                 }}
               >
                 <div
                   style={{
                     ...styles.progressBar,
-                    width: `${(currentTime / duration) * 100}%`
+                    width: `${(currentTime / trimmedDuration) * 100}%`
                   }}
                 />
                 <div
                   style={{
                     ...styles.progressHandle,
-                    left: `${(currentTime / duration) * 100}%`
+                    left: `${(currentTime / trimmedDuration) * 100}%`
                   }}
                 />
               </div>
@@ -843,7 +918,7 @@ const VideoEditorModal = ({
                   )}
                 </button>
                 <span style={styles.timeDisplay}>
-                  {formatTime(currentTime)} / {formatTime(duration)}
+                  {formatTime(currentTime)} / {formatTime(trimmedDuration)}
                 </span>
                 <button style={styles.fullscreenButton}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1189,7 +1264,7 @@ const VideoEditorModal = ({
                   <div style={styles.clipsSectionHeader}>
                     <h4 style={styles.sectionTitle}>Timeline ({clips.length} clips)</h4>
                     <div style={styles.beatsInfo}>
-                      {isAnalyzing ? 'Analyzing beats...' : bpm ? `${Math.round(bpm)} BPM` : 'No beats detected'}
+                      {isAnalyzing ? 'Analyzing beats...' : bpm ? `${Math.round(bpm)} BPM (${filteredBeats.length} beats)` : 'No beats detected'}
                     </div>
                   </div>
 
@@ -1315,7 +1390,7 @@ const VideoEditorModal = ({
           <WordTimeline
             words={words}
             setWords={setWords}
-            duration={duration}
+            duration={trimmedDuration}
             currentTime={currentTime}
             onSeek={handleSeek}
             isPlaying={isPlaying}
@@ -1377,9 +1452,9 @@ const VideoEditorModal = ({
         {/* Beat Selector Modal */}
         {showBeatSelector && (
           <BeatSelector
-            beats={beats}
+            beats={filteredBeats}
             bpm={bpm}
-            duration={duration}
+            duration={trimmedDuration}
             onApply={handleBeatSelectionApply}
             onCancel={() => setShowBeatSelector(false)}
           />

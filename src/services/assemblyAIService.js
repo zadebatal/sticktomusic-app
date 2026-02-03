@@ -1,7 +1,19 @@
 /**
  * AssemblyAI Service - Transcribes audio with word-level timestamps
  * Supports files up to 5GB - much better for full songs!
+ *
+ * IMPORTANT: By default, returns words in GLOBAL time (full audio timeline).
+ * Pass trimStart/trimEnd options to get words in LOCAL time (normalized to trim range).
+ *
+ * @example
+ * // Full audio (GLOBAL time):
+ * const result = await transcribeAudio(file, apiKey);
+ *
+ * // Trimmed audio (LOCAL time, 0 = trimStart):
+ * const result = await transcribeAudio(file, apiKey, onProgress, { trimStart: 30, trimEnd: 50 });
  */
+
+import { normalizeWordsToTrimRange } from '../utils/timelineNormalization';
 
 const UPLOAD_URL = 'https://api.assemblyai.com/v2/upload';
 const TRANSCRIPT_URL = 'https://api.assemblyai.com/v2/transcript';
@@ -90,10 +102,19 @@ async function pollTranscription(transcriptId, apiKey, onProgress) {
 /**
  * Main transcription function
  * @param {File|string} audioFileOrUrl - File object or public URL string
+ * @param {string} apiKey - AssemblyAI API key
+ * @param {Function} onProgress - Progress callback
+ * @param {Object} options - Optional settings
+ * @param {number} options.trimStart - Trim start in seconds (for LOCAL time output)
+ * @param {number} options.trimEnd - Trim end in seconds (for LOCAL time output)
+ * @returns {Object} - { text, words, confidence, duration, isTrimmed }
  */
-export async function transcribeAudio(audioFileOrUrl, apiKey, onProgress) {
+export async function transcribeAudio(audioFileOrUrl, apiKey, onProgress, options = {}) {
   if (!apiKey) throw new Error('AssemblyAI API key is required');
   if (!audioFileOrUrl) throw new Error('Audio file or URL is required');
+
+  const { trimStart = 0, trimEnd = null } = options;
+  const isTrimmed = trimStart > 0 || trimEnd !== null;
 
   let audioUrl;
 
@@ -116,19 +137,41 @@ export async function transcribeAudio(audioFileOrUrl, apiKey, onProgress) {
   const result = await pollTranscription(transcript.id, apiKey, onProgress);
   onProgress?.('Transcription complete!');
 
-  // Transform to our word format
-  const words = (result.words || []).map((word, index) => ({
+  // Transform to our word format (GLOBAL time from API)
+  const globalWords = (result.words || []).map((word, index) => ({
     id: `word_${Date.now()}_${index}`,
     text: word.text,
-    startTime: word.start / 1000, // Convert ms to seconds
+    start: word.start,  // Keep in ms for normalization
+    end: word.end,
+    startTime: word.start / 1000, // Also provide seconds
     duration: (word.end - word.start) / 1000,
   }));
 
+  // If trim boundaries provided, normalize to LOCAL time
+  let words = globalWords;
+  let text = result.text;
+  let effectiveDuration = result.audio_duration;
+
+  if (isTrimmed) {
+    // Use the normalization utility - it expects ms input with inputInMs option
+    words = normalizeWordsToTrimRange(globalWords, trimStart, trimEnd, { inputInMs: false });
+
+    // Rebuild text from filtered words
+    text = words.map(w => w.text).join(' ');
+
+    // Calculate trimmed duration
+    effectiveDuration = (trimEnd || result.audio_duration) - trimStart;
+
+    onProgress?.(`Filtered to ${words.length} words in trim range`);
+  }
+
   return {
-    text: result.text,
+    text,
     words,
     confidence: result.confidence,
-    duration: result.audio_duration,
+    duration: effectiveDuration,
+    fullDuration: result.audio_duration,
+    isTrimmed,
   };
 }
 

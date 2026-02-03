@@ -1,9 +1,21 @@
 import { useState, useCallback } from 'react';
 import { guess } from 'web-audio-beat-detector';
+import { normalizeBeatsToTrimRange } from '../utils/timelineNormalization';
 
 /**
  * Custom hook for beat detection in audio files.
  * Uses web-audio-beat-detector for professional-grade BPM detection.
+ *
+ * IMPORTANT: This hook returns beats in GLOBAL time (full audio file timeline).
+ * If you have trimmed audio, use getLocalBeats() or normalizeBeatsToTrimRange()
+ * to convert to LOCAL time before using in UI or clip creation.
+ *
+ * @example
+ * const { beats, bpm, getLocalBeats } = useBeatDetection();
+ * // For full audio:
+ * const allBeats = beats; // GLOBAL time
+ * // For trimmed audio:
+ * const localBeats = getLocalBeats(trimStart, trimEnd); // LOCAL time
  */
 export const useBeatDetection = () => {
   const [beats, setBeats] = useState([]);
@@ -150,14 +162,27 @@ export const useBeatDetection = () => {
     setError(null);
   }, []);
 
+  /**
+   * Get beats normalized to LOCAL time for a trim range
+   * Use this when working with trimmed audio
+   *
+   * @param {number} trimStart - Start of trim range in GLOBAL seconds
+   * @param {number} trimEnd - End of trim range in GLOBAL seconds
+   * @returns {Array<number>} - Beats in LOCAL time (0 = trimStart)
+   */
+  const getLocalBeats = useCallback((trimStart, trimEnd) => {
+    return normalizeBeatsToTrimRange(beats, trimStart, trimEnd);
+  }, [beats]);
+
   return {
-    beats,
+    beats,        // GLOBAL time - use for full audio only
     bpm,
     isAnalyzing,
     error,
     analyzeAudio,
     generateBeatsFromBPM,
-    clearBeats
+    clearBeats,
+    getLocalBeats // LOCAL time - use for trimmed audio
   };
 };
 
