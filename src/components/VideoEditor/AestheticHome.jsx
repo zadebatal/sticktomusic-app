@@ -47,11 +47,13 @@ const AestheticHome = ({
   };
 
   const handleVideoUpload = (e) => {
-    const files = e.target.files;
+    // Convert FileList to Array BEFORE clearing input
+    // FileList is a live reference that gets emptied when input is cleared
+    const files = Array.from(e.target.files);
+    e.target.value = ''; // Clear input first, array is safe
     if (files.length > 0) {
       onUploadVideos(files);
     }
-    e.target.value = '';
   };
 
   const handleAudioUpload = (e) => {
