@@ -1,11 +1,9 @@
 import { useState, useCallback } from 'react';
+import { guess } from 'web-audio-beat-detector';
 
 /**
  * Custom hook for beat detection in audio files.
- * Uses a simplified algorithm based on onset detection.
- * For production, consider using libraries like:
- * - music-tempo (npm install music-tempo)
- * - web-audio-beat-detector (npm install web-audio-beat-detector)
+ * Uses web-audio-beat-detector for professional-grade BPM detection.
  */
 export const useBeatDetection = () => {
   const [beats, setBeats] = useState([]);
@@ -15,7 +13,7 @@ export const useBeatDetection = () => {
 
   /**
    * Analyze audio file or URL for beats
-   * @param {File|string} audioSource - File object or URL string
+   * @param {File|Blob|string} audioSource - File object, Blob, or URL string
    */
   const analyzeAudio = useCallback(async (audioSource) => {
     setIsAnalyzing(true);
@@ -27,53 +25,106 @@ export const useBeatDetection = () => {
 
       // Get array buffer - handle both File objects and URLs
       let arrayBuffer;
+
       if (audioSource instanceof File || audioSource instanceof Blob) {
+        // Direct file/blob - most reliable, no CORS issues
+        console.log('Beat detection: Analyzing from file/blob');
         arrayBuffer = await audioSource.arrayBuffer();
       } else if (typeof audioSource === 'string') {
-        // It's a URL - fetch the audio data
-        const response = await fetch(audioSource);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch audio: ${response.status}`);
+        // It's a URL - try to fetch the audio data
+        console.log('Beat detection: Fetching from URL:', audioSource.substring(0, 50) + '...');
+
+        try {
+          const response = await fetch(audioSource, { mode: 'cors' });
+          if (!response.ok) {
+            throw new Error(`Failed to fetch audio: ${response.status}`);
+          }
+          arrayBuffer = await response.arrayBuffer();
+        } catch (fetchError) {
+          // CORS error or network issue - try loading via audio element
+          console.warn('Direct fetch failed, trying audio element method:', fetchError.message);
+
+          // Create an audio element to load the audio
+          const audio = new Audio();
+          audio.crossOrigin = 'anonymous';
+          audio.src = audioSource;
+
+          // Wait for it to load
+          await new Promise((resolve, reject) => {
+            audio.oncanplaythrough = resolve;
+            audio.onerror = () => reject(new Error('Failed to load audio via element'));
+            setTimeout(() => reject(new Error('Audio load timeout')), 15000);
+          });
+
+          // Use MediaElementSourceNode to get the audio data
+          // This approach doesn't give us raw ArrayBuffer, so fall back to basic detection
+          console.warn('Could not get raw audio data due to CORS. Using fallback BPM estimation.');
+
+          // Estimate based on common music tempos (this is a fallback)
+          const fallbackBpm = 120;
+          const duration = audio.duration || 60;
+
+          setBpm(fallbackBpm);
+          setBeats(generateBeatTimestamps(fallbackBpm, 0, duration));
+          setIsAnalyzing(false);
+
+          return { bpm: fallbackBpm, beats: generateBeatTimestamps(fallbackBpm, 0, duration), isFallback: true };
         }
-        arrayBuffer = await response.arrayBuffer();
       } else {
         throw new Error('Invalid audio source - must be File, Blob, or URL string');
       }
 
       // Decode audio data
+      console.log('Beat detection: Decoding audio data...');
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
-      // Get audio data (mono - use first channel or mix down)
-      let channelData;
-      if (audioBuffer.numberOfChannels === 1) {
-        channelData = audioBuffer.getChannelData(0);
-      } else {
-        // Mix stereo to mono
-        const left = audioBuffer.getChannelData(0);
-        const right = audioBuffer.getChannelData(1);
-        channelData = new Float32Array(left.length);
-        for (let i = 0; i < left.length; i++) {
-          channelData[i] = (left[i] + right[i]) / 2;
-        }
-      }
-
-      const sampleRate = audioBuffer.sampleRate;
       const duration = audioBuffer.duration;
 
-      // Detect beats using onset detection
-      const result = detectBeats(channelData, sampleRate, duration);
+      // Use web-audio-beat-detector for professional BPM detection
+      console.log('Beat detection: Running BPM analysis...');
 
-      setBpm(result.bpm);
-      setBeats(result.beats);
+      try {
+        const result = await guess(audioBuffer);
 
-      // Close audio context
-      await audioContext.close();
+        console.log('Beat detection result:', result);
 
-      return result;
+        const detectedBpm = Math.round(result.bpm || result.tempo);
+        const offset = result.offset || 0;
+
+        // Generate beat timestamps from BPM and offset
+        const beatTimestamps = generateBeatTimestamps(detectedBpm, offset, duration);
+
+        setBpm(detectedBpm);
+        setBeats(beatTimestamps);
+
+        // Close audio context
+        await audioContext.close();
+
+        console.log(`Beat detection complete: ${detectedBpm} BPM, ${beatTimestamps.length} beats`);
+
+        return { bpm: detectedBpm, beats: beatTimestamps, offset };
+
+      } catch (detectError) {
+        console.warn('Professional beat detection failed, using fallback:', detectError.message);
+
+        // Fallback to basic onset detection
+        const fallbackResult = detectBeatsBasic(audioBuffer);
+
+        setBpm(fallbackResult.bpm);
+        setBeats(fallbackResult.beats);
+
+        await audioContext.close();
+
+        return fallbackResult;
+      }
 
     } catch (err) {
       console.error('Beat detection error:', err);
       setError(err.message);
+
+      // Set default values so UI doesn't break
+      setBpm(120);
+      setBeats(generateBeatTimestamps(120, 0, 60));
+
       throw err;
     } finally {
       setIsAnalyzing(false);
@@ -81,20 +132,13 @@ export const useBeatDetection = () => {
   }, []);
 
   /**
-   * Generate beats from a known BPM
+   * Generate beats from a known BPM (manual entry)
    */
   const generateBeatsFromBPM = useCallback((bpmValue, offset = 0, duration = 60) => {
-    const beatInterval = 60 / bpmValue;
-    const generatedBeats = [];
-
-    for (let time = offset; time < duration; time += beatInterval) {
-      generatedBeats.push(parseFloat(time.toFixed(3)));
-    }
-
+    const beatTimestamps = generateBeatTimestamps(bpmValue, offset, duration);
     setBpm(bpmValue);
-    setBeats(generatedBeats);
-
-    return generatedBeats;
+    setBeats(beatTimestamps);
+    return beatTimestamps;
   }, []);
 
   /**
@@ -118,39 +162,62 @@ export const useBeatDetection = () => {
 };
 
 /**
- * Simple beat detection algorithm using onset detection
- * For better results, use a dedicated library like music-tempo
+ * Generate beat timestamps from BPM and offset
  */
-function detectBeats(audioData, sampleRate, duration) {
+function generateBeatTimestamps(bpm, offset = 0, duration = 60) {
+  const beatInterval = 60 / bpm;
+  const beats = [];
+
+  // Start from offset, generate beats until duration
+  for (let time = offset; time < duration; time += beatInterval) {
+    if (time >= 0) {
+      beats.push(parseFloat(time.toFixed(3)));
+    }
+  }
+
+  return beats;
+}
+
+/**
+ * Basic fallback beat detection using onset detection
+ * Used when the professional library fails
+ */
+function detectBeatsBasic(audioBuffer) {
+  const channelData = audioBuffer.getChannelData(0);
+  const sampleRate = audioBuffer.sampleRate;
+  const duration = audioBuffer.duration;
+
   // Parameters
   const windowSize = Math.floor(sampleRate * 0.02); // 20ms windows
   const hopSize = Math.floor(windowSize / 2);
 
   // Calculate energy for each window
   const energies = [];
-  for (let i = 0; i < audioData.length - windowSize; i += hopSize) {
+  for (let i = 0; i < channelData.length - windowSize; i += hopSize) {
     let energy = 0;
     for (let j = 0; j < windowSize; j++) {
-      energy += audioData[i + j] * audioData[i + j];
+      energy += channelData[i + j] * channelData[i + j];
     }
     energies.push(energy / windowSize);
   }
 
   // Normalize energies
   const maxEnergy = Math.max(...energies);
+  if (maxEnergy === 0) {
+    return { bpm: 120, beats: generateBeatTimestamps(120, 0, duration) };
+  }
+
   const normalizedEnergies = energies.map(e => e / maxEnergy);
 
   // Detect onsets (sudden increases in energy)
   const onsets = [];
   const threshold = 0.15;
-  const minTimeBetweenOnsets = 0.15; // Minimum 150ms between beats
+  const minTimeBetweenOnsets = 0.15;
 
   for (let i = 1; i < normalizedEnergies.length; i++) {
     const diff = normalizedEnergies[i] - normalizedEnergies[i - 1];
     if (diff > threshold) {
       const time = (i * hopSize) / sampleRate;
-
-      // Check minimum time between beats
       if (onsets.length === 0 || time - onsets[onsets.length - 1] >= minTimeBetweenOnsets) {
         onsets.push(parseFloat(time.toFixed(3)));
       }
@@ -158,37 +225,24 @@ function detectBeats(audioData, sampleRate, duration) {
   }
 
   // Estimate BPM from onset intervals
-  let bpm = 120; // Default BPM
+  let bpm = 120;
   if (onsets.length >= 4) {
     const intervals = [];
     for (let i = 1; i < Math.min(onsets.length, 50); i++) {
       intervals.push(onsets[i] - onsets[i - 1]);
     }
-
-    // Sort intervals and find the most common one
     intervals.sort((a, b) => a - b);
     const medianInterval = intervals[Math.floor(intervals.length / 2)];
 
-    // Convert interval to BPM
     if (medianInterval > 0) {
       bpm = Math.round(60 / medianInterval);
-
-      // Constrain BPM to reasonable range
       while (bpm < 60) bpm *= 2;
       while (bpm > 180) bpm /= 2;
     }
   }
 
-  // Regenerate beat grid based on detected BPM
-  const beatInterval = 60 / bpm;
-  const beats = [];
-
-  // Find first beat offset
-  const firstBeat = onsets.length > 0 ? onsets[0] % beatInterval : 0;
-
-  for (let time = firstBeat; time < duration; time += beatInterval) {
-    beats.push(parseFloat(time.toFixed(3)));
-  }
+  const firstBeat = onsets.length > 0 ? onsets[0] % (60 / bpm) : 0;
+  const beats = generateBeatTimestamps(bpm, firstBeat, duration);
 
   return { bpm, beats };
 }
