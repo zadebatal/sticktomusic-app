@@ -7,11 +7,13 @@ import { loadLyricTemplate, saveLyricTemplate } from '../../services/storageServ
  * LyricAnalyzer - AI-powered lyric transcription with caching
  * Checks for cached lyrics before re-analyzing the same song
  */
-const LyricAnalyzer = ({ audioFile, onComplete, onClose }) => {
+const LyricAnalyzer = ({ audioFile, audioUrl, onComplete, onClose }) => {
   const [apiKey, setApiKey] = useState('');
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [cachedLyrics, setCachedLyrics] = useState(null);
   const { analyze, isAnalyzing, progress, error, hasApiKey } = useLyricAnalyzer();
+
+  const audioSource = audioFile || audioUrl;
 
   // Check for cached lyrics on mount
   useEffect(() => {
@@ -20,13 +22,13 @@ const LyricAnalyzer = ({ audioFile, onComplete, onClose }) => {
     else setShowApiKeyInput(true);
 
     // Check if we have cached lyrics for this audio file
-    if (audioFile) {
-      const cached = loadLyricTemplate(audioFile);
+    if (audioSource) {
+      const cached = loadLyricTemplate(audioSource);
       if (cached) {
         setCachedLyrics(cached);
       }
     }
-  }, [audioFile]);
+  }, [audioSource]);
 
   const handleAnalyze = async () => {
     if (!apiKey && !hasApiKey) {
@@ -34,11 +36,11 @@ const LyricAnalyzer = ({ audioFile, onComplete, onClose }) => {
       return;
     }
     try {
-      const result = await analyze(audioFile, apiKey || undefined);
+      const result = await analyze(audioSource, apiKey || undefined);
 
       // Save the analyzed lyrics as a template for future use
       if (result && result.words && result.words.length > 0) {
-        saveLyricTemplate(audioFile, result.text, result.words);
+        saveLyricTemplate(audioSource, result.text, result.words);
       }
 
       onComplete?.(result);

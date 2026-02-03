@@ -369,23 +369,34 @@ const VideoEditorModal = ({
     setTranscriptionError(null);
 
     try {
-      // Step 1: Upload audio to AssemblyAI
-      const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
-        method: 'POST',
-        headers: {
-          'Authorization': savedKey,
-          'Content-Type': 'application/octet-stream'
-        },
-        body: await fetch(selectedAudio.url).then(r => r.blob())
-      });
+      let audioUrl;
 
-      if (!uploadResponse.ok) {
-        throw new Error('Failed to upload audio to AssemblyAI');
+      // Check if URL is publicly accessible (http/https) vs local blob
+      const isPublicUrl = selectedAudio.url.startsWith('http://') || selectedAudio.url.startsWith('https://');
+
+      if (isPublicUrl) {
+        // Use URL directly - AssemblyAI can fetch it server-side (avoids CORS)
+        audioUrl = selectedAudio.url;
+      } else {
+        // Local blob URL - need to upload first
+        const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
+          method: 'POST',
+          headers: {
+            'Authorization': savedKey,
+            'Content-Type': 'application/octet-stream'
+          },
+          body: await fetch(selectedAudio.url).then(r => r.blob())
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error('Failed to upload audio to AssemblyAI');
+        }
+
+        const uploadResult = await uploadResponse.json();
+        audioUrl = uploadResult.upload_url;
       }
 
-      const { upload_url } = await uploadResponse.json();
-
-      // Step 2: Request transcription with word-level timestamps
+      // Request transcription with word-level timestamps
       const transcriptResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
         method: 'POST',
         headers: {
@@ -393,7 +404,7 @@ const VideoEditorModal = ({
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          audio_url: upload_url,
+          audio_url: audioUrl,
           word_boost: [],
           boost_param: 'high'
         })

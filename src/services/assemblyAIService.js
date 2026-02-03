@@ -89,17 +89,27 @@ async function pollTranscription(transcriptId, apiKey, onProgress) {
 
 /**
  * Main transcription function
+ * @param {File|string} audioFileOrUrl - File object or public URL string
  */
-export async function transcribeAudio(audioFile, apiKey, onProgress) {
+export async function transcribeAudio(audioFileOrUrl, apiKey, onProgress) {
   if (!apiKey) throw new Error('AssemblyAI API key is required');
-  if (!audioFile) throw new Error('Audio file is required');
+  if (!audioFileOrUrl) throw new Error('Audio file or URL is required');
 
-  // Step 1: Upload
-  const uploadUrl = await uploadAudio(audioFile, apiKey, onProgress);
-  onProgress?.('Audio uploaded, starting transcription...');
+  let audioUrl;
+
+  // Check if input is a URL string or a File object
+  if (typeof audioFileOrUrl === 'string') {
+    // It's a URL - use directly (AssemblyAI fetches server-side, avoids CORS)
+    audioUrl = audioFileOrUrl;
+    onProgress?.('Using audio URL directly...');
+  } else {
+    // It's a File - upload first
+    audioUrl = await uploadAudio(audioFileOrUrl, apiKey, onProgress);
+    onProgress?.('Audio uploaded, starting transcription...');
+  }
 
   // Step 2: Submit transcription
-  const transcript = await submitTranscription(uploadUrl, apiKey);
+  const transcript = await submitTranscription(audioUrl, apiKey);
   onProgress?.('Transcription queued, processing...');
 
   // Step 3: Poll for completion

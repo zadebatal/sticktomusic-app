@@ -6,6 +6,71 @@ import { uploadFile, getMediaDuration, generateThumbnail } from '../../services/
 import { saveCategories, loadCategories, savePresets, loadPresets } from '../../services/storageService';
 
 /**
+ * ErrorBoundary - Catches errors in VideoEditorModal to prevent blank page crashes
+ */
+class EditorErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('VideoEditorModal Error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0,0,0,0.9)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000
+        }}>
+          <div style={{
+            backgroundColor: '#1a1a2e',
+            padding: '32px',
+            borderRadius: '12px',
+            maxWidth: '500px',
+            textAlign: 'center'
+          }}>
+            <h2 style={{ color: '#ef4444', marginBottom: '16px' }}>Something went wrong</h2>
+            <p style={{ color: '#9ca3af', marginBottom: '24px' }}>
+              The video editor encountered an error. Please try again.
+            </p>
+            <button
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+                this.props.onClose?.();
+              }}
+              style={{
+                padding: '12px 24px',
+                backgroundColor: '#6366f1',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              Close Editor
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+/**
  * VideoStudio - Main container for the Flowstage-inspired video creation workflow
  *
  * Flow:
@@ -409,16 +474,18 @@ const VideoStudio = ({ onClose, artists = [] }) => {
         )}
       </main>
 
-      {/* Editor Modal */}
+      {/* Editor Modal with ErrorBoundary to prevent blank page crashes */}
       {showEditor && selectedCategory && (
-        <VideoEditorModal
-          category={selectedCategory}
-          existingVideo={editingVideo}
-          presets={categoryPresets}
-          onSave={handleSaveVideo}
-          onSavePreset={handleSavePreset}
-          onClose={handleCloseEditor}
-        />
+        <EditorErrorBoundary onClose={handleCloseEditor}>
+          <VideoEditorModal
+            category={selectedCategory}
+            existingVideo={editingVideo}
+            presets={categoryPresets}
+            onSave={handleSaveVideo}
+            onSavePreset={handleSavePreset}
+            onClose={handleCloseEditor}
+          />
+        </EditorErrorBoundary>
       )}
     </div>
   );
