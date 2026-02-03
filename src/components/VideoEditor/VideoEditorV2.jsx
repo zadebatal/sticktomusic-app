@@ -23,16 +23,22 @@ console.log('🎬🎬🎬 VideoEditorV2.jsx MODULE LOADED! 🎬🎬🎬');
 /**
  * VideoEditor V2 - Full-featured video editor with auto-remix capabilities
  *
- * LEGACY COMPONENT - This editor does NOT support audio trim boundaries.
- * All timestamps are in GLOBAL time (full audio file).
+ * ⚠️ LEGACY COMPONENT - DO NOT USE FOR NEW FEATURES ⚠️
+ *
+ * TIME WINDOW VIOLATION: This editor does NOT support audio trim boundaries.
+ * All timestamps are in GLOBAL time (full audio file), violating the
+ * LOCAL_TIME_INVARIANT defined in docs/DOMAIN_INVARIANTS.md
  *
  * For trim-aware editing, use VideoEditorModal instead, which:
  * - Supports audio trim boundaries (startTime/endTime)
- * - Normalizes all timestamps to LOCAL time
+ * - Normalizes all timestamps to LOCAL time (0 = trim start)
  * - Uses the timelineNormalization utility
+ * - Properly invalidates data when trim changes
  *
+ * @deprecated Use VideoEditorModal for all new development
  * @see VideoEditorModal for the production workflow
  * @see src/utils/timelineNormalization.js for the normalization architecture
+ * @see docs/DOMAIN_INVARIANTS.md Section A for time window rules
  */
 const VideoEditorV2 = ({
   onSave,

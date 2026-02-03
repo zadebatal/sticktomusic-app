@@ -16,6 +16,9 @@ import {
 // Video Studio - Flowstage-inspired workflow
 import { VideoStudio } from './components/VideoEditor';
 
+// Domain enforcement utilities
+import { isUserOperator } from './utils/roles';
+
 // Firebase imports
 import { initializeApp, getApps } from 'firebase/app';
 import {
@@ -2408,7 +2411,27 @@ const StickToMusic = () => {
   }
 
   // OPERATOR DASHBOARD PAGE
+  // P0 SECURITY: Guard against non-operators accessing this page
   if (currentPage === 'operator') {
+    // INVARIANT: Operator page requires operator role
+    if (!isUserOperator(user)) {
+      console.warn('[ROLE VIOLATION] Non-operator attempted to access operator dashboard');
+      // Redirect to appropriate page
+      return (
+        <div className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold mb-4">Access Denied</h1>
+            <p className="text-zinc-400 mb-6">This page is only accessible to operators.</p>
+            <button
+              onClick={() => setCurrentPage(user?.role === 'artist' ? 'artist-portal' : 'home')}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg transition"
+            >
+              Go Back
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen bg-zinc-950 text-zinc-100">
         {/* Header */}

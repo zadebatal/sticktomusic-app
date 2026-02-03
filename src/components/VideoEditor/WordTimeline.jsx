@@ -3,6 +3,17 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 /**
  * WordTimeline - Flowstage-inspired word timing editor
  * Features draggable/resizable word blocks, zoom, auto-scroll, and live preview
+ *
+ * TIME WINDOW CONTRACT:
+ * This component expects ALL word timestamps to be in LOCAL time.
+ * LOCAL time means 0 = start of trimmed range, not start of full audio file.
+ * The parent component is responsible for normalizing word data
+ * using the timelineNormalization utility before passing it here.
+ *
+ * Word objects must have: { id, text, startTime (LOCAL), duration }
+ *
+ * @see src/utils/timelineNormalization.js for normalization functions
+ * @see docs/DOMAIN_INVARIANTS.md Section A for time window rules
  */
 const WordTimeline = ({
   words = [],

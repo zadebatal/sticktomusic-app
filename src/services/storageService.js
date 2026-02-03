@@ -6,7 +6,12 @@
  * - Presets
  * - API Keys
  * - Settings
+ *
+ * INVARIANT: Persisted items NEVER contain blob: URLs
+ * @see docs/DOMAIN_INVARIANTS.md Section B
  */
+
+import { findBlobUrls } from '../utils/assets';
 
 const STORAGE_KEYS = {
   CATEGORIES: 'stm_categories',
@@ -50,6 +55,8 @@ function loadFromStorage(key, defaultValue = null) {
 /**
  * Save all categories
  * Strips thumbnails and blob URLs to avoid quota exceeded errors
+ *
+ * INVARIANT: No blob URLs after cleaning
  */
 export function saveCategories(categories) {
   // Filter out blob URLs and strip thumbnails (they're huge base64 strings)
@@ -74,6 +81,15 @@ export function saveCategories(categories) {
       }))
     }))
   }));
+
+  // INVARIANT CHECK: Verify no blob URLs remain after cleaning
+  if (process.env.NODE_ENV === 'development') {
+    const blobViolations = findBlobUrls(cleanedCategories);
+    if (blobViolations.length > 0) {
+      console.error('[STORAGE VIOLATION] Blob URLs found after cleaning:', blobViolations);
+    }
+  }
+
   return saveToStorage(STORAGE_KEYS.CATEGORIES, cleanedCategories);
 }
 

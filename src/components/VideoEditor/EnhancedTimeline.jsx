@@ -2,6 +2,15 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 
 /**
  * Enhanced Timeline - Clip timeline with thumbnails, waveform, beat markers, and quick actions
+ *
+ * TIME WINDOW CONTRACT:
+ * This component expects ALL time-based data (clips, words, beats) to be in LOCAL time.
+ * LOCAL time means 0 = start of trimmed range, not start of full audio file.
+ * The parent component (VideoEditorModal) is responsible for normalizing data
+ * using the timelineNormalization utility before passing it here.
+ *
+ * @see src/utils/timelineNormalization.js for normalization functions
+ * @see docs/DOMAIN_INVARIANTS.md Section A for time window rules
  */
 const EnhancedTimeline = ({
   clips = [],

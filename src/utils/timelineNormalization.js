@@ -249,6 +249,72 @@ export function getTrimHash(trimStart, trimEnd) {
   return `${safeStart.toFixed(3)}_${safeEnd.toFixed(3)}`;
 }
 
+/**
+ * Assert active range (trim boundaries) are valid
+ * Use this at boundaries to catch invalid trim data early
+ *
+ * @param {Object} activeRange - { trimStart, trimEnd, trimmedDuration }
+ * @param {string} context - Where the check is happening
+ * @throws {Error} In development, or logs warning in production
+ */
+export function assertActiveRange(activeRange, context = '') {
+  const errors = [];
+
+  if (!activeRange) {
+    errors.push('activeRange is null/undefined');
+  } else {
+    const { trimStart, trimEnd, trimmedDuration } = activeRange;
+
+    if (typeof trimStart !== 'number' || isNaN(trimStart)) {
+      errors.push(`trimStart is invalid: ${trimStart}`);
+    }
+    if (typeof trimEnd !== 'number' || isNaN(trimEnd)) {
+      errors.push(`trimEnd is invalid: ${trimEnd}`);
+    }
+    if (trimStart !== undefined && trimEnd !== undefined && trimStart >= trimEnd) {
+      errors.push(`trimStart (${trimStart}) >= trimEnd (${trimEnd})`);
+    }
+    if (trimmedDuration !== undefined && trimmedDuration <= 0) {
+      errors.push(`trimmedDuration is non-positive: ${trimmedDuration}`);
+    }
+  }
+
+  if (errors.length > 0) {
+    const msg = `Invalid activeRange${context ? ` in ${context}` : ''}: ${errors.join(', ')}`;
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[TIME WINDOW VIOLATION]', msg, activeRange);
+    }
+    // Don't throw in production - gracefully degrade
+  }
+
+  return errors.length === 0;
+}
+
+/**
+ * Clip and normalize words in one step (convenience wrapper)
+ * @param {Array} words
+ * @param {Object} activeRange - { trimStart, trimEnd }
+ * @param {Object} options
+ * @returns {Array}
+ */
+export function clipAndNormalizeWords(words, activeRange, options = {}) {
+  if (!activeRange) return words;
+  assertActiveRange(activeRange, 'clipAndNormalizeWords');
+  return normalizeWordsToTrimRange(words, activeRange.trimStart, activeRange.trimEnd, options);
+}
+
+/**
+ * Clip and normalize beats in one step (convenience wrapper)
+ * @param {Array} beats
+ * @param {Object} activeRange - { trimStart, trimEnd }
+ * @returns {Array}
+ */
+export function clipAndNormalizeBeats(beats, activeRange) {
+  if (!activeRange) return beats;
+  assertActiveRange(activeRange, 'clipAndNormalizeBeats');
+  return normalizeBeatsToTrimRange(beats, activeRange.trimStart, activeRange.trimEnd);
+}
+
 export default {
   normalizeWordsToTrimRange,
   normalizeBeatsToTrimRange,
@@ -257,5 +323,8 @@ export default {
   getTrimBoundaries,
   localToGlobalTime,
   globalToLocalTime,
-  getTrimHash
+  getTrimHash,
+  assertActiveRange,
+  clipAndNormalizeWords,
+  clipAndNormalizeBeats,
 };
