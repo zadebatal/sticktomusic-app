@@ -79,17 +79,50 @@ class EditorErrorBoundary extends React.Component {
  * 2. Content Library - View all created videos, edit them anytime
  * 3. Editor Modal - Create/edit videos with presets and sync tools
  */
+
+// Session persistence key
+const SESSION_KEY = 'stm_studio_session';
+
+// Helper to load session state
+const loadSessionState = () => {
+  try {
+    const saved = localStorage.getItem(SESSION_KEY);
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (e) {
+    console.warn('Failed to load session state:', e);
+  }
+  return null;
+};
+
+// Helper to save session state
+const saveSessionState = (state) => {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      ...state,
+      savedAt: Date.now()
+    }));
+  } catch (e) {
+    console.warn('Failed to save session state:', e);
+  }
+};
+
 const VideoStudio = ({
   onClose,
   artists = [],
   lateAccountIds = {},
   onSchedulePost
 }) => {
-  // Navigation state
-  const [currentView, setCurrentView] = useState('home'); // home, library, editor
+  // Load saved session for initial state
+  const savedSession = useMemo(() => loadSessionState(), []);
+
+  // Navigation state - restore from session if available
+  const [currentView, setCurrentView] = useState(savedSession?.currentView || 'home');
   const [selectedArtist, setSelectedArtist] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(null); // Track upload progress
+  const [sessionRestored, setSessionRestored] = useState(false);
 
   // Derive accounts array from lateAccountIds for PostingModule
   const accounts = useMemo(() => {
@@ -193,12 +226,40 @@ const VideoStudio = ({
     savePresets(presets);
   }, [presets]);
 
-  // Initialize with first artist
+  // Initialize with first artist and restore session
   useEffect(() => {
     if (artists.length > 0 && !selectedArtist) {
       setSelectedArtist(artists[0]);
     }
   }, [artists, selectedArtist]);
+
+  // Restore full session state after categories are loaded
+  useEffect(() => {
+    if (sessionRestored || categories.length === 0) return;
+
+    const saved = loadSessionState();
+    if (saved && saved.categoryId) {
+      // Find the saved category
+      const category = categories.find(c => c.id === saved.categoryId);
+      if (category) {
+        console.log('Restoring session:', saved.currentView, category.name);
+        setSelectedCategory(category);
+        setCurrentView(saved.currentView || 'home');
+      }
+    }
+    setSessionRestored(true);
+  }, [categories, sessionRestored]);
+
+  // Save session state when navigation changes
+  useEffect(() => {
+    if (!sessionRestored) return; // Don't save during initial restore
+
+    saveSessionState({
+      currentView,
+      categoryId: selectedCategory?.id || null,
+      artistId: selectedArtist?.id || null
+    });
+  }, [currentView, selectedCategory?.id, selectedArtist?.id, sessionRestored]);
 
   // Get categories for selected artist
   const artistCategories = categories.filter(c =>
