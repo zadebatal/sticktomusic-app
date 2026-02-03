@@ -696,8 +696,12 @@ const AudioClipSelector = ({
                 <button
                   style={styles.useNowButton}
                   onClick={() => {
-                    // Use the saved clip's trim points
-                    onSave(savedClipData.startTime, savedClipData.endTime);
+                    // Use the saved clip's trim points - pass as object matching expected format
+                    onSave({
+                      startTime: savedClipData.startTime,
+                      endTime: savedClipData.endTime,
+                      duration: savedClipData.clipDuration
+                    });
                     setShowUseClipPrompt(false);
                     setSavedClipData(null);
                   }}

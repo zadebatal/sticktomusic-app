@@ -345,7 +345,7 @@ const VideoStudio = ({ onClose, artists = [] }) => {
     setUploadProgress(null);
   }, [selectedCategory]);
 
-  const handleUploadAudio = useCallback(async (files) => {
+  const handleUploadAudio = useCallback(async (files, trimData = null) => {
     if (!selectedCategory) return;
 
     setUploadProgress({ type: 'audio', current: 0, total: files.length });
@@ -365,25 +365,37 @@ const VideoStudio = ({ onClose, artists = [] }) => {
         const localBlobUrl = URL.createObjectURL(file);
 
         // Get duration from local blob (more reliable than Firebase URL due to CORS)
-        let duration = 0;
+        let fullDuration = 0;
         try {
-          duration = await getMediaDuration(localBlobUrl, 'audio');
+          fullDuration = await getMediaDuration(localBlobUrl, 'audio');
         } catch (e) {
           console.warn('Could not get audio duration:', file.name, e.message);
           // Try from Firebase URL as fallback
-          duration = await getMediaDuration(url, 'audio').catch(() => 0);
+          fullDuration = await getMediaDuration(url, 'audio').catch(() => 0);
         }
 
-        uploadedAudio.push({
+        // Use trim data if provided, otherwise use full duration
+        const audioData = {
           id: `audio_${Date.now()}_${i}`,
           name: file.name,
           url,
           localUrl: localBlobUrl, // Local blob URL for beat detection and playback (no CORS)
           file: file, // Keep original file for beat detection
           storagePath: path,
-          duration,
+          fullDuration, // Store the full duration for reference
+          duration: trimData?.clipDuration || fullDuration, // Use trimmed duration if provided
           createdAt: new Date().toISOString()
-        });
+        };
+
+        // Add trim boundaries if trim data was provided
+        if (trimData) {
+          audioData.startTime = trimData.startTime;
+          audioData.endTime = trimData.endTime;
+          audioData.isTrimmed = true;
+          console.log(`Audio uploaded with trim: ${trimData.startTime.toFixed(1)}s - ${trimData.endTime.toFixed(1)}s`);
+        }
+
+        uploadedAudio.push(audioData);
       } catch (error) {
         console.error('Failed to upload audio:', file.name, error);
         // Continue with other files
@@ -415,11 +427,16 @@ const VideoStudio = ({ onClose, artists = [] }) => {
         setUploadProgress(prev => ({ ...prev, progress }));
       });
 
+      // Create local blob URL for reliable playback (avoids CORS)
+      const localBlobUrl = URL.createObjectURL(clipData.file);
+
       // Create the saved clip with trim info
       const savedClip = {
         id: `audioclip_${Date.now()}`,
         name: clipData.name,
         url,
+        localUrl: localBlobUrl, // Local blob URL for current session (no CORS)
+        file: clipData.file, // Keep file reference for beat detection
         storagePath: path,
         duration: clipData.clipDuration,
         // Store trim info so we can restore the selection

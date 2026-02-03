@@ -413,6 +413,7 @@ const VideoEditorModal = ({
         id: `clip_${Date.now()}_${i}`,
         sourceId: randomClip.id,
         url: randomClip.url,
+        localUrl: randomClip.localUrl, // Include localUrl for CORS fallback
         thumbnail: randomClip.thumbnail,
         startTime: startTime,
         duration: clipDuration,
@@ -434,6 +435,7 @@ const VideoEditorModal = ({
         id: `clip_${Date.now()}_${i}`,
         sourceId: randomClip.id,
         url: randomClip.url,
+        localUrl: randomClip.localUrl, // Include localUrl for CORS fallback
         thumbnail: randomClip.thumbnail,
         startTime: word.startTime,
         duration: word.duration || 0.5,
@@ -459,6 +461,7 @@ const VideoEditorModal = ({
         ...clip,
         sourceId: randomClip.id,
         url: randomClip.url,
+        localUrl: randomClip.localUrl, // Include localUrl for CORS fallback
         thumbnail: randomClip.thumbnail
       };
     }));
@@ -480,7 +483,13 @@ const VideoEditorModal = ({
   const handleApplyPreset = useCallback((preset) => {
     setSelectedPreset(preset);
     if (preset.settings) {
+      // Apply text style settings
       setTextStyle(prev => ({ ...prev, ...preset.settings }));
+
+      // Apply crop mode if specified in preset
+      if (preset.settings.cropMode) {
+        setCropMode(preset.settings.cropMode);
+      }
     }
   }, []);
 
@@ -868,7 +877,8 @@ const VideoEditorModal = ({
             <button style={styles.makePresetButton} onClick={() => {
               const name = prompt('Preset name:');
               if (name) {
-                onSavePreset({ name, settings: textStyle });
+                // Include all relevant settings in the preset
+                onSavePreset({ name, settings: { ...textStyle, cropMode } });
               }
             }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1132,6 +1142,7 @@ const VideoEditorModal = ({
                             id: `clip_${Date.now()}_${i}`,
                             sourceId: v.id,
                             url: v.url,
+                            localUrl: v.localUrl, // Include localUrl for CORS fallback
                             thumbnail: v.thumbnail,
                             startTime: i * 2,
                             duration: 2,
@@ -1155,6 +1166,7 @@ const VideoEditorModal = ({
                               id: `clip_${Date.now()}_${i}`,
                               sourceId: video.id,
                               url: video.url,
+                              localUrl: video.localUrl, // Include localUrl for CORS fallback
                               thumbnail: video.thumbnail,
                               startTime: prev.length * 2,
                               duration: 2,
