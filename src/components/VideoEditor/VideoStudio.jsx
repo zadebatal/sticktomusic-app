@@ -450,6 +450,38 @@ const VideoStudio = ({ onClose, artists = [] }) => {
     } : prev);
   }, [selectedCategory]);
 
+  // Rename a video clip in the bank
+  const handleRenameBankVideo = useCallback((videoId, newName) => {
+    if (!selectedCategory || !newName.trim()) return;
+
+    setCategories(prev => prev.map(cat =>
+      cat.id === selectedCategory.id
+        ? { ...cat, videos: cat.videos.map(v => v.id === videoId ? { ...v, name: newName.trim() } : v) }
+        : cat
+    ));
+
+    setSelectedCategory(prev => prev ? {
+      ...prev,
+      videos: prev.videos.map(v => v.id === videoId ? { ...v, name: newName.trim() } : v)
+    } : prev);
+  }, [selectedCategory]);
+
+  // Rename an audio track in the bank
+  const handleRenameBankAudio = useCallback((audioId, newName) => {
+    if (!selectedCategory || !newName.trim()) return;
+
+    setCategories(prev => prev.map(cat =>
+      cat.id === selectedCategory.id
+        ? { ...cat, audio: cat.audio.map(a => a.id === audioId ? { ...a, name: newName.trim() } : a) }
+        : cat
+    ));
+
+    setSelectedCategory(prev => prev ? {
+      ...prev,
+      audio: prev.audio.map(a => a.id === audioId ? { ...a, name: newName.trim() } : a)
+    } : prev);
+  }, [selectedCategory]);
+
   const handleApproveVideo = useCallback((videoId) => {
     if (!selectedCategory) return;
 
@@ -563,6 +595,8 @@ const VideoStudio = ({ onClose, artists = [] }) => {
             onSaveAudioClip={handleSaveAudioClip}
             onDeleteBankVideo={handleDeleteBankVideo}
             onDeleteBankAudio={handleDeleteBankAudio}
+            onRenameBankVideo={handleRenameBankVideo}
+            onRenameBankAudio={handleRenameBankAudio}
             onCreateContent={handleCreateContent}
           />
         )}

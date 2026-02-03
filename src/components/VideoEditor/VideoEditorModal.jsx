@@ -52,6 +52,12 @@ const VideoEditorModal = ({
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState(null);
 
+  // Auto-save state
+  const [showRecoveryPrompt, setShowRecoveryPrompt] = useState(false);
+  const [recoveryData, setRecoveryData] = useState(null);
+  const [lastSaved, setLastSaved] = useState(null);
+  const autoSaveKey = `stm_autosave_${category?.id || 'default'}`;
+
   // Beat detection
   const { beats, bpm, isAnalyzing, analyzeAudio } = useBeatDetection();
 
@@ -210,11 +216,16 @@ const VideoEditorModal = ({
         e.preventDefault();
         handleToggleMute();
       }
+      // Cmd+S / Ctrl+S to save
+      if ((e.metaKey || e.ctrlKey) && e.code === 'KeyS') {
+        e.preventDefault();
+        handleSave();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handlePlayPause, handleSeek, handleToggleMute, currentTime, duration, onClose]);
+  }, [handlePlayPause, handleSeek, handleToggleMute, handleSave, currentTime, duration, onClose]);
 
   // Prevent background scroll when modal is open (P0-UI-04)
   useEffect(() => {
@@ -224,6 +235,85 @@ const VideoEditorModal = ({
       document.body.style.overflow = originalOverflow;
     };
   }, []);
+
+  // Check for auto-saved draft on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(autoSaveKey);
+      if (saved && !existingVideo) {
+        const data = JSON.parse(saved);
+        // Only show recovery if it's recent (less than 24 hours old)
+        const savedTime = data.savedAt ? new Date(data.savedAt).getTime() : 0;
+        const now = Date.now();
+        if (now - savedTime < 24 * 60 * 60 * 1000) {
+          setRecoveryData(data);
+          setShowRecoveryPrompt(true);
+        } else {
+          // Clear old drafts
+          localStorage.removeItem(autoSaveKey);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to check for auto-saved draft:', e);
+    }
+  }, [autoSaveKey, existingVideo]);
+
+  // Auto-save every 30 seconds
+  useEffect(() => {
+    const autoSave = () => {
+      // Don't auto-save if there's nothing to save
+      if (!selectedAudio && clips.length === 0 && words.length === 0) return;
+
+      try {
+        const draftData = {
+          audio: selectedAudio,
+          clips,
+          words,
+          lyrics,
+          textStyle,
+          cropMode,
+          savedAt: new Date().toISOString()
+        };
+        localStorage.setItem(autoSaveKey, JSON.stringify(draftData));
+        setLastSaved(new Date());
+      } catch (e) {
+        console.error('Auto-save failed:', e);
+      }
+    };
+
+    const interval = setInterval(autoSave, 30000); // 30 seconds
+    return () => clearInterval(interval);
+  }, [autoSaveKey, selectedAudio, clips, words, lyrics, textStyle, cropMode]);
+
+  // Clear auto-save on successful save
+  const clearAutoSave = useCallback(() => {
+    try {
+      localStorage.removeItem(autoSaveKey);
+    } catch (e) {
+      console.error('Failed to clear auto-save:', e);
+    }
+  }, [autoSaveKey]);
+
+  // Restore from auto-saved draft
+  const handleRestoreDraft = useCallback(() => {
+    if (recoveryData) {
+      if (recoveryData.audio) setSelectedAudio(recoveryData.audio);
+      if (recoveryData.clips) setClips(recoveryData.clips);
+      if (recoveryData.words) setWords(recoveryData.words);
+      if (recoveryData.lyrics) setLyrics(recoveryData.lyrics);
+      if (recoveryData.textStyle) setTextStyle(recoveryData.textStyle);
+      if (recoveryData.cropMode) setCropMode(recoveryData.cropMode);
+    }
+    setShowRecoveryPrompt(false);
+    setRecoveryData(null);
+  }, [recoveryData]);
+
+  // Discard auto-saved draft
+  const handleDiscardDraft = useCallback(() => {
+    clearAutoSave();
+    setShowRecoveryPrompt(false);
+    setRecoveryData(null);
+  }, [clearAutoSave]);
 
   // Get current visible text
   const currentText = words.find(w =>
@@ -337,7 +427,9 @@ const VideoEditorModal = ({
       thumbnail: clips[0]?.thumbnail || null,
       textOverlay: words[0]?.text || lyrics.split('\n')[0] || ''
     });
-  }, [existingVideo, selectedAudio, clips, words, lyrics, textStyle, cropMode, duration, bpm, onSave]);
+    // Clear auto-save after successful save
+    clearAutoSave();
+  }, [existingVideo, selectedAudio, clips, words, lyrics, textStyle, cropMode, duration, bpm, onSave, clearAutoSave]);
 
   const handleSyncLyrics = useCallback((mode) => {
     if (!lyrics.trim() || !beats.length) return;
@@ -1048,8 +1140,16 @@ const VideoEditorModal = ({
 
         {/* Footer */}
         <div style={styles.footer}>
-          <button style={styles.resetButton}>Reset to saved</button>
+          <div style={styles.footerLeft}>
+            <button style={styles.resetButton}>Reset to saved</button>
+            {lastSaved && (
+              <span style={styles.autoSaveIndicator}>
+                ✓ Auto-saved {lastSaved.toLocaleTimeString()}
+              </span>
+            )}
+          </div>
           <div style={styles.footerRight}>
+            <span style={styles.shortcutHint}>⌘S to save</span>
             <button style={styles.cancelButton} onClick={onClose}>Cancel</button>
             <button style={styles.confirmButton} onClick={handleSave}>Confirm</button>
           </div>
@@ -1147,6 +1247,47 @@ const VideoEditorModal = ({
           <div style={styles.analyzingOverlay}>
             <div style={styles.spinner} />
             <p>Analyzing beats...</p>
+          </div>
+        )}
+
+        {/* Auto-save Recovery Prompt */}
+        {showRecoveryPrompt && recoveryData && (
+          <div style={styles.lyricsOverlay}>
+            <div style={{...styles.lyricsModal, maxWidth: '420px'}}>
+              <h3 style={styles.lyricsTitle}>📝 Recover Unsaved Work?</h3>
+              <p style={{ color: '#9CA3AF', fontSize: '14px', marginBottom: '16px' }}>
+                We found an auto-saved draft from{' '}
+                <strong style={{ color: '#fff' }}>
+                  {recoveryData.savedAt ? new Date(recoveryData.savedAt).toLocaleString() : 'recently'}
+                </strong>
+              </p>
+              <div style={{
+                backgroundColor: '#1f1f2e',
+                padding: '12px',
+                borderRadius: '8px',
+                marginBottom: '16px',
+                fontSize: '13px',
+                color: '#9ca3af'
+              }}>
+                <div>🎵 Audio: {recoveryData.audio?.name || 'None'}</div>
+                <div>🎬 Clips: {recoveryData.clips?.length || 0}</div>
+                <div>💬 Words: {recoveryData.words?.length || 0}</div>
+              </div>
+              <div style={styles.lyricsActions}>
+                <button
+                  style={styles.cancelButton}
+                  onClick={handleDiscardDraft}
+                >
+                  Start Fresh
+                </button>
+                <button
+                  style={{...styles.confirmButton, background: 'linear-gradient(135deg, #10b981, #059669)'}}
+                  onClick={handleRestoreDraft}
+                >
+                  ✨ Restore Draft
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -1817,6 +1958,11 @@ const styles = {
     padding: '16px 20px',
     borderTop: '1px solid #1f1f2e'
   },
+  footerLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px'
+  },
   resetButton: {
     padding: '10px 16px',
     backgroundColor: 'transparent',
@@ -1826,9 +1972,24 @@ const styles = {
     cursor: 'pointer',
     fontSize: '13px'
   },
+  autoSaveIndicator: {
+    fontSize: '11px',
+    color: '#10b981',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px'
+  },
   footerRight: {
     display: 'flex',
-    gap: '8px'
+    alignItems: 'center',
+    gap: '12px'
+  },
+  shortcutHint: {
+    fontSize: '11px',
+    color: '#6b7280',
+    padding: '4px 8px',
+    backgroundColor: '#1f1f2e',
+    borderRadius: '4px'
   },
   cancelButton: {
     padding: '10px 20px',

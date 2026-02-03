@@ -19,6 +19,8 @@ const AestheticHome = ({
   onSaveAudioClip, // New: save trimmed clip to library
   onDeleteBankVideo,
   onDeleteBankAudio,
+  onRenameBankVideo,
+  onRenameBankAudio,
   onCreateContent
 }) => {
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
@@ -284,6 +286,7 @@ const AestheticHome = ({
                           videoId: video.id,
                           videoName: video.name || 'this video'
                         })}
+                        onRename={(newName) => onRenameBankVideo?.(video.id, newName)}
                       />
                     ))
                   )}
@@ -341,6 +344,7 @@ const AestheticHome = ({
                           audioId: audio.id,
                           audioName: audio.name || 'this audio'
                         })}
+                        onRename={(newName) => onRenameBankAudio?.(audio.id, newName)}
                       />
                     ))
                   )}
@@ -453,16 +457,34 @@ const AestheticHome = ({
 };
 
 /**
- * VideoCard - Individual video card with hover delete button
+ * VideoCard - Individual video card with hover actions (rename, delete)
  */
-const VideoCard = ({ video, onDelete }) => {
+const VideoCard = ({ video, onDelete, onRename }) => {
   const [showActions, setShowActions] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(video.name || '');
+
+  const handleRename = () => {
+    if (editName.trim() && editName.trim() !== video.name) {
+      onRename(editName.trim());
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleRename();
+    } else if (e.key === 'Escape') {
+      setEditName(video.name || '');
+      setIsEditing(false);
+    }
+  };
 
   return (
     <div
       style={styles.videoCard}
       onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
+      onMouseLeave={() => { if (!isEditing) setShowActions(false); }}
     >
       <div style={styles.videoThumb}>
         {video.thumbnail ? (
@@ -484,30 +506,89 @@ const VideoCard = ({ video, onDelete }) => {
           />
         )}
       </div>
+
+      {/* Video name label - editable */}
+      <div style={styles.videoNameContainer}>
+        {isEditing ? (
+          <input
+            type="text"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            onBlur={handleRename}
+            onKeyDown={handleKeyDown}
+            style={styles.videoNameInput}
+            autoFocus
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <span
+            style={styles.videoName}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsEditing(true);
+            }}
+            title="Click to rename"
+          >
+            {video.name || 'Untitled'}
+          </span>
+        )}
+      </div>
+
       <span style={styles.videoDuration}>
         {video.duration ? `${Math.floor(video.duration / 60)}:${String(Math.floor(video.duration % 60)).padStart(2, '0')}` : '0:00'}
       </span>
-      {showActions && (
-        <button
-          style={styles.deleteVideoBtn}
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          title="Delete video"
-        >
-          ✕
-        </button>
+
+      {showActions && !isEditing && (
+        <div style={styles.videoActionBtns}>
+          <button
+            style={styles.renameVideoBtn}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsEditing(true);
+            }}
+            title="Rename video"
+          >
+            ✎
+          </button>
+          <button
+            style={styles.deleteVideoBtn}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            title="Delete video"
+          >
+            ✕
+          </button>
+        </div>
       )}
     </div>
   );
 };
 
 /**
- * AudioItem - Individual audio item with hover delete button
+ * AudioItem - Individual audio item with hover actions (rename, delete)
  */
-const AudioItem = ({ audio, onDelete }) => {
+const AudioItem = ({ audio, onDelete, onRename }) => {
   const [showActions, setShowActions] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(audio.name || '');
+
+  const handleRename = () => {
+    if (editName.trim() && editName.trim() !== audio.name) {
+      onRename(editName.trim());
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleRename();
+    } else if (e.key === 'Escape') {
+      setEditName(audio.name || '');
+      setIsEditing(false);
+    }
+  };
 
   return (
     <div
@@ -516,7 +597,7 @@ const AudioItem = ({ audio, onDelete }) => {
         ...(audio.isClip ? styles.audioItemClip : {})
       }}
       onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
+      onMouseLeave={() => { if (!isEditing) setShowActions(false); }}
     >
       {audio.isClip ? (
         <span style={styles.clipIcon}>✂️</span>
@@ -527,25 +608,57 @@ const AudioItem = ({ audio, onDelete }) => {
         </svg>
       )}
       <div style={styles.audioInfo}>
-        <span style={styles.audioName}>
-          {audio.name}
-          {audio.isClip && <span style={styles.clipBadge}>Saved Clip</span>}
-        </span>
+        {isEditing ? (
+          <input
+            type="text"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            onBlur={handleRename}
+            onKeyDown={handleKeyDown}
+            style={styles.audioNameInput}
+            autoFocus
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <span
+            style={styles.audioNameEditable}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsEditing(true);
+            }}
+            title="Click to rename"
+          >
+            {audio.name}
+            {audio.isClip && <span style={styles.clipBadge}>Saved Clip</span>}
+          </span>
+        )}
         <span style={styles.audioDuration}>
           {audio.duration ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}` : '--:--'}
         </span>
       </div>
-      {showActions && (
-        <button
-          style={styles.deleteAudioBtn}
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          title="Delete audio"
-        >
-          ✕
-        </button>
+      {showActions && !isEditing && (
+        <div style={styles.audioActionBtns}>
+          <button
+            style={styles.renameAudioBtn}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsEditing(true);
+            }}
+            title="Rename audio"
+          >
+            ✎
+          </button>
+          <button
+            style={styles.deleteAudioBtn}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            title="Delete audio"
+          >
+            ✕
+          </button>
+        </div>
       )}
     </div>
   );
@@ -902,10 +1015,58 @@ const styles = {
     fontSize: '10px',
     color: '#fff'
   },
-  deleteVideoBtn: {
+  videoNameContainer: {
+    position: 'absolute',
+    bottom: '24px',
+    left: '4px',
+    right: '4px',
+    padding: '2px'
+  },
+  videoName: {
+    display: 'block',
+    fontSize: '10px',
+    color: '#fff',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: '2px 6px',
+    borderRadius: '3px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    cursor: 'pointer'
+  },
+  videoNameInput: {
+    width: '100%',
+    fontSize: '10px',
+    color: '#fff',
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    border: '1px solid #7c3aed',
+    padding: '2px 6px',
+    borderRadius: '3px',
+    outline: 'none',
+    boxSizing: 'border-box'
+  },
+  videoActionBtns: {
     position: 'absolute',
     top: '4px',
     right: '4px',
+    display: 'flex',
+    gap: '2px'
+  },
+  renameVideoBtn: {
+    width: '22px',
+    height: '22px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1f1f2e',
+    border: 'none',
+    borderRadius: '4px',
+    color: '#fff',
+    cursor: 'pointer',
+    fontSize: '12px',
+    opacity: 0.9
+  },
+  deleteVideoBtn: {
     width: '22px',
     height: '22px',
     display: 'flex',
@@ -965,6 +1126,46 @@ const styles = {
     backgroundColor: '#7c3aed',
     borderRadius: '4px',
     color: '#fff'
+  },
+  audioNameEditable: {
+    fontSize: '13px',
+    color: '#fff',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    cursor: 'pointer',
+    padding: '2px 4px',
+    borderRadius: '3px',
+    marginLeft: '-4px'
+  },
+  audioNameInput: {
+    flex: 1,
+    fontSize: '13px',
+    color: '#fff',
+    backgroundColor: '#1f1f2e',
+    border: '1px solid #7c3aed',
+    padding: '4px 8px',
+    borderRadius: '4px',
+    outline: 'none'
+  },
+  audioActionBtns: {
+    display: 'flex',
+    gap: '4px',
+    flexShrink: 0
+  },
+  renameAudioBtn: {
+    width: '24px',
+    height: '24px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1f1f2e',
+    border: '1px solid #2d2d3d',
+    borderRadius: '4px',
+    color: '#fff',
+    cursor: 'pointer',
+    fontSize: '12px',
+    flexShrink: 0
   },
   deleteAudioBtn: {
     width: '24px',
