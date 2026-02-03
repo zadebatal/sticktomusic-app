@@ -4,6 +4,7 @@ import { DisplayModeSelector } from './TemplateSelector';
 
 /**
  * Lyric Editor - Import, sync, and manage lyrics with tap-to-sync
+ * Now with visual waveform playhead like AudioClipSelector
  */
 const LyricEditor = ({
   words = [],
@@ -17,13 +18,20 @@ const LyricEditor = ({
   isPlaying,
   onPlay,
   onPause,
-  audioRef
+  audioRef,
+  audioDuration = 0,
+  audioUrl = null
 }) => {
   const [mode, setMode] = useState('edit'); // edit, tapSync, manual
   const [tapSyncIndex, setTapSyncIndex] = useState(0);
   const [tapSyncWords, setTapSyncWords] = useState([]);
   const [tapSyncTimes, setTapSyncTimes] = useState([]);
+  const [waveformData, setWaveformData] = useState([]);
+  const [localPlayheadTime, setLocalPlayheadTime] = useState(0);
   const containerRef = useRef(null);
+  const canvasRef = useRef(null);
+  const waveformContainerRef = useRef(null);
+  const animationRef = useRef(null);
 
   // Parse lyrics when they change
   const handleLyricsChange = (newLyrics) => {
@@ -109,6 +117,154 @@ const LyricEditor = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [mode, handleTap]);
 
+  // Generate waveform from audio URL
+  useEffect(() => {
+    if (!audioUrl) return;
+
+    const generateWaveform = async () => {
+      try {
+        const response = await fetch(audioUrl);
+        const arrayBuffer = await response.arrayBuffer();
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+        const rawData = audioBuffer.getChannelData(0);
+        const samples = 200;
+        const blockSize = Math.floor(rawData.length / samples);
+        const filteredData = [];
+
+        for (let i = 0; i < samples; i++) {
+          let sum = 0;
+          for (let j = 0; j < blockSize; j++) {
+            sum += Math.abs(rawData[i * blockSize + j]);
+          }
+          filteredData.push(sum / blockSize);
+        }
+
+        const maxVal = Math.max(...filteredData);
+        const normalizedData = filteredData.map(n => n / maxVal);
+        setWaveformData(normalizedData);
+
+        audioContext.close();
+      } catch (err) {
+        console.error('Waveform generation failed:', err);
+        // Fallback to placeholder waveform
+        setWaveformData(Array(200).fill(0).map(() => Math.random() * 0.5 + 0.2));
+      }
+    };
+
+    generateWaveform();
+  }, [audioUrl]);
+
+  // Sync local playhead with currentTime prop
+  useEffect(() => {
+    setLocalPlayheadTime(currentTime);
+  }, [currentTime]);
+
+  // Animate playhead during playback
+  useEffect(() => {
+    if (isPlaying && audioRef?.current) {
+      const updateLoop = () => {
+        if (!audioRef.current) return;
+        setLocalPlayheadTime(audioRef.current.currentTime);
+        animationRef.current = requestAnimationFrame(updateLoop);
+      };
+      animationRef.current = requestAnimationFrame(updateLoop);
+    } else {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    }
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [isPlaying, audioRef]);
+
+  // Draw waveform on canvas
+  useEffect(() => {
+    if (!canvasRef.current || waveformData.length === 0 || audioDuration === 0) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+
+    ctx.clearRect(0, 0, width, height);
+
+    // Background
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, width, height);
+
+    // Calculate playhead position
+    const playheadX = (localPlayheadTime / audioDuration) * width;
+
+    // Draw waveform
+    const barWidth = width / waveformData.length;
+    const barGap = 1;
+
+    waveformData.forEach((value, index) => {
+      const x = index * barWidth;
+      const barHeight = value * (height - 20);
+      const y = (height - barHeight) / 2;
+
+      const barTime = (index / waveformData.length) * audioDuration;
+      const isPast = barTime <= localPlayheadTime;
+
+      ctx.fillStyle = isPast ? '#7c3aed' : '#334155';
+      ctx.fillRect(x + barGap / 2, y, barWidth - barGap, barHeight);
+    });
+
+    // Draw time markers
+    ctx.fillStyle = '#64748b';
+    ctx.font = '10px monospace';
+    const markerInterval = Math.max(5, Math.floor(audioDuration / 8));
+    for (let t = 0; t <= audioDuration; t += markerInterval) {
+      const x = (t / audioDuration) * width;
+      ctx.fillText(formatTimeShort(t), x + 2, height - 3);
+      ctx.fillRect(x, height - 14, 1, 4);
+    }
+
+    // Draw playhead (white line)
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(playheadX, 0);
+    ctx.lineTo(playheadX, height);
+    ctx.stroke();
+
+    // Playhead head (small triangle)
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(playheadX - 6, 0);
+    ctx.lineTo(playheadX + 6, 0);
+    ctx.lineTo(playheadX, 8);
+    ctx.closePath();
+    ctx.fill();
+
+  }, [waveformData, localPlayheadTime, audioDuration]);
+
+  // Handle waveform click to seek
+  const handleWaveformClick = useCallback((e) => {
+    if (!waveformContainerRef.current || audioDuration === 0 || !audioRef?.current) return;
+
+    const rect = waveformContainerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const time = Math.max(0, Math.min((x / rect.width) * audioDuration, audioDuration));
+
+    audioRef.current.currentTime = time;
+    setLocalPlayheadTime(time);
+  }, [audioDuration, audioRef]);
+
+  // Format time helper
+  const formatTimeShort = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   // Auto-sync to beats
   const autoSyncToBeats = () => {
     if (!lyrics.trim() || beats.length === 0) {
@@ -156,6 +312,39 @@ const LyricEditor = ({
           onChange={onDisplayModeChange}
         />
       </div>
+
+      {/* Audio Waveform Scrubber */}
+      {audioUrl && audioDuration > 0 && (
+        <div style={styles.waveformSection}>
+          <div style={styles.waveformHeader}>
+            <span style={styles.waveformLabel}>Audio Timeline</span>
+            <span style={styles.waveformTime}>
+              {formatTimeShort(localPlayheadTime)} / {formatTimeShort(audioDuration)}
+            </span>
+          </div>
+          <div
+            ref={waveformContainerRef}
+            style={styles.waveformContainer}
+            onClick={handleWaveformClick}
+          >
+            <canvas
+              ref={canvasRef}
+              width={400}
+              height={60}
+              style={styles.waveformCanvas}
+            />
+          </div>
+          <div style={styles.waveformControls}>
+            <button
+              style={styles.waveformPlayButton}
+              onClick={() => isPlaying ? onPause?.() : onPlay?.()}
+            >
+              {isPlaying ? '⏸' : '▶'}
+            </button>
+            <span style={styles.waveformHint}>Click waveform to seek • Space to tap sync</span>
+          </div>
+        </div>
+      )}
 
       {/* Mode: Edit */}
       {mode === 'edit' && (
@@ -306,6 +495,65 @@ const styles = {
     fontSize: '14px',
     fontWeight: '600',
     color: '#e2e8f0'
+  },
+  // Waveform styles
+  waveformSection: {
+    backgroundColor: '#0f172a',
+    borderRadius: '8px',
+    padding: '12px',
+    border: '1px solid #1e293b'
+  },
+  waveformHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '8px'
+  },
+  waveformLabel: {
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em'
+  },
+  waveformTime: {
+    fontSize: '12px',
+    fontFamily: 'monospace',
+    color: '#94a3b8'
+  },
+  waveformContainer: {
+    cursor: 'crosshair',
+    borderRadius: '4px',
+    overflow: 'hidden',
+    backgroundColor: '#0f172a'
+  },
+  waveformCanvas: {
+    display: 'block',
+    width: '100%',
+    height: '60px'
+  },
+  waveformControls: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginTop: '8px'
+  },
+  waveformPlayButton: {
+    width: '32px',
+    height: '32px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#7c3aed',
+    border: 'none',
+    borderRadius: '50%',
+    color: 'white',
+    fontSize: '14px',
+    cursor: 'pointer'
+  },
+  waveformHint: {
+    fontSize: '11px',
+    color: '#64748b'
   },
   lyricsInput: {
     width: '100%',

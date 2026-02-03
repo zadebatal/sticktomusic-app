@@ -27,12 +27,18 @@ const EnhancedTimeline = ({
   onRerollAll,
   onShuffleOrder,
   selectedClipIndex,
-  audioBuffer // For waveform
+  audioBuffer, // For waveform
+  isPlaying = false // New prop to know if video is playing
 }) => {
   const timelineRef = useRef(null);
   const [waveformData, setWaveformData] = useState([]);
   const [hoveredClip, setHoveredClip] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
+
+  // Find the active clip (the one the playhead is currently in)
+  const activeClipIndex = clips.findIndex(clip =>
+    currentTime >= clip.startTime && currentTime < (clip.startTime + clip.duration)
+  );
 
   // Generate waveform data from audio buffer
   useEffect(() => {
@@ -196,7 +202,8 @@ const EnhancedTimeline = ({
                   width: Math.max(timeToPixels(clip.duration), 20),
                   ...(selectedClipIndex === index ? styles.clipSelected : {}),
                   ...(clip.locked ? styles.clipLocked : {}),
-                  ...(hoveredClip === index ? styles.clipHovered : {})
+                  ...(hoveredClip === index ? styles.clipHovered : {}),
+                  ...(activeClipIndex === index && isPlaying ? styles.clipActive : {})
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -476,6 +483,12 @@ const styles = {
   clipHovered: {
     transform: 'scale(1.02)',
     zIndex: 10
+  },
+  clipActive: {
+    borderColor: '#22c55e',
+    boxShadow: '0 0 12px rgba(34, 197, 94, 0.6), 0 0 0 2px rgba(34, 197, 94, 0.3)',
+    transform: 'scale(1.03)',
+    zIndex: 15
   },
   clipThumbnail: {
     width: '100%',

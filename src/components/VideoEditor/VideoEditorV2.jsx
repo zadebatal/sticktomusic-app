@@ -660,6 +660,8 @@ const VideoEditorV2 = ({
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
                 audioRef={audioRef}
+                audioUrl={audioFile}
+                audioDuration={duration}
               />
             )}
 
@@ -753,6 +755,7 @@ const VideoEditorV2 = ({
         onShuffleOrder={handleShuffleOrder}
         selectedClipIndex={selectedClipIndex}
         audioBuffer={audioBuffer}
+        isPlaying={isPlaying}
       />
 
       {/* Modals */}
