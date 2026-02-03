@@ -37,6 +37,8 @@ const AudioClipSelector = ({
   const [editTimeValue, setEditTimeValue] = useState('');
   const [showSaveClipModal, setShowSaveClipModal] = useState(false);
   const [clipName, setClipName] = useState('');
+  const [showUseClipPrompt, setShowUseClipPrompt] = useState(false);
+  const [savedClipData, setSavedClipData] = useState(null);
 
   const audioRef = useRef(null);
   const canvasRef = useRef(null);
@@ -626,13 +628,16 @@ const AudioClipSelector = ({
                 autoFocus
                 onKeyDown={e => {
                   if (e.key === 'Enter' && clipName.trim()) {
-                    onSaveClip({
+                    const clipData = {
                       name: clipName.trim(),
                       startTime: inPoint,
                       endTime: outPoint,
                       clipDuration: selectedDuration
-                    });
+                    };
+                    onSaveClip(clipData);
+                    setSavedClipData(clipData);
                     setShowSaveClipModal(false);
+                    setShowUseClipPrompt(true);
                   }
                 }}
               />
@@ -644,18 +649,60 @@ const AudioClipSelector = ({
                   style={styles.saveButton}
                   onClick={() => {
                     if (clipName.trim()) {
-                      onSaveClip({
+                      const clipData = {
                         name: clipName.trim(),
                         startTime: inPoint,
                         endTime: outPoint,
                         clipDuration: selectedDuration
-                      });
+                      };
+                      onSaveClip(clipData);
+                      setSavedClipData(clipData);
                       setShowSaveClipModal(false);
+                      setShowUseClipPrompt(true);
                     }
                   }}
                   disabled={!clipName.trim()}
                 >
                   Save to Library
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Use Clip Now Prompt */}
+        {showUseClipPrompt && savedClipData && (
+          <div style={styles.saveClipOverlay} onClick={() => setShowUseClipPrompt(false)}>
+            <div style={styles.useClipModal} onClick={e => e.stopPropagation()}>
+              <div style={styles.useClipIcon}>✅</div>
+              <h3 style={styles.useClipTitle}>Clip Saved!</h3>
+              <p style={styles.useClipDesc}>
+                "{savedClipData.name}" has been saved to your library.
+              </p>
+              <p style={styles.useClipQuestion}>
+                Would you like to use this clip now?
+              </p>
+              <div style={styles.useClipActions}>
+                <button
+                  style={styles.laterButton}
+                  onClick={() => {
+                    setShowUseClipPrompt(false);
+                    setSavedClipData(null);
+                    setClipName('');
+                  }}
+                >
+                  Save More Clips
+                </button>
+                <button
+                  style={styles.useNowButton}
+                  onClick={() => {
+                    // Use the saved clip's trim points
+                    onSave(savedClipData.startTime, savedClipData.endTime);
+                    setShowUseClipPrompt(false);
+                    setSavedClipData(null);
+                  }}
+                >
+                  ✨ Use Now
                 </button>
               </div>
             </div>
@@ -1019,6 +1066,60 @@ const styles = {
     display: 'flex',
     justifyContent: 'flex-end',
     gap: '8px'
+  },
+  // Use Clip Now Modal styles
+  useClipModal: {
+    backgroundColor: '#111118',
+    borderRadius: '16px',
+    padding: '24px',
+    textAlign: 'center',
+    maxWidth: '360px'
+  },
+  useClipIcon: {
+    fontSize: '48px',
+    marginBottom: '12px'
+  },
+  useClipTitle: {
+    fontSize: '20px',
+    fontWeight: '600',
+    color: '#fff',
+    margin: '0 0 8px 0'
+  },
+  useClipDesc: {
+    fontSize: '14px',
+    color: '#10b981',
+    margin: '0 0 4px 0',
+    fontWeight: '500'
+  },
+  useClipQuestion: {
+    fontSize: '14px',
+    color: '#9ca3af',
+    margin: '0 0 20px 0'
+  },
+  useClipActions: {
+    display: 'flex',
+    gap: '12px',
+    justifyContent: 'center'
+  },
+  laterButton: {
+    padding: '12px 20px',
+    backgroundColor: '#1f1f2e',
+    border: '1px solid #2d2d3d',
+    borderRadius: '8px',
+    color: '#9ca3af',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '500'
+  },
+  useNowButton: {
+    padding: '12px 24px',
+    background: 'linear-gradient(135deg, #10b981, #059669)',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#fff',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '600'
   }
 };
 
