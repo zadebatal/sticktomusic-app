@@ -38,9 +38,13 @@ export function normalizeWordsToTrimRange(words, trimStart = 0, trimEnd = null, 
   const { inputInMs = false, preservePartial = false } = options;
   const msMultiplier = inputInMs ? 1000 : 1;
 
+  // Safety: ensure trim boundaries are valid numbers
+  const safeTrimStart = typeof trimStart === 'number' && !isNaN(trimStart) ? trimStart : 0;
+  const safeTrimEnd = typeof trimEnd === 'number' && !isNaN(trimEnd) ? trimEnd : null;
+
   // Convert trim boundaries to the same unit as input
-  const trimStartUnit = trimStart * msMultiplier;
-  const trimEndUnit = trimEnd ? trimEnd * msMultiplier : Infinity;
+  const trimStartUnit = safeTrimStart * msMultiplier;
+  const trimEndUnit = safeTrimEnd ? safeTrimEnd * msMultiplier : Infinity;
 
   return words
     .filter(word => {
@@ -89,11 +93,14 @@ export function normalizeBeatsToTrimRange(beats, trimStart = 0, trimEnd = null) 
     return [];
   }
 
-  const effectiveTrimEnd = trimEnd ?? Infinity;
+  // Safety: ensure trim boundaries are valid numbers
+  const safeTrimStart = typeof trimStart === 'number' && !isNaN(trimStart) ? trimStart : 0;
+  const safeTrimEnd = typeof trimEnd === 'number' && !isNaN(trimEnd) ? trimEnd : null;
+  const effectiveTrimEnd = safeTrimEnd ?? Infinity;
 
   return beats
-    .filter(beatTime => beatTime >= trimStart && beatTime < effectiveTrimEnd)
-    .map(beatTime => beatTime - trimStart);
+    .filter(beatTime => typeof beatTime === 'number' && !isNaN(beatTime) && beatTime >= safeTrimStart && beatTime < effectiveTrimEnd)
+    .map(beatTime => beatTime - safeTrimStart);
 }
 
 /**
@@ -236,7 +243,10 @@ export function globalToLocalTime(globalTime, trimStart = 0) {
  * @returns {string}
  */
 export function getTrimHash(trimStart, trimEnd) {
-  return `${trimStart.toFixed(3)}_${trimEnd.toFixed(3)}`;
+  // Safety check to prevent crashes if values are undefined/null
+  const safeStart = typeof trimStart === 'number' && !isNaN(trimStart) ? trimStart : 0;
+  const safeEnd = typeof trimEnd === 'number' && !isNaN(trimEnd) ? trimEnd : 30;
+  return `${safeStart.toFixed(3)}_${safeEnd.toFixed(3)}`;
 }
 
 export default {
