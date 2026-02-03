@@ -333,6 +333,46 @@ const VideoStudio = ({ onClose, artists = [] }) => {
     setUploadProgress(null);
   }, [selectedCategory]);
 
+  // Save a trimmed audio clip to the library for reuse
+  const handleSaveAudioClip = useCallback(async (clipData) => {
+    if (!selectedCategory) return;
+
+    setUploadProgress({ type: 'audio', current: 1, total: 1, name: clipData.name });
+
+    try {
+      // Upload the original file to Firebase Storage
+      const { url, path } = await uploadFile(clipData.file, 'audio', (progress) => {
+        setUploadProgress(prev => ({ ...prev, progress }));
+      });
+
+      // Create the saved clip with trim info
+      const savedClip = {
+        id: `audioclip_${Date.now()}`,
+        name: clipData.name,
+        url,
+        storagePath: path,
+        duration: clipData.clipDuration,
+        // Store trim info so we can restore the selection
+        startTime: clipData.startTime,
+        endTime: clipData.endTime,
+        isClip: true, // Flag to identify saved clips
+        createdAt: new Date().toISOString()
+      };
+
+      setCategories(prev => prev.map(cat =>
+        cat.id === selectedCategory.id
+          ? { ...cat, audio: [...cat.audio, savedClip] }
+          : cat
+      ));
+
+      setSelectedCategory(prev => prev ? { ...prev, audio: [...prev.audio, savedClip] } : prev);
+    } catch (error) {
+      console.error('Failed to save audio clip:', error);
+    }
+
+    setUploadProgress(null);
+  }, [selectedCategory]);
+
   const handleDeleteVideo = useCallback((videoId) => {
     if (!selectedCategory) return;
 
@@ -458,6 +498,7 @@ const VideoStudio = ({ onClose, artists = [] }) => {
             onCreateCategory={handleCreateCategory}
             onUploadVideos={handleUploadVideos}
             onUploadAudio={handleUploadAudio}
+            onSaveAudioClip={handleSaveAudioClip}
             onCreateContent={handleCreateContent}
           />
         )}

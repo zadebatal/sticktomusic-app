@@ -15,6 +15,7 @@ const AestheticHome = ({
   onCreateCategory,
   onUploadVideos,
   onUploadAudio,
+  onSaveAudioClip, // New: save trimmed clip to library
   onCreateContent
 }) => {
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
@@ -78,6 +79,20 @@ const AestheticHome = ({
       URL.revokeObjectURL(pendingAudio.url);
     }
     setPendingAudio(null);
+  };
+
+  // Handle saving a clip to the library for reuse
+  const handleSaveClipToLibrary = (clipData) => {
+    if (pendingAudio && onSaveAudioClip) {
+      onSaveAudioClip({
+        file: pendingAudio.file,
+        originalUrl: pendingAudio.url,
+        name: clipData.name,
+        startTime: clipData.startTime,
+        endTime: clipData.endTime,
+        clipDuration: clipData.clipDuration
+      });
+    }
   };
 
   return (
@@ -327,13 +342,23 @@ const AestheticHome = ({
                     </div>
                   ) : (
                     selectedCategory.audio.map(audio => (
-                      <div key={audio.id} style={styles.audioItem}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-                          <path d="M15.54 8.46a5 5 0 010 7.07"/>
-                        </svg>
+                      <div key={audio.id} style={{
+                        ...styles.audioItem,
+                        ...(audio.isClip ? styles.audioItemClip : {})
+                      }}>
+                        {audio.isClip ? (
+                          <span style={styles.clipIcon}>✂️</span>
+                        ) : (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                            <path d="M15.54 8.46a5 5 0 010 7.07"/>
+                          </svg>
+                        )}
                         <div style={styles.audioInfo}>
-                          <span style={styles.audioName}>{audio.name}</span>
+                          <span style={styles.audioName}>
+                            {audio.name}
+                            {audio.isClip && <span style={styles.clipBadge}>Saved Clip</span>}
+                          </span>
                           <span style={styles.audioDuration}>
                             {audio.duration ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}` : '--:--'}
                           </span>
@@ -411,7 +436,9 @@ const AestheticHome = ({
         <AudioClipSelector
           audioFile={pendingAudio.file}
           audioUrl={pendingAudio.url}
+          audioName={pendingAudio.name}
           onSave={handleClipSave}
+          onSaveClip={onSaveAudioClip ? handleSaveClipToLibrary : null}
           onCancel={handleClipCancel}
         />
       )}
@@ -799,6 +826,21 @@ const styles = {
   audioDuration: {
     fontSize: '12px',
     color: '#6b7280'
+  },
+  audioItemClip: {
+    backgroundColor: 'rgba(124, 58, 237, 0.1)',
+    borderLeft: '3px solid #7c3aed'
+  },
+  clipIcon: {
+    fontSize: '14px'
+  },
+  clipBadge: {
+    marginLeft: '8px',
+    fontSize: '10px',
+    padding: '2px 6px',
+    backgroundColor: '#7c3aed',
+    borderRadius: '4px',
+    color: '#fff'
   },
   createButtonContainer: {
     marginTop: '24px',

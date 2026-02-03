@@ -15,7 +15,9 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 const AudioClipSelector = ({
   audioFile,
   audioUrl,
+  audioName, // Original audio name for default clip naming
   onSave,
+  onSaveClip, // New: callback to save clip to library
   onCancel,
   initialStart = 0,
   initialEnd = null
@@ -33,6 +35,8 @@ const AudioClipSelector = ({
   const [dragStartOut, setDragStartOut] = useState(0);
   const [editingTime, setEditingTime] = useState(null); // 'in' | 'out' | null
   const [editTimeValue, setEditTimeValue] = useState('');
+  const [showSaveClipModal, setShowSaveClipModal] = useState(false);
+  const [clipName, setClipName] = useState('');
 
   const audioRef = useRef(null);
   const canvasRef = useRef(null);
@@ -580,6 +584,19 @@ const AudioClipSelector = ({
           </div>
           <div style={styles.footerActions}>
             <button style={styles.cancelButton} onClick={onCancel}>Cancel</button>
+            {onSaveClip && (
+              <button
+                style={styles.saveClipButton}
+                onClick={() => {
+                  const baseName = audioName || 'Audio';
+                  const defaultName = `${baseName.replace(/\.[^/.]+$/, '')} (${formatTimeShort(inPoint)}-${formatTimeShort(outPoint)})`;
+                  setClipName(defaultName);
+                  setShowSaveClipModal(true);
+                }}
+              >
+                💾 Save Clip
+              </button>
+            )}
             <button
               style={styles.saveButton}
               onClick={() => onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration })}
@@ -591,6 +608,59 @@ const AudioClipSelector = ({
             </button>
           </div>
         </div>
+
+        {/* Save Clip Modal */}
+        {showSaveClipModal && (
+          <div style={styles.saveClipOverlay} onClick={() => setShowSaveClipModal(false)}>
+            <div style={styles.saveClipModal} onClick={e => e.stopPropagation()}>
+              <h3 style={styles.saveClipTitle}>💾 Save Audio Clip</h3>
+              <p style={styles.saveClipDesc}>
+                Save this {formatTime(selectedDuration)} selection for quick reuse
+              </p>
+              <input
+                type="text"
+                value={clipName}
+                onChange={e => setClipName(e.target.value)}
+                placeholder="Clip name..."
+                style={styles.saveClipInput}
+                autoFocus
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && clipName.trim()) {
+                    onSaveClip({
+                      name: clipName.trim(),
+                      startTime: inPoint,
+                      endTime: outPoint,
+                      clipDuration: selectedDuration
+                    });
+                    setShowSaveClipModal(false);
+                  }
+                }}
+              />
+              <div style={styles.saveClipActions}>
+                <button style={styles.cancelButton} onClick={() => setShowSaveClipModal(false)}>
+                  Cancel
+                </button>
+                <button
+                  style={styles.saveButton}
+                  onClick={() => {
+                    if (clipName.trim()) {
+                      onSaveClip({
+                        name: clipName.trim(),
+                        startTime: inPoint,
+                        endTime: outPoint,
+                        clipDuration: selectedDuration
+                      });
+                      setShowSaveClipModal(false);
+                    }
+                  }}
+                  disabled={!clipName.trim()}
+                >
+                  Save to Library
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -895,6 +965,60 @@ const styles = {
     fontSize: '14px',
     fontWeight: '600',
     cursor: 'pointer'
+  },
+  saveClipButton: {
+    padding: '10px 20px',
+    backgroundColor: '#7c3aed',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#fff',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer'
+  },
+  saveClipOverlay: {
+    position: 'absolute',
+    inset: 0,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10
+  },
+  saveClipModal: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: '12px',
+    padding: '24px',
+    width: '100%',
+    maxWidth: '400px'
+  },
+  saveClipTitle: {
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#fff',
+    margin: '0 0 8px 0'
+  },
+  saveClipDesc: {
+    fontSize: '13px',
+    color: '#9ca3af',
+    margin: '0 0 16px 0'
+  },
+  saveClipInput: {
+    width: '100%',
+    padding: '12px 16px',
+    backgroundColor: '#0a0a0f',
+    border: '1px solid #2d2d3d',
+    borderRadius: '8px',
+    color: '#fff',
+    fontSize: '14px',
+    marginBottom: '16px',
+    outline: 'none',
+    boxSizing: 'border-box'
+  },
+  saveClipActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '8px'
   }
 };
 
