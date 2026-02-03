@@ -157,6 +157,29 @@ const VideoEditorModal = ({
     }
   }, [currentClip?.url, currentClip?.id]);
 
+  // Handlers - MUST be defined before useEffect that references them (TDZ fix)
+  const handleSeek = useCallback((time) => {
+    const clampedTime = Math.max(0, Math.min(time, duration));
+    setCurrentTime(clampedTime);
+    if (audioRef.current) {
+      audioRef.current.currentTime = clampedTime;
+    }
+    // Video sync will happen via the useEffect
+  }, [duration]);
+
+  const handleToggleMute = useCallback(() => {
+    setIsMuted(prev => {
+      if (audioRef.current) {
+        audioRef.current.muted = !prev;
+      }
+      return !prev;
+    });
+  }, []);
+
+  const handlePlayPause = useCallback(() => {
+    setIsPlaying(prev => !prev);
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -194,28 +217,6 @@ const VideoEditorModal = ({
   const handleAudioSelect = (audio) => {
     setSelectedAudio(audio);
   };
-
-  const handleSeek = useCallback((time) => {
-    const clampedTime = Math.max(0, Math.min(time, duration));
-    setCurrentTime(clampedTime);
-    if (audioRef.current) {
-      audioRef.current.currentTime = clampedTime;
-    }
-    // Video sync will happen via the useEffect
-  }, [duration]);
-
-  const handleToggleMute = useCallback(() => {
-    setIsMuted(prev => {
-      if (audioRef.current) {
-        audioRef.current.muted = !prev;
-      }
-      return !prev;
-    });
-  }, []);
-
-  const handlePlayPause = useCallback(() => {
-    setIsPlaying(prev => !prev);
-  }, []);
 
   const handleCutByBeat = useCallback(() => {
     if (!beats.length || !category?.videos?.length) return;
