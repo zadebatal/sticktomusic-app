@@ -188,6 +188,34 @@ const VideoEditorModal = ({
     setIsPlaying(prev => !prev);
   }, []);
 
+  // Clear auto-save on successful save - MUST be defined before handleSave
+  const clearAutoSave = useCallback(() => {
+    try {
+      localStorage.removeItem(autoSaveKey);
+    } catch (e) {
+      console.error('Failed to clear auto-save:', e);
+    }
+  }, [autoSaveKey]);
+
+  // handleSave - MUST be defined before keyboard shortcuts useEffect
+  const handleSave = useCallback(() => {
+    onSave({
+      id: existingVideo?.id,
+      audio: selectedAudio,
+      clips,
+      words,
+      lyrics,
+      textStyle,
+      cropMode,
+      duration,
+      bpm,
+      thumbnail: clips[0]?.thumbnail || null,
+      textOverlay: words[0]?.text || lyrics.split('\n')[0] || ''
+    });
+    // Clear auto-save after successful save
+    clearAutoSave();
+  }, [existingVideo, selectedAudio, clips, words, lyrics, textStyle, cropMode, duration, bpm, onSave, clearAutoSave]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -284,15 +312,6 @@ const VideoEditorModal = ({
     const interval = setInterval(autoSave, 30000); // 30 seconds
     return () => clearInterval(interval);
   }, [autoSaveKey, selectedAudio, clips, words, lyrics, textStyle, cropMode]);
-
-  // Clear auto-save on successful save
-  const clearAutoSave = useCallback(() => {
-    try {
-      localStorage.removeItem(autoSaveKey);
-    } catch (e) {
-      console.error('Failed to clear auto-save:', e);
-    }
-  }, [autoSaveKey]);
 
   // Restore from auto-saved draft
   const handleRestoreDraft = useCallback(() => {
@@ -412,24 +431,6 @@ const VideoEditorModal = ({
       setTextStyle(prev => ({ ...prev, ...preset.settings }));
     }
   }, []);
-
-  const handleSave = useCallback(() => {
-    onSave({
-      id: existingVideo?.id,
-      audio: selectedAudio,
-      clips,
-      words,
-      lyrics,
-      textStyle,
-      cropMode,
-      duration,
-      bpm,
-      thumbnail: clips[0]?.thumbnail || null,
-      textOverlay: words[0]?.text || lyrics.split('\n')[0] || ''
-    });
-    // Clear auto-save after successful save
-    clearAutoSave();
-  }, [existingVideo, selectedAudio, clips, words, lyrics, textStyle, cropMode, duration, bpm, onSave, clearAutoSave]);
 
   const handleSyncLyrics = useCallback((mode) => {
     if (!lyrics.trim() || !beats.length) return;
