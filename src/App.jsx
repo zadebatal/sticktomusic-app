@@ -4663,7 +4663,7 @@ const StickToMusic = () => {
         {showVideoEditor && (
           <VideoStudio
             onClose={() => setShowVideoEditor(false)}
-            artists={artists.map(a => ({ id: a.id, name: a.name }))}
+            artists={operatorArtists.map(a => ({ id: a.id, name: a.name }))}
           />
         )}
       </div>
