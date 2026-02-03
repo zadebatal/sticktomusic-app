@@ -38,15 +38,15 @@ export const renderVideo = async (videoData, onProgress = () => {}) => {
   canvas.height = height;
   const ctx = canvas.getContext('2d');
 
-  // Create video elements for each clip
+  // Create video elements for each clip (prefer localUrl to avoid CORS)
   const videoElements = await Promise.all(
-    clips.map(clip => loadVideoElement(clip.url))
+    clips.map(clip => loadVideoElement(clip.localUrl || clip.url))
   );
 
-  // Create audio element
+  // Create audio element (prefer localUrl to avoid CORS)
   let audioElement = null;
-  if (audio?.url) {
-    audioElement = await loadAudioElement(audio.url);
+  if (audio?.url || audio?.localUrl) {
+    audioElement = await loadAudioElement(audio.localUrl || audio.url);
   }
 
   // Set up MediaRecorder
@@ -266,8 +266,8 @@ export const exportAsPreview = async (videoData) => {
     throw new Error('No clips to export');
   }
 
-  // Just generate a preview image from first clip
-  const video = await loadVideoElement(clips[0].url);
+  // Just generate a preview image from first clip (prefer localUrl to avoid CORS)
+  const video = await loadVideoElement(clips[0].localUrl || clips[0].url);
 
   const canvas = document.createElement('canvas');
   canvas.width = 1080;
