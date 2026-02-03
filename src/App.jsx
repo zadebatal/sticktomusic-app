@@ -675,6 +675,9 @@ const StickToMusic = () => {
 
   // Bulk selection state
   const [selectedPosts, setSelectedPosts] = useState(new Set());
+
+  // UI-12/13: Day detail drawer state
+  const [dayDetailDrawer, setDayDetailDrawer] = useState({ isOpen: false, date: null, posts: [] });
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Settings state
@@ -781,6 +784,7 @@ const StickToMusic = () => {
       if (e.key === 'Escape') {
         setShowQuickSearch(false);
         setDeleteConfirmModal({ show: false, postId: null, caption: '' });
+        setDayDetailDrawer({ isOpen: false, date: null, posts: [] }); // UI-13
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -3562,9 +3566,13 @@ const StickToMusic = () => {
                   return (
                     <div className="space-y-4">
                       {sortedDates.length === 0 ? (
-                        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center text-zinc-500">
-                          No posts synced. Click "Sync from Late" to load your scheduled posts.
-                        </div>
+                        <SharedEmptyState
+                          icon="📅"
+                          title="No posts scheduled"
+                          description={postSearch || postPlatformFilter !== 'all' ? 'No posts match your filters. Try adjusting your search.' : 'Sync your posts from Late to see your scheduled content timeline.'}
+                          actionLabel={!postSearch && postPlatformFilter === 'all' ? 'Sync from Late' : undefined}
+                          onAction={!postSearch && postPlatformFilter === 'all' ? handleSync : undefined}
+                        />
                       ) : (
                         sortedDates.map(date => {
                           const datePosts = postsByDate[date];
@@ -3709,10 +3717,23 @@ const StickToMusic = () => {
                           const dayPosts = postsByDate[dateStr] || [];
                           const isToday = new Date().toISOString().split('T')[0] === dateStr;
 
+                          // UI-14: Check if this day is in the current week
+                          const today = new Date();
+                          const startOfWeek = new Date(today);
+                          startOfWeek.setDate(today.getDate() - today.getDay());
+                          const endOfWeek = new Date(startOfWeek);
+                          endOfWeek.setDate(startOfWeek.getDate() + 6);
+                          const dayDate = new Date(year, month, day);
+                          const isCurrentWeek = dayDate >= startOfWeek && dayDate <= endOfWeek;
+
                           return (
                             <div
                               key={day}
-                              className={`min-h-[120px] p-2 border-r border-b border-zinc-800 last:border-r-0 ${isToday ? 'bg-purple-900/20' : ''}`}
+                              onClick={() => dayPosts.length > 0 && setDayDetailDrawer({ isOpen: true, date: dateStr, posts: dayPosts })}
+                              className={`min-h-[120px] p-2 border-r border-b border-zinc-800 last:border-r-0 transition-colors ${
+                                isToday ? 'bg-purple-900/20' :
+                                isCurrentWeek ? 'bg-zinc-800/30' : ''
+                              } ${dayPosts.length > 0 ? 'cursor-pointer hover:bg-zinc-800/50' : ''}`}
                             >
                               <div className={`text-sm font-medium mb-2 ${isToday ? 'text-purple-400' : 'text-zinc-400'}`}>
                                 {day}
@@ -3731,6 +3752,10 @@ const StickToMusic = () => {
                                       key={post._id || idx}
                                       className="text-xs p-1.5 bg-zinc-800 rounded truncate hover:bg-zinc-700 cursor-pointer transition"
                                       title={post.content}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDayDetailDrawer({ isOpen: true, date: dateStr, posts: dayPosts });
+                                      }}
                                     >
                                       <span className="text-zinc-500">{time}</span>
                                       {' '}
@@ -3857,10 +3882,14 @@ const StickToMusic = () => {
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={6} className="p-8 text-center text-zinc-500">
-                                {postSearch || postPlatformFilter !== 'all'
-                                  ? 'No posts match your filters.'
-                                  : 'No posts synced. Click "Sync from Late" to load your scheduled posts.'}
+                              <td colSpan={6} className="p-8">
+                                <SharedEmptyState
+                                  icon="📋"
+                                  title="No posts found"
+                                  description={postSearch || postPlatformFilter !== 'all' ? 'No posts match your current filters. Try adjusting your search.' : 'Sync your posts from Late to see your scheduled content.'}
+                                  actionLabel={!postSearch && postPlatformFilter === 'all' ? 'Sync from Late' : undefined}
+                                  onAction={!postSearch && postPlatformFilter === 'all' ? handleSync : undefined}
+                                />
                               </td>
                             </tr>
                           );
@@ -5602,6 +5631,107 @@ const StickToMusic = () => {
           </div>
         </div>
       )}
+
+      {/* UI-12/13: Day Detail Drawer for Calendar View */}
+      {dayDetailDrawer.isOpen && (() => {
+        const dateObj = dayDetailDrawer.date ? new Date(dayDetailDrawer.date + 'T12:00:00') : new Date();
+        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+        const formattedDate = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+        // ESC handler via effect would be ideal, but inline works for drawer
+        const closeDrawer = () => setDayDetailDrawer({ isOpen: false, date: null, posts: [] });
+
+        return (
+          <div
+            className="fixed inset-0 bg-black/60 z-50 flex justify-end"
+            onClick={closeDrawer}
+            onKeyDown={(e) => e.key === 'Escape' && closeDrawer()}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div
+              className="w-full max-w-md bg-zinc-900 border-l border-zinc-800 h-full overflow-y-auto shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Drawer Header */}
+              <div className="sticky top-0 bg-zinc-900 border-b border-zinc-800 p-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">{dayName}</h2>
+                  <p className="text-sm text-zinc-500">{formattedDate}</p>
+                </div>
+                <button
+                  onClick={closeDrawer}
+                  className="p-2 hover:bg-zinc-800 rounded-lg transition text-zinc-400 hover:text-white"
+                  aria-label="Close drawer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Drawer Content */}
+              <div className="p-4 space-y-3">
+                <p className="text-sm text-zinc-500">{dayDetailDrawer.posts.length} post{dayDetailDrawer.posts.length === 1 ? '' : 's'} scheduled</p>
+
+                {dayDetailDrawer.posts.map((post) => {
+                  const time = post.scheduledFor ? new Date(post.scheduledFor).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+                  const platforms = (post.platforms || []).map(p => p.platform || p);
+
+                  return (
+                    <div key={post._id} className="bg-zinc-800 rounded-xl p-4">
+                      {/* Time & Platforms */}
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-medium text-zinc-300">{time}</span>
+                        <div className="flex gap-1">
+                          {platforms.map(p => (
+                            <span key={p} className={`px-2 py-0.5 rounded text-xs ${p === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                              {p === 'tiktok' ? 'TikTok' : 'Instagram'}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Caption */}
+                      <p className="text-sm text-zinc-400 mb-3 line-clamp-3">{post.content || 'No caption'}</p>
+
+                      {/* Status & Actions */}
+                      <div className="flex items-center justify-between">
+                        <StatusPill status={post.status || 'scheduled'} />
+                        <div className="flex gap-2">
+                          {getPostUrls(post).map((pu, idx) => (
+                            <a
+                              key={idx}
+                              href={pu.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`px-2 py-1 rounded text-xs font-medium transition ${
+                                pu.platform === 'tiktok'
+                                  ? 'bg-pink-500/20 text-pink-400 hover:bg-pink-500/30'
+                                  : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
+                              }`}
+                            >
+                              View ↗
+                            </a>
+                          ))}
+                          <button
+                            onClick={() => {
+                              closeDrawer();
+                              confirmDeletePost(post._id, post.content?.substring(0, 50));
+                            }}
+                            className="px-2 py-1 text-xs text-red-400 hover:bg-red-500/20 rounded transition"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Delete Confirmation Modal - P0 Compliant */}
       {deleteConfirmModal.show && (

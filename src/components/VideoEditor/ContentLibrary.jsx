@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import ExportAndPostModal from './ExportAndPostModal';
+import { StatusPill, ConfirmDialog, EmptyState as SharedEmptyState } from '../ui';
 
 /**
  * ContentLibrary - Shows all videos created with a category
@@ -18,6 +19,12 @@ const ContentLibrary = ({
   const [dateRange, setDateRange] = useState('all');
   const [selectedVideoIds, setSelectedVideoIds] = useState(new Set());
   const [exportingVideo, setExportingVideo] = useState(null);
+
+  // UI-30: Confirm dialog for delete
+  const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, videoId: null });
+
+  // Batch Create Modal state
+  const [showBatchModal, setShowBatchModal] = useState(false);
 
   const videos = category?.createdVideos || [];
 
@@ -87,7 +94,7 @@ const ContentLibrary = ({
             </svg>
             Make a video
           </button>
-          <button style={styles.secondaryButton} onClick={() => onMakeVideo()}>Make up to 10 at once</button>
+          <button style={styles.secondaryButton} onClick={() => setShowBatchModal(true)}>Make up to 10 at once</button>
         </div>
       </div>
 
@@ -131,7 +138,7 @@ const ContentLibrary = ({
                 isSelected={selectedVideoIds.has(video.id)}
                 onToggleSelect={() => toggleVideoSelection(video.id)}
                 onEdit={() => onEditVideo(video)}
-                onDelete={() => onDeleteVideo(video.id)}
+                onDelete={() => setDeleteConfirm({ isOpen: true, videoId: video.id })}
                 onApprove={() => onApproveVideo(video.id)}
                 onPost={() => setExportingVideo(video)}
               />
@@ -175,6 +182,38 @@ const ContentLibrary = ({
           onSchedulePost={onSchedulePost}
         />
       )}
+
+      {/* UI-30: Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        title="Delete video?"
+        message="This will permanently remove this video from the library. This action cannot be undone."
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        onConfirm={() => {
+          onDeleteVideo(deleteConfirm.videoId);
+          setDeleteConfirm({ isOpen: false, videoId: null });
+        }}
+        onCancel={() => setDeleteConfirm({ isOpen: false, videoId: null })}
+      />
+
+      {/* Batch Create Modal */}
+      {showBatchModal && (
+        <BatchCreateModal
+          category={category}
+          onClose={() => setShowBatchModal(false)}
+          onCreateDrafts={(drafts) => {
+            // Add drafts to category.createdVideos
+            drafts.forEach(draft => {
+              if (onMakeVideo) {
+                // Pass draft as existingVideo to open in editor
+                onMakeVideo(draft);
+              }
+            });
+            setShowBatchModal(false);
+          }}
+        />
+      )}
     </div>
   );
 };
@@ -182,13 +221,19 @@ const ContentLibrary = ({
 const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onApprove, onPost }) => {
   const [showActions, setShowActions] = useState(false);
 
+  // UI-34: Prevent action buttons from triggering selection
+  const handleActionClick = (e, action) => {
+    e.stopPropagation();
+    action();
+  };
+
   return (
     <div
       style={{...styles.videoCard, ...(isSelected ? styles.videoCardSelected : {})}}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
-      <div style={styles.videoCheckbox}>
+      <div style={styles.videoCheckbox} onClick={(e) => e.stopPropagation()}>
         <input type="checkbox" checked={isSelected} onChange={onToggleSelect} style={styles.checkbox} />
       </div>
 
@@ -207,18 +252,286 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
 
         {showActions && (
           <div style={styles.videoActions}>
-            <button style={styles.actionBtn} onClick={onEdit}>Edit</button>
-            <button style={styles.actionBtnPost} onClick={onPost}>Post</button>
-            <button style={styles.actionBtnDel} onClick={onDelete}>✕</button>
+            <button style={styles.actionBtn} onClick={(e) => handleActionClick(e, onEdit)}>Edit</button>
+            <button style={styles.actionBtnPost} onClick={(e) => handleActionClick(e, onPost)}>Post</button>
+            <button style={styles.actionBtnDel} onClick={(e) => handleActionClick(e, onDelete)}>✕</button>
           </div>
         )}
       </div>
 
-      <div style={{...styles.statusBadge, ...(video.status === 'approved' ? styles.statusApproved : styles.statusDraft)}}>
-        {video.status === 'approved' ? 'Approved' : 'Draft'}
+      {/* UI-31: Use StatusPill instead of custom badge */}
+      <div style={styles.statusBadgeContainer}>
+        <StatusPill status={video.status || 'draft'} />
       </div>
     </div>
   );
+};
+
+/**
+ * BatchCreateModal - Generate multiple draft videos at once
+ */
+const BatchCreateModal = ({ category, onClose, onCreateDrafts }) => {
+  const [quantity, setQuantity] = useState(3);
+  const [selectedAudio, setSelectedAudio] = useState(null);
+  const [selectedClips, setSelectedClips] = useState(new Set());
+  const [clipStrategy, setClipStrategy] = useState('random');
+  const [namePrefix, setNamePrefix] = useState(`BATCH_${new Date().toISOString().slice(0,10).replace(/-/g,'')}`);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const audioBank = category?.audio || [];
+  const videoBank = category?.videos || [];
+
+  const canGenerate = selectedAudio && selectedClips.size > 0 && quantity >= 2 && quantity <= 10;
+
+  const toggleClip = (clipId) => {
+    setSelectedClips(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(clipId)) newSet.delete(clipId);
+      else newSet.add(clipId);
+      return newSet;
+    });
+  };
+
+  const selectAllClips = () => {
+    if (selectedClips.size === videoBank.length) {
+      setSelectedClips(new Set());
+    } else {
+      setSelectedClips(new Set(videoBank.map((_, i) => i)));
+    }
+  };
+
+  const handleGenerate = () => {
+    setIsGenerating(true);
+
+    const selectedClipsList = videoBank.filter((_, i) => selectedClips.has(i));
+    const drafts = [];
+
+    for (let i = 0; i < quantity; i++) {
+      // Pick clips based on strategy
+      let draftClips;
+      if (clipStrategy === 'random' && selectedClipsList.length >= 1) {
+        // Random unique selection
+        const shuffled = [...selectedClipsList].sort(() => Math.random() - 0.5);
+        draftClips = shuffled.slice(0, Math.min(3, shuffled.length)); // Max 3 clips per video
+      } else {
+        // Sequential with wrapping
+        const startIdx = i % selectedClipsList.length;
+        draftClips = [selectedClipsList[startIdx]];
+      }
+
+      const draft = {
+        id: `draft_${Date.now()}_${i}`,
+        createdAt: new Date().toISOString(),
+        title: `${namePrefix}_${(i + 1).toString().padStart(2, '0')}`,
+        status: 'draft',
+        category: category?.name,
+        audio: selectedAudio,
+        clips: draftClips.map(c => ({
+          url: c.url,
+          name: c.name || 'Clip',
+          thumbnailUrl: c.thumbnailUrl || c.url
+        })),
+        textStyle: {
+          fontSize: 48,
+          fontFamily: 'Inter, sans-serif',
+          fontWeight: '600',
+          color: '#ffffff',
+          outline: true,
+          outlineColor: '#000000'
+        },
+        lyrics: '',
+        words: [],
+        thumbnail: draftClips[0]?.thumbnailUrl || null,
+        export: { cloudUrl: null, thumbnailUrl: null }
+      };
+
+      drafts.push(draft);
+    }
+
+    // Save to category's createdVideos (through parent)
+    setTimeout(() => {
+      setIsGenerating(false);
+      onCreateDrafts(drafts);
+    }, 500);
+  };
+
+  // ESC to close
+  React.useEffect(() => {
+    const handleEsc = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [onClose]);
+
+  // Prevent background scroll
+  React.useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  return (
+    <div
+      style={batchStyles.overlay}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div style={batchStyles.modal}>
+        <div style={batchStyles.header}>
+          <h2 style={batchStyles.title}>Batch Create Drafts</h2>
+          <button style={batchStyles.closeBtn} onClick={onClose}>✕</button>
+        </div>
+
+        <div style={batchStyles.body}>
+          {/* Audio Selection */}
+          <div style={batchStyles.section}>
+            <label style={batchStyles.label}>Audio Track *</label>
+            {audioBank.length === 0 ? (
+              <p style={batchStyles.emptyHint}>No audio in this category. Add audio first.</p>
+            ) : (
+              <select
+                style={batchStyles.select}
+                value={selectedAudio?.url || ''}
+                onChange={(e) => {
+                  const audio = audioBank.find(a => a.url === e.target.value);
+                  setSelectedAudio(audio);
+                }}
+              >
+                <option value="">Select audio...</option>
+                {audioBank.map((audio, i) => (
+                  <option key={i} value={audio.url}>{audio.name || `Audio ${i + 1}`}</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Clip Selection */}
+          <div style={batchStyles.section}>
+            <div style={batchStyles.labelRow}>
+              <label style={batchStyles.label}>Video Clips * ({selectedClips.size} selected)</label>
+              <button style={batchStyles.selectAllBtn} onClick={selectAllClips}>
+                {selectedClips.size === videoBank.length ? 'Deselect All' : 'Select All'}
+              </button>
+            </div>
+            {videoBank.length === 0 ? (
+              <p style={batchStyles.emptyHint}>No clips in this category. Add video clips first.</p>
+            ) : (
+              <div style={batchStyles.clipGrid}>
+                {videoBank.map((clip, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      ...batchStyles.clipItem,
+                      ...(selectedClips.has(i) ? batchStyles.clipItemSelected : {})
+                    }}
+                    onClick={() => toggleClip(i)}
+                  >
+                    <div style={batchStyles.clipThumb}>
+                      {clip.thumbnailUrl ? (
+                        <img src={clip.thumbnailUrl} alt="" style={batchStyles.clipThumbImg} />
+                      ) : (
+                        <div style={batchStyles.clipThumbPlaceholder}>🎬</div>
+                      )}
+                    </div>
+                    <span style={batchStyles.clipName}>{clip.name || `Clip ${i + 1}`}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Quantity & Strategy */}
+          <div style={batchStyles.row}>
+            <div style={batchStyles.halfSection}>
+              <label style={batchStyles.label}>Quantity (2-10)</label>
+              <input
+                type="number"
+                min="2"
+                max="10"
+                value={quantity}
+                onChange={(e) => setQuantity(Math.min(10, Math.max(2, parseInt(e.target.value) || 2)))}
+                style={batchStyles.input}
+              />
+            </div>
+            <div style={batchStyles.halfSection}>
+              <label style={batchStyles.label}>Clip Selection</label>
+              <select
+                value={clipStrategy}
+                onChange={(e) => setClipStrategy(e.target.value)}
+                style={batchStyles.select}
+              >
+                <option value="random">Random unique</option>
+                <option value="sequential">Sequential</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Naming */}
+          <div style={batchStyles.section}>
+            <label style={batchStyles.label}>Name Prefix</label>
+            <input
+              type="text"
+              value={namePrefix}
+              onChange={(e) => setNamePrefix(e.target.value)}
+              style={batchStyles.input}
+              placeholder="BATCH_20260202"
+            />
+          </div>
+        </div>
+
+        <div style={batchStyles.footer}>
+          {!canGenerate && (
+            <p style={batchStyles.hint}>
+              {!selectedAudio ? 'Select an audio track' :
+               selectedClips.size === 0 ? 'Select at least one clip' :
+               'Set quantity between 2-10'}
+            </p>
+          )}
+          <div style={batchStyles.footerActions}>
+            <button style={batchStyles.cancelBtn} onClick={onClose}>Cancel</button>
+            <button
+              style={{
+                ...batchStyles.generateBtn,
+                ...(canGenerate ? {} : batchStyles.generateBtnDisabled)
+              }}
+              disabled={!canGenerate || isGenerating}
+              onClick={handleGenerate}
+            >
+              {isGenerating ? 'Generating...' : `Generate ${quantity} Drafts`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const batchStyles = {
+  overlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '20px' },
+  modal: { backgroundColor: '#111118', borderRadius: '16px', width: '100%', maxWidth: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #1f1f2e' },
+  title: { fontSize: '18px', fontWeight: '600', color: '#fff', margin: 0 },
+  closeBtn: { background: 'none', border: 'none', color: '#9ca3af', fontSize: '20px', cursor: 'pointer', padding: '4px 8px' },
+  body: { flex: 1, overflow: 'auto', padding: '24px' },
+  section: { marginBottom: '20px' },
+  labelRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' },
+  label: { display: 'block', fontSize: '13px', fontWeight: '500', color: '#9ca3af', marginBottom: '8px' },
+  select: { width: '100%', padding: '10px 12px', backgroundColor: '#1f1f2e', border: '1px solid #2d2d3d', borderRadius: '8px', color: '#fff', fontSize: '14px' },
+  input: { width: '100%', padding: '10px 12px', backgroundColor: '#1f1f2e', border: '1px solid #2d2d3d', borderRadius: '8px', color: '#fff', fontSize: '14px', boxSizing: 'border-box' },
+  row: { display: 'flex', gap: '16px', marginBottom: '20px' },
+  halfSection: { flex: 1 },
+  clipGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', maxHeight: '200px', overflow: 'auto' },
+  clipItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px', backgroundColor: '#1f1f2e', borderRadius: '8px', cursor: 'pointer', border: '2px solid transparent' },
+  clipItemSelected: { border: '2px solid #7c3aed', backgroundColor: '#2d2d3d' },
+  clipThumb: { width: '60px', height: '80px', borderRadius: '4px', overflow: 'hidden', marginBottom: '4px' },
+  clipThumbImg: { width: '100%', height: '100%', objectFit: 'cover' },
+  clipThumbPlaceholder: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0f', fontSize: '20px' },
+  clipName: { fontSize: '10px', color: '#9ca3af', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' },
+  selectAllBtn: { fontSize: '12px', color: '#7c3aed', background: 'none', border: 'none', cursor: 'pointer' },
+  emptyHint: { fontSize: '13px', color: '#6b7280', fontStyle: 'italic' },
+  footer: { padding: '16px 24px', borderTop: '1px solid #1f1f2e' },
+  hint: { fontSize: '12px', color: '#9ca3af', marginBottom: '12px' },
+  footerActions: { display: 'flex', justifyContent: 'flex-end', gap: '12px' },
+  cancelBtn: { padding: '10px 20px', backgroundColor: '#1f1f2e', border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '14px' },
+  generateBtn: { padding: '10px 24px', backgroundColor: '#7c3aed', border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '600' },
+  generateBtnDisabled: { opacity: 0.5, cursor: 'not-allowed' }
 };
 
 const styles = {
@@ -266,7 +579,9 @@ const styles = {
   batchBtnClear: { padding: '8px 16px', backgroundColor: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px' },
   batchBtnPost: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: '#fff', border: 'none', borderRadius: '6px', color: '#7c3aed', cursor: 'pointer', fontSize: '14px', fontWeight: '600' },
   footer: { display: 'flex', justifyContent: 'center', gap: '16px', padding: '16px 24px', borderTop: '1px solid #1f1f2e' },
-  footerButton: { padding: '10px 16px', backgroundColor: 'transparent', border: '1px solid #2d2d3d', borderRadius: '8px', color: '#9ca3af', cursor: 'pointer', fontSize: '13px' }
+  footerButton: { padding: '10px 16px', backgroundColor: 'transparent', border: '1px solid #2d2d3d', borderRadius: '8px', color: '#9ca3af', cursor: 'pointer', fontSize: '13px' },
+  // UI-31: Container for StatusPill at bottom of video card
+  statusBadgeContainer: { padding: '10px 12px', backgroundColor: '#1f1f2e', display: 'flex', alignItems: 'center', justifyContent: 'center' }
 };
 
 export default ContentLibrary;

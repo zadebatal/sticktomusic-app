@@ -71,11 +71,20 @@ const LyricAnalyzer = ({ audioFile, audioUrl, onComplete, onClose }) => {
         </div>
 
         <div style={styles.content}>
+          {/* UI-40: Empty state when no audio */}
+          {!audioSource ? (
+            <div style={styles.emptyState}>
+              <div style={styles.emptyIcon}>🎵</div>
+              <h4 style={styles.emptyTitle}>No Audio Selected</h4>
+              <p style={styles.emptyText}>Select an audio track to analyze lyrics with word-level timestamps.</p>
+            </div>
+          ) : (
+          <>
           {/* Audio Info */}
           <div style={styles.audioInfo}>
             <div style={styles.audioIcon}>🎵</div>
             <div>
-              <p style={styles.audioName}>{audioFile?.name || 'Audio file'}</p>
+              <p style={styles.audioName}>{audioFile?.name || (typeof audioUrl === 'string' ? audioUrl.split('/').pop() : 'Audio file')}</p>
               <p style={styles.audioSize}>{audioFile ? `${(audioFile.size / (1024 * 1024)).toFixed(2)} MB` : ''}</p>
             </div>
           </div>
@@ -149,11 +158,13 @@ const LyricAnalyzer = ({ audioFile, audioUrl, onComplete, onClose }) => {
               </ol>
             </div>
           )}
+          </>
+          )}
         </div>
 
         <div style={styles.footer}>
           <button style={styles.cancelBtn} onClick={onClose}>Cancel</button>
-          {!cachedLyrics && (
+          {audioSource && !cachedLyrics && (
             <button
               style={styles.analyzeBtn}
               onClick={handleAnalyze}
@@ -416,6 +427,30 @@ const styles = {
     fontWeight: '600',
     cursor: 'pointer',
     fontSize: '14px'
+  },
+  // UI-40: Empty state styles
+  emptyState: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '40px 20px',
+    textAlign: 'center'
+  },
+  emptyIcon: {
+    fontSize: '48px',
+    marginBottom: '16px'
+  },
+  emptyTitle: {
+    margin: '0 0 8px 0',
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#fff'
+  },
+  emptyText: {
+    margin: 0,
+    fontSize: '13px',
+    color: '#6b7280'
   }
 };
 

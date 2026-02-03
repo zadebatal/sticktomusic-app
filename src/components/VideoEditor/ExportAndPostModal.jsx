@@ -140,6 +140,47 @@ const ExportAndPostModal = ({
         </div>
 
         <div style={styles.body}>
+          {/* UI-50: Stepper UI */}
+          {!alreadyExported && stage !== 'done' && (
+            <div style={styles.stepper}>
+              <div style={styles.stepperStep}>
+                <div style={{
+                  ...styles.stepperDot,
+                  backgroundColor: stage === 'options' ? '#7c3aed' : (stage === 'rendering' || stage === 'uploading' || stage === 'ready' || stage === 'posting') ? '#22c55e' : '#3f3f46'
+                }}>
+                  {(stage === 'rendering' || stage === 'uploading' || stage === 'ready' || stage === 'posting') ? '✓' : '1'}
+                </div>
+                <span style={styles.stepperLabel}>Export</span>
+              </div>
+              <div style={{
+                ...styles.stepperLine,
+                backgroundColor: (stage === 'uploading' || stage === 'ready' || stage === 'posting') ? '#22c55e' : '#3f3f46'
+              }} />
+              <div style={styles.stepperStep}>
+                <div style={{
+                  ...styles.stepperDot,
+                  backgroundColor: (stage === 'uploading') ? '#7c3aed' : (stage === 'ready' || stage === 'posting') ? '#22c55e' : '#3f3f46'
+                }}>
+                  {(stage === 'ready' || stage === 'posting') ? '✓' : '2'}
+                </div>
+                <span style={styles.stepperLabel}>Upload</span>
+              </div>
+              <div style={{
+                ...styles.stepperLine,
+                backgroundColor: stage === 'ready' || stage === 'posting' ? '#22c55e' : '#3f3f46'
+              }} />
+              <div style={styles.stepperStep}>
+                <div style={{
+                  ...styles.stepperDot,
+                  backgroundColor: stage === 'ready' || stage === 'posting' ? '#7c3aed' : '#3f3f46'
+                }}>
+                  3
+                </div>
+                <span style={styles.stepperLabel}>Post</span>
+              </div>
+            </div>
+          )}
+
           {/* Options Stage - Already Exported */}
           {stage === 'options' && alreadyExported && (
             <>
@@ -329,15 +370,38 @@ const ExportAndPostModal = ({
             </>
           )}
 
-          {/* Error Display */}
+          {/* UI-51: Error Panel with retry option */}
           {error && (
             <div style={styles.errorBox}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="15" y1="9" x2="9" y2="15"/>
-                <line x1="9" y1="9" x2="15" y2="15"/>
-              </svg>
-              <span>{error}</span>
+              <div style={styles.errorHeader}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span style={styles.errorTitle}>Export Failed</span>
+              </div>
+              <p style={styles.errorMessage}>{error}</p>
+              <div style={styles.errorActions}>
+                <button
+                  style={styles.retryButton}
+                  onClick={() => {
+                    setError(null);
+                    setStage('options');
+                  }}
+                >
+                  ← Back to Options
+                </button>
+                <button
+                  style={styles.retryPrimaryButton}
+                  onClick={() => {
+                    setError(null);
+                    handleExportAndUpload();
+                  }}
+                >
+                  🔄 Retry Export
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -615,16 +679,85 @@ const styles = {
     lineHeight: '1.5'
   },
   errorBox: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '12px',
+    padding: '16px',
     backgroundColor: 'rgba(220, 38, 38, 0.1)',
     border: '1px solid #dc2626',
     borderRadius: '8px',
-    color: '#ef4444',
-    fontSize: '13px',
     marginTop: '16px'
+  },
+  errorHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '8px'
+  },
+  errorTitle: {
+    color: '#ef4444',
+    fontSize: '14px',
+    fontWeight: '600'
+  },
+  errorMessage: {
+    color: '#fca5a5',
+    fontSize: '13px',
+    margin: '0 0 12px 0',
+    lineHeight: '1.5'
+  },
+  errorActions: {
+    display: 'flex',
+    gap: '8px'
+  },
+  retryButton: {
+    padding: '8px 16px',
+    backgroundColor: '#3f3f46',
+    border: 'none',
+    borderRadius: '6px',
+    color: '#fff',
+    fontSize: '12px',
+    cursor: 'pointer'
+  },
+  retryPrimaryButton: {
+    padding: '8px 16px',
+    backgroundColor: '#dc2626',
+    border: 'none',
+    borderRadius: '6px',
+    color: '#fff',
+    fontSize: '12px',
+    fontWeight: '600',
+    cursor: 'pointer'
+  },
+  // UI-50: Stepper styles
+  stepper: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: '20px',
+    padding: '12px 0'
+  },
+  stepperStep: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '6px'
+  },
+  stepperDot: {
+    width: '28px',
+    height: '28px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#fff'
+  },
+  stepperLabel: {
+    fontSize: '11px',
+    color: '#9ca3af'
+  },
+  stepperLine: {
+    width: '40px',
+    height: '2px',
+    margin: '0 8px 20px'
   }
 };
 

@@ -1,9 +1,97 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState, createContext, useContext } from 'react';
 
 /**
  * Shared UI Components for StickToMusic
- * P0 Standards: Loading, Error, Empty States, Confirm Dialog, Status Pills
+ * P0 Standards: Loading, Error, Empty States, Confirm Dialog, Status Pills, Toast
  */
+
+// ============================================
+// TOAST SYSTEM
+// ============================================
+const ToastContext = createContext(null);
+
+export const useToast = () => {
+  const context = useContext(ToastContext);
+  if (!context) {
+    // Fallback for components outside provider
+    return {
+      toast: () => console.warn('Toast provider not found'),
+      success: () => console.warn('Toast provider not found'),
+      error: () => console.warn('Toast provider not found'),
+    };
+  }
+  return context;
+};
+
+export const ToastProvider = ({ children }) => {
+  const [toasts, setToasts] = useState([]);
+
+  const addToast = useCallback((message, type = 'success', duration = 4000) => {
+    const id = Date.now() + Math.random();
+    setToasts(prev => {
+      // Max 3 toasts
+      const updated = [...prev, { id, message, type }].slice(-3);
+      return updated;
+    });
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, duration);
+    return id;
+  }, []);
+
+  const removeToast = useCallback((id) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  const value = {
+    toasts,
+    toast: addToast,
+    success: (msg) => addToast(msg, 'success'),
+    error: (msg) => addToast(msg, 'error'),
+    info: (msg) => addToast(msg, 'info'),
+    removeToast,
+  };
+
+  return (
+    <ToastContext.Provider value={value}>
+      {children}
+      <Toasts toasts={toasts} onRemove={removeToast} />
+    </ToastContext.Provider>
+  );
+};
+
+export const Toasts = ({ toasts = [], onRemove }) => {
+  if (!toasts.length) return null;
+
+  return (
+    <div className="fixed bottom-4 right-4 z-[100] space-y-2 pointer-events-none">
+      {toasts.map(toast => (
+        <div
+          key={toast.id}
+          className={`pointer-events-auto px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-slide-up min-w-[200px] max-w-[400px] ${
+            toast.type === 'success' ? 'bg-green-600 text-white' :
+            toast.type === 'error' ? 'bg-red-600 text-white' :
+            toast.type === 'info' ? 'bg-blue-600 text-white' :
+            'bg-zinc-800 text-white'
+          }`}
+        >
+          <span className="flex-shrink-0">
+            {toast.type === 'success' ? '✓' : toast.type === 'error' ? '✕' : 'ℹ'}
+          </span>
+          <span className="text-sm flex-1">{toast.message}</span>
+          {onRemove && (
+            <button
+              onClick={() => onRemove(toast.id)}
+              className="ml-2 opacity-70 hover:opacity-100 flex-shrink-0"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
 
 // ============================================
 // LOADING SPINNER
@@ -192,11 +280,13 @@ export const StatusPill = ({ status, size = 'sm' }) => {
     // Neutral
     draft: { bg: 'bg-zinc-700', text: 'text-zinc-300', label: 'Draft' },
     pending: { bg: 'bg-zinc-700', text: 'text-zinc-300', label: 'Pending' },
+    unknown: { bg: 'bg-zinc-700', text: 'text-zinc-300', label: 'Unknown' },
     // Positive
     scheduled: { bg: 'bg-green-900/50', text: 'text-green-400', label: 'Scheduled' },
     active: { bg: 'bg-green-900/50', text: 'text-green-400', label: 'Active' },
     approved: { bg: 'bg-green-900/50', text: 'text-green-400', label: 'Approved' },
     posted: { bg: 'bg-green-900/50', text: 'text-green-400', label: 'Posted' },
+    published: { bg: 'bg-green-900/50', text: 'text-green-400', label: 'Posted' }, // Late uses "published"
     completed: { bg: 'bg-green-900/50', text: 'text-green-400', label: 'Completed' },
     // Warning
     'needs-attention': { bg: 'bg-yellow-900/50', text: 'text-yellow-400', label: 'Needs Attention' },

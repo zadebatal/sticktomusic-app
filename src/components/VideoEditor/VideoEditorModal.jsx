@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useBeatDetection } from '../../hooks/useBeatDetection';
 import WordTimeline from './WordTimeline';
 import { saveApiKey, loadApiKey } from '../../services/storageService';
+import { ErrorPanel, EmptyState as SharedEmptyState } from '../ui';
 
 /**
  * VideoEditorModal - Flowstage-inspired video editor modal
@@ -876,10 +877,22 @@ const VideoEditorModal = ({
                           Select audio above to enable AI transcription
                         </p>
                       )}
+                      {/* UI-42: Error panel with retry option */}
                       {transcriptionError && (
-                        <p style={{ color: '#EF4444', fontSize: '12px', marginTop: '8px' }}>
-                          {transcriptionError}
-                        </p>
+                        <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#2a0f0f', border: '1px solid #dc2626', borderRadius: '8px' }}>
+                          <p style={{ color: '#fca5a5', fontSize: '12px', margin: '0 0 8px 0' }}>
+                            ❌ {transcriptionError}
+                          </p>
+                          <button
+                            onClick={() => {
+                              setTranscriptionError(null);
+                              handleAITranscribe();
+                            }}
+                            style={{ padding: '6px 12px', backgroundColor: '#dc2626', border: 'none', borderRadius: '6px', color: '#fff', fontSize: '11px', cursor: 'pointer' }}
+                          >
+                            🔄 Retry
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
