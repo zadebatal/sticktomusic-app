@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import AestheticHome from './AestheticHome';
 import ContentLibrary from './ContentLibrary';
 import VideoEditorModal from './VideoEditorModal';
@@ -79,12 +79,26 @@ class EditorErrorBoundary extends React.Component {
  * 2. Content Library - View all created videos, edit them anytime
  * 3. Editor Modal - Create/edit videos with presets and sync tools
  */
-const VideoStudio = ({ onClose, artists = [] }) => {
+const VideoStudio = ({
+  onClose,
+  artists = [],
+  lateAccountIds = {},
+  onSchedulePost
+}) => {
   // Navigation state
   const [currentView, setCurrentView] = useState('home'); // home, library, editor
   const [selectedArtist, setSelectedArtist] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(null); // Track upload progress
+
+  // Derive accounts array from lateAccountIds for PostingModule
+  const accounts = useMemo(() => {
+    return Object.entries(lateAccountIds).map(([handle, ids]) => ({
+      handle,
+      tiktokId: ids.tiktok,
+      instagramId: ids.instagram
+    }));
+  }, [lateAccountIds]);
 
   // Default categories for fresh installs
   const defaultCategories = [
@@ -727,6 +741,9 @@ const VideoStudio = ({ onClose, artists = [] }) => {
             onEditVideo={handleMakeVideo}
             onDeleteVideo={handleDeleteVideo}
             onApproveVideo={handleApproveVideo}
+            onSchedulePost={onSchedulePost}
+            accounts={accounts}
+            lateAccountIds={lateAccountIds}
           />
         )}
       </main>

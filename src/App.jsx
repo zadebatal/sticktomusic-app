@@ -4854,6 +4854,8 @@ const StickToMusic = () => {
           <VideoStudio
             onClose={() => setShowVideoEditor(false)}
             artists={operatorArtists.map(a => ({ id: a.id, name: a.name }))}
+            lateAccountIds={LATE_ACCOUNT_IDS}
+            onSchedulePost={lateApi.schedulePost}
           />
         )}
       </div>
