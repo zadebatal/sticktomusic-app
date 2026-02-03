@@ -161,6 +161,11 @@ const VideoEditorModal = ({
           const effectiveDuration = end - start;
           setDuration(effectiveDuration);
 
+          // Store the start boundary on the audioRef for child components (WordTimeline)
+          // This allows them to calculate relative time for the trimmed range
+          audioRef.current._startBoundary = start;
+          audioRef.current._endBoundary = end;
+
           // Set initial playback position to trim start
           if (start > 0) {
             audioRef.current.currentTime = start;
@@ -1416,6 +1421,7 @@ const VideoEditorModal = ({
             isPlaying={isPlaying}
             onPlayPause={handlePlayPause}
             onClose={() => setShowWordTimeline(false)}
+            audioRef={audioRef}
           />
         )}
 

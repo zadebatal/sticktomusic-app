@@ -23,17 +23,59 @@ const WordTimeline = ({
   onSeek,
   isPlaying,
   onPlayPause,
-  onClose
+  onClose,
+  audioRef // Add audioRef for direct time tracking
 }) => {
   const [zoom, setZoom] = useState(1);
   const [selectedWordIndex, setSelectedWordIndex] = useState(null);
   const [dragState, setDragState] = useState(null);
   const [autoCensor, setAutoCensor] = useState(true);
+  const [localTime, setLocalTime] = useState(currentTime); // Local playhead time for smooth animation
   const timelineRef = useRef(null);
+  const animationRef = useRef(null);
 
-  // Find the current word based on playhead position
+  // Sync localTime with currentTime prop when not playing
+  useEffect(() => {
+    if (!isPlaying) {
+      setLocalTime(currentTime);
+    }
+  }, [currentTime, isPlaying]);
+
+  // Animate playhead during playback using requestAnimationFrame
+  useEffect(() => {
+    if (isPlaying && audioRef?.current) {
+      const startBoundary = audioRef.current._startBoundary || 0;
+
+      const updatePlayhead = () => {
+        if (!audioRef?.current) return;
+
+        const actualTime = audioRef.current.currentTime;
+        const relativeTime = actualTime - startBoundary;
+        setLocalTime(Math.max(0, relativeTime));
+
+        if (isPlaying) {
+          animationRef.current = requestAnimationFrame(updatePlayhead);
+        }
+      };
+
+      animationRef.current = requestAnimationFrame(updatePlayhead);
+    } else {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    }
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [isPlaying, audioRef]);
+
+  // Find the current word based on playhead position (use localTime for smooth tracking)
+  const displayTime = isPlaying ? localTime : currentTime;
   const currentWord = words.find(word =>
-    currentTime >= word.startTime && currentTime < word.startTime + (word.duration || 0.5)
+    displayTime >= word.startTime && displayTime < word.startTime + (word.duration || 0.5)
   );
 
   // Profanity filter
@@ -65,7 +107,7 @@ const WordTimeline = ({
     if (!isPlaying || !timelineRef.current) return;
 
     const timeline = timelineRef.current;
-    const playheadPosition = timeToPixels(currentTime);
+    const playheadPosition = timeToPixels(displayTime);
     const timelineWidth = timeline.clientWidth;
     const scrollLeft = timeline.scrollLeft;
 
@@ -77,7 +119,7 @@ const WordTimeline = ({
     } else if (playheadPosition > scrollLeft + timelineWidth - margin) {
       timeline.scrollTo({ left: playheadPosition - timelineWidth + margin, behavior: 'smooth' });
     }
-  }, [currentTime, isPlaying, timeToPixels]);
+  }, [displayTime, isPlaying, timeToPixels]);
 
   const handleWordMouseDown = (e, index, type = 'move') => {
     e.stopPropagation();
@@ -164,23 +206,42 @@ const WordTimeline = ({
   const handleSplitWord = () => {
     if (selectedWordIndex === null) return;
     const word = words[selectedWordIndex];
-    if (!word.text.includes(' ')) {
-      alert('Word has no spaces to split');
-      return;
+
+    // If word has spaces, split by spaces
+    if (word.text.includes(' ')) {
+      const parts = word.text.split(' ').filter(p => p.trim());
+      const partDuration = word.duration / parts.length;
+      const newWords = parts.map((text, i) => ({
+        id: `word_${Date.now()}_${i}`,
+        text,
+        startTime: word.startTime + (i * partDuration),
+        duration: partDuration
+      }));
+      setWords(prev => {
+        const result = [...prev];
+        result.splice(selectedWordIndex, 1, ...newWords);
+        return result;
+      });
+    } else if (word.text.length > 1) {
+      // Split single word into two halves at the middle
+      const midpoint = Math.ceil(word.text.length / 2);
+      const firstHalf = word.text.slice(0, midpoint);
+      const secondHalf = word.text.slice(midpoint);
+      const halfDuration = word.duration / 2;
+
+      const newWords = [
+        { id: `word_${Date.now()}_0`, text: firstHalf, startTime: word.startTime, duration: halfDuration },
+        { id: `word_${Date.now()}_1`, text: secondHalf, startTime: word.startTime + halfDuration, duration: halfDuration }
+      ];
+
+      setWords(prev => {
+        const result = [...prev];
+        result.splice(selectedWordIndex, 1, ...newWords);
+        return result;
+      });
+    } else {
+      alert('Word is too short to split');
     }
-    const parts = word.text.split(' ');
-    const partDuration = word.duration / parts.length;
-    const newWords = parts.map((text, i) => ({
-      id: `word_${Date.now()}_${i}`,
-      text,
-      startTime: word.startTime + (i * partDuration),
-      duration: partDuration
-    }));
-    setWords(prev => {
-      const result = [...prev];
-      result.splice(selectedWordIndex, 1, ...newWords);
-      return result;
-    });
   };
 
   const handleCombineWords = () => {
@@ -262,7 +323,7 @@ const WordTimeline = ({
 
         <div style={styles.toolbar}>
           <div style={styles.timeDisplay}>
-            <span style={styles.currentTimeText}>{formatTime(currentTime)}</span>
+            <span style={styles.currentTimeText}>{formatTime(displayTime)}</span>
             <span style={styles.totalTime}> / {formatTime(duration)}</span>
             <span style={styles.originalTime}>(Original: {formatTime(duration)})</span>
           </div>
@@ -298,7 +359,7 @@ const WordTimeline = ({
           </button>
           <div ref={timelineRef} style={styles.timeline} onClick={handleTimelineClick}>
             <div style={{ ...styles.timelineInner, width: getTimelineWidth() }}>
-              <div style={{ ...styles.playhead, left: timeToPixels(currentTime) }} />
+              <div style={{ ...styles.playhead, left: timeToPixels(displayTime) }} />
               {words.map((word, index) => (
                 <div
                   key={word.id || index}
@@ -329,7 +390,7 @@ const WordTimeline = ({
                   {line.map((word, wordIndex) => (
                     <span key={word.id || wordIndex} style={{
                       ...styles.wordChip,
-                      ...(currentTime >= word.startTime && currentTime < word.startTime + word.duration ? styles.wordChipActive : {})
+                      ...(displayTime >= word.startTime && displayTime < word.startTime + word.duration ? styles.wordChipActive : {})
                     }}>
                       {censorWord(word.text)}
                     </span>
