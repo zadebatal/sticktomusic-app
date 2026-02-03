@@ -88,7 +88,9 @@ const loadSessionState = () => {
   try {
     const saved = localStorage.getItem(SESSION_KEY);
     if (saved) {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      console.log('[Session] Loaded:', parsed);
+      return parsed;
     }
   } catch (e) {
     console.warn('Failed to load session state:', e);
@@ -99,10 +101,12 @@ const loadSessionState = () => {
 // Helper to save session state
 const saveSessionState = (state) => {
   try {
-    localStorage.setItem(SESSION_KEY, JSON.stringify({
+    const toSave = {
       ...state,
       savedAt: Date.now()
-    }));
+    };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(toSave));
+    console.log('[Session] Saved:', toSave);
   } catch (e) {
     console.warn('Failed to save session state:', e);
   }
@@ -205,9 +209,9 @@ const VideoStudio = ({
     return saved.length > 0 ? saved : defaultPresets;
   });
 
-  // Editor state
+  // Editor state - restore showEditor from session if they were in the editor
   const [editingVideo, setEditingVideo] = useState(null);
-  const [showEditor, setShowEditor] = useState(false);
+  const [showEditor, setShowEditor] = useState(savedSession?.showEditor || false);
 
   // Save to localStorage when categories change
   useEffect(() => {
@@ -242,9 +246,10 @@ const VideoStudio = ({
       // Find the saved category
       const category = categories.find(c => c.id === saved.categoryId);
       if (category) {
-        console.log('Restoring session:', saved.currentView, category.name);
+        console.log('[Session] Restoring:', saved.currentView, category.name, 'editor:', saved.showEditor);
         setSelectedCategory(category);
         setCurrentView(saved.currentView || 'home');
+        // showEditor is already set from initial state
       }
     }
     setSessionRestored(true);
@@ -257,9 +262,10 @@ const VideoStudio = ({
     saveSessionState({
       currentView,
       categoryId: selectedCategory?.id || null,
-      artistId: selectedArtist?.id || null
+      artistId: selectedArtist?.id || null,
+      showEditor
     });
-  }, [currentView, selectedCategory?.id, selectedArtist?.id, sessionRestored]);
+  }, [currentView, selectedCategory?.id, selectedArtist?.id, showEditor, sessionRestored]);
 
   // Get categories for selected artist
   const artistCategories = categories.filter(c =>
