@@ -49,13 +49,30 @@ function loadFromStorage(key, defaultValue = null) {
 
 /**
  * Save all categories
+ * Strips thumbnails and blob URLs to avoid quota exceeded errors
  */
 export function saveCategories(categories) {
-  // Filter out any blob URLs before saving - they won't work after reload
+  // Filter out blob URLs and strip thumbnails (they're huge base64 strings)
   const cleanedCategories = categories.map(cat => ({
     ...cat,
-    videos: cat.videos.filter(v => v.url && !v.url.startsWith('blob:')),
-    audio: cat.audio.filter(a => a.url && !a.url.startsWith('blob:'))
+    // Clean videos - remove thumbnails and blob URLs
+    videos: (cat.videos || [])
+      .filter(v => v.url && !v.url.startsWith('blob:'))
+      .map(v => ({
+        ...v,
+        thumbnail: null // Don't store base64 thumbnails - they fill localStorage
+      })),
+    // Clean audio - remove blob URLs
+    audio: (cat.audio || [])
+      .filter(a => a.url && !a.url.startsWith('blob:')),
+    // Clean created videos - strip clip thumbnails too
+    createdVideos: (cat.createdVideos || []).map(video => ({
+      ...video,
+      clips: (video.clips || []).map(clip => ({
+        ...clip,
+        thumbnail: null // Strip clip thumbnails too
+      }))
+    }))
   }));
   return saveToStorage(STORAGE_KEYS.CATEGORIES, cleanedCategories);
 }
@@ -142,6 +159,45 @@ export function clearAllData() {
   });
 }
 
+/**
+ * Get storage usage info
+ */
+export function getStorageInfo() {
+  let totalSize = 0;
+  const breakdown = {};
+
+  for (const key of Object.keys(localStorage)) {
+    const size = (localStorage.getItem(key) || '').length * 2; // UTF-16
+    totalSize += size;
+    breakdown[key] = (size / 1024).toFixed(2) + ' KB';
+  }
+
+  return {
+    total: (totalSize / 1024 / 1024).toFixed(2) + ' MB',
+    breakdown,
+    isNearLimit: totalSize > 4 * 1024 * 1024 // Warn if over 4MB (limit is ~5MB)
+  };
+}
+
+/**
+ * Clean up storage by removing thumbnails from existing data
+ * Call this if quota is exceeded
+ */
+export function cleanupStorage() {
+  try {
+    const categories = loadCategories();
+    if (categories.length > 0) {
+      // Re-save with thumbnails stripped
+      saveCategories(categories);
+      console.log('Storage cleanup complete');
+      return true;
+    }
+  } catch (error) {
+    console.error('Storage cleanup failed:', error);
+  }
+  return false;
+}
+
 export default {
   saveCategories,
   loadCategories,
@@ -152,5 +208,7 @@ export default {
   clearApiKey,
   saveSettings,
   loadSettings,
-  clearAllData
+  clearAllData,
+  getStorageInfo,
+  cleanupStorage
 };

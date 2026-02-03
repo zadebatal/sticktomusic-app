@@ -3,7 +3,7 @@ import AestheticHome from './AestheticHome';
 import ContentLibrary from './ContentLibrary';
 import VideoEditorModal from './VideoEditorModal';
 import { uploadFile, deleteFile, getMediaDuration, generateThumbnail } from '../../services/firebaseStorage';
-import { saveCategories, loadCategories, savePresets, loadPresets } from '../../services/storageService';
+import { saveCategories, loadCategories, savePresets, loadPresets, cleanupStorage } from '../../services/storageService';
 
 /**
  * ErrorBoundary - Catches errors in VideoEditorModal to prevent blank page crashes
@@ -163,7 +163,14 @@ const VideoStudio = ({ onClose, artists = [] }) => {
 
   // Save to localStorage when categories change
   useEffect(() => {
-    saveCategories(categories);
+    const success = saveCategories(categories);
+    if (!success) {
+      // Storage quota exceeded - try cleanup and retry
+      console.warn('Storage save failed, attempting cleanup...');
+      cleanupStorage();
+      // Retry save after cleanup
+      saveCategories(categories);
+    }
   }, [categories]);
 
   // Save to localStorage when presets change
