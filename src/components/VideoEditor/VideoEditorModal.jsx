@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useBeatDetection } from '../../hooks/useBeatDetection';
 import WordTimeline from './WordTimeline';
+import BeatSelector from './BeatSelector';
 import { saveApiKey, loadApiKey } from '../../services/storageService';
 import { ErrorPanel, EmptyState as SharedEmptyState } from '../ui';
 
@@ -44,7 +45,9 @@ const VideoEditorModal = ({
   const [selectedPreset, setSelectedPreset] = useState(null);
   const [showLyricsEditor, setShowLyricsEditor] = useState(false);
   const [showWordTimeline, setShowWordTimeline] = useState(false);
+  const [showBeatSelector, setShowBeatSelector] = useState(false);
   const [selectedClips, setSelectedClips] = useState([]);
+  const [timelineScale, setTimelineScale] = useState(1);
 
   // AI Transcription state
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
@@ -344,17 +347,30 @@ const VideoEditorModal = ({
     setSelectedAudio(audio);
   };
 
+  // Show the beat selector modal
   const handleCutByBeat = useCallback(() => {
-    if (!beats.length || !category?.videos?.length) return;
+    if (!beats.length) {
+      console.warn('No beats detected - cannot open beat selector');
+      return;
+    }
+    setShowBeatSelector(true);
+  }, [beats]);
+
+  // Handle when user selects beats from the BeatSelector modal
+  const handleBeatSelectionApply = useCallback((selectedBeatTimes) => {
+    if (!selectedBeatTimes.length || !category?.videos?.length) {
+      setShowBeatSelector(false);
+      return;
+    }
 
     const availableClips = category.videos;
-    const beatsPerCut = 2;
     const newClips = [];
 
-    for (let i = 0; i < beats.length; i += beatsPerCut) {
-      const startBeat = beats[i];
-      const endBeat = beats[Math.min(i + beatsPerCut, beats.length - 1)];
-      const clipDuration = endBeat - startBeat;
+    // Create clips for each selected beat (cut points)
+    for (let i = 0; i < selectedBeatTimes.length; i++) {
+      const startTime = selectedBeatTimes[i];
+      const endTime = selectedBeatTimes[i + 1] || duration; // Use next beat or end of audio
+      const clipDuration = endTime - startTime;
 
       const randomClip = availableClips[Math.floor(Math.random() * availableClips.length)];
 
@@ -363,14 +379,15 @@ const VideoEditorModal = ({
         sourceId: randomClip.id,
         url: randomClip.url,
         thumbnail: randomClip.thumbnail,
-        startTime: startBeat,
+        startTime: startTime,
         duration: clipDuration,
         locked: false
       });
     }
 
     setClips(newClips);
-  }, [beats, category?.videos]);
+    setShowBeatSelector(false);
+  }, [category?.videos, duration]);
 
   const handleCutByWord = useCallback(() => {
     if (!words.length || !category?.videos?.length) return;
@@ -1086,12 +1103,13 @@ const VideoEditorModal = ({
                         <p>Click clips above to add, or use Cut by beat</p>
                       </div>
                     ) : (
-                      <div style={styles.clipsRow}>
+                      <div style={{...styles.clipsRow, transform: `scaleX(${timelineScale})`, transformOrigin: 'left center'}}>
                         {clips.map((clip, index) => (
                           <div
                             key={clip.id}
                             style={{
                               ...styles.clipItem,
+                              minWidth: `${Math.max(60, (clip.duration || 1) * 40)}px`,
                               ...(selectedClips.includes(index) ? styles.clipItemSelected : {})
                             }}
                             onClick={(e) => handleClipSelect(index, e)}
@@ -1119,8 +1137,16 @@ const VideoEditorModal = ({
                     <button style={styles.clipAction} onClick={handleRearrange}>Rearrange</button>
                     <div style={styles.scaleControl}>
                       <span>Scale</span>
-                      <input type="range" min="0.5" max="2" step="0.1" defaultValue="1" style={styles.scaleSlider} />
-                      <span>1.00x</span>
+                      <input
+                        type="range"
+                        min="0.5"
+                        max="2"
+                        step="0.1"
+                        value={timelineScale}
+                        onChange={(e) => setTimelineScale(parseFloat(e.target.value))}
+                        style={styles.scaleSlider}
+                      />
+                      <span>{timelineScale.toFixed(2)}x</span>
                     </div>
                   </div>
 
@@ -1252,6 +1278,17 @@ const VideoEditorModal = ({
         )}
 
         {/* Auto-save Recovery Prompt */}
+        {/* Beat Selector Modal */}
+        {showBeatSelector && (
+          <BeatSelector
+            beats={beats}
+            bpm={bpm}
+            duration={duration}
+            onApply={handleBeatSelectionApply}
+            onCancel={() => setShowBeatSelector(false)}
+          />
+        )}
+
         {showRecoveryPrompt && recoveryData && (
           <div style={styles.lyricsOverlay}>
             <div style={{...styles.lyricsModal, maxWidth: '420px'}}>
