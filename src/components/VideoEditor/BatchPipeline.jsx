@@ -60,11 +60,17 @@ const ClipThumbnail = ({ clip, style }) => {
     return (
       <video
         src={videoUrl}
-        style={{ ...style, objectFit: 'cover' }}
+        style={{ ...style, objectFit: 'cover', background: '#27272a' }}
         muted
         playsInline
-        preload="metadata"
-        onLoadedMetadata={(e) => { e.target.currentTime = 0.5; }}
+        preload="auto"
+        onLoadedData={(e) => {
+          // Seek to 0.5s to show a better frame than black first frame
+          if (e.target.currentTime === 0) {
+            e.target.currentTime = 0.5;
+          }
+        }}
+        onError={(e) => console.warn('Video load error:', videoUrl?.substring(0, 50))}
       />
     );
   }
