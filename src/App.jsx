@@ -229,6 +229,7 @@ const StickToMusic = () => {
   const [pendingPage, setPendingPage] = useState(savedAppSession?.currentPage || null);
   const [pendingOperatorTab, setPendingOperatorTab] = useState(savedAppSession?.operatorTab || null);
   const [pendingShowVideoEditor, setPendingShowVideoEditor] = useState(savedAppSession?.showVideoEditor || false);
+  const [sessionRestoreComplete, setSessionRestoreComplete] = useState(!savedAppSession); // Skip if no saved session
   const [operatorTab, setOperatorTab] = useState('artists'); // Moved up for restore effect
   const [showVideoEditor, setShowVideoEditor] = useState(false); // Moved up for restore effect
   const [openFaq, setOpenFaq] = useState(null);
@@ -354,8 +355,12 @@ const StickToMusic = () => {
         setCurrentPage(user.role === 'artist' ? 'artist-portal' : 'operator');
       }
       setPendingPage(null); // Clear pending page after restore
+      setSessionRestoreComplete(true);
+    } else if (authChecked && firestoreLoaded && !pendingPage) {
+      // No pending session to restore, or user not authenticated - mark complete
+      setSessionRestoreComplete(true);
     }
-  }, [user, pendingPage, pendingOperatorTab, pendingShowVideoEditor]);
+  }, [user, pendingPage, pendingOperatorTab, pendingShowVideoEditor, authChecked, firestoreLoaded]);
 
   // Save session state when navigation changes
   useEffect(() => {
@@ -2047,6 +2052,18 @@ const StickToMusic = () => {
       )}
     </nav>
   );
+
+  // Show loading screen while restoring session (prevents flash of wrong content)
+  if (!sessionRestoreComplete && pendingPage) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-zinc-500 text-sm">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   // INTAKE FORM PAGE
   if (currentPage === 'intake') {
