@@ -87,6 +87,9 @@ const SlideshowEditor = ({
     height: dimensions.height * previewScale
   };
 
+  // Get current slide (defined early so callbacks can reference it)
+  const currentSlide = slides[selectedSlideIndex];
+
   // Initialize with at least one slide, or generate batch of 10 in batch mode
   useEffect(() => {
     if (slides.length === 0) {
@@ -387,9 +390,6 @@ const SlideshowEditor = ({
     e.stopPropagation();
     setEditingTextId(overlayId);
   }, []);
-
-  // Get current slide
-  const currentSlide = slides[selectedSlideIndex];
 
   // Save slideshow
   const handleSave = useCallback(() => {
