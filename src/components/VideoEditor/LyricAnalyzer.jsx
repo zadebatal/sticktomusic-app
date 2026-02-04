@@ -45,7 +45,11 @@ const LyricAnalyzer = ({ audioFile, audioUrl, onComplete, onClose }) => {
 
       onComplete?.(result);
     } catch (err) {
-      if (err.message === 'API_KEY_REQUIRED') setShowApiKeyInput(true);
+      // Show API key input on authentication errors (401) or if key is required
+      if (err.message === 'API_KEY_REQUIRED' || err.message?.includes('401')) {
+        setShowApiKeyInput(true);
+        setApiKey(''); // Clear invalid key so user can enter a new one
+      }
     }
   };
 
@@ -115,8 +119,8 @@ const LyricAnalyzer = ({ audioFile, audioUrl, onComplete, onClose }) => {
             </div>
           )}
 
-          {/* API Key Input (only if no cache or user wants to re-analyze) */}
-          {showApiKeyInput && !cachedLyrics && (
+          {/* API Key Input (show if no key, error occurred, or user wants to change) */}
+          {(showApiKeyInput || error) && !cachedLyrics && (
             <div style={styles.apiKeySection}>
               <label style={styles.label}>
                 AssemblyAI API Key
@@ -133,6 +137,15 @@ const LyricAnalyzer = ({ audioFile, audioUrl, onComplete, onClose }) => {
               />
               <p style={styles.cost}>✅ Supports files up to 5GB • Free tier: 3 hours/month</p>
             </div>
+          )}
+          {/* Show button to change API key if one is stored but input is hidden */}
+          {!showApiKeyInput && !error && !cachedLyrics && apiKey && (
+            <button
+              style={styles.changeKeyBtn}
+              onClick={() => setShowApiKeyInput(true)}
+            >
+              🔑 Change API Key
+            </button>
           )}
 
           {/* Progress */}
@@ -353,6 +366,16 @@ const styles = {
     margin: '10px 0 0',
     fontSize: '12px',
     color: '#22c55e'
+  },
+  changeKeyBtn: {
+    background: 'none',
+    border: '1px solid #2d2d3d',
+    borderRadius: '8px',
+    color: '#9ca3af',
+    padding: '8px 12px',
+    fontSize: '12px',
+    cursor: 'pointer',
+    marginBottom: '16px'
   },
   progress: {
     display: 'flex',
