@@ -35,106 +35,19 @@ const BEAT_PATTERNS = [
 ];
 
 /**
- * ClipThumbnail - Generates thumbnail from video if not available
- * Falls back to showing actual video element if canvas fails (CORS)
+ * ClipThumbnail - Shows thumbnail image or video element
+ * Simple approach: if thumbnail exists use it, else show video element directly
  */
 const ClipThumbnail = ({ clip, style }) => {
-  const [thumbUrl, setThumbUrl] = useState(clip.thumbnail || null);
-  const [showVideo, setShowVideo] = useState(false);
-  const [videoUrl, setVideoUrl] = useState(null);
+  const videoUrl = clip.localUrl || clip.url;
 
-  useEffect(() => {
-    // If we already have a thumbnail, use it
-    if (clip.thumbnail) {
-      setThumbUrl(clip.thumbnail);
-      return;
-    }
-
-    // Get video URL
-    const url = clip.localUrl || clip.url;
-    if (!url) return;
-
-    setVideoUrl(url);
-
-    // Try to generate thumbnail without crossOrigin (CORS workaround)
-    const tryGenerateThumbnail = (useCors) => {
-      const video = document.createElement('video');
-      if (useCors) video.crossOrigin = 'anonymous';
-      video.muted = true;
-      video.playsInline = true;
-      video.preload = 'metadata';
-
-      video.onloadeddata = () => {
-        video.currentTime = 0.5; // Seek to 0.5s for thumbnail
-      };
-
-      video.onseeked = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = 120;
-          canvas.height = 213; // 9:16 aspect ratio
-          const ctx = canvas.getContext('2d');
-
-          // Center crop
-          const videoRatio = video.videoWidth / video.videoHeight;
-          const canvasRatio = canvas.width / canvas.height;
-          let sx, sy, sw, sh;
-
-          if (videoRatio > canvasRatio) {
-            sh = video.videoHeight;
-            sw = sh * canvasRatio;
-            sx = (video.videoWidth - sw) / 2;
-            sy = 0;
-          } else {
-            sw = video.videoWidth;
-            sh = sw / canvasRatio;
-            sx = 0;
-            sy = (video.videoHeight - sh) / 2;
-          }
-
-          ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-          // Check if canvas was tainted (will be blank)
-          if (dataUrl && dataUrl !== 'data:,') {
-            setThumbUrl(dataUrl);
-          } else {
-            throw new Error('Canvas tainted');
-          }
-        } catch (e) {
-          // Canvas tainted due to CORS, fall back to video element
-          if (useCors) {
-            // Try again without CORS
-            tryGenerateThumbnail(false);
-          } else {
-            // Show video element instead
-            setShowVideo(true);
-          }
-        }
-      };
-
-      video.onerror = () => {
-        if (useCors) {
-          // Try without CORS
-          tryGenerateThumbnail(false);
-        } else {
-          // Still show video element as last resort
-          setShowVideo(true);
-        }
-      };
-
-      video.src = url;
-    };
-
-    // Start with CORS, fall back if needed
-    tryGenerateThumbnail(true);
-  }, [clip]);
-
-  if (thumbUrl) {
-    return <img src={thumbUrl} alt="" style={style} />;
+  // If we have a thumbnail, use it
+  if (clip.thumbnail) {
+    return <img src={clip.thumbnail} alt="" style={{ ...style, objectFit: 'cover' }} />;
   }
 
-  // Fallback: show video element directly (handles CORS cases)
-  if (showVideo && videoUrl) {
+  // Otherwise show video element directly (this works even with CORS)
+  if (videoUrl) {
     return (
       <video
         src={videoUrl}
@@ -142,30 +55,23 @@ const ClipThumbnail = ({ clip, style }) => {
         muted
         playsInline
         preload="metadata"
-        onLoadedData={(e) => e.target.currentTime = 0.5}
+        onLoadedMetadata={(e) => { e.target.currentTime = 0.5; }}
       />
     );
   }
 
-  // Still loading or no URL
+  // No media available
   return (
     <div style={{
       ...style,
       background: 'linear-gradient(135deg, #3f3f46 0%, #27272a 100%)',
       display: 'flex',
       alignItems: 'center',
-      justifyContent: 'center'
+      justifyContent: 'center',
+      color: '#71717a',
+      fontSize: '12px'
     }}>
-      {videoUrl && (
-        <div style={{
-          width: 16,
-          height: 16,
-          border: '2px solid #71717a',
-          borderTopColor: '#a78bfa',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite'
-        }} />
-      )}
+      No video
     </div>
   );
 };
