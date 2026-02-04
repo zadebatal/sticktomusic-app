@@ -3,7 +3,7 @@ import { useBeatDetection } from '../../hooks/useBeatDetection';
 import WordTimeline from './WordTimeline';
 import BeatSelector from './BeatSelector';
 import { saveApiKey, loadApiKey } from '../../services/storageService';
-import { ErrorPanel, EmptyState as SharedEmptyState } from '../ui';
+import { ErrorPanel, EmptyState as SharedEmptyState, useToast } from '../ui';
 import {
   getTrimHash,
   getTrimBoundaries,
@@ -89,6 +89,9 @@ const VideoEditorModal = ({
   // Beat detection
   const { beats, bpm, isAnalyzing, analyzeAudio } = useBeatDetection();
 
+  // Toast notifications
+  const toast = useToast();
+
   // Refs
   const audioRef = useRef(null);
   const videoRef = useRef(null);
@@ -120,6 +123,12 @@ const VideoEditorModal = ({
       console.log('[TrimChange] Trim boundaries changed, invalidating dependent data');
       console.log(`  Old: ${previousTrimHashRef.current}`);
       console.log(`  New: ${currentHash}`);
+
+      // Reset playhead to start (prevent out-of-bounds position)
+      setCurrentTime(0);
+      if (audioRef.current) {
+        audioRef.current.currentTime = trimStart;
+      }
 
       // Clear words (they were timed to the old trim range)
       if (words.length > 0) {
@@ -448,6 +457,8 @@ const VideoEditorModal = ({
 
   // Auto-save every 30 seconds
   useEffect(() => {
+    let failedOnce = false; // Track if we already warned user
+
     const autoSave = () => {
       // Don't auto-save if there's nothing to save
       if (!selectedAudio && clips.length === 0 && words.length === 0) return;
@@ -464,14 +475,20 @@ const VideoEditorModal = ({
         };
         localStorage.setItem(autoSaveKey, JSON.stringify(draftData));
         setLastSaved(new Date());
+        failedOnce = false; // Reset on success
       } catch (e) {
         console.error('Auto-save failed:', e);
+        // Only warn once per session to avoid spamming
+        if (!failedOnce) {
+          toast.error('Auto-save failed. Save your work manually.');
+          failedOnce = true;
+        }
       }
     };
 
     const interval = setInterval(autoSave, 30000); // 30 seconds
     return () => clearInterval(interval);
-  }, [autoSaveKey, selectedAudio, clips, words, lyrics, textStyle, cropMode]);
+  }, [autoSaveKey, selectedAudio, clips, words, lyrics, textStyle, cropMode, toast]);
 
   // Restore from auto-saved draft
   const handleRestoreDraft = useCallback(() => {
@@ -507,11 +524,11 @@ const VideoEditorModal = ({
   // Show the beat selector modal
   const handleCutByBeat = useCallback(() => {
     if (!filteredBeats.length) {
-      console.warn('No beats detected in trimmed range - cannot open beat selector');
+      toast.error('No beats detected. Try a different audio track or check the trim range.');
       return;
     }
     setShowBeatSelector(true);
-  }, [filteredBeats]);
+  }, [filteredBeats, toast]);
 
   // Handle when user selects beats from the BeatSelector modal
   // Note: selectedBeatTimes are now in LOCAL time (0 to trimmedDuration)
@@ -551,7 +568,14 @@ const VideoEditorModal = ({
   }, [category?.videos, duration, selectedAudio]);
 
   const handleCutByWord = useCallback(() => {
-    if (!words.length || !category?.videos?.length) return;
+    if (!words.length) {
+      toast.error('No words to cut by. Add lyrics first.');
+      return;
+    }
+    if (!category?.videos?.length) {
+      toast.error('No clips in bank. Upload videos first.');
+      return;
+    }
 
     const availableClips = category.videos;
     const newClips = words.map((word, i) => {
@@ -569,10 +593,18 @@ const VideoEditorModal = ({
     });
 
     setClips(newClips);
-  }, [words, category?.videos]);
+    toast.success(`Created ${newClips.length} clips from words`);
+  }, [words, category?.videos, toast]);
 
   const handleReroll = useCallback(() => {
-    if (!category?.videos?.length) return;
+    if (!category?.videos?.length) {
+      toast.error('No clips in bank. Upload videos first.');
+      return;
+    }
+    if (!clips.length) {
+      toast.error('No clips to reroll. Cut by beat or word first.');
+      return;
+    }
 
     const availableClips = category.videos;
 
@@ -595,6 +627,7 @@ const VideoEditorModal = ({
       indicesToReroll = playheadClip >= 0 ? [playheadClip] : clips.map((_, i) => i);
     }
 
+    const rerollCount = indicesToReroll.filter(i => !clips[i]?.locked).length;
     setClips(prev => prev.map((clip, i) => {
       if (!indicesToReroll.includes(i) || clip.locked) return clip;
       const randomClip = availableClips[Math.floor(Math.random() * availableClips.length)];
@@ -606,9 +639,20 @@ const VideoEditorModal = ({
         thumbnail: randomClip.thumbnail
       };
     }));
-  }, [clips, selectedClips, category?.videos, currentTime]);
+    toast.success(`Rerolled ${rerollCount} clip${rerollCount !== 1 ? 's' : ''}`);
+  }, [clips, selectedClips, category?.videos, currentTime, toast]);
 
   const handleRearrange = useCallback(() => {
+    if (!clips.length) {
+      toast.error('No clips to rearrange.');
+      return;
+    }
+    const unlockedCount = clips.filter(c => !c.locked).length;
+    if (unlockedCount < 2) {
+      toast.info('Need at least 2 unlocked clips to rearrange.');
+      return;
+    }
+
     setClips(prev => {
       const unlocked = prev.filter(c => !c.locked);
       const shuffled = [...unlocked].sort(() => Math.random() - 0.5);
@@ -619,7 +663,8 @@ const VideoEditorModal = ({
         return { ...shuffled[j++], startTime: clip.startTime, duration: clip.duration };
       });
     });
-  }, []);
+    toast.success(`Shuffled ${unlockedCount} clips`);
+  }, [clips, toast]);
 
   // Get the clip at the current playhead position
   const getClipAtPlayhead = useCallback(() => {
@@ -661,12 +706,16 @@ const VideoEditorModal = ({
           return newClips;
         });
         setSelectedClips([]);
+        toast.success('Combined clip with next');
+      } else {
+        toast.info('Select clips or position playhead to combine');
       }
       return;
     }
 
     // Sort indices and combine consecutive clips
     const sorted = [...indices].sort((a, b) => a - b);
+    let combineCount = 0;
     setClips(prev => {
       const newClips = [...prev];
       // Start from the end to preserve indices
@@ -680,17 +729,26 @@ const VideoEditorModal = ({
             duration: (newClips[prevIdx].duration || 0.5) + (newClips[idx].duration || 0.5)
           };
           newClips.splice(prevIdx, 2, combined);
+          combineCount++;
         }
       }
       return newClips;
     });
     setSelectedClips([]);
-  }, [clips, getEffectiveClipIndices]);
+    if (combineCount > 0) {
+      toast.success(`Combined ${combineCount + 1} clips`);
+    } else {
+      toast.info('Select consecutive clips to combine');
+    }
+  }, [clips, getEffectiveClipIndices, toast]);
 
   // Break/split a clip at the playhead position
   const handleBreak = useCallback(() => {
     const clipIndex = getClipAtPlayhead();
-    if (clipIndex < 0) return;
+    if (clipIndex < 0) {
+      toast.info('Position playhead over a clip to split');
+      return;
+    }
 
     // Calculate where in the clip the playhead is
     let cumTime = 0;
@@ -703,7 +761,10 @@ const VideoEditorModal = ({
     const splitPoint = currentTime - clipStartTime;
 
     // Don't split if too close to edges
-    if (splitPoint < 0.1 || splitPoint > clipDuration - 0.1) return;
+    if (splitPoint < 0.1 || splitPoint > clipDuration - 0.1) {
+      toast.info('Move playhead away from clip edge to split');
+      return;
+    }
 
     // Create two clips from one
     const firstHalf = {
@@ -724,7 +785,8 @@ const VideoEditorModal = ({
       return newClips;
     });
     setSelectedClips([]);
-  }, [clips, currentTime, getClipAtPlayhead]);
+    toast.success('Split clip at playhead');
+  }, [clips, currentTime, getClipAtPlayhead, toast]);
 
   // Clip drag reorder handlers
   const handleClipDragStart = useCallback((index) => {
@@ -923,20 +985,24 @@ const VideoEditorModal = ({
           // Rebuild lyrics text from filtered words
           const filteredLyrics = newWords.map(w => w.text).join(' ');
           setLyrics(filteredLyrics);
+          toast.success(`Transcribed ${newWords.length} words`);
         } else {
+          toast.error('No words detected in the selected audio range');
           setTranscriptionError('No words detected in the selected audio range');
         }
       } else {
+        toast.error('No words detected in audio');
         setTranscriptionError('No words detected in audio');
       }
 
     } catch (error) {
       console.error('Transcription error:', error);
+      toast.error(`Transcription failed: ${error.message}`);
       setTranscriptionError(error.message);
     } finally {
       setIsTranscribing(false);
     }
-  }, [selectedAudio]);
+  }, [selectedAudio, duration, toast]);
 
   const handleSaveApiKey = useCallback(() => {
     if (apiKeyInput.trim()) {
