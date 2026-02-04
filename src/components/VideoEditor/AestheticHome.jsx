@@ -23,7 +23,8 @@ const AestheticHome = ({
   onRenameBankVideo,
   onRenameBankAudio,
   onCreateContent,
-  onShowBatchPipeline // Open batch create & schedule workflow
+  onShowBatchPipeline, // Open batch create & schedule workflow
+  onViewContent // View content library / drafts
 }) => {
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -394,6 +395,25 @@ const AestheticHome = ({
                 Make a Video
               </button>
 
+              {/* View Content Library / Drafts */}
+              {onViewContent && (
+                <button
+                  style={styles.contentButton}
+                  onClick={onViewContent}
+                  title="View created videos and drafts"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <path d="M3 9h18"/>
+                    <path d="M9 21V9"/>
+                  </svg>
+                  Content
+                  {selectedCategory.createdVideos?.length > 0 && (
+                    <span style={styles.contentBadge}>{selectedCategory.createdVideos.length}</span>
+                  )}
+                </button>
+              )}
+
               {/* Batch Create & Schedule - Streamlined workflow */}
               {onShowBatchPipeline && (
                 <button
@@ -410,7 +430,7 @@ const AestheticHome = ({
                     <rect x="3" y="14" width="7" height="7" rx="1"/>
                     <rect x="14" y="14" width="7" height="7" rx="1"/>
                   </svg>
-                  Batch Create & Schedule
+                  Make up to 10 at once
                 </button>
               )}
             </div>
@@ -1301,6 +1321,27 @@ const styles = {
     fontSize: '14px',
     fontWeight: '500',
     transition: 'opacity 0.15s'
+  },
+  contentButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '14px 28px',
+    backgroundColor: '#059669',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#fff',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '500',
+    transition: 'opacity 0.15s'
+  },
+  contentBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    padding: '2px 8px',
+    borderRadius: '10px',
+    fontSize: '12px',
+    fontWeight: '600'
   },
   categoriesGrid: {
     maxWidth: '800px',

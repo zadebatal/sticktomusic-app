@@ -897,6 +897,7 @@ const VideoStudio = ({
             onRenameBankAudio={handleRenameBankAudio}
             onCreateContent={handleCreateContent}
             onShowBatchPipeline={() => setShowBatchPipeline(true)}
+            onViewContent={() => setCurrentView('library')}
           />
         )}
 

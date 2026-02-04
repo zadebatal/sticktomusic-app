@@ -21,10 +21,7 @@ const STAGES = {
   OPTIONS: 'options',
   PREVIEW: 'preview',
   GENERATING: 'generating',
-  VIDEO_BANK: 'video_bank',  // New stage: view/edit videos before scheduling
-  REVIEW: 'review',
-  SCHEDULING: 'scheduling',
-  DONE: 'done'
+  VIDEO_BANK: 'video_bank'  // View/edit videos then save as drafts
 };
 
 // Beat cut patterns - mirrors the singular editor's beat selector
@@ -159,15 +156,7 @@ const BatchPipeline = ({
   const [generatedVideos, setGeneratedVideos] = useState([]);
   const [playingVideoId, setPlayingVideoId] = useState(null);  // Track which video is playing
 
-  // Scheduling options
-  const [scheduleDate, setScheduleDate] = useState(() => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(12, 0, 0, 0);
-    return tomorrow.toISOString().slice(0, 16);
-  });
-  const [intervalMinutes, setIntervalMinutes] = useState(180);
-  const [platforms, setPlatforms] = useState({ tiktok: true, instagram: true });
+  // Captions for generated videos
   const [captions, setCaptions] = useState([]);
 
   // Caption bank state
@@ -565,57 +554,6 @@ const BatchPipeline = ({
       onClose();
     }
   }, [captions, onEditVideo, onClose]);
-
-  // Schedule all videos
-  const handleSchedule = useCallback(async () => {
-    if (!accountMapping) {
-      setError('No account linked to this category');
-      return;
-    }
-
-    setStage(STAGES.SCHEDULING);
-    setError(null);
-
-    const baseDate = new Date(scheduleDate);
-    let successCount = 0;
-    const errors = [];
-
-    for (let i = 0; i < generatedVideos.length; i++) {
-      const video = generatedVideos[i];
-      const scheduledFor = new Date(baseDate.getTime() + (i * intervalMinutes * 60 * 1000));
-
-      const platformsArray = [];
-      if (platforms.tiktok && accountMapping.tiktok) {
-        platformsArray.push({ platform: 'tiktok', accountId: accountMapping.tiktok });
-      }
-      if (platforms.instagram && accountMapping.instagram) {
-        platformsArray.push({ platform: 'instagram', accountId: accountMapping.instagram });
-      }
-
-      if (platformsArray.length === 0) {
-        errors.push(`Video ${i + 1}: No platforms selected`);
-        continue;
-      }
-
-      try {
-        await onSchedulePost({
-          platforms: platformsArray,
-          caption: captions[i] || video.caption,
-          videoUrl: video.cloudUrl,
-          scheduledFor: scheduledFor.toISOString()
-        });
-        successCount++;
-      } catch (err) {
-        errors.push(`Video ${i + 1}: ${err.message}`);
-      }
-    }
-
-    if (errors.length > 0) {
-      setError(`Scheduled ${successCount}/${generatedVideos.length}. Errors: ${errors.join('; ')}`);
-    }
-
-    setStage(STAGES.DONE);
-  }, [generatedVideos, scheduleDate, intervalMinutes, platforms, accountMapping, captions, onSchedulePost]);
 
   // Update caption
   const updateCaption = useCallback((index, value) => {
@@ -1425,195 +1363,17 @@ const BatchPipeline = ({
             </button>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
-                style={{ ...styles.btn, ...styles.secondaryBtn }}
-                onClick={handleSaveAsDrafts}
-              >
-                💾 Save as Drafts
-              </button>
-              <button
                 style={{
                   ...styles.btn,
                   ...styles.primaryBtn,
                   ...(generatedVideos.length === 0 ? styles.primaryBtnDisabled : {})
                 }}
-                onClick={() => setStage(STAGES.REVIEW)}
+                onClick={handleSaveAsDrafts}
                 disabled={generatedVideos.length === 0}
               >
-                Proceed to Schedule ({generatedVideos.length}) →
+                💾 Save as Drafts ({generatedVideos.length})
               </button>
             </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // REVIEW STAGE
-  if (stage === STAGES.REVIEW) {
-    return (
-      <div style={styles.overlay}>
-        <div style={styles.modal}>
-          <div style={styles.header}>
-            <h2 style={styles.title}>Review & Schedule</h2>
-            <button style={styles.closeBtn} onClick={onClose}>×</button>
-          </div>
-
-          <div style={styles.content}>
-            {error && <div style={styles.error}>{error}</div>}
-
-            {/* Schedule Settings */}
-            <div style={styles.section}>
-              <div style={styles.sectionTitle}>Schedule Settings</div>
-              <div style={styles.row}>
-                <div style={styles.col}>
-                  <label style={styles.label}>Start Date & Time</label>
-                  <input
-                    type="datetime-local"
-                    style={styles.input}
-                    value={scheduleDate}
-                    onChange={e => setScheduleDate(e.target.value)}
-                  />
-                </div>
-                <div style={styles.col}>
-                  <label style={styles.label}>Interval Between Posts</label>
-                  <select
-                    style={styles.select}
-                    value={intervalMinutes}
-                    onChange={e => setIntervalMinutes(Number(e.target.value))}
-                  >
-                    <option value={60}>1 hour</option>
-                    <option value={120}>2 hours</option>
-                    <option value={180}>3 hours</option>
-                    <option value={360}>6 hours</option>
-                    <option value={720}>12 hours</option>
-                    <option value={1440}>24 hours</option>
-                  </select>
-                </div>
-              </div>
-              <div style={styles.row}>
-                <label style={styles.checkbox}>
-                  <input
-                    type="checkbox"
-                    checked={platforms.tiktok}
-                    onChange={e => setPlatforms(p => ({ ...p, tiktok: e.target.checked }))}
-                  />
-                  <span style={{ color: '#ff0050' }}>TikTok</span>
-                </label>
-                <label style={styles.checkbox}>
-                  <input
-                    type="checkbox"
-                    checked={platforms.instagram}
-                    onChange={e => setPlatforms(p => ({ ...p, instagram: e.target.checked }))}
-                  />
-                  <span style={{ color: '#c13584' }}>Instagram</span>
-                </label>
-              </div>
-            </div>
-
-            {/* Video List */}
-            <div style={styles.section}>
-              <div style={styles.sectionTitle}>Videos ({generatedVideos.length})</div>
-              <div style={styles.videoList}>
-                {generatedVideos.map((video, idx) => {
-                  const postTime = new Date(
-                    new Date(scheduleDate).getTime() + (idx * intervalMinutes * 60 * 1000)
-                  );
-                  return (
-                    <div key={video.id} style={styles.videoRow}>
-                      <div style={styles.videoThumb}>
-                        {video.clips[0] && (
-                          <ClipThumbnail clip={video.clips[0]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        )}
-                      </div>
-                      <div style={styles.videoInfo}>
-                        <div style={{ color: 'white', fontWeight: '500', marginBottom: '4px' }}>
-                          {video.title}
-                        </div>
-                        <div style={{ color: '#a1a1aa', fontSize: '12px' }}>
-                          📅 {postTime.toLocaleString()}
-                        </div>
-                        <input
-                          type="text"
-                          placeholder="Add caption..."
-                          style={{ ...styles.input, marginTop: '8px', padding: '6px 10px' }}
-                          value={captions[idx] || ''}
-                          onChange={e => updateCaption(idx, e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          <div style={styles.footer}>
-            <button
-              style={{ ...styles.btn, ...styles.secondaryBtn }}
-              onClick={() => setStage(STAGES.VIDEO_BANK)}
-            >
-              ← Back to Videos
-            </button>
-            <button
-              style={{ ...styles.btn, ...styles.primaryBtn }}
-              onClick={handleSchedule}
-              disabled={!platforms.tiktok && !platforms.instagram}
-            >
-              Schedule All →
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // SCHEDULING STAGE
-  if (stage === STAGES.SCHEDULING) {
-    return (
-      <div style={styles.overlay}>
-        <div style={styles.modal}>
-          <div style={styles.header}>
-            <h2 style={styles.title}>Scheduling Posts...</h2>
-          </div>
-          <div style={styles.content}>
-            <div style={styles.progress}>
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>📅</div>
-              <div style={{ color: 'white', fontSize: '18px' }}>
-                Sending to Late.co...
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // DONE STAGE
-  if (stage === STAGES.DONE) {
-    return (
-      <div style={styles.overlay}>
-        <div style={styles.modal}>
-          <div style={styles.header}>
-            <h2 style={styles.title}>Done!</h2>
-          </div>
-          <div style={styles.content}>
-            {error && <div style={styles.error}>{error}</div>}
-            <div style={styles.success}>
-              <div style={styles.successIcon}>✅</div>
-              <div style={{ color: 'white', fontSize: '24px', marginBottom: '8px' }}>
-                {generatedVideos.length} Videos Scheduled
-              </div>
-              <div style={{ color: '#a1a1aa' }}>
-                Posted to {accountHandle} on{' '}
-                {[platforms.tiktok && 'TikTok', platforms.instagram && 'Instagram'].filter(Boolean).join(' & ')}
-              </div>
-            </div>
-          </div>
-          <div style={styles.footer}>
-            <div />
-            <button style={{ ...styles.btn, ...styles.primaryBtn }} onClick={onClose}>
-              Done
-            </button>
           </div>
         </div>
       </div>
