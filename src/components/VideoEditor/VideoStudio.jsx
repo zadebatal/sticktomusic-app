@@ -1182,6 +1182,7 @@ const VideoStudio = ({
           onSave={handleSaveSlideshow}
           onClose={handleCloseSlideshowEditor}
           onSchedulePost={onSchedulePost}
+          onAddLyrics={handleAddLyrics}
           lateAccountIds={lateAccountIds}
         />
       )}

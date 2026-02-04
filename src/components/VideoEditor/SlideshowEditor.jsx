@@ -20,6 +20,7 @@ const SlideshowEditor = ({
   onSave,
   onClose,
   onSchedulePost,
+  onAddLyrics,
   lateAccountIds = {}
 }) => {
   // Slideshow state
@@ -119,14 +120,38 @@ const SlideshowEditor = ({
     setSelectedSlideIndex(toIndex);
   }, []);
 
-  // Set background for current slide
-  const setSlideBackground = useCallback((imageUrl, thumbnail) => {
+  // Set background for current slide (tracks source bank for re-roll)
+  const setSlideBackground = useCallback((imageUrl, thumbnail, sourceBank = null, sourceImageId = null) => {
     setSlides(prev => prev.map((slide, i) =>
       i === selectedSlideIndex
-        ? { ...slide, backgroundImage: imageUrl, thumbnail: thumbnail || imageUrl }
+        ? {
+            ...slide,
+            backgroundImage: imageUrl,
+            thumbnail: thumbnail || imageUrl,
+            sourceBank: sourceBank || slide.sourceBank,
+            sourceImageId: sourceImageId || slide.sourceImageId
+          }
         : slide
     ));
   }, [selectedSlideIndex]);
+
+  // Re-roll: Replace current slide's image with random different image from same bank
+  const handleReroll = useCallback(() => {
+    if (!currentSlide?.sourceBank) return;
+
+    const bank = currentSlide.sourceBank === 'imageA' ? imagesA : imagesB;
+    const otherImages = bank.filter(img => img.id !== currentSlide.sourceImageId);
+
+    if (otherImages.length === 0) return; // No other images available
+
+    const randomImage = otherImages[Math.floor(Math.random() * otherImages.length)];
+    setSlideBackground(
+      randomImage.localUrl || randomImage.url,
+      randomImage.localUrl || randomImage.url,
+      currentSlide.sourceBank,
+      randomImage.id
+    );
+  }, [currentSlide, imagesA, imagesB, setSlideBackground]);
 
   // Handle drag over
   const handleDragOver = useCallback((e) => {
@@ -141,7 +166,12 @@ const SlideshowEditor = ({
     if (data) {
       try {
         const clipData = JSON.parse(data);
-        setSlideBackground(clipData.url || clipData.localUrl, clipData.thumbnail);
+        setSlideBackground(
+          clipData.url || clipData.localUrl,
+          clipData.thumbnail,
+          clipData.sourceBank,
+          clipData.id
+        );
       } catch (err) {
         console.warn('Invalid drop data:', err);
       }
@@ -510,7 +540,8 @@ const SlideshowEditor = ({
                         e.dataTransfer.setData('application/json', JSON.stringify({
                           ...image,
                           url: image.localUrl || image.url,
-                          thumbnail: image.localUrl || image.url
+                          thumbnail: image.localUrl || image.url,
+                          sourceBank: activeBank // Track which bank this came from
                         }));
                       }}
                     >
@@ -590,13 +621,62 @@ const SlideshowEditor = ({
                 ))}
               </div>
 
-              {/* Add Text Button */}
-              <button style={styles.addTextButton} onClick={addTextOverlay}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 5v14M5 12h14"/>
-                </svg>
-                Add Text
-              </button>
+              {/* Canvas Actions */}
+              <div style={styles.canvasActions}>
+                {/* Re-roll Button (only show when slide has an image) */}
+                {currentSlide?.backgroundImage && currentSlide?.sourceBank && (
+                  <button
+                    style={styles.rerollButton}
+                    onClick={handleReroll}
+                    title="Replace with random image from same bank"
+                    disabled={
+                      (currentSlide.sourceBank === 'imageA' && imagesA.length <= 1) ||
+                      (currentSlide.sourceBank === 'imageB' && imagesB.length <= 1)
+                    }
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M23 4v6h-6"/>
+                      <path d="M1 20v-6h6"/>
+                      <path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/>
+                      <path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/>
+                    </svg>
+                    Reroll
+                  </button>
+                )}
+
+                {/* Add Text Button */}
+                <button style={styles.addTextButton} onClick={addTextOverlay}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 5v14M5 12h14"/>
+                  </svg>
+                  Add Text
+                </button>
+
+                {/* Add to Lyric Bank Button */}
+                {onAddLyrics && (
+                  <button
+                    style={styles.addToLyricBankButton}
+                    onClick={() => {
+                      const text = prompt('Enter lyrics to add to bank:');
+                      if (text?.trim()) {
+                        onAddLyrics({
+                          title: text.split('\n')[0].slice(0, 30) || 'New Lyrics',
+                          content: text.trim()
+                        });
+                      }
+                    }}
+                    title="Add lyrics to your bank"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                      <path d="M14 2v6h6"/>
+                      <line x1="12" y1="11" x2="12" y2="17"/>
+                      <line x1="9" y1="14" x2="15" y2="14"/>
+                    </svg>
+                    + Lyric Bank
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Text Editor (when editing) */}
@@ -1173,6 +1253,12 @@ const styles = {
     position: 'absolute',
     userSelect: 'none'
   },
+  canvasActions: {
+    display: 'flex',
+    gap: '8px',
+    flexWrap: 'wrap',
+    justifyContent: 'center'
+  },
   addTextButton: {
     display: 'flex',
     alignItems: 'center',
@@ -1182,6 +1268,30 @@ const styles = {
     border: '1px solid rgba(99, 102, 241, 0.5)',
     borderRadius: '8px',
     color: '#a5b4fc',
+    cursor: 'pointer',
+    fontSize: '13px'
+  },
+  rerollButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 16px',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    border: '1px solid rgba(16, 185, 129, 0.5)',
+    borderRadius: '8px',
+    color: '#6ee7b7',
+    cursor: 'pointer',
+    fontSize: '13px'
+  },
+  addToLyricBankButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 16px',
+    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+    border: '1px solid rgba(139, 92, 246, 0.5)',
+    borderRadius: '8px',
+    color: '#c4b5fd',
     cursor: 'pointer',
     fontSize: '13px'
   },
