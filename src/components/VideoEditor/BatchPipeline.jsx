@@ -36,73 +36,38 @@ const BEAT_PATTERNS = [
 ];
 
 /**
- * ClipThumbnail - Shows thumbnail image or video element with hover preview
- * Uses crossOrigin for CORS and captures frame after load
+ * ClipThumbnail - Shows thumbnail or video preview
+ * SIMPLE approach matching the working VideoCard in main library
  */
 const ClipThumbnail = ({ clip, style }) => {
-  const [thumbnailUrl, setThumbnailUrl] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
   const videoUrl = clip.localUrl || clip.url;
 
-  // Generate thumbnail from video using canvas
-  useEffect(() => {
-    if (!videoUrl || clip.thumbnail) return;
-
-    const video = document.createElement('video');
-    video.crossOrigin = 'anonymous';
-    video.muted = true;
-    video.playsInline = true;
-    video.preload = 'auto';
-
-    const captureFrame = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = 180;
-        canvas.height = 320;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-        setThumbnailUrl(dataUrl);
-        setIsLoading(false);
-      } catch (err) {
-        console.warn('Failed to capture thumbnail:', err);
-        setIsLoading(false);
-      }
-    };
-
-    video.onloadeddata = () => {
-      // Seek to 0.5s then capture
-      video.currentTime = 0.5;
-    };
-
-    video.onseeked = () => {
-      captureFrame();
-    };
-
-    video.onerror = () => {
-      console.warn('Video load error for thumbnail');
-      setIsLoading(false);
-    };
-
-    video.src = videoUrl;
-    video.load();
-
-    return () => {
-      video.src = '';
-    };
-  }, [videoUrl, clip.thumbnail]);
-
-  // If we have a stored thumbnail, use it
+  // If stored thumbnail exists, use it
   if (clip.thumbnail) {
     return <img src={clip.thumbnail} alt="" style={{ ...style, objectFit: 'cover' }} />;
   }
 
-  // If we captured a thumbnail, show it
-  if (thumbnailUrl) {
-    return <img src={thumbnailUrl} alt="" style={{ ...style, objectFit: 'cover' }} />;
+  // Simple video element - matches working VideoCard approach
+  if (videoUrl) {
+    return (
+      <video
+        src={videoUrl}
+        style={{ ...style, objectFit: 'cover' }}
+        muted
+        playsInline
+        onMouseEnter={(e) => {
+          const playPromise = e.target.play();
+          if (playPromise) playPromise.catch(() => {});
+        }}
+        onMouseLeave={(e) => {
+          if (!e.target.paused) e.target.pause();
+          e.target.currentTime = 0;
+        }}
+      />
+    );
   }
 
-  // Loading or fallback state
+  // No media fallback
   return (
     <div style={{
       ...style,
@@ -111,9 +76,9 @@ const ClipThumbnail = ({ clip, style }) => {
       alignItems: 'center',
       justifyContent: 'center',
       color: '#71717a',
-      fontSize: '10px'
+      fontSize: '24px'
     }}>
-      {isLoading ? '⏳' : '🎬'}
+      🎬
     </div>
   );
 };
