@@ -1266,7 +1266,7 @@ const VideoStudio = ({
             // Actions
             onCreateContent={handleCreateContent}
             onShowBatchPipeline={() => setShowBatchPipeline(true)}
-            onViewContent={() => setCurrentView('library')}
+            onViewContent={(options) => setCurrentView(options?.type === 'slideshows' ? 'slideshows' : 'library')}
             onMakeSlideshow={handleMakeSlideshow}
             onEditSlideshow={(slideshow) => handleMakeSlideshow(slideshow)}
             onDeleteSlideshow={handleDeleteSlideshow}
@@ -1276,6 +1276,7 @@ const VideoStudio = ({
         {currentView === 'library' && selectedCategory && (
           <ContentLibrary
             category={selectedCategory}
+            contentType="videos"
             onBack={() => setCurrentView('home')}
             onMakeVideo={handleMakeVideo}
             onEditVideo={handleMakeVideo}
@@ -1284,6 +1285,22 @@ const VideoStudio = ({
             onUpdateVideo={handleUpdateVideo}
             onSchedulePost={onSchedulePost}
             onShowBatchPipeline={() => setShowBatchPipeline(true)}
+            accounts={accounts}
+            lateAccountIds={lateAccountIds}
+          />
+        )}
+
+        {currentView === 'slideshows' && selectedCategory && (
+          <ContentLibrary
+            category={selectedCategory}
+            contentType="slideshows"
+            onBack={() => setCurrentView('home')}
+            onMakeSlideshow={handleMakeSlideshow}
+            onEditSlideshow={(slideshow) => handleMakeSlideshow(slideshow)}
+            onDeleteSlideshow={handleDeleteSlideshow}
+            onShowBatchPipeline={() => {
+              handleMakeSlideshow({ batch: true });
+            }}
             accounts={accounts}
             lateAccountIds={lateAccountIds}
           />

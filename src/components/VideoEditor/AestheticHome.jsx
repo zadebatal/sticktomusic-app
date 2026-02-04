@@ -293,7 +293,7 @@ const AestheticHome = ({
                     {slideshowCount > 0 && (
                       <button
                         style={styles.modeCardViewBtn}
-                        onClick={(e) => { e.stopPropagation(); onViewContent?.(); }}
+                        onClick={(e) => { e.stopPropagation(); onViewContent?.({ type: 'slideshows' }); }}
                       >
                         📁 View Library
                       </button>
@@ -528,8 +528,8 @@ const AestheticHome = ({
                       style={styles.actionButtonPurple}
                       onClick={() => {
                         onMakeSlideshow?.({ batch: true });
-                        // Auto-navigate to content library after batch creation
-                        setTimeout(() => onViewContent?.(), 100);
+                        // Auto-navigate to slideshow library after batch creation
+                        setTimeout(() => onViewContent?.({ type: 'slideshows' }), 100);
                       }}
                       disabled={(selectedCategory.imagesA || []).length === 0 || (selectedCategory.imagesB || []).length === 0}
                       title="Generate 10 slideshows randomly pulling from A/B banks"
@@ -541,7 +541,7 @@ const AestheticHome = ({
                     <button
                       style={styles.actionButtonGreen}
                       title="View created slideshows"
-                      onClick={() => onViewContent?.()}
+                      onClick={() => onViewContent?.({ type: 'slideshows' })}
                     >
                       <span style={styles.actionIcon}>📁</span>
                       View Created ({slideshowCount})

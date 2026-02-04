@@ -7,23 +7,31 @@ import { renderVideo } from '../../services/videoExportService';
 import { uploadFile } from '../../services/firebaseStorage';
 
 /**
- * ContentLibrary - Shows all videos created with a category
+ * ContentLibrary - Shows all videos or slideshows created within a category
  * With batch selection and posting capabilities
  */
 const ContentLibrary = ({
   category,
+  contentType = 'videos', // 'videos' or 'slideshows'
   onBack,
+  // Video-specific props
   onMakeVideo,
   onEditVideo,
   onDeleteVideo,
   onApproveVideo,
   onSchedulePost,
   onUpdateVideo,  // New: update a video after rendering
+  // Slideshow-specific props
+  onMakeSlideshow,
+  onEditSlideshow,
+  onDeleteSlideshow,
+  // Shared
   onShowBatchPipeline, // Open the main batch create workflow
   // Posting module props
   accounts = [],
   lateAccountIds = {}
 }) => {
+  const isSlideshow = contentType === 'slideshows';
   const [filter, setFilter] = useState('all');
   const [dateRange, setDateRange] = useState('all');
   const [selectedVideoIds, setSelectedVideoIds] = useState(new Set());
@@ -89,40 +97,49 @@ const ContentLibrary = ({
   // Posting Module state
   const [showPostingModule, setShowPostingModule] = useState(false);
 
-  const videos = category?.createdVideos || [];
+  // Get content array based on type
+  const items = isSlideshow
+    ? (category?.slideshows || [])
+    : (category?.createdVideos || []);
 
-  const selectedVideos = useMemo(() =>
-    videos.filter(v => selectedVideoIds.has(v.id)),
-    [videos, selectedVideoIds]
+  // For backwards compatibility, also alias as videos for video-specific logic
+  const videos = isSlideshow ? [] : items;
+
+  const selectedItems = useMemo(() =>
+    items.filter(v => selectedVideoIds.has(v.id)),
+    [items, selectedVideoIds]
   );
 
-  const toggleVideoSelection = (videoId) => {
+  // Backwards compat alias
+  const selectedVideos = isSlideshow ? [] : selectedItems;
+
+  const toggleItemSelection = (itemId) => {
     setSelectedVideoIds(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(videoId)) {
-        newSet.delete(videoId);
+      if (newSet.has(itemId)) {
+        newSet.delete(itemId);
       } else {
-        newSet.add(videoId);
+        newSet.add(itemId);
       }
       return newSet;
     });
   };
 
   const toggleSelectAll = () => {
-    const allSelected = filteredVideos.every(v => selectedVideoIds.has(v.id));
+    const allSelected = filteredItems.every(v => selectedVideoIds.has(v.id));
     if (allSelected) {
       setSelectedVideoIds(new Set());
     } else {
-      setSelectedVideoIds(new Set(filteredVideos.map(v => v.id)));
+      setSelectedVideoIds(new Set(filteredItems.map(v => v.id)));
     }
   };
 
   const clearSelection = () => setSelectedVideoIds(new Set());
 
-  const filteredVideos = videos.filter(video => {
-    if (filter !== 'all' && video.status !== filter) return false;
+  const filteredItems = items.filter(item => {
+    if (filter !== 'all' && item.status !== filter) return false;
     if (dateRange !== 'all') {
-      const created = new Date(video.createdAt);
+      const created = new Date(item.createdAt);
       const now = new Date();
       const diffDays = Math.floor((now - created) / (1000 * 60 * 60 * 24));
       if (dateRange === 'today' && diffDays > 0) return false;
@@ -131,6 +148,9 @@ const ContentLibrary = ({
     }
     return true;
   });
+
+  // Backwards compat alias
+  const filteredVideos = isSlideshow ? [] : filteredItems;
 
   return (
     <div style={styles.container}>
@@ -146,18 +166,25 @@ const ContentLibrary = ({
             <div style={styles.categoryIcon}>{category?.name?.charAt(0).toUpperCase()}</div>
             <div>
               <h1 style={styles.title}>{category?.name}</h1>
-              <p style={styles.subtitle}>Draft and approve videos</p>
+              <p style={styles.subtitle}>
+                {isSlideshow ? 'Draft and approve slideshows' : 'Draft and approve videos'}
+              </p>
             </div>
           </div>
         </div>
         <div style={styles.headerActions}>
-          <button style={styles.primaryButton} onClick={() => onMakeVideo()}>
+          <button
+            style={styles.primaryButton}
+            onClick={() => isSlideshow ? onMakeSlideshow?.() : onMakeVideo?.()}
+          >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            Make a video
+            {isSlideshow ? 'Make a slideshow' : 'Make a video'}
           </button>
-          <button style={styles.secondaryButton} onClick={onShowBatchPipeline}>Make up to 10 at once</button>
+          <button style={styles.secondaryButton} onClick={onShowBatchPipeline}>
+            Make up to 10 at once
+          </button>
         </div>
       </div>
 
@@ -175,15 +202,15 @@ const ContentLibrary = ({
           ))}
         </div>
         <div style={styles.filterRight}>
-          {filteredVideos.length > 0 && (
+          {filteredItems.length > 0 && (
             <label style={styles.selectAllLabel}>
               <input
                 type="checkbox"
-                checked={filteredVideos.length > 0 && filteredVideos.every(v => selectedVideoIds.has(v.id))}
+                checked={filteredItems.length > 0 && filteredItems.every(v => selectedVideoIds.has(v.id))}
                 onChange={toggleSelectAll}
                 style={styles.checkbox}
               />
-              Select All ({filteredVideos.length})
+              Select All ({filteredItems.length})
             </label>
           )}
           <select value={filter} onChange={(e) => setFilter(e.target.value)} style={styles.statusFilter}>
@@ -196,42 +223,70 @@ const ContentLibrary = ({
 
       {/* Content Grid */}
       <div style={styles.contentArea}>
-        {filteredVideos.length === 0 ? (
+        {filteredItems.length === 0 ? (
           <div style={styles.emptyState}>
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
-              <rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3V9z"/>
-            </svg>
-            <h3 style={styles.emptyTitle}>No videos yet</h3>
-            <p style={styles.emptyText}>Create your first video to get started</p>
-            <button style={styles.emptyButton} onClick={() => onMakeVideo()}>Make a video</button>
+            {isSlideshow ? (
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
+                <rect x="2" y="6" width="6" height="12" rx="1"/>
+                <rect x="9" y="6" width="6" height="12" rx="1"/>
+                <rect x="16" y="6" width="6" height="12" rx="1"/>
+              </svg>
+            ) : (
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
+                <rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3V9z"/>
+              </svg>
+            )}
+            <h3 style={styles.emptyTitle}>
+              {isSlideshow ? 'No slideshows yet' : 'No videos yet'}
+            </h3>
+            <p style={styles.emptyText}>
+              {isSlideshow ? 'Create your first slideshow to get started' : 'Create your first video to get started'}
+            </p>
+            <button
+              style={styles.emptyButton}
+              onClick={() => isSlideshow ? onMakeSlideshow?.() : onMakeVideo?.()}
+            >
+              {isSlideshow ? 'Make a slideshow' : 'Make a video'}
+            </button>
           </div>
         ) : (
           <div style={styles.grid}>
-            {filteredVideos.map(video => (
-              <VideoCard
-                key={video.id}
-                video={video}
-                isSelected={selectedVideoIds.has(video.id)}
-                onToggleSelect={() => toggleVideoSelection(video.id)}
-                onEdit={() => onEditVideo(video)}
-                onDelete={() => setDeleteConfirm({ isOpen: true, videoId: video.id })}
-                onApprove={() => onApproveVideo(video.id)}
-                onPost={() => setExportingVideo(video)}
-                onRender={() => handleRenderVideo(video)}
-                isRendering={renderingVideoId === video.id}
-                renderProgress={renderingVideoId === video.id ? renderProgress : 0}
-              />
+            {filteredItems.map(item => (
+              isSlideshow ? (
+                <SlideshowCard
+                  key={item.id}
+                  slideshow={item}
+                  isSelected={selectedVideoIds.has(item.id)}
+                  onToggleSelect={() => toggleItemSelection(item.id)}
+                  onEdit={() => onEditSlideshow?.(item)}
+                  onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
+                />
+              ) : (
+                <VideoCard
+                  key={item.id}
+                  video={item}
+                  isSelected={selectedVideoIds.has(item.id)}
+                  onToggleSelect={() => toggleItemSelection(item.id)}
+                  onEdit={() => onEditVideo(item)}
+                  onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
+                  onApprove={() => onApproveVideo(item.id)}
+                  onPost={() => setExportingVideo(item)}
+                  onRender={() => handleRenderVideo(item)}
+                  isRendering={renderingVideoId === item.id}
+                  renderProgress={renderingVideoId === item.id ? renderProgress : 0}
+                />
+              )
             ))}
           </div>
         )}
       </div>
 
       {/* Batch Action Bar */}
-      {selectedVideos.length > 0 && (
+      {selectedItems.length > 0 && (
         <div style={styles.batchBar}>
           <div style={styles.batchLeft}>
-            <input type="checkbox" checked={filteredVideos.every(v => selectedVideoIds.has(v.id))} onChange={toggleSelectAll} style={styles.checkbox} />
-            <span style={styles.batchText}>{selectedVideos.length} selected</span>
+            <input type="checkbox" checked={filteredItems.every(v => selectedVideoIds.has(v.id))} onChange={toggleSelectAll} style={styles.checkbox} />
+            <span style={styles.batchText}>{selectedItems.length} selected</span>
           </div>
           <div style={styles.batchRight}>
             <button style={styles.batchBtnClear} onClick={clearSelection}>Clear</button>
@@ -242,21 +297,25 @@ const ContentLibrary = ({
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
               </svg>
-              Delete {selectedVideos.length}
+              Delete {selectedItems.length}
             </button>
-            <button style={styles.batchBtnExport} onClick={() => setExportingVideo(selectedVideos[0])}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              Export
-            </button>
-            <button style={styles.batchBtnPost} onClick={() => setShowPostingModule(true)}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
-              Schedule {selectedVideos.length} Post{selectedVideos.length > 1 ? 's' : ''}
-            </button>
+            {!isSlideshow && (
+              <>
+                <button style={styles.batchBtnExport} onClick={() => setExportingVideo(selectedItems[0])}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                  Export
+                </button>
+                <button style={styles.batchBtnPost} onClick={() => setShowPostingModule(true)}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                  </svg>
+                  Schedule {selectedItems.length} Post{selectedItems.length > 1 ? 's' : ''}
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -281,20 +340,33 @@ const ContentLibrary = ({
       {/* UI-30: Delete Confirmation Dialog */}
       <ConfirmDialog
         isOpen={deleteConfirm.isOpen}
-        title={deleteConfirm.isBulk ? `Delete ${selectedVideos.length} videos?` : "Delete video?"}
-        message={deleteConfirm.isBulk
-          ? `This will permanently remove ${selectedVideos.length} video${selectedVideos.length > 1 ? 's' : ''} from the library. This action cannot be undone.`
-          : "This will permanently remove this video from the library. This action cannot be undone."
+        title={deleteConfirm.isBulk
+          ? `Delete ${selectedItems.length} ${isSlideshow ? 'slideshows' : 'videos'}?`
+          : `Delete ${isSlideshow ? 'slideshow' : 'video'}?`
         }
-        confirmLabel={deleteConfirm.isBulk ? `Delete ${selectedVideos.length}` : "Delete"}
+        message={deleteConfirm.isBulk
+          ? `This will permanently remove ${selectedItems.length} ${isSlideshow ? 'slideshow' : 'video'}${selectedItems.length > 1 ? 's' : ''} from the library. This action cannot be undone.`
+          : `This will permanently remove this ${isSlideshow ? 'slideshow' : 'video'} from the library. This action cannot be undone.`
+        }
+        confirmLabel={deleteConfirm.isBulk ? `Delete ${selectedItems.length}` : "Delete"}
         confirmVariant="destructive"
         onConfirm={() => {
           if (deleteConfirm.isBulk) {
-            // Bulk delete all selected videos
-            selectedVideos.forEach(video => onDeleteVideo(video.id));
+            // Bulk delete all selected items
+            selectedItems.forEach(item => {
+              if (isSlideshow) {
+                onDeleteSlideshow?.(item.id);
+              } else {
+                onDeleteVideo?.(item.id);
+              }
+            });
             clearSelection();
           } else {
-            onDeleteVideo(deleteConfirm.videoId);
+            if (isSlideshow) {
+              onDeleteSlideshow?.(deleteConfirm.videoId);
+            } else {
+              onDeleteVideo?.(deleteConfirm.videoId);
+            }
           }
           setDeleteConfirm({ isOpen: false, videoId: null, isBulk: false });
         }}
@@ -440,6 +512,90 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
       {/* UI-31: Use StatusPill instead of custom badge */}
       <div style={styles.statusBadgeContainer}>
         <StatusPill status={video.status || VIDEO_STATUS.DRAFT} />
+      </div>
+    </div>
+  );
+};
+
+const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onEdit, onDelete }) => {
+  const [showActions, setShowActions] = useState(false);
+
+  const handleActionClick = (e, action) => {
+    e.stopPropagation();
+    action();
+  };
+
+  // Get thumbnail from first slide
+  const thumbnail = slideshow.slides?.[0]?.imageA?.localUrl ||
+                    slideshow.slides?.[0]?.imageA?.url ||
+                    slideshow.slides?.[0]?.thumbnail;
+
+  return (
+    <div
+      style={{...styles.videoCard, ...(isSelected ? styles.videoCardSelected : {})}}
+      onMouseEnter={() => setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
+    >
+      <div style={styles.videoCheckbox} onClick={(e) => e.stopPropagation()}>
+        <input type="checkbox" checked={isSelected} onChange={onToggleSelect} style={styles.checkbox} />
+      </div>
+
+      <div style={styles.videoThumb}>
+        {thumbnail ? (
+          <img src={thumbnail} alt="" style={styles.videoThumbImg} />
+        ) : (
+          <div style={styles.videoThumbPlaceholder}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
+              <rect x="2" y="6" width="6" height="12" rx="1"/>
+              <rect x="9" y="6" width="6" height="12" rx="1"/>
+              <rect x="16" y="6" width="6" height="12" rx="1"/>
+            </svg>
+          </div>
+        )}
+
+        {/* Slide count badge */}
+        <div style={{
+          position: 'absolute',
+          bottom: '8px',
+          right: '8px',
+          background: 'rgba(0,0,0,0.7)',
+          color: '#fff',
+          padding: '2px 6px',
+          borderRadius: '4px',
+          fontSize: '10px',
+          fontWeight: '500'
+        }}>
+          {slideshow.slides?.length || 0} slides
+        </div>
+
+        {/* Recipe badge if has audio */}
+        {slideshow.audio && (
+          <div style={{
+            position: 'absolute',
+            top: '8px',
+            right: '8px',
+            background: 'rgba(251, 191, 36, 0.9)',
+            color: '#78350f',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            fontSize: '10px',
+            fontWeight: '600'
+          }}>
+            ⚡ Recipe
+          </div>
+        )}
+
+        {showActions && (
+          <div style={styles.videoActions}>
+            <button style={styles.actionBtn} onClick={(e) => handleActionClick(e, onEdit)}>Edit</button>
+            <button style={styles.actionBtnDel} onClick={(e) => handleActionClick(e, onDelete)}>✕</button>
+          </div>
+        )}
+      </div>
+
+      {/* Status */}
+      <div style={styles.statusBadgeContainer}>
+        <StatusPill status={slideshow.status || VIDEO_STATUS.DRAFT} />
       </div>
     </div>
   );
