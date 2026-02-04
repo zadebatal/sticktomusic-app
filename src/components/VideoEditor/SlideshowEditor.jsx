@@ -1271,6 +1271,8 @@ const SlideshowEditor = ({
           <LyricAnalyzer
             audioFile={selectedAudio.file}
             audioUrl={selectedAudio.url || selectedAudio.localUrl}
+            startTime={selectedAudio.startTime}
+            endTime={selectedAudio.endTime}
             onComplete={handleTranscriptionComplete}
             onClose={() => setShowLyricAnalyzer(false)}
           />

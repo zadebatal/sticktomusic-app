@@ -6,12 +6,24 @@ import { loadLyricTemplate, saveLyricTemplate } from '../../services/storageServ
 /**
  * LyricAnalyzer - AI-powered lyric transcription with caching
  * Checks for cached lyrics before re-analyzing the same song
+ * Supports trimming audio to a specific section before transcription
  */
-const LyricAnalyzer = ({ audioFile, audioUrl, onComplete, onClose }) => {
+const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, onClose }) => {
   const [apiKey, setApiKey] = useState('');
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [cachedLyrics, setCachedLyrics] = useState(null);
+  const [isTrimming, setIsTrimming] = useState(false);
   const { analyze, isAnalyzing, progress, error, hasApiKey } = useLyricAnalyzer();
+
+  // Check if we need to trim
+  const needsTrimming = typeof startTime === 'number' || typeof endTime === 'number';
+
+  // Format time as mm:ss
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   // Determine best audio source:
   // 1. File object (direct upload) - always preferred
@@ -54,13 +66,120 @@ const LyricAnalyzer = ({ audioFile, audioUrl, onComplete, onClose }) => {
     }
   }, [audioSource]);
 
+  // Trim audio to the specified section using Web Audio API
+  const trimAudio = async (source, start, end) => {
+    setIsTrimming(true);
+    try {
+      // Fetch the audio data
+      let arrayBuffer;
+      if (source instanceof File || source instanceof Blob) {
+        arrayBuffer = await source.arrayBuffer();
+      } else if (typeof source === 'string') {
+        const response = await fetch(source);
+        arrayBuffer = await response.arrayBuffer();
+      } else {
+        throw new Error('Invalid audio source');
+      }
+
+      // Decode the audio
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+      // Calculate sample positions
+      const sampleRate = audioBuffer.sampleRate;
+      const startSample = Math.floor((start || 0) * sampleRate);
+      const endSample = end ? Math.floor(end * sampleRate) : audioBuffer.length;
+      const duration = endSample - startSample;
+
+      // Create a new buffer for the trimmed audio
+      const trimmedBuffer = audioContext.createBuffer(
+        audioBuffer.numberOfChannels,
+        duration,
+        sampleRate
+      );
+
+      // Copy the relevant portion
+      for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+        const sourceData = audioBuffer.getChannelData(channel);
+        const destData = trimmedBuffer.getChannelData(channel);
+        for (let i = 0; i < duration; i++) {
+          destData[i] = sourceData[startSample + i];
+        }
+      }
+
+      // Convert to WAV blob
+      const wavBlob = audioBufferToWav(trimmedBuffer);
+      audioContext.close();
+
+      return new File([wavBlob], 'trimmed-audio.wav', { type: 'audio/wav' });
+    } finally {
+      setIsTrimming(false);
+    }
+  };
+
+  // Convert AudioBuffer to WAV format
+  const audioBufferToWav = (buffer) => {
+    const numChannels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const format = 1; // PCM
+    const bitDepth = 16;
+
+    const bytesPerSample = bitDepth / 8;
+    const blockAlign = numChannels * bytesPerSample;
+    const dataLength = buffer.length * blockAlign;
+    const bufferLength = 44 + dataLength;
+
+    const arrayBuffer = new ArrayBuffer(bufferLength);
+    const view = new DataView(arrayBuffer);
+
+    // WAV header
+    const writeString = (offset, string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    };
+
+    writeString(0, 'RIFF');
+    view.setUint32(4, bufferLength - 8, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true); // fmt chunk size
+    view.setUint16(20, format, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    writeString(36, 'data');
+    view.setUint32(40, dataLength, true);
+
+    // Write audio data
+    let offset = 44;
+    for (let i = 0; i < buffer.length; i++) {
+      for (let channel = 0; channel < numChannels; channel++) {
+        const sample = Math.max(-1, Math.min(1, buffer.getChannelData(channel)[i]));
+        const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+        view.setInt16(offset, intSample, true);
+        offset += 2;
+      }
+    }
+
+    return new Blob([arrayBuffer], { type: 'audio/wav' });
+  };
+
   const handleAnalyze = async () => {
     if (!apiKey && !hasApiKey) {
       setShowApiKeyInput(true);
       return;
     }
     try {
-      const result = await analyze(audioSource, apiKey || undefined);
+      // If we have trim times, trim the audio first
+      let sourceToAnalyze = audioSource;
+      if (needsTrimming && audioSource) {
+        sourceToAnalyze = await trimAudio(audioSource, startTime, endTime);
+      }
+
+      const result = await analyze(sourceToAnalyze, apiKey || undefined);
 
       // Save the analyzed lyrics as a template for future use
       if (result && result.words && result.words.length > 0) {
@@ -119,7 +238,13 @@ const LyricAnalyzer = ({ audioFile, audioUrl, onComplete, onClose }) => {
             <div style={styles.audioIcon}>🎵</div>
             <div>
               <p style={styles.audioName}>{audioFile?.name || (typeof audioUrl === 'string' ? audioUrl.split('/').pop() : 'Audio file')}</p>
-              <p style={styles.audioSize}>{audioFile ? `${(audioFile.size / (1024 * 1024)).toFixed(2)} MB` : ''}</p>
+              <p style={styles.audioSize}>
+                {needsTrimming ? (
+                  <>✂️ Trimmed: {formatTime(startTime || 0)} - {formatTime(endTime || 0)}</>
+                ) : audioFile ? (
+                  `${(audioFile.size / (1024 * 1024)).toFixed(2)} MB`
+                ) : ''}
+              </p>
             </div>
           </div>
 
@@ -179,10 +304,12 @@ const LyricAnalyzer = ({ audioFile, audioUrl, onComplete, onClose }) => {
           )}
 
           {/* Progress */}
-          {isAnalyzing && (
+          {(isAnalyzing || isTrimming) && (
             <div style={styles.progress}>
               <div style={styles.spinner} />
-              <p style={styles.progressText}>{progress}</p>
+              <p style={styles.progressText}>
+                {isTrimming ? '✂️ Trimming audio to selected section...' : progress}
+              </p>
             </div>
           )}
 
