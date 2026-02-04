@@ -278,7 +278,7 @@ const SlideshowEditor = ({
   useEffect(() => {
     if (!selectedAudio || !audioRef.current) return;
 
-    const audioUrl = selectedAudio.localUrl || selectedAudio.url;
+    const audioUrl = selectedAudio.url || selectedAudio.localUrl;
     if (!audioUrl) return;
 
     audioRef.current.src = audioUrl;
@@ -1270,7 +1270,7 @@ const SlideshowEditor = ({
         {showLyricAnalyzer && selectedAudio && (
           <LyricAnalyzer
             audioFile={selectedAudio.file}
-            audioUrl={selectedAudio.localUrl || selectedAudio.url}
+            audioUrl={selectedAudio.url || selectedAudio.localUrl}
             onComplete={handleTranscriptionComplete}
             onClose={() => setShowLyricAnalyzer(false)}
           />
@@ -1280,7 +1280,7 @@ const SlideshowEditor = ({
         {showAudioTrimmer && audioToTrim && (
           <AudioClipSelector
             audioFile={audioToTrim.file}
-            audioUrl={audioToTrim.localUrl || audioToTrim.url}
+            audioUrl={audioToTrim.url || audioToTrim.localUrl}
             audioName={audioToTrim.name}
             initialStart={audioToTrim.startTime || 0}
             initialEnd={audioToTrim.endTime || null}
