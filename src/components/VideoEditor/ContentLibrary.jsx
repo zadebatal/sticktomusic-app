@@ -336,6 +336,15 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
             playsInline
             preload="metadata"
           />
+        ) : video.clips?.[0]?.url ? (
+          // For unrendered recipes, show first clip as preview
+          <video
+            src={video.clips[0].url}
+            style={styles.videoThumbImg}
+            muted
+            playsInline
+            preload="metadata"
+          />
         ) : (
           <div style={styles.videoThumbPlaceholder}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
