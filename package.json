@@ -8,7 +8,6 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
-    "vercel": "^50.9.6",
     "web-audio-beat-detector": "^8.2.34"
   },
   "scripts": {
@@ -26,5 +25,9 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "firebase-tools": "^15.5.1",
+    "vercel": "^50.10.0"
   }
 }

@@ -37,31 +37,60 @@ const BEAT_PATTERNS = [
 
 /**
  * ClipThumbnail - Shows thumbnail or video preview
- * SIMPLE approach matching the working VideoCard in main library
+ * Uses autoplay+pause trick to force first frame render in modal context
  */
 const ClipThumbnail = ({ clip, style }) => {
+  const videoRef = useRef(null);
   const videoUrl = clip.localUrl || clip.url;
+
+  // Force first frame render when video loads
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !videoUrl) return;
+
+    const forceFirstFrame = () => {
+      // Seek to 0.1s to trigger frame decode, then pause
+      video.currentTime = 0.1;
+      video.pause();
+    };
+
+    // Try multiple events to ensure frame renders
+    video.addEventListener('loadeddata', forceFirstFrame);
+    video.addEventListener('canplay', forceFirstFrame);
+
+    // Fallback: if video is already loaded, force frame now
+    if (video.readyState >= 2) {
+      forceFirstFrame();
+    }
+
+    return () => {
+      video.removeEventListener('loadeddata', forceFirstFrame);
+      video.removeEventListener('canplay', forceFirstFrame);
+    };
+  }, [videoUrl]);
 
   // If stored thumbnail exists, use it
   if (clip.thumbnail) {
     return <img src={clip.thumbnail} alt="" style={{ ...style, objectFit: 'cover' }} />;
   }
 
-  // Simple video element - matches working VideoCard approach
+  // Video element with preload and autoplay tricks
   if (videoUrl) {
     return (
       <video
+        ref={videoRef}
         src={videoUrl}
-        style={{ ...style, objectFit: 'cover' }}
+        style={{ ...style, objectFit: 'cover', background: '#27272a' }}
         muted
         playsInline
+        preload="auto"
         onMouseEnter={(e) => {
           const playPromise = e.target.play();
           if (playPromise) playPromise.catch(() => {});
         }}
         onMouseLeave={(e) => {
           if (!e.target.paused) e.target.pause();
-          e.target.currentTime = 0;
+          e.target.currentTime = 0.1;
         }}
       />
     );
