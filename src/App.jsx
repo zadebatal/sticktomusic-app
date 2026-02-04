@@ -107,15 +107,26 @@ const lateApi = {
 
   async schedulePost({ platforms, caption, videoUrl, scheduledFor }) {
     try {
+      // Validate required fields
+      if (!platforms || !Array.isArray(platforms) || platforms.length === 0) {
+        throw new Error('No platforms selected for posting. Please select TikTok or Instagram.');
+      }
+      if (!videoUrl) {
+        throw new Error('No video URL provided');
+      }
+      if (!scheduledFor) {
+        throw new Error('No schedule time provided');
+      }
+
       // Format matches Late's expected structure - both platforms in one call
       const payload = {
         action: 'posts',
-        content: caption,
+        content: caption || '',
         mediaItems: [{ type: 'video', url: videoUrl }],
         platforms: platforms.map(p => ({
           platform: p.platform,
           accountId: p.accountId,
-          customContent: caption,
+          customContent: caption || '',
           scheduledFor
         })),
         scheduledFor,

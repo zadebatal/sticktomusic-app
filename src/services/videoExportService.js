@@ -1,21 +1,46 @@
 /**
  * videoExportService.js
- * Service for rendering and exporting videos with canvas + MediaRecorder
+ * Fast video rendering using FFmpeg.wasm
  */
 
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { fetchFile, toBlobURL } from '@ffmpeg/util';
+
+let ffmpeg = null;
+let ffmpegLoaded = false;
+
 /**
- * Render a video from clips, audio, and text overlays
- * Uses Canvas + MediaRecorder to create a WebM video file
- *
- * @param {Object} videoData - The video configuration
- * @param {Array} videoData.clips - Array of video clips with url, startTime, duration
- * @param {Object} videoData.audio - Audio object with url
- * @param {Array} videoData.words - Array of words with text, startTime, duration
- * @param {Object} videoData.textStyle - Text styling options
- * @param {string} videoData.cropMode - Crop mode (9:16, 4:3, 1:1)
- * @param {number} videoData.duration - Total duration in seconds
- * @param {Function} onProgress - Progress callback (0-100)
- * @returns {Promise<Blob>} - The rendered video as a Blob
+ * Initialize FFmpeg (lazy load)
+ */
+const initFFmpeg = async (onProgress) => {
+  if (ffmpegLoaded && ffmpeg) return ffmpeg;
+
+  ffmpeg = new FFmpeg();
+
+  ffmpeg.on('progress', ({ progress }) => {
+    if (onProgress) {
+      onProgress(Math.round(progress * 100));
+    }
+  });
+
+  ffmpeg.on('log', ({ message }) => {
+    console.log('[FFmpeg]', message);
+  });
+
+  // Load FFmpeg core from CDN
+  const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+  await ffmpeg.load({
+    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+  });
+
+  ffmpegLoaded = true;
+  return ffmpeg;
+};
+
+/**
+ * Render a video from clips and audio using FFmpeg
+ * Much faster than real-time Canvas + MediaRecorder approach
  */
 export const renderVideo = async (videoData, onProgress = () => {}) => {
   const { clips, audio, words, textStyle, cropMode, duration } = videoData;
@@ -30,320 +55,191 @@ export const renderVideo = async (videoData, onProgress = () => {}) => {
     throw new Error(`${invalidClips.length} clip(s) missing URLs. Re-upload or re-select the clips.`);
   }
 
-  console.log(`[VideoExport] Starting render: ${clips.length} clips, ${duration}s duration`);
+  console.log(`[VideoExport] Starting FFmpeg render: ${clips.length} clips, ${duration}s duration`);
+  onProgress(5); // Show initial progress
 
-  // Set up canvas dimensions based on crop mode
-  const dimensions = {
-    '9:16': { width: 1080, height: 1920 },
-    '4:3': { width: 1080, height: 1440 },
-    '1:1': { width: 1080, height: 1080 }
-  };
-  const { width, height } = dimensions[cropMode] || dimensions['9:16'];
-
-  // Create canvas
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-
-  // Create video elements for each clip (prefer localUrl to avoid CORS)
-  console.log('[VideoExport] Loading video clips...');
-  const videoElements = [];
-  for (let i = 0; i < clips.length; i++) {
-    const clip = clips[i];
-    const url = clip.localUrl || clip.url;
-    console.log(`[VideoExport] Loading clip ${i + 1}/${clips.length}: ${url.substring(0, 60)}...`);
-    try {
-      const videoEl = await loadVideoElement(url);
-      videoElements.push(videoEl);
-    } catch (err) {
-      console.error(`[VideoExport] Failed to load clip ${i + 1}:`, err);
-      throw new Error(`Failed to load clip ${i + 1}: ${err.message}`);
-    }
-  }
-  console.log('[VideoExport] All clips loaded');
-
-  // Create audio element (prefer localUrl to avoid CORS)
-  let audioElement = null;
-  if (audio?.url || audio?.localUrl) {
-    audioElement = await loadAudioElement(audio.localUrl || audio.url);
-  }
-
-  // Set up MediaRecorder
-  const stream = canvas.captureStream(30);
-
-  // Add audio track if available
-  if (audioElement) {
-    const audioCtx = new AudioContext();
-    const source = audioCtx.createMediaElementSource(audioElement);
-    const destination = audioCtx.createMediaStreamDestination();
-    source.connect(destination);
-    // NOTE: Do NOT connect to audioCtx.destination - that plays through speakers during rendering
-
-    destination.stream.getAudioTracks().forEach(track => {
-      stream.addTrack(track);
-    });
-  }
-
-  const mediaRecorder = new MediaRecorder(stream, {
-    mimeType: 'video/webm;codecs=vp9',
-    videoBitsPerSecond: 5000000
-  });
-
-  const chunks = [];
-  mediaRecorder.ondataavailable = (e) => {
-    if (e.data.size > 0) {
-      chunks.push(e.data);
-    }
-  };
-
-  return new Promise((resolve, reject) => {
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(chunks, { type: 'video/webm' });
-      resolve(blob);
-    };
-
-    mediaRecorder.onerror = reject;
-    mediaRecorder.start();
-
-    // Start rendering
-    let startTime = performance.now();
-    let currentTime = 0;
-    const frameRate = 30;
-    const frameDuration = 1000 / frameRate;
-
-    // Start audio
-    if (audioElement) {
-      audioElement.play().catch(console.error);
-    }
-
-    const renderFrame = () => {
-      const elapsed = (performance.now() - startTime) / 1000;
-      currentTime = elapsed;
-
-      if (currentTime >= duration) {
-        // Done rendering
-        if (audioElement) {
-          audioElement.pause();
-        }
-        mediaRecorder.stop();
-        onProgress(100);
-        return;
-      }
-
-      // Update progress
-      onProgress(Math.floor((currentTime / duration) * 100));
-
-      // Find current clip
-      const currentClipIndex = clips.findIndex((clip, i) => {
-        const nextClip = clips[i + 1];
-        if (!nextClip) return currentTime >= clip.startTime;
-        return currentTime >= clip.startTime && currentTime < nextClip.startTime;
-      });
-
-      const currentClip = clips[currentClipIndex] || clips[0];
-      const videoElement = videoElements[currentClipIndex] || videoElements[0];
-
-      // Draw video frame
-      if (videoElement && videoElement.readyState >= 2) {
-        // Calculate position within clip
-        const clipStartTime = currentClip.startTime || 0;
-        const clipDuration = currentClip.duration || 2;
-        const positionInClip = (currentTime - clipStartTime) % clipDuration;
-        videoElement.currentTime = positionInClip;
-
-        // Draw video to canvas (center-crop to fit)
-        drawCenteredCrop(ctx, videoElement, width, height);
-      } else {
-        // Draw placeholder if video not ready
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, width, height);
-      }
-
-      // Draw text overlay
-      const currentWord = words?.find(w =>
-        currentTime >= w.startTime && currentTime < w.startTime + (w.duration || 0.5)
-      );
-
-      if (currentWord) {
-        drawTextOverlay(ctx, currentWord.text, textStyle, width, height);
-      }
-
-      // Schedule next frame
-      requestAnimationFrame(renderFrame);
-    };
-
-    renderFrame();
-  });
-};
-
-/**
- * Load a video element and wait for it to be ready
- * Tries with crossOrigin first, falls back to no crossOrigin for CORS issues
- */
-const loadVideoElement = async (url, timeout = 15000) => {
-  // First try with crossOrigin (needed for canvas drawing)
   try {
-    return await loadVideoWithOptions(url, { crossOrigin: true, timeout });
-  } catch (corsError) {
-    console.warn('Video load failed with crossOrigin, trying without:', corsError.message);
-    // Fall back to no crossOrigin - won't work with canvas but at least loads
-    try {
-      return await loadVideoWithOptions(url, { crossOrigin: false, timeout });
-    } catch (fallbackError) {
-      throw new Error(`Failed to load video: ${url.substring(0, 50)}... - ${fallbackError.message}`);
+    // Initialize FFmpeg
+    console.log('[VideoExport] Loading FFmpeg...');
+    const ffmpegInstance = await initFFmpeg((p) => {
+      // FFmpeg progress is 0-100, map to 20-90 range
+      onProgress(20 + Math.round(p * 0.7));
+    });
+    onProgress(10);
+
+    // Get dimensions based on crop mode
+    const dimensions = {
+      '9:16': { width: 1080, height: 1920 },
+      '4:3': { width: 1080, height: 1440 },
+      '1:1': { width: 1080, height: 1080 }
+    };
+    const { width, height } = dimensions[cropMode] || dimensions['9:16'];
+
+    // Download and write clip files to FFmpeg filesystem
+    console.log('[VideoExport] Loading clips...');
+    const clipFiles = [];
+    for (let i = 0; i < clips.length; i++) {
+      const clip = clips[i];
+      const url = clip.localUrl || clip.url;
+      const filename = `clip${i}.mp4`;
+
+      console.log(`[VideoExport] Fetching clip ${i + 1}/${clips.length}`);
+      const clipData = await fetchFile(url);
+      await ffmpegInstance.writeFile(filename, clipData);
+      clipFiles.push({
+        filename,
+        duration: clip.duration || 2,
+        startTime: clip.startTime || 0
+      });
+      onProgress(10 + Math.round((i / clips.length) * 10));
     }
-  }
-};
 
-const loadVideoWithOptions = (url, { crossOrigin = true, timeout = 15000 }) => {
-  return new Promise((resolve, reject) => {
-    const video = document.createElement('video');
-    if (crossOrigin) {
-      video.crossOrigin = 'anonymous';
+    // Download and write audio if available
+    let hasAudio = false;
+    if (audio?.url || audio?.localUrl) {
+      console.log('[VideoExport] Loading audio...');
+      const audioUrl = audio.localUrl || audio.url;
+      const audioData = await fetchFile(audioUrl);
+      await ffmpegInstance.writeFile('audio.mp3', audioData);
+      hasAudio = true;
     }
-    video.muted = true;
-    video.playsInline = true;
-    video.preload = 'auto';
+    onProgress(20);
 
-    const timeoutId = setTimeout(() => {
-      video.src = ''; // Cancel loading
-      reject(new Error(`Video load timeout after ${timeout}ms`));
-    }, timeout);
+    // Create concat file for clips
+    // Each clip plays for its duration, looping if needed
+    let concatContent = '';
+    let currentTime = 0;
 
-    video.onloadeddata = () => {
-      clearTimeout(timeoutId);
-      resolve(video);
-    };
-    video.onerror = (e) => {
-      clearTimeout(timeoutId);
-      reject(new Error(`Video load error: ${e.type || 'unknown'}`));
-    };
-    video.src = url;
-    video.load();
-  });
-};
+    for (let i = 0; i < clipFiles.length; i++) {
+      const clip = clipFiles[i];
+      const clipDuration = clip.duration;
+      concatContent += `file '${clip.filename}'\n`;
+      concatContent += `duration ${clipDuration}\n`;
+      currentTime += clipDuration;
+    }
 
-/**
- * Load an audio element and wait for it to be ready
- */
-const loadAudioElement = (url, timeout = 15000) => {
-  return new Promise((resolve, reject) => {
-    const audio = document.createElement('audio');
-    audio.crossOrigin = 'anonymous';
-    audio.preload = 'auto';
+    await ffmpegInstance.writeFile('concat.txt', concatContent);
 
-    const timeoutId = setTimeout(() => {
-      audio.src = ''; // Cancel loading
-      reject(new Error(`Audio load timeout after ${timeout}ms`));
-    }, timeout);
+    // Build FFmpeg command
+    console.log('[VideoExport] Rendering video...');
 
-    audio.onloadeddata = () => {
-      clearTimeout(timeoutId);
-      resolve(audio);
-    };
-    audio.onerror = (e) => {
-      clearTimeout(timeoutId);
-      reject(new Error(`Audio load error: ${e.type || 'unknown'}`));
-    };
-    audio.src = url;
-    audio.load();
-  });
-};
+    // Step 1: Concat clips with scaling
+    const filterComplex = `[0:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1[v]`;
 
-/**
- * Draw a video element to canvas with center crop
- */
-const drawCenteredCrop = (ctx, video, canvasWidth, canvasHeight) => {
-  const videoRatio = video.videoWidth / video.videoHeight;
-  const canvasRatio = canvasWidth / canvasHeight;
+    if (hasAudio) {
+      // With audio: trim audio to video duration and mix
+      await ffmpegInstance.exec([
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', 'concat.txt',
+        '-i', 'audio.mp3',
+        '-filter_complex', filterComplex,
+        '-map', '[v]',
+        '-map', '1:a',
+        '-t', String(duration),
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '23',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-shortest',
+        '-y',
+        'output.mp4'
+      ]);
+    } else {
+      // No audio
+      await ffmpegInstance.exec([
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', 'concat.txt',
+        '-filter_complex', filterComplex,
+        '-map', '[v]',
+        '-t', String(duration),
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '23',
+        '-y',
+        'output.mp4'
+      ]);
+    }
 
-  let sx, sy, sw, sh;
+    onProgress(90);
 
-  if (videoRatio > canvasRatio) {
-    // Video is wider - crop sides
-    sh = video.videoHeight;
-    sw = sh * canvasRatio;
-    sx = (video.videoWidth - sw) / 2;
-    sy = 0;
-  } else {
-    // Video is taller - crop top/bottom
-    sw = video.videoWidth;
-    sh = sw / canvasRatio;
-    sx = 0;
-    sy = (video.videoHeight - sh) / 2;
+    // Read output file
+    console.log('[VideoExport] Reading output...');
+    const data = await ffmpegInstance.readFile('output.mp4');
+    const blob = new Blob([data.buffer], { type: 'video/mp4' });
+
+    // Cleanup
+    for (const clip of clipFiles) {
+      await ffmpegInstance.deleteFile(clip.filename).catch(() => {});
+    }
+    await ffmpegInstance.deleteFile('concat.txt').catch(() => {});
+    await ffmpegInstance.deleteFile('output.mp4').catch(() => {});
+    if (hasAudio) {
+      await ffmpegInstance.deleteFile('audio.mp3').catch(() => {});
+    }
+
+    onProgress(100);
+    console.log('[VideoExport] Done!');
+
+    return blob;
+  } catch (error) {
+    console.error('[VideoExport] FFmpeg error:', error);
+    throw new Error(`Video rendering failed: ${error.message}`);
   }
-
-  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvasWidth, canvasHeight);
 };
 
 /**
- * Draw text overlay on canvas
- */
-const drawTextOverlay = (ctx, text, style, canvasWidth, canvasHeight) => {
-  const fontSize = (style?.fontSize || 48) * 2; // Scale up for high res
-  const fontFamily = style?.fontFamily || 'Inter, sans-serif';
-  const fontWeight = style?.fontWeight || '600';
-  const color = style?.color || '#ffffff';
-  const outline = style?.outline !== false;
-  const outlineColor = style?.outlineColor || '#000000';
-  const textCase = style?.textCase || 'default';
-
-  // Apply text case
-  let displayText = text;
-  if (textCase === 'upper') displayText = text.toUpperCase();
-  if (textCase === 'lower') displayText = text.toLowerCase();
-
-  ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  const x = canvasWidth / 2;
-  const y = canvasHeight / 2;
-
-  // Draw outline
-  if (outline) {
-    ctx.strokeStyle = outlineColor;
-    ctx.lineWidth = fontSize / 10;
-    ctx.lineJoin = 'round';
-    ctx.miterLimit = 2;
-    ctx.strokeText(displayText, x, y);
-  }
-
-  // Draw fill
-  ctx.fillStyle = color;
-  ctx.fillText(displayText, x, y);
-};
-
-/**
- * Simpler export method - exports individual clip thumbnails as a preview
- * For actual video rendering, use renderVideo
+ * Simple preview export - just returns first frame as image
  */
 export const exportAsPreview = async (videoData) => {
-  const { clips, words, textStyle } = videoData;
+  const { clips } = videoData;
 
   if (!clips || clips.length === 0) {
     throw new Error('No clips to export');
   }
 
-  // Just generate a preview image from first clip (prefer localUrl to avoid CORS)
-  const video = await loadVideoElement(clips[0].localUrl || clips[0].url);
+  // Load first clip and capture a frame
+  const url = clips[0].localUrl || clips[0].url;
 
-  const canvas = document.createElement('canvas');
-  canvas.width = 1080;
-  canvas.height = 1920;
-  const ctx = canvas.getContext('2d');
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.crossOrigin = 'anonymous';
+    video.muted = true;
+    video.playsInline = true;
 
-  // Draw video
-  drawCenteredCrop(ctx, video, 1080, 1920);
+    video.onloadeddata = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1080;
+      canvas.height = 1920;
+      const ctx = canvas.getContext('2d');
 
-  // Draw first word
-  if (words && words.length > 0) {
-    drawTextOverlay(ctx, words[0].text, textStyle, 1080, 1920);
-  }
+      // Draw video frame
+      const videoRatio = video.videoWidth / video.videoHeight;
+      const canvasRatio = canvas.width / canvas.height;
 
-  return new Promise((resolve) => {
-    canvas.toBlob(resolve, 'image/jpeg', 0.9);
+      let sx, sy, sw, sh;
+      if (videoRatio > canvasRatio) {
+        sh = video.videoHeight;
+        sw = sh * canvasRatio;
+        sx = (video.videoWidth - sw) / 2;
+        sy = 0;
+      } else {
+        sw = video.videoWidth;
+        sh = sw / canvasRatio;
+        sx = 0;
+        sy = (video.videoHeight - sh) / 2;
+      }
+
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+
+      canvas.toBlob(resolve, 'image/jpeg', 0.9);
+    };
+
+    video.onerror = () => reject(new Error('Failed to load video for preview'));
+    video.src = url;
+    video.load();
   });
 };
 
