@@ -894,10 +894,10 @@ const VideoEditorModal = ({
     setShowLyricsEditor(false);
   }, [lyrics, filteredBeats, duration, selectedAudio]);
 
-  // AI Transcription with AssemblyAI
+  // AI Transcription with OpenAI Whisper (much better for music/vocals)
   const handleAITranscribe = useCallback(async () => {
     // Check for API key
-    const savedKey = loadApiKey('assemblyai');
+    const savedKey = loadApiKey('openai');
     if (!savedKey) {
       setShowApiKeyModal(true);
       return;
@@ -912,103 +912,67 @@ const VideoEditorModal = ({
     setTranscriptionError(null);
 
     try {
-      let audioUrl;
-
       // Get trim boundaries - we'll only transcribe this portion
       const { trimStart, trimEnd } = getTrimBoundaries(selectedAudio, duration);
       const trimDuration = trimEnd - trimStart;
-      console.log(`AI Transcribe: Will transcribe ${trimDuration.toFixed(1)}s (${trimStart.toFixed(1)}s - ${trimEnd.toFixed(1)}s)`);
+      console.log(`Whisper: Will transcribe ${trimDuration.toFixed(1)}s (${trimStart.toFixed(1)}s - ${trimEnd.toFixed(1)}s)`);
 
       if (!selectedAudio.url) {
         throw new Error('No audio URL available. Please re-upload the audio file.');
       }
 
-      try {
-        // Fetch the full audio
-        console.log('AI Transcribe: Fetching audio from Firebase...');
-        const response = await fetch(selectedAudio.url);
-        if (!response.ok) throw new Error('Failed to fetch audio');
-        const fullAudioBlob = await response.blob();
-        console.log(`AI Transcribe: Fetched full audio - ${(fullAudioBlob.size / 1024 / 1024).toFixed(1)}MB`);
+      // Fetch and trim the audio
+      console.log('Whisper: Fetching audio from Firebase...');
+      const response = await fetch(selectedAudio.url);
+      if (!response.ok) throw new Error('Failed to fetch audio');
+      const fullAudioBlob = await response.blob();
+      console.log(`Whisper: Fetched full audio - ${(fullAudioBlob.size / 1024 / 1024).toFixed(1)}MB`);
 
-        // Trim the audio to just the selected range using Web Audio API
-        console.log('AI Transcribe: Trimming audio to selected range...');
-        const arrayBuffer = await fullAudioBlob.arrayBuffer();
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      // Trim the audio to just the selected range using Web Audio API
+      console.log('Whisper: Trimming audio to selected range...');
+      const arrayBuffer = await fullAudioBlob.arrayBuffer();
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
-        // Calculate sample positions
-        const sampleRate = audioBuffer.sampleRate;
-        const totalSamples = audioBuffer.length;
-        const totalDuration = audioBuffer.duration;
-        console.log(`AI Transcribe: Audio buffer - ${sampleRate}Hz, ${totalSamples} samples, ${totalDuration.toFixed(1)}s, ${audioBuffer.numberOfChannels} channels`);
+      const sampleRate = audioBuffer.sampleRate;
+      const startSample = Math.floor(trimStart * sampleRate);
+      const endSample = Math.min(Math.floor(trimEnd * sampleRate), audioBuffer.length);
+      const trimmedLength = endSample - startSample;
+      console.log(`Whisper: Trimming ${(trimmedLength/sampleRate).toFixed(1)}s of audio`);
 
-        const startSample = Math.floor(trimStart * sampleRate);
-        const endSample = Math.min(Math.floor(trimEnd * sampleRate), totalSamples);
-        const trimmedLength = endSample - startSample;
-        console.log(`AI Transcribe: Trimming samples ${startSample} to ${endSample} (${trimmedLength} samples = ${(trimmedLength/sampleRate).toFixed(1)}s)`);
+      // Create a new buffer with just the trimmed portion
+      const trimmedBuffer = audioContext.createBuffer(
+        audioBuffer.numberOfChannels,
+        trimmedLength,
+        sampleRate
+      );
 
-        // Create a new buffer with just the trimmed portion
-        const trimmedBuffer = audioContext.createBuffer(
-          audioBuffer.numberOfChannels,
-          trimmedLength,
-          sampleRate
-        );
-
-        // Copy the trimmed audio data
-        for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
-          const sourceData = audioBuffer.getChannelData(channel);
-          const destData = trimmedBuffer.getChannelData(channel);
-          for (let i = 0; i < trimmedLength; i++) {
-            destData[i] = sourceData[startSample + i];
-          }
+      for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+        const sourceData = audioBuffer.getChannelData(channel);
+        const destData = trimmedBuffer.getChannelData(channel);
+        for (let i = 0; i < trimmedLength; i++) {
+          destData[i] = sourceData[startSample + i];
         }
-
-        // Convert to WAV blob (simpler than MP3, AssemblyAI handles it well)
-        const wavBlob = audioBufferToWav(trimmedBuffer);
-        console.log(`AI Transcribe: Trimmed audio ready - ${(wavBlob.size / 1024).toFixed(0)}KB`);
-
-        // Upload trimmed audio to AssemblyAI
-        console.log('AI Transcribe: Uploading trimmed audio to AssemblyAI...');
-        const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
-          method: 'POST',
-          headers: {
-            'Authorization': savedKey,
-            'Content-Type': 'application/octet-stream'
-          },
-          body: wavBlob
-        });
-
-        if (!uploadResponse.ok) {
-          throw new Error('Failed to upload audio to AssemblyAI');
-        }
-
-        const uploadResult = await uploadResponse.json();
-        audioUrl = uploadResult.upload_url;
-        console.log('AI Transcribe: Trimmed audio uploaded successfully');
-
-        // Close audio context to free memory
-        await audioContext.close();
-      } catch (fetchErr) {
-        console.error('AI Transcribe: Error processing audio:', fetchErr.message);
-        throw new Error(`Failed to process audio: ${fetchErr.message}`);
       }
+
+      // Convert to WAV
+      const wavBlob = audioBufferToWav(trimmedBuffer);
+      console.log(`Whisper: Trimmed audio ready - ${(wavBlob.size / 1024).toFixed(0)}KB`);
+      await audioContext.close();
 
       // Helper function to convert AudioBuffer to WAV
       function audioBufferToWav(buffer) {
         const numChannels = buffer.numberOfChannels;
-        const sampleRate = buffer.sampleRate;
-        const format = 1; // PCM
+        const sr = buffer.sampleRate;
+        const format = 1;
         const bitDepth = 16;
         const bytesPerSample = bitDepth / 8;
         const blockAlign = numChannels * bytesPerSample;
-
         const dataLength = buffer.length * blockAlign;
         const bufferLength = 44 + dataLength;
-        const arrayBuffer = new ArrayBuffer(bufferLength);
-        const view = new DataView(arrayBuffer);
+        const ab = new ArrayBuffer(bufferLength);
+        const view = new DataView(ab);
 
-        // WAV header
         const writeString = (offset, string) => {
           for (let i = 0; i < string.length; i++) {
             view.setUint8(offset + i, string.charCodeAt(i));
@@ -1019,101 +983,79 @@ const VideoEditorModal = ({
         view.setUint32(4, bufferLength - 8, true);
         writeString(8, 'WAVE');
         writeString(12, 'fmt ');
-        view.setUint32(16, 16, true); // fmt chunk size
+        view.setUint32(16, 16, true);
         view.setUint16(20, format, true);
         view.setUint16(22, numChannels, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * blockAlign, true);
+        view.setUint32(24, sr, true);
+        view.setUint32(28, sr * blockAlign, true);
         view.setUint16(32, blockAlign, true);
         view.setUint16(34, bitDepth, true);
         writeString(36, 'data');
         view.setUint32(40, dataLength, true);
 
-        // Write audio data
         let offset = 44;
         for (let i = 0; i < buffer.length; i++) {
-          for (let channel = 0; channel < numChannels; channel++) {
-            const sample = Math.max(-1, Math.min(1, buffer.getChannelData(channel)[i]));
-            const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
-            view.setInt16(offset, intSample, true);
+          for (let ch = 0; ch < numChannels; ch++) {
+            const sample = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]));
+            view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
             offset += 2;
           }
         }
-
-        return new Blob([arrayBuffer], { type: 'audio/wav' });
+        return new Blob([ab], { type: 'audio/wav' });
       }
 
-      // Request transcription with word-level timestamps
-      const transcriptResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
+      // Send to OpenAI Whisper API with word-level timestamps
+      console.log('Whisper: Sending to OpenAI for transcription...');
+      const formData = new FormData();
+      formData.append('file', wavBlob, 'audio.wav');
+      formData.append('model', 'whisper-1');
+      formData.append('response_format', 'verbose_json');
+      formData.append('timestamp_granularities[]', 'word');
+
+      const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
         method: 'POST',
         headers: {
-          'Authorization': savedKey,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${savedKey}`
         },
-        body: JSON.stringify({
-          audio_url: audioUrl,
-          word_boost: [],
-          boost_param: 'high'
-        })
+        body: formData
       });
 
-      if (!transcriptResponse.ok) {
-        throw new Error('Failed to start transcription');
+      if (!whisperResponse.ok) {
+        const errorData = await whisperResponse.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `Whisper API error: ${whisperResponse.status}`);
       }
 
-      const { id: transcriptId } = await transcriptResponse.json();
+      const result = await whisperResponse.json();
+      console.log('Whisper: Transcription complete', result);
 
-      // Step 3: Poll for completion
-      console.log('AI Transcribe: Waiting for transcription to complete...');
-      let transcript = null;
-      let pollCount = 0;
-      while (!transcript) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        pollCount++;
-
-        const statusResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
-          headers: { 'Authorization': savedKey }
-        });
-
-        const result = await statusResponse.json();
-        console.log(`AI Transcribe: Poll ${pollCount} - status: ${result.status}`);
-
-        if (result.status === 'completed') {
-          transcript = result;
-        } else if (result.status === 'error') {
-          throw new Error(result.error || 'Transcription failed');
-        }
-        // Otherwise still processing, continue polling
-      }
-
-      // Step 4: Set the words with timestamps
-      // Since we uploaded trimmed audio, timestamps are already in LOCAL time (starting from 0)
-      // Just need to convert from milliseconds to seconds
-      if (transcript.words && transcript.words.length > 0) {
-        const newWords = transcript.words.map((word, index) => ({
+      // Process words from Whisper response
+      if (result.words && result.words.length > 0) {
+        const newWords = result.words.map((word, index) => ({
           id: `word-${Date.now()}-${index}`,
-          text: word.text,
-          startTime: word.start / 1000, // Convert ms to seconds
-          duration: (word.end - word.start) / 1000
+          text: word.word,
+          startTime: word.start,
+          duration: word.end - word.start
         }));
 
-        console.log(`AI Transcribe: Got ${newWords.length} words`);
+        console.log(`Whisper: Got ${newWords.length} words`);
+        setWords(newWords);
+        setLyrics(result.text || newWords.map(w => w.text).join(' '));
+        toast.success(`Transcribed ${newWords.length} words with Whisper`);
+      } else if (result.text) {
+        // Whisper returned text but no word timestamps - create evenly spaced words
+        const words = result.text.split(/\s+/).filter(w => w.length > 0);
+        const wordDuration = trimDuration / words.length;
+        const newWords = words.map((word, index) => ({
+          id: `word-${Date.now()}-${index}`,
+          text: word,
+          startTime: index * wordDuration,
+          duration: wordDuration * 0.9
+        }));
 
-        if (newWords.length > 0) {
-          // Validate the data in development
-          if (process.env.NODE_ENV === 'development') {
-            validateLocalTimeData({ words: newWords }, trimDuration);
-          }
-
-          setWords(newWords);
-          // Rebuild lyrics text from filtered words
-          const filteredLyrics = newWords.map(w => w.text).join(' ');
-          setLyrics(filteredLyrics);
-          toast.success(`Transcribed ${newWords.length} words`);
-        } else {
-          toast.error('No words detected in the selected audio range');
-          setTranscriptionError('No words detected in the selected audio range');
-        }
+        console.log(`Whisper: Got ${newWords.length} words (evenly spaced)`);
+        setWords(newWords);
+        setLyrics(result.text);
+        toast.success(`Transcribed ${newWords.length} words (adjust timing in Word Timeline)`);
       } else {
         toast.error('No words detected in audio');
         setTranscriptionError('No words detected in audio');
@@ -1130,7 +1072,7 @@ const VideoEditorModal = ({
 
   const handleSaveApiKey = useCallback(() => {
     if (apiKeyInput.trim()) {
-      saveApiKey('assemblyai', apiKeyInput.trim());
+      saveApiKey('openai', apiKeyInput.trim());
       setShowApiKeyModal(false);
       setApiKeyInput('');
       // Trigger transcription after saving key
@@ -1885,10 +1827,10 @@ const VideoEditorModal = ({
         {showApiKeyModal && (
           <div style={styles.lyricsOverlay}>
             <div style={{...styles.lyricsModal, maxWidth: '400px'}}>
-              <h3 style={styles.lyricsTitle}>🔑 AssemblyAI API Key</h3>
+              <h3 style={styles.lyricsTitle}>🔑 OpenAI API Key</h3>
               <p style={{ color: '#9CA3AF', fontSize: '14px', marginBottom: '16px' }}>
-                To use AI transcription, you need an AssemblyAI API key.
-                Get one free at <a href="https://assemblyai.com" target="_blank" rel="noopener noreferrer" style={{ color: '#8B5CF6' }}>assemblyai.com</a>
+                AI transcription uses OpenAI Whisper (great for music/vocals).
+                Get a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" style={{ color: '#8B5CF6' }}>platform.openai.com</a>
               </p>
               <input
                 type="password"
@@ -1904,7 +1846,7 @@ const VideoEditorModal = ({
                     setApiKeyInput('');
                   }
                 }}
-                placeholder="Enter your AssemblyAI API key..."
+                placeholder="Enter your OpenAI API key (sk-...)..."
                 autoFocus
                 style={{
                   width: '100%',
