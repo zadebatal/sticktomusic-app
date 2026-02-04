@@ -41,6 +41,8 @@ const AestheticHome = ({
   onShowBatchPipeline,
   onViewContent,
   onMakeSlideshow,
+  onEditSlideshow,
+  onDeleteSlideshow,
   onMakeVideo
 }) => {
   // Studio mode: null = mode selection, 'videos' = video mode, 'slideshows' = slideshow mode
@@ -61,6 +63,10 @@ const AestheticHome = ({
   const [deleteVideoConfirm, setDeleteVideoConfirm] = useState({ isOpen: false, videoId: null, videoName: '' });
   const [deleteAudioConfirm, setDeleteAudioConfirm] = useState({ isOpen: false, audioId: null, audioName: '' });
   const [deleteImageConfirm, setDeleteImageConfirm] = useState({ isOpen: false, imageId: null, imageName: '', bank: 'A' });
+  const [deleteSlideshowConfirm, setDeleteSlideshowConfirm] = useState({ isOpen: false, slideshowId: null, slideshowName: '' });
+
+  // Slideshow library view state
+  const [showSlideshowLibrary, setShowSlideshowLibrary] = useState(false);
 
   const handleCreateCategory = () => {
     if (newCategoryName.trim()) {
@@ -512,6 +518,7 @@ const AestheticHome = ({
                     <button
                       style={styles.actionButtonGreen}
                       title="View created slideshows"
+                      onClick={() => setShowSlideshowLibrary(true)}
                     >
                       <span style={styles.actionIcon}>📁</span>
                       View Created ({slideshowCount})
@@ -697,6 +704,86 @@ const AestheticHome = ({
         onConfirm={() => { onDeleteBankImage?.(deleteImageConfirm.imageId, deleteImageConfirm.bank); setDeleteImageConfirm({ isOpen: false, imageId: null, imageName: '', bank: 'A' }); }}
         onCancel={() => setDeleteImageConfirm({ isOpen: false, imageId: null, imageName: '', bank: 'A' })}
       />
+
+      <ConfirmDialog
+        isOpen={deleteSlideshowConfirm.isOpen}
+        title="Delete slideshow?"
+        message={`This will permanently delete "${deleteSlideshowConfirm.slideshowName}".`}
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        onConfirm={() => { onDeleteSlideshow?.(deleteSlideshowConfirm.slideshowId); setDeleteSlideshowConfirm({ isOpen: false, slideshowId: null, slideshowName: '' }); }}
+        onCancel={() => setDeleteSlideshowConfirm({ isOpen: false, slideshowId: null, slideshowName: '' })}
+      />
+
+      {/* Slideshow Library Modal */}
+      {showSlideshowLibrary && (
+        <div style={styles.slideshowLibraryOverlay}>
+          <div style={styles.slideshowLibraryModal}>
+            <div style={styles.slideshowLibraryHeader}>
+              <h2 style={styles.slideshowLibraryTitle}>
+                📁 Slideshows ({(selectedCategory?.slideshows || []).length})
+              </h2>
+              <button
+                style={styles.slideshowLibraryClose}
+                onClick={() => setShowSlideshowLibrary(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={styles.slideshowLibraryContent}>
+              {(selectedCategory?.slideshows || []).length === 0 ? (
+                <div style={styles.slideshowLibraryEmpty}>
+                  <p>No slideshows yet</p>
+                  <p style={{fontSize: '14px', color: '#71717a', marginTop: '8px'}}>
+                    Create slideshows using "Make a Slideshow" or "Make 10 at once"
+                  </p>
+                </div>
+              ) : (
+                <div style={styles.slideshowLibraryGrid}>
+                  {(selectedCategory?.slideshows || []).map(slideshow => (
+                    <div key={slideshow.id} style={styles.slideshowCard}>
+                      <div style={styles.slideshowCardPreview}>
+                        {slideshow.slides?.[0]?.thumbnail ? (
+                          <img
+                            src={slideshow.slides[0].thumbnail}
+                            alt=""
+                            style={styles.slideshowCardImg}
+                          />
+                        ) : (
+                          <div style={styles.slideshowCardPlaceholder}>🖼️</div>
+                        )}
+                        <div style={styles.slideshowCardBadge}>
+                          {slideshow.slides?.length || 0} slides
+                        </div>
+                      </div>
+                      <div style={styles.slideshowCardInfo}>
+                        <div style={styles.slideshowCardName}>{slideshow.name}</div>
+                        <div style={styles.slideshowCardStatus}>
+                          {slideshow.status === 'rendered' ? '✅ Exported' : '📝 Draft'}
+                        </div>
+                      </div>
+                      <div style={styles.slideshowCardActions}>
+                        <button
+                          style={styles.slideshowCardEditBtn}
+                          onClick={() => { setShowSlideshowLibrary(false); onEditSlideshow?.(slideshow); }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          style={styles.slideshowCardDeleteBtn}
+                          onClick={() => setDeleteSlideshowConfirm({ isOpen: true, slideshowId: slideshow.id, slideshowName: slideshow.name })}
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -917,7 +1004,28 @@ const styles = {
   categoryCardInfo: {},
   categoryCardName: { fontSize: '16px', fontWeight: '600', color: '#fff', margin: '0 0 4px 0' },
   categoryCardMeta: { fontSize: '12px', color: '#6b7280', margin: 0 },
-  addCategoryCard: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '40px 20px', backgroundColor: 'transparent', border: '2px dashed #374151', borderRadius: '12px', cursor: 'pointer', color: '#6b7280', fontSize: '14px' }
+  addCategoryCard: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '40px 20px', backgroundColor: 'transparent', border: '2px dashed #374151', borderRadius: '12px', cursor: 'pointer', color: '#6b7280', fontSize: '14px' },
+
+  // Slideshow Library Modal
+  slideshowLibraryOverlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' },
+  slideshowLibraryModal: { width: '100%', maxWidth: '900px', maxHeight: '80vh', backgroundColor: '#0f0f1a', borderRadius: '16px', overflow: 'hidden', display: 'flex', flexDirection: 'column' },
+  slideshowLibraryHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #1f1f2e' },
+  slideshowLibraryTitle: { fontSize: '20px', fontWeight: '600', color: '#fff', margin: 0 },
+  slideshowLibraryClose: { padding: '8px 12px', backgroundColor: 'transparent', border: '1px solid #374151', borderRadius: '6px', color: '#9ca3af', cursor: 'pointer', fontSize: '16px' },
+  slideshowLibraryContent: { flex: 1, overflow: 'auto', padding: '24px' },
+  slideshowLibraryEmpty: { textAlign: 'center', padding: '60px 20px', color: '#9ca3af' },
+  slideshowLibraryGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' },
+  slideshowCard: { backgroundColor: '#111118', borderRadius: '12px', overflow: 'hidden', border: '1px solid #1f1f2e' },
+  slideshowCardPreview: { position: 'relative', aspectRatio: '9/16', backgroundColor: '#0a0a0f', maxHeight: '180px' },
+  slideshowCardImg: { width: '100%', height: '100%', objectFit: 'cover' },
+  slideshowCardPlaceholder: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', color: '#4b5563' },
+  slideshowCardBadge: { position: 'absolute', bottom: '8px', right: '8px', padding: '4px 8px', backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: '4px', fontSize: '11px', color: '#fff' },
+  slideshowCardInfo: { padding: '12px' },
+  slideshowCardName: { fontSize: '14px', fontWeight: '500', color: '#fff', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  slideshowCardStatus: { fontSize: '12px', color: '#6b7280' },
+  slideshowCardActions: { display: 'flex', gap: '8px', padding: '0 12px 12px 12px' },
+  slideshowCardEditBtn: { flex: 1, padding: '8px 12px', backgroundColor: '#3b82f6', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
+  slideshowCardDeleteBtn: { padding: '8px 12px', backgroundColor: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', color: '#f87171', cursor: 'pointer', fontSize: '13px' }
 };
 
 export default AestheticHome;

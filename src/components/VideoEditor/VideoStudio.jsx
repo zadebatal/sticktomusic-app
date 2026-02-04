@@ -928,8 +928,9 @@ const VideoStudio = ({
         setCategories(prev => prev.map(updateCategory));
         setSelectedCategory(prev => prev ? updateCategory(prev) : prev);
 
-        alert(`Created ${batchSlideshows.length} slideshows! View them in your content library.`);
-        setCurrentView('library');
+        // Stay on home view - the slideshows are now in the category
+        // User can click "View Created" to see them
+        alert(`Created ${batchSlideshows.length} slideshows! Click "View Created" to see them.`);
       }
     } else {
       // Single slideshow or edit existing
@@ -1057,6 +1058,22 @@ const VideoStudio = ({
     setSelectedCategory(prev => prev ? {
       ...prev,
       [bankKey]: (prev[bankKey] || []).filter(img => img.id !== imageId)
+    } : prev);
+  }, [selectedCategory]);
+
+  // Delete a slideshow
+  const handleDeleteSlideshow = useCallback((slideshowId) => {
+    if (!selectedCategory) return;
+
+    setCategories(prev => prev.map(cat =>
+      cat.id === selectedCategory.id
+        ? { ...cat, slideshows: (cat.slideshows || []).filter(s => s.id !== slideshowId) }
+        : cat
+    ));
+
+    setSelectedCategory(prev => prev ? {
+      ...prev,
+      slideshows: (prev.slideshows || []).filter(s => s.id !== slideshowId)
     } : prev);
   }, [selectedCategory]);
 
@@ -1217,6 +1234,8 @@ const VideoStudio = ({
             onShowBatchPipeline={() => setShowBatchPipeline(true)}
             onViewContent={() => setCurrentView('library')}
             onMakeSlideshow={handleMakeSlideshow}
+            onEditSlideshow={(slideshow) => handleMakeSlideshow(slideshow)}
+            onDeleteSlideshow={handleDeleteSlideshow}
           />
         )}
 
