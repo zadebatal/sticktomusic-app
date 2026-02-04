@@ -914,52 +914,128 @@ const VideoEditorModal = ({
     try {
       let audioUrl;
 
-      // STRATEGY: ALWAYS prefer cloud URL for transcription
-      // Local File objects can become stale after page refresh and contain garbage data
-      // that passes validation but isn't actual audio. Cloud URL is the only reliable source.
+      // Get trim boundaries - we'll only transcribe this portion
+      const { trimStart, trimEnd } = getTrimBoundaries(selectedAudio, duration);
+      const trimDuration = trimEnd - trimStart;
+      console.log(`AI Transcribe: Will transcribe ${trimDuration.toFixed(1)}s (${trimStart.toFixed(1)}s - ${trimEnd.toFixed(1)}s)`);
 
-      console.log('AI Transcribe: Checking sources - cloudUrl:', !!selectedAudio.url, 'file:', !!selectedAudio.file);
-
-      if (selectedAudio.url) {
-        // Fetch from Firebase URL and upload to AssemblyAI
-        console.log('AI Transcribe: Fetching from Firebase URL and uploading to AssemblyAI...');
-
-        try {
-          const response = await fetch(selectedAudio.url);
-          if (!response.ok) throw new Error('Failed to fetch audio');
-          const audioBlob = await response.blob();
-
-          console.log(`AI Transcribe: Fetched blob - size: ${audioBlob.size}, type: ${audioBlob.type}`);
-
-          // Validate the blob is actually audio, not an error page
-          if (audioBlob.size < 1000 || audioBlob.type.startsWith('text/')) {
-            throw new Error(`Invalid audio: received ${audioBlob.type} (${audioBlob.size} bytes)`);
-          }
-
-          const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
-            method: 'POST',
-            headers: {
-              'Authorization': savedKey,
-              'Content-Type': 'application/octet-stream'
-            },
-            body: audioBlob
-          });
-
-          if (!uploadResponse.ok) {
-            throw new Error('Failed to upload audio to AssemblyAI');
-          }
-
-          const uploadResult = await uploadResponse.json();
-          audioUrl = uploadResult.upload_url;
-          console.log('AI Transcribe: Audio fetched and uploaded successfully');
-        } catch (fetchErr) {
-          // Fallback: let AssemblyAI try to fetch directly (may work for public URLs)
-          console.log('AI Transcribe: Fetch failed, trying URL directly:', fetchErr.message);
-          audioUrl = selectedAudio.url;
-        }
-      } else {
-        // No cloud URL available
+      if (!selectedAudio.url) {
         throw new Error('No audio URL available. Please re-upload the audio file.');
+      }
+
+      try {
+        // Fetch the full audio
+        console.log('AI Transcribe: Fetching audio from Firebase...');
+        const response = await fetch(selectedAudio.url);
+        if (!response.ok) throw new Error('Failed to fetch audio');
+        const fullAudioBlob = await response.blob();
+        console.log(`AI Transcribe: Fetched full audio - ${(fullAudioBlob.size / 1024 / 1024).toFixed(1)}MB`);
+
+        // Trim the audio to just the selected range using Web Audio API
+        console.log('AI Transcribe: Trimming audio to selected range...');
+        const arrayBuffer = await fullAudioBlob.arrayBuffer();
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+        // Calculate sample positions
+        const sampleRate = audioBuffer.sampleRate;
+        const startSample = Math.floor(trimStart * sampleRate);
+        const endSample = Math.floor(trimEnd * sampleRate);
+        const trimmedLength = endSample - startSample;
+
+        // Create a new buffer with just the trimmed portion
+        const trimmedBuffer = audioContext.createBuffer(
+          audioBuffer.numberOfChannels,
+          trimmedLength,
+          sampleRate
+        );
+
+        // Copy the trimmed audio data
+        for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+          const sourceData = audioBuffer.getChannelData(channel);
+          const destData = trimmedBuffer.getChannelData(channel);
+          for (let i = 0; i < trimmedLength; i++) {
+            destData[i] = sourceData[startSample + i];
+          }
+        }
+
+        // Convert to WAV blob (simpler than MP3, AssemblyAI handles it well)
+        const wavBlob = audioBufferToWav(trimmedBuffer);
+        console.log(`AI Transcribe: Trimmed audio ready - ${(wavBlob.size / 1024).toFixed(0)}KB`);
+
+        // Upload trimmed audio to AssemblyAI
+        console.log('AI Transcribe: Uploading trimmed audio to AssemblyAI...');
+        const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
+          method: 'POST',
+          headers: {
+            'Authorization': savedKey,
+            'Content-Type': 'application/octet-stream'
+          },
+          body: wavBlob
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error('Failed to upload audio to AssemblyAI');
+        }
+
+        const uploadResult = await uploadResponse.json();
+        audioUrl = uploadResult.upload_url;
+        console.log('AI Transcribe: Trimmed audio uploaded successfully');
+
+        // Close audio context to free memory
+        await audioContext.close();
+      } catch (fetchErr) {
+        console.error('AI Transcribe: Error processing audio:', fetchErr.message);
+        throw new Error(`Failed to process audio: ${fetchErr.message}`);
+      }
+
+      // Helper function to convert AudioBuffer to WAV
+      function audioBufferToWav(buffer) {
+        const numChannels = buffer.numberOfChannels;
+        const sampleRate = buffer.sampleRate;
+        const format = 1; // PCM
+        const bitDepth = 16;
+        const bytesPerSample = bitDepth / 8;
+        const blockAlign = numChannels * bytesPerSample;
+
+        const dataLength = buffer.length * blockAlign;
+        const bufferLength = 44 + dataLength;
+        const arrayBuffer = new ArrayBuffer(bufferLength);
+        const view = new DataView(arrayBuffer);
+
+        // WAV header
+        const writeString = (offset, string) => {
+          for (let i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+          }
+        };
+
+        writeString(0, 'RIFF');
+        view.setUint32(4, bufferLength - 8, true);
+        writeString(8, 'WAVE');
+        writeString(12, 'fmt ');
+        view.setUint32(16, 16, true); // fmt chunk size
+        view.setUint16(20, format, true);
+        view.setUint16(22, numChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * blockAlign, true);
+        view.setUint16(32, blockAlign, true);
+        view.setUint16(34, bitDepth, true);
+        writeString(36, 'data');
+        view.setUint32(40, dataLength, true);
+
+        // Write audio data
+        let offset = 44;
+        for (let i = 0; i < buffer.length; i++) {
+          for (let channel = 0; channel < numChannels; channel++) {
+            const sample = Math.max(-1, Math.min(1, buffer.getChannelData(channel)[i]));
+            const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+            view.setInt16(offset, intSample, true);
+            offset += 2;
+          }
+        }
+
+        return new Blob([arrayBuffer], { type: 'audio/wav' });
       }
 
       // Request transcription with word-level timestamps
@@ -983,15 +1059,19 @@ const VideoEditorModal = ({
       const { id: transcriptId } = await transcriptResponse.json();
 
       // Step 3: Poll for completion
+      console.log('AI Transcribe: Waiting for transcription to complete...');
       let transcript = null;
+      let pollCount = 0;
       while (!transcript) {
         await new Promise(resolve => setTimeout(resolve, 2000));
+        pollCount++;
 
         const statusResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
           headers: { 'Authorization': savedKey }
         });
 
         const result = await statusResponse.json();
+        console.log(`AI Transcribe: Poll ${pollCount} - status: ${result.status}`);
 
         if (result.status === 'completed') {
           transcript = result;
@@ -1002,24 +1082,22 @@ const VideoEditorModal = ({
       }
 
       // Step 4: Set the words with timestamps
-      // Use the normalization utility to filter and convert to LOCAL time
+      // Since we uploaded trimmed audio, timestamps are already in LOCAL time (starting from 0)
+      // Just need to convert from milliseconds to seconds
       if (transcript.words && transcript.words.length > 0) {
-        const { trimStart, trimEnd } = getTrimBoundaries(selectedAudio, duration);
+        const newWords = transcript.words.map((word, index) => ({
+          id: `word-${Date.now()}-${index}`,
+          text: word.text,
+          startTime: word.start / 1000, // Convert ms to seconds
+          duration: (word.end - word.start) / 1000
+        }));
 
-        // Use centralized normalization utility
-        // AssemblyAI returns timestamps in milliseconds
-        const newWords = normalizeWordsToTrimRange(
-          transcript.words,
-          trimStart,
-          trimEnd,
-          { inputInMs: true }
-        );
+        console.log(`AI Transcribe: Got ${newWords.length} words`);
 
         if (newWords.length > 0) {
-          // Validate the normalized data in development
+          // Validate the data in development
           if (process.env.NODE_ENV === 'development') {
-            const trimmedDuration = trimEnd - trimStart;
-            validateLocalTimeData({ words: newWords }, trimmedDuration);
+            validateLocalTimeData({ words: newWords }, trimDuration);
           }
 
           setWords(newWords);
