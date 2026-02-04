@@ -34,8 +34,9 @@ const ContentLibrary = ({
   const [renderProgress, setRenderProgress] = useState(0);
 
   // Handle rendering a video recipe into a real video
+  // Returns the cloudUrl when called from PostingModule
   const handleRenderVideo = useCallback(async (video) => {
-    if (renderingVideoId) return; // Already rendering
+    if (renderingVideoId) throw new Error('Already rendering another video');
 
     setRenderingVideoId(video.id);
     setRenderProgress(0);
@@ -70,9 +71,10 @@ const ContentLibrary = ({
       }
 
       setRenderProgress(100);
+      return cloudUrl; // Return URL for PostingModule
     } catch (err) {
       console.error('[ContentLibrary] Render failed:', err);
-      alert(`Render failed: ${err.message}`);
+      throw err; // Re-throw for PostingModule to handle
     } finally {
       setRenderingVideoId(null);
       setRenderProgress(0);
@@ -305,6 +307,7 @@ const ContentLibrary = ({
           accounts={accounts}
           lateAccountIds={lateAccountIds}
           onSchedulePost={onSchedulePost}
+          onRenderVideo={handleRenderVideo}
           onClose={() => {
             setShowPostingModule(false);
             clearSelection();

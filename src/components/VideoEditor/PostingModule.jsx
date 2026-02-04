@@ -24,6 +24,7 @@ const PostingModule = ({
   accounts = [],
   lateAccountIds = {},
   onSchedulePost,
+  onRenderVideo,
   onClose
 }) => {
   // Bank selection
@@ -43,6 +44,8 @@ const PostingModule = ({
 
   // UI state
   const [isScheduling, setIsScheduling] = useState(false);
+  const [isRendering, setIsRendering] = useState(false);
+  const [renderProgress, setRenderProgress] = useState({ current: 0, total: 0, videoName: '' });
   const [error, setError] = useState(null);
   const [successCount, setSuccessCount] = useState(0);
 
@@ -53,18 +56,21 @@ const PostingModule = ({
     return Array.from(handles);
   }, [accounts]);
 
-  // Filter videos that are ready for posting (have cloud URL)
-  const readyVideos = useMemo(() => {
-    return videos.filter(v =>
-      v.export?.cloudUrl || v.postedUrl || v.cloudUrl
-    );
-  }, [videos]);
+  // Check if a video is rendered (has cloud URL)
+  const isVideoRendered = useCallback((video) => {
+    return !!(video.export?.cloudUrl || video.postedUrl || video.cloudUrl);
+  }, []);
 
-  // Initialize posts when videos or bank changes
+  // Count videos that need rendering
+  const videosNeedingRender = useMemo(() => {
+    return videos.filter(v => !isVideoRendered(v));
+  }, [videos, isVideoRendered]);
+
+  // Initialize posts when videos or bank changes (include ALL videos, not just rendered)
   useEffect(() => {
-    if (readyVideos.length === 0) return;
+    if (videos.length === 0) return;
 
-    const newPosts = readyVideos.map((video, index) => {
+    const newPosts = videos.map((video, index) => {
       const content = generatePostContent(selectedBank, {
         platform: platforms.instagram ? 'instagram' : 'tiktok'
       });
@@ -72,7 +78,9 @@ const PostingModule = ({
       return {
         id: video.id,
         videoId: video.id,
-        videoUrl: video.export?.cloudUrl || video.postedUrl || video.cloudUrl,
+        video: video, // Keep reference to full video for rendering
+        videoUrl: video.export?.cloudUrl || video.postedUrl || video.cloudUrl || null,
+        needsRender: !isVideoRendered(video),
         thumbnail: video.thumbnail || video.export?.thumbnailUrl,
         title: video.title || `Video ${index + 1}`,
         caption: content.caption,
@@ -83,7 +91,7 @@ const PostingModule = ({
     });
 
     setPosts(newPosts);
-  }, [readyVideos, selectedBank, platforms.instagram]);
+  }, [videos, selectedBank, platforms.instagram, isVideoRendered]);
 
   // Initialize date to today
   useEffect(() => {
@@ -158,7 +166,7 @@ const PostingModule = ({
     setPosts(prev => prev.filter(p => p.id !== postId));
   }, []);
 
-  // Schedule all posts
+  // Schedule all posts (rendering drafts first if needed)
   const handleScheduleAll = useCallback(async () => {
     if (!selectedHandle) {
       setError('Please select an account handle');
@@ -181,6 +189,49 @@ const PostingModule = ({
       return;
     }
 
+    // First, render any videos that need rendering
+    const postsNeedingRender = posts.filter(p => p.needsRender);
+    let updatedPosts = [...posts];
+
+    if (postsNeedingRender.length > 0) {
+      if (!onRenderVideo) {
+        setError('Cannot render videos - render function not available');
+        return;
+      }
+
+      setIsRendering(true);
+      setRenderProgress({ current: 0, total: postsNeedingRender.length, videoName: '' });
+
+      for (let i = 0; i < postsNeedingRender.length; i++) {
+        const post = postsNeedingRender[i];
+        setRenderProgress({
+          current: i + 1,
+          total: postsNeedingRender.length,
+          videoName: post.title
+        });
+
+        try {
+          // Render the video and get the cloudUrl
+          const cloudUrl = await onRenderVideo(post.video);
+
+          // Update the post with the new cloudUrl
+          updatedPosts = updatedPosts.map(p =>
+            p.id === post.id
+              ? { ...p, videoUrl: cloudUrl, needsRender: false }
+              : p
+          );
+        } catch (err) {
+          console.error('Render error:', err);
+          setError(`Failed to render "${post.title}": ${err.message}`);
+          setIsRendering(false);
+          return;
+        }
+      }
+
+      setIsRendering(false);
+      setPosts(updatedPosts);
+    }
+
     setIsScheduling(true);
     setError(null);
     setSuccessCount(0);
@@ -189,8 +240,8 @@ const PostingModule = ({
     let failed = 0;
     const errors = [];
 
-    for (let i = 0; i < posts.length; i++) {
-      const post = posts[i];
+    for (let i = 0; i < updatedPosts.length; i++) {
+      const post = updatedPosts[i];
 
       // Calculate scheduled time for this post
       const baseDate = new Date(`${scheduleDate}T${scheduleTime}`);
@@ -258,11 +309,33 @@ const PostingModule = ({
           <div>
             <h2 style={styles.title}>Schedule Posts</h2>
             <p style={styles.subtitle}>
-              {category?.name} • {posts.length} video{posts.length !== 1 ? 's' : ''} ready
+              {category?.name} • {posts.length} video{posts.length !== 1 ? 's' : ''}
+              {videosNeedingRender.length > 0 && (
+                <span style={{ color: '#f59e0b' }}>
+                  {' '}({videosNeedingRender.length} will be rendered)
+                </span>
+              )}
             </p>
           </div>
           <button style={styles.closeButton} onClick={onClose}>×</button>
         </div>
+
+        {/* Rendering Progress */}
+        {isRendering && (
+          <div style={styles.renderingBar}>
+            <div style={styles.renderingText}>
+              🎬 Rendering {renderProgress.current}/{renderProgress.total}: {renderProgress.videoName}
+            </div>
+            <div style={styles.progressBarContainer}>
+              <div
+                style={{
+                  ...styles.progressBar,
+                  width: `${(renderProgress.current / renderProgress.total) * 100}%`
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Controls Bar */}
         <div style={styles.controlsBar}>
@@ -633,6 +706,27 @@ const styles = {
     margin: '4px 0 0 0',
     fontSize: '14px',
     color: '#71717a'
+  },
+  renderingBar: {
+    backgroundColor: '#1f1f23',
+    padding: '12px 24px',
+    borderBottom: '1px solid #27272a'
+  },
+  renderingText: {
+    fontSize: '14px',
+    color: '#f59e0b',
+    marginBottom: '8px'
+  },
+  progressBarContainer: {
+    height: '4px',
+    backgroundColor: '#27272a',
+    borderRadius: '2px',
+    overflow: 'hidden'
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#f59e0b',
+    transition: 'width 0.3s ease'
   },
   closeButton: {
     background: 'none',

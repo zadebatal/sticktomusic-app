@@ -368,7 +368,13 @@ const StickToMusic = () => {
       setPendingPage(null); // Clear pending page after restore
       setSessionRestoreComplete(true);
     } else if (authChecked && firestoreLoaded && !pendingPage) {
-      // No pending session to restore, or user not authenticated - mark complete
+      // No pending session to restore - mark complete
+      setSessionRestoreComplete(true);
+    } else if (authChecked && firestoreLoaded && !user && pendingPage) {
+      // User is NOT authenticated but has a pending page (e.g., was logged out)
+      // Clear pending page and proceed to home - user will need to login
+      console.log('[App Session] User not authenticated, clearing pending page:', pendingPage);
+      setPendingPage(null);
       setSessionRestoreComplete(true);
     }
   }, [user, pendingPage, pendingOperatorTab, pendingShowVideoEditor, authChecked, firestoreLoaded]);

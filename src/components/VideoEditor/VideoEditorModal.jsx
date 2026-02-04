@@ -104,6 +104,9 @@ const VideoEditorModal = ({
   const animationRef = useRef(null);
   const previousTrimHashRef = useRef(null);
   const isPlayingRef = useRef(false); // Ref to avoid stale closure in animation loop
+  // Track if we're still in initial load phase (loading existing video with words)
+  // This prevents clearing words due to minor duration changes when audio loads
+  const initialLoadPhaseRef = useRef(existingVideo?.words?.length > 0);
 
   // Persist active tab to localStorage
   useEffect(() => {
@@ -126,9 +129,18 @@ const VideoEditorModal = ({
 
     // Check if trim boundaries changed
     if (previousTrimHashRef.current !== currentHash) {
-      console.log('[TrimChange] Trim boundaries changed, invalidating dependent data');
+      console.log('[TrimChange] Trim boundaries changed');
       console.log(`  Old: ${previousTrimHashRef.current}`);
       console.log(`  New: ${currentHash}`);
+
+      // If we're in the initial load phase (loading existing video with words),
+      // don't clear words - the change is just from audio metadata loading
+      if (initialLoadPhaseRef.current) {
+        console.log('[TrimChange] In initial load phase, skipping word clear');
+        initialLoadPhaseRef.current = false; // Mark initial load as complete
+        previousTrimHashRef.current = currentHash;
+        return;
+      }
 
       // Reset playhead to start (prevent out-of-bounds position)
       setCurrentTime(0);
@@ -959,8 +971,19 @@ const VideoEditorModal = ({
 
     try {
       // Get trim boundaries - we'll only transcribe this portion
-      const { trimStart, trimEnd } = getTrimBoundaries(selectedAudio, duration);
-      const trimDuration = trimEnd - trimStart;
+      let { trimStart, trimEnd } = getTrimBoundaries(selectedAudio, duration);
+      let trimDuration = trimEnd - trimStart;
+
+      // Whisper API has a 25MB file limit. At 44.1kHz stereo 16-bit WAV, that's ~145 seconds.
+      // Limit to 90 seconds to be safe and provide better transcription quality.
+      const MAX_TRANSCRIBE_DURATION = 90;
+      if (trimDuration > MAX_TRANSCRIBE_DURATION) {
+        console.log(`Whisper: Duration ${trimDuration.toFixed(1)}s exceeds max ${MAX_TRANSCRIBE_DURATION}s, limiting`);
+        toast.info(`Audio is ${Math.floor(trimDuration)}s - transcribing first ${MAX_TRANSCRIBE_DURATION}s. Trim your audio for a specific section.`);
+        trimEnd = trimStart + MAX_TRANSCRIBE_DURATION;
+        trimDuration = MAX_TRANSCRIBE_DURATION;
+      }
+
       console.log(`Whisper: Will transcribe ${trimDuration.toFixed(1)}s (${trimStart.toFixed(1)}s - ${trimEnd.toFixed(1)}s)`);
 
       if (!selectedAudio.url) {
