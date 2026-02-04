@@ -24,6 +24,14 @@ export const renderVideo = async (videoData, onProgress = () => {}) => {
     throw new Error('No clips to render');
   }
 
+  // Validate clip URLs
+  const invalidClips = clips.filter(clip => !clip.localUrl && !clip.url);
+  if (invalidClips.length > 0) {
+    throw new Error(`${invalidClips.length} clip(s) missing URLs. Re-upload or re-select the clips.`);
+  }
+
+  console.log(`[VideoExport] Starting render: ${clips.length} clips, ${duration}s duration`);
+
   // Set up canvas dimensions based on crop mode
   const dimensions = {
     '9:16': { width: 1080, height: 1920 },
@@ -39,9 +47,21 @@ export const renderVideo = async (videoData, onProgress = () => {}) => {
   const ctx = canvas.getContext('2d');
 
   // Create video elements for each clip (prefer localUrl to avoid CORS)
-  const videoElements = await Promise.all(
-    clips.map(clip => loadVideoElement(clip.localUrl || clip.url))
-  );
+  console.log('[VideoExport] Loading video clips...');
+  const videoElements = [];
+  for (let i = 0; i < clips.length; i++) {
+    const clip = clips[i];
+    const url = clip.localUrl || clip.url;
+    console.log(`[VideoExport] Loading clip ${i + 1}/${clips.length}: ${url.substring(0, 60)}...`);
+    try {
+      const videoEl = await loadVideoElement(url);
+      videoElements.push(videoEl);
+    } catch (err) {
+      console.error(`[VideoExport] Failed to load clip ${i + 1}:`, err);
+      throw new Error(`Failed to load clip ${i + 1}: ${err.message}`);
+    }
+  }
+  console.log('[VideoExport] All clips loaded');
 
   // Create audio element (prefer localUrl to avoid CORS)
   let audioElement = null;
@@ -159,17 +179,46 @@ export const renderVideo = async (videoData, onProgress = () => {}) => {
 
 /**
  * Load a video element and wait for it to be ready
+ * Tries with crossOrigin first, falls back to no crossOrigin for CORS issues
  */
-const loadVideoElement = (url) => {
+const loadVideoElement = async (url, timeout = 15000) => {
+  // First try with crossOrigin (needed for canvas drawing)
+  try {
+    return await loadVideoWithOptions(url, { crossOrigin: true, timeout });
+  } catch (corsError) {
+    console.warn('Video load failed with crossOrigin, trying without:', corsError.message);
+    // Fall back to no crossOrigin - won't work with canvas but at least loads
+    try {
+      return await loadVideoWithOptions(url, { crossOrigin: false, timeout });
+    } catch (fallbackError) {
+      throw new Error(`Failed to load video: ${url.substring(0, 50)}... - ${fallbackError.message}`);
+    }
+  }
+};
+
+const loadVideoWithOptions = (url, { crossOrigin = true, timeout = 15000 }) => {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
-    video.crossOrigin = 'anonymous';
+    if (crossOrigin) {
+      video.crossOrigin = 'anonymous';
+    }
     video.muted = true;
     video.playsInline = true;
     video.preload = 'auto';
 
-    video.onloadeddata = () => resolve(video);
-    video.onerror = reject;
+    const timeoutId = setTimeout(() => {
+      video.src = ''; // Cancel loading
+      reject(new Error(`Video load timeout after ${timeout}ms`));
+    }, timeout);
+
+    video.onloadeddata = () => {
+      clearTimeout(timeoutId);
+      resolve(video);
+    };
+    video.onerror = (e) => {
+      clearTimeout(timeoutId);
+      reject(new Error(`Video load error: ${e.type || 'unknown'}`));
+    };
     video.src = url;
     video.load();
   });
@@ -178,14 +227,25 @@ const loadVideoElement = (url) => {
 /**
  * Load an audio element and wait for it to be ready
  */
-const loadAudioElement = (url) => {
+const loadAudioElement = (url, timeout = 15000) => {
   return new Promise((resolve, reject) => {
     const audio = document.createElement('audio');
     audio.crossOrigin = 'anonymous';
     audio.preload = 'auto';
 
-    audio.onloadeddata = () => resolve(audio);
-    audio.onerror = reject;
+    const timeoutId = setTimeout(() => {
+      audio.src = ''; // Cancel loading
+      reject(new Error(`Audio load timeout after ${timeout}ms`));
+    }, timeout);
+
+    audio.onloadeddata = () => {
+      clearTimeout(timeoutId);
+      resolve(audio);
+    };
+    audio.onerror = (e) => {
+      clearTimeout(timeoutId);
+      reject(new Error(`Audio load error: ${e.type || 'unknown'}`));
+    };
     audio.src = url;
     audio.load();
   });
