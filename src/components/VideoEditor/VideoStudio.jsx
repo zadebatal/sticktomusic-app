@@ -294,7 +294,8 @@ const VideoStudio = ({
   const handleSaveVideo = useCallback((videoData) => {
     if (!selectedCategory) return;
 
-    setCategories(prev => prev.map(cat => {
+    // Build the updated category data
+    const updateCategory = (cat) => {
       if (cat.id !== selectedCategory.id) return cat;
 
       const existingIndex = cat.createdVideos.findIndex(v => v.id === videoData.id);
@@ -315,18 +316,20 @@ const VideoStudio = ({
           }]
         };
       }
-    }));
+    };
 
-    // Update selected category
+    // Update categories
+    setCategories(prev => prev.map(updateCategory));
+
+    // Update selected category with the same logic (avoids stale closure)
     setSelectedCategory(prev => {
       if (!prev) return prev;
-      const updated = categories.find(c => c.id === prev.id);
-      return updated || prev;
+      return updateCategory(prev);
     });
 
     setShowEditor(false);
     setEditingVideo(null);
-  }, [selectedCategory, categories]);
+  }, [selectedCategory]);
 
   const handleUploadVideos = useCallback(async (files) => {
     if (!selectedCategory) return;
