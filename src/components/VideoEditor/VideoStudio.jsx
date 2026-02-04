@@ -863,56 +863,51 @@ const VideoStudio = ({
       const imagesA = selectedCategory.imagesA || [];
       const imagesB = selectedCategory.imagesB || [];
 
-      if (imagesA.length === 0 && imagesB.length === 0) {
-        alert('Please add images to Image A or Image B banks first');
+      if (imagesA.length === 0 || imagesB.length === 0) {
+        alert('Please add images to both Image A and Image B banks first');
         return;
       }
 
       const batchSlideshows = [];
-      const slidesPerSlideshow = 5; // Each slideshow gets 5 slides
 
       for (let i = 0; i < 10; i++) {
-        const slides = [];
+        // Each slideshow has exactly 2 slides: Slide 1 from Image A, Slide 2 from Image B
+        const imageA = imagesA[Math.floor(Math.random() * imagesA.length)];
+        const imageB = imagesB[Math.floor(Math.random() * imagesB.length)];
 
-        // Create slides alternating between A and B banks (like video clips)
-        for (let j = 0; j < slidesPerSlideshow; j++) {
-          // Alternate: even index = A, odd index = B (with fallback)
-          const useBank = j % 2 === 0 ? 'imageA' : 'imageB';
-          const bank = useBank === 'imageA' ? imagesA : imagesB;
-          const fallbackBank = useBank === 'imageA' ? imagesB : imagesA;
-
-          // Use primary bank if available, otherwise fallback
-          const sourceBank = bank.length > 0 ? bank : fallbackBank;
-          const sourceBankName = bank.length > 0 ? useBank : (useBank === 'imageA' ? 'imageB' : 'imageA');
-
-          if (sourceBank.length > 0) {
-            // Random image from the bank
-            const randomImage = sourceBank[Math.floor(Math.random() * sourceBank.length)];
-            slides.push({
-              id: `slide_${Date.now()}_${i}_${j}`,
-              index: j,
-              backgroundImage: randomImage.localUrl || randomImage.url,
-              thumbnail: randomImage.localUrl || randomImage.url,
-              sourceBank: sourceBankName,
-              sourceImageId: randomImage.id,
-              textOverlays: [],
-              duration: 3
-            });
+        const slides = [
+          {
+            id: `slide_${Date.now()}_${i}_0`,
+            index: 0,
+            backgroundImage: imageA.localUrl || imageA.url,
+            thumbnail: imageA.localUrl || imageA.url,
+            sourceBank: 'imageA',
+            sourceImageId: imageA.id,
+            textOverlays: [],
+            duration: 3
+          },
+          {
+            id: `slide_${Date.now()}_${i}_1`,
+            index: 1,
+            backgroundImage: imageB.localUrl || imageB.url,
+            thumbnail: imageB.localUrl || imageB.url,
+            sourceBank: 'imageB',
+            sourceImageId: imageB.id,
+            textOverlays: [],
+            duration: 3
           }
-        }
+        ];
 
-        if (slides.length > 0) {
-          batchSlideshows.push({
-            id: `slideshow_batch_${Date.now()}_${i}`,
-            name: `${selectedCategory.name} Slideshow ${i + 1}`,
-            aspectRatio: '9:16',
-            slides,
-            audio: null,
-            status: 'draft',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          });
-        }
+        batchSlideshows.push({
+          id: `slideshow_batch_${Date.now()}_${i}`,
+          name: `${selectedCategory.name} Slideshow ${i + 1}`,
+          aspectRatio: '9:16',
+          slides,
+          audio: null,
+          status: 'draft',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
       }
 
       // Save all slideshows to category
