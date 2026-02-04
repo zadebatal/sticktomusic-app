@@ -32,17 +32,42 @@ export async function transcribeAudio(audioFileOrUrl, apiKey, onProgress, option
   // Handle URL input - fetch and convert to File
   let audioFile = audioFileOrUrl;
   if (typeof audioFileOrUrl === 'string') {
+    // Reject blob URLs - they expire and can't be fetched reliably
+    if (audioFileOrUrl.startsWith('blob:')) {
+      throw new Error('Blob URLs are not supported. Please use a direct file upload or a valid HTTP URL.');
+    }
+
+    // Must be an HTTP/HTTPS URL
+    if (!audioFileOrUrl.startsWith('http://') && !audioFileOrUrl.startsWith('https://')) {
+      throw new Error('Invalid audio source. Expected a File object or HTTP URL.');
+    }
+
     onProgress?.('Fetching audio from URL...');
     try {
       const response = await fetch(audioFileOrUrl);
       if (!response.ok) throw new Error(`Failed to fetch audio: ${response.status}`);
       const blob = await response.blob();
+
+      // Validate we got actual content
+      if (blob.size === 0) {
+        throw new Error('Fetched audio is empty');
+      }
+
       // Extract filename from URL or use default
       const filename = audioFileOrUrl.split('/').pop()?.split('?')[0] || 'audio.mp3';
       audioFile = new File([blob], filename, { type: blob.type || 'audio/mpeg' });
     } catch (err) {
       throw new Error(`Failed to fetch audio from URL: ${err.message}`);
     }
+  }
+
+  // Validate we have a proper File object
+  if (!(audioFile instanceof File) && !(audioFile instanceof Blob)) {
+    throw new Error('Invalid audio: expected a File or Blob object');
+  }
+
+  if (audioFile.size === 0) {
+    throw new Error('Audio file is empty');
   }
 
   const formData = new FormData();

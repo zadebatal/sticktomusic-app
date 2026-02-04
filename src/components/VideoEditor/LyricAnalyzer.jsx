@@ -13,7 +13,31 @@ const LyricAnalyzer = ({ audioFile, audioUrl, onComplete, onClose }) => {
   const [cachedLyrics, setCachedLyrics] = useState(null);
   const { analyze, isAnalyzing, progress, error, hasApiKey } = useLyricAnalyzer();
 
-  const audioSource = audioFile || audioUrl;
+  // Determine best audio source:
+  // 1. File object (direct upload) - always preferred
+  // 2. HTTPS URL (Firebase Storage) - can be fetched
+  // 3. Blob URL - NOT supported (expires)
+  const getValidAudioSource = () => {
+    // Prefer File object if available
+    if (audioFile instanceof File || audioFile instanceof Blob) {
+      return audioFile;
+    }
+
+    // Check if URL is valid (not blob)
+    if (typeof audioUrl === 'string') {
+      if (audioUrl.startsWith('blob:')) {
+        return null; // Blob URLs expire, not supported
+      }
+      if (audioUrl.startsWith('http://') || audioUrl.startsWith('https://')) {
+        return audioUrl;
+      }
+    }
+
+    return null;
+  };
+
+  const audioSource = getValidAudioSource();
+  const isBlobUrl = typeof audioUrl === 'string' && audioUrl.startsWith('blob:') && !audioFile;
 
   // Check for cached lyrics on mount
   useEffect(() => {
@@ -75,12 +99,18 @@ const LyricAnalyzer = ({ audioFile, audioUrl, onComplete, onClose }) => {
         </div>
 
         <div style={styles.content}>
-          {/* UI-40: Empty state when no audio */}
+          {/* UI-40: Empty state when no audio or blob URL issue */}
           {!audioSource ? (
             <div style={styles.emptyState}>
-              <div style={styles.emptyIcon}>🎵</div>
-              <h4 style={styles.emptyTitle}>No Audio Selected</h4>
-              <p style={styles.emptyText}>Select an audio track to analyze lyrics with word-level timestamps.</p>
+              <div style={styles.emptyIcon}>{isBlobUrl ? '⚠️' : '🎵'}</div>
+              <h4 style={styles.emptyTitle}>
+                {isBlobUrl ? 'Audio Session Expired' : 'No Audio Selected'}
+              </h4>
+              <p style={styles.emptyText}>
+                {isBlobUrl
+                  ? 'The audio needs to be re-uploaded. Please close this and add the audio file again.'
+                  : 'Select an audio track to analyze lyrics with word-level timestamps.'}
+              </p>
             </div>
           ) : (
           <>
