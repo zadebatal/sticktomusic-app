@@ -125,7 +125,12 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
   const loadedClips = [];
   for (let i = 0; i < clips.length; i++) {
     const clip = clips[i];
-    const url = clip.localUrl || clip.url;
+    // Prefer cloud URL over blob URLs (blob URLs expire between sessions)
+    const localUrl = clip.localUrl;
+    const isBlobUrl = localUrl && localUrl.startsWith('blob:');
+    const url = isBlobUrl ? clip.url : (localUrl || clip.url);
+
+    console.log(`[VideoExport] Loading clip ${i}:`, url?.substring(0, 50) + '...');
     try {
       const video = await loadVideo(url);
       loadedClips.push({ ...clip, video });
@@ -145,7 +150,12 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
   if (audio?.url || audio?.localUrl) {
     try {
       console.log('[VideoExport] Loading audio...');
-      audioElement = await loadAudio(audio.localUrl || audio.url);
+      // Prefer cloud URL over expired blob URLs
+      const audioLocalUrl = audio.localUrl;
+      const isAudioBlobUrl = audioLocalUrl && audioLocalUrl.startsWith('blob:');
+      const audioUrl = isAudioBlobUrl ? audio.url : (audioLocalUrl || audio.url);
+      console.log('[VideoExport] Audio URL:', audioUrl?.substring(0, 50) + '...');
+      audioElement = await loadAudio(audioUrl);
 
       // Set up audio for recording
       audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -416,8 +426,10 @@ export const exportThumbnail = async (videoData) => {
   canvas.height = height;
   const ctx = canvas.getContext('2d');
 
-  // Load first clip
-  const url = clips[0].localUrl || clips[0].url;
+  // Load first clip - prefer cloud URL over expired blob URLs
+  const localUrl = clips[0].localUrl;
+  const isBlobUrl = localUrl && localUrl.startsWith('blob:');
+  const url = isBlobUrl ? clips[0].url : (localUrl || clips[0].url);
   const video = await loadVideo(url);
 
   // Draw frame

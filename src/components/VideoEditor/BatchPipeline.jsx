@@ -41,7 +41,12 @@ const BEAT_PATTERNS = [
  */
 const ClipThumbnail = ({ clip, style }) => {
   const videoRef = useRef(null);
-  const videoUrl = clip.localUrl || clip.url;
+
+  // Prefer cloud URL over blob URLs (blob URLs expire between sessions)
+  // Only use localUrl if it's NOT a blob URL
+  const localUrl = clip.localUrl;
+  const isBlobUrl = localUrl && localUrl.startsWith('blob:');
+  const videoUrl = isBlobUrl ? clip.url : (localUrl || clip.url);
 
   // Force first frame render when video loads
   useEffect(() => {
