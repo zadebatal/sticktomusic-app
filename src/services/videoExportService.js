@@ -162,7 +162,7 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
       audioSource = audioContext.createMediaElementSource(audioElement);
       audioDestination = audioContext.createMediaStreamDestination();
       audioSource.connect(audioDestination);
-      audioSource.connect(audioContext.destination); // Also play locally for sync
+      // Don't connect to destination - we don't want to hear it during render
     } catch (err) {
       console.warn('Failed to load audio:', err);
     }

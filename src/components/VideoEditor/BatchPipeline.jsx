@@ -444,10 +444,11 @@ const BatchPipeline = ({
         });
 
         // Generate clip sequence with variation
-        let clipPool = [...selectedClips];
-        if (clipStrategy === 'random') {
-          clipPool = clipPool.sort(() => Math.random() - 0.5);
-        } else if (clipStrategy === 'sequential') {
+        // ALWAYS shuffle the clip pool for variety between videos
+        let clipPool = [...selectedClips].sort(() => Math.random() - 0.5);
+
+        // For sequential mode, also apply rotation offset
+        if (clipStrategy === 'sequential') {
           const offset = i % clipPool.length;
           clipPool = [...clipPool.slice(offset), ...clipPool.slice(0, offset)];
         }
