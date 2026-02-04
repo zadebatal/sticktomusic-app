@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
-import { getStoredApiKey } from '../../services/assemblyAIService';
+import { getStoredApiKey } from '../../services/whisperService';
 import { loadLyricTemplate, saveLyricTemplate } from '../../services/storageService';
 
 /**
@@ -123,9 +123,9 @@ const LyricAnalyzer = ({ audioFile, audioUrl, onComplete, onClose }) => {
           {(showApiKeyInput || error) && !cachedLyrics && (
             <div style={styles.apiKeySection}>
               <label style={styles.label}>
-                AssemblyAI API Key
+                OpenAI API Key
                 <span style={styles.hint}>
-                  Get yours free at <a href="https://www.assemblyai.com/dashboard/signup" target="_blank" rel="noopener noreferrer" style={styles.link}>assemblyai.com</a>
+                  Get yours at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" style={styles.link}>platform.openai.com</a>
                 </span>
               </label>
               <input
@@ -135,7 +135,7 @@ const LyricAnalyzer = ({ audioFile, audioUrl, onComplete, onClose }) => {
                 placeholder="Enter your API key..."
                 style={styles.input}
               />
-              <p style={styles.cost}>✅ Supports files up to 5GB • Free tier: 3 hours/month</p>
+              <p style={styles.cost}>✅ Whisper API • Max 25MB • ~$0.006/min</p>
             </div>
           )}
           {/* Show button to change API key if one is stored but input is hidden */}
@@ -164,7 +164,7 @@ const LyricAnalyzer = ({ audioFile, audioUrl, onComplete, onClose }) => {
             <div style={styles.info}>
               <h4 style={styles.infoTitle}>How it works:</h4>
               <ol style={styles.steps}>
-                <li>Your audio is uploaded to AssemblyAI</li>
+                <li>Your audio is sent to OpenAI Whisper</li>
                 <li>AI transcribes lyrics with word-level timestamps</li>
                 <li>Words load into the Word Timeline editor</li>
                 <li>Results are cached for future use</li>

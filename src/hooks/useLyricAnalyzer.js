@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { transcribeAudio, getStoredApiKey, storeApiKey, validateApiKey } from '../services/assemblyAIService';
+import { transcribeAudio, getStoredApiKey, storeApiKey, validateApiKey } from '../services/whisperService';
 
 export function useLyricAnalyzer() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
