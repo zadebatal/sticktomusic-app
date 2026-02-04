@@ -12,7 +12,7 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/audio/transcriptions';
 
 /**
  * Transcribe audio file and get word-level timestamps
- * @param {File} audioFile - Audio file to transcribe
+ * @param {File|string} audioFileOrUrl - Audio file or URL to transcribe
  * @param {string} apiKey - OpenAI API key
  * @param {Function} onProgress - Progress callback
  * @param {Object} options - Optional settings
@@ -20,14 +20,30 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/audio/transcriptions';
  * @param {number} options.trimEnd - Trim end in seconds (for LOCAL time output)
  * @returns {Object} - { text, words, language, duration, isTrimmed }
  */
-export async function transcribeAudio(audioFile, apiKey, onProgress, options = {}) {
+export async function transcribeAudio(audioFileOrUrl, apiKey, onProgress, options = {}) {
   if (!apiKey) throw new Error('OpenAI API key is required');
-  if (!audioFile) throw new Error('Audio file is required');
+  if (!audioFileOrUrl) throw new Error('Audio file or URL is required');
 
   const { trimStart = 0, trimEnd = null } = options;
   const isTrimmed = trimStart > 0 || trimEnd !== null;
 
   onProgress?.('Preparing audio file...');
+
+  // Handle URL input - fetch and convert to File
+  let audioFile = audioFileOrUrl;
+  if (typeof audioFileOrUrl === 'string') {
+    onProgress?.('Fetching audio from URL...');
+    try {
+      const response = await fetch(audioFileOrUrl);
+      if (!response.ok) throw new Error(`Failed to fetch audio: ${response.status}`);
+      const blob = await response.blob();
+      // Extract filename from URL or use default
+      const filename = audioFileOrUrl.split('/').pop()?.split('?')[0] || 'audio.mp3';
+      audioFile = new File([blob], filename, { type: blob.type || 'audio/mpeg' });
+    } catch (err) {
+      throw new Error(`Failed to fetch audio from URL: ${err.message}`);
+    }
+  }
 
   const formData = new FormData();
   formData.append('file', audioFile);
