@@ -264,6 +264,20 @@ const VideoEditorModal = ({
     }
   }, [currentClip, currentTime, isPlaying]);
 
+  // Handlers - MUST be defined before useEffect that references them (TDZ fix)
+  const handleSeek = useCallback((time) => {
+    // Use trimmed duration for clamping
+    const effectiveDuration = (selectedAudio?.endTime || selectedAudio?.duration || duration) - (selectedAudio?.startTime || 0);
+    const clampedTime = Math.max(0, Math.min(time, effectiveDuration));
+    setCurrentTime(clampedTime);
+    if (audioRef.current) {
+      // Add audio start boundary offset for trimmed audio
+      const startBoundary = selectedAudio?.startTime || 0;
+      audioRef.current.currentTime = clampedTime + startBoundary;
+    }
+    // Video sync will happen via the useEffect
+  }, [duration, selectedAudio]);
+
   // Progress bar dragging
   useEffect(() => {
     if (!progressDragging) return;
@@ -303,20 +317,6 @@ const VideoEditorModal = ({
       }
     }
   }, [currentClip?.url, currentClip?.id]);
-
-  // Handlers - MUST be defined before useEffect that references them (TDZ fix)
-  const handleSeek = useCallback((time) => {
-    // Use trimmed duration for clamping
-    const effectiveDuration = (selectedAudio?.endTime || selectedAudio?.duration || duration) - (selectedAudio?.startTime || 0);
-    const clampedTime = Math.max(0, Math.min(time, effectiveDuration));
-    setCurrentTime(clampedTime);
-    if (audioRef.current) {
-      // Add audio start boundary offset for trimmed audio
-      const startBoundary = selectedAudio?.startTime || 0;
-      audioRef.current.currentTime = clampedTime + startBoundary;
-    }
-    // Video sync will happen via the useEffect
-  }, [duration, selectedAudio]);
 
   const handleToggleMute = useCallback(() => {
     setIsMuted(prev => {
