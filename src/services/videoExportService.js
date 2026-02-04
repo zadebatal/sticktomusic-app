@@ -1,29 +1,101 @@
 /**
  * videoExportService.js
  * Video rendering using Canvas + MediaRecorder (reliable fallback)
- * With optional FFmpeg.wasm for faster encoding when available
+ * With FFmpeg.wasm for WebM to MP4 conversion (TikTok compatibility)
  */
 
-let ffmpegAvailable = null; // null = unknown, true/false = checked
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { fetchFile, toBlobURL } from '@ffmpeg/util';
+
+let ffmpegInstance = null;
+let ffmpegLoading = false;
 
 /**
- * Check if FFmpeg.wasm can be used (requires SharedArrayBuffer)
+ * Load FFmpeg.wasm instance (lazy loading)
  */
-const checkFFmpegAvailable = async () => {
-  if (ffmpegAvailable !== null) return ffmpegAvailable;
+const loadFFmpeg = async (onProgress = () => {}) => {
+  if (ffmpegInstance && ffmpegInstance.loaded) {
+    return ffmpegInstance;
+  }
+
+  if (ffmpegLoading) {
+    // Wait for existing load to complete
+    while (ffmpegLoading) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return ffmpegInstance;
+  }
+
+  ffmpegLoading = true;
 
   try {
-    // SharedArrayBuffer requires specific headers
-    if (typeof SharedArrayBuffer === 'undefined') {
-      console.log('[VideoExport] SharedArrayBuffer not available, using Canvas fallback');
-      ffmpegAvailable = false;
-      return false;
-    }
-    ffmpegAvailable = true;
-    return true;
-  } catch (e) {
-    ffmpegAvailable = false;
-    return false;
+    console.log('[VideoExport] Loading FFmpeg.wasm...');
+    const ffmpeg = new FFmpeg();
+
+    ffmpeg.on('progress', ({ progress }) => {
+      onProgress(Math.round(progress * 100));
+    });
+
+    // Load FFmpeg with CDN URLs
+    const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+    await ffmpeg.load({
+      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+    });
+
+    console.log('[VideoExport] FFmpeg.wasm loaded successfully');
+    ffmpegInstance = ffmpeg;
+    ffmpegLoading = false;
+    return ffmpeg;
+  } catch (error) {
+    console.error('[VideoExport] Failed to load FFmpeg:', error);
+    ffmpegLoading = false;
+    throw error;
+  }
+};
+
+/**
+ * Convert WebM blob to MP4 using FFmpeg.wasm
+ */
+const convertToMP4 = async (webmBlob, onProgress = () => {}) => {
+  console.log('[VideoExport] Converting WebM to MP4...');
+
+  try {
+    const ffmpeg = await loadFFmpeg(onProgress);
+
+    // Write input file
+    const inputName = 'input.webm';
+    const outputName = 'output.mp4';
+
+    await ffmpeg.writeFile(inputName, await fetchFile(webmBlob));
+
+    // Convert to MP4 with H.264 codec (most compatible)
+    // Using fast preset for reasonable speed
+    await ffmpeg.exec([
+      '-i', inputName,
+      '-c:v', 'libx264',
+      '-preset', 'fast',
+      '-crf', '23',
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      '-movflags', '+faststart',
+      '-pix_fmt', 'yuv420p',
+      outputName
+    ]);
+
+    // Read output file
+    const data = await ffmpeg.readFile(outputName);
+    const mp4Blob = new Blob([data.buffer], { type: 'video/mp4' });
+
+    // Clean up
+    await ffmpeg.deleteFile(inputName);
+    await ffmpeg.deleteFile(outputName);
+
+    console.log('[VideoExport] MP4 conversion complete:', (mp4Blob.size / 1024 / 1024).toFixed(2), 'MB');
+    return mp4Blob;
+  } catch (error) {
+    console.error('[VideoExport] MP4 conversion failed:', error);
+    throw error;
   }
 };
 
@@ -348,10 +420,15 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
 };
 
 /**
- * Main render function - tries FFmpeg first, falls back to Canvas
+ * Main render function - renders video and converts to MP4 for TikTok compatibility
+ * @param {Object} videoData - Video data including clips, audio, words, etc.
+ * @param {Function} onProgress - Progress callback (0-100)
+ * @param {Object} options - Render options
+ * @param {boolean} options.convertToMP4 - Whether to convert to MP4 (default: true for TikTok compatibility)
  */
-export const renderVideo = async (videoData, onProgress = () => {}) => {
+export const renderVideo = async (videoData, onProgress = () => {}, options = {}) => {
   const { clips, audio, duration } = videoData;
+  const { convertToMP4: shouldConvert = true } = options;
 
   if (!clips || clips.length === 0) {
     throw new Error('No clips to render');
@@ -367,7 +444,30 @@ export const renderVideo = async (videoData, onProgress = () => {}) => {
 
   // Use Canvas + MediaRecorder (most reliable)
   try {
-    return await renderWithCanvas(videoData, onProgress);
+    // Phase 1: Render WebM (0-70%)
+    const webmProgress = (p) => onProgress(Math.round(p * 0.7));
+    const webmBlob = await renderWithCanvas(videoData, webmProgress);
+
+    // Phase 2: Convert to MP4 if requested (70-100%)
+    if (shouldConvert) {
+      onProgress(70);
+      console.log('[VideoExport] Converting to MP4 for TikTok compatibility...');
+
+      try {
+        const mp4Progress = (p) => onProgress(70 + Math.round(p * 0.3));
+        const mp4Blob = await convertToMP4(webmBlob, mp4Progress);
+        onProgress(100);
+        return mp4Blob;
+      } catch (conversionError) {
+        console.warn('[VideoExport] MP4 conversion failed, returning WebM:', conversionError);
+        // Fall back to WebM if conversion fails
+        onProgress(100);
+        return webmBlob;
+      }
+    }
+
+    onProgress(100);
+    return webmBlob;
   } catch (canvasError) {
     console.error('[VideoExport] Canvas render failed:', canvasError);
     throw new Error(`Video rendering failed: ${canvasError.message}`);

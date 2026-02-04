@@ -51,10 +51,12 @@ const ContentLibrary = ({
 
       console.log('[ContentLibrary] Video rendered, size:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
 
-      // Upload to Firebase
+      // Upload to Firebase - use correct extension based on blob type
       setRenderProgress(95);
+      const isMP4 = blob.type === 'video/mp4';
+      const extension = isMP4 ? 'mp4' : 'webm';
       const { url: cloudUrl } = await uploadFile(
-        new File([blob], `${video.id}.webm`, { type: 'video/webm' }),
+        new File([blob], `${video.id}.${extension}`, { type: blob.type }),
         'videos'
       );
 
