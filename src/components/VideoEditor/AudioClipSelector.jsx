@@ -601,7 +601,22 @@ const AudioClipSelector = ({
             )}
             <button
               style={styles.saveButton}
-              onClick={() => onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration })}
+              onClick={() => {
+                // Auto-save to library if audio was trimmed (not using full track)
+                const isTrimmed = inPoint > 0.1 || (duration > 0 && Math.abs(outPoint - duration) > 0.1);
+                if (isTrimmed && onSaveClip) {
+                  const baseName = audioName || 'Audio';
+                  const autoClipName = `${baseName.replace(/\.[^/.]+$/, '')} (${formatTimeShort(inPoint)}-${formatTimeShort(outPoint)})`;
+                  onSaveClip({
+                    name: autoClipName,
+                    startTime: inPoint,
+                    endTime: outPoint,
+                    clipDuration: selectedDuration,
+                    autoSaved: true
+                  });
+                }
+                onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration });
+              }}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="20 6 9 17 4 12"/>

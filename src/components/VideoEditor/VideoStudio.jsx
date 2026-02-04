@@ -140,6 +140,8 @@ const VideoStudio = ({
 
   // Default categories for fresh installs
   // accountHandle links category to Late.co account for auto-scheduling
+  // defaultPreset contains text style and cut settings for batch generation
+  // captionTemplate uses {title}, {hashtags}, {index} placeholders
   const defaultCategories = [
     {
       id: 'boon-runway',
@@ -150,7 +152,23 @@ const VideoStudio = ({
       thumbnail: null,
       videos: [],
       audio: [],
-      createdVideos: []
+      createdVideos: [],
+      // New: Category defaults for batch generation
+      defaultPreset: {
+        textStyle: {
+          fontSize: 48,
+          fontFamily: "'Playfair Display', serif",
+          fontWeight: '300',
+          color: '#ffffff',
+          outline: true,
+          outlineColor: 'rgba(0,0,0,0.3)',
+          textCase: 'upper'
+        },
+        cutStyle: 'beat',
+        beatsPerCut: 2
+      },
+      captionTemplate: '{title} ✨ #fashion #runway {hashtags}',
+      defaultHashtags: '#aesthetic #fyp #style #viral'
     },
     {
       id: 'boon-edm',
@@ -161,7 +179,23 @@ const VideoStudio = ({
       thumbnail: null,
       videos: [],
       audio: [],
-      createdVideos: []
+      createdVideos: [],
+      // New: Category defaults for batch generation
+      defaultPreset: {
+        textStyle: {
+          fontSize: 72,
+          fontFamily: "'Space Grotesk', sans-serif",
+          fontWeight: '900',
+          color: '#00ff88',
+          outline: true,
+          outlineColor: '#000000',
+          textCase: 'upper'
+        },
+        cutStyle: 'beat',
+        beatsPerCut: 1
+      },
+      captionTemplate: '{title} 🔥 #edm #rave {hashtags}',
+      defaultHashtags: '#dj #electronic #music #fyp'
     }
   ];
 
@@ -533,6 +567,8 @@ const VideoStudio = ({
         startTime: clipData.startTime,
         endTime: clipData.endTime,
         isClip: true, // Flag to identify saved clips
+        autoSaved: clipData.autoSaved || false, // Was this auto-saved from "Use this clip"?
+        savedLyrics: [], // Initialize empty lyrics array
         createdAt: new Date().toISOString()
       };
 
@@ -548,6 +584,38 @@ const VideoStudio = ({
     }
 
     setUploadProgress(null);
+  }, [selectedCategory]);
+
+  // Save lyrics template to an audio track
+  const handleSaveLyricsToAudio = useCallback((audioId, lyricsData) => {
+    if (!selectedCategory) return;
+
+    const lyricsEntry = {
+      id: `lyrics_${Date.now()}`,
+      name: lyricsData.name || 'Untitled Lyrics',
+      words: lyricsData.words || [],
+      createdAt: new Date().toISOString()
+    };
+
+    const updateCategory = (cat) => {
+      if (cat.id !== selectedCategory.id) return cat;
+      return {
+        ...cat,
+        audio: cat.audio.map(audio =>
+          audio.id === audioId
+            ? {
+                ...audio,
+                savedLyrics: [...(audio.savedLyrics || []), lyricsEntry]
+              }
+            : audio
+        )
+      };
+    };
+
+    setCategories(prev => prev.map(updateCategory));
+    setSelectedCategory(prev => prev ? updateCategory(prev) : prev);
+
+    console.log('[Lyrics] Saved lyrics to audio:', audioId, lyricsEntry);
   }, [selectedCategory]);
 
   const handleDeleteVideo = useCallback(async (videoId) => {
@@ -845,6 +913,7 @@ const VideoStudio = ({
           lateAccountIds={lateAccountIds}
           onSchedulePost={onSchedulePost}
           onClose={() => setShowBatchPipeline(false)}
+          onSaveLyrics={(audioId, lyricsData) => handleSaveLyricsToAudio(audioId, lyricsData)}
           onVideosCreated={(videos) => {
             // Add created videos to category
             setCategories(prev => prev.map(cat =>
