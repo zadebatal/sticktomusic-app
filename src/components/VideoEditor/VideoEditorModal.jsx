@@ -22,6 +22,7 @@ const VideoEditorModal = ({
   presets = [],
   onSave,
   onSavePreset,
+  onSaveLyrics,
   onClose
 }) => {
   // Media state
@@ -35,6 +36,10 @@ const VideoEditorModal = ({
   // Text state
   const [lyrics, setLyrics] = useState(existingVideo?.lyrics || '');
   const [words, setWords] = useState(existingVideo?.words || []);
+
+  // Lyrics saving state
+  const [showSaveLyricsPrompt, setShowSaveLyricsPrompt] = useState(false);
+  const [pendingSaveData, setPendingSaveData] = useState(null);
   const [textStyle, setTextStyle] = useState(existingVideo?.textStyle || {
     fontSize: 48,
     fontFamily: 'Inter, sans-serif',
@@ -400,8 +405,8 @@ const VideoEditorModal = ({
   }, [autoSaveKey]);
 
   // handleSave - MUST be defined before keyboard shortcuts useEffect
-  const handleSave = useCallback(() => {
-    onSave({
+  const handleSave = useCallback((skipLyricsPrompt = false) => {
+    const videoData = {
       id: existingVideo?.id,
       audio: selectedAudio,
       clips,
@@ -413,10 +418,40 @@ const VideoEditorModal = ({
       bpm,
       thumbnail: clips[0]?.thumbnail || null,
       textOverlay: words[0]?.text || lyrics.split('\n')[0] || ''
-    });
-    // Clear auto-save after successful save
+    };
+
+    // If we have lyrics and a save handler, prompt to save to song
+    if (!skipLyricsPrompt && words.length > 0 && selectedAudio?.id && onSaveLyrics) {
+      setPendingSaveData(videoData);
+      setShowSaveLyricsPrompt(true);
+      return;
+    }
+
+    // Save directly
+    onSave(videoData);
     clearAutoSave();
-  }, [existingVideo, selectedAudio, clips, words, lyrics, textStyle, cropMode, duration, bpm, onSave, clearAutoSave]);
+  }, [existingVideo, selectedAudio, clips, words, lyrics, textStyle, cropMode, duration, bpm, onSave, onSaveLyrics, clearAutoSave]);
+
+  // Handle lyrics save prompt response
+  const handleLyricsPromptResponse = useCallback((saveLyrics) => {
+    if (saveLyrics && selectedAudio?.id && onSaveLyrics) {
+      // Save lyrics to the song
+      onSaveLyrics(selectedAudio.id, {
+        name: selectedAudio.name || 'Untitled',
+        words: words
+      });
+      toast.success('Lyrics saved to song for future videos!');
+    }
+
+    // Now save the video
+    if (pendingSaveData) {
+      onSave(pendingSaveData);
+      clearAutoSave();
+    }
+
+    setShowSaveLyricsPrompt(false);
+    setPendingSaveData(null);
+  }, [selectedAudio, words, onSaveLyrics, pendingSaveData, onSave, clearAutoSave, toast]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -552,6 +587,17 @@ const VideoEditorModal = ({
   // Handlers
   const handleAudioSelect = (audio) => {
     setSelectedAudio(audio);
+
+    // Auto-load saved lyrics from this audio if available and no lyrics exist yet
+    if (audio?.savedLyrics?.length > 0 && words.length === 0) {
+      const latestLyrics = audio.savedLyrics[audio.savedLyrics.length - 1];
+      if (latestLyrics.words?.length > 0) {
+        console.log('[Lyrics] Auto-loading saved lyrics from audio:', latestLyrics.name);
+        setWords(latestLyrics.words);
+        setLyrics(latestLyrics.words.map(w => w.text).join(' '));
+        toast.success(`Loaded saved lyrics: "${latestLyrics.name}"`);
+      }
+    }
   };
 
   // Show the beat selector modal
@@ -1929,6 +1975,46 @@ const VideoEditorModal = ({
                   onClick={handleRestoreDraft}
                 >
                   ✨ Restore Draft
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Save Lyrics to Song Prompt */}
+        {showSaveLyricsPrompt && (
+          <div style={styles.lyricsOverlay}>
+            <div style={{...styles.lyricsModal, maxWidth: '420px'}}>
+              <h3 style={styles.lyricsTitle}>💾 Save Lyrics to Song?</h3>
+              <p style={{ color: '#9CA3AF', fontSize: '14px', marginBottom: '16px' }}>
+                You've created timed lyrics for <strong style={{ color: '#fff' }}>{selectedAudio?.name || 'this song'}</strong>.
+                Save them to the song so they're automatically available next time you use it?
+              </p>
+              <div style={{
+                backgroundColor: '#1f1f2e',
+                padding: '12px',
+                borderRadius: '8px',
+                marginBottom: '16px',
+                fontSize: '13px',
+                color: '#9ca3af'
+              }}>
+                <div>🎤 {words.length} words with timing data</div>
+                <div style={{ marginTop: '4px', fontSize: '12px', color: '#6b7280' }}>
+                  "{words.slice(0, 5).map(w => w.text).join(' ')}{words.length > 5 ? '...' : ''}"
+                </div>
+              </div>
+              <div style={styles.lyricsActions}>
+                <button
+                  style={styles.cancelButton}
+                  onClick={() => handleLyricsPromptResponse(false)}
+                >
+                  No, Just This Video
+                </button>
+                <button
+                  style={styles.confirmButton}
+                  onClick={() => handleLyricsPromptResponse(true)}
+                >
+                  Yes, Save to Song
                 </button>
               </div>
             </div>

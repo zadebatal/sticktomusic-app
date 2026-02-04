@@ -368,6 +368,8 @@ const VideoStudio = ({
 
     setShowEditor(false);
     setEditingVideo(null);
+    // Navigate to content library after saving
+    setCurrentView('library');
   }, [selectedCategory]);
 
   const handleUploadVideos = useCallback(async (files) => {
@@ -927,6 +929,7 @@ const VideoStudio = ({
             presets={categoryPresets}
             onSave={handleSaveVideo}
             onSavePreset={handleSavePreset}
+            onSaveLyrics={handleSaveLyricsToAudio}
             onClose={handleCloseEditor}
           />
         </EditorErrorBoundary>

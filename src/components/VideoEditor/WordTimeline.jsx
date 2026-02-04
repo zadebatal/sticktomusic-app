@@ -44,6 +44,9 @@ const WordTimeline = ({
   const animationRef = useRef(null);
   const editInputRef = useRef(null);
 
+  // Refs to hold latest callback functions (avoids stale closures in keyboard handler)
+  const callbacksRef = useRef({});
+
   // Sync localTime with currentTime prop when not playing
   useEffect(() => {
     if (!isPlaying && !playheadDragging) {
@@ -438,17 +441,40 @@ const WordTimeline = ({
     return lines;
   };
 
-  // Keyboard shortcuts (moved here to ensure all dependencies are defined)
+  // Keep callbacks ref updated (avoids re-registering keyboard listener on every render)
+  useEffect(() => {
+    callbacksRef.current = {
+      onPlayPause,
+      onClose,
+      handleDeleteWord,
+      cancelDelete,
+      confirmDelete,
+      cancelInlineEdit,
+      getEffectiveWordIndex
+    };
+  });
+
+  // Keyboard shortcuts - use refs to avoid constant re-registration
   useEffect(() => {
     const handleKeyDown = (e) => {
+      const {
+        onPlayPause: playPause,
+        onClose: close,
+        handleDeleteWord: deleteWord,
+        cancelDelete: cancelDel,
+        confirmDelete: confirmDel,
+        cancelInlineEdit: cancelEdit,
+        getEffectiveWordIndex: getIndex
+      } = callbacksRef.current;
+
       // Escape to cancel delete confirmation or close modal
       if (e.key === 'Escape') {
         if (deleteConfirm.show) {
-          cancelDelete();
+          cancelDel?.();
         } else if (editingWordId) {
-          cancelInlineEdit();
+          cancelEdit?.();
         } else {
-          onClose?.();
+          close?.();
         }
         return;
       }
@@ -456,30 +482,30 @@ const WordTimeline = ({
       // Enter to confirm delete
       if (e.key === 'Enter' && deleteConfirm.show) {
         e.preventDefault();
-        confirmDelete();
+        confirmDel?.();
         return;
       }
 
       // Space to toggle play/pause (when not editing)
       if (e.key === ' ' && !editingWordId && !deleteConfirm.show) {
         e.preventDefault();
-        onPlayPause?.();
+        playPause?.();
         return;
       }
 
       // Delete key to delete word
       if ((e.key === 'Delete' || e.key === 'Backspace') && !editingWordId && !deleteConfirm.show) {
-        const index = getEffectiveWordIndex();
+        const index = getIndex?.();
         if (index >= 0) {
           e.preventDefault();
-          handleDeleteWord();
+          deleteWord?.();
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [deleteConfirm.show, editingWordId, onClose, onPlayPause, getEffectiveWordIndex, handleDeleteWord, cancelDelete, confirmDelete, cancelInlineEdit]);
+  }, [deleteConfirm.show, editingWordId]); // Only re-register when these state values change
 
   const selectedWord = selectedWordIndex !== null ? words[selectedWordIndex] : null;
   const effectiveIndex = getEffectiveWordIndex();
