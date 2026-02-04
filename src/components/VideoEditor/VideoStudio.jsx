@@ -911,6 +911,7 @@ const VideoStudio = ({
             onApproveVideo={handleApproveVideo}
             onUpdateVideo={handleUpdateVideo}
             onSchedulePost={onSchedulePost}
+            onShowBatchPipeline={() => setShowBatchPipeline(true)}
             accounts={accounts}
             lateAccountIds={lateAccountIds}
           />
