@@ -211,11 +211,29 @@ const BatchPipeline = ({
 
   // Analyze beats when audio is selected
   useEffect(() => {
-    if (selectedAudio && (selectedAudio.localUrl || selectedAudio.url)) {
-      const audioSource = selectedAudio.file || selectedAudio.localUrl || selectedAudio.url;
-      analyzeAudio(audioSource).catch(err => {
-        console.warn('Beat analysis failed:', err);
-      });
+    if (selectedAudio) {
+      // Determine the best audio source for beat detection
+      // Priority: File object > non-blob URL > cloud URL
+      let audioSource = null;
+
+      if (selectedAudio.file instanceof File || selectedAudio.file instanceof Blob) {
+        audioSource = selectedAudio.file;
+        console.log('[BatchPipeline] Using file object for beat detection');
+      } else if (selectedAudio.localUrl && !selectedAudio.localUrl.startsWith('blob:')) {
+        audioSource = selectedAudio.localUrl;
+        console.log('[BatchPipeline] Using localUrl for beat detection:', audioSource?.substring(0, 50));
+      } else if (selectedAudio.url) {
+        audioSource = selectedAudio.url;
+        console.log('[BatchPipeline] Using cloud URL for beat detection:', audioSource?.substring(0, 50));
+      }
+
+      if (audioSource) {
+        analyzeAudio(audioSource).catch(err => {
+          console.warn('Beat analysis failed:', err);
+        });
+      } else {
+        console.warn('[BatchPipeline] No valid audio source for beat detection:', selectedAudio);
+      }
     }
   }, [selectedAudio, analyzeAudio]);
 
