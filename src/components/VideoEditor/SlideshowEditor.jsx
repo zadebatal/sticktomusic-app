@@ -804,7 +804,7 @@ const SlideshowEditor = ({
                 )}
 
                 {/* Text Overlays */}
-                {currentSlide?.textOverlays.map(overlay => (
+                {(currentSlide?.textOverlays || []).map(overlay => (
                   <div
                     key={overlay.id}
                     style={{
@@ -930,7 +930,7 @@ const SlideshowEditor = ({
             {/* Text Editor (when editing) */}
             {editingTextId && currentSlide && (
               <TextEditor
-                overlay={currentSlide.textOverlays.find(o => o.id === editingTextId)}
+                overlay={(currentSlide.textOverlays || []).find(o => o.id === editingTextId)}
                 onUpdate={(updates) => updateTextOverlay(editingTextId, updates)}
                 onRemove={() => removeTextOverlay(editingTextId)}
                 onClose={() => setEditingTextId(null)}

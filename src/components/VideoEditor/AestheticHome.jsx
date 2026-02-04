@@ -463,6 +463,20 @@ const AestheticHome = ({
                       <input ref={imageBInputRef} type="file" accept="image/*" multiple onChange={(e) => handleImageUpload(e, 'B')} style={{ display: 'none' }} />
                     </div>
 
+                    {/* Audio Bank (for slideshows) */}
+                    <div style={styles.bankItem}>
+                      <div style={styles.bankHeader}>
+                        <span style={{...styles.bankIcon, color: '#22c55e'}}>🎵</span>
+                        <span style={styles.bankName}>Audio ({(selectedCategory.audio || []).length})</span>
+                      </div>
+                      <button style={{...styles.bankAddButton, borderColor: '#22c55e', color: '#22c55e'}} onClick={() => audioInputRef.current?.click()}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                        Add
+                      </button>
+                    </div>
+
                     {/* Lyrics Bank */}
                     <div style={styles.bankItem}>
                       <div style={styles.bankHeader}>
@@ -542,6 +556,41 @@ const AestheticHome = ({
                             image={image}
                             onDelete={() => setDeleteImageConfirm({ isOpen: true, imageId: image.id, imageName: image.name, bank: 'B' })}
                           />
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Audio Bank Grid */}
+                  <div style={styles.expandedBank}>
+                    <h4 style={{...styles.expandedBankTitle, color: '#22c55e'}}>🎵 Audio Bank</h4>
+                    <div style={styles.audioGrid}>
+                      {(selectedCategory.audio || []).length === 0 ? (
+                        <div style={{...styles.emptyState, borderColor: '#22c55e'}} onClick={() => audioInputRef.current?.click()}>
+                          <span style={{color: '#22c55e'}}>Click to add audio</span>
+                        </div>
+                      ) : (
+                        (selectedCategory.audio || []).map(audio => (
+                          <div key={audio.id} style={styles.audioCard}>
+                            <div style={styles.audioCardIcon}>🎵</div>
+                            <div style={styles.audioCardInfo}>
+                              <div style={styles.audioCardName}>{audio.name}</div>
+                              <div style={styles.audioCardDuration}>
+                                {audio.clipDuration ? `${Math.floor(audio.clipDuration / 60)}:${String(Math.floor(audio.clipDuration % 60)).padStart(2, '0')}` : '--:--'}
+                              </div>
+                            </div>
+                            <button
+                              style={styles.audioDeleteBtn}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteAudioConfirm({ isOpen: true, audioId: audio.id, audioName: audio.name });
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14"/>
+                              </svg>
+                            </button>
+                          </div>
                         ))
                       )}
                     </div>
@@ -816,6 +865,13 @@ const styles = {
   expandedBankTitle: { fontSize: '14px', fontWeight: '600', color: '#9ca3af', marginBottom: '12px' },
   assetGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '12px' },
   imageGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px' },
+  audioGrid: { display: 'flex', flexDirection: 'column', gap: '8px' },
+  audioCard: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', backgroundColor: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', borderRadius: '8px' },
+  audioCardIcon: { fontSize: '20px' },
+  audioCardInfo: { flex: 1, minWidth: 0 },
+  audioCardName: { fontSize: '13px', fontWeight: '500', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  audioCardDuration: { fontSize: '11px', color: '#86efac' },
+  audioDeleteBtn: { padding: '6px', backgroundColor: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '4px', color: '#f87171', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   audioList: { display: 'flex', flexDirection: 'column', gap: '8px' },
   emptyState: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px', border: '2px dashed #374151', borderRadius: '8px', cursor: 'pointer', color: '#6b7280', fontSize: '13px' },
   emptyStateSmall: { padding: '16px', border: '1px dashed #374151', borderRadius: '6px', textAlign: 'center', cursor: 'pointer', color: '#6b7280', fontSize: '12px' },
