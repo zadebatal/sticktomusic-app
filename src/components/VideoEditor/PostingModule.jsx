@@ -419,6 +419,7 @@ const PostingModule = ({
 
 /**
  * PostCard - Individual post item with editable fields
+ * Click on caption/hashtags to edit directly
  */
 const PostCard = ({
   post,
@@ -432,6 +433,10 @@ const PostCard = ({
   onRandomize,
   onRemove
 }) => {
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const captionInputRef = React.useRef(null);
+  const hashtagInputRef = React.useRef(null);
+
   // Calculate this post's scheduled time
   const scheduledTime = useMemo(() => {
     if (!scheduleDate || !scheduleTime) return null;
@@ -445,6 +450,36 @@ const PostCard = ({
       minute: '2-digit'
     });
   }, [scheduleDate, scheduleTime, index, intervalMinutes]);
+
+  // Auto-focus input when editing starts
+  React.useEffect(() => {
+    if (post.isEditing && captionInputRef.current) {
+      captionInputRef.current.focus();
+    }
+  }, [post.isEditing]);
+
+  // Handle keyboard shortcuts in inputs
+  const handleInputKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      onToggleEdit(post.id);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      onToggleEdit(post.id);
+    }
+  };
+
+  // Handle remove with confirmation
+  const handleRemove = () => {
+    if (showRemoveConfirm) {
+      onRemove(post.id);
+      setShowRemoveConfirm(false);
+    } else {
+      setShowRemoveConfirm(true);
+      // Auto-reset after 3 seconds
+      setTimeout(() => setShowRemoveConfirm(false), 3000);
+    }
+  };
 
   return (
     <div style={styles.postCard}>
@@ -465,35 +500,65 @@ const PostCard = ({
           <span style={styles.postTime}>{scheduledTime || 'No date set'}</span>
         </div>
 
-        {/* Caption */}
+        {/* Caption - Click to edit */}
         <div style={styles.fieldGroup}>
           <label style={styles.fieldLabel}>Caption</label>
           {post.isEditing ? (
             <input
+              ref={captionInputRef}
               type="text"
               value={post.caption}
               onChange={(e) => onCaptionChange(post.id, e.target.value)}
+              onKeyDown={handleInputKeyDown}
               style={styles.captionInput}
               placeholder="Enter caption..."
             />
           ) : (
-            <p style={styles.captionText}>{post.caption || '(no caption)'}</p>
+            <p
+              style={{
+                ...styles.captionText,
+                cursor: 'pointer',
+                borderBottom: '1px dashed transparent',
+                transition: 'border-color 0.2s'
+              }}
+              onClick={() => onToggleEdit(post.id)}
+              onMouseEnter={(e) => e.target.style.borderBottomColor = '#52525b'}
+              onMouseLeave={(e) => e.target.style.borderBottomColor = 'transparent'}
+              title="Click to edit"
+            >
+              {post.caption || '(click to add caption)'}
+            </p>
           )}
         </div>
 
-        {/* Hashtags */}
+        {/* Hashtags - Click to edit */}
         <div style={styles.fieldGroup}>
           <label style={styles.fieldLabel}>Hashtags</label>
           {post.isEditing ? (
             <input
+              ref={hashtagInputRef}
               type="text"
               value={post.hashtagString}
               onChange={(e) => onHashtagsChange(post.id, e.target.value)}
+              onKeyDown={handleInputKeyDown}
               style={styles.hashtagInput}
               placeholder="#hashtag1 #hashtag2..."
             />
           ) : (
-            <p style={styles.hashtagText}>{post.hashtagString || '(no hashtags)'}</p>
+            <p
+              style={{
+                ...styles.hashtagText,
+                cursor: 'pointer',
+                borderBottom: '1px dashed transparent',
+                transition: 'border-color 0.2s'
+              }}
+              onClick={() => onToggleEdit(post.id)}
+              onMouseEnter={(e) => e.target.style.borderBottomColor = '#52525b'}
+              onMouseLeave={(e) => e.target.style.borderBottomColor = 'transparent'}
+              title="Click to edit"
+            >
+              {post.hashtagString || '(click to add hashtags)'}
+            </p>
           )}
         </div>
       </div>
@@ -503,7 +568,7 @@ const PostCard = ({
         <button
           style={styles.actionBtn}
           onClick={() => onToggleEdit(post.id)}
-          title={post.isEditing ? 'Done editing' : 'Edit'}
+          title={post.isEditing ? 'Done editing (Enter)' : 'Edit'}
         >
           {post.isEditing ? '✓' : '✏️'}
         </button>
@@ -515,11 +580,15 @@ const PostCard = ({
           🎲
         </button>
         <button
-          style={styles.actionBtnDanger}
-          onClick={() => onRemove(post.id)}
-          title="Remove"
+          style={{
+            ...styles.actionBtnDanger,
+            backgroundColor: showRemoveConfirm ? '#dc2626' : undefined,
+            color: showRemoveConfirm ? '#fff' : undefined
+          }}
+          onClick={handleRemove}
+          title={showRemoveConfirm ? 'Click again to confirm' : 'Remove'}
         >
-          ✕
+          {showRemoveConfirm ? '?' : '✕'}
         </button>
       </div>
     </div>

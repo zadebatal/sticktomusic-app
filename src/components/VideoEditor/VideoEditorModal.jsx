@@ -46,8 +46,12 @@ const VideoEditorModal = ({
     displayMode: 'word'
   });
 
-  // Editor state
-  const [activeTab, setActiveTab] = useState('caption'); // caption, styles
+  // Editor state - restore tab from session
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      return localStorage.getItem('stm_editor_tab') || 'caption';
+    } catch { return 'caption'; }
+  });
   const [cropMode, setCropMode] = useState('9:16');
   const [selectedPreset, setSelectedPreset] = useState(null);
   const [showLyricsEditor, setShowLyricsEditor] = useState(false);
@@ -75,6 +79,13 @@ const VideoEditorModal = ({
   // Close confirmation state
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
+  // Progress bar dragging state
+  const [progressDragging, setProgressDragging] = useState(false);
+  const progressBarRef = useRef(null);
+
+  // Clip drag reordering state
+  const [clipDrag, setClipDrag] = useState({ dragging: false, fromIndex: -1, toIndex: -1 });
+
   // Beat detection
   const { beats, bpm, isAnalyzing, analyzeAudio } = useBeatDetection();
 
@@ -84,6 +95,13 @@ const VideoEditorModal = ({
   const timelineRef = useRef(null);
   const animationRef = useRef(null);
   const previousTrimHashRef = useRef(null);
+
+  // Persist active tab to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('stm_editor_tab', activeTab);
+    } catch { /* ignore */ }
+  }, [activeTab]);
 
   // Trim change detection - invalidate dependent data when trim boundaries change
   // INVARIANT: Words and clips are in LOCAL time, so they become invalid if trim changes
@@ -245,6 +263,32 @@ const VideoEditorModal = ({
       }
     }
   }, [currentClip, currentTime, isPlaying]);
+
+  // Progress bar dragging
+  useEffect(() => {
+    if (!progressDragging) return;
+
+    const handleMouseMove = (e) => {
+      if (!progressBarRef.current) return;
+      const rect = progressBarRef.current.getBoundingClientRect();
+      const clickX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+      const percent = clickX / rect.width;
+      const newTime = percent * trimmedDuration;
+      handleSeek(newTime);
+    };
+
+    const handleMouseUp = () => {
+      setProgressDragging(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [progressDragging, trimmedDuration, handleSeek]);
 
   // Handle clip changes - load new video
   useEffect(() => {
@@ -531,9 +575,25 @@ const VideoEditorModal = ({
     if (!category?.videos?.length) return;
 
     const availableClips = category.videos;
-    const indicesToReroll = selectedClips.length > 0
-      ? selectedClips
-      : clips.map((_, i) => i);
+
+    // Get indices to reroll: selected clips, or clip at playhead, or all clips
+    let indicesToReroll;
+    if (selectedClips.length > 0) {
+      indicesToReroll = selectedClips;
+    } else {
+      // Find clip at current playhead position
+      let cumTime = 0;
+      let playheadClip = -1;
+      for (let i = 0; i < clips.length; i++) {
+        const clipEnd = cumTime + (clips[i].duration || 0.5);
+        if (currentTime >= cumTime && currentTime < clipEnd) {
+          playheadClip = i;
+          break;
+        }
+        cumTime = clipEnd;
+      }
+      indicesToReroll = playheadClip >= 0 ? [playheadClip] : clips.map((_, i) => i);
+    }
 
     setClips(prev => prev.map((clip, i) => {
       if (!indicesToReroll.includes(i) || clip.locked) return clip;
@@ -546,7 +606,7 @@ const VideoEditorModal = ({
         thumbnail: randomClip.thumbnail
       };
     }));
-  }, [clips, selectedClips, category?.videos]);
+  }, [clips, selectedClips, category?.videos, currentTime]);
 
   const handleRearrange = useCallback(() => {
     setClips(prev => {
@@ -560,6 +620,140 @@ const VideoEditorModal = ({
       });
     });
   }, []);
+
+  // Get the clip at the current playhead position
+  const getClipAtPlayhead = useCallback(() => {
+    let cumTime = 0;
+    for (let i = 0; i < clips.length; i++) {
+      const clipEnd = cumTime + (clips[i].duration || 0.5);
+      if (currentTime >= cumTime && currentTime < clipEnd) {
+        return i;
+      }
+      cumTime = clipEnd;
+    }
+    return -1;
+  }, [clips, currentTime]);
+
+  // Get effective indices for operations (selected or at playhead)
+  const getEffectiveClipIndices = useCallback(() => {
+    if (selectedClips.length > 0) return selectedClips;
+    const playheadClip = getClipAtPlayhead();
+    return playheadClip >= 0 ? [playheadClip] : [];
+  }, [selectedClips, getClipAtPlayhead]);
+
+  // Combine selected clips into one (merges consecutive clips)
+  const handleCombine = useCallback(() => {
+    const indices = getEffectiveClipIndices();
+    if (indices.length < 2) {
+      // Need at least 2 clips to combine - try combining with next clip
+      if (indices.length === 1 && indices[0] < clips.length - 1) {
+        const idx = indices[0];
+        setClips(prev => {
+          const newClips = [...prev];
+          const clip1 = newClips[idx];
+          const clip2 = newClips[idx + 1];
+          // Keep the first clip's source, sum the durations
+          const combined = {
+            ...clip1,
+            duration: (clip1.duration || 0.5) + (clip2.duration || 0.5)
+          };
+          newClips.splice(idx, 2, combined);
+          return newClips;
+        });
+        setSelectedClips([]);
+      }
+      return;
+    }
+
+    // Sort indices and combine consecutive clips
+    const sorted = [...indices].sort((a, b) => a - b);
+    setClips(prev => {
+      const newClips = [...prev];
+      // Start from the end to preserve indices
+      for (let i = sorted.length - 1; i > 0; i--) {
+        const idx = sorted[i];
+        const prevIdx = sorted[i - 1];
+        // Only combine if consecutive
+        if (idx === prevIdx + 1) {
+          const combined = {
+            ...newClips[prevIdx],
+            duration: (newClips[prevIdx].duration || 0.5) + (newClips[idx].duration || 0.5)
+          };
+          newClips.splice(prevIdx, 2, combined);
+        }
+      }
+      return newClips;
+    });
+    setSelectedClips([]);
+  }, [clips, getEffectiveClipIndices]);
+
+  // Break/split a clip at the playhead position
+  const handleBreak = useCallback(() => {
+    const clipIndex = getClipAtPlayhead();
+    if (clipIndex < 0) return;
+
+    // Calculate where in the clip the playhead is
+    let cumTime = 0;
+    for (let i = 0; i < clipIndex; i++) {
+      cumTime += clips[i].duration || 0.5;
+    }
+    const clipStartTime = cumTime;
+    const clip = clips[clipIndex];
+    const clipDuration = clip.duration || 0.5;
+    const splitPoint = currentTime - clipStartTime;
+
+    // Don't split if too close to edges
+    if (splitPoint < 0.1 || splitPoint > clipDuration - 0.1) return;
+
+    // Create two clips from one
+    const firstHalf = {
+      ...clip,
+      id: `${clip.id}_a`,
+      duration: splitPoint
+    };
+    const secondHalf = {
+      ...clip,
+      id: `${clip.id}_b`,
+      duration: clipDuration - splitPoint,
+      startTime: clip.startTime + splitPoint
+    };
+
+    setClips(prev => {
+      const newClips = [...prev];
+      newClips.splice(clipIndex, 1, firstHalf, secondHalf);
+      return newClips;
+    });
+    setSelectedClips([]);
+  }, [clips, currentTime, getClipAtPlayhead]);
+
+  // Clip drag reorder handlers
+  const handleClipDragStart = useCallback((index) => {
+    setClipDrag({ dragging: true, fromIndex: index, toIndex: index });
+  }, []);
+
+  const handleClipDragOver = useCallback((index) => {
+    if (clipDrag.dragging && index !== clipDrag.toIndex) {
+      setClipDrag(prev => ({ ...prev, toIndex: index }));
+    }
+  }, [clipDrag.dragging, clipDrag.toIndex]);
+
+  const handleClipDragEnd = useCallback(() => {
+    if (clipDrag.dragging && clipDrag.fromIndex !== clipDrag.toIndex && clipDrag.fromIndex >= 0 && clipDrag.toIndex >= 0) {
+      setClips(prev => {
+        const newClips = [...prev];
+        const [movedClip] = newClips.splice(clipDrag.fromIndex, 1);
+        newClips.splice(clipDrag.toIndex, 0, movedClip);
+        // Recalculate start times
+        let cumTime = 0;
+        return newClips.map(clip => {
+          const updated = { ...clip, startTime: cumTime };
+          cumTime += clip.duration || 0.5;
+          return updated;
+        });
+      });
+    }
+    setClipDrag({ dragging: false, fromIndex: -1, toIndex: -1 });
+  }, [clipDrag]);
 
   const handleApplyPreset = useCallback((preset) => {
     setSelectedPreset(preset);
@@ -885,10 +1079,25 @@ const VideoEditorModal = ({
                 </div>
               </div>
 
-              {/* Progress Bar */}
+              {/* Progress Bar - Draggable */}
               <div
-                style={styles.progressBarContainer}
+                ref={progressBarRef}
+                style={{
+                  ...styles.progressBarContainer,
+                  cursor: progressDragging ? 'grabbing' : 'pointer'
+                }}
                 onClick={(e) => {
+                  if (progressDragging) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const clickX = e.clientX - rect.left;
+                  const percent = clickX / rect.width;
+                  const newTime = percent * trimmedDuration;
+                  handleSeek(newTime);
+                }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  setProgressDragging(true);
+                  // Immediately seek to clicked position
                   const rect = e.currentTarget.getBoundingClientRect();
                   const clickX = e.clientX - rect.left;
                   const percent = clickX / rect.width;
@@ -905,7 +1114,16 @@ const VideoEditorModal = ({
                 <div
                   style={{
                     ...styles.progressHandle,
-                    left: `${(currentTime / trimmedDuration) * 100}%`
+                    left: `${(currentTime / trimmedDuration) * 100}%`,
+                    cursor: 'grab',
+                    width: '14px',
+                    height: '14px',
+                    marginLeft: '-7px',
+                    marginTop: '-5px'
+                  }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    setProgressDragging(true);
                   }}
                 />
               </div>
@@ -1303,15 +1521,25 @@ const VideoEditorModal = ({
                         {clips.map((clip, index) => (
                           <div
                             key={clip.id}
+                            draggable={!clip.locked}
+                            onDragStart={() => handleClipDragStart(index)}
+                            onDragOver={(e) => { e.preventDefault(); handleClipDragOver(index); }}
+                            onDragEnd={handleClipDragEnd}
                             style={{
                               ...styles.clipItem,
                               minWidth: `${Math.max(60, (clip.duration || 1) * 40)}px`,
-                              ...(selectedClips.includes(index) ? styles.clipItemSelected : {})
+                              ...(selectedClips.includes(index) ? styles.clipItemSelected : {}),
+                              ...(clipDrag.dragging && clipDrag.fromIndex === index ? { opacity: 0.5 } : {}),
+                              ...(clipDrag.dragging && clipDrag.toIndex === index && clipDrag.fromIndex !== index ? {
+                                borderLeft: '3px solid #22c55e',
+                                marginLeft: '-3px'
+                              } : {}),
+                              cursor: clip.locked ? 'not-allowed' : 'grab'
                             }}
                             onClick={(e) => handleClipSelect(index, e)}
                           >
                             {clip.thumbnail ? (
-                              <img src={clip.thumbnail} alt="" style={styles.clipThumb} />
+                              <img src={clip.thumbnail} alt="" style={styles.clipThumb} draggable={false} />
                             ) : (
                               <video src={clip.url} style={styles.clipThumb} muted />
                             )}
@@ -1327,9 +1555,9 @@ const VideoEditorModal = ({
 
                   {/* Clip Actions */}
                   <div style={styles.clipActions}>
-                    <button style={styles.clipAction} onClick={() => {}}>Combine</button>
-                    <button style={styles.clipAction} onClick={() => {}}>Break</button>
-                    <button style={styles.clipAction} onClick={handleReroll}>Reroll</button>
+                    <button style={styles.clipAction} onClick={handleCombine} title="Combine selected clips or clip at playhead with next">Combine</button>
+                    <button style={styles.clipAction} onClick={handleBreak} title="Split clip at playhead position">Break</button>
+                    <button style={styles.clipAction} onClick={handleReroll} title="Replace clip(s) with random from bank">Reroll</button>
                     <button style={styles.clipAction} onClick={handleRearrange}>Rearrange</button>
                     <div style={styles.scaleControl}>
                       <span>Scale</span>
@@ -1380,7 +1608,15 @@ const VideoEditorModal = ({
 
         {/* Lyrics Editor Modal */}
         {showLyricsEditor && (
-          <div style={styles.lyricsOverlay}>
+          <div
+            style={styles.lyricsOverlay}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                setShowLyricsEditor(false);
+              }
+            }}
+          >
             <div style={styles.lyricsModal}>
               <h3 style={styles.lyricsTitle}>Edit Lyrics</h3>
               <textarea
@@ -1388,6 +1624,7 @@ const VideoEditorModal = ({
                 onChange={(e) => setLyrics(e.target.value)}
                 placeholder="Enter your lyrics here, one word or line per row..."
                 style={styles.lyricsTextarea}
+                autoFocus
               />
               <div style={styles.lyricsSyncOptions}>
                 <span>Sync method:</span>
@@ -1438,7 +1675,18 @@ const VideoEditorModal = ({
                 type="password"
                 value={apiKeyInput}
                 onChange={(e) => setApiKeyInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && apiKeyInput.trim()) {
+                    e.preventDefault();
+                    handleSaveApiKey();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setShowApiKeyModal(false);
+                    setApiKeyInput('');
+                  }
+                }}
                 placeholder="Enter your AssemblyAI API key..."
+                autoFocus
                 style={{
                   width: '100%',
                   padding: '12px',

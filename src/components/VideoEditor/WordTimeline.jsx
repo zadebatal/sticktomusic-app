@@ -26,7 +26,12 @@ const WordTimeline = ({
   onClose,
   audioRef // Add audioRef for direct time tracking
 }) => {
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(() => {
+    try {
+      const saved = localStorage.getItem('stm_wordtimeline_zoom');
+      return saved ? parseFloat(saved) : 1;
+    } catch { return 1; }
+  });
   const [selectedWordIndex, setSelectedWordIndex] = useState(null);
   const [dragState, setDragState] = useState(null);
   const [playheadDragging, setPlayheadDragging] = useState(false);
@@ -34,6 +39,7 @@ const WordTimeline = ({
   const [localTime, setLocalTime] = useState(currentTime); // Local playhead time for smooth animation
   const [editingWordId, setEditingWordId] = useState(null); // Which word is being edited inline
   const [editText, setEditText] = useState(''); // Text being edited
+  const [deleteConfirm, setDeleteConfirm] = useState({ show: false, index: -1, text: '' }); // Delete confirmation
   const timelineRef = useRef(null);
   const animationRef = useRef(null);
   const editInputRef = useRef(null);
@@ -44,6 +50,56 @@ const WordTimeline = ({
       setLocalTime(currentTime);
     }
   }, [currentTime, isPlaying, playheadDragging]);
+
+  // Persist zoom level
+  useEffect(() => {
+    try {
+      localStorage.setItem('stm_wordtimeline_zoom', zoom.toString());
+    } catch { /* ignore */ }
+  }, [zoom]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Escape to cancel delete confirmation or close modal
+      if (e.key === 'Escape') {
+        if (deleteConfirm.show) {
+          cancelDelete();
+        } else if (editingWordId) {
+          cancelInlineEdit();
+        } else {
+          onClose?.();
+        }
+        return;
+      }
+
+      // Enter to confirm delete
+      if (e.key === 'Enter' && deleteConfirm.show) {
+        e.preventDefault();
+        confirmDelete();
+        return;
+      }
+
+      // Space to toggle play/pause (when not editing)
+      if (e.key === ' ' && !editingWordId && !deleteConfirm.show) {
+        e.preventDefault();
+        onPlayPause?.();
+        return;
+      }
+
+      // Delete key to delete word
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !editingWordId && !deleteConfirm.show) {
+        const index = getEffectiveWordIndex();
+        if (index >= 0) {
+          e.preventDefault();
+          handleDeleteWord();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [deleteConfirm.show, editingWordId, onClose, onPlayPause, getEffectiveWordIndex]);
 
   // Animate playhead during playback using requestAnimationFrame
   useEffect(() => {
@@ -246,8 +302,20 @@ const WordTimeline = ({
   const handleDeleteWord = () => {
     const index = getEffectiveWordIndex();
     if (index < 0) return;
-    setWords(prev => prev.filter((_, i) => i !== index));
-    setSelectedWordIndex(null);
+    const word = words[index];
+    setDeleteConfirm({ show: true, index, text: word.text });
+  };
+
+  const confirmDelete = () => {
+    if (deleteConfirm.index >= 0) {
+      setWords(prev => prev.filter((_, i) => i !== deleteConfirm.index));
+      setSelectedWordIndex(null);
+    }
+    setDeleteConfirm({ show: false, index: -1, text: '' });
+  };
+
+  const cancelDelete = () => {
+    setDeleteConfirm({ show: false, index: -1, text: '' });
   };
 
   const handleSplitWord = () => {
@@ -718,6 +786,22 @@ const WordTimeline = ({
           <button style={styles.saveButton} onClick={onClose}>Save word timings</button>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      {deleteConfirm.show && (
+        <div style={styles.confirmOverlay}>
+          <div style={styles.confirmDialog}>
+            <h3 style={styles.confirmTitle}>Delete word?</h3>
+            <p style={styles.confirmMessage}>
+              Are you sure you want to delete "{deleteConfirm.text}"?
+            </p>
+            <div style={styles.confirmButtons}>
+              <button style={styles.confirmCancel} onClick={cancelDelete}>Cancel</button>
+              <button style={styles.confirmDelete} onClick={confirmDelete}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -774,7 +858,15 @@ const styles = {
   wordEditLabel: { width: '60px', fontSize: '12px', color: '#9ca3af' },
   wordEditInput: { flex: 1, padding: '6px 10px', backgroundColor: '#0a0a0f', border: '1px solid #2d2d3d', borderRadius: '6px', fontSize: '12px', color: '#fff', outline: 'none' },
   footer: { display: 'flex', justifyContent: 'flex-end', padding: '16px 20px', borderTop: '1px solid #1f1f2e', backgroundColor: '#0a0a0f' },
-  saveButton: { padding: '10px 20px', backgroundColor: '#7c3aed', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', color: '#fff', cursor: 'pointer' }
+  saveButton: { padding: '10px 20px', backgroundColor: '#7c3aed', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', color: '#fff', cursor: 'pointer' },
+  // Delete confirmation dialog
+  confirmOverlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200 },
+  confirmDialog: { backgroundColor: '#1a1a2e', borderRadius: '12px', padding: '24px', maxWidth: '320px', textAlign: 'center' },
+  confirmTitle: { margin: '0 0 12px 0', fontSize: '16px', fontWeight: '600', color: '#fff' },
+  confirmMessage: { margin: '0 0 20px 0', fontSize: '14px', color: '#9ca3af' },
+  confirmButtons: { display: 'flex', gap: '12px', justifyContent: 'center' },
+  confirmCancel: { padding: '8px 16px', backgroundColor: '#2d2d3d', border: 'none', borderRadius: '6px', fontSize: '13px', color: '#e5e7eb', cursor: 'pointer' },
+  confirmDelete: { padding: '8px 16px', backgroundColor: '#ef4444', border: 'none', borderRadius: '6px', fontSize: '13px', color: '#fff', cursor: 'pointer' }
 };
 
 export default WordTimeline;
