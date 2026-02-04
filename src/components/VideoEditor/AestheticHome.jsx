@@ -65,8 +65,7 @@ const AestheticHome = ({
   const [deleteImageConfirm, setDeleteImageConfirm] = useState({ isOpen: false, imageId: null, imageName: '', bank: 'A' });
   const [deleteSlideshowConfirm, setDeleteSlideshowConfirm] = useState({ isOpen: false, slideshowId: null, slideshowName: '' });
 
-  // Slideshow library view state
-  const [showSlideshowLibrary, setShowSlideshowLibrary] = useState(false);
+  // Note: Library views now use onViewContent to navigate to full content library page
 
   const handleCreateCategory = () => {
     if (newCategoryName.trim()) {
@@ -257,29 +256,49 @@ const AestheticHome = ({
 
                 <div style={styles.modeCards}>
                   {/* Videos Mode Card */}
-                  <button style={styles.modeCard} onClick={() => setStudioMode('videos')}>
-                    <div style={styles.modeCardIcon}>
-                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <rect x="2" y="4" width="20" height="16" rx="2"/>
-                        <path d="M10 9l5 3-5 3V9z" fill="currentColor"/>
-                      </svg>
-                    </div>
-                    <h3 style={styles.modeCardTitle}>VIDEOS</h3>
-                    <p style={styles.modeCardCount}>{videoCount} created</p>
-                  </button>
+                  <div style={styles.modeCard}>
+                    <button style={styles.modeCardMain} onClick={() => setStudioMode('videos')}>
+                      <div style={styles.modeCardIcon}>
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <rect x="2" y="4" width="20" height="16" rx="2"/>
+                          <path d="M10 9l5 3-5 3V9z" fill="currentColor"/>
+                        </svg>
+                      </div>
+                      <h3 style={styles.modeCardTitle}>VIDEOS</h3>
+                      <p style={styles.modeCardCount}>{videoCount} created</p>
+                    </button>
+                    {videoCount > 0 && (
+                      <button
+                        style={styles.modeCardViewBtn}
+                        onClick={(e) => { e.stopPropagation(); onViewContent?.(); }}
+                      >
+                        📁 View Library
+                      </button>
+                    )}
+                  </div>
 
                   {/* Slideshows Mode Card */}
-                  <button style={styles.modeCard} onClick={() => setStudioMode('slideshows')}>
-                    <div style={styles.modeCardIcon}>
-                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <rect x="2" y="6" width="6" height="12" rx="1"/>
-                        <rect x="9" y="6" width="6" height="12" rx="1"/>
-                        <rect x="16" y="6" width="6" height="12" rx="1"/>
-                      </svg>
-                    </div>
-                    <h3 style={styles.modeCardTitle}>SLIDESHOWS</h3>
-                    <p style={styles.modeCardCount}>{slideshowCount} created</p>
-                  </button>
+                  <div style={styles.modeCard}>
+                    <button style={styles.modeCardMain} onClick={() => setStudioMode('slideshows')}>
+                      <div style={styles.modeCardIcon}>
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <rect x="2" y="6" width="6" height="12" rx="1"/>
+                          <rect x="9" y="6" width="6" height="12" rx="1"/>
+                          <rect x="16" y="6" width="6" height="12" rx="1"/>
+                        </svg>
+                      </div>
+                      <h3 style={styles.modeCardTitle}>SLIDESHOWS</h3>
+                      <p style={styles.modeCardCount}>{slideshowCount} created</p>
+                    </button>
+                    {slideshowCount > 0 && (
+                      <button
+                        style={styles.modeCardViewBtn}
+                        onClick={(e) => { e.stopPropagation(); onViewContent?.(); }}
+                      >
+                        📁 View Library
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Shared Lyric Bank */}
@@ -509,8 +528,8 @@ const AestheticHome = ({
                       style={styles.actionButtonPurple}
                       onClick={() => {
                         onMakeSlideshow?.({ batch: true });
-                        // Auto-open slideshow library after batch creation
-                        setTimeout(() => setShowSlideshowLibrary(true), 100);
+                        // Auto-navigate to content library after batch creation
+                        setTimeout(() => onViewContent?.(), 100);
                       }}
                       disabled={(selectedCategory.imagesA || []).length === 0 || (selectedCategory.imagesB || []).length === 0}
                       title="Generate 10 slideshows randomly pulling from A/B banks"
@@ -522,7 +541,7 @@ const AestheticHome = ({
                     <button
                       style={styles.actionButtonGreen}
                       title="View created slideshows"
-                      onClick={() => setShowSlideshowLibrary(true)}
+                      onClick={() => onViewContent?.()}
                     >
                       <span style={styles.actionIcon}>📁</span>
                       View Created ({slideshowCount})
@@ -719,75 +738,6 @@ const AestheticHome = ({
         onCancel={() => setDeleteSlideshowConfirm({ isOpen: false, slideshowId: null, slideshowName: '' })}
       />
 
-      {/* Slideshow Library Modal */}
-      {showSlideshowLibrary && (
-        <div style={styles.slideshowLibraryOverlay}>
-          <div style={styles.slideshowLibraryModal}>
-            <div style={styles.slideshowLibraryHeader}>
-              <h2 style={styles.slideshowLibraryTitle}>
-                📁 Slideshows ({(selectedCategory?.slideshows || []).length})
-              </h2>
-              <button
-                style={styles.slideshowLibraryClose}
-                onClick={() => setShowSlideshowLibrary(false)}
-              >
-                ✕
-              </button>
-            </div>
-            <div style={styles.slideshowLibraryContent}>
-              {(selectedCategory?.slideshows || []).length === 0 ? (
-                <div style={styles.slideshowLibraryEmpty}>
-                  <p>No slideshows yet</p>
-                  <p style={{fontSize: '14px', color: '#71717a', marginTop: '8px'}}>
-                    Create slideshows using "Make a Slideshow" or "Make 10 at once"
-                  </p>
-                </div>
-              ) : (
-                <div style={styles.slideshowLibraryGrid}>
-                  {(selectedCategory?.slideshows || []).map(slideshow => (
-                    <div key={slideshow.id} style={styles.slideshowCard}>
-                      <div style={styles.slideshowCardPreview}>
-                        {slideshow.slides?.[0]?.thumbnail ? (
-                          <img
-                            src={slideshow.slides[0].thumbnail}
-                            alt=""
-                            style={styles.slideshowCardImg}
-                          />
-                        ) : (
-                          <div style={styles.slideshowCardPlaceholder}>🖼️</div>
-                        )}
-                        <div style={styles.slideshowCardBadge}>
-                          {slideshow.slides?.length || 0} slides
-                        </div>
-                      </div>
-                      <div style={styles.slideshowCardInfo}>
-                        <div style={styles.slideshowCardName}>{slideshow.name}</div>
-                        <div style={styles.slideshowCardStatus}>
-                          {slideshow.status === 'rendered' ? '✅ Exported' : '📝 Draft'}
-                        </div>
-                      </div>
-                      <div style={styles.slideshowCardActions}>
-                        <button
-                          style={styles.slideshowCardEditBtn}
-                          onClick={() => { setShowSlideshowLibrary(false); onEditSlideshow?.(slideshow); }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          style={styles.slideshowCardDeleteBtn}
-                          onClick={() => setDeleteSlideshowConfirm({ isOpen: true, slideshowId: slideshow.id, slideshowName: slideshow.name })}
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -925,10 +875,12 @@ const styles = {
   modeSelection: { textAlign: 'center', paddingTop: '40px' },
   modeTitle: { fontSize: '20px', fontWeight: '600', color: '#fff', marginBottom: '32px' },
   modeCards: { display: 'flex', justifyContent: 'center', gap: '24px', marginBottom: '48px' },
-  modeCard: { width: '200px', padding: '32px 24px', backgroundColor: '#111118', border: '2px solid #1f1f2e', borderRadius: '16px', cursor: 'pointer', transition: 'all 0.2s', textAlign: 'center' },
+  modeCard: { width: '200px', backgroundColor: '#111118', border: '2px solid #1f1f2e', borderRadius: '16px', transition: 'all 0.2s', textAlign: 'center', overflow: 'hidden' },
+  modeCardMain: { width: '100%', padding: '32px 24px', backgroundColor: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'center' },
   modeCardIcon: { color: '#9ca3af', marginBottom: '16px' },
   modeCardTitle: { fontSize: '18px', fontWeight: '700', color: '#fff', margin: '0 0 8px 0' },
   modeCardCount: { fontSize: '14px', color: '#6b7280', margin: 0 },
+  modeCardViewBtn: { width: '100%', padding: '12px', backgroundColor: '#1f1f2e', border: 'none', borderTop: '1px solid #2d2d3d', color: '#9ca3af', fontSize: '13px', cursor: 'pointer', transition: 'background-color 0.2s' },
   sharedSection: { borderTop: '1px solid #1f1f2e', paddingTop: '24px', maxWidth: '500px', margin: '0 auto' },
   sharedLyricBankHeader: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' },
   sharedLabel: { fontSize: '14px', color: '#9ca3af' },
@@ -1021,6 +973,7 @@ const styles = {
   slideshowLibraryGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' },
   slideshowCard: { backgroundColor: '#111118', borderRadius: '12px', overflow: 'hidden', border: '1px solid #1f1f2e' },
   slideshowCardPreview: { position: 'relative', aspectRatio: '9/16', backgroundColor: '#0a0a0f', maxHeight: '180px' },
+  videoLibraryPreview: { position: 'relative', aspectRatio: '16/9', backgroundColor: '#0a0a0f', maxHeight: '120px' },
   slideshowCardImg: { width: '100%', height: '100%', objectFit: 'cover' },
   slideshowCardPlaceholder: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', color: '#4b5563' },
   slideshowCardBadge: { position: 'absolute', bottom: '8px', right: '8px', padding: '4px 8px', backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: '4px', fontSize: '11px', color: '#fff' },
