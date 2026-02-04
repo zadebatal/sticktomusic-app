@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import AestheticHome from './AestheticHome';
 import ContentLibrary from './ContentLibrary';
 import VideoEditorModal from './VideoEditorModal';
@@ -120,11 +121,47 @@ const VideoStudio = ({
   lateAccountIds = {},
   onSchedulePost
 }) => {
+  // React Router hooks for URL-based navigation within studio
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Parse initial view from URL
+  const getInitialViewFromUrl = () => {
+    const path = location.pathname;
+    if (path.includes('/studio/library')) return 'library';
+    if (path.includes('/studio/slideshows')) return 'slideshows';
+    return 'home';
+  };
+
   // Load saved session for initial state
   const savedSession = useMemo(() => loadSessionState(), []);
 
-  // Navigation state - restore from session if available
-  const [currentView, setCurrentView] = useState(savedSession?.currentView || 'home');
+  // Navigation state - restore from session if available, or use URL
+  const [currentView, setCurrentViewState] = useState(getInitialViewFromUrl() || savedSession?.currentView || 'home');
+
+  // Wrap setCurrentView to also update URL
+  const setCurrentView = useCallback((view) => {
+    setCurrentViewState(view);
+    // Update URL based on view
+    let targetPath = '/operator/studio';
+    if (view === 'library') targetPath = '/operator/studio/library';
+    else if (view === 'slideshows') targetPath = '/operator/studio/slideshows';
+    if (location.pathname !== targetPath) {
+      navigate(targetPath, { replace: false });
+    }
+  }, [navigate, location.pathname]);
+
+  // Handle browser back/forward within studio
+  useEffect(() => {
+    const path = location.pathname;
+    if (path.includes('/studio/library') && currentView !== 'library') {
+      setCurrentViewState('library');
+    } else if (path.includes('/studio/slideshows') && currentView !== 'slideshows') {
+      setCurrentViewState('slideshows');
+    } else if (path === '/operator/studio' && currentView !== 'home') {
+      setCurrentViewState('home');
+    }
+  }, [location.pathname, currentView]);
   const [selectedArtist, setSelectedArtist] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(null); // Track upload progress

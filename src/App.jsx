@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 // Shared UI Components
 import {
@@ -234,16 +235,71 @@ const saveAppSession = (state) => {
 };
 
 const StickToMusic = () => {
+  // React Router hooks for URL-based navigation
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Parse initial state from URL
+  const getInitialStateFromUrl = () => {
+    const path = location.pathname;
+    if (path.startsWith('/operator/studio')) {
+      return { page: 'operator', tab: 'studio', showStudio: true };
+    } else if (path.startsWith('/operator/')) {
+      const tab = path.replace('/operator/', '').split('/')[0] || 'artists';
+      return { page: 'operator', tab, showStudio: false };
+    } else if (path === '/operator') {
+      return { page: 'operator', tab: 'artists', showStudio: false };
+    }
+    return { page: 'home', tab: 'artists', showStudio: false };
+  };
+
+  const initialState = getInitialStateFromUrl();
+
   // Load saved page - but only use it after auth is confirmed
   const savedAppSession = loadAppSession();
-  const [currentPage, setCurrentPage] = useState('home');
+  const [currentPage, setCurrentPage] = useState(initialState.page);
   const [pendingPage, setPendingPage] = useState(savedAppSession?.currentPage || null);
   const [pendingOperatorTab, setPendingOperatorTab] = useState(savedAppSession?.operatorTab || null);
   const [pendingShowVideoEditor, setPendingShowVideoEditor] = useState(savedAppSession?.showVideoEditor || false);
   const [sessionRestoreComplete, setSessionRestoreComplete] = useState(!savedAppSession); // Skip if no saved session
-  const [operatorTab, setOperatorTab] = useState('artists'); // Moved up for restore effect
-  const [showVideoEditor, setShowVideoEditor] = useState(false); // Moved up for restore effect
+  const [operatorTab, setOperatorTab] = useState(initialState.tab); // Moved up for restore effect
+  const [showVideoEditor, setShowVideoEditor] = useState(initialState.showStudio); // Moved up for restore effect
   const [openFaq, setOpenFaq] = useState(null);
+
+  // Sync URL when navigation state changes
+  useEffect(() => {
+    let targetPath = '/';
+    if (currentPage === 'operator') {
+      if (showVideoEditor) {
+        targetPath = '/operator/studio';
+      } else {
+        targetPath = `/operator/${operatorTab}`;
+      }
+    }
+    // Only update if path is different to avoid loops
+    if (location.pathname !== targetPath) {
+      navigate(targetPath, { replace: false });
+    }
+  }, [currentPage, operatorTab, showVideoEditor]);
+
+  // Handle browser back/forward navigation
+  useEffect(() => {
+    const path = location.pathname;
+    if (path.startsWith('/operator/studio')) {
+      if (currentPage !== 'operator') setCurrentPage('operator');
+      if (!showVideoEditor) setShowVideoEditor(true);
+    } else if (path.startsWith('/operator/')) {
+      const tab = path.replace('/operator/', '').split('/')[0] || 'artists';
+      if (currentPage !== 'operator') setCurrentPage('operator');
+      if (showVideoEditor) setShowVideoEditor(false);
+      if (operatorTab !== tab) setOperatorTab(tab);
+    } else if (path === '/operator') {
+      if (currentPage !== 'operator') setCurrentPage('operator');
+      if (showVideoEditor) setShowVideoEditor(false);
+    } else if (path === '/' || path === '') {
+      if (currentPage !== 'home') setCurrentPage('home');
+    }
+  }, [location.pathname]);
 
   // Authentication state
   const [user, setUser] = useState(null); // { email, role, name, artistId }
