@@ -58,49 +58,6 @@ const WordTimeline = ({
     } catch { /* ignore */ }
   }, [zoom]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      // Escape to cancel delete confirmation or close modal
-      if (e.key === 'Escape') {
-        if (deleteConfirm.show) {
-          cancelDelete();
-        } else if (editingWordId) {
-          cancelInlineEdit();
-        } else {
-          onClose?.();
-        }
-        return;
-      }
-
-      // Enter to confirm delete
-      if (e.key === 'Enter' && deleteConfirm.show) {
-        e.preventDefault();
-        confirmDelete();
-        return;
-      }
-
-      // Space to toggle play/pause (when not editing)
-      if (e.key === ' ' && !editingWordId && !deleteConfirm.show) {
-        e.preventDefault();
-        onPlayPause?.();
-        return;
-      }
-
-      // Delete key to delete word
-      if ((e.key === 'Delete' || e.key === 'Backspace') && !editingWordId && !deleteConfirm.show) {
-        const index = getEffectiveWordIndex();
-        if (index >= 0) {
-          e.preventDefault();
-          handleDeleteWord();
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [deleteConfirm.show, editingWordId, onClose, onPlayPause, getEffectiveWordIndex]);
-
   // Animate playhead during playback using requestAnimationFrame
   useEffect(() => {
     if (isPlaying && audioRef?.current && !playheadDragging) {
@@ -480,6 +437,49 @@ const WordTimeline = ({
     if (currentLine.length > 0) lines.push(currentLine);
     return lines;
   };
+
+  // Keyboard shortcuts (moved here to ensure all dependencies are defined)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Escape to cancel delete confirmation or close modal
+      if (e.key === 'Escape') {
+        if (deleteConfirm.show) {
+          cancelDelete();
+        } else if (editingWordId) {
+          cancelInlineEdit();
+        } else {
+          onClose?.();
+        }
+        return;
+      }
+
+      // Enter to confirm delete
+      if (e.key === 'Enter' && deleteConfirm.show) {
+        e.preventDefault();
+        confirmDelete();
+        return;
+      }
+
+      // Space to toggle play/pause (when not editing)
+      if (e.key === ' ' && !editingWordId && !deleteConfirm.show) {
+        e.preventDefault();
+        onPlayPause?.();
+        return;
+      }
+
+      // Delete key to delete word
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !editingWordId && !deleteConfirm.show) {
+        const index = getEffectiveWordIndex();
+        if (index >= 0) {
+          e.preventDefault();
+          handleDeleteWord();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [deleteConfirm.show, editingWordId, onClose, onPlayPause, getEffectiveWordIndex, handleDeleteWord, cancelDelete, confirmDelete, cancelInlineEdit]);
 
   const selectedWord = selectedWordIndex !== null ? words[selectedWordIndex] : null;
   const effectiveIndex = getEffectiveWordIndex();
