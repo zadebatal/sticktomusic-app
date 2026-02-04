@@ -939,9 +939,14 @@ const VideoEditorModal = ({
 
         // Calculate sample positions
         const sampleRate = audioBuffer.sampleRate;
+        const totalSamples = audioBuffer.length;
+        const totalDuration = audioBuffer.duration;
+        console.log(`AI Transcribe: Audio buffer - ${sampleRate}Hz, ${totalSamples} samples, ${totalDuration.toFixed(1)}s, ${audioBuffer.numberOfChannels} channels`);
+
         const startSample = Math.floor(trimStart * sampleRate);
-        const endSample = Math.floor(trimEnd * sampleRate);
+        const endSample = Math.min(Math.floor(trimEnd * sampleRate), totalSamples);
         const trimmedLength = endSample - startSample;
+        console.log(`AI Transcribe: Trimming samples ${startSample} to ${endSample} (${trimmedLength} samples = ${(trimmedLength/sampleRate).toFixed(1)}s)`);
 
         // Create a new buffer with just the trimmed portion
         const trimmedBuffer = audioContext.createBuffer(
