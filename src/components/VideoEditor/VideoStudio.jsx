@@ -1055,11 +1055,15 @@ const VideoStudio = ({
       {/* Header */}
       <header style={styles.header}>
         <div style={styles.headerLeft}>
-          <button onClick={onClose} style={styles.logoButton}>
+          <button
+            onClick={() => { setCurrentView('home'); setSelectedCategory(null); }}
+            style={styles.logoButton}
+            title="Back to categories"
+          >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polygon points="5,3 19,12 5,21" fill="currentColor"/>
             </svg>
-            <span style={styles.logoText}>StickToMusic Studio</span>
+            <span style={styles.logoText}>Studio</span>
           </button>
         </div>
 

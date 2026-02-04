@@ -1184,7 +1184,17 @@ const VideoEditorModal = ({
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div style={styles.header}>
-          <h2 id="video-editor-title" style={styles.title}>Preview video edit</h2>
+          <button
+            id="video-editor-title"
+            style={styles.studioButton}
+            onClick={handleCloseRequest}
+            title="Back to categories"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polygon points="5,3 19,12 5,21" fill="currentColor"/>
+            </svg>
+            <span>Studio</span>
+          </button>
           <button
             style={styles.closeButton}
             onClick={handleCloseRequest}
@@ -2173,6 +2183,20 @@ const styles = {
     fontWeight: '600',
     color: '#fff',
     margin: 0
+  },
+  studioButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 12px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: '#fff',
+    cursor: 'pointer',
+    borderRadius: '8px',
+    fontSize: '15px',
+    fontWeight: '600',
+    transition: 'background-color 0.2s'
   },
   closeButton: {
     display: 'flex',
