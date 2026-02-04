@@ -228,7 +228,9 @@ const StickToMusic = () => {
   const [currentPage, setCurrentPage] = useState('home');
   const [pendingPage, setPendingPage] = useState(savedAppSession?.currentPage || null);
   const [pendingOperatorTab, setPendingOperatorTab] = useState(savedAppSession?.operatorTab || null);
+  const [pendingShowVideoEditor, setPendingShowVideoEditor] = useState(savedAppSession?.showVideoEditor || false);
   const [operatorTab, setOperatorTab] = useState('artists'); // Moved up for restore effect
+  const [showVideoEditor, setShowVideoEditor] = useState(false); // Moved up for restore effect
   const [openFaq, setOpenFaq] = useState(null);
 
   // Authentication state
@@ -331,12 +333,17 @@ const StickToMusic = () => {
     if (user && pendingPage) {
       // Verify user has access to the pending page
       if (pendingPage === 'operator' && user.role === 'operator') {
-        console.log('[App Session] Restoring operator page, tab:', pendingOperatorTab);
+        console.log('[App Session] Restoring operator page, tab:', pendingOperatorTab, 'editor:', pendingShowVideoEditor);
         setCurrentPage('operator');
         // Restore operator tab if saved
         if (pendingOperatorTab) {
           setOperatorTab(pendingOperatorTab);
           setPendingOperatorTab(null);
+        }
+        // Restore video editor if it was open
+        if (pendingShowVideoEditor) {
+          setShowVideoEditor(true);
+          setPendingShowVideoEditor(false);
         }
       } else if (pendingPage === 'artist-portal' && user.role === 'artist') {
         console.log('[App Session] Restoring artist-portal page');
@@ -348,12 +355,12 @@ const StickToMusic = () => {
       }
       setPendingPage(null); // Clear pending page after restore
     }
-  }, [user, pendingPage, pendingOperatorTab]);
+  }, [user, pendingPage, pendingOperatorTab, pendingShowVideoEditor]);
 
   // Save session state when navigation changes
   useEffect(() => {
-    saveAppSession({ currentPage, operatorTab });
-  }, [currentPage, operatorTab]);
+    saveAppSession({ currentPage, operatorTab, showVideoEditor });
+  }, [currentPage, operatorTab, showVideoEditor]);
 
   // Load applications from Firestore for operators
   useEffect(() => {
@@ -714,8 +721,7 @@ const StickToMusic = () => {
   const [dateRange, setDateRange] = useState({ start: '2025-01-01', end: '2025-01-30' });
   const [dashboardTab, setDashboardTab] = useState('overview');
 
-  // Operator dashboard state (operatorTab moved to top for session restore)
-  const [showVideoEditor, setShowVideoEditor] = useState(false);
+  // Operator dashboard state (operatorTab & showVideoEditor moved to top for session restore)
   const [selectedArtist, setSelectedArtist] = useState('all');
   const [selectedPlatform, setSelectedPlatform] = useState('all');
   const [contentArtist, setContentArtist] = useState('all');
