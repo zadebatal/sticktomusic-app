@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { renderVideo, renderPreview } from '../../services/videoExportService';
 import { uploadFile } from '../../services/firebaseStorage';
 import { useBeatDetection } from '../../hooks/useBeatDetection';
@@ -8,7 +8,7 @@ import { useBeatDetection } from '../../hooks/useBeatDetection';
  *
  * Features:
  * - Select All / Deselect All for clips
- * - Beat-synced cuts option
+ * - Beat-synced cuts with granular options (every beat, 2 and 4, etc.)
  * - Preview first video before batch render
  * - Text overlay with saved lyrics
  * - Caption templates per category
@@ -24,13 +24,109 @@ const STAGES = {
   DONE: 'done'
 };
 
+// Beat cut patterns - mirrors the singular editor's beat selector
+const BEAT_PATTERNS = [
+  { id: 'every', label: 'Every beat', description: 'Cut on every beat (fast)', beats: [1] },
+  { id: '2-4', label: '2 and 4', description: 'Cut on beats 2 and 4 (groovy)', beats: [2, 4] },
+  { id: '1-3', label: '1 and 3', description: 'Cut on beats 1 and 3', beats: [1, 3] },
+  { id: 'every-2', label: 'Every 2 beats', description: 'Cut every other beat', beats: [1], interval: 2 },
+  { id: 'every-4', label: 'Every 4 beats', description: 'Cut every measure (slower)', beats: [1], interval: 4 },
+  { id: 'every-8', label: 'Every 8 beats', description: 'Cut every 2 measures (slowest)', beats: [1], interval: 8 }
+];
+
+/**
+ * ClipThumbnail - Generates thumbnail from video if not available
+ */
+const ClipThumbnail = ({ clip, style }) => {
+  const [thumbUrl, setThumbUrl] = useState(clip.thumbnail || null);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    // If we already have a thumbnail, use it
+    if (clip.thumbnail) {
+      setThumbUrl(clip.thumbnail);
+      return;
+    }
+
+    // Otherwise generate from video
+    const videoUrl = clip.localUrl || clip.url;
+    if (!videoUrl) return;
+
+    const video = document.createElement('video');
+    video.crossOrigin = 'anonymous';
+    video.muted = true;
+    video.preload = 'metadata';
+
+    video.onloadeddata = () => {
+      video.currentTime = 0.5; // Seek to 0.5s for thumbnail
+    };
+
+    video.onseeked = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 120;
+        canvas.height = 213; // 9:16 aspect ratio
+        const ctx = canvas.getContext('2d');
+
+        // Center crop
+        const videoRatio = video.videoWidth / video.videoHeight;
+        const canvasRatio = canvas.width / canvas.height;
+        let sx, sy, sw, sh;
+
+        if (videoRatio > canvasRatio) {
+          sh = video.videoHeight;
+          sw = sh * canvasRatio;
+          sx = (video.videoWidth - sw) / 2;
+          sy = 0;
+        } else {
+          sw = video.videoWidth;
+          sh = sw / canvasRatio;
+          sx = 0;
+          sy = (video.videoHeight - sh) / 2;
+        }
+
+        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+        setThumbUrl(canvas.toDataURL('image/jpeg', 0.6));
+      } catch (e) {
+        console.warn('Thumbnail generation failed:', e);
+      }
+    };
+
+    video.onerror = () => {
+      console.warn('Could not load video for thumbnail');
+    };
+
+    video.src = videoUrl;
+  }, [clip]);
+
+  if (thumbUrl) {
+    return <img src={thumbUrl} alt="" style={style} />;
+  }
+
+  // Fallback: show video element directly
+  const videoUrl = clip.localUrl || clip.url;
+  if (videoUrl) {
+    return (
+      <video
+        src={videoUrl}
+        style={style}
+        muted
+        preload="metadata"
+      />
+    );
+  }
+
+  return <div style={{ ...style, background: '#3f3f46' }} />;
+};
+
 const BatchPipeline = ({
   category,
   lateAccountIds = {},
   onSchedulePost,
   onClose,
   onVideosCreated,
-  onSaveLyrics // Save lyrics to audio track
+  onSaveLyrics
 }) => {
   // Stage management
   const [stage, setStage] = useState(STAGES.OPTIONS);
@@ -40,12 +136,12 @@ const BatchPipeline = ({
   const [selectedAudio, setSelectedAudio] = useState(null);
   const [selectedClips, setSelectedClips] = useState([]);
   const [quantity, setQuantity] = useState(5);
-  const [clipStrategy, setClipStrategy] = useState('beat'); // beat, random, sequential
-  const [beatsPerCut, setBeatsPerCut] = useState(2);
+  const [clipStrategy, setClipStrategy] = useState('beat');
+  const [beatPattern, setBeatPattern] = useState('every-2'); // Default: every 2 beats
 
   // Text overlay options
   const [useTextOverlay, setUseTextOverlay] = useState(false);
-  const [selectedLyrics, setSelectedLyrics] = useState(null); // Saved lyrics template
+  const [selectedLyrics, setSelectedLyrics] = useState(null);
 
   // Beat detection
   const { beats, bpm, isAnalyzing, analyzeAudio } = useBeatDetection();
@@ -58,7 +154,7 @@ const BatchPipeline = ({
   const [previewUrl, setPreviewUrl] = useState(null);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
 
-  // Generated videos ready for scheduling
+  // Generated videos
   const [generatedVideos, setGeneratedVideos] = useState([]);
 
   // Scheduling options
@@ -72,22 +168,19 @@ const BatchPipeline = ({
   const [platforms, setPlatforms] = useState({ tiktok: true, instagram: true });
   const [captions, setCaptions] = useState([]);
 
-  // Caption template from category
+  // Category settings
   const captionTemplate = category?.captionTemplate || '{title} ✨ {hashtags}';
   const defaultHashtags = category?.defaultHashtags || '#viral #fyp';
-
-  // Get account from category
   const accountHandle = category?.accountHandle;
   const accountMapping = accountHandle ? lateAccountIds[accountHandle] : null;
 
-  // Available clips and audio from category
+  // Available clips and audio
   const availableClips = category?.videos || [];
   const availableAudio = category?.audio || [];
 
-  // Get saved lyrics for selected audio
+  // Saved lyrics for selected audio
   const savedLyricsForAudio = useMemo(() => {
     if (!selectedAudio) return [];
-    // Check if audio has saved lyrics
     return selectedAudio.savedLyrics || [];
   }, [selectedAudio]);
 
@@ -121,13 +214,12 @@ const BatchPipeline = ({
     });
   }, []);
 
-  // Generate clip sequence based on strategy and beats
+  // Generate clip sequence based on strategy and beat pattern
   const generateClipSequence = useCallback((audioDuration, clipPool, strategy) => {
     const clips = [];
     let currentTime = 0;
 
     if (strategy === 'beat' && beats.length > 0) {
-      // Beat-synced cuts
       const audioStart = selectedAudio?.startTime || 0;
       const audioEnd = selectedAudio?.endTime || audioDuration + audioStart;
 
@@ -136,23 +228,62 @@ const BatchPipeline = ({
         .filter(b => b >= audioStart && b <= audioEnd)
         .map(b => b - audioStart);
 
-      // Group beats by beatsPerCut
-      let beatIndex = 0;
-      while (currentTime < audioDuration && beatIndex < trimmedBeats.length) {
-        const clipStartTime = currentTime;
-        let clipEndTime;
-
-        // Advance by beatsPerCut beats
-        const targetBeatIndex = beatIndex + beatsPerCut;
-        if (targetBeatIndex < trimmedBeats.length) {
-          clipEndTime = trimmedBeats[targetBeatIndex];
-        } else {
-          clipEndTime = audioDuration;
+      if (trimmedBeats.length === 0) {
+        // No beats, fall back to even distribution
+        const numClips = Math.min(clipPool.length, 8);
+        const clipDuration = audioDuration / numClips;
+        for (let i = 0; i < numClips; i++) {
+          clips.push({
+            id: `clip_${Date.now()}_${i}`,
+            sourceId: clipPool[i % clipPool.length].id,
+            url: clipPool[i % clipPool.length].url,
+            localUrl: clipPool[i % clipPool.length].localUrl,
+            thumbnail: clipPool[i % clipPool.length].thumbnail,
+            startTime: i * clipDuration,
+            duration: clipDuration,
+            locked: false
+          });
         }
+        return clips;
+      }
 
+      // Get the selected beat pattern
+      const pattern = BEAT_PATTERNS.find(p => p.id === beatPattern) || BEAT_PATTERNS[0];
+
+      // Calculate cut points based on pattern
+      const cutPoints = [0]; // Always start at 0
+
+      if (pattern.interval) {
+        // Every N beats pattern
+        for (let i = pattern.interval; i < trimmedBeats.length; i += pattern.interval) {
+          cutPoints.push(trimmedBeats[i]);
+        }
+      } else {
+        // Specific beat pattern (e.g., 2 and 4)
+        // Assuming 4/4 time signature, group beats into measures
+        const beatsPerMeasure = 4;
+        for (let measureStart = 0; measureStart < trimmedBeats.length; measureStart += beatsPerMeasure) {
+          for (const beatNum of pattern.beats) {
+            const beatIndex = measureStart + beatNum - 1;
+            if (beatIndex < trimmedBeats.length && trimmedBeats[beatIndex] > cutPoints[cutPoints.length - 1]) {
+              cutPoints.push(trimmedBeats[beatIndex]);
+            }
+          }
+        }
+      }
+
+      // Add end point
+      cutPoints.push(audioDuration);
+
+      // Create clips from cut points
+      for (let i = 0; i < cutPoints.length - 1; i++) {
+        const clipStartTime = cutPoints[i];
+        const clipEndTime = cutPoints[i + 1];
         const clipDuration = clipEndTime - clipStartTime;
-        const sourceClip = clipPool[clips.length % clipPool.length];
 
+        if (clipDuration < 0.1) continue; // Skip very short clips
+
+        const sourceClip = clipPool[clips.length % clipPool.length];
         clips.push({
           id: `clip_${Date.now()}_${clips.length}`,
           sourceId: sourceClip.id,
@@ -163,12 +294,8 @@ const BatchPipeline = ({
           duration: clipDuration,
           locked: false
         });
-
-        currentTime = clipEndTime;
-        beatIndex = targetBeatIndex;
       }
     } else if (strategy === 'random') {
-      // Random shuffle
       const shuffled = [...clipPool].sort(() => Math.random() - 0.5);
       const numClips = Math.min(shuffled.length, 8);
       const clipDuration = audioDuration / numClips;
@@ -206,9 +333,9 @@ const BatchPipeline = ({
     }
 
     return clips;
-  }, [beats, beatsPerCut, selectedAudio]);
+  }, [beats, beatPattern, selectedAudio]);
 
-  // Generate preview of first video
+  // Generate preview
   const handleGeneratePreview = useCallback(async () => {
     if (!selectedAudio || selectedClips.length < 2) {
       setError('Select audio and at least 2 clips');
@@ -219,8 +346,14 @@ const BatchPipeline = ({
     setError(null);
 
     try {
-      const audioDuration = selectedAudio.duration || 30;
+      const audioDuration = selectedAudio.endTime
+        ? selectedAudio.endTime - (selectedAudio.startTime || 0)
+        : selectedAudio.duration || 30;
+
+      console.log('[BatchPipeline] Generating preview with duration:', audioDuration);
+
       const clips = generateClipSequence(audioDuration, selectedClips, clipStrategy);
+      console.log('[BatchPipeline] Generated clips:', clips.length);
 
       const videoData = {
         id: `preview_${Date.now()}`,
@@ -237,14 +370,14 @@ const BatchPipeline = ({
           outlineColor: '#000000'
         },
         cropMode: '9:16',
-        duration: Math.min(audioDuration, 10) // Preview only first 10 seconds
+        duration: Math.min(audioDuration, 10)
       };
 
+      console.log('[BatchPipeline] Rendering preview...');
       const blob = await renderPreview(videoData, (p) => {
         setGenerationProgress({ current: 1, total: 1, status: `Generating preview... ${p}%` });
       });
 
-      // Create URL for preview
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       const url = URL.createObjectURL(blob);
       setPreviewBlob(blob);
@@ -252,7 +385,7 @@ const BatchPipeline = ({
       setStage(STAGES.PREVIEW);
 
     } catch (err) {
-      console.error('Preview generation failed:', err);
+      console.error('[BatchPipeline] Preview generation failed:', err);
       setError(`Preview failed: ${err.message}`);
     } finally {
       setIsGeneratingPreview(false);
@@ -275,7 +408,13 @@ const BatchPipeline = ({
     setGeneratedVideos([]);
 
     const videos = [];
-    const audioDuration = selectedAudio.duration || 30;
+    const audioDuration = selectedAudio.endTime
+      ? selectedAudio.endTime - (selectedAudio.startTime || 0)
+      : selectedAudio.duration || 30;
+
+    console.log('[BatchPipeline] Starting batch generation');
+    console.log('[BatchPipeline] Audio duration:', audioDuration);
+    console.log('[BatchPipeline] Selected clips:', selectedClips.length);
 
     try {
       for (let i = 0; i < quantity; i++) {
@@ -290,12 +429,12 @@ const BatchPipeline = ({
         if (clipStrategy === 'random') {
           clipPool = clipPool.sort(() => Math.random() - 0.5);
         } else if (clipStrategy === 'sequential') {
-          // Rotate starting point for each video
           const offset = i % clipPool.length;
           clipPool = [...clipPool.slice(offset), ...clipPool.slice(0, offset)];
         }
 
         const clips = generateClipSequence(audioDuration, clipPool, clipStrategy);
+        console.log(`[BatchPipeline] Video ${i + 1} clips:`, clips.length);
 
         const videoData = {
           id: `batch_${Date.now()}_${i}`,
@@ -317,12 +456,16 @@ const BatchPipeline = ({
 
         // Render video
         setGenerationProgress(prev => ({ ...prev, status: `Rendering video ${i + 1}...` }));
+        console.log(`[BatchPipeline] Rendering video ${i + 1}...`);
+
         const blob = await renderVideo(videoData, (p) => {
           setGenerationProgress(prev => ({
             ...prev,
             status: `Rendering video ${i + 1}... ${p}%`
           }));
         });
+
+        console.log(`[BatchPipeline] Video ${i + 1} rendered, size:`, (blob.size / 1024 / 1024).toFixed(2), 'MB');
 
         // Upload to Firebase
         setGenerationProgress(prev => ({ ...prev, status: `Uploading video ${i + 1}...` }));
@@ -331,7 +474,9 @@ const BatchPipeline = ({
           'videos'
         );
 
-        // Generate caption from template
+        console.log(`[BatchPipeline] Video ${i + 1} uploaded:`, cloudUrl);
+
+        // Generate caption
         const caption = captionTemplate
           .replace('{title}', category.name)
           .replace('{hashtags}', defaultHashtags)
@@ -349,13 +494,12 @@ const BatchPipeline = ({
       setCaptions(videos.map(v => v.caption));
       setStage(STAGES.REVIEW);
 
-      // Notify parent
       if (onVideosCreated) {
         onVideosCreated(videos);
       }
 
     } catch (err) {
-      console.error('Generation error:', err);
+      console.error('[BatchPipeline] Generation error:', err);
       setError(`Failed to generate videos: ${err.message}`);
       setStage(STAGES.OPTIONS);
     }
@@ -412,7 +556,7 @@ const BatchPipeline = ({
     setStage(STAGES.DONE);
   }, [generatedVideos, scheduleDate, intervalMinutes, platforms, accountMapping, captions, onSchedulePost]);
 
-  // Update individual caption
+  // Update caption
   const updateCaption = useCallback((index, value) => {
     setCaptions(prev => {
       const updated = [...prev];
@@ -421,7 +565,7 @@ const BatchPipeline = ({
     });
   }, []);
 
-  // Cleanup preview URL on unmount
+  // Cleanup
   useEffect(() => {
     return () => {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -511,14 +655,15 @@ const BatchPipeline = ({
       borderRadius: '8px',
       overflow: 'hidden',
       cursor: 'pointer',
-      border: selected ? '3px solid #8b5cf6' : '2px solid transparent',
-      opacity: selected ? 1 : 0.6,
+      border: selected ? '3px solid #8b5cf6' : '2px solid #3f3f46',
+      opacity: selected ? 1 : 0.7,
       transition: 'all 0.15s'
     }),
     clipThumb: {
       width: '100%',
       height: '100%',
-      objectFit: 'cover'
+      objectFit: 'cover',
+      display: 'block'
     },
     clipCheck: {
       position: 'absolute',
@@ -644,6 +789,31 @@ const BatchPipeline = ({
       padding: '8px 12px',
       background: '#27272a',
       borderRadius: '6px'
+    },
+    beatPatternGrid: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(3, 1fr)',
+      gap: '8px',
+      marginTop: '8px'
+    },
+    beatPatternBtn: (selected) => ({
+      padding: '10px 12px',
+      background: selected ? '#8b5cf6' : '#27272a',
+      border: selected ? '2px solid #a78bfa' : '1px solid #3f3f46',
+      borderRadius: '8px',
+      cursor: 'pointer',
+      textAlign: 'left'
+    }),
+    beatPatternLabel: {
+      color: 'white',
+      fontSize: '13px',
+      fontWeight: '500',
+      display: 'block'
+    },
+    beatPatternDesc: {
+      color: '#71717a',
+      fontSize: '11px',
+      marginTop: '2px'
     },
     videoList: {
       display: 'flex',
@@ -780,11 +950,7 @@ const BatchPipeline = ({
                         style={styles.clipCard(isSelected)}
                         onClick={() => toggleClip(clip)}
                       >
-                        {clip.thumbnail ? (
-                          <img src={clip.thumbnail} alt="" style={styles.clipThumb} />
-                        ) : (
-                          <div style={{ ...styles.clipThumb, background: '#3f3f46' }} />
-                        )}
+                        <ClipThumbnail clip={clip} style={styles.clipThumb} />
                         {isSelected && (
                           <div style={styles.clipCheck}>✓</div>
                         )}
@@ -823,22 +989,26 @@ const BatchPipeline = ({
                     <option value="sequential">Sequential rotation</option>
                   </select>
                 </div>
-                {clipStrategy === 'beat' && (
-                  <div style={styles.col}>
-                    <label style={styles.label}>Beats per Cut</label>
-                    <select
-                      style={styles.select}
-                      value={beatsPerCut}
-                      onChange={e => setBeatsPerCut(Number(e.target.value))}
-                    >
-                      <option value={1}>Every beat (fast)</option>
-                      <option value={2}>Every 2 beats</option>
-                      <option value={4}>Every 4 beats (slow)</option>
-                      <option value={8}>Every 8 beats</option>
-                    </select>
-                  </div>
-                )}
               </div>
+
+              {/* Beat Pattern Selection - Only show for beat-synced */}
+              {clipStrategy === 'beat' && (
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={styles.label}>Beat Pattern (when to cut)</label>
+                  <div style={styles.beatPatternGrid}>
+                    {BEAT_PATTERNS.map(pattern => (
+                      <button
+                        key={pattern.id}
+                        style={styles.beatPatternBtn(beatPattern === pattern.id)}
+                        onClick={() => setBeatPattern(pattern.id)}
+                      >
+                        <span style={styles.beatPatternLabel}>{pattern.label}</span>
+                        <span style={styles.beatPatternDesc}>{pattern.description}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Text Overlay Option */}
               <div style={styles.row}>
@@ -1045,12 +1215,8 @@ const BatchPipeline = ({
                   return (
                     <div key={video.id} style={styles.videoRow}>
                       <div style={styles.videoThumb}>
-                        {video.clips[0]?.thumbnail && (
-                          <img
-                            src={video.clips[0].thumbnail}
-                            alt=""
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
+                        {video.clips[0] && (
+                          <ClipThumbnail clip={video.clips[0]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         )}
                       </div>
                       <div style={styles.videoInfo}>
