@@ -19,6 +19,7 @@ const STAGES = {
   OPTIONS: 'options',
   PREVIEW: 'preview',
   GENERATING: 'generating',
+  VIDEO_BANK: 'video_bank',  // New stage: view/edit videos before scheduling
   REVIEW: 'review',
   SCHEDULING: 'scheduling',
   DONE: 'done'
@@ -36,47 +37,72 @@ const BEAT_PATTERNS = [
 
 /**
  * ClipThumbnail - Shows thumbnail image or video element with hover preview
- * Uses preload="auto" and seeks to 0.5s to show actual video frame
+ * Uses crossOrigin for CORS and captures frame after load
  */
 const ClipThumbnail = ({ clip, style }) => {
-  const videoRef = useRef(null);
+  const [thumbnailUrl, setThumbnailUrl] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const videoUrl = clip.localUrl || clip.url;
+
+  // Generate thumbnail from video using canvas
+  useEffect(() => {
+    if (!videoUrl || clip.thumbnail) return;
+
+    const video = document.createElement('video');
+    video.crossOrigin = 'anonymous';
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+
+    const captureFrame = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 180;
+        canvas.height = 320;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        setThumbnailUrl(dataUrl);
+        setIsLoading(false);
+      } catch (err) {
+        console.warn('Failed to capture thumbnail:', err);
+        setIsLoading(false);
+      }
+    };
+
+    video.onloadeddata = () => {
+      // Seek to 0.5s then capture
+      video.currentTime = 0.5;
+    };
+
+    video.onseeked = () => {
+      captureFrame();
+    };
+
+    video.onerror = () => {
+      console.warn('Video load error for thumbnail');
+      setIsLoading(false);
+    };
+
+    video.src = videoUrl;
+    video.load();
+
+    return () => {
+      video.src = '';
+    };
+  }, [videoUrl, clip.thumbnail]);
 
   // If we have a stored thumbnail, use it
   if (clip.thumbnail) {
     return <img src={clip.thumbnail} alt="" style={{ ...style, objectFit: 'cover' }} />;
   }
 
-  // Show video element that seeks to show a frame
-  if (videoUrl) {
-    return (
-      <video
-        ref={videoRef}
-        src={videoUrl}
-        style={{ ...style, objectFit: 'cover', background: '#27272a' }}
-        muted
-        playsInline
-        preload="auto"
-        onLoadedData={(e) => {
-          // Seek to 0.5s to show an actual frame instead of black
-          if (e.target.currentTime === 0) {
-            e.target.currentTime = 0.5;
-          }
-        }}
-        onMouseEnter={(e) => {
-          e.target.currentTime = 0;
-          const playPromise = e.target.play();
-          if (playPromise) playPromise.catch(() => {});
-        }}
-        onMouseLeave={(e) => {
-          if (!e.target.paused) e.target.pause();
-          e.target.currentTime = 0.5;
-        }}
-      />
-    );
+  // If we captured a thumbnail, show it
+  if (thumbnailUrl) {
+    return <img src={thumbnailUrl} alt="" style={{ ...style, objectFit: 'cover' }} />;
   }
 
-  // No media available
+  // Loading or fallback state
   return (
     <div style={{
       ...style,
@@ -87,7 +113,7 @@ const ClipThumbnail = ({ clip, style }) => {
       color: '#71717a',
       fontSize: '10px'
     }}>
-      🎬
+      {isLoading ? '⏳' : '🎬'}
     </div>
   );
 };
@@ -128,6 +154,7 @@ const BatchPipeline = ({
 
   // Generated videos
   const [generatedVideos, setGeneratedVideos] = useState([]);
+  const [playingVideoId, setPlayingVideoId] = useState(null);  // Track which video is playing
 
   // Scheduling options
   const [scheduleDate, setScheduleDate] = useState(() => {
@@ -485,7 +512,7 @@ const BatchPipeline = ({
 
       setGeneratedVideos(videos);
       setCaptions(videos.map(v => v.caption));
-      setStage(STAGES.REVIEW);
+      setStage(STAGES.VIDEO_BANK);  // Go to video bank first to view/edit
 
       if (onVideosCreated) {
         onVideosCreated(videos);
@@ -1156,6 +1183,150 @@ const BatchPipeline = ({
     );
   }
 
+  // VIDEO_BANK STAGE - View and edit videos before scheduling
+  if (stage === STAGES.VIDEO_BANK) {
+    return (
+      <div style={styles.overlay}>
+        <div style={{ ...styles.modal, maxWidth: '1100px' }}>
+          <div style={styles.header}>
+            <h2 style={styles.title}>Video Bank - {generatedVideos.length} Videos Created</h2>
+            <button style={styles.closeBtn} onClick={onClose}>×</button>
+          </div>
+
+          <div style={styles.content}>
+            {error && <div style={styles.error}>{error}</div>}
+
+            <p style={{ color: '#a1a1aa', marginBottom: '20px' }}>
+              Review your generated videos below. Click to preview, or proceed to scheduling when ready.
+            </p>
+
+            {/* Video Grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+              gap: '16px'
+            }}>
+              {generatedVideos.map((video, idx) => (
+                <div
+                  key={video.id}
+                  style={{
+                    background: '#27272a',
+                    borderRadius: '12px',
+                    overflow: 'hidden',
+                    border: playingVideoId === video.id ? '2px solid #8b5cf6' : '2px solid transparent'
+                  }}
+                >
+                  {/* Video Preview */}
+                  <div style={{ position: 'relative', aspectRatio: '9/16', background: '#000' }}>
+                    {video.cloudUrl && (
+                      <video
+                        src={video.cloudUrl}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        controls
+                        playsInline
+                        onPlay={() => setPlayingVideoId(video.id)}
+                        onPause={() => setPlayingVideoId(null)}
+                      />
+                    )}
+                    <div style={{
+                      position: 'absolute',
+                      top: '8px',
+                      left: '8px',
+                      background: '#8b5cf6',
+                      color: 'white',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      fontWeight: '600'
+                    }}>
+                      #{idx + 1}
+                    </div>
+                  </div>
+
+                  {/* Video Info */}
+                  <div style={{ padding: '12px' }}>
+                    <div style={{ color: 'white', fontWeight: '500', marginBottom: '4px' }}>
+                      {video.title}
+                    </div>
+                    <div style={{ color: '#71717a', fontSize: '12px', marginBottom: '8px' }}>
+                      {video.clips?.length || 0} clips • {Math.round(video.duration || 0)}s
+                    </div>
+
+                    {/* Caption Preview */}
+                    <input
+                      type="text"
+                      placeholder="Add caption..."
+                      style={{ ...styles.input, padding: '8px 10px', fontSize: '12px' }}
+                      value={captions[idx] || ''}
+                      onChange={e => updateCaption(idx, e.target.value)}
+                    />
+
+                    {/* Actions */}
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                      <button
+                        style={{
+                          flex: 1,
+                          padding: '6px',
+                          background: '#3f3f46',
+                          border: 'none',
+                          borderRadius: '6px',
+                          color: 'white',
+                          fontSize: '11px',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => {
+                          // Remove this video
+                          setGeneratedVideos(prev => prev.filter(v => v.id !== video.id));
+                          setCaptions(prev => prev.filter((_, i) => i !== idx));
+                        }}
+                      >
+                        🗑️ Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {generatedVideos.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#71717a' }}>
+                No videos in bank. Generate some videos first.
+              </div>
+            )}
+          </div>
+
+          <div style={styles.footer}>
+            <button
+              style={{ ...styles.btn, ...styles.secondaryBtn }}
+              onClick={() => setStage(STAGES.OPTIONS)}
+            >
+              ← Generate More
+            </button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                style={{ ...styles.btn, ...styles.secondaryBtn }}
+                onClick={onClose}
+              >
+                Save as Drafts
+              </button>
+              <button
+                style={{
+                  ...styles.btn,
+                  ...styles.primaryBtn,
+                  ...(generatedVideos.length === 0 ? styles.primaryBtnDisabled : {})
+                }}
+                onClick={() => setStage(STAGES.REVIEW)}
+                disabled={generatedVideos.length === 0}
+              >
+                Proceed to Schedule ({generatedVideos.length}) →
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // REVIEW STAGE
   if (stage === STAGES.REVIEW) {
     return (
@@ -1256,8 +1427,11 @@ const BatchPipeline = ({
           </div>
 
           <div style={styles.footer}>
-            <button style={{ ...styles.btn, ...styles.secondaryBtn }} onClick={onClose}>
-              Save as Drafts
+            <button
+              style={{ ...styles.btn, ...styles.secondaryBtn }}
+              onClick={() => setStage(STAGES.VIDEO_BANK)}
+            >
+              ← Back to Videos
             </button>
             <button
               style={{ ...styles.btn, ...styles.primaryBtn }}
