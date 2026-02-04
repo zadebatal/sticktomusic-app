@@ -778,6 +778,29 @@ const VideoStudio = ({
     } : prev);
   }, [selectedCategory]);
 
+  // Update a video with new fields (used after rendering)
+  const handleUpdateVideo = useCallback((videoId, updates) => {
+    if (!selectedCategory) return;
+
+    setCategories(prev => prev.map(cat =>
+      cat.id === selectedCategory.id
+        ? {
+            ...cat,
+            createdVideos: cat.createdVideos.map(v =>
+              v.id === videoId ? { ...v, ...updates } : v
+            )
+          }
+        : cat
+    ));
+
+    setSelectedCategory(prev => prev ? {
+      ...prev,
+      createdVideos: prev.createdVideos.map(v =>
+        v.id === videoId ? { ...v, ...updates } : v
+      )
+    } : prev);
+  }, [selectedCategory]);
+
   const handleCreateCategory = useCallback((categoryData) => {
     const newCategory = {
       id: `cat_${Date.now()}`,
@@ -885,6 +908,7 @@ const VideoStudio = ({
             onEditVideo={handleMakeVideo}
             onDeleteVideo={handleDeleteVideo}
             onApproveVideo={handleApproveVideo}
+            onUpdateVideo={handleUpdateVideo}
             onSchedulePost={onSchedulePost}
             accounts={accounts}
             lateAccountIds={lateAccountIds}

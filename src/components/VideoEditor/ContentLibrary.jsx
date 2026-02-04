@@ -1,8 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import ExportAndPostModal from './ExportAndPostModal';
 import PostingModule from './PostingModule';
 import { StatusPill, ConfirmDialog, EmptyState as SharedEmptyState } from '../ui';
 import { VIDEO_STATUS } from '../../utils/status';
+import { renderVideo } from '../../services/videoExportService';
+import { uploadFile } from '../../services/firebaseStorage';
 
 /**
  * ContentLibrary - Shows all videos created with a category
@@ -16,6 +18,7 @@ const ContentLibrary = ({
   onDeleteVideo,
   onApproveVideo,
   onSchedulePost,
+  onUpdateVideo,  // New: update a video after rendering
   // Posting module props
   accounts = [],
   lateAccountIds = {}
@@ -24,6 +27,56 @@ const ContentLibrary = ({
   const [dateRange, setDateRange] = useState('all');
   const [selectedVideoIds, setSelectedVideoIds] = useState(new Set());
   const [exportingVideo, setExportingVideo] = useState(null);
+
+  // Rendering state
+  const [renderingVideoId, setRenderingVideoId] = useState(null);
+  const [renderProgress, setRenderProgress] = useState(0);
+
+  // Handle rendering a video recipe into a real video
+  const handleRenderVideo = useCallback(async (video) => {
+    if (renderingVideoId) return; // Already rendering
+
+    setRenderingVideoId(video.id);
+    setRenderProgress(0);
+
+    try {
+      console.log('[ContentLibrary] Rendering video:', video.id);
+
+      // Render the video
+      const blob = await renderVideo(video, (progress) => {
+        setRenderProgress(progress);
+      });
+
+      console.log('[ContentLibrary] Video rendered, size:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
+
+      // Upload to Firebase
+      setRenderProgress(95);
+      const { url: cloudUrl } = await uploadFile(
+        new File([blob], `${video.id}.webm`, { type: 'video/webm' }),
+        'videos'
+      );
+
+      console.log('[ContentLibrary] Video uploaded:', cloudUrl);
+
+      // Update the video with the cloudUrl
+      if (onUpdateVideo) {
+        onUpdateVideo(video.id, {
+          cloudUrl,
+          isRendered: true,
+          status: VIDEO_STATUS.COMPLETED,
+          updatedAt: new Date().toISOString()
+        });
+      }
+
+      setRenderProgress(100);
+    } catch (err) {
+      console.error('[ContentLibrary] Render failed:', err);
+      alert(`Render failed: ${err.message}`);
+    } finally {
+      setRenderingVideoId(null);
+      setRenderProgress(0);
+    }
+  }, [renderingVideoId, onUpdateVideo]);
 
   // UI-30: Confirm dialog for delete
   const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, videoId: null });
@@ -149,6 +202,9 @@ const ContentLibrary = ({
                 onDelete={() => setDeleteConfirm({ isOpen: true, videoId: video.id })}
                 onApprove={() => onApproveVideo(video.id)}
                 onPost={() => setExportingVideo(video)}
+                onRender={() => handleRenderVideo(video)}
+                isRendering={renderingVideoId === video.id}
+                renderProgress={renderingVideoId === video.id ? renderProgress : 0}
               />
             ))}
           </div>
@@ -248,7 +304,7 @@ const ContentLibrary = ({
   );
 };
 
-const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onApprove, onPost }) => {
+const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onApprove, onPost, onRender, isRendering, renderProgress }) => {
   const [showActions, setShowActions] = useState(false);
 
   // UI-34: Prevent action buttons from triggering selection
@@ -256,6 +312,8 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
     e.stopPropagation();
     action();
   };
+
+  const needsRendering = video.isRendered === false;
 
   return (
     <div
@@ -270,6 +328,14 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
       <div style={styles.videoThumb}>
         {video.thumbnail ? (
           <img src={video.thumbnail} alt="" style={styles.videoThumbImg} />
+        ) : video.cloudUrl ? (
+          <video
+            src={video.cloudUrl}
+            style={styles.videoThumbImg}
+            muted
+            playsInline
+            preload="metadata"
+          />
         ) : (
           <div style={styles.videoThumbPlaceholder}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
@@ -280,10 +346,67 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
 
         {video.textOverlay && <div style={styles.textOverlay}>{video.textOverlay}</div>}
 
-        {showActions && (
+        {/* "Needs Rendering" badge */}
+        {needsRendering && !isRendering && (
+          <div style={{
+            position: 'absolute',
+            top: '8px',
+            right: '8px',
+            background: 'rgba(251, 191, 36, 0.9)',
+            color: '#78350f',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            fontSize: '10px',
+            fontWeight: '600'
+          }}>
+            ⚡ Recipe
+          </div>
+        )}
+
+        {/* Rendering progress */}
+        {isRendering && (
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(0,0,0,0.8)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white'
+          }}>
+            <div style={{ fontSize: '12px', marginBottom: '8px' }}>Rendering...</div>
+            <div style={{
+              width: '80%',
+              height: '4px',
+              background: 'rgba(255,255,255,0.2)',
+              borderRadius: '2px'
+            }}>
+              <div style={{
+                width: `${renderProgress}%`,
+                height: '100%',
+                background: '#8b5cf6',
+                borderRadius: '2px',
+                transition: 'width 0.3s'
+              }} />
+            </div>
+            <div style={{ fontSize: '11px', marginTop: '4px' }}>{renderProgress}%</div>
+          </div>
+        )}
+
+        {showActions && !isRendering && (
           <div style={styles.videoActions}>
             <button style={styles.actionBtn} onClick={(e) => handleActionClick(e, onEdit)}>Edit</button>
-            <button style={styles.actionBtnPost} onClick={(e) => handleActionClick(e, onPost)}>Post</button>
+            {needsRendering ? (
+              <button
+                style={{...styles.actionBtnPost, background: '#f59e0b'}}
+                onClick={(e) => handleActionClick(e, onRender)}
+              >
+                🎬 Export
+              </button>
+            ) : (
+              <button style={styles.actionBtnPost} onClick={(e) => handleActionClick(e, onPost)}>Post</button>
+            )}
             <button style={styles.actionBtnDel} onClick={(e) => handleActionClick(e, onDelete)}>✕</button>
           </div>
         )}
