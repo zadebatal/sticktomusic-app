@@ -172,11 +172,24 @@ const ContentLibrary = ({
             </button>
           ))}
         </div>
-        <select value={filter} onChange={(e) => setFilter(e.target.value)} style={styles.statusFilter}>
-          <option value="all">All statuses</option>
-          <option value="draft">Drafts</option>
-          <option value="approved">Approved</option>
-        </select>
+        <div style={styles.filterRight}>
+          {filteredVideos.length > 0 && (
+            <label style={styles.selectAllLabel}>
+              <input
+                type="checkbox"
+                checked={filteredVideos.length > 0 && filteredVideos.every(v => selectedVideoIds.has(v.id))}
+                onChange={toggleSelectAll}
+                style={styles.checkbox}
+              />
+              Select All ({filteredVideos.length})
+            </label>
+          )}
+          <select value={filter} onChange={(e) => setFilter(e.target.value)} style={styles.statusFilter}>
+            <option value="all">All statuses</option>
+            <option value="draft">Drafts</option>
+            <option value="approved">Approved</option>
+          </select>
+        </div>
       </div>
 
       {/* Content Grid */}
@@ -728,8 +741,10 @@ const styles = {
   secondaryButton: { padding: '10px 16px', backgroundColor: '#1f1f2e', border: '1px solid #2d2d3d', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '13px' },
   filters: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 24px', borderBottom: '1px solid #1f1f2e' },
   filterGroup: { display: 'flex', alignItems: 'center', gap: '4px' },
+  filterRight: { display: 'flex', alignItems: 'center', gap: '16px' },
   dateFilter: { padding: '6px 12px', backgroundColor: 'transparent', border: 'none', borderRadius: '6px', color: '#9ca3af', cursor: 'pointer', fontSize: '13px' },
   dateFilterActive: { padding: '6px 12px', backgroundColor: '#1f1f2e', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px' },
+  selectAllLabel: { display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af', fontSize: '13px', cursor: 'pointer' },
   statusFilter: { padding: '8px 12px', backgroundColor: '#1f1f2e', border: '1px solid #2d2d3d', borderRadius: '6px', color: '#fff', fontSize: '13px', cursor: 'pointer' },
   contentArea: { flex: 1, overflow: 'auto', padding: '24px' },
   emptyState: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' },
