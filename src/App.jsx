@@ -2586,12 +2586,12 @@ const StickToMusic = () => {
                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
-            {/* Video Editor - opens modal */}
+            {/* Studio - opens modal */}
             <button
               onClick={() => setShowVideoEditor(true)}
               className="px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap text-zinc-400 hover:text-white hover:bg-zinc-900"
             >
-              Video Editor
+              Studio
             </button>
             {['applications', 'settings'].map(tab => (
               <button

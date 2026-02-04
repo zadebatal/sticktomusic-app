@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
 import LyricBank from './LyricBank';
+import AudioClipSelector from './AudioClipSelector';
 
 /**
  * SlideshowEditor - Flowstage-style carousel/slideshow creator
@@ -29,7 +30,17 @@ const SlideshowEditor = ({
   const [aspectRatio, setAspectRatio] = useState(existingSlideshow?.aspectRatio || '9:16');
   const [slides, setSlides] = useState(existingSlideshow?.slides || []);
   const [selectedSlideIndex, setSelectedSlideIndex] = useState(0);
-  const [activeBank, setActiveBank] = useState('imageA'); // 'imageA' | 'imageB' | 'lyrics'
+  const [activeBank, setActiveBank] = useState('imageA'); // 'imageA' | 'imageB' | 'audio' | 'lyrics'
+
+  // Audio state
+  const [selectedAudio, setSelectedAudio] = useState(existingSlideshow?.audio || null);
+  const [showAudioTrimmer, setShowAudioTrimmer] = useState(false);
+  const [audioToTrim, setAudioToTrim] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const audioRef = useRef(null);
+  const animationRef = useRef(null);
 
   // Text editor state
   const [editingTextId, setEditingTextId] = useState(null);
@@ -57,11 +68,12 @@ const SlideshowEditor = ({
   const canvasRef = useRef(null);
   const previewRef = useRef(null);
 
-  // Get content from category's image banks (separate from video banks)
+  // Get content from category's banks (separate from video banks)
   const imagesA = category?.imagesA || [];
   const imagesB = category?.imagesB || [];
+  const audioTracks = category?.audio || [];
   const lyrics = category?.lyrics || [];
-  const activeContent = activeBank === 'imageA' ? imagesA : activeBank === 'imageB' ? imagesB : [];
+  const activeContent = activeBank === 'imageA' ? imagesA : activeBank === 'imageB' ? imagesB : activeBank === 'audio' ? audioTracks : [];
 
   // Dimensions based on aspect ratio
   const dimensions = aspectRatio === '9:16'
@@ -181,6 +193,112 @@ const SlideshowEditor = ({
     );
   }, [currentSlide, imagesA, imagesB, setSlideBackground]);
 
+  // Audio playback controls
+  const handleSelectAudio = useCallback((audio) => {
+    // Open trimmer for the selected audio
+    setAudioToTrim(audio);
+    setShowAudioTrimmer(true);
+  }, []);
+
+  const handleAudioTrimSave = useCallback(({ startTime, endTime, duration }) => {
+    if (!audioToTrim) return;
+
+    setSelectedAudio({
+      ...audioToTrim,
+      startTime,
+      endTime,
+      trimmedDuration: endTime - startTime,
+      isTrimmed: true
+    });
+    setShowAudioTrimmer(false);
+    setAudioToTrim(null);
+  }, [audioToTrim]);
+
+  const handlePlayPause = useCallback(() => {
+    if (!audioRef.current || !selectedAudio) return;
+
+    if (isPlaying) {
+      audioRef.current.pause();
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      setIsPlaying(false);
+    } else {
+      const startBoundary = selectedAudio.startTime || 0;
+      if (audioRef.current.currentTime < startBoundary) {
+        audioRef.current.currentTime = startBoundary;
+      }
+      audioRef.current.play().catch(console.error);
+      setIsPlaying(true);
+
+      // Animation loop for time updates
+      const updateTime = () => {
+        if (audioRef.current) {
+          const startBound = selectedAudio.startTime || 0;
+          const endBound = selectedAudio.endTime || audioRef.current.duration;
+          const actualTime = audioRef.current.currentTime;
+
+          setCurrentTime(actualTime - startBound);
+
+          // Loop back if past end boundary
+          if (actualTime >= endBound) {
+            audioRef.current.currentTime = startBound;
+          }
+        }
+        animationRef.current = requestAnimationFrame(updateTime);
+      };
+      animationRef.current = requestAnimationFrame(updateTime);
+    }
+  }, [isPlaying, selectedAudio]);
+
+  const handleRemoveAudio = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+    setSelectedAudio(null);
+    setIsPlaying(false);
+    setCurrentTime(0);
+  }, []);
+
+  // Load audio when selected
+  useEffect(() => {
+    if (!selectedAudio || !audioRef.current) return;
+
+    const audioUrl = selectedAudio.localUrl || selectedAudio.url;
+    if (!audioUrl) return;
+
+    audioRef.current.src = audioUrl;
+    audioRef.current.load();
+
+    audioRef.current.onloadedmetadata = () => {
+      const start = selectedAudio.startTime || 0;
+      const end = selectedAudio.endTime || audioRef.current.duration;
+      setAudioDuration(end - start);
+      audioRef.current.currentTime = start;
+    };
+
+    audioRef.current.onended = () => {
+      const start = selectedAudio.startTime || 0;
+      audioRef.current.currentTime = start;
+    };
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [selectedAudio]);
+
+  // Format time for display
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   // Handle drag over
   const handleDragOver = useCallback((e) => {
     e.preventDefault();
@@ -280,13 +398,14 @@ const SlideshowEditor = ({
       name,
       aspectRatio,
       slides,
+      audio: selectedAudio,
       status: 'draft',
       createdAt: existingSlideshow?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
     onSave?.(slideshowData);
     onClose?.();
-  }, [name, aspectRatio, slides, existingSlideshow, onSave, onClose]);
+  }, [name, aspectRatio, slides, selectedAudio, existingSlideshow, onSave, onClose]);
 
   // Export slideshow as carousel images
   const handleExport = useCallback(async () => {
@@ -507,6 +626,16 @@ const SlideshowEditor = ({
               <button
                 style={{
                   ...styles.bankTab,
+                  ...styles.bankTabGreen,
+                  ...(activeBank === 'audio' ? styles.bankTabActiveGreen : {})
+                }}
+                onClick={() => setActiveBank('audio')}
+              >
+                🎵 Audio
+              </button>
+              <button
+                style={{
+                  ...styles.bankTab,
                   ...styles.bankTabPurple,
                   ...(activeBank === 'lyrics' ? styles.bankTabActivePurple : {})
                 }}
@@ -552,6 +681,59 @@ const SlideshowEditor = ({
                   showAddForm={false}
                   compact={false}
                 />
+              ) : activeBank === 'audio' ? (
+                /* Audio Bank Panel */
+                audioTracks.length === 0 ? (
+                  <div style={styles.emptyBank}>
+                    <p>No audio tracks</p>
+                    <p style={styles.emptySubtext}>Upload audio in the Aesthetic Home</p>
+                  </div>
+                ) : (
+                  <div style={styles.audioList}>
+                    {/* Selected Audio Indicator */}
+                    {selectedAudio && (
+                      <div style={styles.selectedAudioCard}>
+                        <div style={styles.selectedAudioHeader}>
+                          <span style={styles.selectedAudioIcon}>🎵</span>
+                          <span style={styles.selectedAudioLabel}>Selected</span>
+                        </div>
+                        <div style={styles.selectedAudioName}>{selectedAudio.name}</div>
+                        <div style={styles.selectedAudioDuration}>
+                          {formatTime(selectedAudio.trimmedDuration || selectedAudio.duration || 0)}
+                          {selectedAudio.isTrimmed && <span style={styles.trimmedBadge}>Trimmed</span>}
+                        </div>
+                        <button style={styles.removeAudioBtn} onClick={handleRemoveAudio}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                          </svg>
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                    {/* Audio Track List */}
+                    {audioTracks.map(audio => (
+                      <div
+                        key={audio.id}
+                        style={{
+                          ...styles.audioCard,
+                          ...(selectedAudio?.id === audio.id ? styles.audioCardSelected : {})
+                        }}
+                        onClick={() => handleSelectAudio(audio)}
+                      >
+                        <div style={styles.audioCardIcon}>🎵</div>
+                        <div style={styles.audioCardInfo}>
+                          <div style={styles.audioCardName}>{audio.name}</div>
+                          <div style={styles.audioCardDuration}>
+                            {formatTime(audio.duration || 0)}
+                          </div>
+                        </div>
+                        <button style={styles.audioSelectBtn}>
+                          {selectedAudio?.id === audio.id ? '✓' : 'Use'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )
               ) : activeContent.length === 0 ? (
                 <div style={styles.emptyBank}>
                   <p>No images in {activeBank === 'imageA' ? 'Image A' : 'Image B'}</p>
@@ -648,6 +830,44 @@ const SlideshowEditor = ({
                   </div>
                 ))}
               </div>
+
+              {/* Hidden audio element */}
+              <audio ref={audioRef} style={{ display: 'none' }} />
+
+              {/* Audio Player Controls */}
+              {selectedAudio && (
+                <div style={styles.audioPlayerBar}>
+                  <button
+                    style={styles.playPauseBtn}
+                    onClick={handlePlayPause}
+                  >
+                    {isPlaying ? (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="6" y="4" width="4" height="16" rx="1"/>
+                        <rect x="14" y="4" width="4" height="16" rx="1"/>
+                      </svg>
+                    ) : (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <polygon points="5,3 19,12 5,21"/>
+                      </svg>
+                    )}
+                  </button>
+                  <div style={styles.audioPlayerInfo}>
+                    <span style={styles.audioPlayerName}>{selectedAudio.name}</span>
+                    <span style={styles.audioPlayerTime}>
+                      {formatTime(currentTime)} / {formatTime(audioDuration)}
+                    </span>
+                  </div>
+                  <div style={styles.audioProgressBar}>
+                    <div
+                      style={{
+                        ...styles.audioProgressFill,
+                        width: `${audioDuration > 0 ? (currentTime / audioDuration) * 100 : 0}%`
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Canvas Actions */}
               <div style={styles.canvasActions}>
@@ -922,6 +1142,22 @@ const SlideshowEditor = ({
             </div>
           </div>
         )}
+
+        {/* Audio Trimmer Modal */}
+        {showAudioTrimmer && audioToTrim && (
+          <AudioClipSelector
+            audioFile={audioToTrim.file}
+            audioUrl={audioToTrim.localUrl || audioToTrim.url}
+            audioName={audioToTrim.name}
+            initialStart={audioToTrim.startTime || 0}
+            initialEnd={audioToTrim.endTime || null}
+            onSave={handleAudioTrimSave}
+            onCancel={() => {
+              setShowAudioTrimmer(false);
+              setAudioToTrim(null);
+            }}
+          />
+        )}
       </div>
     </div>
   );
@@ -1184,6 +1420,14 @@ const styles = {
     color: '#a78bfa',
     backgroundColor: 'rgba(167, 139, 250, 0.15)',
     borderBottom: '2px solid #a78bfa'
+  },
+  bankTabGreen: {
+    color: '#86efac'
+  },
+  bankTabActiveGreen: {
+    color: '#22c55e',
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    borderBottom: '2px solid #22c55e'
   },
   bankContent: {
     flex: 1,
@@ -1561,6 +1805,159 @@ const styles = {
     fontSize: '14px',
     fontWeight: '500',
     cursor: 'pointer'
+  },
+  // Audio styles
+  audioList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px'
+  },
+  selectedAudioCard: {
+    padding: '12px',
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    border: '1px solid rgba(34, 197, 94, 0.3)',
+    borderRadius: '10px',
+    marginBottom: '8px'
+  },
+  selectedAudioHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    marginBottom: '6px'
+  },
+  selectedAudioIcon: {
+    fontSize: '14px'
+  },
+  selectedAudioLabel: {
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#22c55e',
+    textTransform: 'uppercase'
+  },
+  selectedAudioName: {
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#fff',
+    marginBottom: '4px'
+  },
+  selectedAudioDuration: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '12px',
+    color: '#9ca3af'
+  },
+  trimmedBadge: {
+    fontSize: '10px',
+    padding: '2px 6px',
+    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+    color: '#22c55e',
+    borderRadius: '4px'
+  },
+  removeAudioBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    marginTop: '8px',
+    padding: '6px 10px',
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    border: '1px solid rgba(239, 68, 68, 0.3)',
+    borderRadius: '6px',
+    color: '#f87171',
+    fontSize: '12px',
+    cursor: 'pointer'
+  },
+  audioCard: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '10px 12px',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    transition: 'all 0.2s'
+  },
+  audioCardSelected: {
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    border: '1px solid rgba(34, 197, 94, 0.3)'
+  },
+  audioCardIcon: {
+    fontSize: '20px'
+  },
+  audioCardInfo: {
+    flex: 1,
+    minWidth: 0
+  },
+  audioCardName: {
+    fontSize: '13px',
+    fontWeight: '500',
+    color: '#fff',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
+  },
+  audioCardDuration: {
+    fontSize: '11px',
+    color: '#6b7280'
+  },
+  audioSelectBtn: {
+    padding: '4px 10px',
+    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+    border: '1px solid rgba(99, 102, 241, 0.3)',
+    borderRadius: '4px',
+    color: '#a5b4fc',
+    fontSize: '11px',
+    cursor: 'pointer'
+  },
+  audioPlayerBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '10px 16px',
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    border: '1px solid rgba(34, 197, 94, 0.2)',
+    borderRadius: '10px',
+    marginBottom: '8px'
+  },
+  playPauseBtn: {
+    width: '36px',
+    height: '36px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#22c55e',
+    border: 'none',
+    borderRadius: '50%',
+    color: '#fff',
+    cursor: 'pointer'
+  },
+  audioPlayerInfo: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px'
+  },
+  audioPlayerName: {
+    fontSize: '13px',
+    fontWeight: '500',
+    color: '#fff'
+  },
+  audioPlayerTime: {
+    fontSize: '11px',
+    color: '#86efac',
+    fontFamily: 'monospace'
+  },
+  audioProgressBar: {
+    width: '100px',
+    height: '4px',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: '2px',
+    overflow: 'hidden'
+  },
+  audioProgressFill: {
+    height: '100%',
+    backgroundColor: '#22c55e',
+    transition: 'width 0.1s linear'
   }
 };
 
