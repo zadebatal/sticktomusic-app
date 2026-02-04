@@ -22,7 +22,8 @@ const AestheticHome = ({
   onDeleteBankAudio,
   onRenameBankVideo,
   onRenameBankAudio,
-  onCreateContent
+  onCreateContent,
+  onShowBatchPipeline // Open batch create & schedule workflow
 }) => {
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -379,7 +380,7 @@ const AestheticHome = ({
               </div>
             </div>
 
-            {/* Create Button */}
+            {/* Create Buttons */}
             <div style={styles.createButtonContainer}>
               <button
                 style={styles.createButton}
@@ -390,8 +391,28 @@ const AestheticHome = ({
                   <path d="M12 20h9"/>
                   <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
                 </svg>
-                Create using this category
+                Make a Video
               </button>
+
+              {/* Batch Create & Schedule - Streamlined workflow */}
+              {onShowBatchPipeline && (
+                <button
+                  style={styles.batchButton}
+                  onClick={onShowBatchPipeline}
+                  disabled={selectedCategory.videos.length === 0 || selectedCategory.audio.length === 0}
+                  title={selectedCategory.videos.length === 0 || selectedCategory.audio.length === 0
+                    ? 'Add videos and audio first'
+                    : 'Batch create videos and schedule to social'}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="7" height="7" rx="1"/>
+                    <rect x="14" y="3" width="7" height="7" rx="1"/>
+                    <rect x="3" y="14" width="7" height="7" rx="1"/>
+                    <rect x="14" y="14" width="7" height="7" rx="1"/>
+                  </svg>
+                  Batch Create & Schedule
+                </button>
+              )}
             </div>
           </>
         ) : (
@@ -1250,7 +1271,9 @@ const styles = {
   createButtonContainer: {
     marginTop: '24px',
     display: 'flex',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    gap: '12px',
+    flexWrap: 'wrap'
   },
   createButton: {
     display: 'flex',
@@ -1264,6 +1287,20 @@ const styles = {
     cursor: 'pointer',
     fontSize: '14px',
     fontWeight: '500'
+  },
+  batchButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '14px 28px',
+    backgroundColor: '#7c3aed',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#fff',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '500',
+    transition: 'opacity 0.15s'
   },
   categoriesGrid: {
     maxWidth: '800px',

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import AestheticHome from './AestheticHome';
 import ContentLibrary from './ContentLibrary';
 import VideoEditorModal from './VideoEditorModal';
+import BatchPipeline from './BatchPipeline';
 import { uploadFile, deleteFile, getMediaDuration, generateThumbnail } from '../../services/firebaseStorage';
 import { saveCategories, loadCategories, savePresets, loadPresets, cleanupStorage } from '../../services/storageService';
 import { VIDEO_STATUS } from '../../utils/status';
@@ -138,12 +139,14 @@ const VideoStudio = ({
   }, [lateAccountIds]);
 
   // Default categories for fresh installs
+  // accountHandle links category to Late.co account for auto-scheduling
   const defaultCategories = [
     {
       id: 'boon-runway',
       artistId: 'boon',
       name: 'Runway',
       description: 'High fashion editorial content',
+      accountHandle: '@margiela.mommy', // Linked Late.co account
       thumbnail: null,
       videos: [],
       audio: [],
@@ -154,6 +157,7 @@ const VideoStudio = ({
       artistId: 'boon',
       name: 'EDM',
       description: 'High energy electronic visuals',
+      accountHandle: '@neonphoebe', // Linked Late.co account
       thumbnail: null,
       videos: [],
       audio: [],
@@ -212,6 +216,7 @@ const VideoStudio = ({
   // Editor state - restore showEditor from session if they were in the editor
   const [editingVideo, setEditingVideo] = useState(null);
   const [showEditor, setShowEditor] = useState(savedSession?.showEditor || false);
+  const [showBatchPipeline, setShowBatchPipeline] = useState(false);
 
   // Save to localStorage when categories change
   useEffect(() => {
@@ -800,6 +805,7 @@ const VideoStudio = ({
             onRenameBankVideo={handleRenameBankVideo}
             onRenameBankAudio={handleRenameBankAudio}
             onCreateContent={handleCreateContent}
+            onShowBatchPipeline={() => setShowBatchPipeline(true)}
           />
         )}
 
@@ -830,6 +836,28 @@ const VideoStudio = ({
             onClose={handleCloseEditor}
           />
         </EditorErrorBoundary>
+      )}
+
+      {/* Batch Pipeline - Streamlined batch create & schedule */}
+      {showBatchPipeline && selectedCategory && (
+        <BatchPipeline
+          category={selectedCategory}
+          lateAccountIds={lateAccountIds}
+          onSchedulePost={onSchedulePost}
+          onClose={() => setShowBatchPipeline(false)}
+          onVideosCreated={(videos) => {
+            // Add created videos to category
+            setCategories(prev => prev.map(cat =>
+              cat.id === selectedCategory.id
+                ? { ...cat, createdVideos: [...cat.createdVideos, ...videos] }
+                : cat
+            ));
+            setSelectedCategory(prev => prev ? {
+              ...prev,
+              createdVideos: [...prev.createdVideos, ...videos]
+            } : prev);
+          }}
+        />
       )}
 
       {/* UI-20: Upload Progress Overlay */}

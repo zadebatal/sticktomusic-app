@@ -22,6 +22,7 @@ export { default as ContentBankManager } from './ContentBankManager';
 export { default as LyricEditor } from './LyricEditor';
 export { default as TemplateSelector } from './TemplateSelector';
 export { default as BatchExport } from './BatchExport';
+export { default as BatchPipeline } from './BatchPipeline';
 
 // Templates and Utilities
 export * from './LyricTemplates';
