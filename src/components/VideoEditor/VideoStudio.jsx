@@ -1161,6 +1161,10 @@ const VideoStudio = ({
             onSave={handleSaveVideo}
             onSavePreset={handleSavePreset}
             onSaveLyrics={handleSaveLyricsToAudio}
+            onAddLyrics={handleAddLyrics}
+            onUpdateLyrics={handleUpdateLyrics}
+            onDeleteLyrics={handleDeleteLyrics}
+            onShowBatchPipeline={() => setShowBatchPipeline(true)}
             onClose={handleCloseEditor}
           />
         </EditorErrorBoundary>

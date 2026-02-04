@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useBeatDetection } from '../../hooks/useBeatDetection';
 import WordTimeline from './WordTimeline';
 import BeatSelector from './BeatSelector';
+import LyricBank from './LyricBank';
 import { saveApiKey, loadApiKey } from '../../services/storageService';
 import { ErrorPanel, EmptyState as SharedEmptyState, useToast } from '../ui';
 import {
@@ -23,6 +24,10 @@ const VideoEditorModal = ({
   onSave,
   onSavePreset,
   onSaveLyrics,
+  onAddLyrics,
+  onUpdateLyrics,
+  onDeleteLyrics,
+  onShowBatchPipeline,
   onClose
 }) => {
   // Media state
@@ -1447,6 +1452,12 @@ const VideoEditorModal = ({
                   >
                     Styles
                   </button>
+                  <button
+                    style={activeTab === 'lyrics' ? {...styles.tabActive, color: '#a78bfa'} : {...styles.tab, color: '#8b5cf6'}}
+                    onClick={() => setActiveTab('lyrics')}
+                  >
+                    📝 Lyrics
+                  </button>
                 </div>
 
                 {activeTab === 'caption' && (
@@ -1649,6 +1660,31 @@ const VideoEditorModal = ({
                   </div>
                 )}
 
+                {activeTab === 'lyrics' && (
+                  <div style={styles.tabContent}>
+                    <LyricBank
+                      lyrics={category?.lyrics || []}
+                      onAddLyrics={onAddLyrics}
+                      onUpdateLyrics={onUpdateLyrics}
+                      onDeleteLyrics={onDeleteLyrics}
+                      onSelectText={(selectedText) => {
+                        // Set selected lyrics as the current lyrics
+                        setLyrics(selectedText);
+                        // Auto-switch to caption tab to see the result
+                        setActiveTab('caption');
+                        toast.success('Lyrics loaded! Use Quick Edit or Word Timeline to sync.');
+                      }}
+                      compact={false}
+                      showAddForm={true}
+                    />
+                    {category?.lyrics?.length === 0 && (
+                      <p style={{ color: '#6b7280', fontSize: '12px', marginTop: '12px', textAlign: 'center' }}>
+                        Add lyrics in your category's Aesthetic Home, or add them here for quick access.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Available Clips from Category */}
                 <div style={styles.availableClipsSection}>
                   <div style={styles.clipsSectionHeader}>
@@ -1830,6 +1866,24 @@ const VideoEditorModal = ({
             )}
           </div>
           <div style={styles.footerRight}>
+            {onShowBatchPipeline && (
+              <button
+                style={styles.batchButton}
+                onClick={() => {
+                  onClose();
+                  onShowBatchPipeline();
+                }}
+                title="Generate up to 10 videos at once"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="7" height="7" rx="1"/>
+                  <rect x="14" y="3" width="7" height="7" rx="1"/>
+                  <rect x="3" y="14" width="7" height="7" rx="1"/>
+                  <rect x="14" y="14" width="7" height="7" rx="1"/>
+                </svg>
+                Make 10 at once
+              </button>
+            )}
             <span style={styles.shortcutHint}>⌘S to save</span>
             <button style={styles.cancelButton} onClick={onClose}>Cancel</button>
             <button style={styles.confirmButton} onClick={handleSave}>Confirm</button>
@@ -2785,6 +2839,20 @@ const styles = {
     padding: '4px 8px',
     backgroundColor: '#1f1f2e',
     borderRadius: '4px'
+  },
+  batchButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '10px 16px',
+    background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+    border: 'none',
+    borderRadius: '6px',
+    color: '#fff',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: '500',
+    marginRight: '8px'
   },
   cancelButton: {
     padding: '10px 20px',
