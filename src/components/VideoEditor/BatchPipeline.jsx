@@ -36,9 +36,10 @@ const BEAT_PATTERNS = [
 
 /**
  * ClipThumbnail - Shows thumbnail image or video element with hover preview
- * Matches VideoCard approach from AestheticHome for consistent behavior
+ * Uses preload="auto" and seeks to 0.5s to show actual video frame
  */
 const ClipThumbnail = ({ clip, style }) => {
+  const videoRef = useRef(null);
   const videoUrl = clip.localUrl || clip.url;
 
   // If we have a stored thumbnail, use it
@@ -46,22 +47,30 @@ const ClipThumbnail = ({ clip, style }) => {
     return <img src={clip.thumbnail} alt="" style={{ ...style, objectFit: 'cover' }} />;
   }
 
-  // Show video with hover-to-play (same as main library VideoCard)
+  // Show video element that seeks to show a frame
   if (videoUrl) {
     return (
       <video
+        ref={videoRef}
         src={videoUrl}
-        style={{ ...style, objectFit: 'cover' }}
+        style={{ ...style, objectFit: 'cover', background: '#27272a' }}
         muted
         playsInline
-        preload="metadata"
+        preload="auto"
+        onLoadedData={(e) => {
+          // Seek to 0.5s to show an actual frame instead of black
+          if (e.target.currentTime === 0) {
+            e.target.currentTime = 0.5;
+          }
+        }}
         onMouseEnter={(e) => {
+          e.target.currentTime = 0;
           const playPromise = e.target.play();
           if (playPromise) playPromise.catch(() => {});
         }}
         onMouseLeave={(e) => {
           if (!e.target.paused) e.target.pause();
-          e.target.currentTime = 0;
+          e.target.currentTime = 0.5;
         }}
       />
     );
@@ -141,11 +150,28 @@ const BatchPipeline = ({
   const availableClips = category?.videos || [];
   const availableAudio = category?.audio || [];
 
+  // DEBUG: Log state on every render
+  console.log('[BatchPipeline] Render state:', {
+    selectedAudio: selectedAudio ? { id: selectedAudio.id, name: selectedAudio.name } : null,
+    selectedClipsCount: selectedClips.length,
+    availableClipsCount: availableClips.length,
+    availableAudioCount: availableAudio.length,
+    disabledCondition: !selectedAudio || selectedClips.length < 2
+  });
+
   // Saved lyrics for selected audio
   const savedLyricsForAudio = useMemo(() => {
     if (!selectedAudio) return [];
     return selectedAudio.savedLyrics || [];
   }, [selectedAudio]);
+
+  // Auto-select audio if only one option (better UX)
+  useEffect(() => {
+    if (!selectedAudio && availableAudio.length === 1) {
+      console.log('[BatchPipeline] Auto-selecting single audio option');
+      setSelectedAudio(availableAudio[0]);
+    }
+  }, [availableAudio, selectedAudio]);
 
   // Analyze beats when audio is selected
   useEffect(() => {
@@ -159,6 +185,10 @@ const BatchPipeline = ({
 
   // Select All / Deselect All
   const handleSelectAll = useCallback(() => {
+    console.log('[BatchPipeline] Select All clicked:', {
+      currentSelected: selectedClips.length,
+      available: availableClips.length
+    });
     if (selectedClips.length === availableClips.length) {
       setSelectedClips([]);
     } else {
@@ -699,9 +729,19 @@ const BatchPipeline = ({
       background: '#8b5cf6',
       color: 'white'
     },
+    primaryBtnDisabled: {
+      background: '#4c4c54',
+      color: '#71717a',
+      cursor: 'not-allowed'
+    },
     secondaryBtn: {
       background: '#27272a',
       color: 'white'
+    },
+    secondaryBtnDisabled: {
+      background: '#1f1f23',
+      color: '#52525b',
+      cursor: 'not-allowed'
     },
     footer: {
       padding: '16px 24px',
@@ -867,7 +907,10 @@ const BatchPipeline = ({
                   <div
                     key={audio.id}
                     style={styles.audioCard(selectedAudio?.id === audio.id)}
-                    onClick={() => setSelectedAudio(audio)}
+                    onClick={() => {
+                      console.log('[BatchPipeline] Audio clicked:', audio.id, audio.name);
+                      setSelectedAudio(audio);
+                    }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
@@ -1014,14 +1057,22 @@ const BatchPipeline = ({
             </button>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
-                style={{ ...styles.btn, ...styles.secondaryBtn }}
+                style={{
+                  ...styles.btn,
+                  ...styles.secondaryBtn,
+                  ...(((!selectedAudio || selectedClips.length < 2 || isGeneratingPreview) ? styles.secondaryBtnDisabled : {}))
+                }}
                 onClick={handleGeneratePreview}
                 disabled={!selectedAudio || selectedClips.length < 2 || isGeneratingPreview}
               >
                 {isGeneratingPreview ? 'Generating...' : '👁 Preview First'}
               </button>
               <button
-                style={{ ...styles.btn, ...styles.primaryBtn }}
+                style={{
+                  ...styles.btn,
+                  ...styles.primaryBtn,
+                  ...((!selectedAudio || selectedClips.length < 2) ? styles.primaryBtnDisabled : {})
+                }}
                 onClick={handleGenerate}
                 disabled={!selectedAudio || selectedClips.length < 2}
               >
