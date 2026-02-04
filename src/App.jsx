@@ -210,12 +210,12 @@ const loadAppSession = () => {
   return null;
 };
 
-const saveAppSession = (page) => {
+const saveAppSession = (state) => {
   try {
     // Only save authenticated pages (not landing/marketing pages)
-    if (['operator', 'artist-portal', 'dashboard'].includes(page)) {
-      localStorage.setItem(APP_SESSION_KEY, JSON.stringify({ currentPage: page, savedAt: Date.now() }));
-      console.log('[App Session] Saved:', page);
+    if (['operator', 'artist-portal', 'dashboard'].includes(state.currentPage)) {
+      localStorage.setItem(APP_SESSION_KEY, JSON.stringify({ ...state, savedAt: Date.now() }));
+      console.log('[App Session] Saved:', state);
     }
   } catch (e) {
     console.warn('Failed to save app session:', e);
@@ -227,6 +227,8 @@ const StickToMusic = () => {
   const savedAppSession = loadAppSession();
   const [currentPage, setCurrentPage] = useState('home');
   const [pendingPage, setPendingPage] = useState(savedAppSession?.currentPage || null);
+  const [pendingOperatorTab, setPendingOperatorTab] = useState(savedAppSession?.operatorTab || null);
+  const [operatorTab, setOperatorTab] = useState('artists'); // Moved up for restore effect
   const [openFaq, setOpenFaq] = useState(null);
 
   // Authentication state
@@ -329,8 +331,13 @@ const StickToMusic = () => {
     if (user && pendingPage) {
       // Verify user has access to the pending page
       if (pendingPage === 'operator' && user.role === 'operator') {
-        console.log('[App Session] Restoring operator page');
+        console.log('[App Session] Restoring operator page, tab:', pendingOperatorTab);
         setCurrentPage('operator');
+        // Restore operator tab if saved
+        if (pendingOperatorTab) {
+          setOperatorTab(pendingOperatorTab);
+          setPendingOperatorTab(null);
+        }
       } else if (pendingPage === 'artist-portal' && user.role === 'artist') {
         console.log('[App Session] Restoring artist-portal page');
         setCurrentPage('artist-portal');
@@ -341,12 +348,12 @@ const StickToMusic = () => {
       }
       setPendingPage(null); // Clear pending page after restore
     }
-  }, [user, pendingPage]);
+  }, [user, pendingPage, pendingOperatorTab]);
 
-  // Save currentPage when it changes to an authenticated page
+  // Save session state when navigation changes
   useEffect(() => {
-    saveAppSession(currentPage);
-  }, [currentPage]);
+    saveAppSession({ currentPage, operatorTab });
+  }, [currentPage, operatorTab]);
 
   // Load applications from Firestore for operators
   useEffect(() => {
@@ -707,8 +714,7 @@ const StickToMusic = () => {
   const [dateRange, setDateRange] = useState({ start: '2025-01-01', end: '2025-01-30' });
   const [dashboardTab, setDashboardTab] = useState('overview');
 
-  // Operator dashboard state
-  const [operatorTab, setOperatorTab] = useState('artists');
+  // Operator dashboard state (operatorTab moved to top for session restore)
   const [showVideoEditor, setShowVideoEditor] = useState(false);
   const [selectedArtist, setSelectedArtist] = useState('all');
   const [selectedPlatform, setSelectedPlatform] = useState('all');
