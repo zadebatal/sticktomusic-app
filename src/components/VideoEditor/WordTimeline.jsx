@@ -44,6 +44,10 @@ const WordTimeline = ({
   const animationRef = useRef(null);
   const editInputRef = useRef(null);
 
+  // Undo history (stores previous word states)
+  const historyRef = useRef([]);
+  const MAX_HISTORY = 50;
+
   // Refs to hold latest callback functions (avoids stale closures in keyboard handler)
   const callbacksRef = useRef({});
 
@@ -114,6 +118,21 @@ const WordTimeline = ({
     source.start(0, globalTime, snippetDuration);
     scrubSourceRef.current = source;
   }, [audioRef]);
+
+  // Save current state to undo history
+  const saveToHistory = useCallback(() => {
+    historyRef.current.push(JSON.parse(JSON.stringify(words)));
+    if (historyRef.current.length > MAX_HISTORY) {
+      historyRef.current.shift(); // Remove oldest
+    }
+  }, [words]);
+
+  // Undo last action
+  const handleUndo = useCallback(() => {
+    if (historyRef.current.length === 0) return;
+    const previousState = historyRef.current.pop();
+    setWords(previousState);
+  }, [setWords]);
 
   // Sync localTime with currentTime prop when not playing
   useEffect(() => {
@@ -223,6 +242,8 @@ const WordTimeline = ({
     e.stopPropagation();
     const word = words[index];
     setSelectedWordIndex(index);
+    // Save to history before dragging starts
+    saveToHistory();
     setDragState({
       index,
       type,
@@ -352,6 +373,7 @@ const WordTimeline = ({
 
   const confirmDelete = () => {
     if (deleteConfirm.index >= 0) {
+      saveToHistory();
       setWords(prev => prev.filter((_, i) => i !== deleteConfirm.index));
       setSelectedWordIndex(null);
     }
@@ -362,36 +384,28 @@ const WordTimeline = ({
     setDeleteConfirm({ show: false, index: -1, text: '' });
   };
 
-  const handleSplitWord = () => {
+  // Cut word at playhead position - splits timing without changing text
+  const handleCutWord = () => {
     const index = getEffectiveWordIndex();
     if (index < 0) return;
     const word = words[index];
 
-    // If word has spaces, split by spaces
-    if (word.text.includes(' ')) {
-      const parts = word.text.split(' ').filter(p => p.trim());
-      const partDuration = word.duration / parts.length;
-      const newWords = parts.map((text, i) => ({
-        id: `word_${Date.now()}_${i}`,
-        text,
-        startTime: word.startTime + (i * partDuration),
-        duration: partDuration
-      }));
-      setWords(prev => {
-        const result = [...prev];
-        result.splice(index, 1, ...newWords);
-        return result;
-      });
-    } else if (word.text.length > 1) {
-      // Split single word into two halves at the middle
-      const midpoint = Math.ceil(word.text.length / 2);
-      const firstHalf = word.text.slice(0, midpoint);
-      const secondHalf = word.text.slice(midpoint);
-      const halfDuration = word.duration / 2;
+    // Cut at the current playhead position
+    const cutTime = displayTime;
+
+    // Make sure cut point is within the word
+    if (cutTime <= word.startTime || cutTime >= word.startTime + word.duration) {
+      // Cut at middle if playhead not inside word
+      const midTime = word.startTime + word.duration / 2;
+      const firstDuration = word.duration / 2;
+      const secondDuration = word.duration / 2;
+
+      // Save for undo
+      saveToHistory();
 
       const newWords = [
-        { id: `word_${Date.now()}_0`, text: firstHalf, startTime: word.startTime, duration: halfDuration },
-        { id: `word_${Date.now()}_1`, text: secondHalf, startTime: word.startTime + halfDuration, duration: halfDuration }
+        { id: `word_${Date.now()}_0`, text: word.text, startTime: word.startTime, duration: firstDuration },
+        { id: `word_${Date.now()}_1`, text: word.text, startTime: midTime, duration: secondDuration }
       ];
 
       setWords(prev => {
@@ -400,13 +414,30 @@ const WordTimeline = ({
         return result;
       });
     } else {
-      alert('Word is too short to split');
+      // Cut at playhead position
+      const firstDuration = cutTime - word.startTime;
+      const secondDuration = (word.startTime + word.duration) - cutTime;
+
+      // Save for undo
+      saveToHistory();
+
+      const newWords = [
+        { id: `word_${Date.now()}_0`, text: word.text, startTime: word.startTime, duration: firstDuration },
+        { id: `word_${Date.now()}_1`, text: word.text, startTime: cutTime, duration: secondDuration }
+      ];
+
+      setWords(prev => {
+        const result = [...prev];
+        result.splice(index, 1, ...newWords);
+        return result;
+      });
     }
   };
 
   const handleCombineWords = () => {
     const index = getEffectiveWordIndex();
     if (index < 0 || index >= words.length - 1) return;
+    saveToHistory();
     const word1 = words[index];
     const word2 = words[index + 1];
     const combined = {
@@ -425,6 +456,7 @@ const WordTimeline = ({
   const handleChangeCase = (caseType) => {
     const index = getEffectiveWordIndex();
     if (index < 0) return;
+    saveToHistory();
     setWords(prev => {
       const newWords = [...prev];
       const word = { ...newWords[index] };
@@ -437,6 +469,7 @@ const WordTimeline = ({
   };
 
   const handleMakeLegato = () => {
+    saveToHistory();
     setWords(prev => {
       const sorted = [...prev].sort((a, b) => a.startTime - b.startTime);
       return sorted.map((word, i) => {
@@ -466,6 +499,7 @@ const WordTimeline = ({
   // Save inline edit
   const saveInlineEdit = () => {
     if (editingWordId === null) return;
+    saveToHistory();
     setWords(prev => prev.map(w =>
       w.id === editingWordId ? { ...w, text: editText } : w
     ));
@@ -534,7 +568,8 @@ const WordTimeline = ({
       cancelDelete,
       confirmDelete,
       cancelInlineEdit,
-      getEffectiveWordIndex
+      getEffectiveWordIndex,
+      handleUndo
     };
   });
 
@@ -548,8 +583,16 @@ const WordTimeline = ({
         cancelDelete: cancelDel,
         confirmDelete: confirmDel,
         cancelInlineEdit: cancelEdit,
-        getEffectiveWordIndex: getIndex
+        getEffectiveWordIndex: getIndex,
+        handleUndo: undo
       } = callbacksRef.current;
+
+      // Command/Ctrl+Z to undo
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !editingWordId) {
+        e.preventDefault();
+        undo?.();
+        return;
+      }
 
       // Escape to cancel delete confirmation or close modal
       if (e.key === 'Escape') {
@@ -632,11 +675,11 @@ const WordTimeline = ({
                 opacity: hasWordAtPlayhead ? 1 : 0.5,
                 cursor: hasWordAtPlayhead ? 'pointer' : 'not-allowed'
               }}
-              onClick={handleSplitWord}
+              onClick={handleCutWord}
               disabled={!hasWordAtPlayhead}
-              title={hasWordAtPlayhead ? 'Split word' : 'Move playhead over a word'}
+              title={hasWordAtPlayhead ? 'Cut word at playhead (keeps text)' : 'Move playhead over a word'}
             >
-              Split
+              ✂️ Cut
             </button>
             <button style={styles.toolButtonPrimary} onClick={handleAddWord}>Add</button>
             <button
