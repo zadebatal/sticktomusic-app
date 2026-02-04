@@ -1,9 +1,9 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { renderVideo, renderPreview } from '../../services/videoExportService';
-import { uploadFile } from '../../services/firebaseStorage';
+import { renderPreview } from '../../services/videoExportService';
 import { useBeatDetection } from '../../hooks/useBeatDetection';
 import { isValidBankName, generateBatchPostContent, getBankNames } from '../../utils/captionGenerator';
 import { VIDEO_STATUS } from '../../utils/status';
+import PreviewPlayer from './PreviewPlayer';
 
 /**
  * BatchPipeline - Streamlined workflow for batch video creation and scheduling
@@ -421,7 +421,7 @@ const BatchPipeline = ({
     }
   }, [selectedAudio, selectedClips, clipStrategy, generateClipSequence, useTextOverlay, selectedLyrics, category, previewUrl]);
 
-  // Generate all videos
+  // Generate all video RECIPES (instant - no rendering!)
   const handleGenerate = useCallback(async () => {
     if (!selectedAudio) {
       setError('Please select an audio track');
@@ -432,7 +432,7 @@ const BatchPipeline = ({
       return;
     }
 
-    setStage(STAGES.GENERATING);
+    // INSTANT - no rendering, just create recipes!
     setError(null);
     setGeneratedVideos([]);
 
@@ -441,109 +441,73 @@ const BatchPipeline = ({
       ? selectedAudio.endTime - (selectedAudio.startTime || 0)
       : selectedAudio.duration || 30;
 
-    console.log('[BatchPipeline] Starting batch generation');
+    console.log('[BatchPipeline] Creating video recipes (instant!)');
     console.log('[BatchPipeline] Audio duration:', audioDuration);
     console.log('[BatchPipeline] Selected clips:', selectedClips.length);
 
-    try {
-      for (let i = 0; i < quantity; i++) {
-        setGenerationProgress({
-          current: i + 1,
-          total: quantity,
-          status: `Creating video ${i + 1} of ${quantity}...`
-        });
+    for (let i = 0; i < quantity; i++) {
+      // Generate clip sequence with variation
+      // ALWAYS shuffle the clip pool for variety between videos
+      let clipPool = [...selectedClips].sort(() => Math.random() - 0.5);
 
-        // Generate clip sequence with variation
-        // ALWAYS shuffle the clip pool for variety between videos
-        let clipPool = [...selectedClips].sort(() => Math.random() - 0.5);
-
-        // For sequential mode, also apply rotation offset
-        if (clipStrategy === 'sequential') {
-          const offset = i % clipPool.length;
-          clipPool = [...clipPool.slice(offset), ...clipPool.slice(0, offset)];
-        }
-
-        const clips = generateClipSequence(audioDuration, clipPool, clipStrategy);
-        console.log(`[BatchPipeline] Video ${i + 1} clips:`, clips.length);
-
-        const videoData = {
-          id: `batch_${Date.now()}_${i}`,
-          title: `${category.name} ${i + 1}`,
-          clips,
-          audio: selectedAudio,
-          words: useTextOverlay && selectedLyrics ? selectedLyrics.words : [],
-          textStyle: category?.defaultPreset?.textStyle || {
-            fontSize: 48,
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: '600',
-            color: '#ffffff',
-            outline: true,
-            outlineColor: '#000000'
-          },
-          cropMode: '9:16',
-          duration: audioDuration
-        };
-
-        // Render video
-        setGenerationProgress(prev => ({ ...prev, status: `Rendering video ${i + 1}...` }));
-        console.log(`[BatchPipeline] Rendering video ${i + 1}...`);
-
-        const blob = await renderVideo(videoData, (p) => {
-          setGenerationProgress(prev => ({
-            ...prev,
-            status: `Rendering video ${i + 1}... ${p}%`
-          }));
-        });
-
-        console.log(`[BatchPipeline] Video ${i + 1} rendered, size:`, (blob.size / 1024 / 1024).toFixed(2), 'MB');
-
-        // Upload to Firebase
-        setGenerationProgress(prev => ({ ...prev, status: `Uploading video ${i + 1}...` }));
-        const { url: cloudUrl } = await uploadFile(
-          new File([blob], `${videoData.id}.webm`, { type: 'video/webm' }),
-          'videos'
-        );
-
-        console.log(`[BatchPipeline] Video ${i + 1} uploaded:`, cloudUrl);
-
-        // Generate caption - use bank if available, otherwise use template
-        let caption, hashtags;
-        if (hasCaptionBank) {
-          const postContent = generateBatchPostContent(category.name, 1)[0];
-          caption = postContent.fullText;
-          hashtags = postContent.hashtagString;
-        } else {
-          // Fallback to template-based caption
-          caption = captionTemplate
-            .replace('{title}', category.name)
-            .replace('{hashtags}', defaultHashtags)
-            .replace('{index}', String(i + 1));
-          hashtags = defaultHashtags;
-        }
-
-        videos.push({
-          ...videoData,
-          cloudUrl,
-          caption,
-          hashtags,
-          // Add proper video structure for library integration
-          status: VIDEO_STATUS.DRAFT,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
+      // For sequential mode, also apply rotation offset
+      if (clipStrategy === 'sequential') {
+        const offset = i % clipPool.length;
+        clipPool = [...clipPool.slice(offset), ...clipPool.slice(0, offset)];
       }
 
-      setGeneratedVideos(videos);
-      setCaptions(videos.map(v => v.caption));
-      setStage(STAGES.VIDEO_BANK);  // Go to video bank first to view/edit
+      const clips = generateClipSequence(audioDuration, clipPool, clipStrategy);
+      console.log(`[BatchPipeline] Video ${i + 1} recipe: ${clips.length} clips`);
 
-      // Don't auto-save to library yet - wait for "Save as Drafts" button
+      // Generate caption - use bank if available, otherwise use template
+      let caption, hashtags;
+      if (hasCaptionBank) {
+        const postContent = generateBatchPostContent(category.name, 1)[0];
+        caption = postContent.fullText;
+        hashtags = postContent.hashtagString;
+      } else {
+        // Fallback to template-based caption
+        caption = captionTemplate
+          .replace('{title}', category.name)
+          .replace('{hashtags}', defaultHashtags)
+          .replace('{index}', String(i + 1));
+        hashtags = defaultHashtags;
+      }
 
-    } catch (err) {
-      console.error('[BatchPipeline] Generation error:', err);
-      setError(`Failed to generate videos: ${err.message}`);
-      setStage(STAGES.OPTIONS);
+      // Create video RECIPE (not rendered yet!)
+      const videoRecipe = {
+        id: `batch_${Date.now()}_${i}`,
+        title: `${category.name} ${i + 1}`,
+        clips,
+        audio: selectedAudio,
+        words: useTextOverlay && selectedLyrics ? selectedLyrics.words : [],
+        textStyle: category?.defaultPreset?.textStyle || {
+          fontSize: 48,
+          fontFamily: 'Inter, sans-serif',
+          fontWeight: '600',
+          color: '#ffffff',
+          outline: true,
+          outlineColor: '#000000'
+        },
+        cropMode: '9:16',
+        duration: audioDuration,
+        caption,
+        hashtags,
+        // Mark as draft - not rendered yet
+        status: VIDEO_STATUS.DRAFT,
+        isRendered: false,  // Flag to indicate this needs rendering
+        cloudUrl: null,     // Will be set after rendering
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      videos.push(videoRecipe);
     }
+
+    console.log(`[BatchPipeline] Created ${videos.length} video recipes instantly!`);
+    setGeneratedVideos(videos);
+    setCaptions(videos.map(v => v.caption));
+    setStage(STAGES.VIDEO_BANK);  // Go to video bank to preview
   }, [selectedAudio, selectedClips, quantity, clipStrategy, generateClipSequence, useTextOverlay, selectedLyrics, category, captionTemplate, defaultHashtags, hasCaptionBank]);
 
   // Save videos as drafts to library
@@ -1280,8 +1244,30 @@ const BatchPipeline = ({
               </div>
             )}
 
+            {/* Instant generation notice */}
+            <div style={{
+              background: '#065f46',
+              border: '1px solid #10b981',
+              borderRadius: '8px',
+              padding: '12px 16px',
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <span style={{ fontSize: '20px' }}>⚡</span>
+              <div>
+                <div style={{ color: '#d1fae5', fontWeight: '500', marginBottom: '2px' }}>
+                  Instant Preview Mode
+                </div>
+                <div style={{ color: '#a7f3d0', fontSize: '13px' }}>
+                  Videos are previews only - they'll be rendered when you export/finalize from the library.
+                </div>
+              </div>
+            </div>
+
             <p style={{ color: '#a1a1aa', marginBottom: '20px' }}>
-              Review your generated videos below. Click "Edit" to open in full editor, or proceed to scheduling when ready.
+              Preview your video recipes below. Click "Edit" to open in full editor, or save as drafts to render later.
             </p>
 
             {/* Video Grid */}
@@ -1300,18 +1286,15 @@ const BatchPipeline = ({
                     border: playingVideoId === video.id ? '2px solid #8b5cf6' : '2px solid transparent'
                   }}
                 >
-                  {/* Video Preview */}
-                  <div style={{ position: 'relative', aspectRatio: '9/16', background: '#000' }}>
-                    {video.cloudUrl && (
-                      <video
-                        src={video.cloudUrl}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        controls
-                        playsInline
-                        onPlay={() => setPlayingVideoId(video.id)}
-                        onPause={() => setPlayingVideoId(null)}
-                      />
-                    )}
+                  {/* Video Preview using PreviewPlayer */}
+                  <div style={{ position: 'relative' }}>
+                    <PreviewPlayer
+                      clips={video.clips}
+                      audio={video.audio}
+                      duration={video.duration}
+                      showControls={true}
+                    />
+                    {/* Video number badge */}
                     <div style={{
                       position: 'absolute',
                       top: '8px',
@@ -1321,10 +1304,28 @@ const BatchPipeline = ({
                       padding: '4px 8px',
                       borderRadius: '4px',
                       fontSize: '12px',
-                      fontWeight: '600'
+                      fontWeight: '600',
+                      zIndex: 10
                     }}>
                       #{idx + 1}
                     </div>
+                    {/* "Not Rendered" badge */}
+                    {!video.isRendered && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '8px',
+                        right: '8px',
+                        background: 'rgba(0,0,0,0.7)',
+                        color: '#fbbf24',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '10px',
+                        fontWeight: '500',
+                        zIndex: 10
+                      }}>
+                        ⚡ Preview
+                      </div>
+                    )}
                   </div>
 
                   {/* Video Info */}
