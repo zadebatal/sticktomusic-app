@@ -36,11 +36,12 @@ const BEAT_PATTERNS = [
 
 /**
  * ClipThumbnail - Generates thumbnail from video if not available
+ * Falls back to showing actual video element if canvas fails (CORS)
  */
 const ClipThumbnail = ({ clip, style }) => {
   const [thumbUrl, setThumbUrl] = useState(clip.thumbnail || null);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
+  const [showVideo, setShowVideo] = useState(false);
+  const [videoUrl, setVideoUrl] = useState(null);
 
   useEffect(() => {
     // If we already have a thumbnail, use it
@@ -49,75 +50,124 @@ const ClipThumbnail = ({ clip, style }) => {
       return;
     }
 
-    // Otherwise generate from video
-    const videoUrl = clip.localUrl || clip.url;
-    if (!videoUrl) return;
+    // Get video URL
+    const url = clip.localUrl || clip.url;
+    if (!url) return;
 
-    const video = document.createElement('video');
-    video.crossOrigin = 'anonymous';
-    video.muted = true;
-    video.preload = 'metadata';
+    setVideoUrl(url);
 
-    video.onloadeddata = () => {
-      video.currentTime = 0.5; // Seek to 0.5s for thumbnail
-    };
+    // Try to generate thumbnail without crossOrigin (CORS workaround)
+    const tryGenerateThumbnail = (useCors) => {
+      const video = document.createElement('video');
+      if (useCors) video.crossOrigin = 'anonymous';
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = 'metadata';
 
-    video.onseeked = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = 120;
-        canvas.height = 213; // 9:16 aspect ratio
-        const ctx = canvas.getContext('2d');
+      video.onloadeddata = () => {
+        video.currentTime = 0.5; // Seek to 0.5s for thumbnail
+      };
 
-        // Center crop
-        const videoRatio = video.videoWidth / video.videoHeight;
-        const canvasRatio = canvas.width / canvas.height;
-        let sx, sy, sw, sh;
+      video.onseeked = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 120;
+          canvas.height = 213; // 9:16 aspect ratio
+          const ctx = canvas.getContext('2d');
 
-        if (videoRatio > canvasRatio) {
-          sh = video.videoHeight;
-          sw = sh * canvasRatio;
-          sx = (video.videoWidth - sw) / 2;
-          sy = 0;
-        } else {
-          sw = video.videoWidth;
-          sh = sw / canvasRatio;
-          sx = 0;
-          sy = (video.videoHeight - sh) / 2;
+          // Center crop
+          const videoRatio = video.videoWidth / video.videoHeight;
+          const canvasRatio = canvas.width / canvas.height;
+          let sx, sy, sw, sh;
+
+          if (videoRatio > canvasRatio) {
+            sh = video.videoHeight;
+            sw = sh * canvasRatio;
+            sx = (video.videoWidth - sw) / 2;
+            sy = 0;
+          } else {
+            sw = video.videoWidth;
+            sh = sw / canvasRatio;
+            sx = 0;
+            sy = (video.videoHeight - sh) / 2;
+          }
+
+          ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+          // Check if canvas was tainted (will be blank)
+          if (dataUrl && dataUrl !== 'data:,') {
+            setThumbUrl(dataUrl);
+          } else {
+            throw new Error('Canvas tainted');
+          }
+        } catch (e) {
+          // Canvas tainted due to CORS, fall back to video element
+          if (useCors) {
+            // Try again without CORS
+            tryGenerateThumbnail(false);
+          } else {
+            // Show video element instead
+            setShowVideo(true);
+          }
         }
+      };
 
-        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-        setThumbUrl(canvas.toDataURL('image/jpeg', 0.6));
-      } catch (e) {
-        console.warn('Thumbnail generation failed:', e);
-      }
+      video.onerror = () => {
+        if (useCors) {
+          // Try without CORS
+          tryGenerateThumbnail(false);
+        } else {
+          // Still show video element as last resort
+          setShowVideo(true);
+        }
+      };
+
+      video.src = url;
     };
 
-    video.onerror = () => {
-      console.warn('Could not load video for thumbnail');
-    };
-
-    video.src = videoUrl;
+    // Start with CORS, fall back if needed
+    tryGenerateThumbnail(true);
   }, [clip]);
 
   if (thumbUrl) {
     return <img src={thumbUrl} alt="" style={style} />;
   }
 
-  // Fallback: show video element directly
-  const videoUrl = clip.localUrl || clip.url;
-  if (videoUrl) {
+  // Fallback: show video element directly (handles CORS cases)
+  if (showVideo && videoUrl) {
     return (
       <video
         src={videoUrl}
-        style={style}
+        style={{ ...style, objectFit: 'cover' }}
         muted
+        playsInline
         preload="metadata"
+        onLoadedData={(e) => e.target.currentTime = 0.5}
       />
     );
   }
 
-  return <div style={{ ...style, background: '#3f3f46' }} />;
+  // Still loading or no URL
+  return (
+    <div style={{
+      ...style,
+      background: 'linear-gradient(135deg, #3f3f46 0%, #27272a 100%)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }}>
+      {videoUrl && (
+        <div style={{
+          width: 16,
+          height: 16,
+          border: '2px solid #71717a',
+          borderTopColor: '#a78bfa',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }} />
+      )}
+    </div>
+  );
 };
 
 const BatchPipeline = ({
