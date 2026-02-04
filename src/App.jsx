@@ -43,14 +43,15 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 
-// Firebase configuration
+// Firebase configuration - loaded from environment variables for security
+// Set these in .env.local for development or Vercel dashboard for production
 const firebaseConfig = {
-  apiKey: "AIzaSyDIw9xCnMVpDHW36vyxsNtwvmOfVlIHa0Y",
-  authDomain: "sticktomusic-c8b23.firebaseapp.com",
-  projectId: "sticktomusic-c8b23",
-  storageBucket: "sticktomusic-c8b23.firebasestorage.app",
-  messagingSenderId: "621559911733",
-  appId: "1:621559911733:web:4fe5066433967245ada87c"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID
 };
 
 // Initialize Firebase only if not already initialized (prevents duplicate-app error)
@@ -64,8 +65,8 @@ const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
 const googleProvider = new GoogleAuthProvider();
 
-// Stripe Configuration
-const STRIPE_PUBLISHABLE_KEY = 'pk_live_51SwClT6Yzynsfn3ImqR6SMOHy1EgQoTeQ7o7i3iMBRWSTTaYo2WrIq6G5ZpOMrhGCmEwuKc9mpKFMZXKFn9TLfUv00lfBRoJyl';
+// Stripe Configuration - loaded from environment variable for security
+const STRIPE_PUBLISHABLE_KEY = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY;
 
 // Operator emails (these users get operator access)
 // Can be overridden via REACT_APP_OPERATOR_EMAILS environment variable (comma-separated)

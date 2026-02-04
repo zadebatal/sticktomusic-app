@@ -507,8 +507,12 @@ const AestheticHome = ({
 
                     <button
                       style={styles.actionButtonPurple}
-                      onClick={() => onMakeSlideshow?.({ batch: true })}
-                      disabled={(selectedCategory.imagesA || []).length === 0 && (selectedCategory.imagesB || []).length === 0}
+                      onClick={() => {
+                        onMakeSlideshow?.({ batch: true });
+                        // Auto-open slideshow library after batch creation
+                        setTimeout(() => setShowSlideshowLibrary(true), 100);
+                      }}
+                      disabled={(selectedCategory.imagesA || []).length === 0 || (selectedCategory.imagesB || []).length === 0}
                       title="Generate 10 slideshows randomly pulling from A/B banks"
                     >
                       <span style={styles.actionIcon}>📦</span>

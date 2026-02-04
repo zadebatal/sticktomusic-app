@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
 import LyricBank from './LyricBank';
 import AudioClipSelector from './AudioClipSelector';
+import LyricAnalyzer from './LyricAnalyzer';
 
 /**
  * SlideshowEditor - Flowstage-style carousel/slideshow creator
@@ -45,6 +46,13 @@ const SlideshowEditor = ({
   // Text editor state
   const [editingTextId, setEditingTextId] = useState(null);
   const [textEditorPosition, setTextEditorPosition] = useState({ x: 0, y: 0 });
+  const [showTextEditorPanel, setShowTextEditorPanel] = useState(false); // Flowstage-style side panel
+
+  // AI Transcription state
+  const [showLyricAnalyzer, setShowLyricAnalyzer] = useState(false);
+
+  // Audio upload ref for slideshow
+  const slideshowAudioInputRef = useRef(null);
 
   // Export state
   const [isExporting, setIsExporting] = useState(false);
@@ -389,6 +397,53 @@ const SlideshowEditor = ({
   const handleTextClick = useCallback((e, overlayId) => {
     e.stopPropagation();
     setEditingTextId(overlayId);
+    setShowTextEditorPanel(true);
+  }, []);
+
+  // Handle click on slide image to open text editor panel
+  const handleSlideClick = useCallback(() => {
+    setShowTextEditorPanel(true);
+  }, []);
+
+  // Handle AI transcription completion - add lyrics to bank and to slide
+  const handleTranscriptionComplete = useCallback((result) => {
+    if (result?.text) {
+      // Add text overlay with the transcribed lyrics
+      const newOverlay = {
+        id: `text_${Date.now()}`,
+        text: result.text,
+        style: {
+          fontSize: 36,
+          fontFamily: "'Inter', sans-serif",
+          fontWeight: '600',
+          color: '#ffffff',
+          textAlign: 'center',
+          outline: true,
+          outlineColor: 'rgba(0,0,0,0.5)'
+        },
+        position: { x: 50, y: 50, width: 80, height: 20 }
+      };
+      setSlides(prev => prev.map((slide, i) =>
+        i === selectedSlideIndex
+          ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] }
+          : slide
+      ));
+      setEditingTextId(newOverlay.id);
+      setShowTextEditorPanel(true);
+    }
+    setShowLyricAnalyzer(false);
+  }, [selectedSlideIndex]);
+
+  // Handle audio file upload directly in slideshow editor
+  const handleSlideshowAudioUpload = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      // Open trimmer for the uploaded audio
+      setAudioToTrim({ file, url, localUrl: url, name: file.name, duration: 0 });
+      setShowAudioTrimmer(true);
+    }
+    e.target.value = '';
   }, []);
 
   // Save slideshow
@@ -686,7 +741,16 @@ const SlideshowEditor = ({
                 audioTracks.length === 0 ? (
                   <div style={styles.emptyBank}>
                     <p>No audio tracks</p>
-                    <p style={styles.emptySubtext}>Upload audio in the Aesthetic Home</p>
+                    <p style={styles.emptySubtext}>Upload audio to get started</p>
+                    <button
+                      style={styles.uploadAudioBtn}
+                      onClick={() => slideshowAudioInputRef.current?.click()}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 5v14M5 12h14"/>
+                      </svg>
+                      Add Audio
+                    </button>
                   </div>
                 ) : (
                   <div style={styles.audioList}>
@@ -785,12 +849,13 @@ const SlideshowEditor = ({
                   aspectRatio: aspectRatio === '9:16' ? '9/16' : '3/4'
                 }}
               >
-                {/* Background Image */}
+                {/* Background Image - Click to open text editor */}
                 {currentSlide?.backgroundImage ? (
                   <img
                     src={currentSlide.backgroundImage}
                     alt="Slide background"
                     style={styles.canvasBackground}
+                    onClick={handleSlideClick}
                   />
                 ) : (
                   <div style={styles.canvasPlaceholder}>
@@ -869,6 +934,15 @@ const SlideshowEditor = ({
                 </div>
               )}
 
+              {/* Hidden audio input for slideshow */}
+              <input
+                ref={slideshowAudioInputRef}
+                type="file"
+                accept="audio/*"
+                onChange={handleSlideshowAudioUpload}
+                style={{ display: 'none' }}
+              />
+
               {/* Canvas Actions */}
               <div style={styles.canvasActions}>
                 {/* Re-roll Button (only show when slide has an image) */}
@@ -893,12 +967,29 @@ const SlideshowEditor = ({
                 )}
 
                 {/* Add Text Button */}
-                <button style={styles.addTextButton} onClick={addTextOverlay}>
+                <button style={styles.addTextButton} onClick={() => { addTextOverlay(); setShowTextEditorPanel(true); }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M12 5v14M5 12h14"/>
                   </svg>
                   Add Text
                 </button>
+
+                {/* AI Transcribe Button */}
+                {selectedAudio && (
+                  <button
+                    style={styles.aiTranscribeButton}
+                    onClick={() => setShowLyricAnalyzer(true)}
+                    title="AI transcribe audio to add lyrics"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
+                      <path d="M19 10v2a7 7 0 01-14 0v-2"/>
+                      <line x1="12" y1="19" x2="12" y2="23"/>
+                      <line x1="8" y1="23" x2="16" y2="23"/>
+                    </svg>
+                    AI Transcribe
+                  </button>
+                )}
 
                 {/* Add to Lyric Bank Button */}
                 {onAddLyrics && (
@@ -927,13 +1018,45 @@ const SlideshowEditor = ({
               </div>
             </div>
 
-            {/* Text Editor (when editing) */}
-            {editingTextId && currentSlide && (
-              <TextEditor
-                overlay={(currentSlide.textOverlays || []).find(o => o.id === editingTextId)}
-                onUpdate={(updates) => updateTextOverlay(editingTextId, updates)}
-                onRemove={() => removeTextOverlay(editingTextId)}
-                onClose={() => setEditingTextId(null)}
+            {/* Flowstage-style Text Editor Side Panel */}
+            {showTextEditorPanel && currentSlide && (
+              <TextEditorPanel
+                slide={currentSlide}
+                editingTextId={editingTextId}
+                lyrics={lyrics}
+                onSelectText={(text) => {
+                  // Add selected lyrics as text overlay
+                  const newOverlay = {
+                    id: `text_${Date.now()}`,
+                    text: text,
+                    style: {
+                      fontSize: 36,
+                      fontFamily: "'Inter', sans-serif",
+                      fontWeight: '600',
+                      color: '#ffffff',
+                      textAlign: 'center',
+                      outline: true,
+                      outlineColor: 'rgba(0,0,0,0.5)'
+                    },
+                    position: { x: 50, y: 50, width: 80, height: 20 }
+                  };
+                  setSlides(prev => prev.map((slide, i) =>
+                    i === selectedSlideIndex
+                      ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] }
+                      : slide
+                  ));
+                  setEditingTextId(newOverlay.id);
+                }}
+                onAddTextOverlay={() => {
+                  addTextOverlay();
+                }}
+                onSelectOverlay={(overlayId) => setEditingTextId(overlayId)}
+                onUpdateOverlay={(overlayId, updates) => updateTextOverlay(overlayId, updates)}
+                onRemoveOverlay={(overlayId) => removeTextOverlay(overlayId)}
+                onClose={() => {
+                  setShowTextEditorPanel(false);
+                  setEditingTextId(null);
+                }}
               />
             )}
 
@@ -1143,6 +1266,16 @@ const SlideshowEditor = ({
           </div>
         )}
 
+        {/* AI Lyric Analyzer Modal */}
+        {showLyricAnalyzer && selectedAudio && (
+          <LyricAnalyzer
+            audioFile={selectedAudio.file}
+            audioUrl={selectedAudio.localUrl || selectedAudio.url}
+            onComplete={handleTranscriptionComplete}
+            onClose={() => setShowLyricAnalyzer(false)}
+          />
+        )}
+
         {/* Audio Trimmer Modal */}
         {showAudioTrimmer && audioToTrim && (
           <AudioClipSelector
@@ -1164,89 +1297,202 @@ const SlideshowEditor = ({
 };
 
 /**
- * TextEditor - Inline text editing panel
+ * TextEditorPanel - Flowstage-style side panel for text editing
+ * Shows all text overlays on slide, allows editing, and pulling from lyric bank
  */
-const TextEditor = ({ overlay, onUpdate, onRemove, onClose }) => {
-  if (!overlay) return null;
+const TextEditorPanel = ({
+  slide,
+  editingTextId,
+  lyrics = [],
+  onSelectText,
+  onAddTextOverlay,
+  onSelectOverlay,
+  onUpdateOverlay,
+  onRemoveOverlay,
+  onClose
+}) => {
+  const [showLyricPicker, setShowLyricPicker] = useState(false);
+  const textOverlays = slide?.textOverlays || [];
+  const selectedOverlay = textOverlays.find(o => o.id === editingTextId);
 
   return (
-    <div style={textEditorStyles.container}>
-      <div style={textEditorStyles.header}>
-        <span>Edit Text</span>
-        <button style={textEditorStyles.closeBtn} onClick={onClose}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
+    <div style={textPanelStyles.panel}>
+      {/* Panel Header */}
+      <div style={textPanelStyles.header}>
+        <h3 style={textPanelStyles.title}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M4 7V4h16v3M9 20h6M12 4v16"/>
+          </svg>
+          Text Editor
+        </h3>
+        <button style={textPanelStyles.closeBtn} onClick={onClose}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
         </button>
       </div>
 
-      <textarea
-        value={overlay.text}
-        onChange={(e) => onUpdate({ text: e.target.value })}
-        style={textEditorStyles.textarea}
-        placeholder="Enter text..."
-        rows={3}
-      />
-
-      <div style={textEditorStyles.controls}>
-        {/* Font Size */}
-        <div style={textEditorStyles.control}>
-          <label>Size</label>
-          <input
-            type="range"
-            min="24"
-            max="120"
-            value={overlay.style.fontSize}
-            onChange={(e) => onUpdate({
-              style: { ...overlay.style, fontSize: parseInt(e.target.value) }
-            })}
-            style={textEditorStyles.slider}
-          />
-          <span>{overlay.style.fontSize}px</span>
+      {/* Text Blocks List */}
+      <div style={textPanelStyles.textList}>
+        <div style={textPanelStyles.sectionHeader}>
+          <span>Text Blocks ({textOverlays.length})</span>
+          <button style={textPanelStyles.addBtn} onClick={onAddTextOverlay}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+          </button>
         </div>
 
-        {/* Color */}
-        <div style={textEditorStyles.control}>
-          <label>Color</label>
-          <input
-            type="color"
-            value={overlay.style.color}
-            onChange={(e) => onUpdate({
-              style: { ...overlay.style, color: e.target.value }
-            })}
-            style={textEditorStyles.colorPicker}
-          />
-        </div>
-
-        {/* Text Align */}
-        <div style={textEditorStyles.control}>
-          <label>Align</label>
-          <div style={textEditorStyles.alignButtons}>
-            {['left', 'center', 'right'].map(align => (
-              <button
-                key={align}
-                style={{
-                  ...textEditorStyles.alignBtn,
-                  ...(overlay.style.textAlign === align ? textEditorStyles.alignBtnActive : {})
-                }}
-                onClick={() => onUpdate({
-                  style: { ...overlay.style, textAlign: align }
-                })}
-              >
-                {align[0].toUpperCase()}
-              </button>
-            ))}
+        {textOverlays.length === 0 ? (
+          <div style={textPanelStyles.emptyText}>
+            <p>No text on this slide</p>
+            <button style={textPanelStyles.addTextBtn} onClick={onAddTextOverlay}>
+              + Add Text
+            </button>
           </div>
-        </div>
+        ) : (
+          textOverlays.map(overlay => (
+            <div
+              key={overlay.id}
+              style={{
+                ...textPanelStyles.textBlock,
+                ...(editingTextId === overlay.id ? textPanelStyles.textBlockActive : {})
+              }}
+              onClick={() => onSelectOverlay(overlay.id)}
+            >
+              <div style={textPanelStyles.textPreview}>
+                {overlay.text.slice(0, 50)}{overlay.text.length > 50 ? '...' : ''}
+              </div>
+              <button
+                style={textPanelStyles.deleteBlockBtn}
+                onClick={(e) => { e.stopPropagation(); onRemoveOverlay(overlay.id); }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/>
+                </svg>
+              </button>
+            </div>
+          ))
+        )}
       </div>
 
-      <button style={textEditorStyles.deleteBtn} onClick={onRemove}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-        </svg>
-        Delete Text
-      </button>
+      {/* Selected Text Editor */}
+      {selectedOverlay && (
+        <div style={textPanelStyles.editor}>
+          <div style={textPanelStyles.sectionHeader}>Edit Text</div>
+
+          <textarea
+            value={selectedOverlay.text}
+            onChange={(e) => onUpdateOverlay(selectedOverlay.id, { text: e.target.value })}
+            style={textPanelStyles.textarea}
+            placeholder="Enter text..."
+            rows={4}
+          />
+
+          {/* Font Size */}
+          <div style={textPanelStyles.control}>
+            <div style={textPanelStyles.controlHeader}>
+              <span>Size</span>
+              <span style={textPanelStyles.controlValue}>{selectedOverlay.style.fontSize}px</span>
+            </div>
+            <div style={textPanelStyles.sizeButtons}>
+              <button
+                style={textPanelStyles.sizeBtn}
+                onClick={() => onUpdateOverlay(selectedOverlay.id, {
+                  style: { ...selectedOverlay.style, fontSize: Math.max(12, selectedOverlay.style.fontSize - 4) }
+                })}
+              >A-</button>
+              <button
+                style={textPanelStyles.sizeBtn}
+                onClick={() => onUpdateOverlay(selectedOverlay.id, {
+                  style: { ...selectedOverlay.style, fontSize: Math.min(120, selectedOverlay.style.fontSize + 4) }
+                })}
+              >A+</button>
+            </div>
+          </div>
+
+          {/* Alignment */}
+          <div style={textPanelStyles.control}>
+            <span>Align</span>
+            <div style={textPanelStyles.alignButtons}>
+              {['left', 'center', 'right'].map(align => (
+                <button
+                  key={align}
+                  style={{
+                    ...textPanelStyles.alignBtn,
+                    ...(selectedOverlay.style.textAlign === align ? textPanelStyles.alignBtnActive : {})
+                  }}
+                  onClick={() => onUpdateOverlay(selectedOverlay.id, {
+                    style: { ...selectedOverlay.style, textAlign: align }
+                  })}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    {align === 'left' && <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></>}
+                    {align === 'center' && <><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></>}
+                    {align === 'right' && <><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></>}
+                  </svg>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Color */}
+          <div style={textPanelStyles.control}>
+            <span>Color</span>
+            <input
+              type="color"
+              value={selectedOverlay.style.color}
+              onChange={(e) => onUpdateOverlay(selectedOverlay.id, {
+                style: { ...selectedOverlay.style, color: e.target.value }
+              })}
+              style={textPanelStyles.colorPicker}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Pull from Lyric Bank Section */}
+      <div style={textPanelStyles.lyricSection}>
+        <button
+          style={textPanelStyles.lyricBankBtn}
+          onClick={() => setShowLyricPicker(!showLyricPicker)}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <path d="M14 2v6h6"/>
+          </svg>
+          Pull from Lyric Bank
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 'auto', transform: showLyricPicker ? 'rotate(180deg)' : 'none' }}>
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+
+        {showLyricPicker && (
+          <div style={textPanelStyles.lyricPicker}>
+            {lyrics.length === 0 ? (
+              <div style={textPanelStyles.noLyrics}>No lyrics in bank</div>
+            ) : (
+              lyrics.map(lyric => (
+                <div key={lyric.id} style={textPanelStyles.lyricItem}>
+                  <div style={textPanelStyles.lyricTitle}>{lyric.title}</div>
+                  <div style={textPanelStyles.lyricPreview}>
+                    {lyric.content.split('\n').slice(0, 2).join(' / ')}
+                  </div>
+                  <button
+                    style={textPanelStyles.useLyricBtn}
+                    onClick={() => {
+                      onSelectText(lyric.content);
+                      setShowLyricPicker(false);
+                    }}
+                  >
+                    Use
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -1566,6 +1812,32 @@ const styles = {
     color: '#c4b5fd',
     cursor: 'pointer',
     fontSize: '13px'
+  },
+  aiTranscribeButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 16px',
+    backgroundColor: 'rgba(251, 191, 36, 0.2)',
+    border: '1px solid rgba(251, 191, 36, 0.5)',
+    borderRadius: '8px',
+    color: '#fcd34d',
+    cursor: 'pointer',
+    fontSize: '13px'
+  },
+  uploadAudioBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 20px',
+    marginTop: '12px',
+    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+    border: '1px solid rgba(34, 197, 94, 0.5)',
+    borderRadius: '8px',
+    color: '#22c55e',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '500'
   },
   filmstrip: {
     display: 'flex',
@@ -1961,30 +2233,128 @@ const styles = {
   }
 };
 
-// Text Editor Styles
-const textEditorStyles = {
-  container: {
+// Flowstage-style Text Editor Panel Styles
+const textPanelStyles = {
+  panel: {
+    position: 'absolute',
+    right: '24px',
+    top: '24px',
+    width: '320px',
+    maxHeight: 'calc(100% - 180px)',
     backgroundColor: '#1a1a2e',
-    borderRadius: '12px',
-    padding: '16px',
+    borderRadius: '16px',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+    border: '1px solid rgba(255,255,255,0.1)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px'
+    overflow: 'hidden',
+    zIndex: 100
   },
   header: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    color: '#fff',
-    fontSize: '14px',
-    fontWeight: '500'
+    padding: '16px 20px',
+    borderBottom: '1px solid rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)' // Red tint like Flowstage
+  },
+  title: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    margin: 0,
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#f87171'
   },
   closeBtn: {
-    padding: '4px',
+    padding: '6px',
     backgroundColor: 'transparent',
     border: 'none',
     color: '#9ca3af',
+    cursor: 'pointer',
+    borderRadius: '6px',
+    transition: 'background 0.2s'
+  },
+  textList: {
+    padding: '16px',
+    borderBottom: '1px solid rgba(255,255,255,0.1)'
+  },
+  sectionHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '12px',
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#9ca3af',
+    textTransform: 'uppercase'
+  },
+  addBtn: {
+    width: '24px',
+    height: '24px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+    border: 'none',
+    borderRadius: '6px',
+    color: '#a5b4fc',
     cursor: 'pointer'
+  },
+  emptyText: {
+    textAlign: 'center',
+    padding: '20px',
+    color: '#6b7280'
+  },
+  addTextBtn: {
+    marginTop: '12px',
+    padding: '8px 16px',
+    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+    border: '1px solid rgba(99, 102, 241, 0.3)',
+    borderRadius: '8px',
+    color: '#a5b4fc',
+    cursor: 'pointer',
+    fontSize: '13px'
+  },
+  textBlock: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '12px',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: '8px',
+    marginBottom: '8px',
+    cursor: 'pointer',
+    border: '1px solid transparent',
+    transition: 'all 0.2s'
+  },
+  textBlockActive: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    border: '1px solid rgba(239, 68, 68, 0.3)'
+  },
+  textPreview: {
+    flex: 1,
+    fontSize: '13px',
+    color: '#e4e4e7',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
+  },
+  deleteBlockBtn: {
+    padding: '4px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: '#6b7280',
+    cursor: 'pointer',
+    opacity: 0.6,
+    transition: 'opacity 0.2s'
+  },
+  editor: {
+    padding: '16px',
+    borderBottom: '1px solid rgba(255,255,255,0.1)',
+    maxHeight: '300px',
+    overflowY: 'auto'
   },
   textarea: {
     width: '100%',
@@ -1995,59 +2365,126 @@ const textEditorStyles = {
     color: '#fff',
     fontSize: '14px',
     resize: 'none',
-    outline: 'none'
-  },
-  controls: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px'
+    outline: 'none',
+    marginBottom: '12px',
+    fontFamily: 'inherit'
   },
   control: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px'
+    justifyContent: 'space-between',
+    marginBottom: '12px',
+    fontSize: '13px',
+    color: '#9ca3af'
   },
-  slider: {
-    flex: 1,
-    accentColor: '#6366f1'
+  controlHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
   },
-  colorPicker: {
-    width: '32px',
-    height: '32px',
+  controlValue: {
+    fontSize: '12px',
+    color: '#6b7280'
+  },
+  sizeButtons: {
+    display: 'flex',
+    gap: '4px'
+  },
+  sizeBtn: {
+    padding: '6px 12px',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer'
+    borderRadius: '4px',
+    color: '#e4e4e7',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: '600'
   },
   alignButtons: {
     display: 'flex',
     gap: '4px'
   },
   alignBtn: {
-    padding: '6px 12px',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    border: 'none',
-    borderRadius: '4px',
-    color: '#9ca3af',
-    cursor: 'pointer',
-    fontSize: '12px'
-  },
-  alignBtnActive: {
-    backgroundColor: '#6366f1',
-    color: '#fff'
-  },
-  deleteBtn: {
+    width: '32px',
+    height: '32px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '8px',
-    padding: '10px',
-    backgroundColor: 'rgba(239, 68, 68, 0.2)',
-    border: '1px solid rgba(239, 68, 68, 0.5)',
-    borderRadius: '8px',
-    color: '#f87171',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    border: 'none',
+    borderRadius: '6px',
+    color: '#9ca3af',
+    cursor: 'pointer'
+  },
+  alignBtnActive: {
+    backgroundColor: '#ef4444',
+    color: '#fff'
+  },
+  colorPicker: {
+    width: '32px',
+    height: '32px',
+    border: 'none',
+    borderRadius: '6px',
     cursor: 'pointer',
-    fontSize: '13px',
-    marginTop: '8px'
+    padding: 0
+  },
+  lyricSection: {
+    padding: '16px'
+  },
+  lyricBankBtn: {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '12px 16px',
+    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    border: '1px solid rgba(139, 92, 246, 0.3)',
+    borderRadius: '10px',
+    color: '#c4b5fd',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '500',
+    transition: 'all 0.2s'
+  },
+  lyricPicker: {
+    marginTop: '12px',
+    maxHeight: '200px',
+    overflowY: 'auto'
+  },
+  noLyrics: {
+    padding: '16px',
+    textAlign: 'center',
+    color: '#6b7280',
+    fontSize: '13px'
+  },
+  lyricItem: {
+    padding: '12px',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: '8px',
+    marginBottom: '8px'
+  },
+  lyricTitle: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#e4e4e7',
+    marginBottom: '4px'
+  },
+  lyricPreview: {
+    fontSize: '12px',
+    color: '#6b7280',
+    marginBottom: '8px',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
+  },
+  useLyricBtn: {
+    padding: '6px 12px',
+    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+    border: '1px solid rgba(139, 92, 246, 0.3)',
+    borderRadius: '6px',
+    color: '#c4b5fd',
+    cursor: 'pointer',
+    fontSize: '12px'
   }
 };
 

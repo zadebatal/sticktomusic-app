@@ -960,9 +960,11 @@ const VideoStudio = ({
         setCategories(prev => prev.map(updateCategory));
         setSelectedCategory(prev => prev ? updateCategory(prev) : prev);
 
-        // Stay on home view - the slideshows are now in the category
-        // User can click "View Created" to see them
-        alert(`Created ${batchSlideshows.length} slideshows! Click "View Created" to see them.`);
+        // Navigate to slideshow library view to see created slideshows
+        // We signal AestheticHome to show the library via a special option
+        alert(`Created ${batchSlideshows.length} slideshows!`);
+        // Return a signal to open the library (handled by AestheticHome)
+        return { openLibrary: true, count: batchSlideshows.length };
       }
     } else {
       // Single slideshow or edit existing
