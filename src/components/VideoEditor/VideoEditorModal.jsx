@@ -98,6 +98,7 @@ const VideoEditorModal = ({
   const timelineRef = useRef(null);
   const animationRef = useRef(null);
   const previousTrimHashRef = useRef(null);
+  const isPlayingRef = useRef(false); // Ref to avoid stale closure in animation loop
 
   // Persist active tab to localStorage
   useEffect(() => {
@@ -147,6 +148,15 @@ const VideoEditorModal = ({
     }
   }, [selectedAudio, duration, words.length, clips.length]);
 
+  // Helper to get the best URL for a clip (prefer cloud URL over expired blob)
+  const getClipUrl = useCallback((clip) => {
+    if (!clip) return null;
+    const localUrl = clip.localUrl;
+    const isBlobUrl = localUrl && localUrl.startsWith('blob:');
+    // If it's a blob URL, use cloud URL instead (blob URLs expire)
+    return isBlobUrl ? clip.url : (localUrl || clip.url);
+  }, []);
+
   // Get current clip based on currentTime
   const currentClip = clips.find((clip, i) => {
     const nextClip = clips[i + 1];
@@ -170,16 +180,32 @@ const VideoEditorModal = ({
   // Load audio and analyze beats
   useEffect(() => {
     if (selectedAudio?.url || selectedAudio?.localUrl) {
-      // Analyze beats - use file if available, then localUrl, otherwise fetch from URL
-      // Priority: file (most reliable) > localUrl (no CORS) > url (may have CORS issues)
-      const audioSource = selectedAudio.file || selectedAudio.localUrl || selectedAudio.url;
-      analyzeAudio(audioSource).catch(err => {
-        console.error('Beat analysis failed:', err);
-      });
+      // Determine best audio source - skip expired blob URLs
+      let audioSource = null;
+      const localUrl = selectedAudio.localUrl;
+      const isBlobUrl = localUrl && localUrl.startsWith('blob:');
 
-      // Create audio element for playback - prefer localUrl to avoid CORS
+      if (selectedAudio.file instanceof File || selectedAudio.file instanceof Blob) {
+        audioSource = selectedAudio.file;
+        console.log('[VideoEditorModal] Using file object for beat detection');
+      } else if (localUrl && !isBlobUrl) {
+        audioSource = localUrl;
+        console.log('[VideoEditorModal] Using localUrl for beat detection');
+      } else if (selectedAudio.url) {
+        audioSource = selectedAudio.url;
+        console.log('[VideoEditorModal] Using cloud URL for beat detection');
+      }
+
+      if (audioSource) {
+        analyzeAudio(audioSource).catch(err => {
+          console.error('Beat analysis failed:', err);
+        });
+      }
+
+      // Create audio element for playback - use cloud URL if blob expired
       if (audioRef.current) {
-        audioRef.current.src = selectedAudio.localUrl || selectedAudio.url;
+        const playbackUrl = isBlobUrl ? selectedAudio.url : (localUrl || selectedAudio.url);
+        audioRef.current.src = playbackUrl;
         audioRef.current.load();
         audioRef.current.onloadedmetadata = () => {
           // Use trimmed duration if audio was trimmed, otherwise full duration
@@ -215,12 +241,15 @@ const VideoEditorModal = ({
     const startBoundary = selectedAudio?.startTime || 0;
     const endBoundary = selectedAudio?.endTime || audioRef.current.duration || duration;
 
+    // Update ref to avoid stale closure
+    isPlayingRef.current = isPlaying;
+
     if (isPlaying) {
       audioRef.current.play().catch(console.error);
 
       // Update currentTime during playback, respecting trim boundaries
       const updateTime = () => {
-        if (audioRef.current) {
+        if (audioRef.current && isPlayingRef.current) {
           const actualTime = audioRef.current.currentTime;
 
           // Check if we've reached the end boundary
@@ -232,9 +261,11 @@ const VideoEditorModal = ({
             // Set relative time (offset from start boundary)
             setCurrentTime(actualTime - startBoundary);
           }
-        }
-        if (isPlaying) {
-          animationRef.current = requestAnimationFrame(updateTime);
+
+          // Continue animation loop using ref to check current state
+          if (isPlayingRef.current) {
+            animationRef.current = requestAnimationFrame(updateTime);
+          }
         }
       };
       animationRef.current = requestAnimationFrame(updateTime);
@@ -315,17 +346,19 @@ const VideoEditorModal = ({
 
   // Handle clip changes - load new video
   useEffect(() => {
-    if (videoRef.current && currentClip?.url) {
+    const clipUrl = getClipUrl(currentClip);
+    if (videoRef.current && clipUrl) {
       // If video source changed, reload
-      if (videoRef.current.src !== currentClip.url) {
-        videoRef.current.src = currentClip.url;
+      if (videoRef.current.src !== clipUrl) {
+        console.log('[VideoEditorModal] Loading video:', clipUrl.substring(0, 60));
+        videoRef.current.src = clipUrl;
         videoRef.current.load();
         if (isPlaying) {
           videoRef.current.play().catch(() => {});
         }
       }
     }
-  }, [currentClip?.url, currentClip?.id]);
+  }, [currentClip?.url, currentClip?.id, currentClip?.localUrl, getClipUrl, isPlaying]);
 
   const handleToggleMute = useCallback(() => {
     setIsMuted(prev => {
@@ -1577,7 +1610,36 @@ const VideoEditorModal = ({
                     </div>
                   </div>
 
-                  <div style={styles.clipsTimeline} ref={timelineRef}>
+                  <div style={{...styles.clipsTimeline, position: 'relative'}} ref={timelineRef}>
+                    {/* Playhead indicator */}
+                    {clips.length > 0 && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: `${(currentTime / trimmedDuration) * 100}%`,
+                          top: 0,
+                          bottom: 0,
+                          width: '2px',
+                          background: '#ef4444',
+                          zIndex: 20,
+                          pointerEvents: 'none',
+                          boxShadow: '0 0 4px rgba(239, 68, 68, 0.5)',
+                          transition: isPlaying ? 'none' : 'left 0.1s ease-out'
+                        }}
+                      >
+                        {/* Playhead top triangle */}
+                        <div style={{
+                          position: 'absolute',
+                          top: '-4px',
+                          left: '-5px',
+                          width: 0,
+                          height: 0,
+                          borderLeft: '6px solid transparent',
+                          borderRight: '6px solid transparent',
+                          borderTop: '8px solid #ef4444'
+                        }} />
+                      </div>
+                    )}
                     {clips.length === 0 ? (
                       <div style={styles.noClips}>
                         <p>Click clips above to add, or use Cut by beat</p>
