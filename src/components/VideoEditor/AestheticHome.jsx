@@ -144,11 +144,13 @@ const AestheticHome = ({
 
   const handleEditCancel = () => setEditingAudio(null);
 
-  // Back button handler
+  // Back button handler - step back through navigation hierarchy
   const handleBack = () => {
     if (studioMode) {
+      // If in video/slideshow mode, go back to mode selection (keep category selected)
       setStudioMode(null);
-    } else {
+    } else if (selectedCategory) {
+      // If in mode selection (category selected but no mode), go back to category list
       onSelectCategory(null);
     }
   };
@@ -342,6 +344,16 @@ const AestheticHome = ({
                     >
                       <span style={styles.actionIcon}>✏️</span>
                       Make a Video
+                    </button>
+
+                    <button
+                      style={styles.actionButtonPurple}
+                      onClick={onShowBatchPipeline}
+                      disabled={selectedCategory.videos?.length === 0 || selectedCategory.audio?.length === 0}
+                      title="Generate up to 10 videos at once"
+                    >
+                      <span style={styles.actionIcon}>📦</span>
+                      Make 10 at once
                     </button>
 
                     <button
