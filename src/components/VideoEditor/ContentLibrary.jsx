@@ -78,8 +78,8 @@ const ContentLibrary = ({
     }
   }, [renderingVideoId, onUpdateVideo]);
 
-  // UI-30: Confirm dialog for delete
-  const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, videoId: null });
+  // UI-30: Confirm dialog for delete (supports single and bulk delete)
+  const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, videoId: null, isBulk: false });
 
   // Batch Create Modal state
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -220,6 +220,15 @@ const ContentLibrary = ({
           </div>
           <div style={styles.batchRight}>
             <button style={styles.batchBtnClear} onClick={clearSelection}>Clear</button>
+            <button
+              style={styles.batchBtnDelete}
+              onClick={() => setDeleteConfirm({ isOpen: true, videoId: null, isBulk: true })}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+              Delete {selectedVideos.length}
+            </button>
             <button style={styles.batchBtnExport} onClick={() => setExportingVideo(selectedVideos[0])}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -257,15 +266,24 @@ const ContentLibrary = ({
       {/* UI-30: Delete Confirmation Dialog */}
       <ConfirmDialog
         isOpen={deleteConfirm.isOpen}
-        title="Delete video?"
-        message="This will permanently remove this video from the library. This action cannot be undone."
-        confirmLabel="Delete"
+        title={deleteConfirm.isBulk ? `Delete ${selectedVideos.length} videos?` : "Delete video?"}
+        message={deleteConfirm.isBulk
+          ? `This will permanently remove ${selectedVideos.length} video${selectedVideos.length > 1 ? 's' : ''} from the library. This action cannot be undone.`
+          : "This will permanently remove this video from the library. This action cannot be undone."
+        }
+        confirmLabel={deleteConfirm.isBulk ? `Delete ${selectedVideos.length}` : "Delete"}
         confirmVariant="destructive"
         onConfirm={() => {
-          onDeleteVideo(deleteConfirm.videoId);
-          setDeleteConfirm({ isOpen: false, videoId: null });
+          if (deleteConfirm.isBulk) {
+            // Bulk delete all selected videos
+            selectedVideos.forEach(video => onDeleteVideo(video.id));
+            clearSelection();
+          } else {
+            onDeleteVideo(deleteConfirm.videoId);
+          }
+          setDeleteConfirm({ isOpen: false, videoId: null, isBulk: false });
         }}
-        onCancel={() => setDeleteConfirm({ isOpen: false, videoId: null })}
+        onCancel={() => setDeleteConfirm({ isOpen: false, videoId: null, isBulk: false })}
       />
 
       {/* Batch Create Modal */}
@@ -739,6 +757,7 @@ const styles = {
   batchText: { color: '#fff', fontSize: '14px', fontWeight: '500' },
   batchRight: { display: 'flex', alignItems: 'center', gap: '8px' },
   batchBtnClear: { padding: '8px 16px', backgroundColor: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px' },
+  batchBtnDelete: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', backgroundColor: '#dc2626', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
   batchBtnExport: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', backgroundColor: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
   batchBtnPost: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: '#fff', border: 'none', borderRadius: '6px', color: '#7c3aed', cursor: 'pointer', fontSize: '14px', fontWeight: '600' },
   footer: { display: 'flex', justifyContent: 'center', gap: '16px', padding: '16px 24px', borderTop: '1px solid #1f1f2e' },
