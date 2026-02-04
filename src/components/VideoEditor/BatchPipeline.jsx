@@ -2,6 +2,8 @@ import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { renderVideo, renderPreview } from '../../services/videoExportService';
 import { uploadFile } from '../../services/firebaseStorage';
 import { useBeatDetection } from '../../hooks/useBeatDetection';
+import { isValidBankName, generateBatchPostContent, getBankNames } from '../../utils/captionGenerator';
+import { VIDEO_STATUS } from '../../utils/status';
 
 /**
  * BatchPipeline - Streamlined workflow for batch video creation and scheduling
@@ -123,7 +125,9 @@ const BatchPipeline = ({
   onSchedulePost,
   onClose,
   onVideosCreated,
-  onSaveLyrics
+  onSaveLyrics,
+  onEditVideo,           // Open video in full editor
+  onNavigateToLibrary    // Navigate to content library
 }) => {
   // Stage management
   const [stage, setStage] = useState(STAGES.OPTIONS);
@@ -166,7 +170,13 @@ const BatchPipeline = ({
   const [platforms, setPlatforms] = useState({ tiktok: true, instagram: true });
   const [captions, setCaptions] = useState([]);
 
-  // Category settings
+  // Caption bank state
+  const [showBankWarning, setShowBankWarning] = useState(false);
+  const hasCaptionBank = useMemo(() => {
+    return isValidBankName(category?.name);
+  }, [category?.name]);
+
+  // Category settings - use bank if available, otherwise fallback to category templates
   const captionTemplate = category?.captionTemplate || '{title} ✨ {hashtags}';
   const defaultHashtags = category?.defaultHashtags || '#viral #fyp';
   const accountHandle = category?.accountHandle;
@@ -496,17 +506,30 @@ const BatchPipeline = ({
 
         console.log(`[BatchPipeline] Video ${i + 1} uploaded:`, cloudUrl);
 
-        // Generate caption
-        const caption = captionTemplate
-          .replace('{title}', category.name)
-          .replace('{hashtags}', defaultHashtags)
-          .replace('{index}', String(i + 1));
+        // Generate caption - use bank if available, otherwise use template
+        let caption, hashtags;
+        if (hasCaptionBank) {
+          const postContent = generateBatchPostContent(category.name, 1)[0];
+          caption = postContent.fullText;
+          hashtags = postContent.hashtagString;
+        } else {
+          // Fallback to template-based caption
+          caption = captionTemplate
+            .replace('{title}', category.name)
+            .replace('{hashtags}', defaultHashtags)
+            .replace('{index}', String(i + 1));
+          hashtags = defaultHashtags;
+        }
 
         videos.push({
           ...videoData,
           cloudUrl,
           caption,
-          hashtags: defaultHashtags
+          hashtags,
+          // Add proper video structure for library integration
+          status: VIDEO_STATUS.DRAFT,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
         });
       }
 
@@ -514,16 +537,52 @@ const BatchPipeline = ({
       setCaptions(videos.map(v => v.caption));
       setStage(STAGES.VIDEO_BANK);  // Go to video bank first to view/edit
 
-      if (onVideosCreated) {
-        onVideosCreated(videos);
-      }
+      // Don't auto-save to library yet - wait for "Save as Drafts" button
 
     } catch (err) {
       console.error('[BatchPipeline] Generation error:', err);
       setError(`Failed to generate videos: ${err.message}`);
       setStage(STAGES.OPTIONS);
     }
-  }, [selectedAudio, selectedClips, quantity, clipStrategy, generateClipSequence, useTextOverlay, selectedLyrics, category, captionTemplate, defaultHashtags, onVideosCreated]);
+  }, [selectedAudio, selectedClips, quantity, clipStrategy, generateClipSequence, useTextOverlay, selectedLyrics, category, captionTemplate, defaultHashtags, hasCaptionBank]);
+
+  // Save videos as drafts to library
+  const handleSaveAsDrafts = useCallback(() => {
+    if (generatedVideos.length === 0) return;
+
+    // Update videos with current captions from state
+    const videosWithCaptions = generatedVideos.map((video, idx) => ({
+      ...video,
+      caption: captions[idx] || video.caption,
+      status: VIDEO_STATUS.DRAFT
+    }));
+
+    // Save to category's createdVideos
+    if (onVideosCreated) {
+      onVideosCreated(videosWithCaptions);
+    }
+
+    // Navigate to library to view drafts
+    if (onNavigateToLibrary) {
+      onNavigateToLibrary();
+    }
+
+    onClose();
+  }, [generatedVideos, captions, onVideosCreated, onNavigateToLibrary, onClose]);
+
+  // Handle click on video to edit
+  const handleEditVideoClick = useCallback((video, index) => {
+    // Update video with current caption before editing
+    const videoToEdit = {
+      ...video,
+      caption: captions[index] || video.caption
+    };
+
+    if (onEditVideo) {
+      onEditVideo(videoToEdit);
+      onClose();
+    }
+  }, [captions, onEditVideo, onClose]);
 
   // Schedule all videos
   const handleSchedule = useCallback(async () => {
@@ -1196,8 +1255,33 @@ const BatchPipeline = ({
           <div style={styles.content}>
             {error && <div style={styles.error}>{error}</div>}
 
+            {/* Caption Bank Warning */}
+            {!hasCaptionBank && (
+              <div style={{
+                background: '#78350f',
+                border: '1px solid #fbbf24',
+                borderRadius: '8px',
+                padding: '12px 16px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
+                <span style={{ fontSize: '20px' }}>⚠️</span>
+                <div>
+                  <div style={{ color: '#fef3c7', fontWeight: '500', marginBottom: '2px' }}>
+                    No Caption Bank for "{category?.name}"
+                  </div>
+                  <div style={{ color: '#fde68a', fontSize: '13px' }}>
+                    Create a bank named "{category?.name}" to auto-generate captions.
+                    Available banks: {getBankNames().join(', ')}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <p style={{ color: '#a1a1aa', marginBottom: '20px' }}>
-              Review your generated videos below. Click to preview, or proceed to scheduling when ready.
+              Review your generated videos below. Click "Edit" to open in full editor, or proceed to scheduling when ready.
             </p>
 
             {/* Video Grid */}
@@ -1263,6 +1347,24 @@ const BatchPipeline = ({
 
                     {/* Actions */}
                     <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                      {onEditVideo && (
+                        <button
+                          style={{
+                            flex: 1,
+                            padding: '6px',
+                            background: '#8b5cf6',
+                            border: 'none',
+                            borderRadius: '6px',
+                            color: 'white',
+                            fontSize: '11px',
+                            cursor: 'pointer',
+                            fontWeight: '500'
+                          }}
+                          onClick={() => handleEditVideoClick(video, idx)}
+                        >
+                          ✏️ Edit
+                        </button>
+                      )}
                       <button
                         style={{
                           flex: 1,
@@ -1305,9 +1407,9 @@ const BatchPipeline = ({
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
                 style={{ ...styles.btn, ...styles.secondaryBtn }}
-                onClick={onClose}
+                onClick={handleSaveAsDrafts}
               >
-                Save as Drafts
+                💾 Save as Drafts
               </button>
               <button
                 style={{

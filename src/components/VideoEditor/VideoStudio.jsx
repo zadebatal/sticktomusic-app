@@ -926,6 +926,16 @@ const VideoStudio = ({
               createdVideos: [...prev.createdVideos, ...videos]
             } : prev);
           }}
+          onEditVideo={(video) => {
+            // Open video in full editor
+            setShowBatchPipeline(false);
+            handleMakeVideo(video);
+          }}
+          onNavigateToLibrary={() => {
+            // Navigate to content library to view drafts
+            setShowBatchPipeline(false);
+            setCurrentView('library');
+          }}
         />
       )}
 
