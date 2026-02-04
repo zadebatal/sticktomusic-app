@@ -35,42 +35,34 @@ const BEAT_PATTERNS = [
 ];
 
 /**
- * ClipThumbnail - Shows thumbnail image or video element
- * Simple approach: if thumbnail exists use it, else show video element directly
+ * ClipThumbnail - Shows thumbnail image or video element with hover preview
+ * Matches VideoCard approach from AestheticHome for consistent behavior
  */
 const ClipThumbnail = ({ clip, style }) => {
   const videoUrl = clip.localUrl || clip.url;
 
-  // Debug logging
-  console.log('[ClipThumbnail] Clip data:', {
-    name: clip.name?.substring(0, 20),
-    hasUrl: !!clip.url,
-    hasLocalUrl: !!clip.localUrl,
-    hasThumbnail: !!clip.thumbnail,
-    url: clip.url?.substring(0, 50)
-  });
-
-  // If we have a thumbnail, use it
+  // If we have a stored thumbnail, use it
   if (clip.thumbnail) {
     return <img src={clip.thumbnail} alt="" style={{ ...style, objectFit: 'cover' }} />;
   }
 
-  // Otherwise show video element directly (this works even with CORS)
+  // Show video with hover-to-play (same as main library VideoCard)
   if (videoUrl) {
     return (
       <video
         src={videoUrl}
-        style={{ ...style, objectFit: 'cover', background: '#27272a' }}
+        style={{ ...style, objectFit: 'cover' }}
         muted
         playsInline
-        preload="auto"
-        onLoadedData={(e) => {
-          // Seek to 0.5s to show a better frame than black first frame
-          if (e.target.currentTime === 0) {
-            e.target.currentTime = 0.5;
-          }
+        preload="metadata"
+        onMouseEnter={(e) => {
+          const playPromise = e.target.play();
+          if (playPromise) playPromise.catch(() => {});
         }}
-        onError={(e) => console.warn('Video load error:', videoUrl?.substring(0, 50))}
+        onMouseLeave={(e) => {
+          if (!e.target.paused) e.target.pause();
+          e.target.currentTime = 0;
+        }}
       />
     );
   }
@@ -84,9 +76,9 @@ const ClipThumbnail = ({ clip, style }) => {
       alignItems: 'center',
       justifyContent: 'center',
       color: '#71717a',
-      fontSize: '12px'
+      fontSize: '10px'
     }}>
-      No video
+      🎬
     </div>
   );
 };
@@ -148,18 +140,6 @@ const BatchPipeline = ({
   // Available clips and audio
   const availableClips = category?.videos || [];
   const availableAudio = category?.audio || [];
-
-  // Debug logging
-  console.log('[BatchPipeline] Category received:', {
-    name: category?.name,
-    videosCount: availableClips.length,
-    audioCount: availableAudio.length,
-    firstClip: availableClips[0] ? {
-      name: availableClips[0].name?.substring(0, 20),
-      hasUrl: !!availableClips[0].url,
-      urlPrefix: availableClips[0].url?.substring(0, 50)
-    } : null
-  });
 
   // Saved lyrics for selected audio
   const savedLyricsForAudio = useMemo(() => {
