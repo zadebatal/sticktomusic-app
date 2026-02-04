@@ -1104,7 +1104,7 @@ const VideoEditorModal = ({
                   <>
                     <video
                       ref={videoRef}
-                      src={currentClip?.localUrl || currentClip?.url || category?.videos?.[0]?.localUrl || category?.videos?.[0]?.url}
+                      src={getClipUrl(currentClip) || getClipUrl(category?.videos?.[0])}
                       style={{
                         ...styles.previewVideo,
                         display: videoError ? 'none' : 'block'
@@ -1669,7 +1669,7 @@ const VideoEditorModal = ({
                             {clip.thumbnail ? (
                               <img src={clip.thumbnail} alt="" style={styles.clipThumb} draggable={false} />
                             ) : (
-                              <video src={clip.url} style={styles.clipThumb} muted />
+                              <video src={getClipUrl(clip)} style={styles.clipThumb} muted />
                             )}
                             <span style={styles.clipDuration}>
                               {clip.duration?.toFixed(1)}s
