@@ -17,7 +17,8 @@ const STORAGE_KEYS = {
   CATEGORIES: 'stm_categories',
   PRESETS: 'stm_presets',
   SETTINGS: 'stm_settings',
-  API_KEYS: 'stm_api_keys'
+  API_KEYS: 'stm_api_keys',
+  LYRIC_TEMPLATES: 'stm_lyric_templates'
 };
 
 /**
@@ -164,6 +165,26 @@ export function loadSettings() {
   });
 }
 
+// ==================== LYRIC TEMPLATES ====================
+
+/**
+ * Save lyric template for an audio source
+ * Used by LyricAnalyzer to cache transcription results
+ */
+export function saveLyricTemplate(audioSource, template) {
+  const templates = loadFromStorage(STORAGE_KEYS.LYRIC_TEMPLATES, {});
+  templates[audioSource] = template;
+  return saveToStorage(STORAGE_KEYS.LYRIC_TEMPLATES, templates);
+}
+
+/**
+ * Load lyric template for an audio source
+ */
+export function loadLyricTemplate(audioSource) {
+  const templates = loadFromStorage(STORAGE_KEYS.LYRIC_TEMPLATES, {});
+  return templates[audioSource] || null;
+}
+
 // ==================== UTILITY ====================
 
 /**
@@ -224,6 +245,8 @@ export default {
   clearApiKey,
   saveSettings,
   loadSettings,
+  saveLyricTemplate,
+  loadLyricTemplate,
   clearAllData,
   getStorageInfo,
   cleanupStorage
