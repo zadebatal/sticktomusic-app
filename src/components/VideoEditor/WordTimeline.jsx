@@ -47,6 +47,74 @@ const WordTimeline = ({
   // Refs to hold latest callback functions (avoids stale closures in keyboard handler)
   const callbacksRef = useRef({});
 
+  // Audio scrubbing refs
+  const scrubContextRef = useRef(null);
+  const scrubBufferRef = useRef(null);
+  const scrubSourceRef = useRef(null);
+  const lastScrubTimeRef = useRef(0);
+  const scrubIntervalRef = useRef(null);
+
+  // Initialize audio scrubbing - decode audio for scrub playback
+  useEffect(() => {
+    const initScrubAudio = async () => {
+      if (!audioRef?.current?.src) return;
+
+      try {
+        // Create audio context for scrubbing
+        if (!scrubContextRef.current) {
+          scrubContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        // Fetch and decode the audio
+        const response = await fetch(audioRef.current.src);
+        const arrayBuffer = await response.arrayBuffer();
+        scrubBufferRef.current = await scrubContextRef.current.decodeAudioData(arrayBuffer);
+        console.log('[Scrub] Audio buffer ready for scrubbing');
+      } catch (err) {
+        console.warn('[Scrub] Could not init scrub audio:', err.message);
+      }
+    };
+
+    initScrubAudio();
+
+    return () => {
+      // Cleanup on unmount
+      if (scrubSourceRef.current) {
+        try { scrubSourceRef.current.stop(); } catch {}
+      }
+      if (scrubIntervalRef.current) {
+        clearInterval(scrubIntervalRef.current);
+      }
+    };
+  }, [audioRef?.current?.src]);
+
+  // Play a short audio snippet at the given time (for scrubbing)
+  const playScrubSnippet = useCallback((time) => {
+    if (!scrubContextRef.current || !scrubBufferRef.current) return;
+
+    // Get the start boundary (trim offset)
+    const startBoundary = audioRef?.current?._startBoundary || 0;
+    const globalTime = startBoundary + time;
+
+    // Don't play if out of bounds
+    if (globalTime < 0 || globalTime >= scrubBufferRef.current.duration) return;
+
+    // Stop any existing scrub source
+    if (scrubSourceRef.current) {
+      try { scrubSourceRef.current.stop(); } catch {}
+    }
+
+    // Create a new source for this snippet
+    const source = scrubContextRef.current.createBufferSource();
+    source.buffer = scrubBufferRef.current;
+    source.connect(scrubContextRef.current.destination);
+
+    // Play a short snippet (50ms)
+    const snippetDuration = 0.05;
+    source.start(0, globalTime, snippetDuration);
+    scrubSourceRef.current = source;
+  }, [audioRef]);
+
   // Sync localTime with currentTime prop when not playing
   useEffect(() => {
     if (!isPlaying && !playheadDragging) {
@@ -214,6 +282,8 @@ const WordTimeline = ({
   useEffect(() => {
     if (!playheadDragging) return;
 
+    let lastScrubTime = Date.now();
+
     const handleMouseMove = (e) => {
       const rect = timelineRef.current?.getBoundingClientRect();
       if (!rect) return;
@@ -222,10 +292,21 @@ const WordTimeline = ({
       const time = pixelsToTime(clickX);
       const clampedTime = Math.max(0, Math.min(duration, time));
       onSeek?.(clampedTime);
+
+      // Play scrub audio snippet (throttled to every 50ms)
+      const now = Date.now();
+      if (now - lastScrubTime > 50) {
+        playScrubSnippet(clampedTime);
+        lastScrubTime = now;
+      }
     };
 
     const handleMouseUp = () => {
       setPlayheadDragging(false);
+      // Stop any playing scrub audio
+      if (scrubSourceRef.current) {
+        try { scrubSourceRef.current.stop(); } catch {}
+      }
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -235,7 +316,7 @@ const WordTimeline = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [playheadDragging, pixelsToTime, duration, onSeek]);
+  }, [playheadDragging, pixelsToTime, duration, onSeek, playScrubSnippet]);
 
   const handleTimelineClick = (e) => {
     if (dragState || playheadDragging) return;
@@ -244,7 +325,10 @@ const WordTimeline = ({
     const scrollLeft = timelineRef.current?.scrollLeft || 0;
     const clickX = e.clientX - rect.left + scrollLeft;
     const time = pixelsToTime(clickX);
-    onSeek?.(Math.max(0, Math.min(duration, time)));
+    const clampedTime = Math.max(0, Math.min(duration, time));
+    onSeek?.(clampedTime);
+    // Play a short audio snippet at the clicked position
+    playScrubSnippet(clampedTime);
   };
 
   const handleAddWord = () => {
