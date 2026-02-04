@@ -193,8 +193,40 @@ const lateApi = {
 // Campaign data structure - starts empty, campaigns are created via the UI
 const CAMPAIGNS_DATA = [];
 
+// App-level session persistence
+const APP_SESSION_KEY = 'stm_app_session';
+
+const loadAppSession = () => {
+  try {
+    const saved = localStorage.getItem(APP_SESSION_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      console.log('[App Session] Loaded:', parsed);
+      return parsed;
+    }
+  } catch (e) {
+    console.warn('Failed to load app session:', e);
+  }
+  return null;
+};
+
+const saveAppSession = (page) => {
+  try {
+    // Only save authenticated pages (not landing/marketing pages)
+    if (['operator', 'artist-portal', 'dashboard'].includes(page)) {
+      localStorage.setItem(APP_SESSION_KEY, JSON.stringify({ currentPage: page, savedAt: Date.now() }));
+      console.log('[App Session] Saved:', page);
+    }
+  } catch (e) {
+    console.warn('Failed to save app session:', e);
+  }
+};
+
 const StickToMusic = () => {
+  // Load saved page - but only use it after auth is confirmed
+  const savedAppSession = loadAppSession();
   const [currentPage, setCurrentPage] = useState('home');
+  const [pendingPage, setPendingPage] = useState(savedAppSession?.currentPage || null);
   const [openFaq, setOpenFaq] = useState(null);
 
   // Authentication state
@@ -291,6 +323,30 @@ const StickToMusic = () => {
       setUser(null);
     }
   }, [authChecked, firestoreLoaded, currentAuthUser, allowedUsers]);
+
+  // Restore saved page after user is authenticated
+  useEffect(() => {
+    if (user && pendingPage) {
+      // Verify user has access to the pending page
+      if (pendingPage === 'operator' && user.role === 'operator') {
+        console.log('[App Session] Restoring operator page');
+        setCurrentPage('operator');
+      } else if (pendingPage === 'artist-portal' && user.role === 'artist') {
+        console.log('[App Session] Restoring artist-portal page');
+        setCurrentPage('artist-portal');
+      } else if (pendingPage === 'operator' || pendingPage === 'artist-portal') {
+        // User is authenticated but role doesn't match - go to their correct dashboard
+        console.log('[App Session] Role mismatch, going to correct dashboard');
+        setCurrentPage(user.role === 'artist' ? 'artist-portal' : 'operator');
+      }
+      setPendingPage(null); // Clear pending page after restore
+    }
+  }, [user, pendingPage]);
+
+  // Save currentPage when it changes to an authenticated page
+  useEffect(() => {
+    saveAppSession(currentPage);
+  }, [currentPage]);
 
   // Load applications from Firestore for operators
   useEffect(() => {
