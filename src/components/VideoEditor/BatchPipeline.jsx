@@ -41,6 +41,15 @@ const BEAT_PATTERNS = [
 const ClipThumbnail = ({ clip, style }) => {
   const videoUrl = clip.localUrl || clip.url;
 
+  // Debug logging
+  console.log('[ClipThumbnail] Clip data:', {
+    name: clip.name?.substring(0, 20),
+    hasUrl: !!clip.url,
+    hasLocalUrl: !!clip.localUrl,
+    hasThumbnail: !!clip.thumbnail,
+    url: clip.url?.substring(0, 50)
+  });
+
   // If we have a thumbnail, use it
   if (clip.thumbnail) {
     return <img src={clip.thumbnail} alt="" style={{ ...style, objectFit: 'cover' }} />;
@@ -133,6 +142,18 @@ const BatchPipeline = ({
   // Available clips and audio
   const availableClips = category?.videos || [];
   const availableAudio = category?.audio || [];
+
+  // Debug logging
+  console.log('[BatchPipeline] Category received:', {
+    name: category?.name,
+    videosCount: availableClips.length,
+    audioCount: availableAudio.length,
+    firstClip: availableClips[0] ? {
+      name: availableClips[0].name?.substring(0, 20),
+      hasUrl: !!availableClips[0].url,
+      urlPrefix: availableClips[0].url?.substring(0, 50)
+    } : null
+  });
 
   // Saved lyrics for selected audio
   const savedLyricsForAudio = useMemo(() => {
