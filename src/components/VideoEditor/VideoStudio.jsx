@@ -852,8 +852,19 @@ const VideoStudio = ({
   }, [selectedCategory]);
 
   // Slideshow handlers
-  const handleMakeSlideshow = useCallback((existingSlideshow = null) => {
-    setEditingSlideshow(existingSlideshow);
+  // Batch slideshow mode state
+  const [slideshowBatchMode, setSlideshowBatchMode] = useState(false);
+
+  const handleMakeSlideshow = useCallback((options = null) => {
+    if (options?.batch) {
+      // Batch mode - will generate 10 slideshows
+      setSlideshowBatchMode(true);
+      setEditingSlideshow(null);
+    } else {
+      // Single slideshow or edit existing
+      setSlideshowBatchMode(false);
+      setEditingSlideshow(options);
+    }
     setShowSlideshowEditor(true);
   }, []);
 
@@ -1179,6 +1190,7 @@ const VideoStudio = ({
         <SlideshowEditor
           category={selectedCategory}
           existingSlideshow={editingSlideshow}
+          batchMode={slideshowBatchMode}
           onSave={handleSaveSlideshow}
           onClose={handleCloseSlideshowEditor}
           onSchedulePost={onSchedulePost}
@@ -1225,10 +1237,10 @@ const VideoStudio = ({
         <div style={styles.uploadOverlay}>
           <div style={styles.uploadModal}>
             <div style={styles.uploadIcon}>
-              {uploadProgress.type === 'video' ? '🎬' : '🎵'}
+              {uploadProgress.type === 'video' ? '🎬' : uploadProgress.type === 'image' ? '🖼️' : '🎵'}
             </div>
             <h3 style={styles.uploadTitle}>
-              Uploading {uploadProgress.type === 'video' ? 'Videos' : 'Audio'}
+              Uploading {uploadProgress.type === 'video' ? 'Videos' : uploadProgress.type === 'image' ? 'Images' : 'Audio'}
             </h3>
             <p style={styles.uploadStatus}>
               {uploadProgress.current} of {uploadProgress.total}
@@ -1238,7 +1250,8 @@ const VideoStudio = ({
               <div
                 style={{
                   ...styles.uploadProgressFill,
-                  width: `${uploadProgress.progress || 0}%`
+                  width: `${uploadProgress.progress || 0}%`,
+                  backgroundColor: uploadProgress.type === 'image' ? '#14b8a6' : '#7c3aed'
                 }}
               />
             </div>

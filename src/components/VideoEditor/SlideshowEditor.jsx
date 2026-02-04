@@ -17,6 +17,7 @@ import LyricBank from './LyricBank';
 const SlideshowEditor = ({
   category,
   existingSlideshow = null,
+  batchMode = false,
   onSave,
   onClose,
   onSchedulePost,
@@ -74,12 +75,39 @@ const SlideshowEditor = ({
     height: dimensions.height * previewScale
   };
 
-  // Initialize with at least one slide
+  // Initialize with at least one slide, or generate batch of 10 in batch mode
   useEffect(() => {
     if (slides.length === 0) {
-      addSlide();
+      if (batchMode && (imagesA.length > 0 || imagesB.length > 0)) {
+        // Batch mode: Generate 10 slides randomly from A/B banks
+        const allImages = [
+          ...imagesA.map(img => ({ ...img, sourceBank: 'imageA' })),
+          ...imagesB.map(img => ({ ...img, sourceBank: 'imageB' }))
+        ];
+
+        if (allImages.length > 0) {
+          const batchSlides = [];
+          for (let i = 0; i < 10; i++) {
+            const randomImage = allImages[Math.floor(Math.random() * allImages.length)];
+            batchSlides.push({
+              id: `slide_${Date.now()}_${i}`,
+              index: i,
+              backgroundImage: randomImage.localUrl || randomImage.url,
+              thumbnail: randomImage.localUrl || randomImage.url,
+              sourceBank: randomImage.sourceBank,
+              sourceImageId: randomImage.id,
+              textOverlays: [],
+              duration: 3
+            });
+          }
+          setSlides(batchSlides);
+          setName('Batch Slideshow ' + new Date().toLocaleTimeString());
+        }
+      } else {
+        addSlide();
+      }
     }
-  }, []);
+  }, [batchMode]);
 
   // Add a new slide
   const addSlide = useCallback(() => {
