@@ -1,10 +1,17 @@
 import React, { useState, useRef } from 'react';
 import AudioClipSelector from './AudioClipSelector';
+import LyricBank from './LyricBank';
 import { ConfirmDialog } from '../ui';
 
 /**
  * AestheticHome - Landing page showing categories and their assets
  * Similar to Flowstage's Aesthetic overview page
+ *
+ * Banks:
+ * - Videos: Video clips for video editor
+ * - Audio: Music tracks for video editor
+ * - Image A / Image B: Images for slideshow editor
+ * - Lyrics: Song lyrics (shared between both modes)
  */
 const AestheticHome = ({
   artists = [],
@@ -14,30 +21,44 @@ const AestheticHome = ({
   selectedCategory,
   onSelectCategory,
   onCreateCategory,
+  // Video mode banks
   onUploadVideos,
   onUploadAudio,
-  onSaveAudioClip, // New: save trimmed clip to library
-  onEditAudio, // Edit/re-trim existing audio
+  onSaveAudioClip,
+  onEditAudio,
   onDeleteBankVideo,
   onDeleteBankAudio,
   onRenameBankVideo,
   onRenameBankAudio,
+  // Image banks (for slideshows)
+  onUploadImages,
+  onDeleteBankImage,
+  // Lyric bank (shared)
+  onAddLyrics,
+  onUpdateLyrics,
+  onDeleteLyrics,
+  // Actions
   onCreateContent,
-  onShowBatchPipeline, // Open batch create & schedule workflow
-  onViewContent, // View content library / drafts
-  onMakeSlideshow // Open slideshow/carousel editor
+  onShowBatchPipeline,
+  onViewContent,
+  onMakeSlideshow
 }) => {
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryDesc, setNewCategoryDesc] = useState('');
   const [pendingAudio, setPendingAudio] = useState(null); // Audio waiting for clip selection
   const [editingAudio, setEditingAudio] = useState(null); // Existing audio being edited
+
+  // File input refs
   const videoInputRef = useRef(null);
   const audioInputRef = useRef(null);
+  const imageAInputRef = useRef(null);
+  const imageBInputRef = useRef(null);
 
   // Delete confirmation dialogs
   const [deleteVideoConfirm, setDeleteVideoConfirm] = useState({ isOpen: false, videoId: null, videoName: '' });
   const [deleteAudioConfirm, setDeleteAudioConfirm] = useState({ isOpen: false, audioId: null, audioName: '' });
+  const [deleteImageConfirm, setDeleteImageConfirm] = useState({ isOpen: false, imageId: null, imageName: '', bank: 'A' });
 
   const handleCreateCategory = () => {
     if (newCategoryName.trim()) {
@@ -114,6 +135,15 @@ const AestheticHome = ({
   // Handle clicking edit on existing audio
   const handleEditAudio = (audio) => {
     setEditingAudio(audio);
+  };
+
+  // Handle image upload for slideshow banks
+  const handleImageUpload = (e, bank) => {
+    const files = Array.from(e.target.files);
+    e.target.value = '';
+    if (files.length > 0 && onUploadImages) {
+      onUploadImages(files, bank);
+    }
   };
 
   // Handle saving edited audio trim
@@ -380,6 +410,145 @@ const AestheticHome = ({
                   )}
                 </div>
               </div>
+
+              {/* Slideshow Banks Divider */}
+              <div style={styles.sectionDivider}>
+                <span style={styles.dividerText}>Slideshow Banks</span>
+              </div>
+
+              {/* Image A Bank (for Slideshows) */}
+              <div style={styles.assetSection}>
+                <div style={styles.assetHeader}>
+                  <div style={styles.assetTitleRow}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#14b8a6" strokeWidth="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2"/>
+                      <circle cx="8.5" cy="8.5" r="1.5"/>
+                      <path d="M21 15l-5-5L5 21"/>
+                    </svg>
+                    <h2 style={styles.assetTitle}>Image A</h2>
+                    <span style={styles.assetCount}>({(selectedCategory.imagesA || []).length})</span>
+                  </div>
+                  <button
+                    style={styles.addButtonTeal}
+                    onClick={() => imageAInputRef.current?.click()}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="12" y1="5" x2="12" y2="19"/>
+                      <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    Add
+                  </button>
+                  <input
+                    ref={imageAInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => handleImageUpload(e, 'A')}
+                    style={{ display: 'none' }}
+                  />
+                </div>
+
+                <div style={styles.assetGrid}>
+                  {(selectedCategory.imagesA || []).length === 0 ? (
+                    <div
+                      style={styles.emptyStateTeal}
+                      onClick={() => imageAInputRef.current?.click()}
+                    >
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#14b8a6" strokeWidth="1.5">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <path d="M21 15l-5-5L5 21"/>
+                      </svg>
+                      <span>Click to add images for Slide A</span>
+                    </div>
+                  ) : (
+                    (selectedCategory.imagesA || []).map(image => (
+                      <ImageCard
+                        key={image.id}
+                        image={image}
+                        onDelete={() => setDeleteImageConfirm({
+                          isOpen: true,
+                          imageId: image.id,
+                          imageName: image.name || 'this image',
+                          bank: 'A'
+                        })}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Image B Bank (for Slideshows) */}
+              <div style={styles.assetSection}>
+                <div style={styles.assetHeader}>
+                  <div style={styles.assetTitleRow}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2"/>
+                      <circle cx="8.5" cy="8.5" r="1.5"/>
+                      <path d="M21 15l-5-5L5 21"/>
+                    </svg>
+                    <h2 style={styles.assetTitle}>Image B</h2>
+                    <span style={styles.assetCount}>({(selectedCategory.imagesB || []).length})</span>
+                  </div>
+                  <button
+                    style={styles.addButtonAmber}
+                    onClick={() => imageBInputRef.current?.click()}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="12" y1="5" x2="12" y2="19"/>
+                      <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    Add
+                  </button>
+                  <input
+                    ref={imageBInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => handleImageUpload(e, 'B')}
+                    style={{ display: 'none' }}
+                  />
+                </div>
+
+                <div style={styles.assetGrid}>
+                  {(selectedCategory.imagesB || []).length === 0 ? (
+                    <div
+                      style={styles.emptyStateAmber}
+                      onClick={() => imageBInputRef.current?.click()}
+                    >
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.5">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <path d="M21 15l-5-5L5 21"/>
+                      </svg>
+                      <span>Click to add images for Slide B</span>
+                    </div>
+                  ) : (
+                    (selectedCategory.imagesB || []).map(image => (
+                      <ImageCard
+                        key={image.id}
+                        image={image}
+                        onDelete={() => setDeleteImageConfirm({
+                          isOpen: true,
+                          imageId: image.id,
+                          imageName: image.name || 'this image',
+                          bank: 'B'
+                        })}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Lyric Bank (shared between video and slideshow) */}
+              <div style={styles.assetSection}>
+                <LyricBank
+                  lyrics={selectedCategory.lyrics || []}
+                  onAddLyrics={onAddLyrics}
+                  onUpdateLyrics={onUpdateLyrics}
+                  onDeleteLyrics={onDeleteLyrics}
+                />
+              </div>
             </div>
 
             {/* Create Buttons */}
@@ -440,9 +609,9 @@ const AestheticHome = ({
                 <button
                   style={styles.slideshowButton}
                   onClick={() => onMakeSlideshow()}
-                  disabled={selectedCategory.videos.length === 0}
-                  title={selectedCategory.videos.length === 0
-                    ? 'Add images or videos first'
+                  disabled={(selectedCategory.imagesA || []).length === 0 && (selectedCategory.imagesB || []).length === 0}
+                  title={(selectedCategory.imagesA || []).length === 0 && (selectedCategory.imagesB || []).length === 0
+                    ? 'Add images to Image A or Image B banks first'
                     : 'Create carousel/slideshow for Instagram or TikTok'}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -551,6 +720,20 @@ const AestheticHome = ({
           setDeleteAudioConfirm({ isOpen: false, audioId: null, audioName: '' });
         }}
         onCancel={() => setDeleteAudioConfirm({ isOpen: false, audioId: null, audioName: '' })}
+      />
+
+      {/* Delete Image Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteImageConfirm.isOpen}
+        title="Delete image?"
+        message={`This will permanently delete "${deleteImageConfirm.imageName}" from your library and storage. This action cannot be undone.`}
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        onConfirm={() => {
+          onDeleteBankImage?.(deleteImageConfirm.imageId, deleteImageConfirm.bank);
+          setDeleteImageConfirm({ isOpen: false, imageId: null, imageName: '', bank: 'A' });
+        }}
+        onCancel={() => setDeleteImageConfirm({ isOpen: false, imageId: null, imageName: '', bank: 'A' })}
       />
     </div>
   );
@@ -767,6 +950,50 @@ const AudioItem = ({ audio, onEdit, onDelete, onRename }) => {
               onDelete();
             }}
             title="Delete audio"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * ImageCard - Individual image card for slideshow banks
+ */
+const ImageCard = ({ image, onDelete }) => {
+  const [showActions, setShowActions] = useState(false);
+
+  return (
+    <div
+      style={styles.imageCard}
+      onMouseEnter={() => setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
+    >
+      <div style={styles.imageThumb}>
+        <img
+          src={image.localUrl || image.url}
+          alt={image.name || 'Image'}
+          style={styles.imageThumbImg}
+        />
+      </div>
+
+      <div style={styles.imageNameContainer}>
+        <span style={styles.imageName}>
+          {image.name?.slice(0, 15) || 'Untitled'}
+        </span>
+      </div>
+
+      {showActions && (
+        <div style={styles.imageActionBtns}>
+          <button
+            style={styles.deleteImageBtn}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            title="Delete image"
           >
             ✕
           </button>
@@ -1459,6 +1686,132 @@ const styles = {
     cursor: 'pointer',
     color: '#6b7280',
     fontSize: '13px'
+  },
+  // Slideshow Banks Styles
+  sectionDivider: {
+    gridColumn: '1 / -1',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    margin: '8px 0'
+  },
+  dividerText: {
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    whiteSpace: 'nowrap'
+  },
+  addButtonTeal: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '6px 12px',
+    backgroundColor: '#0d9488',
+    border: 'none',
+    borderRadius: '6px',
+    color: '#fff',
+    cursor: 'pointer',
+    fontSize: '12px',
+    fontWeight: '500'
+  },
+  addButtonAmber: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '6px 12px',
+    backgroundColor: '#d97706',
+    border: 'none',
+    borderRadius: '6px',
+    color: '#fff',
+    cursor: 'pointer',
+    fontSize: '12px',
+    fontWeight: '500'
+  },
+  emptyStateTeal: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '24px',
+    borderRadius: '8px',
+    border: '2px dashed #0d9488',
+    backgroundColor: 'rgba(13, 148, 136, 0.05)',
+    color: '#14b8a6',
+    cursor: 'pointer',
+    fontSize: '12px',
+    textAlign: 'center'
+  },
+  emptyStateAmber: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '24px',
+    borderRadius: '8px',
+    border: '2px dashed #d97706',
+    backgroundColor: 'rgba(217, 119, 6, 0.05)',
+    color: '#f59e0b',
+    cursor: 'pointer',
+    fontSize: '12px',
+    textAlign: 'center'
+  },
+  // Image Card Styles
+  imageCard: {
+    position: 'relative',
+    aspectRatio: '1',
+    backgroundColor: '#1f1f2e',
+    borderRadius: '8px',
+    overflow: 'hidden',
+    cursor: 'pointer'
+  },
+  imageThumb: {
+    width: '100%',
+    height: '100%'
+  },
+  imageThumbImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover'
+  },
+  imageNameContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: '4px 8px',
+    background: 'linear-gradient(transparent, rgba(0,0,0,0.8))'
+  },
+  imageName: {
+    fontSize: '10px',
+    color: '#e4e4e7',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    display: 'block'
+  },
+  imageActionBtns: {
+    position: 'absolute',
+    top: '4px',
+    right: '4px',
+    display: 'flex',
+    gap: '4px'
+  },
+  deleteImageBtn: {
+    width: '22px',
+    height: '22px',
+    borderRadius: '4px',
+    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    border: 'none',
+    color: '#fff',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '12px'
   }
 };
 

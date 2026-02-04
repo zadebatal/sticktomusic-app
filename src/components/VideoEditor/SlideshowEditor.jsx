@@ -1,11 +1,13 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
+import LyricBank from './LyricBank';
 
 /**
  * SlideshowEditor - Flowstage-style carousel/slideshow creator
  *
  * Features:
- * - Two content banks (Slide 1 / Slide 2)
+ * - Image A / Image B banks for backgrounds
+ * - Lyric Bank for text overlays (with paragraph selection)
  * - Drag-and-drop to add images to slides
  * - Click-to-edit text overlays
  * - Aspect ratio options (9:16 / 4:3)
@@ -25,7 +27,7 @@ const SlideshowEditor = ({
   const [aspectRatio, setAspectRatio] = useState(existingSlideshow?.aspectRatio || '9:16');
   const [slides, setSlides] = useState(existingSlideshow?.slides || []);
   const [selectedSlideIndex, setSelectedSlideIndex] = useState(0);
-  const [activeBank, setActiveBank] = useState('slide1'); // 'slide1' | 'slide2'
+  const [activeBank, setActiveBank] = useState('imageA'); // 'imageA' | 'imageB' | 'lyrics'
 
   // Text editor state
   const [editingTextId, setEditingTextId] = useState(null);
@@ -53,10 +55,11 @@ const SlideshowEditor = ({
   const canvasRef = useRef(null);
   const previewRef = useRef(null);
 
-  // Get content from category's slide banks
-  const slideBank1 = category?.slideBanks?.find(b => b.slideIndex === 1)?.clips || category?.videos || [];
-  const slideBank2 = category?.slideBanks?.find(b => b.slideIndex === 2)?.clips || [];
-  const activeContent = activeBank === 'slide1' ? slideBank1 : slideBank2;
+  // Get content from category's image banks (separate from video banks)
+  const imagesA = category?.imagesA || [];
+  const imagesB = category?.imagesB || [];
+  const lyrics = category?.lyrics || [];
+  const activeContent = activeBank === 'imageA' ? imagesA : activeBank === 'imageB' ? imagesB : [];
 
   // Dimensions based on aspect ratio
   const dimensions = aspectRatio === '9:16'
@@ -420,58 +423,103 @@ const SlideshowEditor = ({
 
         {/* Main Content */}
         <div style={styles.content}>
-          {/* Left Panel - Content Bank */}
+          {/* Left Panel - Content Banks */}
           <div style={styles.leftPanel}>
             <div style={styles.bankTabs}>
               <button
                 style={{
                   ...styles.bankTab,
-                  ...(activeBank === 'slide1' ? styles.bankTabActive : {})
+                  ...styles.bankTabTeal,
+                  ...(activeBank === 'imageA' ? styles.bankTabActiveTeal : {})
                 }}
-                onClick={() => setActiveBank('slide1')}
+                onClick={() => setActiveBank('imageA')}
               >
-                Slide 1 Bank
+                Image A
               </button>
               <button
                 style={{
                   ...styles.bankTab,
-                  ...(activeBank === 'slide2' ? styles.bankTabActive : {})
+                  ...styles.bankTabAmber,
+                  ...(activeBank === 'imageB' ? styles.bankTabActiveAmber : {})
                 }}
-                onClick={() => setActiveBank('slide2')}
+                onClick={() => setActiveBank('imageB')}
               >
-                Slide 2 Bank
+                Image B
+              </button>
+              <button
+                style={{
+                  ...styles.bankTab,
+                  ...styles.bankTabPurple,
+                  ...(activeBank === 'lyrics' ? styles.bankTabActivePurple : {})
+                }}
+                onClick={() => setActiveBank('lyrics')}
+              >
+                Lyrics
               </button>
             </div>
 
             <div style={styles.bankContent}>
-              {activeContent.length === 0 ? (
+              {activeBank === 'lyrics' ? (
+                /* Lyric Bank Panel */
+                <LyricBank
+                  lyrics={lyrics}
+                  onSelectText={(text) => {
+                    // Add selected lyrics as text overlay to current slide
+                    const newOverlay = {
+                      id: `text_${Date.now()}`,
+                      text: text,
+                      style: {
+                        fontSize: 48,
+                        fontFamily: "'Inter', sans-serif",
+                        fontWeight: '600',
+                        color: '#ffffff',
+                        textAlign: 'center',
+                        outline: true,
+                        outlineColor: 'rgba(0,0,0,0.5)'
+                      },
+                      position: {
+                        x: 50,
+                        y: 50,
+                        width: 80,
+                        height: 20
+                      }
+                    };
+                    setSlides(prev => prev.map((slide, i) =>
+                      i === selectedSlideIndex
+                        ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] }
+                        : slide
+                    ));
+                    setEditingTextId(newOverlay.id);
+                  }}
+                  showAddForm={false}
+                  compact={false}
+                />
+              ) : activeContent.length === 0 ? (
                 <div style={styles.emptyBank}>
-                  <p>No content in this bank</p>
-                  <p style={styles.emptySubtext}>Upload images/videos in the Aesthetic Home</p>
+                  <p>No images in {activeBank === 'imageA' ? 'Image A' : 'Image B'}</p>
+                  <p style={styles.emptySubtext}>Upload images in the Aesthetic Home</p>
                 </div>
               ) : (
                 <div style={styles.clipGrid}>
-                  {activeContent.map(clip => (
+                  {activeContent.map(image => (
                     <div
-                      key={clip.id}
+                      key={image.id}
                       style={styles.clipCard}
                       draggable
                       onDragStart={(e) => {
-                        e.dataTransfer.setData('application/json', JSON.stringify(clip));
+                        e.dataTransfer.setData('application/json', JSON.stringify({
+                          ...image,
+                          url: image.localUrl || image.url,
+                          thumbnail: image.localUrl || image.url
+                        }));
                       }}
                     >
-                      {clip.thumbnail ? (
-                        <img src={clip.thumbnail} alt={clip.name} style={styles.clipThumbnail} />
-                      ) : (
-                        <div style={styles.clipPlaceholder}>
-                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <rect x="3" y="3" width="18" height="18" rx="2"/>
-                            <circle cx="8.5" cy="8.5" r="1.5"/>
-                            <path d="M21 15l-5-5L5 21"/>
-                          </svg>
-                        </div>
-                      )}
-                      <span style={styles.clipName}>{clip.name?.slice(0, 15) || 'Untitled'}</span>
+                      <img
+                        src={image.localUrl || image.url}
+                        alt={image.name}
+                        style={styles.clipThumbnail}
+                      />
+                      <span style={styles.clipName}>{image.name?.slice(0, 15) || 'Untitled'}</span>
                     </div>
                   ))}
                 </div>
@@ -1003,6 +1051,31 @@ const styles = {
     color: '#fff',
     backgroundColor: 'rgba(99, 102, 241, 0.2)',
     borderBottom: '2px solid #6366f1'
+  },
+  // Colored tab variants
+  bankTabTeal: {
+    color: '#5eead4'
+  },
+  bankTabActiveTeal: {
+    color: '#14b8a6',
+    backgroundColor: 'rgba(20, 184, 166, 0.15)',
+    borderBottom: '2px solid #14b8a6'
+  },
+  bankTabAmber: {
+    color: '#fcd34d'
+  },
+  bankTabActiveAmber: {
+    color: '#f59e0b',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderBottom: '2px solid #f59e0b'
+  },
+  bankTabPurple: {
+    color: '#c4b5fd'
+  },
+  bankTabActivePurple: {
+    color: '#a78bfa',
+    backgroundColor: 'rgba(167, 139, 250, 0.15)',
+    borderBottom: '2px solid #a78bfa'
   },
   bankContent: {
     flex: 1,

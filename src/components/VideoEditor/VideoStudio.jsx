@@ -151,9 +151,16 @@ const VideoStudio = ({
       description: 'High fashion editorial content',
       accountHandle: '@margiela.mommy', // Linked Late.co account
       thumbnail: null,
+      // Video mode banks
       videos: [],
       audio: [],
       createdVideos: [],
+      // Slideshow mode banks (separate from video)
+      imagesA: [], // Image A bank for slideshows
+      imagesB: [], // Image B bank for slideshows
+      slideshows: [], // Created slideshows
+      // Shared: Lyric bank (accessible in both modes)
+      lyrics: [], // { id, title, content, createdAt }
       // New: Category defaults for batch generation
       defaultPreset: {
         textStyle: {
@@ -178,9 +185,16 @@ const VideoStudio = ({
       description: 'High energy electronic visuals',
       accountHandle: '@neonphoebe', // Linked Late.co account
       thumbnail: null,
+      // Video mode banks
       videos: [],
       audio: [],
       createdVideos: [],
+      // Slideshow mode banks (separate from video)
+      imagesA: [], // Image A bank for slideshows
+      imagesB: [], // Image B bank for slideshows
+      slideshows: [], // Created slideshows
+      // Shared: Lyric bank (accessible in both modes)
+      lyrics: [], // { id, title, content, createdAt }
       // New: Category defaults for batch generation
       defaultPreset: {
         textStyle: {
@@ -812,9 +826,16 @@ const VideoStudio = ({
     const newCategory = {
       id: `cat_${Date.now()}`,
       artistId: selectedArtist?.id,
+      // Video mode banks
       videos: [],
       audio: [],
       createdVideos: [],
+      // Slideshow mode banks
+      imagesA: [],
+      imagesB: [],
+      slideshows: [],
+      // Shared
+      lyrics: [],
       ...categoryData
     };
     setCategories(prev => [...prev, newCategory]);
@@ -875,6 +896,154 @@ const VideoStudio = ({
 
     setShowSlideshowEditor(false);
     setEditingSlideshow(null);
+  }, [selectedCategory]);
+
+  // ============================================
+  // IMAGE BANK HANDLERS (for Slideshow mode)
+  // ============================================
+
+  // Upload images to Image A or Image B bank
+  const handleUploadImages = useCallback(async (files, bank = 'A') => {
+    if (!selectedCategory) return;
+
+    const bankKey = bank === 'A' ? 'imagesA' : 'imagesB';
+    setUploadProgress({ type: 'image', current: 0, total: files.length });
+
+    const uploadedImages = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        setUploadProgress({ type: 'image', current: i + 1, total: files.length, name: file.name, progress: 0 });
+
+        // Upload to Firebase Storage
+        const { url, path } = await uploadFile(file, 'images', (progress) => {
+          setUploadProgress(prev => ({ ...prev, progress }));
+        });
+
+        // Create local blob for preview
+        const localUrl = URL.createObjectURL(file);
+
+        uploadedImages.push({
+          id: `img_${Date.now()}_${i}`,
+          name: file.name,
+          url,
+          localUrl,
+          storagePath: path,
+          width: 0, // Could detect with Image() if needed
+          height: 0,
+          createdAt: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('Failed to upload image:', file.name, error);
+      }
+    }
+
+    if (uploadedImages.length > 0) {
+      setCategories(prev => prev.map(cat =>
+        cat.id === selectedCategory.id
+          ? { ...cat, [bankKey]: [...(cat[bankKey] || []), ...uploadedImages] }
+          : cat
+      ));
+
+      setSelectedCategory(prev => prev ? {
+        ...prev,
+        [bankKey]: [...(prev[bankKey] || []), ...uploadedImages]
+      } : prev);
+    }
+
+    setUploadProgress(null);
+  }, [selectedCategory]);
+
+  // Delete image from bank
+  const handleDeleteBankImage = useCallback(async (imageId, bank = 'A') => {
+    if (!selectedCategory) return;
+
+    const bankKey = bank === 'A' ? 'imagesA' : 'imagesB';
+    const images = selectedCategory[bankKey] || [];
+    const image = images.find(img => img.id === imageId);
+
+    if (image?.storagePath) {
+      await deleteFile(image.storagePath);
+    }
+
+    setCategories(prev => prev.map(cat =>
+      cat.id === selectedCategory.id
+        ? { ...cat, [bankKey]: (cat[bankKey] || []).filter(img => img.id !== imageId) }
+        : cat
+    ));
+
+    setSelectedCategory(prev => prev ? {
+      ...prev,
+      [bankKey]: (prev[bankKey] || []).filter(img => img.id !== imageId)
+    } : prev);
+  }, [selectedCategory]);
+
+  // ============================================
+  // LYRIC BANK HANDLERS (shared between modes)
+  // ============================================
+
+  // Add lyrics to the bank
+  const handleAddLyrics = useCallback((lyricsData) => {
+    if (!selectedCategory) return;
+
+    const newLyrics = {
+      id: `lyrics_${Date.now()}`,
+      title: lyricsData.title || 'Untitled Lyrics',
+      content: lyricsData.content || '',
+      createdAt: new Date().toISOString()
+    };
+
+    setCategories(prev => prev.map(cat =>
+      cat.id === selectedCategory.id
+        ? { ...cat, lyrics: [...(cat.lyrics || []), newLyrics] }
+        : cat
+    ));
+
+    setSelectedCategory(prev => prev ? {
+      ...prev,
+      lyrics: [...(prev.lyrics || []), newLyrics]
+    } : prev);
+
+    return newLyrics;
+  }, [selectedCategory]);
+
+  // Update lyrics
+  const handleUpdateLyrics = useCallback((lyricsId, updates) => {
+    if (!selectedCategory) return;
+
+    setCategories(prev => prev.map(cat =>
+      cat.id === selectedCategory.id
+        ? {
+            ...cat,
+            lyrics: (cat.lyrics || []).map(l =>
+              l.id === lyricsId ? { ...l, ...updates, updatedAt: new Date().toISOString() } : l
+            )
+          }
+        : cat
+    ));
+
+    setSelectedCategory(prev => prev ? {
+      ...prev,
+      lyrics: (prev.lyrics || []).map(l =>
+        l.id === lyricsId ? { ...l, ...updates, updatedAt: new Date().toISOString() } : l
+      )
+    } : prev);
+  }, [selectedCategory]);
+
+  // Delete lyrics from bank
+  const handleDeleteLyrics = useCallback((lyricsId) => {
+    if (!selectedCategory) return;
+
+    setCategories(prev => prev.map(cat =>
+      cat.id === selectedCategory.id
+        ? { ...cat, lyrics: (cat.lyrics || []).filter(l => l.id !== lyricsId) }
+        : cat
+    ));
+
+    setSelectedCategory(prev => prev ? {
+      ...prev,
+      lyrics: (prev.lyrics || []).filter(l => l.id !== lyricsId)
+    } : prev);
   }, [selectedCategory]);
 
   const categoryPresets = presets.filter(p =>
@@ -941,6 +1110,7 @@ const VideoStudio = ({
             selectedCategory={selectedCategory}
             onSelectCategory={handleSelectCategory}
             onCreateCategory={handleCreateCategory}
+            // Video banks
             onUploadVideos={handleUploadVideos}
             onUploadAudio={handleUploadAudio}
             onSaveAudioClip={handleSaveAudioClip}
@@ -949,6 +1119,14 @@ const VideoStudio = ({
             onDeleteBankAudio={handleDeleteBankAudio}
             onRenameBankVideo={handleRenameBankVideo}
             onRenameBankAudio={handleRenameBankAudio}
+            // Image banks (for slideshows)
+            onUploadImages={handleUploadImages}
+            onDeleteBankImage={handleDeleteBankImage}
+            // Lyric bank (shared)
+            onAddLyrics={handleAddLyrics}
+            onUpdateLyrics={handleUpdateLyrics}
+            onDeleteLyrics={handleDeleteLyrics}
+            // Actions
             onCreateContent={handleCreateContent}
             onShowBatchPipeline={() => setShowBatchPipeline(true)}
             onViewContent={() => setCurrentView('library')}
