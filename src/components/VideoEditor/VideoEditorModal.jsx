@@ -916,19 +916,22 @@ const VideoEditorModal = ({
 
       // For AI transcription, we need to upload the audio to AssemblyAI directly
       // Firebase URLs often have CORS issues that prevent AssemblyAI from downloading
-      // Priority: file (most reliable) > localUrl (blob) > url (Firebase - may fail)
+      // Priority: file (most reliable) > non-blob localUrl > fetch from cloud URL
 
-      const hasLocalSource = selectedAudio.file || selectedAudio.localUrl;
+      // Check if localUrl is a blob URL (blob URLs expire between sessions)
+      const localUrl = selectedAudio.localUrl;
+      const isBlobUrl = localUrl && localUrl.startsWith('blob:');
+      const hasValidLocalSource = selectedAudio.file || (localUrl && !isBlobUrl);
 
-      if (hasLocalSource) {
+      if (hasValidLocalSource) {
         // Upload to AssemblyAI directly for most reliable transcription
         console.log('AI Transcribe: Uploading audio to AssemblyAI directly (avoids Firebase CORS)...');
 
         let audioBlob;
         if (selectedAudio.file) {
           audioBlob = selectedAudio.file;
-        } else if (selectedAudio.localUrl) {
-          audioBlob = await fetch(selectedAudio.localUrl).then(r => r.blob());
+        } else if (localUrl && !isBlobUrl) {
+          audioBlob = await fetch(localUrl).then(r => r.blob());
         }
 
         const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
@@ -947,11 +950,38 @@ const VideoEditorModal = ({
         const uploadResult = await uploadResponse.json();
         audioUrl = uploadResult.upload_url;
         console.log('AI Transcribe: Audio uploaded to AssemblyAI successfully');
+      } else if (selectedAudio.url) {
+        // No local source - fetch from Firebase URL and upload to AssemblyAI
+        console.log('AI Transcribe: Fetching from Firebase URL and uploading to AssemblyAI...');
+
+        try {
+          const response = await fetch(selectedAudio.url);
+          if (!response.ok) throw new Error('Failed to fetch audio');
+          const audioBlob = await response.blob();
+
+          const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
+            method: 'POST',
+            headers: {
+              'Authorization': savedKey,
+              'Content-Type': 'application/octet-stream'
+            },
+            body: audioBlob
+          });
+
+          if (!uploadResponse.ok) {
+            throw new Error('Failed to upload audio to AssemblyAI');
+          }
+
+          const uploadResult = await uploadResponse.json();
+          audioUrl = uploadResult.upload_url;
+          console.log('AI Transcribe: Audio fetched and uploaded successfully');
+        } catch (fetchErr) {
+          // Fallback: let AssemblyAI try to fetch directly (may work for public URLs)
+          console.log('AI Transcribe: Fetch failed, trying URL directly:', fetchErr.message);
+          audioUrl = selectedAudio.url;
+        }
       } else {
-        // No local source - try Firebase URL directly (may fail due to CORS)
-        // AssemblyAI will try to download from server-side
-        console.log('AI Transcribe: Using Firebase URL directly (note: may fail if CORS not configured)');
-        audioUrl = selectedAudio.url;
+        throw new Error('No audio source available');
       }
 
       // Request transcription with word-level timestamps
