@@ -24,7 +24,8 @@ const AestheticHome = ({
   onRenameBankAudio,
   onCreateContent,
   onShowBatchPipeline, // Open batch create & schedule workflow
-  onViewContent // View content library / drafts
+  onViewContent, // View content library / drafts
+  onMakeSlideshow // Open slideshow/carousel editor
 }) => {
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -431,6 +432,25 @@ const AestheticHome = ({
                     <rect x="14" y="14" width="7" height="7" rx="1"/>
                   </svg>
                   Make up to 10 at once
+                </button>
+              )}
+
+              {/* Slideshow/Carousel Editor */}
+              {onMakeSlideshow && (
+                <button
+                  style={styles.slideshowButton}
+                  onClick={() => onMakeSlideshow()}
+                  disabled={selectedCategory.videos.length === 0}
+                  title={selectedCategory.videos.length === 0
+                    ? 'Add images or videos first'
+                    : 'Create carousel/slideshow for Instagram or TikTok'}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="2" y="6" width="6" height="12" rx="1"/>
+                    <rect x="9" y="6" width="6" height="12" rx="1"/>
+                    <rect x="16" y="6" width="6" height="12" rx="1"/>
+                  </svg>
+                  Make a Slideshow
                 </button>
               )}
             </div>
@@ -1342,6 +1362,20 @@ const styles = {
     borderRadius: '10px',
     fontSize: '12px',
     fontWeight: '600'
+  },
+  slideshowButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '14px 28px',
+    backgroundColor: '#0891b2',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#fff',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '500',
+    transition: 'opacity 0.15s'
   },
   categoriesGrid: {
     maxWidth: '800px',

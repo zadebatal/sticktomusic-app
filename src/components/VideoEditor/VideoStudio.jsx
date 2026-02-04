@@ -3,6 +3,7 @@ import AestheticHome from './AestheticHome';
 import ContentLibrary from './ContentLibrary';
 import VideoEditorModal from './VideoEditorModal';
 import BatchPipeline from './BatchPipeline';
+import SlideshowEditor from './SlideshowEditor';
 import { uploadFile, deleteFile, getMediaDuration, generateThumbnail } from '../../services/firebaseStorage';
 import { saveCategories, loadCategories, savePresets, loadPresets, cleanupStorage } from '../../services/storageService';
 import { VIDEO_STATUS } from '../../utils/status';
@@ -251,6 +252,10 @@ const VideoStudio = ({
   const [editingVideo, setEditingVideo] = useState(null);
   const [showEditor, setShowEditor] = useState(savedSession?.showEditor || false);
   const [showBatchPipeline, setShowBatchPipeline] = useState(false);
+
+  // Slideshow editor state
+  const [showSlideshowEditor, setShowSlideshowEditor] = useState(false);
+  const [editingSlideshow, setEditingSlideshow] = useState(null);
 
   // Save to localStorage when categories change
   useEffect(() => {
@@ -825,6 +830,53 @@ const VideoStudio = ({
     setPresets(prev => [...prev, newPreset]);
   }, [selectedCategory]);
 
+  // Slideshow handlers
+  const handleMakeSlideshow = useCallback((existingSlideshow = null) => {
+    setEditingSlideshow(existingSlideshow);
+    setShowSlideshowEditor(true);
+  }, []);
+
+  const handleCloseSlideshowEditor = useCallback(() => {
+    setShowSlideshowEditor(false);
+    setEditingSlideshow(null);
+  }, []);
+
+  const handleSaveSlideshow = useCallback((slideshowData) => {
+    if (!selectedCategory) return;
+
+    const updateCategory = (cat) => {
+      if (cat.id !== selectedCategory.id) return cat;
+
+      // Initialize slideshows array if needed
+      const slideshows = cat.slideshows || [];
+      const existingIndex = slideshows.findIndex(s => s.id === slideshowData.id);
+
+      if (existingIndex >= 0) {
+        // Update existing
+        const newSlideshows = [...slideshows];
+        newSlideshows[existingIndex] = { ...slideshowData, updatedAt: new Date().toISOString() };
+        return { ...cat, slideshows: newSlideshows };
+      } else {
+        // Add new
+        return {
+          ...cat,
+          slideshows: [...slideshows, {
+            ...slideshowData,
+            id: `slideshow_${Date.now()}`,
+            createdAt: new Date().toISOString(),
+            status: 'draft'
+          }]
+        };
+      }
+    };
+
+    setCategories(prev => prev.map(updateCategory));
+    setSelectedCategory(prev => prev ? updateCategory(prev) : prev);
+
+    setShowSlideshowEditor(false);
+    setEditingSlideshow(null);
+  }, [selectedCategory]);
+
   const categoryPresets = presets.filter(p =>
     p.categoryId === selectedCategory?.id || p.categoryId === null
   );
@@ -900,6 +952,7 @@ const VideoStudio = ({
             onCreateContent={handleCreateContent}
             onShowBatchPipeline={() => setShowBatchPipeline(true)}
             onViewContent={() => setCurrentView('library')}
+            onMakeSlideshow={handleMakeSlideshow}
           />
         )}
 
@@ -933,6 +986,18 @@ const VideoStudio = ({
             onClose={handleCloseEditor}
           />
         </EditorErrorBoundary>
+      )}
+
+      {/* Slideshow Editor Modal */}
+      {showSlideshowEditor && selectedCategory && (
+        <SlideshowEditor
+          category={selectedCategory}
+          existingSlideshow={editingSlideshow}
+          onSave={handleSaveSlideshow}
+          onClose={handleCloseSlideshowEditor}
+          onSchedulePost={onSchedulePost}
+          lateAccountIds={lateAccountIds}
+        />
       )}
 
       {/* Batch Pipeline - Streamlined batch create & schedule */}
