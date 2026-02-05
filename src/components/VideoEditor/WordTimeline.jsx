@@ -32,9 +32,12 @@ const WordTimeline = ({
       return saved ? parseFloat(saved) : 1;
     } catch { return 1; }
   });
-  const [selectedWordIndex, setSelectedWordIndex] = useState(null);
+  // Multi-select: array of selected word indices
+  const [selectedWordIndices, setSelectedWordIndices] = useState([]);
+  const [lastSelectedIndex, setLastSelectedIndex] = useState(null); // For shift+click range selection
   const [dragState, setDragState] = useState(null);
   const [playheadDragging, setPlayheadDragging] = useState(false);
+  const [isDraggingSelection, setIsDraggingSelection] = useState(false); // Track if we're dragging selected words
   const [autoCensor, setAutoCensor] = useState(true);
   const [localTime, setLocalTime] = useState(currentTime); // Local playhead time for smooth animation
   const [editingWordId, setEditingWordId] = useState(null); // Which word is being edited inline
@@ -188,11 +191,27 @@ const WordTimeline = ({
   );
   const currentWord = currentWordIndex >= 0 ? words[currentWordIndex] : null;
 
-  // Get the effective word index for operations (selected or at playhead)
+  // Get the effective word index for operations (first selected or at playhead)
   const getEffectiveWordIndex = useCallback(() => {
-    if (selectedWordIndex !== null) return selectedWordIndex;
+    if (selectedWordIndices.length > 0) return selectedWordIndices[0];
     return currentWordIndex;
-  }, [selectedWordIndex, currentWordIndex]);
+  }, [selectedWordIndices, currentWordIndex]);
+
+  // Check if a word is selected
+  const isWordSelected = useCallback((index) => {
+    return selectedWordIndices.includes(index);
+  }, [selectedWordIndices]);
+
+  // Select all words
+  const selectAllWords = useCallback(() => {
+    setSelectedWordIndices(words.map((_, i) => i));
+  }, [words]);
+
+  // Clear selection
+  const clearSelection = useCallback(() => {
+    setSelectedWordIndices([]);
+    setLastSelectedIndex(null);
+  }, []);
 
   // Profanity filter
   const censorWord = (text) => {
@@ -237,20 +256,70 @@ const WordTimeline = ({
     }
   }, [displayTime, isPlaying, timeToPixels, playheadDragging]);
 
+  // Handle word block click for selection (with modifier keys)
+  const handleWordClick = (e, index) => {
+    e.stopPropagation();
+
+    if (e.shiftKey && lastSelectedIndex !== null) {
+      // Shift+click: range selection
+      const start = Math.min(lastSelectedIndex, index);
+      const end = Math.max(lastSelectedIndex, index);
+      const rangeIndices = [];
+      for (let i = start; i <= end; i++) {
+        rangeIndices.push(i);
+      }
+      setSelectedWordIndices(rangeIndices);
+    } else if (e.metaKey || e.ctrlKey) {
+      // Cmd/Ctrl+click: toggle selection
+      setSelectedWordIndices(prev => {
+        if (prev.includes(index)) {
+          return prev.filter(i => i !== index);
+        } else {
+          return [...prev, index].sort((a, b) => a - b);
+        }
+      });
+      setLastSelectedIndex(index);
+    } else {
+      // Regular click: single selection (unless already part of multi-selection)
+      if (!selectedWordIndices.includes(index) || selectedWordIndices.length === 1) {
+        setSelectedWordIndices([index]);
+      }
+      setLastSelectedIndex(index);
+    }
+  };
+
   // Handle word block dragging/resizing
   const handleWordMouseDown = (e, index, type = 'move') => {
     e.stopPropagation();
     const word = words[index];
-    setSelectedWordIndex(index);
+
+    // Handle selection with click first
+    if (type === 'move') {
+      handleWordClick(e, index);
+    }
+
+    // Determine which indices we're dragging
+    let indicesToDrag = selectedWordIndices.includes(index) ? selectedWordIndices : [index];
+
     // Save to history before dragging starts
     saveToHistory();
+
+    // For move operations, store initial times for ALL selected words
+    const initialTimes = {};
+    indicesToDrag.forEach(idx => {
+      initialTimes[idx] = words[idx].startTime;
+    });
+
     setDragState({
       index,
       type,
+      indicesToDrag,
+      initialTimes,
       startX: e.clientX,
       startTime: word.startTime,
       startDuration: word.duration || 0.5
     });
+    setIsDraggingSelection(type === 'move' && indicesToDrag.length > 1);
   };
 
   useEffect(() => {
@@ -262,28 +331,41 @@ const WordTimeline = ({
 
       setWords(prev => {
         const newWords = [...prev];
-        const word = { ...newWords[dragState.index] };
 
         if (dragState.type === 'move') {
-          const newStartTime = Math.max(0, Math.min(duration - (word.duration || 0.5), dragState.startTime + deltaTime));
-          word.startTime = newStartTime;
+          // Move all selected words together
+          const indicesToMove = dragState.indicesToDrag || [dragState.index];
+
+          indicesToMove.forEach(idx => {
+            const word = { ...newWords[idx] };
+            const initialTime = dragState.initialTimes?.[idx] ?? dragState.startTime;
+            const newStartTime = Math.max(0, Math.min(duration - (word.duration || 0.5), initialTime + deltaTime));
+            word.startTime = newStartTime;
+            newWords[idx] = word;
+          });
         } else if (dragState.type === 'resize-left') {
+          const word = { ...newWords[dragState.index] };
           const newStartTime = Math.max(0, dragState.startTime + deltaTime);
           const endTime = dragState.startTime + dragState.startDuration;
           const newDuration = Math.max(0.1, endTime - newStartTime);
           word.startTime = newStartTime;
           word.duration = newDuration;
+          newWords[dragState.index] = word;
         } else if (dragState.type === 'resize-right') {
+          const word = { ...newWords[dragState.index] };
           const newDuration = Math.max(0.1, dragState.startDuration + deltaTime);
           word.duration = newDuration;
+          newWords[dragState.index] = word;
         }
 
-        newWords[dragState.index] = word;
         return newWords;
       });
     };
 
-    const handleMouseUp = () => setDragState(null);
+    const handleMouseUp = () => {
+      setDragState(null);
+      setIsDraggingSelection(false);
+    };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
@@ -350,6 +432,10 @@ const WordTimeline = ({
     onSeek?.(clampedTime);
     // Play a short audio snippet at the clicked position
     playScrubSnippet(clampedTime);
+    // Clear selection when clicking empty timeline space
+    if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+      clearSelection();
+    }
   };
 
   const handleAddWord = () => {
@@ -365,23 +451,30 @@ const WordTimeline = ({
   };
 
   const handleDeleteWord = () => {
-    const index = getEffectiveWordIndex();
-    if (index < 0) return;
-    const word = words[index];
-    setDeleteConfirm({ show: true, index, text: word.text });
+    // Delete all selected words, or word at playhead
+    const indicesToDelete = selectedWordIndices.length > 0 ? selectedWordIndices : (currentWordIndex >= 0 ? [currentWordIndex] : []);
+    if (indicesToDelete.length === 0) return;
+
+    const wordTexts = indicesToDelete.map(i => words[i]?.text).filter(Boolean).join(', ');
+    setDeleteConfirm({
+      show: true,
+      indices: indicesToDelete,
+      text: indicesToDelete.length === 1 ? wordTexts : `${indicesToDelete.length} words`
+    });
   };
 
   const confirmDelete = () => {
-    if (deleteConfirm.index >= 0) {
+    if (deleteConfirm.indices?.length > 0) {
       saveToHistory();
-      setWords(prev => prev.filter((_, i) => i !== deleteConfirm.index));
-      setSelectedWordIndex(null);
+      const indicesToDelete = new Set(deleteConfirm.indices);
+      setWords(prev => prev.filter((_, i) => !indicesToDelete.has(i)));
+      clearSelection();
     }
-    setDeleteConfirm({ show: false, index: -1, text: '' });
+    setDeleteConfirm({ show: false, indices: [], text: '' });
   };
 
   const cancelDelete = () => {
-    setDeleteConfirm({ show: false, index: -1, text: '' });
+    setDeleteConfirm({ show: false, indices: [], text: '' });
   };
 
   // Cut word at playhead position - splits timing without changing text
@@ -454,16 +547,19 @@ const WordTimeline = ({
   };
 
   const handleChangeCase = (caseType) => {
-    const index = getEffectiveWordIndex();
-    if (index < 0) return;
+    // Apply to all selected words, or word at playhead
+    const indicesToChange = selectedWordIndices.length > 0 ? selectedWordIndices : (currentWordIndex >= 0 ? [currentWordIndex] : []);
+    if (indicesToChange.length === 0) return;
     saveToHistory();
     setWords(prev => {
       const newWords = [...prev];
-      const word = { ...newWords[index] };
-      if (caseType === 'lower') word.text = word.text.toLowerCase();
-      else if (caseType === 'title') word.text = word.text.charAt(0).toUpperCase() + word.text.slice(1).toLowerCase();
-      else if (caseType === 'upper') word.text = word.text.toUpperCase();
-      newWords[index] = word;
+      indicesToChange.forEach(index => {
+        const word = { ...newWords[index] };
+        if (caseType === 'lower') word.text = word.text.toLowerCase();
+        else if (caseType === 'title') word.text = word.text.charAt(0).toUpperCase() + word.text.slice(1).toLowerCase();
+        else if (caseType === 'upper') word.text = word.text.toUpperCase();
+        newWords[index] = word;
+      });
       return newWords;
     });
   };
@@ -487,7 +583,8 @@ const WordTimeline = ({
     // Also select the word
     const wordIndex = words.findIndex(w => w.id === wordId);
     if (wordIndex >= 0) {
-      setSelectedWordIndex(wordIndex);
+      setSelectedWordIndices([wordIndex]);
+      setLastSelectedIndex(wordIndex);
     }
     // Focus the input after render
     setTimeout(() => {
@@ -525,9 +622,30 @@ const WordTimeline = ({
   };
 
   // Click on a word chip in the line preview
-  const handleWordChipClick = (word, index) => {
-    setSelectedWordIndex(index);
-    startEditingWord(word.id, word.text);
+  const handleWordChipClick = (e, word, index) => {
+    // Support multi-select in line preview too
+    if (e.shiftKey && lastSelectedIndex !== null) {
+      const start = Math.min(lastSelectedIndex, index);
+      const end = Math.max(lastSelectedIndex, index);
+      const rangeIndices = [];
+      for (let i = start; i <= end; i++) {
+        rangeIndices.push(i);
+      }
+      setSelectedWordIndices(rangeIndices);
+    } else if (e.metaKey || e.ctrlKey) {
+      setSelectedWordIndices(prev => {
+        if (prev.includes(index)) {
+          return prev.filter(i => i !== index);
+        } else {
+          return [...prev, index].sort((a, b) => a - b);
+        }
+      });
+      setLastSelectedIndex(index);
+    } else {
+      setSelectedWordIndices([index]);
+      setLastSelectedIndex(index);
+      startEditingWord(word.id, word.text);
+    }
   };
 
   // Click on the live preview text
@@ -559,6 +677,22 @@ const WordTimeline = ({
     return lines;
   };
 
+  // Nudge selected words with arrow keys
+  const nudgeSelectedWords = useCallback((direction) => {
+    if (selectedWordIndices.length === 0) return;
+    const nudgeAmount = 0.05; // 50ms
+    saveToHistory();
+    setWords(prev => {
+      const newWords = [...prev];
+      selectedWordIndices.forEach(idx => {
+        const word = { ...newWords[idx] };
+        word.startTime = Math.max(0, Math.min(duration - (word.duration || 0.5), word.startTime + (direction * nudgeAmount)));
+        newWords[idx] = word;
+      });
+      return newWords;
+    });
+  }, [selectedWordIndices, saveToHistory, setWords, duration]);
+
   // Keep callbacks ref updated (avoids re-registering keyboard listener on every render)
   useEffect(() => {
     callbacksRef.current = {
@@ -569,7 +703,10 @@ const WordTimeline = ({
       confirmDelete,
       cancelInlineEdit,
       getEffectiveWordIndex,
-      handleUndo
+      handleUndo,
+      selectAllWords,
+      clearSelection,
+      nudgeSelectedWords
     };
   });
 
@@ -584,8 +721,18 @@ const WordTimeline = ({
         confirmDelete: confirmDel,
         cancelInlineEdit: cancelEdit,
         getEffectiveWordIndex: getIndex,
-        handleUndo: undo
+        handleUndo: undo,
+        selectAllWords: selectAll,
+        clearSelection: clearSel,
+        nudgeSelectedWords: nudge
       } = callbacksRef.current;
+
+      // Command/Ctrl+A to select all (when not editing)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'a' && !editingWordId && !deleteConfirm.show) {
+        e.preventDefault();
+        selectAll?.();
+        return;
+      }
 
       // Command/Ctrl+Z to undo
       if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !editingWordId) {
@@ -594,12 +741,21 @@ const WordTimeline = ({
         return;
       }
 
-      // Escape to cancel delete confirmation or close modal
+      // Arrow keys to nudge selected words
+      if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !editingWordId && !deleteConfirm.show) {
+        e.preventDefault();
+        nudge?.(e.key === 'ArrowRight' ? 1 : -1);
+        return;
+      }
+
+      // Escape to cancel delete confirmation, clear selection, or close modal
       if (e.key === 'Escape') {
         if (deleteConfirm.show) {
           cancelDel?.();
         } else if (editingWordId) {
           cancelEdit?.();
+        } else if (selectedWordIndices.length > 0) {
+          clearSel?.();
         } else {
           close?.();
         }
@@ -634,7 +790,7 @@ const WordTimeline = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [deleteConfirm.show, editingWordId]); // Only re-register when these state values change
 
-  const selectedWord = selectedWordIndex !== null ? words[selectedWordIndex] : null;
+  const selectedWord = selectedWordIndices.length > 0 ? words[selectedWordIndices[0]] : null;
   const effectiveIndex = getEffectiveWordIndex();
   const hasWordAtPlayhead = effectiveIndex >= 0;
 
@@ -720,6 +876,17 @@ const WordTimeline = ({
               <input type="checkbox" checked={autoCensor} onChange={(e) => setAutoCensor(e.target.checked)} />
               Auto-censor
             </label>
+            {/* Selection indicator */}
+            {selectedWordIndices.length > 0 && (
+              <div style={styles.selectionIndicator}>
+                <span>{selectedWordIndices.length} selected</span>
+                <button style={styles.clearSelectionBtn} onClick={clearSelection} title="Clear selection (Esc)">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -733,6 +900,15 @@ const WordTimeline = ({
           </button>
           <div ref={timelineRef} style={styles.timeline} onClick={handleTimelineClick}>
             <div style={{ ...styles.timelineInner, width: getTimelineWidth() }}>
+              {/* Time Ruler */}
+              <div style={styles.timeRuler}>
+                {Array.from({ length: Math.ceil(duration) + 1 }, (_, i) => (
+                  <div key={i} style={{ ...styles.timeMarker, left: timeToPixels(i) }}>
+                    <div style={styles.timeMarkerLine} />
+                    <span style={styles.timeMarkerLabel}>{i}s</span>
+                  </div>
+                ))}
+              </div>
               {/* Draggable Playhead */}
               <div
                 style={{
@@ -773,8 +949,8 @@ const WordTimeline = ({
                     ...styles.wordBlock,
                     left: timeToPixels(word.startTime),
                     width: Math.max(30, timeToPixels(word.duration || 0.5)),
-                    ...(selectedWordIndex === index ? styles.wordBlockSelected : {}),
-                    ...(currentWord?.id === word.id ? styles.wordBlockCurrent : {})
+                    ...(isWordSelected(index) ? styles.wordBlockSelected : {}),
+                    ...(currentWord?.id === word.id && !isWordSelected(index) ? styles.wordBlockCurrent : {})
                   }}
                   onMouseDown={(e) => handleWordMouseDown(e, index, 'move')}
                   onDoubleClick={(e) => {
@@ -806,7 +982,7 @@ const WordTimeline = ({
 
         <div style={styles.bottomSections}>
           <div style={styles.linePreviewSection}>
-            <h4 style={styles.sectionTitle}>Line build preview (click to edit)</h4>
+            <h4 style={styles.sectionTitle}>Line build preview (Shift+click to multi-select)</h4>
             <div style={styles.linesContainer}>
               {getLines().map((line, lineIndex) => (
                 <div key={lineIndex} style={styles.lineRow}>
@@ -815,11 +991,11 @@ const WordTimeline = ({
                       key={word.id || word.globalIndex}
                       style={{
                         ...styles.wordChip,
-                        ...(displayTime >= word.startTime && displayTime < word.startTime + word.duration ? styles.wordChipActive : {}),
-                        ...(selectedWordIndex === word.globalIndex ? styles.wordChipSelected : {}),
+                        ...(displayTime >= word.startTime && displayTime < word.startTime + word.duration && !isWordSelected(word.globalIndex) ? styles.wordChipActive : {}),
+                        ...(isWordSelected(word.globalIndex) ? styles.wordChipSelected : {}),
                         cursor: 'pointer'
                       }}
-                      onClick={() => handleWordChipClick(word, word.globalIndex)}
+                      onClick={(e) => handleWordChipClick(e, word, word.globalIndex)}
                     >
                       {editingWordId === word.id ? (
                         <input
@@ -876,13 +1052,18 @@ const WordTimeline = ({
               {/* Edit form for selected word OR word at playhead */}
               {(selectedWord || currentWord) && (
                 <div style={styles.wordEditForm}>
+                  {selectedWordIndices.length > 1 && (
+                    <div style={styles.multiSelectInfo}>
+                      {selectedWordIndices.length} words selected
+                    </div>
+                  )}
                   <div style={styles.wordEditRow}>
                     <label style={styles.wordEditLabel}>Text:</label>
                     <input
                       type="text"
                       value={(selectedWord || currentWord).text}
                       onChange={(e) => {
-                        const indexToUpdate = selectedWordIndex !== null ? selectedWordIndex : currentWordIndex;
+                        const indexToUpdate = selectedWordIndices.length > 0 ? selectedWordIndices[0] : currentWordIndex;
                         if (indexToUpdate < 0) return;
                         setWords(prev => {
                           const newWords = [...prev];
@@ -900,7 +1081,7 @@ const WordTimeline = ({
                       value={(selectedWord || currentWord).startTime.toFixed(2)}
                       step="0.1"
                       onChange={(e) => {
-                        const indexToUpdate = selectedWordIndex !== null ? selectedWordIndex : currentWordIndex;
+                        const indexToUpdate = selectedWordIndices.length > 0 ? selectedWordIndices[0] : currentWordIndex;
                         if (indexToUpdate < 0) return;
                         setWords(prev => {
                           const newWords = [...prev];
@@ -918,7 +1099,7 @@ const WordTimeline = ({
                       value={((selectedWord || currentWord).duration || 0.5).toFixed(2)}
                       step="0.1"
                       onChange={(e) => {
-                        const indexToUpdate = selectedWordIndex !== null ? selectedWordIndex : currentWordIndex;
+                        const indexToUpdate = selectedWordIndices.length > 0 ? selectedWordIndices[0] : currentWordIndex;
                         if (indexToUpdate < 0) return;
                         setWords(prev => {
                           const newWords = [...prev];
@@ -979,12 +1160,18 @@ const styles = {
   caseButton: { padding: '6px 10px', backgroundColor: '#1f1f2e', border: 'none', borderRight: '1px solid #2d2d3d', fontSize: '13px', color: '#e5e7eb', cursor: 'pointer' },
   legatoButton: { padding: '6px 12px', backgroundColor: '#1f1f2e', border: '1px solid #2d2d3d', borderRadius: '6px', fontSize: '13px', color: '#e5e7eb', cursor: 'pointer' },
   censorLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#9ca3af', cursor: 'pointer' },
+  selectionIndicator: { display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', backgroundColor: 'rgba(139, 92, 246, 0.2)', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '6px', fontSize: '12px', fontWeight: '500', color: '#a78bfa' },
+  clearSelectionBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '18px', height: '18px', backgroundColor: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '4px', color: '#a78bfa', cursor: 'pointer', padding: 0 },
   timelineContainer: { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px 20px', backgroundColor: '#0a0a0f' },
   playButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', backgroundColor: '#7c3aed', border: 'none', borderRadius: '50%', color: '#fff', cursor: 'pointer', flexShrink: 0 },
-  timeline: { flex: 1, height: '50px', backgroundColor: '#1a1a2e', borderRadius: '8px', overflowX: 'auto', overflowY: 'hidden', position: 'relative', cursor: 'pointer' },
+  timeline: { flex: 1, height: '70px', backgroundColor: '#1a1a2e', borderRadius: '8px', overflowX: 'auto', overflowY: 'hidden', position: 'relative', cursor: 'pointer' },
   timelineInner: { position: 'relative', height: '100%', minWidth: '100%' },
+  timeRuler: { position: 'absolute', top: 0, left: 0, right: 0, height: '20px', pointerEvents: 'none' },
+  timeMarker: { position: 'absolute', top: 0, height: '100%' },
+  timeMarkerLine: { width: '1px', height: '8px', backgroundColor: 'rgba(255,255,255,0.2)' },
+  timeMarkerLabel: { position: 'absolute', top: '8px', left: '-8px', fontSize: '9px', color: '#6b7280', fontFamily: 'monospace' },
   playhead: { position: 'absolute', top: 0, bottom: 0, zIndex: 20 },
-  wordBlock: { position: 'absolute', top: '8px', height: '34px', backgroundColor: '#7c3aed', border: '1px solid #9333ea', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', userSelect: 'none', overflow: 'hidden', transition: 'background-color 0.1s', zIndex: 5 },
+  wordBlock: { position: 'absolute', top: '24px', height: '38px', backgroundColor: '#7c3aed', border: '1px solid #9333ea', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', userSelect: 'none', overflow: 'hidden', transition: 'background-color 0.1s, box-shadow 0.1s', zIndex: 5 },
   wordBlockSelected: { backgroundColor: '#9333ea', border: '2px solid #a855f7', boxShadow: '0 2px 8px rgba(168, 85, 247, 0.5)' },
   wordBlockCurrent: { backgroundColor: '#22c55e', border: '2px solid #4ade80' },
   resizeHandle: { position: 'absolute', left: 0, top: 0, bottom: 0, width: '6px', cursor: 'ew-resize', backgroundColor: 'transparent' },
@@ -1006,6 +1193,7 @@ const styles = {
   livePreviewText: { fontSize: '32px', fontWeight: '600', color: '#fff', textAlign: 'center' },
   livePreviewInput: { fontSize: '32px', fontWeight: '600', color: '#fff', textAlign: 'center', backgroundColor: 'transparent', border: '2px solid #7c3aed', borderRadius: '8px', padding: '8px 16px', outline: 'none', width: '80%' },
   noActiveWord: { color: '#6b7280', fontSize: '14px', textAlign: 'center', padding: '40px 0' },
+  multiSelectInfo: { padding: '8px 12px', backgroundColor: 'rgba(139, 92, 246, 0.2)', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '6px', fontSize: '12px', fontWeight: '500', color: '#a78bfa', marginBottom: '8px', textAlign: 'center' },
   wordEditForm: { display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid #1f1f2e', paddingTop: '12px' },
   wordEditRow: { display: 'flex', alignItems: 'center', gap: '8px' },
   wordEditLabel: { width: '60px', fontSize: '12px', color: '#9ca3af' },
