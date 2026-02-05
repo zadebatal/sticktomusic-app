@@ -11,6 +11,15 @@ let ffmpegInstance = null;
 let ffmpegLoading = false;
 
 /**
+ * Safely clamp progress to 0-100 range
+ * Handles NaN, Infinity, and negative values
+ */
+const safeProgress = (value) => {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+};
+
+/**
  * Load FFmpeg.wasm instance (lazy loading)
  */
 const loadFFmpeg = async (onProgress = () => {}) => {
@@ -33,7 +42,7 @@ const loadFFmpeg = async (onProgress = () => {}) => {
     const ffmpeg = new FFmpeg();
 
     ffmpeg.on('progress', ({ progress }) => {
-      onProgress(Math.round(progress * 100));
+      onProgress(safeProgress(progress * 100));
     });
 
     // Load FFmpeg with CDN URLs
@@ -70,16 +79,19 @@ const convertToMP4 = async (webmBlob, onProgress = () => {}) => {
     await ffmpeg.writeFile(inputName, await fetchFile(webmBlob));
 
     // Convert to MP4 with H.264 codec (most compatible)
-    // Using fast preset for reasonable speed
+    // Using ultrafast preset for maximum speed (slightly larger file size but much faster)
+    // CRF 26 is a good balance of quality/speed for social media
     await ffmpeg.exec([
       '-i', inputName,
       '-c:v', 'libx264',
-      '-preset', 'fast',
-      '-crf', '23',
+      '-preset', 'ultrafast',
+      '-tune', 'fastdecode',
+      '-crf', '26',
       '-c:a', 'aac',
       '-b:a', '128k',
       '-movflags', '+faststart',
       '-pix_fmt', 'yuv420p',
+      '-threads', '0',
       outputName
     ]);
 
@@ -175,8 +187,11 @@ const loadAudio = (url) => {
 const renderWithCanvas = async (videoData, onProgress = () => {}) => {
   const { clips, audio, words, textStyle, cropMode, duration } = videoData;
 
+  // Validate duration to prevent NaN/Infinity in progress calculations
+  const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 30;
+
   console.log('[VideoExport] Starting Canvas render');
-  onProgress(5);
+  onProgress(safeProgress(5));
 
   // Get dimensions
   const dimensions = {
@@ -192,11 +207,9 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
   canvas.height = height;
   const ctx = canvas.getContext('2d');
 
-  // Load all clip videos
-  console.log('[VideoExport] Loading clips...');
-  const loadedClips = [];
-  for (let i = 0; i < clips.length; i++) {
-    const clip = clips[i];
+  // Load all clip videos in parallel for faster loading
+  console.log('[VideoExport] Loading clips in parallel...');
+  const clipPromises = clips.map(async (clip, i) => {
     // Prefer cloud URL over blob URLs (blob URLs expire between sessions)
     const localUrl = clip.localUrl;
     const isBlobUrl = localUrl && localUrl.startsWith('blob:');
@@ -205,13 +218,17 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
     console.log(`[VideoExport] Loading clip ${i}:`, url?.substring(0, 50) + '...');
     try {
       const video = await loadVideo(url);
-      loadedClips.push({ ...clip, video });
-      onProgress(5 + Math.round((i / clips.length) * 15));
+      return { ...clip, video, index: i };
     } catch (err) {
       console.warn(`Failed to load clip ${i}:`, err);
-      loadedClips.push({ ...clip, video: null });
+      return { ...clip, video: null, index: i };
     }
-  }
+  });
+
+  const results = await Promise.all(clipPromises);
+  // Sort by original index to maintain order
+  const loadedClips = results.sort((a, b) => a.index - b.index);
+  onProgress(safeProgress(20));
 
   // Load audio if available
   let audioElement = null;
@@ -239,7 +256,7 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
       console.warn('Failed to load audio:', err);
     }
   }
-  onProgress(25);
+  onProgress(safeProgress(25));
 
   // Set up MediaRecorder
   const canvasStream = canvas.captureStream(30);
@@ -302,11 +319,11 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
       if (!startTime) startTime = timestamp;
       const elapsed = (timestamp - startTime) / 1000;
 
-      // Update progress
-      const progress = Math.min(elapsed / duration, 1);
-      onProgress(25 + Math.round(progress * 65));
+      // Update progress - use safeDuration to prevent division issues
+      const progress = Math.max(0, Math.min(elapsed / safeDuration, 1));
+      onProgress(safeProgress(25 + progress * 65));
 
-      if (elapsed >= duration) {
+      if (elapsed >= safeDuration) {
         // Done
         recorder.stop();
         if (audioElement) {
@@ -394,7 +411,7 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
 
       const blob = new Blob(chunks, { type: mimeType });
       console.log('[VideoExport] Render complete:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
-      onProgress(100);
+      onProgress(safeProgress(100));
       resolve(blob);
     };
 
@@ -445,28 +462,28 @@ export const renderVideo = async (videoData, onProgress = () => {}, options = {}
   // Use Canvas + MediaRecorder (most reliable)
   try {
     // Phase 1: Render WebM (0-70%)
-    const webmProgress = (p) => onProgress(Math.round(p * 0.7));
+    const webmProgress = (p) => onProgress(safeProgress(p * 0.7));
     const webmBlob = await renderWithCanvas(videoData, webmProgress);
 
     // Phase 2: Convert to MP4 if requested (70-100%)
     if (shouldConvert) {
-      onProgress(70);
+      onProgress(safeProgress(70));
       console.log('[VideoExport] Converting to MP4 for TikTok compatibility...');
 
       try {
-        const mp4Progress = (p) => onProgress(70 + Math.round(p * 0.3));
+        const mp4Progress = (p) => onProgress(safeProgress(70 + p * 0.3));
         const mp4Blob = await convertToMP4(webmBlob, mp4Progress);
-        onProgress(100);
+        onProgress(safeProgress(100));
         return mp4Blob;
       } catch (conversionError) {
         console.warn('[VideoExport] MP4 conversion failed, returning WebM:', conversionError);
         // Fall back to WebM if conversion fails
-        onProgress(100);
+        onProgress(safeProgress(100));
         return webmBlob;
       }
     }
 
-    onProgress(100);
+    onProgress(safeProgress(100));
     return webmBlob;
   } catch (canvasError) {
     console.error('[VideoExport] Canvas render failed:', canvasError);
