@@ -109,6 +109,8 @@ const VideoEditorModal = ({
   const animationRef = useRef(null);
   const previousTrimHashRef = useRef(null);
   const isPlayingRef = useRef(false); // Ref to avoid stale closure in animation loop
+  const videoCache = useRef(new Map()); // Cache for preloaded video blobs
+  const preloadQueue = useRef([]); // Queue for videos being preloaded
   // Track if we're still in initial load phase (loading existing video with words)
   // This prevents clearing words due to minor duration changes when audio loads
   const initialLoadPhaseRef = useRef(existingVideo?.words?.length > 0);
@@ -381,6 +383,44 @@ const VideoEditorModal = ({
       }
     }
   }, [currentClip?.url, currentClip?.id, currentClip?.localUrl, getClipUrl, isPlaying]);
+
+  // Preload upcoming clips for smoother playback
+  useEffect(() => {
+    if (!clips.length) return;
+
+    // Find current clip index
+    const currentIndex = clips.findIndex(c => c.id === currentClip?.id);
+    if (currentIndex === -1) return;
+
+    // Preload next 3 clips
+    const clipsToPreload = clips.slice(currentIndex + 1, currentIndex + 4);
+
+    clipsToPreload.forEach(clip => {
+      const url = getClipUrl(clip);
+      if (!url || videoCache.current.has(url) || preloadQueue.current.includes(url)) return;
+
+      preloadQueue.current.push(url);
+
+      // Create a hidden video element to preload
+      const preloadVideo = document.createElement('video');
+      preloadVideo.preload = 'auto';
+      preloadVideo.muted = true;
+      preloadVideo.crossOrigin = 'anonymous';
+      preloadVideo.src = url;
+
+      preloadVideo.oncanplaythrough = () => {
+        videoCache.current.set(url, true);
+        preloadQueue.current = preloadQueue.current.filter(u => u !== url);
+      };
+
+      preloadVideo.onerror = () => {
+        preloadQueue.current = preloadQueue.current.filter(u => u !== url);
+      };
+
+      // Start loading
+      preloadVideo.load();
+    });
+  }, [clips, currentClip?.id, getClipUrl]);
 
   const handleToggleMute = useCallback(() => {
     setIsMuted(prev => {
@@ -1229,6 +1269,7 @@ const VideoEditorModal = ({
                       muted
                       loop
                       playsInline
+                      preload="auto"
                       autoPlay={isPlaying}
                       crossOrigin="anonymous"
                       onLoadStart={() => { setVideoLoading(true); setVideoError(null); }}
@@ -1739,7 +1780,11 @@ const VideoEditorModal = ({
                             }]);
                           }}
                         >
-                          <video src={video.url} style={styles.availableClipThumb} muted />
+                          {video.thumbnail ? (
+                            <img src={video.thumbnail} alt="" style={styles.availableClipThumb} draggable={false} loading="lazy" />
+                          ) : (
+                            <video src={video.url} style={styles.availableClipThumb} muted preload="metadata" />
+                          )}
                           <span style={styles.availableClipName}>{video.name?.slice(0, 15) || `Clip ${i+1}`}</span>
                         </div>
                       ))
@@ -1817,7 +1862,7 @@ const VideoEditorModal = ({
                             {clip.thumbnail ? (
                               <img src={clip.thumbnail} alt="" style={styles.clipThumb} draggable={false} />
                             ) : (
-                              <video src={getClipUrl(clip)} style={styles.clipThumb} muted />
+                              <video src={getClipUrl(clip)} style={styles.clipThumb} muted preload="metadata" />
                             )}
                             <span style={styles.clipDuration}>
                               {clip.duration?.toFixed(1)}s

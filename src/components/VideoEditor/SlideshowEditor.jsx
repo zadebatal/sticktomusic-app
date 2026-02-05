@@ -54,6 +54,29 @@ const SlideshowEditor = ({
   // Audio picker dropdown state
   const [showAudioPicker, setShowAudioPicker] = useState(false);
 
+  // Text style templates state (persisted in localStorage)
+  const [textTemplates, setTextTemplates] = useState(() => {
+    try {
+      const saved = localStorage.getItem('slideshowTextTemplates');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Selected default template for new text overlays
+  const [selectedDefaultTemplate, setSelectedDefaultTemplate] = useState(null);
+
+  // Save templates to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem('slideshowTextTemplates', JSON.stringify(textTemplates));
+  }, [textTemplates]);
+
+  // Save a new template
+  const handleSaveTemplate = useCallback((template) => {
+    setTextTemplates(prev => [...prev, template]);
+  }, []);
+
   // Audio upload ref for slideshow
   const slideshowAudioInputRef = useRef(null);
 
@@ -341,20 +364,28 @@ const SlideshowEditor = ({
     }
   }, [setSlideBackground]);
 
+  // Default text style (can be overridden by selected template)
+  const getDefaultTextStyle = useCallback(() => {
+    if (selectedDefaultTemplate) {
+      return { ...selectedDefaultTemplate.style };
+    }
+    return {
+      fontSize: 48,
+      fontFamily: "'Inter', sans-serif",
+      fontWeight: '600',
+      color: '#ffffff',
+      textAlign: 'center',
+      outline: true,
+      outlineColor: 'rgba(0,0,0,0.5)'
+    };
+  }, [selectedDefaultTemplate]);
+
   // Add text overlay to current slide
   const addTextOverlay = useCallback(() => {
     const newOverlay = {
       id: `text_${Date.now()}`,
       text: 'Click to edit',
-      style: {
-        fontSize: 48,
-        fontFamily: "'Inter', sans-serif",
-        fontWeight: '600',
-        color: '#ffffff',
-        textAlign: 'center',
-        outline: true,
-        outlineColor: 'rgba(0,0,0,0.5)'
-      },
+      style: getDefaultTextStyle(),
       position: {
         x: 50, // Center horizontally (%)
         y: 50, // Center vertically (%)
@@ -370,7 +401,7 @@ const SlideshowEditor = ({
     ));
 
     setEditingTextId(newOverlay.id);
-  }, [selectedSlideIndex]);
+  }, [selectedSlideIndex, getDefaultTextStyle]);
 
   // Update text overlay
   const updateTextOverlay = useCallback((overlayId, updates) => {
@@ -653,6 +684,28 @@ const SlideshowEditor = ({
                 4:3
               </button>
             </div>
+
+            {/* Default Template Selector */}
+            {textTemplates.length > 0 && (
+              <div style={styles.templateSelector}>
+                <label style={styles.templateLabel}>Text Style:</label>
+                <select
+                  value={selectedDefaultTemplate?.id || ''}
+                  onChange={(e) => {
+                    const template = textTemplates.find(t => t.id === e.target.value);
+                    setSelectedDefaultTemplate(template || null);
+                  }}
+                  style={styles.templateSelect}
+                >
+                  <option value="">Default</option>
+                  {textTemplates.map(template => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           <div style={styles.headerRight}>
@@ -746,15 +799,7 @@ const SlideshowEditor = ({
                     const newOverlay = {
                       id: `text_${Date.now()}`,
                       text: text,
-                      style: {
-                        fontSize: 48,
-                        fontFamily: "'Inter', sans-serif",
-                        fontWeight: '600',
-                        color: '#ffffff',
-                        textAlign: 'center',
-                        outline: true,
-                        outlineColor: 'rgba(0,0,0,0.5)'
-                      },
+                      style: getDefaultTextStyle(),
                       position: {
                         x: 50,
                         y: 50,
@@ -1152,20 +1197,13 @@ const SlideshowEditor = ({
                 slide={currentSlide}
                 editingTextId={editingTextId}
                 lyrics={lyrics}
+                templates={textTemplates}
                 onSelectText={(text) => {
-                  // Add selected lyrics as text overlay
+                  // Add selected lyrics as text overlay using template style if set
                   const newOverlay = {
                     id: `text_${Date.now()}`,
                     text: text,
-                    style: {
-                      fontSize: 36,
-                      fontFamily: "'Inter', sans-serif",
-                      fontWeight: '600',
-                      color: '#ffffff',
-                      textAlign: 'center',
-                      outline: true,
-                      outlineColor: 'rgba(0,0,0,0.5)'
-                    },
+                    style: getDefaultTextStyle(),
                     position: { x: 50, y: 50, width: 80, height: 20 }
                   };
                   setSlides(prev => prev.map((slide, i) =>
@@ -1181,6 +1219,8 @@ const SlideshowEditor = ({
                 onSelectOverlay={(overlayId) => setEditingTextId(overlayId)}
                 onUpdateOverlay={(overlayId, updates) => updateTextOverlay(overlayId, updates)}
                 onRemoveOverlay={(overlayId) => removeTextOverlay(overlayId)}
+                onAddLyrics={onAddLyrics}
+                onSaveTemplate={handleSaveTemplate}
                 onClose={() => {
                   setShowTextEditorPanel(false);
                   setEditingTextId(null);
@@ -1406,25 +1446,64 @@ const SlideshowEditor = ({
           />
         )}
 
-        {/* Save to Lyric Bank Prompt */}
+        {/* Save to Lyric Bank Prompt - Premium Card Design */}
         {showSaveToBankPrompt && transcribedLyrics && (
           <div style={styles.saveToBankOverlay}>
             <div style={styles.saveToBankModal}>
-              <div style={styles.saveToBankHeader}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2">
-                  <path d="M9 12l2 2 4-4"/>
-                  <circle cx="12" cy="12" r="10"/>
+              {/* Close button */}
+              <button
+                style={styles.saveToBankCloseBtn}
+                onClick={() => {
+                  setShowSaveToBankPrompt(false);
+                  setTranscribedLyrics(null);
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
-                <h3 style={styles.saveToBankTitle}>Lyrics Transcribed!</h3>
-              </div>
-              <p style={styles.saveToBankText}>
-                Would you like to save these lyrics to your Lyric Bank for future use?
-              </p>
-              <div style={styles.saveToBankPreview}>
-                <div style={styles.saveToBankPreviewText}>
-                  {transcribedLyrics.slice(0, 150)}{transcribedLyrics.length > 150 ? '...' : ''}
+              </button>
+
+              {/* Success Icon with Glow */}
+              <div style={styles.saveToBankIconWrapper}>
+                <div style={styles.saveToBankIconGlow} />
+                <div style={styles.saveToBankIcon}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
+                    <path d="M9 12l2 2 4-4"/>
+                    <circle cx="12" cy="12" r="10"/>
+                  </svg>
                 </div>
               </div>
+
+              {/* Title & Subtitle */}
+              <h3 style={styles.saveToBankTitle}>Lyrics Ready!</h3>
+              <p style={styles.saveToBankSubtitle}>
+                We've transcribed your audio. Save to your Lyric Bank for easy access.
+              </p>
+
+              {/* Lyrics Preview Card */}
+              <div style={styles.saveToBankPreviewCard}>
+                <div style={styles.saveToBankPreviewHeader}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                    <path d="M14 2v6h6"/>
+                  </svg>
+                  <span style={styles.saveToBankPreviewLabel}>Preview</span>
+                </div>
+                <div style={styles.saveToBankPreviewContent}>
+                  {transcribedLyrics.split('\n').slice(0, 4).map((line, i) => (
+                    <div key={i} style={styles.saveToBankLyricLine}>
+                      {line || '\u00A0'}
+                    </div>
+                  ))}
+                  {transcribedLyrics.split('\n').length > 4 && (
+                    <div style={styles.saveToBankMoreLines}>
+                      +{transcribedLyrics.split('\n').length - 4} more lines
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
               <div style={styles.saveToBankActions}>
                 <button
                   style={styles.saveToBankSkipBtn}
@@ -1433,18 +1512,16 @@ const SlideshowEditor = ({
                     setTranscribedLyrics(null);
                   }}
                 >
-                  Skip
+                  Not Now
                 </button>
                 <button
                   style={styles.saveToBankSaveBtn}
                   onClick={handleSaveToLyricBank}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
-                    <polyline points="17,21 17,13 7,13 7,21"/>
-                    <polyline points="7,3 7,8 15,8"/>
+                    <path d="M12 5v14M5 12h14"/>
                   </svg>
-                  Save to Lyric Bank
+                  Save to Bank
                 </button>
               </div>
             </div>
@@ -1493,14 +1570,18 @@ const TextEditorPanel = ({
   slide,
   editingTextId,
   lyrics = [],
+  templates = [],
   onSelectText,
   onAddTextOverlay,
   onSelectOverlay,
   onUpdateOverlay,
   onRemoveOverlay,
+  onAddLyrics,
+  onSaveTemplate,
   onClose
 }) => {
   const [showLyricPicker, setShowLyricPicker] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const textOverlays = slide?.textOverlays || [];
   const selectedOverlay = textOverlays.find(o => o.id === editingTextId);
 
@@ -1655,6 +1736,91 @@ const TextEditorPanel = ({
               style={textPanelStyles.colorPicker}
             />
           </div>
+
+          {/* Template Actions */}
+          <div style={textPanelStyles.templateActions}>
+            {/* Save as Template */}
+            <button
+              style={textPanelStyles.saveTemplateBtn}
+              onClick={() => {
+                const name = prompt('Enter template name:');
+                if (name?.trim() && onSaveTemplate) {
+                  onSaveTemplate({
+                    id: `template_${Date.now()}`,
+                    name: name.trim(),
+                    style: { ...selectedOverlay.style }
+                  });
+                }
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
+                <polyline points="17,21 17,13 7,13 7,21"/>
+                <polyline points="7,3 7,8 15,8"/>
+              </svg>
+              Save as Template
+            </button>
+
+            {/* Apply Template dropdown */}
+            {templates.length > 0 && (
+              <div style={{ position: 'relative' }}>
+                <button
+                  style={textPanelStyles.applyTemplateBtn}
+                  onClick={() => setShowTemplatePicker(!showTemplatePicker)}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <line x1="3" y1="9" x2="21" y2="9"/>
+                    <line x1="9" y1="21" x2="9" y2="9"/>
+                  </svg>
+                  Apply Template
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: '4px' }}>
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </button>
+                {showTemplatePicker && (
+                  <div style={textPanelStyles.templateDropdown}>
+                    {templates.map(template => (
+                      <button
+                        key={template.id}
+                        style={textPanelStyles.templateItem}
+                        onClick={() => {
+                          onUpdateOverlay(selectedOverlay.id, { style: { ...template.style } });
+                          setShowTemplatePicker(false);
+                        }}
+                      >
+                        {template.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Save to Lyric Bank */}
+          {onAddLyrics && selectedOverlay.text.trim() && (
+            <button
+              style={textPanelStyles.saveToLyricBankBtn}
+              onClick={() => {
+                onAddLyrics({
+                  id: `lyric_${Date.now()}`,
+                  title: selectedOverlay.text.split('\n')[0].slice(0, 30) || 'Saved Lyrics',
+                  content: selectedOverlay.text.trim(),
+                  createdAt: new Date().toISOString()
+                });
+                alert('Saved to Lyric Bank!');
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <path d="M14 2v6h6"/>
+                <line x1="12" y1="11" x2="12" y2="17"/>
+                <line x1="9" y1="14" x2="15" y2="14"/>
+              </svg>
+              Save to Lyric Bank
+            </button>
+          )}
         </div>
       )}
 
@@ -1773,6 +1939,32 @@ const styles = {
   aspectButtonActive: {
     backgroundColor: '#6366f1',
     color: '#fff'
+  },
+  templateSelector: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    padding: '6px 12px',
+    borderRadius: '8px',
+    border: '1px solid rgba(255,255,255,0.1)'
+  },
+  templateLabel: {
+    color: '#9ca3af',
+    fontSize: '13px',
+    fontWeight: '500',
+    whiteSpace: 'nowrap'
+  },
+  templateSelect: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    color: '#fff',
+    border: '1px solid rgba(255,255,255,0.15)',
+    borderRadius: '6px',
+    padding: '6px 10px',
+    fontSize: '13px',
+    cursor: 'pointer',
+    outline: 'none',
+    minWidth: '120px'
   },
   saveButton: {
     padding: '10px 24px',
@@ -2803,55 +2995,191 @@ const textPanelStyles = {
     cursor: 'pointer',
     fontSize: '12px'
   },
-  // Save to Lyric Bank prompt styles
+  templateActions: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '12px',
+    flexWrap: 'wrap'
+  },
+  saveTemplateBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '8px 12px',
+    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+    border: '1px solid rgba(34, 197, 94, 0.3)',
+    borderRadius: '6px',
+    color: '#6ee7b7',
+    cursor: 'pointer',
+    fontSize: '12px'
+  },
+  applyTemplateBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '8px 12px',
+    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+    border: '1px solid rgba(99, 102, 241, 0.3)',
+    borderRadius: '6px',
+    color: '#a5b4fc',
+    cursor: 'pointer',
+    fontSize: '12px'
+  },
+  templateDropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: '4px',
+    backgroundColor: '#1f1f2e',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '8px',
+    overflow: 'hidden',
+    zIndex: 10
+  },
+  templateItem: {
+    width: '100%',
+    padding: '10px 12px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: '#e4e4e7',
+    fontSize: '13px',
+    textAlign: 'left',
+    cursor: 'pointer'
+  },
+  saveToLyricBankBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    width: '100%',
+    padding: '10px 12px',
+    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+    border: '1px solid rgba(139, 92, 246, 0.3)',
+    borderRadius: '8px',
+    color: '#c4b5fd',
+    cursor: 'pointer',
+    fontSize: '13px',
+    marginTop: '8px'
+  },
+  // Save to Lyric Bank prompt styles - Premium Design
   saveToBankOverlay: {
     position: 'fixed',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    backdropFilter: 'blur(8px)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1000
+    zIndex: 10001,
+    animation: 'fadeIn 0.2s ease-out'
   },
   saveToBankModal: {
+    position: 'relative',
     backgroundColor: '#1a1a2e',
-    borderRadius: '16px',
-    padding: '24px',
-    maxWidth: '420px',
+    borderRadius: '20px',
+    padding: '32px',
+    maxWidth: '400px',
     width: '90%',
-    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+    boxShadow: '0 25px 60px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255,255,255,0.1)',
+    textAlign: 'center',
+    animation: 'slideUp 0.3s ease-out'
   },
-  saveToBankHeader: {
+  saveToBankCloseBtn: {
+    position: 'absolute',
+    top: '16px',
+    right: '16px',
+    background: 'rgba(255,255,255,0.1)',
+    border: 'none',
+    borderRadius: '8px',
+    padding: '8px',
+    cursor: 'pointer',
+    color: '#6b7280',
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
-    marginBottom: '16px'
+    justifyContent: 'center',
+    transition: 'all 0.2s'
+  },
+  saveToBankIconWrapper: {
+    position: 'relative',
+    display: 'inline-flex',
+    marginBottom: '20px'
+  },
+  saveToBankIconGlow: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    width: '80px',
+    height: '80px',
+    borderRadius: '50%',
+    background: 'radial-gradient(circle, rgba(16, 185, 129, 0.3) 0%, transparent 70%)',
+    animation: 'pulse 2s ease-in-out infinite'
+  },
+  saveToBankIcon: {
+    position: 'relative',
+    width: '64px',
+    height: '64px',
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%)',
+    border: '2px solid rgba(16, 185, 129, 0.3)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   saveToBankTitle: {
-    margin: 0,
-    fontSize: '18px',
-    fontWeight: '600',
-    color: '#fff'
+    margin: '0 0 8px 0',
+    fontSize: '22px',
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: '-0.02em'
   },
-  saveToBankText: {
+  saveToBankSubtitle: {
     color: '#9ca3af',
     fontSize: '14px',
     lineHeight: '1.5',
-    marginBottom: '16px'
+    marginBottom: '24px',
+    padding: '0 12px'
   },
-  saveToBankPreview: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: '8px',
-    padding: '12px',
-    marginBottom: '20px'
+  saveToBankPreviewCard: {
+    backgroundColor: 'rgba(139, 92, 246, 0.08)',
+    border: '1px solid rgba(139, 92, 246, 0.2)',
+    borderRadius: '12px',
+    padding: '16px',
+    marginBottom: '24px',
+    textAlign: 'left'
   },
-  saveToBankPreviewText: {
+  saveToBankPreviewHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '12px',
+    paddingBottom: '12px',
+    borderBottom: '1px solid rgba(255,255,255,0.08)'
+  },
+  saveToBankPreviewLabel: {
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#8b5cf6',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em'
+  },
+  saveToBankPreviewContent: {
+    maxHeight: '120px',
+    overflow: 'hidden'
+  },
+  saveToBankLyricLine: {
     color: '#e4e4e7',
     fontSize: '13px',
-    lineHeight: '1.5',
+    lineHeight: '1.8',
+    fontFamily: "'Inter', sans-serif"
+  },
+  saveToBankMoreLines: {
+    marginTop: '8px',
+    fontSize: '12px',
+    color: '#6b7280',
     fontStyle: 'italic'
   },
   saveToBankActions: {
@@ -2860,27 +3188,29 @@ const textPanelStyles = {
   },
   saveToBankSkipBtn: {
     flex: 1,
-    padding: '12px',
+    padding: '14px 20px',
     backgroundColor: 'transparent',
-    border: '1px solid rgba(255, 255, 255, 0.2)',
-    borderRadius: '8px',
+    border: '1px solid rgba(255, 255, 255, 0.15)',
+    borderRadius: '10px',
     color: '#9ca3af',
     fontSize: '14px',
+    fontWeight: '500',
     cursor: 'pointer',
     transition: 'all 0.2s'
   },
   saveToBankSaveBtn: {
-    flex: 1,
+    flex: 1.2,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     gap: '8px',
-    padding: '12px',
-    backgroundColor: '#8b5cf6',
+    padding: '14px 20px',
+    background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
     border: 'none',
-    borderRadius: '8px',
+    borderRadius: '10px',
     color: '#fff',
     fontSize: '14px',
+    fontWeight: '600',
     fontWeight: '500',
     cursor: 'pointer',
     transition: 'all 0.2s'
