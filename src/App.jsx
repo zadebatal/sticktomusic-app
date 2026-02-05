@@ -107,14 +107,27 @@ const LATE_ACCOUNT_IDS = {
   '@neonphoebe': { tiktok: '697b43be77637c5c857cc41c', instagram: '697b442777637c5c857cc447' }
 };
 
-// Late API Functions - now using secure serverless proxy
+// Helper to get Firebase auth token for API requests
+async function getFirebaseToken() {
+  const auth = getAuth();
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error('Not authenticated');
+  }
+  return user.getIdToken();
+}
+
+// Late API Functions - now using secure serverless proxy with Firebase auth
 const lateApi = {
   async fetchAccounts(artistId = null) {
     try {
+      const token = await getFirebaseToken();
       const url = artistId
         ? `${LATE_API_PROXY}?action=accounts&artistId=${artistId}`
         : `${LATE_API_PROXY}?action=accounts`;
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (!response.ok) throw new Error(`Failed: ${response.status}`);
       const data = await response.json();
       // Handle different response formats
@@ -128,6 +141,7 @@ const lateApi = {
 
   async schedulePost({ platforms, caption, videoUrl, scheduledFor, artistId = null }) {
     try {
+      const token = await getFirebaseToken();
       // Validate required fields
       if (!platforms || !Array.isArray(platforms) || platforms.length === 0) {
         throw new Error('No platforms selected for posting. Please select TikTok or Instagram.');
@@ -161,7 +175,10 @@ const lateApi = {
         : LATE_API_PROXY;
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(payload)
       });
       if (!response.ok) {
@@ -177,6 +194,7 @@ const lateApi = {
 
   async fetchScheduledPosts(page = 1, artistId = null) {
     try {
+      const token = await getFirebaseToken();
       // Fetch all pages of posts
       let allPosts = [];
       let currentPage = page;
@@ -186,7 +204,9 @@ const lateApi = {
         const url = artistId
           ? `${LATE_API_PROXY}?action=posts&page=${currentPage}&artistId=${artistId}`
           : `${LATE_API_PROXY}?action=posts&page=${currentPage}`;
-        const response = await fetch(url);
+        const response = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
         if (!response.ok) throw new Error(`Failed: ${response.status}`);
         const data = await response.json();
         const posts = data.posts || data || [];
@@ -213,11 +233,13 @@ const lateApi = {
 
   async deletePost(postId, artistId = null) {
     try {
+      const token = await getFirebaseToken();
       const url = artistId
         ? `${LATE_API_PROXY}?action=delete&postId=${postId}&artistId=${artistId}`
         : `${LATE_API_PROXY}?action=delete&postId=${postId}`;
       const response = await fetch(url, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
