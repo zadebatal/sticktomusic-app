@@ -1213,6 +1213,7 @@ const StickToMusic = () => {
         email: email,
         role: role,
         name: userCredential.user.displayName || artistInfo?.name || email.split('@')[0],
+        photoURL: userCredential.user.photoURL || null,
         artistId: artistInfo?.artistId || null
       });
       setShowLoginModal(false);
@@ -1264,6 +1265,7 @@ const StickToMusic = () => {
         email: email,
         role: role,
         name: result.user.displayName || email.split('@')[0],
+        photoURL: result.user.photoURL || null,
         artistId: artistInfo?.artistId || null
       });
       setShowLoginModal(false);
@@ -1313,6 +1315,7 @@ const StickToMusic = () => {
         email: email,
         role: role,
         name: artistInfo?.name || signupForm.name,
+        photoURL: userCredential.user.photoURL || null,
         artistId: artistInfo?.artistId || null
       });
       setShowSignupModal(false);
