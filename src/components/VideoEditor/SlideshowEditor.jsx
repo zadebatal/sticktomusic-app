@@ -446,6 +446,21 @@ const SlideshowEditor = ({
   const [transcribedLyrics, setTranscribedLyrics] = useState(null);
   const [showSaveToBankPrompt, setShowSaveToBankPrompt] = useState(false);
 
+  // State for lyric bank picker dropdown
+  const [showLyricBankPicker, setShowLyricBankPicker] = useState(false);
+
+  // Close lyric bank picker when clicking outside
+  useEffect(() => {
+    if (!showLyricBankPicker) return;
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('[data-lyric-bank-picker]')) {
+        setShowLyricBankPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showLyricBankPicker]);
+
   // Handle AI transcription completion - add lyrics to slide and offer to save to bank
   const handleTranscriptionComplete = useCallback((result) => {
     if (result?.text) {
@@ -1164,29 +1179,106 @@ const SlideshowEditor = ({
                   </button>
                 )}
 
-                {/* Add to Lyric Bank Button */}
+                {/* Lyric Bank Button with Dropdown */}
                 {onAddLyrics && (
-                  <button
-                    style={styles.addToLyricBankButton}
-                    onClick={() => {
-                      const text = prompt('Enter lyrics to add to bank:');
-                      if (text?.trim()) {
-                        onAddLyrics({
-                          title: text.split('\n')[0].slice(0, 30) || 'New Lyrics',
-                          content: text.trim()
-                        });
-                      }
-                    }}
-                    title="Add lyrics to your bank"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-                      <path d="M14 2v6h6"/>
-                      <line x1="12" y1="11" x2="12" y2="17"/>
-                      <line x1="9" y1="14" x2="15" y2="14"/>
-                    </svg>
-                    + Lyric Bank
-                  </button>
+                  <div style={{ position: 'relative' }} data-lyric-bank-picker>
+                    <button
+                      style={styles.addToLyricBankButton}
+                      onClick={() => setShowLyricBankPicker(!showLyricBankPicker)}
+                      title="Add lyrics to your bank"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                        <path d="M14 2v6h6"/>
+                      </svg>
+                      + Lyric Bank
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: '4px', transform: showLyricBankPicker ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                        <polyline points="6 9 12 15 18 9"/>
+                      </svg>
+                    </button>
+
+                    {/* Lyric Bank Dropdown Picker */}
+                    {showLyricBankPicker && (
+                      <div style={styles.lyricBankDropdown}>
+                        <div style={styles.lyricBankDropdownHeader}>SELECT LYRICS</div>
+                        <div style={styles.lyricBankDropdownList}>
+                          {lyrics.length === 0 ? (
+                            <div style={styles.lyricBankDropdownEmpty}>
+                              No lyrics in bank yet
+                            </div>
+                          ) : (
+                            lyrics.map((lyric) => (
+                              <div
+                                key={lyric.id}
+                                style={styles.lyricBankDropdownItem}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Add lyric as text overlay to current slide
+                                  if (currentSlide) {
+                                    const newOverlay = {
+                                      id: `text_${Date.now()}`,
+                                      text: lyric.content,
+                                      style: getDefaultTextStyle(),
+                                      position: { x: 50, y: 50, width: 80, height: 20 }
+                                    };
+                                    setSlides(prev => prev.map((slide, i) =>
+                                      i === selectedSlideIndex
+                                        ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] }
+                                        : slide
+                                    ));
+                                    setEditingTextId(newOverlay.id);
+                                    setShowTextEditorPanel(true);
+                                  }
+                                  setShowLyricBankPicker(false);
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = 'rgba(139, 92, 246, 0.3)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = 'rgba(139, 92, 246, 0.1)';
+                                }}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, opacity: 0.6, pointerEvents: 'none' }}>
+                                  <path d="M9 18V5l12-2v13"/>
+                                  <circle cx="6" cy="18" r="3"/>
+                                  <circle cx="18" cy="16" r="3"/>
+                                </svg>
+                                <span style={{ pointerEvents: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {lyric.title || lyric.content?.slice(0, 30) || 'Untitled'}
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                        <div
+                          style={styles.lyricBankDropdownAddNew}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const text = prompt('Enter lyrics to add to bank:');
+                            if (text?.trim()) {
+                              onAddLyrics({
+                                title: text.split('\n')[0].slice(0, 30) || 'New Lyrics',
+                                content: text.trim()
+                              });
+                            }
+                            setShowLyricBankPicker(false);
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(16, 185, 129, 0.2)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'transparent';
+                          }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ pointerEvents: 'none' }}>
+                            <line x1="12" y1="5" x2="12" y2="19"/>
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                          </svg>
+                          <span style={{ pointerEvents: 'none' }}>Add New Lyrics</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -2294,6 +2386,63 @@ const styles = {
     color: '#c4b5fd',
     cursor: 'pointer',
     fontSize: '13px'
+  },
+  lyricBankDropdown: {
+    position: 'absolute',
+    bottom: '100%',
+    left: '0',
+    marginBottom: '8px',
+    minWidth: '220px',
+    maxHeight: '300px',
+    backgroundColor: 'rgba(30, 27, 46, 0.98)',
+    border: '1px solid rgba(139, 92, 246, 0.3)',
+    borderRadius: '12px',
+    boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.4)',
+    zIndex: 1000,
+    overflow: 'hidden'
+  },
+  lyricBankDropdownHeader: {
+    padding: '10px 14px',
+    fontSize: '11px',
+    fontWeight: '600',
+    color: 'rgba(196, 181, 253, 0.6)',
+    letterSpacing: '0.5px',
+    borderBottom: '1px solid rgba(139, 92, 246, 0.2)'
+  },
+  lyricBankDropdownList: {
+    maxHeight: '200px',
+    overflowY: 'auto'
+  },
+  lyricBankDropdownItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '10px 14px',
+    fontSize: '13px',
+    color: '#e9d5ff',
+    cursor: 'pointer',
+    background: 'rgba(139, 92, 246, 0.1)',
+    borderBottom: '1px solid rgba(139, 92, 246, 0.1)',
+    transition: 'background 0.15s'
+  },
+  lyricBankDropdownEmpty: {
+    padding: '16px 14px',
+    fontSize: '12px',
+    color: 'rgba(196, 181, 253, 0.5)',
+    textAlign: 'center',
+    fontStyle: 'italic'
+  },
+  lyricBankDropdownAddNew: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '12px 14px',
+    fontSize: '13px',
+    fontWeight: '500',
+    color: '#6ee7b7',
+    cursor: 'pointer',
+    borderTop: '1px solid rgba(139, 92, 246, 0.2)',
+    transition: 'background 0.15s'
   },
   aiTranscribeButton: {
     display: 'flex',
