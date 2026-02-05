@@ -1014,9 +1014,21 @@ const WordTimeline = ({
     modalRef.current?.focus();
   }, []);
 
+  // Direct spacebar handler on modal (more reliable than window listener)
+  const handleModalKeyDown = (e) => {
+    if (e.key === ' ' && !editingWordId && !deleteConfirm.show) {
+      const tagName = e.target?.tagName?.toLowerCase();
+      if (tagName !== 'input' && tagName !== 'textarea') {
+        e.preventDefault();
+        e.stopPropagation();
+        onPlayPause?.();
+      }
+    }
+  };
+
   return (
     <div style={styles.overlay}>
-      <div ref={modalRef} tabIndex={-1} style={{ ...styles.modal, outline: 'none' }}>
+      <div ref={modalRef} tabIndex={-1} style={{ ...styles.modal, outline: 'none' }} onKeyDown={handleModalKeyDown}>
         <div style={styles.header}>
           <h2 style={styles.title}>Word timeline</h2>
           <button style={styles.closeButton} onClick={onClose}>
