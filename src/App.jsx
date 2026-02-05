@@ -37,6 +37,20 @@ import {
 // Late Service - for per-artist Late connection status
 import { getArtistLateKeyStatus, setArtistLateKey } from './services/lateService';
 
+// Content Template Service - reusable caption/hashtag templates
+import {
+  subscribeToTemplates,
+  saveCategory,
+  deleteCategory,
+  resetToDefaults,
+  generateFromTemplate,
+  getCategoryNames,
+  DEFAULT_TEMPLATES
+} from './services/contentTemplateService';
+
+// Firebase Storage for video uploads
+import { uploadFile } from './services/firebaseStorage';
+
 // Firebase imports
 import { initializeApp, getApps } from 'firebase/app';
 import {
@@ -97,6 +111,75 @@ const CONDUCTOR_EMAILS = (process.env.REACT_APP_CONDUCTOR_EMAILS || process.env.
 // Late API Configuration - API key is now stored securely in Vercel environment variables
 // The /api/late serverless function proxies requests with the key
 const LATE_API_PROXY = '/api/late';
+
+// Centralized Platform Configuration - supports TikTok, Instagram, Facebook, YouTube
+// Add new platforms here and they'll work across the entire app
+const PLATFORMS = {
+  tiktok: {
+    key: 'tiktok',
+    label: 'TT',
+    fullName: 'TikTok',
+    bgColor: 'bg-pink-500/20',
+    textColor: 'text-pink-400',
+    hoverBg: 'hover:bg-pink-500/30',
+    icon: '♪',
+    urlPattern: (username) => `https://www.tiktok.com/@${username}`,
+    weight: 1.0  // For analytics attribution
+  },
+  instagram: {
+    key: 'instagram',
+    label: 'IG',
+    fullName: 'Instagram',
+    bgColor: 'bg-purple-500/20',
+    textColor: 'text-purple-400',
+    hoverBg: 'hover:bg-purple-500/30',
+    icon: '◐',
+    urlPattern: (username) => `https://www.instagram.com/${username}`,
+    weight: 0.85
+  },
+  facebook: {
+    key: 'facebook',
+    label: 'FB',
+    fullName: 'Facebook',
+    bgColor: 'bg-blue-500/20',
+    textColor: 'text-blue-400',
+    hoverBg: 'hover:bg-blue-500/30',
+    icon: 'f',
+    urlPattern: (username) => `https://www.facebook.com/${username}`,
+    weight: 0.7
+  },
+  youtube: {
+    key: 'youtube',
+    label: 'YT',
+    fullName: 'YouTube',
+    bgColor: 'bg-red-500/20',
+    textColor: 'text-red-400',
+    hoverBg: 'hover:bg-red-500/30',
+    icon: '▶',
+    urlPattern: (username) => `https://www.youtube.com/@${username}`,
+    weight: 0.9
+  }
+};
+
+// Platform helper functions
+const getPlatformConfig = (platform) => {
+  // Normalize platform names (Late API might return 'tik_tok', 'TikTok', etc.)
+  const normalized = (platform || '').toLowerCase().replace('_', '').replace(' ', '');
+  const key = normalized === 'tiktok' ? 'tiktok'
+    : normalized === 'instagram' ? 'instagram'
+    : normalized === 'facebook' ? 'facebook'
+    : normalized === 'youtube' ? 'youtube'
+    : null;
+  return PLATFORMS[key] || PLATFORMS.tiktok; // Fallback to TikTok styling
+};
+
+const getPlatformUrl = (platform, username) => {
+  const config = getPlatformConfig(platform);
+  const cleanUsername = (username || '').replace('@', '');
+  return config.urlPattern(cleanUsername);
+};
+
+const getPlatformKeys = () => Object.keys(PLATFORMS);
 
 // Late Account ID Mapping (handle -> { tiktok: id, instagram: id })
 const LATE_ACCOUNT_IDS = {
@@ -528,6 +611,51 @@ const StickToMusic = () => {
       checkArtistLateStatus(currentArtistId);
     }
   }, [currentArtistId, authChecked, currentAuthUser]);
+
+  // Load Late pages (connected accounts) for all artists with Late configured
+  const loadLatePages = async () => {
+    if (!firestoreArtists.length || loadingLatePages) return;
+
+    setLoadingLatePages(true);
+    const allPages = [];
+
+    try {
+      for (const artist of firestoreArtists) {
+        // Check if this artist has Late configured
+        const status = await getArtistLateKeyStatus(artist.id);
+        if (!status.configured) continue;
+
+        // Fetch accounts from Late API
+        const result = await lateApi.fetchAccounts(artist.id);
+        if (result.success && result.accounts) {
+          // Transform Late accounts to page format
+          result.accounts.forEach((account, index) => {
+            const platform = (account.platform || account.type || '').toLowerCase();
+            allPages.push({
+              id: `${artist.id}-${account.id || index}`,
+              handle: account.username ? `@${account.username.replace('@', '')}` : (account.handle || account.name || 'Unknown'),
+              platform: platform === 'tik_tok' ? 'tiktok' : platform,
+              artist: artist.name,
+              artistId: artist.id,
+              niche: artist.niche || 'General',
+              followers: account.followers_count || account.followers || 0,
+              views: account.total_views || account.views || 0,
+              status: account.is_active !== false ? 'active' : 'inactive',
+              profileImage: account.profile_image || account.avatar,
+              lateAccountId: account.id || account.account_id
+            });
+          });
+        }
+      }
+
+      setLatePages(allPages);
+      console.log('📱 Loaded', allPages.length, 'Late pages from', firestoreArtists.length, 'artists');
+    } catch (error) {
+      console.error('Error loading Late pages:', error);
+    } finally {
+      setLoadingLatePages(false);
+    }
+  };
 
   // Handle adding a new artist
   const handleAddArtist = async (e) => {
@@ -1068,9 +1196,18 @@ const StickToMusic = () => {
   const [latePosts, setLatePosts] = useState([]);
   const [artistLateConnected, setArtistLateConnected] = useState(false); // Track if current artist has Late connected
   const [checkingLateStatus, setCheckingLateStatus] = useState(false);
+  const [latePages, setLatePages] = useState([]); // Connected accounts from Late API
+  const [loadingLatePages, setLoadingLatePages] = useState(false);
   const [showLateConnectModal, setShowLateConnectModal] = useState(false);
   const [lateApiKeyInput, setLateApiKeyInput] = useState('');
   const [connectingLate, setConnectingLate] = useState(false);
+
+  // Video Upload state
+  const [showVideoUploadModal, setShowVideoUploadModal] = useState(false);
+  const [uploadedVideos, setUploadedVideos] = useState([]); // { id, name, url, uploadedAt, artistId }
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
   const [contentView, setContentView] = useState('list'); // 'list' or 'calendar'
   const [deletingPostId, setDeletingPostId] = useState(null);
   const [lastSynced, setLastSynced] = useState(null);
@@ -1081,6 +1218,9 @@ const StickToMusic = () => {
   // UI-12/13: Day detail drawer state
   const [dayDetailDrawer, setDayDetailDrawer] = useState({ isOpen: false, date: null, posts: [] });
   const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  // Mobile menu state
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Settings state
   const [showSettings, setShowSettings] = useState(false);
@@ -1630,79 +1770,32 @@ const StickToMusic = () => {
     }
   ];
 
-  const worldPages = [
-    // Boon - 8 real accounts
-    { id: 1, handle: "@sarahs.ipodnano", platform: "tiktok", artist: "Boon", niche: "Fashion", followers: 42000, views: 890000, status: "active", postTime: "14:00" },
-    { id: 2, handle: "@sarahs.ipodnano", platform: "instagram", artist: "Boon", niche: "Fashion", followers: 38000, views: 340000, status: "active", postTime: "14:00" },
-    { id: 3, handle: "@margiela.mommy", platform: "tiktok", artist: "Boon", niche: "Fashion", followers: 67000, views: 1200000, status: "active", postTime: "15:00" },
-    { id: 4, handle: "@margiela.mommy", platform: "instagram", artist: "Boon", niche: "Fashion", followers: 53000, views: 980000, status: "active", postTime: "15:00" },
-    { id: 5, handle: "@yumabestfriend", platform: "tiktok", artist: "Boon", niche: "EDM", followers: 38000, views: 620000, status: "active", postTime: "16:00" },
-    { id: 6, handle: "@yumabestfriend", platform: "instagram", artist: "Boon", niche: "EDM", followers: 24000, views: 290000, status: "active", postTime: "16:00" },
-    { id: 7, handle: "@hedislimanerickowens", platform: "tiktok", artist: "Boon", niche: "Runway", followers: 71000, views: 1450000, status: "active", postTime: "17:00" },
-    { id: 8, handle: "@hedislimanerickowens", platform: "instagram", artist: "Boon", niche: "Runway", followers: 45000, views: 870000, status: "active", postTime: "17:00" },
-    { id: 9, handle: "@princessvamp2016", platform: "tiktok", artist: "Boon", niche: "Fashion", followers: 31000, views: 410000, status: "active", postTime: "18:00" },
-    { id: 10, handle: "@princessvamp2016", platform: "instagram", artist: "Boon", niche: "Fashion", followers: 28000, views: 380000, status: "active", postTime: "18:00" },
-    { id: 11, handle: "@2016iscalling", platform: "tiktok", artist: "Boon", niche: "Fashion", followers: 58000, views: 1100000, status: "active", postTime: "19:00" },
-    { id: 12, handle: "@2016iscalling", platform: "instagram", artist: "Boon", niche: "Fashion", followers: 44000, views: 720000, status: "active", postTime: "19:00" },
-    { id: 13, handle: "@xxshadowskiesxx", platform: "tiktok", artist: "Boon", niche: "EDM", followers: 89000, views: 2100000, status: "active", postTime: "20:00" },
-    { id: 14, handle: "@xxshadowskiesxx", platform: "instagram", artist: "Boon", niche: "EDM", followers: 62000, views: 1400000, status: "active", postTime: "20:00" },
-    { id: 15, handle: "@neonphoebe", platform: "tiktok", artist: "Boon", niche: "Fashion", followers: 112000, views: 3400000, status: "active", postTime: "21:00" },
-    { id: 16, handle: "@neonphoebe", platform: "instagram", artist: "Boon", niche: "Fashion", followers: 78000, views: 1800000, status: "active", postTime: "21:00" },
-  ];
+  // Note: Pages/accounts are now loaded dynamically from Late API via latePages state
+  // The hardcoded worldPages array has been removed in favor of real Late data
 
-  // Content Banks - hashtags and captions per aesthetic category
-  const [contentBanks, setContentBanks] = useState({
-    Fashion: {
-      hashtags: {
-        always: ['#fashion', '#style', '#aesthetic'],
-        pool: ['#ootd', '#archive', '#vibes', '#mood', '#runway', '#designer', '#vintage', '#y2k', '#grunge', '#minimalist', '#streetwear', '#haute']
-      },
-      captions: {
-        always: [],
-        pool: ['mood', 'vibe', 'forever', 'dreaming', '✨', 'archive', 'aesthetic', 'core', 'obsessed', 'iconic', 'serving', 'the blueprint']
-      }
-    },
-    EDM: {
-      hashtags: {
-        always: ['#edm', '#music', '#electronic'],
-        pool: ['#rave', '#bass', '#dubstep', '#house', '#techno', '#festival', '#dj', '#beats', '#wub', '#plur', '#underground']
-      },
-      captions: {
-        always: [],
-        pool: ['wub', 'wub wub', '<3', 'dancedancedance', 'bass drop', 'feel it', '🖤', 'lost in sound', 'the drop', 'vibrations']
-      }
-    },
-    Runway: {
-      hashtags: {
-        always: ['#runway', '#fashion', '#couture'],
-        pool: ['#highfashion', '#model', '#designer', '#fashionweek', '#avantgarde', '#editorial', '#vogue', '#luxury', '#catwalk', '#style']
-      },
-      captions: {
-        always: [],
-        pool: ['walk', 'serve', 'iconic', 'the moment', 'couture', 'editorial', 'pretty', 'elegance', 'grace', 'timeless']
-      }
-    },
-    'Romantic/Soft': {
-      hashtags: {
-        always: ['#aesthetic', '#dreamy', '#soft'],
-        pool: ['#romantic', '#ethereal', '#gentle', '#pastel', '#love', '#tender', '#serene', '#delicate', '#whimsical']
-      },
-      captions: {
-        always: [],
-        pool: ['dreaming', 'soft', 'gentle', '🤍', 'floating', 'whisper', 'tender', 'in bloom', 'softly', 'daydream']
-      }
-    },
-    'Ethereal/Dreamy': {
-      hashtags: {
-        always: ['#ethereal', '#dreamy', '#aesthetic'],
-        pool: ['#celestial', '#mystical', '#fairycore', '#angelic', '#heavenly', '#magical', '#otherworldly', '#fantasy']
-      },
-      captions: {
-        always: [],
-        pool: ['floating', 'celestial', 'otherworldly', '✧', 'dreamscape', 'beyond', 'transcend', 'ethereal', 'magic']
-      }
-    }
+  // Content Banks - hashtags and captions per aesthetic category (loaded from Firestore)
+  const [contentBanks, setContentBanks] = useState(DEFAULT_TEMPLATES);
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [templateForm, setTemplateForm] = useState({
+    name: '',
+    hashtagsAlways: '',
+    hashtagsPool: '',
+    captionsAlways: '',
+    captionsPool: ''
   });
+  const [savingTemplate, setSavingTemplate] = useState(false);
+
+  // Subscribe to templates when artist changes
+  useEffect(() => {
+    if (!currentArtistId || !db) return;
+
+    const unsubscribe = subscribeToTemplates(db, currentArtistId, (templates) => {
+      setContentBanks(templates);
+    });
+
+    return () => unsubscribe();
+  }, [currentArtistId]);
 
   // Helper function to generate hashtags and caption for a post
   const generatePostContent = (category, platform) => {
@@ -1904,79 +1997,76 @@ const StickToMusic = () => {
     return mediaItem?.thumbnail || mediaItem?.url || null;
   };
 
-  // Helper to get social media URLs for posts
+  // Helper to get social media URLs for posts (supports all platforms via PLATFORMS config)
   const getPostUrls = (post) => {
     const urls = [];
     const platforms = post.platforms || [];
 
     platforms.forEach(p => {
       const platform = p.platform || p;
+      const config = getPlatformConfig(platform);
       // Get username from accountId object (Late API returns accountId as object with username)
       const username = p.accountId?.username || p.accountId?.displayName;
 
-      // Priority 1: Direct post URL from Late (Instagram has this for published posts)
+      // Priority 1: Direct post URL from Late (platforms return this for published posts)
       if (p.platformPostUrl) {
         urls.push({
           platform,
           url: p.platformPostUrl,
-          label: platform === 'tiktok' ? 'TikTok' : 'IG',
+          label: config.fullName,
           isActualPost: true
         });
         return;
       }
 
-      // Priority 2: Construct URL from platformPostId + username
+      // Priority 2: Construct URL from platformPostId + username (platform-specific patterns)
       if (p.platformPostId && username && p.status === 'published') {
         if (platform === 'tiktok') {
           // Late returns TikTok IDs like "v_pub_url~v2-1.7602051149071468575"
-          // Extract the numeric video ID after the last dot or use as-is if numeric
           let videoId = p.platformPostId;
           if (videoId.includes('.')) {
             videoId = videoId.split('.').pop();
           }
-          // Only use if it looks like a valid TikTok video ID (numeric, 19 digits)
           if (/^\d{15,}$/.test(videoId)) {
-            urls.push({
-              platform: 'tiktok',
-              url: `https://www.tiktok.com/@${username}/video/${videoId}`,
-              label: 'TikTok',
-              isActualPost: true
-            });
+            urls.push({ platform: 'tiktok', url: `https://www.tiktok.com/@${username}/video/${videoId}`, label: 'TikTok', isActualPost: true });
             return;
           }
         } else if (platform === 'instagram') {
-          urls.push({
-            platform: 'instagram',
-            url: `https://www.instagram.com/reel/${p.platformPostId}/`,
-            label: 'IG',
-            isActualPost: true
-          });
+          urls.push({ platform: 'instagram', url: `https://www.instagram.com/reel/${p.platformPostId}/`, label: 'IG', isActualPost: true });
+          return;
+        } else if (platform === 'youtube') {
+          urls.push({ platform: 'youtube', url: `https://www.youtube.com/watch?v=${p.platformPostId}`, label: 'YT', isActualPost: true });
+          return;
+        } else if (platform === 'facebook') {
+          urls.push({ platform: 'facebook', url: `https://www.facebook.com/${username}/videos/${p.platformPostId}`, label: 'FB', isActualPost: true });
           return;
         }
       }
 
-      // Priority 3: Link to profile if we have username
+      // Priority 3: Link to profile if we have username (using centralized config)
       if (username) {
-        if (platform === 'tiktok') {
-          urls.push({ platform: 'tiktok', url: `https://tiktok.com/@${username}`, label: 'TT', isActualPost: false });
-        } else if (platform === 'instagram') {
-          urls.push({ platform: 'instagram', url: `https://instagram.com/${username}`, label: 'IG', isActualPost: false });
-        }
+        urls.push({
+          platform,
+          url: getPlatformUrl(platform, username),
+          label: config.label,
+          isActualPost: false
+        });
         return;
       }
 
-      // Priority 4: Fallback to our local account ID mapping
+      // Priority 4: Fallback to our local account ID mapping (legacy support)
       const accountIdStr = typeof p.accountId === 'string' ? p.accountId : p.accountId?._id;
       const handleEntry = Object.entries(LATE_ACCOUNT_IDS).find(([handle, ids]) =>
-        ids.tiktok === accountIdStr || ids.instagram === accountIdStr
+        Object.values(ids).includes(accountIdStr)
       );
       if (handleEntry) {
         const handle = handleEntry[0].replace('@', '');
-        if (platform === 'tiktok') {
-          urls.push({ platform: 'tiktok', url: `https://tiktok.com/@${handle}`, label: 'TT', isActualPost: false });
-        } else if (platform === 'instagram') {
-          urls.push({ platform: 'instagram', url: `https://instagram.com/${handle}`, label: 'IG', isActualPost: false });
-        }
+        urls.push({
+          platform,
+          url: getPlatformUrl(platform, handle),
+          label: config.label,
+          isActualPost: false
+        });
       }
     });
 
@@ -2254,9 +2344,6 @@ const StickToMusic = () => {
       </div>
     );
   };
-
-  // Mobile menu state
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Navigation
   const Nav = () => (
@@ -2867,14 +2954,14 @@ const StickToMusic = () => {
       <div className="min-h-screen bg-zinc-950 text-zinc-100">
         {/* Header */}
         <header className="border-b border-zinc-800 bg-zinc-950/95 backdrop-blur sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
             <div className="flex justify-between items-center">
-              <div className="flex items-center gap-6">
-                <button onClick={() => setCurrentPage(user ? (user.role === 'artist' ? 'artist-portal' : 'operator') : 'home')} className="text-xl font-bold hover:text-zinc-300 transition">StickToMusic</button>
-                <span className="text-zinc-600">|</span>
-                <span className="text-zinc-400">{isConductor(user) ? 'Conductor Dashboard' : 'Operator Dashboard'}</span>
+              <div className="flex items-center gap-3 sm:gap-6">
+                <button onClick={() => setCurrentPage(user ? (user.role === 'artist' ? 'artist-portal' : 'operator') : 'home')} className="text-lg sm:text-xl font-bold hover:text-zinc-300 transition">StickToMusic</button>
+                <span className="text-zinc-600 hidden sm:inline">|</span>
+                <span className="text-zinc-400 text-sm sm:text-base hidden sm:inline">{isConductor(user) ? 'Conductor Dashboard' : 'Operator Dashboard'}</span>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 sm:gap-4">
                 {/* Settings gear icon - only for conductors */}
                 {isConductor(user) && (
                   <button
@@ -2904,14 +2991,14 @@ const StickToMusic = () => {
           </div>
         </header>
 
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
-          {/* Tab Navigation */}
-          <div className="flex gap-2 mb-8 border-b border-zinc-800 pb-4 overflow-x-auto">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-8">
+          {/* Tab Navigation - scrollable on mobile */}
+          <div className="flex gap-1 sm:gap-2 mb-4 sm:mb-8 border-b border-zinc-800 pb-3 sm:pb-4 overflow-x-auto scrollbar-hide -mx-3 px-3 sm:mx-0 sm:px-0">
             {['artists', 'pages', 'content', 'campaigns', 'banks'].map(tab => (
               <button
                 key={tab}
-                onClick={() => setOperatorTab(tab)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
+                onClick={() => { setOperatorTab(tab); setMobileMenuOpen(false); }}
+                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition whitespace-nowrap ${
                   operatorTab === tab ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
                 }`}
               >
@@ -2921,14 +3008,14 @@ const StickToMusic = () => {
             {/* Studio - opens modal */}
             <button
               onClick={() => setShowVideoEditor(true)}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap text-zinc-400 hover:text-white hover:bg-zinc-900"
+              className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition whitespace-nowrap text-zinc-400 hover:text-white hover:bg-zinc-900"
             >
               Studio
             </button>
             {/* Analytics */}
             <button
-              onClick={() => setOperatorTab('analytics')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
+              onClick={() => { setOperatorTab('analytics'); setMobileMenuOpen(false); }}
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition whitespace-nowrap ${
                 operatorTab === 'analytics' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
               }`}
             >
@@ -2936,8 +3023,8 @@ const StickToMusic = () => {
             </button>
             {/* Applications tab - visible to all */}
             <button
-              onClick={() => setOperatorTab('applications')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
+              onClick={() => { setOperatorTab('applications'); setMobileMenuOpen(false); }}
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition whitespace-nowrap ${
                 operatorTab === 'applications' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
               }`}
             >
@@ -2997,47 +3084,47 @@ const StickToMusic = () => {
                 ) : displayArtists.map((artist) => (
                   <div
                     key={artist.id}
-                    className={`bg-zinc-900 border rounded-xl p-6 transition cursor-pointer hover:border-zinc-600 ${
+                    className={`bg-zinc-900 border rounded-xl p-4 sm:p-6 transition cursor-pointer hover:border-zinc-600 ${
                       currentArtistId === artist.id ? 'border-violet-500' : 'border-zinc-800'
                     }`}
                     onClick={() => handleArtistChange(artist.id)}
                   >
                     <div className="flex flex-col md:flex-row justify-between gap-4">
-                      <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold ${
+                      <div className="flex items-center gap-3 sm:gap-4">
+                        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-base sm:text-lg font-bold shrink-0 ${
                           currentArtistId === artist.id ? 'bg-violet-600 text-white' : 'bg-zinc-800'
                         }`}>
                           {artist.name[0]}
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-lg font-semibold">{artist.name}</h3>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-base sm:text-lg font-semibold">{artist.name}</h3>
                             {currentArtistId === artist.id && (
                               <span className="px-2 py-0.5 bg-violet-500/20 text-violet-400 text-xs rounded-full">Active</span>
                             )}
                           </div>
-                          <div className="flex gap-2 text-sm text-zinc-500">
+                          <div className="flex flex-wrap gap-x-2 gap-y-1 text-xs sm:text-sm text-zinc-500">
                             <span>{artist.tier}</span>
-                            {artist.cdTier && <><span>•</span><span>{artist.cdTier}</span></>}
+                            {artist.cdTier && <><span className="hidden sm:inline">•</span><span>{artist.cdTier}</span></>}
                             <span>•</span>
                             <span>Since {artist.activeSince}</span>
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-6">
-                        <div className="text-center">
-                          <p className="text-2xl font-bold">{artist.totalPages || 0}</p>
+                      <div className="flex items-center gap-4 sm:gap-6 overflow-x-auto pb-1 -mb-1">
+                        <div className="text-center shrink-0">
+                          <p className="text-xl sm:text-2xl font-bold">{artist.totalPages || 0}</p>
                           <p className="text-xs text-zinc-500">Pages</p>
                         </div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold">{formatNumber(artist.metrics?.views || 0)}</p>
+                        <div className="text-center shrink-0">
+                          <p className="text-xl sm:text-2xl font-bold">{formatNumber(artist.metrics?.views || 0)}</p>
                           <p className="text-xs text-zinc-500">Views</p>
                         </div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold">{artist.metrics?.rate || 0}%</p>
+                        <div className="text-center shrink-0">
+                          <p className="text-xl sm:text-2xl font-bold">{artist.metrics?.rate || 0}%</p>
                           <p className="text-xs text-zinc-500">Eng. Rate</p>
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-xs ${getStatusColor(artist.status)}`}>
+                        <span className={`px-2 sm:px-3 py-1 rounded-full text-xs shrink-0 ${getStatusColor(artist.status)}`}>
                           {artist.status}
                         </span>
                       </div>
@@ -3053,7 +3140,8 @@ const StickToMusic = () => {
             // Use Firestore artists if available, fallback to static list
             const artistsList = firestoreArtists.length > 0 ? firestoreArtists : operatorArtists;
 
-            const filteredPages = worldPages.filter(p =>
+            // Filter pages from Late API
+            const filteredPages = latePages.filter(p =>
               (selectedArtist === 'all' || p.artist === selectedArtist) &&
               (selectedPlatform === 'all' || p.platform === selectedPlatform)
             );
@@ -3062,18 +3150,42 @@ const StickToMusic = () => {
               selectedArtist === 'all' || a.name === selectedArtist
             );
 
+            // Auto-load pages on first visit
+            if (latePages.length === 0 && !loadingLatePages && firestoreArtists.length > 0) {
+              loadLatePages();
+            }
+
             return (
               <div>
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h1 className="text-2xl font-bold">Pages</h1>
-                    <p className="text-sm text-zinc-500">{filteredPages.length} connected page{filteredPages.length !== 1 ? 's' : ''}</p>
+                    <p className="text-sm text-zinc-500">
+                      {loadingLatePages ? 'Loading...' : `${filteredPages.length} connected page${filteredPages.length !== 1 ? 's' : ''}`}
+                    </p>
                   </div>
+                  <button
+                    onClick={loadLatePages}
+                    disabled={loadingLatePages}
+                    className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm transition disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {loadingLatePages ? (
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    )}
+                    Refresh from Late
+                  </button>
                 </div>
-                <div className="flex gap-4 mb-6">
+                <div className="flex flex-col sm:flex-row gap-4 mb-6">
                   <div>
                     <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Artist</label>
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 flex-wrap">
                       <button onClick={() => setSelectedArtist('all')} className={`px-3 py-1.5 rounded-lg text-sm transition ${selectedArtist === 'all' ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>All</button>
                       {artistsList.map(a => (
                         <button key={a.id} onClick={() => setSelectedArtist(a.name)} className={`px-3 py-1.5 rounded-lg text-sm transition ${selectedArtist === a.name ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>{a.name}</button>
@@ -3082,24 +3194,38 @@ const StickToMusic = () => {
                   </div>
                   <div>
                     <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Platform</label>
-                    <div className="flex gap-1">
-                      {['all', 'tiktok', 'instagram'].map(p => (
-                        <button key={p} onClick={() => setSelectedPlatform(p)} className={`px-3 py-1.5 rounded-lg text-sm transition ${selectedPlatform === p ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>{p === 'all' ? 'All' : p.charAt(0).toUpperCase() + p.slice(1)}</button>
-                      ))}
+                    <div className="flex gap-1 flex-wrap">
+                      <button onClick={() => setSelectedPlatform('all')} className={`px-3 py-1.5 rounded-lg text-sm transition ${selectedPlatform === 'all' ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>All</button>
+                      {getPlatformKeys().map(p => {
+                        const config = getPlatformConfig(p);
+                        return (
+                          <button key={p} onClick={() => setSelectedPlatform(p)} className={`px-3 py-1.5 rounded-lg text-sm transition ${selectedPlatform === p ? `${config.bgColor} ${config.textColor}` : 'text-zinc-500 hover:bg-zinc-800'}`}>
+                            {config.fullName}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
 
                 <div className="space-y-6">
-                  {filteredPages.length === 0 ? (
+                  {loadingLatePages ? (
+                    <div className="flex flex-col items-center justify-center py-16">
+                      <svg className="animate-spin h-8 w-8 text-purple-500 mb-4" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      <p className="text-zinc-500">Loading pages from Late...</p>
+                    </div>
+                  ) : filteredPages.length === 0 ? (
                     <SharedEmptyState
                       icon="📱"
                       title="No pages found"
                       description={selectedArtist !== 'all' || selectedPlatform !== 'all'
                         ? "No pages match your current filters. Try adjusting your selection."
-                        : "No social pages have been connected yet."}
-                      actionLabel={selectedArtist !== 'all' || selectedPlatform !== 'all' ? "Clear Filters" : null}
-                      onAction={selectedArtist !== 'all' || selectedPlatform !== 'all' ? () => { setSelectedArtist('all'); setSelectedPlatform('all'); } : null}
+                        : "No social pages connected via Late. Connect Late for each artist to see their pages here."}
+                      actionLabel={selectedArtist !== 'all' || selectedPlatform !== 'all' ? "Clear Filters" : "Refresh"}
+                      onAction={selectedArtist !== 'all' || selectedPlatform !== 'all' ? () => { setSelectedArtist('all'); setSelectedPlatform('all'); } : loadLatePages}
                     />
                   ) : artistsWithPages.map(artist => {
                     const artistPages = filteredPages.filter(p => p.artist === artist.name);
@@ -3120,35 +3246,45 @@ const StickToMusic = () => {
                     return (
                       <div key={artist.id}>
                         <h3 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">{artist.name}</h3>
-                        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-                          <table className="w-full">
+                        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-x-auto">
+                          <table className="w-full min-w-[600px]">
                             <thead>
                               <tr className="border-b border-zinc-800">
-                                <th className="text-left p-4 text-sm font-medium text-zinc-500">Handle</th>
-                                <th className="text-left p-4 text-sm font-medium text-zinc-500">Platforms</th>
-                                <th className="text-left p-4 text-sm font-medium text-zinc-500">Niche</th>
-                                <th className="text-left p-4 text-sm font-medium text-zinc-500">Followers</th>
-                                <th className="text-left p-4 text-sm font-medium text-zinc-500">Views</th>
-                                <th className="text-left p-4 text-sm font-medium text-zinc-500">Status</th>
+                                <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Handle</th>
+                                <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Platforms</th>
+                                <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Niche</th>
+                                <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Followers</th>
+                                <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Views</th>
+                                <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Status</th>
                               </tr>
                             </thead>
                             <tbody>
                               {uniquePages.map((page) => (
                                 <tr key={page.handle} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition">
-                                  <td className="p-4 font-mono text-sm">{page.handle}</td>
-                                  <td className="p-4">
-                                    <div className="flex gap-1">
-                                      {page.platforms.map(p => (
-                                        <span key={p} className={`px-2 py-0.5 rounded text-xs ${p === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
-                                          {p === 'tiktok' ? 'TT' : 'IG'}
-                                        </span>
-                                      ))}
+                                  <td className="p-3 sm:p-4 font-mono text-xs sm:text-sm">{page.handle}</td>
+                                  <td className="p-3 sm:p-4">
+                                    <div className="flex gap-1 flex-wrap">
+                                      {page.platforms.map(p => {
+                                        const config = getPlatformConfig(p);
+                                        const url = getPlatformUrl(p, page.handle);
+                                        return (
+                                          <a
+                                            key={p}
+                                            href={url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className={`px-2 py-0.5 rounded text-xs cursor-pointer transition ${config.bgColor} ${config.textColor} ${config.hoverBg}`}
+                                          >
+                                            {config.label}
+                                          </a>
+                                        );
+                                      })}
                                     </div>
                                   </td>
-                                  <td className="p-4 text-zinc-500 text-sm">{page.niche}</td>
-                                  <td className="p-4 text-zinc-300">{formatNumber(page.totalFollowers)}</td>
-                                  <td className="p-4 text-zinc-300">{formatNumber(page.totalViews)}</td>
-                                  <td className="p-4">
+                                  <td className="p-3 sm:p-4 text-zinc-500 text-xs sm:text-sm">{page.niche}</td>
+                                  <td className="p-3 sm:p-4 text-zinc-300 text-xs sm:text-sm">{formatNumber(page.totalFollowers)}</td>
+                                  <td className="p-3 sm:p-4 text-zinc-300 text-xs sm:text-sm">{formatNumber(page.totalViews)}</td>
+                                  <td className="p-3 sm:p-4">
                                     <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(page.status)}`}>{page.status}</span>
                                   </td>
                                 </tr>
@@ -3186,8 +3322,8 @@ const StickToMusic = () => {
 
             const todayPostsCount = contentQueue.filter(c => c.scheduledFor.startsWith('2026-01-31')).length / 2;
 
-            // Get unique accounts and categories for selected artist
-            const artistPages = worldPages.filter(p => p.artist === batchForm.artist);
+            // Get unique accounts and categories for selected artist (from Late API)
+            const artistPages = latePages.filter(p => p.artist === batchForm.artist);
             const uniqueAccounts = artistPages.reduce((acc, p) => {
               const existing = acc.find(a => a.handle === p.handle);
               if (!existing) {
@@ -3304,22 +3440,56 @@ const StickToMusic = () => {
                 const scheduledFor = `${post.date}T${post.time}:00`;
                 const fullCaption = `${post.caption} ${post.hashtags}`;
 
-                // Get account IDs for this handle
-                const accountIds = LATE_ACCOUNT_IDS[post.handle];
-                if (!accountIds) {
-                  console.error(`No Late account mapping for ${post.handle}`);
-                  failCount++;
-                  errors.push(`${post.handle}: No account mapping found`);
+                // Get account IDs from latePages (dynamically loaded from Late API)
+                const handlePages = latePages.filter(p => p.handle === post.handle);
+                if (handlePages.length === 0) {
+                  // Fallback to legacy LATE_ACCOUNT_IDS for backward compatibility
+                  const legacyAccountIds = LATE_ACCOUNT_IDS[post.handle];
+                  if (!legacyAccountIds) {
+                    console.error(`No Late account mapping for ${post.handle}`);
+                    failCount++;
+                    errors.push(`${post.handle}: No account mapping found`);
+                    continue;
+                  }
+                  // Use legacy mapping
+                  const platformsPayload = post.platforms
+                    .filter(p => legacyAccountIds[p])
+                    .map(p => ({ platform: p, accountId: legacyAccountIds[p] }));
+
+                  if (platformsPayload.length === 0) {
+                    failCount++;
+                    errors.push(`${post.handle}: No platform accounts found`);
+                    continue;
+                  }
+
+                  const result = await lateApi.schedulePost({
+                    platforms: platformsPayload,
+                    caption: fullCaption,
+                    videoUrl: post.videoUrl,
+                    scheduledFor,
+                    artistId: currentArtistId
+                  });
+
+                  if (result.success) {
+                    successCount += platformsPayload.length;
+                  } else {
+                    failCount += platformsPayload.length;
+                    errors.push(`${post.handle}: ${result.error}`);
+                  }
+                  await new Promise(r => setTimeout(r, 200));
                   continue;
                 }
 
-                // Build platforms array with both TikTok and Instagram
+                // Build platforms array from latePages (preferred method)
                 const platformsPayload = post.platforms
-                  .filter(p => accountIds[p]) // Only include platforms that have account IDs
-                  .map(p => ({
-                    platform: p,
-                    accountId: accountIds[p]
-                  }));
+                  .map(p => {
+                    const pageForPlatform = handlePages.find(hp => hp.platform === p);
+                    return pageForPlatform ? {
+                      platform: p,
+                      accountId: pageForPlatform.lateAccountId
+                    } : null;
+                  })
+                  .filter(Boolean);
 
                 if (platformsPayload.length === 0) {
                   failCount++;
@@ -3537,7 +3707,7 @@ const StickToMusic = () => {
                                   onChange={(e) => setBatchForm(prev => ({ ...prev, artist: e.target.value }))}
                                   className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-zinc-500"
                                 >
-                                  {operatorArtists.map(a => (
+                                  {(firestoreArtists.length > 0 ? firestoreArtists : operatorArtists).map(a => (
                                     <option key={a.id} value={a.name}>{a.name}</option>
                                   ))}
                                 </select>
@@ -3549,7 +3719,7 @@ const StickToMusic = () => {
                                   onChange={(e) => setBatchForm(prev => ({ ...prev, category: e.target.value }))}
                                   className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-zinc-500"
                                 >
-                                  {categories.map(cat => {
+                                  {getCategoryNames(contentBanks).map(cat => {
                                     const count = uniqueAccounts.filter(a => a.niche === cat).length;
                                     return <option key={cat} value={cat}>{cat} ({count} accounts)</option>;
                                   })}
@@ -3726,16 +3896,16 @@ const StickToMusic = () => {
                             </div>
 
                             {/* Schedule Grid */}
-                            <div className="bg-zinc-800/50 rounded-xl overflow-hidden">
-                              <table className="w-full text-sm">
+                            <div className="bg-zinc-800/50 rounded-xl overflow-x-auto">
+                              <table className="w-full text-sm min-w-[500px]">
                                 <thead>
                                   <tr className="border-b border-zinc-700">
-                                    <th className="text-left p-3 text-zinc-500 font-medium">Day</th>
-                                    <th className="text-left p-3 text-zinc-500 font-medium">Account</th>
-                                    <th className="text-left p-3 text-zinc-500 font-medium">Time</th>
-                                    <th className="text-left p-3 text-zinc-500 font-medium">Type</th>
-                                    <th className="text-left p-3 text-zinc-500 font-medium">Caption</th>
-                                    <th className="text-left p-3 text-zinc-500 font-medium">Video</th>
+                                    <th className="text-left p-2 sm:p-3 text-zinc-500 font-medium text-xs sm:text-sm">Day</th>
+                                    <th className="text-left p-2 sm:p-3 text-zinc-500 font-medium text-xs sm:text-sm">Account</th>
+                                    <th className="text-left p-2 sm:p-3 text-zinc-500 font-medium text-xs sm:text-sm">Time</th>
+                                    <th className="text-left p-2 sm:p-3 text-zinc-500 font-medium text-xs sm:text-sm">Type</th>
+                                    <th className="text-left p-2 sm:p-3 text-zinc-500 font-medium text-xs sm:text-sm">Caption</th>
+                                    <th className="text-left p-2 sm:p-3 text-zinc-500 font-medium text-xs sm:text-sm">Video</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -3995,22 +4165,25 @@ const StickToMusic = () => {
                       />
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">🔍</span>
                     </div>
-                    <div className="flex bg-zinc-800 rounded-lg p-1">
-                      {['all', 'tiktok', 'instagram'].map(platform => (
-                        <button
-                          key={platform}
-                          onClick={() => setPostPlatformFilter(platform)}
-                          className={`px-3 py-1.5 rounded-md text-sm transition ${
-                            postPlatformFilter === platform
-                              ? platform === 'tiktok' ? 'bg-pink-500/20 text-pink-400'
-                              : platform === 'instagram' ? 'bg-purple-500/20 text-purple-400'
-                              : 'bg-zinc-700 text-white'
-                              : 'text-zinc-400 hover:text-white'
-                          }`}
-                        >
-                          {platform === 'all' ? 'All' : platform === 'tiktok' ? 'TikTok' : 'Instagram'}
-                        </button>
-                      ))}
+                    <div className="flex bg-zinc-800 rounded-lg p-1 flex-wrap">
+                      <button
+                        onClick={() => setPostPlatformFilter('all')}
+                        className={`px-3 py-1.5 rounded-md text-sm transition ${postPlatformFilter === 'all' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}
+                      >
+                        All
+                      </button>
+                      {getPlatformKeys().map(platform => {
+                        const config = getPlatformConfig(platform);
+                        return (
+                          <button
+                            key={platform}
+                            onClick={() => setPostPlatformFilter(platform)}
+                            className={`px-3 py-1.5 rounded-md text-sm transition ${postPlatformFilter === platform ? `${config.bgColor} ${config.textColor}` : 'text-zinc-400 hover:text-white'}`}
+                          >
+                            {config.fullName}
+                          </button>
+                        );
+                      })}
                     </div>
                     {/* Account Filter Dropdown */}
                     <select
@@ -4175,31 +4348,34 @@ const StickToMusic = () => {
                                       </div>
                                       <div>
                                         <div className="flex items-center gap-2">
-                                          {(post.platforms || []).map(p => (
-                                            <span key={p.platform || p} className={`px-2 py-0.5 rounded text-xs ${(p.platform || p) === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
-                                              {(p.platform || p) === 'tiktok' ? 'TikTok' : 'Instagram'}
-                                            </span>
-                                          ))}
+                                          {(post.platforms || []).map(p => {
+                                            const platformKey = p.platform || p;
+                                            const config = getPlatformConfig(platformKey);
+                                            return (
+                                              <span key={platformKey} className={`px-2 py-0.5 rounded text-xs ${config.bgColor} ${config.textColor}`}>
+                                                {config.fullName}
+                                              </span>
+                                            );
+                                          })}
                                         </div>
                                         <p className="text-sm text-zinc-300 mt-1 max-w-md truncate">{post.content || 'No caption'}</p>
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                      {getPostUrls(post).map((pu, idx) => (
-                                        <a
-                                          key={idx}
-                                          href={pu.url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className={`px-2 py-1 rounded text-xs font-medium transition ${
-                                            pu.platform === 'tiktok'
-                                              ? 'bg-pink-500/20 text-pink-400 hover:bg-pink-500/30'
-                                              : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
-                                          }`}
-                                        >
-                                          ↗
-                                        </a>
-                                      ))}
+                                      {getPostUrls(post).map((pu, idx) => {
+                                        const config = getPlatformConfig(pu.platform);
+                                        return (
+                                          <a
+                                            key={idx}
+                                            href={pu.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className={`px-2 py-1 rounded text-xs font-medium transition ${config.bgColor} ${config.textColor} ${config.hoverBg}`}
+                                          >
+                                            ↗
+                                          </a>
+                                        );
+                                      })}
                                       <button
                                         onClick={() => confirmDeletePost(post._id, post.content?.substring(0, 50))}
                                         disabled={deletingPostId === post._id}
@@ -4355,16 +4531,16 @@ const StickToMusic = () => {
 
                 {/* List View */}
                 {!syncing && contentView === 'list' && (
-                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-                    <table className="w-full">
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-x-auto">
+                    <table className="w-full min-w-[700px]">
                       <thead>
                         <tr className="border-b border-zinc-800">
-                          <th className="text-left p-4 text-sm font-medium text-zinc-500">Date & Time</th>
-                          <th className="text-left p-4 text-sm font-medium text-zinc-500">Platforms</th>
-                          <th className="text-left p-4 text-sm font-medium text-zinc-500">Caption</th>
-                          <th className="text-left p-4 text-sm font-medium text-zinc-500">Status</th>
-                          <th className="text-left p-4 text-sm font-medium text-zinc-500">View</th>
-                          <th className="text-left p-4 text-sm font-medium text-zinc-500">Actions</th>
+                          <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Date & Time</th>
+                          <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Platforms</th>
+                          <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Caption</th>
+                          <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Status</th>
+                          <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">View</th>
+                          <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -4403,11 +4579,15 @@ const StickToMusic = () => {
                                 </td>
                                 <td className="p-4">
                                   <div className="flex gap-1">
-                                    {(post.platforms || []).map((p, i) => (
-                                      <span key={i} className={`px-2 py-0.5 rounded text-xs ${(p.platform || p) === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
-                                        {(p.platform || p) === 'tiktok' ? 'TT' : 'IG'}
-                                      </span>
-                                    ))}
+                                    {(post.platforms || []).map((p, i) => {
+                                      const platformKey = p.platform || p;
+                                      const config = getPlatformConfig(platformKey);
+                                      return (
+                                        <span key={i} className={`px-2 py-0.5 rounded text-xs ${config.bgColor} ${config.textColor}`}>
+                                          {config.label}
+                                        </span>
+                                      );
+                                    })}
                                   </div>
                                 </td>
                                 <td className="p-4 text-sm max-w-[200px] truncate">{post.content || 'No caption'}</td>
@@ -4422,23 +4602,22 @@ const StickToMusic = () => {
                                   </span>
                                 </td>
                                 <td className="p-4">
-                                  <div className="flex gap-2">
+                                  <div className="flex gap-2 flex-wrap">
                                     {getPostUrls(post).length > 0 ? (
-                                      getPostUrls(post).map((pu, idx) => (
-                                        <a
-                                          key={idx}
-                                          href={pu.url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className={`px-2 py-1 rounded text-xs font-medium transition ${
-                                            pu.platform === 'tiktok'
-                                              ? 'bg-pink-500/20 text-pink-400 hover:bg-pink-500/30'
-                                              : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
-                                          }`}
-                                        >
-                                          View {pu.label}
-                                        </a>
-                                      ))
+                                      getPostUrls(post).map((pu, idx) => {
+                                        const config = getPlatformConfig(pu.platform);
+                                        return (
+                                          <a
+                                            key={idx}
+                                            href={pu.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className={`px-2 py-1 rounded text-xs font-medium transition ${config.bgColor} ${config.textColor} ${config.hoverBg}`}
+                                          >
+                                            View {pu.label}
+                                          </a>
+                                        );
+                                      })
                                     ) : (
                                       <span className="text-xs text-zinc-600">—</span>
                                     )}
@@ -4611,13 +4790,13 @@ const StickToMusic = () => {
 
               {/* New Campaign Modal */}
               {showCampaignModal && (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowCampaignModal(false)}>
-                  <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
-                    <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
-                      <h2 className="text-xl font-bold">New Campaign</h2>
-                      <button onClick={() => setShowCampaignModal(false)} className="text-zinc-500 hover:text-white">✕</button>
+                <div className="fixed inset-0 bg-black/80 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={() => setShowCampaignModal(false)}>
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                    <div className="p-4 sm:p-6 border-b border-zinc-800 flex justify-between items-center sticky top-0 bg-zinc-900 z-10">
+                      <h2 className="text-lg sm:text-xl font-bold">New Campaign</h2>
+                      <button onClick={() => setShowCampaignModal(false)} className="text-zinc-500 hover:text-white text-2xl">✕</button>
                     </div>
-                    <form onSubmit={handleCreateCampaign} className="p-6 space-y-4">
+                    <form onSubmit={handleCreateCampaign} className="p-4 sm:p-6 space-y-4">
                       <div>
                         <label className="block text-sm font-medium text-zinc-400 mb-2">Campaign Name</label>
                         <input
@@ -4629,7 +4808,7 @@ const StickToMusic = () => {
                           required
                         />
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-zinc-400 mb-2">Start Date</label>
                           <input
@@ -5265,6 +5444,48 @@ const StickToMusic = () => {
                   </div>
                 </div>
 
+                {/* Content Templates Section */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold mb-4">Content Templates</h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between py-3">
+                      <div>
+                        <p className="font-medium">Caption & Hashtag Templates</p>
+                        <p className="text-sm text-zinc-500">
+                          {getCategoryNames(contentBanks).length} templates for {firestoreArtists.find(a => a.id === currentArtistId)?.name || 'current artist'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setShowTemplatesModal(true)}
+                        className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-500 transition"
+                      >
+                        Manage Templates
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Video Upload Section */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold mb-4">Video Library</h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between py-3">
+                      <div>
+                        <p className="font-medium">Upload Videos</p>
+                        <p className="text-sm text-zinc-500">
+                          {uploadedVideos.filter(v => v.artistId === currentArtistId).length} videos uploaded for scheduling
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setShowVideoUploadModal(true)}
+                        className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-500 transition"
+                      >
+                        Upload Videos
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Timezone Section */}
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
                   <h3 className="text-lg font-semibold mb-4">Preferences</h3>
@@ -5449,8 +5670,8 @@ const StickToMusic = () => {
 
         {/* ADD ARTIST MODAL */}
         {showAddArtistModal && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowAddArtistModal(false)}>
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+          <div className="fixed inset-0 bg-black/80 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={() => setShowAddArtistModal(false)}>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
               <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
                 <h2 className="text-xl font-bold">Add New Artist</h2>
                 <button onClick={() => setShowAddArtistModal(false)} className="text-zinc-500 hover:text-white">✕</button>
@@ -5540,15 +5761,426 @@ const StickToMusic = () => {
           </div>
         )}
 
+        {/* CONTENT TEMPLATES MODAL */}
+        {showTemplatesModal && (
+          <div className="fixed inset-0 bg-black/80 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={() => { setShowTemplatesModal(false); setEditingCategory(null); }}>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="p-4 sm:p-6 border-b border-zinc-800 flex justify-between items-center shrink-0">
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold">Content Templates</h2>
+                  <p className="text-xs sm:text-sm text-zinc-500 mt-1">Reusable caption & hashtag combos for {firestoreArtists.find(a => a.id === currentArtistId)?.name || 'this artist'}</p>
+                </div>
+                <button onClick={() => { setShowTemplatesModal(false); setEditingCategory(null); }} className="text-zinc-500 hover:text-white text-2xl">✕</button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                {!editingCategory ? (
+                  // Template List View
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                      <p className="text-zinc-400">{getCategoryNames(contentBanks).length} templates</p>
+                      <div className="flex gap-2 w-full sm:w-auto">
+                        <button
+                          onClick={async () => {
+                            if (confirm('Reset all templates to defaults? This will overwrite your custom templates.')) {
+                              try {
+                                await resetToDefaults(db, currentArtistId);
+                                showToast('Templates reset to defaults', 'success');
+                              } catch (error) {
+                                showToast('Failed to reset templates', 'error');
+                              }
+                            }
+                          }}
+                          className="flex-1 sm:flex-none px-3 py-1.5 text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition"
+                        >
+                          Reset
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingCategory('__new__');
+                            setTemplateForm({ name: '', hashtagsAlways: '', hashtagsPool: '', captionsAlways: '', captionsPool: '' });
+                          }}
+                          className="flex-1 sm:flex-none px-4 py-1.5 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-medium transition"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3">
+                      {getCategoryNames(contentBanks).map(category => {
+                        const template = contentBanks[category];
+                        return (
+                          <div key={category} className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-4 hover:bg-zinc-800 transition">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <h3 className="font-semibold text-lg">{category}</h3>
+                                <div className="mt-2 space-y-1">
+                                  <p className="text-sm text-zinc-400">
+                                    <span className="text-purple-400">{(template.hashtags?.always?.length || 0) + (template.hashtags?.pool?.length || 0)}</span> hashtags
+                                    <span className="mx-2 text-zinc-600">•</span>
+                                    <span className="text-purple-400">{(template.captions?.always?.length || 0) + (template.captions?.pool?.length || 0)}</span> caption phrases
+                                  </p>
+                                  <p className="text-xs text-zinc-500 truncate max-w-md">
+                                    {(template.hashtags?.always || []).concat(template.hashtags?.pool || []).slice(0, 5).join(' ')}...
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => {
+                                    setEditingCategory(category);
+                                    setTemplateForm({
+                                      name: category,
+                                      hashtagsAlways: (template.hashtags?.always || []).join(', '),
+                                      hashtagsPool: (template.hashtags?.pool || []).join(', '),
+                                      captionsAlways: (template.captions?.always || []).join(', '),
+                                      captionsPool: (template.captions?.pool || []).join(', ')
+                                    });
+                                  }}
+                                  className="px-3 py-1.5 text-sm text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg transition"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    if (confirm(`Delete "${category}" template?`)) {
+                                      try {
+                                        await deleteCategory(db, currentArtistId, category);
+                                        showToast('Template deleted', 'success');
+                                      } catch (error) {
+                                        showToast('Failed to delete template', 'error');
+                                      }
+                                    }
+                                  }}
+                                  className="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded-lg transition"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  // Edit/Add Template View
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setEditingCategory(null)}
+                        className="text-zinc-400 hover:text-white"
+                      >
+                        ← Back
+                      </button>
+                      <h3 className="text-lg font-semibold">
+                        {editingCategory === '__new__' ? 'Add New Template' : `Edit: ${editingCategory}`}
+                      </h3>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-zinc-400 mb-2">Template Name / Niche</label>
+                        <input
+                          type="text"
+                          value={templateForm.name}
+                          onChange={e => setTemplateForm(prev => ({ ...prev, name: e.target.value }))}
+                          className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                          placeholder="e.g., Fashion, EDM, Runway"
+                          disabled={editingCategory !== '__new__'}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-zinc-400 mb-2">
+                            Always-Use Hashtags
+                            <span className="text-zinc-600 font-normal ml-2">included in every post</span>
+                          </label>
+                          <textarea
+                            value={templateForm.hashtagsAlways}
+                            onChange={e => setTemplateForm(prev => ({ ...prev, hashtagsAlways: e.target.value }))}
+                            className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-purple-500 h-24 resize-none font-mono text-sm"
+                            placeholder="#fashion, #style, #aesthetic"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-zinc-400 mb-2">
+                            Hashtag Pool
+                            <span className="text-zinc-600 font-normal ml-2">randomly selected</span>
+                          </label>
+                          <textarea
+                            value={templateForm.hashtagsPool}
+                            onChange={e => setTemplateForm(prev => ({ ...prev, hashtagsPool: e.target.value }))}
+                            className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-purple-500 h-24 resize-none font-mono text-sm"
+                            placeholder="#ootd, #archive, #vibes, #mood"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-zinc-400 mb-2">
+                            Always-Use Caption Words
+                            <span className="text-zinc-600 font-normal ml-2">included in every post</span>
+                          </label>
+                          <textarea
+                            value={templateForm.captionsAlways}
+                            onChange={e => setTemplateForm(prev => ({ ...prev, captionsAlways: e.target.value }))}
+                            className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-purple-500 h-24 resize-none"
+                            placeholder="mood, vibe"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-zinc-400 mb-2">
+                            Caption Pool
+                            <span className="text-zinc-600 font-normal ml-2">randomly selected</span>
+                          </label>
+                          <textarea
+                            value={templateForm.captionsPool}
+                            onChange={e => setTemplateForm(prev => ({ ...prev, captionsPool: e.target.value }))}
+                            className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-purple-500 h-24 resize-none"
+                            placeholder="forever, dreaming, ✨, archive, aesthetic"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="bg-zinc-800/50 rounded-xl p-4">
+                        <h4 className="text-sm font-medium text-zinc-400 mb-2">Preview</h4>
+                        <p className="text-sm text-zinc-300">
+                          {(() => {
+                            const preview = generateFromTemplate({
+                              hashtags: {
+                                always: templateForm.hashtagsAlways.split(',').map(t => t.trim()).filter(Boolean),
+                                pool: templateForm.hashtagsPool.split(',').map(t => t.trim()).filter(Boolean)
+                              },
+                              captions: {
+                                always: templateForm.captionsAlways.split(',').map(t => t.trim()).filter(Boolean),
+                                pool: templateForm.captionsPool.split(',').map(t => t.trim()).filter(Boolean)
+                              }
+                            }, 'tiktok');
+                            return preview.combined || 'Add some hashtags and captions to see a preview';
+                          })()}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3 pt-4">
+                      <button
+                        onClick={() => setEditingCategory(null)}
+                        className="flex-1 py-3 bg-zinc-800 text-white rounded-xl font-semibold hover:bg-zinc-700 transition"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const categoryName = editingCategory === '__new__' ? templateForm.name.trim() : editingCategory;
+                          if (!categoryName) {
+                            showToast('Please enter a template name', 'error');
+                            return;
+                          }
+
+                          setSavingTemplate(true);
+                          try {
+                            const template = {
+                              hashtags: {
+                                always: templateForm.hashtagsAlways.split(',').map(t => t.trim()).filter(Boolean),
+                                pool: templateForm.hashtagsPool.split(',').map(t => t.trim()).filter(Boolean)
+                              },
+                              captions: {
+                                always: templateForm.captionsAlways.split(',').map(t => t.trim()).filter(Boolean),
+                                pool: templateForm.captionsPool.split(',').map(t => t.trim()).filter(Boolean)
+                              }
+                            };
+
+                            await saveCategory(db, currentArtistId, categoryName, template);
+                            showToast(`Template "${categoryName}" saved!`, 'success');
+                            setEditingCategory(null);
+                          } catch (error) {
+                            console.error('Error saving template:', error);
+                            showToast('Failed to save template', 'error');
+                          } finally {
+                            setSavingTemplate(false);
+                          }
+                        }}
+                        disabled={savingTemplate}
+                        className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-500 transition disabled:opacity-50"
+                      >
+                        {savingTemplate ? 'Saving...' : 'Save Template'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* VIDEO UPLOAD MODAL */}
+        {showVideoUploadModal && (
+          <div className="fixed inset-0 bg-black/80 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={() => setShowVideoUploadModal(false)}>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="p-4 sm:p-6 border-b border-zinc-800 flex justify-between items-center shrink-0">
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold">Upload Videos</h2>
+                  <p className="text-xs sm:text-sm text-zinc-500 mt-1">Upload videos to use for scheduling</p>
+                </div>
+                <button onClick={() => setShowVideoUploadModal(false)} className="text-zinc-500 hover:text-white text-2xl">✕</button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+                {/* Upload Zone */}
+                <div
+                  className={`border-2 border-dashed rounded-xl p-8 text-center transition ${uploadingVideo ? 'border-purple-500 bg-purple-500/10' : 'border-zinc-700 hover:border-zinc-600'}`}
+                  onDrop={async (e) => {
+                    e.preventDefault();
+                    const file = e.dataTransfer.files[0];
+                    if (!file || !file.type.startsWith('video/')) {
+                      showToast('Please upload a video file', 'error');
+                      return;
+                    }
+                    setUploadingVideo(true);
+                    setUploadProgress(0);
+                    try {
+                      const result = await uploadFile(file, `videos/${currentArtistId}`, (progress) => {
+                        setUploadProgress(progress);
+                      });
+                      setUploadedVideos(prev => [...prev, {
+                        id: Date.now().toString(),
+                        name: file.name,
+                        url: result.url,
+                        path: result.path,
+                        uploadedAt: new Date().toISOString(),
+                        artistId: currentArtistId
+                      }]);
+                      showToast('Video uploaded!', 'success');
+                    } catch (error) {
+                      showToast(`Upload failed: ${error.message}`, 'error');
+                    } finally {
+                      setUploadingVideo(false);
+                      setUploadProgress(0);
+                    }
+                  }}
+                  onDragOver={(e) => e.preventDefault()}
+                >
+                  {uploadingVideo ? (
+                    <div>
+                      <div className="w-16 h-16 mx-auto mb-4 rounded-full border-4 border-purple-500 border-t-transparent animate-spin" />
+                      <p className="text-purple-400 font-medium">Uploading... {Math.round(uploadProgress)}%</p>
+                      <div className="w-48 h-2 bg-zinc-800 rounded-full mx-auto mt-2 overflow-hidden">
+                        <div className="h-full bg-purple-500 transition-all" style={{ width: `${uploadProgress}%` }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-4xl mb-4">📹</div>
+                      <p className="text-zinc-300 font-medium mb-2">Drag & drop video here</p>
+                      <p className="text-zinc-500 text-sm mb-4">or click to browse</p>
+                      <input
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        id="video-upload-input"
+                        onChange={async (e) => {
+                          const file = e.target.files[0];
+                          if (!file) return;
+                          setUploadingVideo(true);
+                          setUploadProgress(0);
+                          try {
+                            const result = await uploadFile(file, `videos/${currentArtistId}`, (progress) => {
+                              setUploadProgress(progress);
+                            });
+                            setUploadedVideos(prev => [...prev, {
+                              id: Date.now().toString(),
+                              name: file.name,
+                              url: result.url,
+                              path: result.path,
+                              uploadedAt: new Date().toISOString(),
+                              artistId: currentArtistId
+                            }]);
+                            showToast('Video uploaded!', 'success');
+                          } catch (error) {
+                            showToast(`Upload failed: ${error.message}`, 'error');
+                          } finally {
+                            setUploadingVideo(false);
+                            setUploadProgress(0);
+                            e.target.value = '';
+                          }
+                        }}
+                      />
+                      <label
+                        htmlFor="video-upload-input"
+                        className="inline-block px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg cursor-pointer transition"
+                      >
+                        Browse Files
+                      </label>
+                      <p className="text-xs text-zinc-600 mt-4">MP4, MOV, WebM up to 500MB</p>
+                    </>
+                  )}
+                </div>
+
+                {/* Uploaded Videos List */}
+                {uploadedVideos.filter(v => v.artistId === currentArtistId).length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-medium text-zinc-400 mb-3">Uploaded Videos ({uploadedVideos.filter(v => v.artistId === currentArtistId).length})</h3>
+                    <div className="space-y-2">
+                      {uploadedVideos.filter(v => v.artistId === currentArtistId).map(video => (
+                        <div key={video.id} className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="text-2xl">🎬</span>
+                            <div className="min-w-0">
+                              <p className="font-medium truncate">{video.name}</p>
+                              <p className="text-xs text-zinc-500">{new Date(video.uploadedAt).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(video.url);
+                                showToast('URL copied to clipboard!', 'success');
+                              }}
+                              className="px-3 py-1.5 text-sm text-purple-400 hover:bg-purple-500/20 rounded-lg transition"
+                            >
+                              Copy URL
+                            </button>
+                            <button
+                              onClick={() => {
+                                setUploadedVideos(prev => prev.filter(v => v.id !== video.id));
+                              }}
+                              className="px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/20 rounded-lg transition"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Quick Insert */}
+                <div className="bg-zinc-800/50 rounded-xl p-4">
+                  <h3 className="text-sm font-medium text-zinc-400 mb-2">Quick Tip</h3>
+                  <p className="text-sm text-zinc-500">
+                    After uploading, copy the video URL and paste it into the batch scheduler.
+                    Each video can be scheduled to multiple accounts at once.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* LATE CONNECT MODAL */}
         {showLateConnectModal && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => { setShowLateConnectModal(false); setLateApiKeyInput(''); }}>
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-              <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
-                <h2 className="text-xl font-bold">Connect Late Account</h2>
-                <button onClick={() => { setShowLateConnectModal(false); setLateApiKeyInput(''); }} className="text-zinc-500 hover:text-white">✕</button>
+          <div className="fixed inset-0 bg-black/80 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={() => { setShowLateConnectModal(false); setLateApiKeyInput(''); }}>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <div className="p-4 sm:p-6 border-b border-zinc-800 flex justify-between items-center">
+                <h2 className="text-lg sm:text-xl font-bold">Connect Late Account</h2>
+                <button onClick={() => { setShowLateConnectModal(false); setLateApiKeyInput(''); }} className="text-zinc-500 hover:text-white text-2xl">✕</button>
               </div>
-              <div className="p-6 space-y-4">
+              <div className="p-4 sm:p-6 space-y-4">
                 <p className="text-zinc-400 text-sm">
                   Enter the Late API key for <strong className="text-white">{firestoreArtists.find(a => a.id === currentArtistId)?.name || 'this artist'}</strong> to connect their posting account.
                 </p>
@@ -6471,11 +7103,14 @@ const StickToMusic = () => {
                       <div className="flex items-center justify-between mb-3">
                         <span className="text-sm font-medium text-zinc-300">{time}</span>
                         <div className="flex gap-1">
-                          {platforms.map(p => (
-                            <span key={p} className={`px-2 py-0.5 rounded text-xs ${p === 'tiktok' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}>
-                              {p === 'tiktok' ? 'TikTok' : 'Instagram'}
-                            </span>
-                          ))}
+                          {platforms.map(p => {
+                            const config = getPlatformConfig(p);
+                            return (
+                              <span key={p} className={`px-2 py-0.5 rounded text-xs ${config.bgColor} ${config.textColor}`}>
+                                {config.fullName}
+                              </span>
+                            );
+                          })}
                         </div>
                       </div>
 
@@ -6485,22 +7120,21 @@ const StickToMusic = () => {
                       {/* Status & Actions */}
                       <div className="flex items-center justify-between">
                         <StatusPill status={post.status || 'scheduled'} />
-                        <div className="flex gap-2">
-                          {getPostUrls(post).map((pu, idx) => (
-                            <a
-                              key={idx}
-                              href={pu.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={`px-2 py-1 rounded text-xs font-medium transition ${
-                                pu.platform === 'tiktok'
-                                  ? 'bg-pink-500/20 text-pink-400 hover:bg-pink-500/30'
-                                  : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
-                              }`}
-                            >
-                              View ↗
-                            </a>
-                          ))}
+                        <div className="flex gap-2 flex-wrap">
+                          {getPostUrls(post).map((pu, idx) => {
+                            const config = getPlatformConfig(pu.platform);
+                            return (
+                              <a
+                                key={idx}
+                                href={pu.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={`px-2 py-1 rounded text-xs font-medium transition ${config.bgColor} ${config.textColor} ${config.hoverBg}`}
+                              >
+                                View ↗
+                              </a>
+                            );
+                          })}
                           <button
                             onClick={() => {
                               closeDrawer();

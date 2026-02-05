@@ -5,6 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>StickToMusic - Operator Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      /* Custom utilities for mobile responsiveness */
+      .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+      }
+      /* Touch-friendly tap targets */
+      @media (max-width: 640px) {
+        .mobile-tap-target {
+          min-height: 44px;
+          min-width: 44px;
+        }
+      }
+    </style>
   </head>
   <body class="bg-zinc-950">
     <div id="root"></div>
