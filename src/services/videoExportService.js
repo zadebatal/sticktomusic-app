@@ -65,35 +65,63 @@ const loadFFmpeg = async (onProgress = () => {}) => {
 
 /**
  * Convert WebM blob to MP4 using FFmpeg.wasm
+ * @param {Blob} webmBlob - The WebM video blob
+ * @param {Function} onProgress - Progress callback
+ * @param {Object} audioInfo - Optional audio info { url, startTime }
  */
-const convertToMP4 = async (webmBlob, onProgress = () => {}) => {
+const convertToMP4 = async (webmBlob, onProgress = () => {}, audioInfo = null) => {
   console.log('[VideoExport] Converting WebM to MP4...');
 
   try {
     const ffmpeg = await loadFFmpeg(onProgress);
 
-    // Write input file
+    // Write input video file
     const inputName = 'input.webm';
+    const audioName = 'audio.mp3';
     const outputName = 'output.mp4';
 
     await ffmpeg.writeFile(inputName, await fetchFile(webmBlob));
 
-    // Convert to MP4 with H.264 codec (most compatible)
-    // Using ultrafast preset for maximum speed (slightly larger file size but much faster)
-    // CRF 26 is a good balance of quality/speed for social media
-    await ffmpeg.exec([
-      '-i', inputName,
+    // Build FFmpeg command
+    let ffmpegArgs = ['-i', inputName];
+
+    // Add audio input if provided
+    if (audioInfo?.url) {
+      try {
+        console.log('[VideoExport] Adding audio track...');
+        const audioResponse = await fetch(audioInfo.url);
+        const audioBuffer = await audioResponse.arrayBuffer();
+        await ffmpeg.writeFile(audioName, new Uint8Array(audioBuffer));
+
+        const audioStart = audioInfo.startTime || 0;
+        ffmpegArgs.push('-ss', String(audioStart), '-i', audioName);
+      } catch (audioErr) {
+        console.warn('[VideoExport] Failed to load audio, continuing without:', audioErr);
+      }
+    }
+
+    // Add encoding parameters
+    ffmpegArgs.push(
       '-c:v', 'libx264',
       '-preset', 'ultrafast',
       '-tune', 'fastdecode',
       '-crf', '26',
-      '-c:a', 'aac',
-      '-b:a', '128k',
-      '-movflags', '+faststart',
       '-pix_fmt', 'yuv420p',
-      '-threads', '0',
-      outputName
-    ]);
+      '-threads', '0'
+    );
+
+    // Add audio encoding if we have audio input
+    if (audioInfo?.url) {
+      ffmpegArgs.push(
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-shortest' // End when shortest input ends
+      );
+    }
+
+    ffmpegArgs.push('-movflags', '+faststart', outputName);
+
+    await ffmpeg.exec(ffmpegArgs);
 
     // Read output file
     const data = await ffmpeg.readFile(outputName);
@@ -102,6 +130,9 @@ const convertToMP4 = async (webmBlob, onProgress = () => {}) => {
     // Clean up
     await ffmpeg.deleteFile(inputName);
     await ffmpeg.deleteFile(outputName);
+    if (audioInfo?.url) {
+      try { await ffmpeg.deleteFile(audioName); } catch (e) { /* ignore */ }
+    }
 
     console.log('[VideoExport] MP4 conversion complete:', (mp4Blob.size / 1024 / 1024).toFixed(2), 'MB');
     return mp4Blob;
@@ -230,53 +261,20 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
   const loadedClips = results.sort((a, b) => a.index - b.index);
   onProgress(safeProgress(20));
 
-  // Load audio if available
-  let audioElement = null;
-  let audioContext = null;
-  let audioSource = null;
-  let audioDestination = null;
-
-  if (audio?.url || audio?.localUrl) {
-    try {
-      console.log('[VideoExport] Loading audio...');
-      // Prefer cloud URL over expired blob URLs
-      const audioLocalUrl = audio.localUrl;
-      const isAudioBlobUrl = audioLocalUrl && audioLocalUrl.startsWith('blob:');
-      const audioUrl = isAudioBlobUrl ? audio.url : (audioLocalUrl || audio.url);
-      console.log('[VideoExport] Audio URL:', audioUrl?.substring(0, 50) + '...');
-      audioElement = await loadAudio(audioUrl);
-
-      // Set up audio for recording
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      audioSource = audioContext.createMediaElementSource(audioElement);
-      audioDestination = audioContext.createMediaStreamDestination();
-      audioSource.connect(audioDestination);
-      // Don't connect to destination - we don't want to hear it during render
-    } catch (err) {
-      console.warn('Failed to load audio:', err);
-    }
-  }
+  // Note: Audio is handled during FFmpeg conversion, not during fast canvas rendering
+  // This allows us to render frames faster than real-time
   onProgress(safeProgress(25));
 
-  // Set up MediaRecorder
-  const canvasStream = canvas.captureStream(30);
+  // Set up MediaRecorder with manual frame control for faster-than-real-time rendering
+  // Using captureStream(0) allows us to manually trigger frame capture
+  const canvasStream = canvas.captureStream(0);
+  const videoTrack = canvasStream.getVideoTracks()[0];
+  const combinedStream = canvasStream;
 
-  // Combine video and audio streams
-  let combinedStream;
-  if (audioDestination) {
-    const audioTrack = audioDestination.stream.getAudioTracks()[0];
-    combinedStream = new MediaStream([
-      ...canvasStream.getVideoTracks(),
-      audioTrack
-    ]);
-  } else {
-    combinedStream = canvasStream;
-  }
-
-  // Determine best codec
+  // Determine best codec - prefer VP8 for faster encoding
   const mimeTypes = [
-    'video/webm;codecs=vp9',
     'video/webm;codecs=vp8',
+    'video/webm;codecs=vp9',
     'video/webm',
     'video/mp4'
   ];
@@ -286,7 +284,7 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
 
   const recorder = new MediaRecorder(combinedStream, {
     mimeType,
-    videoBitsPerSecond: 8000000 // 8 Mbps
+    videoBitsPerSecond: 6000000 // 6 Mbps - slightly lower for faster encoding
   });
 
   const chunks = [];
@@ -294,121 +292,104 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
     if (e.data.size > 0) chunks.push(e.data);
   };
 
-  // Render loop
+  // Render configuration
+  const FPS = 24; // 24fps is standard for video, faster than 30fps
+  const frameInterval = 1 / FPS;
+  const totalFrames = Math.ceil(safeDuration * FPS);
+
+  const getClipAtTime = (t) => {
+    for (let i = 0; i < loadedClips.length; i++) {
+      const clip = loadedClips[i];
+      const clipEnd = clip.startTime + clip.duration;
+      if (t >= clip.startTime && t < clipEnd) {
+        return { clip, clipIndex: i };
+      }
+    }
+    return { clip: loadedClips[loadedClips.length - 1], clipIndex: loadedClips.length - 1 };
+  };
+
+  const getWordAtTime = (t) => {
+    if (!words || words.length === 0) return null;
+    return words.find(w => t >= w.start && t < w.end);
+  };
+
+  // Draw a single frame at the given time
+  const drawFrameAtTime = (currentTime) => {
+    const { clip } = getClipAtTime(currentTime);
+
+    // Clear canvas
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw video frame
+    if (clip?.video) {
+      const video = clip.video;
+      const clipLocalTime = currentTime - clip.startTime;
+      video.currentTime = clipLocalTime % video.duration;
+
+      // Calculate crop to fill canvas
+      const videoRatio = video.videoWidth / video.videoHeight;
+      const canvasRatio = width / height;
+
+      let sx, sy, sw, sh;
+      if (videoRatio > canvasRatio) {
+        sh = video.videoHeight;
+        sw = sh * canvasRatio;
+        sx = (video.videoWidth - sw) / 2;
+        sy = 0;
+      } else {
+        sw = video.videoWidth;
+        sh = sw / canvasRatio;
+        sx = 0;
+        sy = (video.videoHeight - sh) / 2;
+      }
+
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
+    }
+
+    // Draw text overlay
+    const currentWord = getWordAtTime(currentTime);
+    if (currentWord && textStyle) {
+      const text = textStyle.textCase === 'upper'
+        ? currentWord.word.toUpperCase()
+        : textStyle.textCase === 'lower'
+          ? currentWord.word.toLowerCase()
+          : currentWord.word;
+
+      const fontSize = textStyle.fontSize || 48;
+      const fontFamily = textStyle.fontFamily || 'Inter, sans-serif';
+      const fontWeight = textStyle.fontWeight || '600';
+
+      ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const x = width / 2;
+      const y = height * 0.75;
+
+      if (textStyle.outline) {
+        ctx.strokeStyle = textStyle.outlineColor || '#000';
+        ctx.lineWidth = fontSize / 10;
+        ctx.lineJoin = 'round';
+        ctx.strokeText(text, x, y);
+      }
+
+      ctx.fillStyle = textStyle.color || '#fff';
+      ctx.fillText(text, x, y);
+    }
+
+    // Manually trigger frame capture
+    if (videoTrack.requestFrame) {
+      videoTrack.requestFrame();
+    }
+  };
+
+  // Fast render loop - processes frames as fast as possible
   return new Promise((resolve, reject) => {
-    let startTime = null;
-    let animationId = null;
-
-    const getClipAtTime = (t) => {
-      for (let i = 0; i < loadedClips.length; i++) {
-        const clip = loadedClips[i];
-        const clipEnd = clip.startTime + clip.duration;
-        if (t >= clip.startTime && t < clipEnd) {
-          return { clip, clipIndex: i };
-        }
-      }
-      return { clip: loadedClips[loadedClips.length - 1], clipIndex: loadedClips.length - 1 };
-    };
-
-    const getWordAtTime = (t) => {
-      if (!words || words.length === 0) return null;
-      return words.find(w => t >= w.start && t < w.end);
-    };
-
-    const drawFrame = (timestamp) => {
-      if (!startTime) startTime = timestamp;
-      const elapsed = (timestamp - startTime) / 1000;
-
-      // Update progress - use safeDuration to prevent division issues
-      const progress = Math.max(0, Math.min(elapsed / safeDuration, 1));
-      onProgress(safeProgress(25 + progress * 65));
-
-      if (elapsed >= safeDuration) {
-        // Done
-        recorder.stop();
-        if (audioElement) {
-          audioElement.pause();
-        }
-        return;
-      }
-
-      // Get current clip
-      const { clip } = getClipAtTime(elapsed);
-
-      // Clear canvas
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, width, height);
-
-      // Draw video frame
-      if (clip?.video) {
-        const video = clip.video;
-        const clipLocalTime = elapsed - clip.startTime;
-
-        // Seek video to correct position
-        if (Math.abs(video.currentTime - clipLocalTime) > 0.1) {
-          video.currentTime = clipLocalTime % video.duration;
-        }
-
-        // Calculate crop to fill canvas
-        const videoRatio = video.videoWidth / video.videoHeight;
-        const canvasRatio = width / height;
-
-        let sx, sy, sw, sh;
-        if (videoRatio > canvasRatio) {
-          sh = video.videoHeight;
-          sw = sh * canvasRatio;
-          sx = (video.videoWidth - sw) / 2;
-          sy = 0;
-        } else {
-          sw = video.videoWidth;
-          sh = sw / canvasRatio;
-          sx = 0;
-          sy = (video.videoHeight - sh) / 2;
-        }
-
-        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
-      }
-
-      // Draw text overlay
-      const currentWord = getWordAtTime(elapsed);
-      if (currentWord && textStyle) {
-        const text = textStyle.textCase === 'upper'
-          ? currentWord.word.toUpperCase()
-          : textStyle.textCase === 'lower'
-            ? currentWord.word.toLowerCase()
-            : currentWord.word;
-
-        const fontSize = textStyle.fontSize || 48;
-        const fontFamily = textStyle.fontFamily || 'Inter, sans-serif';
-        const fontWeight = textStyle.fontWeight || '600';
-
-        ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
-        const x = width / 2;
-        const y = height * 0.75; // Lower third
-
-        // Outline
-        if (textStyle.outline) {
-          ctx.strokeStyle = textStyle.outlineColor || '#000';
-          ctx.lineWidth = fontSize / 10;
-          ctx.lineJoin = 'round';
-          ctx.strokeText(text, x, y);
-        }
-
-        // Fill
-        ctx.fillStyle = textStyle.color || '#fff';
-        ctx.fillText(text, x, y);
-      }
-
-      animationId = requestAnimationFrame(drawFrame);
-    };
+    let currentFrame = 0;
+    let isRunning = true;
 
     recorder.onstop = () => {
-      if (animationId) cancelAnimationFrame(animationId);
-      if (audioContext) audioContext.close();
-
       const blob = new Blob(chunks, { type: mimeType });
       console.log('[VideoExport] Render complete:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
       onProgress(safeProgress(100));
@@ -416,23 +397,42 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
     };
 
     recorder.onerror = (err) => {
-      if (animationId) cancelAnimationFrame(animationId);
-      if (audioContext) audioContext.close();
+      isRunning = false;
       reject(err);
     };
 
     // Start recording
-    recorder.start(100); // Collect data every 100ms
+    recorder.start(100);
 
-    // Start audio playback if available
-    if (audioElement) {
-      const audioStart = audio.startTime || 0;
-      audioElement.currentTime = audioStart;
-      audioElement.play().catch(console.error);
-    }
+    // Fast frame processing loop using setTimeout(0) for faster-than-real-time
+    const processNextFrame = () => {
+      if (!isRunning) return;
 
-    // Start render loop
-    animationId = requestAnimationFrame(drawFrame);
+      const currentTime = currentFrame * frameInterval;
+
+      // Update progress
+      const progress = currentFrame / totalFrames;
+      onProgress(safeProgress(25 + progress * 65));
+
+      if (currentFrame >= totalFrames) {
+        // Done with all frames
+        isRunning = false;
+        recorder.stop();
+        return;
+      }
+
+      // Draw the frame
+      drawFrameAtTime(currentTime);
+      currentFrame++;
+
+      // Process next frame immediately (faster than requestAnimationFrame)
+      // Using setTimeout(0) allows the browser to process events but runs ASAP
+      setTimeout(processNextFrame, 0);
+    };
+
+    // Start the fast render loop
+    console.log(`[VideoExport] Rendering ${totalFrames} frames at ${FPS}fps...`);
+    processNextFrame();
   });
 };
 
@@ -470,9 +470,20 @@ export const renderVideo = async (videoData, onProgress = () => {}, options = {}
       onProgress(safeProgress(70));
       console.log('[VideoExport] Converting to MP4 for TikTok compatibility...');
 
+      // Prepare audio info for FFmpeg muxing
+      let audioInfo = null;
+      if (audio?.url || audio?.localUrl) {
+        const audioLocalUrl = audio.localUrl;
+        const isAudioBlobUrl = audioLocalUrl && audioLocalUrl.startsWith('blob:');
+        audioInfo = {
+          url: isAudioBlobUrl ? audio.url : (audioLocalUrl || audio.url),
+          startTime: audio.startTime || 0
+        };
+      }
+
       try {
         const mp4Progress = (p) => onProgress(safeProgress(70 + p * 0.3));
-        const mp4Blob = await convertToMP4(webmBlob, mp4Progress);
+        const mp4Blob = await convertToMP4(webmBlob, mp4Progress, audioInfo);
         onProgress(safeProgress(100));
         return mp4Blob;
       } catch (conversionError) {
