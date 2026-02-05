@@ -2881,9 +2881,13 @@ const StickToMusic = () => {
                   </button>
                 )}
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-sm font-bold">
-                    {user?.name?.[0] || 'O'}
-                  </div>
+                  {user?.photoURL ? (
+                    <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-sm font-bold">
+                      {user?.name?.[0] || 'O'}
+                    </div>
+                  )}
                   <span className="text-sm text-zinc-400 hidden md:inline">{user?.name || 'Operator'}</span>
                 </div>
                 <button onClick={handleLogout} className="text-sm text-zinc-500 hover:text-white transition">Log out</button>
