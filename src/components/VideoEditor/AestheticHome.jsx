@@ -358,6 +358,23 @@ const AestheticHome = ({
                         <span style={styles.bankIcon}>📝</span>
                         <span style={styles.bankName}>Lyrics ({(selectedCategory.lyrics || []).length})</span>
                       </div>
+                      <button
+                        style={{...styles.bankAddButton, borderColor: '#a855f7', color: '#a855f7'}}
+                        onClick={() => {
+                          const text = prompt('Enter lyrics to add to bank:');
+                          if (text?.trim()) {
+                            onAddLyrics?.({
+                              title: text.split('\n')[0].slice(0, 30) || 'New Lyrics',
+                              content: text.trim()
+                            });
+                          }
+                        }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                        Add
+                      </button>
                     </div>
                   </div>
 
@@ -511,6 +528,23 @@ const AestheticHome = ({
                         <span style={styles.bankIcon}>📝</span>
                         <span style={styles.bankName}>Lyrics ({(selectedCategory.lyrics || []).length})</span>
                       </div>
+                      <button
+                        style={{...styles.bankAddButton, borderColor: '#a855f7', color: '#a855f7'}}
+                        onClick={() => {
+                          const text = prompt('Enter lyrics to add to bank:');
+                          if (text?.trim()) {
+                            onAddLyrics?.({
+                              title: text.split('\n')[0].slice(0, 30) || 'New Lyrics',
+                              content: text.trim()
+                            });
+                          }
+                        }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                        Add
+                      </button>
                     </div>
                   </div>
 
