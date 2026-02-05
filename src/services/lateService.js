@@ -2,14 +2,64 @@
  * Late API Service
  * Handles authentication and account management for Late.co posting
  *
+ * SECURITY:
+ * - All API calls go through our authenticated serverless proxy
+ * - Firebase ID token required for all operations
+ * - No direct Late API key exposure to client
+ *
  * INVARIANT: Late.co posting is an OPERATOR-ONLY action
  * @see docs/DOMAIN_INVARIANTS.md Section C
  */
 
 import { isUserOperator } from '../utils/roles';
+import { getAuth } from 'firebase/auth';
 
-const LATE_API_BASE = 'https://api.late.co/v1';
-const STORAGE_KEY = 'late_api_token';
+// Use our authenticated proxy instead of direct Late API
+const LATE_PROXY = '/api/late';
+const STORAGE_KEY = 'late_connected'; // Only store connection status, not token
+
+/**
+ * Get Firebase ID token for authenticated requests
+ */
+async function getFirebaseToken() {
+  const auth = getAuth();
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error('Not authenticated');
+  }
+  return user.getIdToken();
+}
+
+/**
+ * Make authenticated request to our Late API proxy
+ */
+async function proxyRequest(action, method = 'GET', body = null) {
+  const token = await getFirebaseToken();
+
+  const url = new URL(LATE_PROXY, window.location.origin);
+  url.searchParams.set('action', action);
+
+  const options = {
+    method,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  };
+
+  if (body && method !== 'GET') {
+    options.body = JSON.stringify(body);
+  }
+
+  const response = await fetch(url.toString(), options);
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(error.error || `API Error: ${response.status}`);
+  }
+
+  return response.json();
+}
 
 /**
  * Assert user has operator privileges before Late.co operations
@@ -18,34 +68,26 @@ const STORAGE_KEY = 'late_api_token';
  * @throws {Error} If user is not operator
  */
 function assertLateAccess(user, operation = 'Late.co operation') {
-  // In production, Late.co access requires operator status
-  // This is enforced here at the API boundary
   if (user && !isUserOperator(user)) {
     const msg = `Permission denied: ${operation} requires operator access`;
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('[LATE SERVICE]', msg, { user });
-    }
-    // Note: We warn but don't throw in current implementation
-    // as operator check is also done in UI. This is defense-in-depth.
+    console.error('[LATE SERVICE]', msg);
+    throw new Error(msg);
   }
 }
 
-export function storeLateToken(token) {
+export function storeLateConnection(connected = true) {
   try {
-    localStorage.setItem(STORAGE_KEY, token);
+    localStorage.setItem(STORAGE_KEY, connected ? 'true' : 'false');
     return true;
   } catch (error) {
-    console.error('Failed to store Late token:', error);
+    console.error('Failed to store Late connection status:', error);
     return false;
   }
 }
 
 export function getLateToken() {
-  try {
-    return localStorage.getItem(STORAGE_KEY);
-  } catch (error) {
-    return null;
-  }
+  // For backward compatibility - check if connected
+  return isLateConnected() ? 'connected' : null;
 }
 
 export function clearLateToken() {
@@ -58,31 +100,18 @@ export function clearLateToken() {
 }
 
 export function isLateConnected() {
-  return !!getLateToken();
+  try {
+    return localStorage.getItem(STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
 }
 
 export async function fetchLateAccounts() {
-  const token = getLateToken();
-  if (!token) return [];
+  if (!isLateConnected()) return [];
 
   try {
-    const response = await fetch(`${LATE_API_BASE}/accounts`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        clearLateToken();
-        throw new Error('INVALID_TOKEN');
-      }
-      throw new Error(`API Error: ${response.status}`);
-    }
-
-    const data = await response.json();
+    const data = await proxyRequest('accounts');
     const accounts = (data.accounts || data.data || []).map(account => ({
       id: account.id || account.account_id,
       platform: (account.platform || account.type || '').toLowerCase(),
@@ -95,28 +124,32 @@ export async function fetchLateAccounts() {
     return accounts.filter(a => a.isActive);
   } catch (error) {
     console.error('Failed to fetch Late accounts:', error);
+    if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+      clearLateToken();
+    }
     throw error;
   }
 }
 
 export async function validateLateToken(token) {
-  if (!token) return false;
+  // Token validation now happens server-side
+  // This just checks if we can successfully call the proxy
   try {
-    const response = await fetch(`${LATE_API_BASE}/me`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    return response.ok;
+    await proxyRequest('accounts');
+    return true;
   } catch {
     return false;
   }
 }
 
 export async function connectLate(token) {
+  // Note: The actual Late API key should be set in Vercel environment variables
+  // This function now just marks the connection as active after verifying
   const isValid = await validateLateToken(token);
   if (!isValid) {
-    throw new Error('Invalid Late API token');
+    throw new Error('Invalid Late API configuration');
   }
-  storeLateToken(token);
+  storeLateConnection(true);
   const accounts = await fetchLateAccounts();
   return { success: true, accounts };
 }
@@ -127,8 +160,7 @@ export function disconnectLate() {
 }
 
 export async function schedulePost({ videoUrl, caption, accountIds, scheduledTime, user }) {
-  const token = getLateToken();
-  if (!token) throw new Error('Not connected to Late');
+  if (!isLateConnected()) throw new Error('Not connected to Late');
 
   // Operator check at API boundary (defense-in-depth)
   assertLateAccess(user, 'schedulePost');
@@ -142,17 +174,48 @@ export async function schedulePost({ videoUrl, caption, accountIds, scheduledTim
     payload.scheduled_at = new Date(scheduledTime).toISOString();
   }
 
-  const response = await fetch(`${LATE_API_BASE}/posts`, {
-    method: 'POST',
+  return proxyRequest('posts', 'POST', payload);
+}
+
+export async function deletePost(postId, user) {
+  if (!isLateConnected()) throw new Error('Not connected to Late');
+  assertLateAccess(user, 'deletePost');
+
+  const token = await getFirebaseToken();
+  const url = new URL(LATE_PROXY, window.location.origin);
+  url.searchParams.set('action', 'delete');
+  url.searchParams.set('postId', postId);
+
+  const response = await fetch(url.toString(), {
+    method: 'DELETE',
     headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
+      'Authorization': `Bearer ${token}`
+    }
   });
 
   if (!response.ok) {
-    throw new Error('Failed to schedule post');
+    throw new Error('Failed to delete post');
+  }
+
+  return response.json();
+}
+
+export async function fetchScheduledPosts(page = 1) {
+  if (!isLateConnected()) return { posts: [], total: 0 };
+
+  const token = await getFirebaseToken();
+  const url = new URL(LATE_PROXY, window.location.origin);
+  url.searchParams.set('action', 'posts');
+  url.searchParams.set('page', page.toString());
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch scheduled posts');
   }
 
   return response.json();

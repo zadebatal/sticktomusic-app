@@ -1,20 +1,88 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Artists collection - allow authenticated users full access
+
+    // ============================================
+    // HELPER FUNCTIONS
+    // ============================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/allowedUsers/$(request.auth.token.email)).data;
+    }
+
+    // Check if user is a conductor (super admin)
+    function isConductor() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/allowedUsers/$(request.auth.token.email)) &&
+        get(/databases/$(database)/documents/allowedUsers/$(request.auth.token.email)).data.role == 'conductor';
+    }
+
+    // Check if user is an operator or conductor
+    function isOperatorOrAbove() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/allowedUsers/$(request.auth.token.email)) &&
+        get(/databases/$(database)/documents/allowedUsers/$(request.auth.token.email)).data.role in ['conductor', 'operator'];
+    }
+
+    // Check if user has access to a specific artist
+    function canAccessArtist(artistId) {
+      return isAuthenticated() && (
+        isConductor() ||
+        (isOperatorOrAbove() &&
+          artistId in get(/databases/$(database)/documents/allowedUsers/$(request.auth.token.email)).data.assignedArtistIds)
+      );
+    }
+
+    // Check if user is the owner of the document (by email)
+    function isOwner(email) {
+      return isAuthenticated() && request.auth.token.email == email;
+    }
+
+    // ============================================
+    // COLLECTION RULES
+    // ============================================
+
+    // Artists collection
+    // - Conductors: full read/write
+    // - Operators: read/write only their assigned artists
+    // - Artists: no direct access (they use their portal)
     match /artists/{artistId} {
-      allow read, write: if request.auth != null;
+      allow read: if isOperatorOrAbove();
+      allow create: if isConductor();
+      allow update, delete: if isConductor() || canAccessArtist(artistId);
     }
 
-    // Allowed users collection (existing)
-    match /allowedUsers/{userId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+    // Allowed users collection (access control list)
+    // - Conductors only can write (add/modify users)
+    // - Any authenticated user can read (to check their own status)
+    match /allowedUsers/{userEmail} {
+      allow read: if isAuthenticated();
+      allow write: if isConductor();
     }
 
-    // Applications collection (existing)
+    // Applications collection (artist signup applications)
+    // - Conductors: full access
+    // - Operators: read only
+    // - Public: can create (submit application)
     match /applications/{appId} {
-      allow read, write: if request.auth != null;
+      allow read: if isOperatorOrAbove();
+      allow create: if true; // Anyone can submit an application
+      allow update, delete: if isConductor();
+    }
+
+    // Analytics collection (if used)
+    match /analytics/{docId} {
+      allow read: if isOperatorOrAbove();
+      allow write: if isConductor();
+    }
+
+    // Catch-all: deny everything else
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

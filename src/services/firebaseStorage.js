@@ -7,15 +7,32 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { getFirestore } from 'firebase/firestore';
 
-// Firebase configuration
+// Firebase configuration - loaded from environment variables
+// IMPORTANT: Never hardcode credentials. Set these in Vercel environment variables.
 const firebaseConfig = {
-  apiKey: "AIzaSyDIw9xCnMVpDHW36vyxsNtwvmOfVlIHa0Y",
-  authDomain: "sticktomusic-c8b23.firebaseapp.com",
-  projectId: "sticktomusic-c8b23",
-  storageBucket: "sticktomusic-c8b23.firebasestorage.app",
-  messagingSenderId: "621559911733",
-  appId: "1:621559911733:web:4fe5066433967245ada87c"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID
 };
+
+// Validate required config in development
+if (process.env.NODE_ENV === 'development') {
+  const required = ['apiKey', 'authDomain', 'projectId'];
+  const missing = required.filter(key => !firebaseConfig[key]);
+  if (missing.length > 0) {
+    console.error('❌ Missing Firebase config:', missing.join(', '));
+    console.error('Set REACT_APP_FIREBASE_* environment variables in .env.local');
+  }
+}
+
+// File upload constraints
+const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'];
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4'];
+const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB max
 
 // Initialize Firebase only if not already initialized
 let firebaseApp;
@@ -39,6 +56,25 @@ export { firebaseApp, db };
  * @returns {Promise<{url: string, path: string}>}
  */
 export async function uploadFile(file, folder = 'uploads', onProgress = null) {
+  // Validate file size
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error(`File too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
+  }
+
+  // Validate file type based on folder
+  const allowedTypes = {
+    videos: ALLOWED_VIDEO_TYPES,
+    thumbnails: ALLOWED_IMAGE_TYPES,
+    images: ALLOWED_IMAGE_TYPES,
+    audio: ALLOWED_AUDIO_TYPES,
+    uploads: [...ALLOWED_VIDEO_TYPES, ...ALLOWED_IMAGE_TYPES, ...ALLOWED_AUDIO_TYPES]
+  };
+
+  const allowed = allowedTypes[folder] || allowedTypes.uploads;
+  if (!allowed.includes(file.type)) {
+    throw new Error(`Invalid file type: ${file.type}. Allowed: ${allowed.join(', ')}`);
+  }
+
   const timestamp = Date.now();
   const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
   const path = `${folder}/${timestamp}_${safeName}`;

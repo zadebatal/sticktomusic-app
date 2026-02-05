@@ -11,6 +11,7 @@
 - **Auth**: Firebase Auth (Google sign-in)
 - **Hosting**: Vercel (auto-deploys on git push)
 - **Storage**: Namespaced localStorage + Firestore
+- **APIs**: Late.co (social posting), Stripe (payments)
 
 ## Architecture
 
@@ -25,16 +26,45 @@ Each artist has isolated data stored in Firestore (`artists` collection) with na
 ### Key Collections (Firestore)
 - `artists` - Artist profiles with `ownerOperatorId` for operator assignment
 - `allowedUsers` - User access control with `role` and `assignedArtistIds`
+- `applications` - Artist signup applications
 
 ## Key Files
 - `/src/App.jsx` - Main app with routing, auth, dashboards
 - `/src/services/artistService.js` - Firestore CRUD for artists
 - `/src/services/storageService.js` - Namespaced localStorage helpers
 - `/src/services/firebaseStorage.js` - Firebase config and exports
+- `/src/services/lateService.js` - Late.co API integration (via proxy)
 - `/src/components/VideoEditor/VideoStudio.jsx` - Video/content editor
+- `/api/late.js` - Serverless proxy for Late API (auth required)
+- `/api/stripe-webhook.js` - Stripe payment webhook handler
+- `/firestore.rules` - Firestore security rules
 
 ## Environment Variables
-- `REACT_APP_CONDUCTOR_EMAILS` - Comma-separated conductor emails (defaults to zade@sticktomusic.com,zadebatal@gmail.com)
+
+### Client-side (set in Vercel AND .env.local for dev)
+- `REACT_APP_FIREBASE_API_KEY`
+- `REACT_APP_FIREBASE_AUTH_DOMAIN`
+- `REACT_APP_FIREBASE_PROJECT_ID`
+- `REACT_APP_FIREBASE_STORAGE_BUCKET`
+- `REACT_APP_FIREBASE_MESSAGING_SENDER_ID`
+- `REACT_APP_FIREBASE_APP_ID`
+- `REACT_APP_STRIPE_PUBLISHABLE_KEY`
+- `REACT_APP_CONDUCTOR_EMAILS`
+
+### Server-side ONLY (set in Vercel, NEVER in code)
+- `FIREBASE_PROJECT_ID`
+- `FIREBASE_CLIENT_EMAIL`
+- `FIREBASE_PRIVATE_KEY`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `LATE_API_KEY`
+
+## Security Notes
+- All API keys loaded from environment variables (never hardcoded)
+- Late API calls go through authenticated serverless proxy
+- Firestore rules enforce role-based access control
+- File uploads validated for type and size (500MB max)
+- CORS restricted to sticktomusic.com domains only
 
 ## Deployment
 Push to GitHub → Vercel auto-deploys → All users see updates
@@ -51,6 +81,7 @@ git push
 - Video Studio with slideshow editor
 - Content banks (lyrics, hooks, captions)
 - Analytics dashboard
-- Late API integration
+- Late API integration (authenticated proxy)
 - Artist portal
 - Campaign management
+- Stripe payment integration

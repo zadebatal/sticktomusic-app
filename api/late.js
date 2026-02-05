@@ -3,14 +3,68 @@
  * This keeps the Late API key secure on the server side
  *
  * Environment variable required: LATE_API_KEY
+ *
+ * SECURITY:
+ * - CORS restricted to allowed origins only
+ * - Firebase Auth token verification required
+ * - Rate limiting recommended (add via Vercel Edge Config)
  */
+
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 
 const LATE_API_BASE = 'https://getlate.dev/api/v1';
 
+// Allowed origins - restrict CORS to your domains only
+const ALLOWED_ORIGINS = [
+  'https://sticktomusic.com',
+  'https://www.sticktomusic.com',
+  'https://sticktomusic-app.vercel.app',
+  // Add localhost for development
+  process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : null
+].filter(Boolean);
+
+// Initialize Firebase Admin (only once)
+if (!getApps().length) {
+  try {
+    initializeApp({
+      credential: cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      }),
+    });
+  } catch (error) {
+    console.error('Firebase Admin init error:', error.message);
+  }
+}
+
+/**
+ * Verify Firebase ID token from Authorization header
+ */
+async function verifyAuth(req) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return { error: 'Missing or invalid Authorization header', status: 401 };
+  }
+
+  const idToken = authHeader.split('Bearer ')[1];
+  try {
+    const decodedToken = await getAuth().verifyIdToken(idToken);
+    return { user: decodedToken };
+  } catch (error) {
+    console.error('Token verification failed:', error.message);
+    return { error: 'Invalid or expired token', status: 401 };
+  }
+}
+
 export default async function handler(req, res) {
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Credentials', true);
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // CORS - restrict to allowed origins
+  const origin = req.headers.origin;
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
@@ -18,6 +72,15 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
+
+  // Verify authentication
+  const authResult = await verifyAuth(req);
+  if (authResult.error) {
+    return res.status(authResult.status).json({ error: authResult.error });
+  }
+
+  // Log authenticated user (for audit trail)
+  console.log(`Late API request from: ${authResult.user.email}`);
 
   const LATE_API_KEY = process.env.LATE_API_KEY;
 

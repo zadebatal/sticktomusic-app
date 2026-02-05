@@ -5348,11 +5348,13 @@ const StickToMusic = () => {
     );
   }
 
-  // DASHBOARD PAGE - Redirect to Artist Portal
+  // DASHBOARD PAGE - Redirect to Artist Portal (requires authentication)
   if (currentPage === 'dashboard') {
-    // Auto-login as demo artist if not logged in
     if (!user) {
-      setUser({ email: 'boon@artist.com', role: 'artist', name: 'Boon', artistId: 'boon' });
+      // Require login instead of auto-login with demo user
+      setShowLoginModal(true);
+      setCurrentPage('home');
+      return null;
     }
     setCurrentPage('artist-portal');
     return null;
