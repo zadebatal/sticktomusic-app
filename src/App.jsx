@@ -661,6 +661,14 @@ const StickToMusic = () => {
     }
   }, [user, pendingPage, pendingOperatorTab, pendingShowVideoEditor, authChecked, firestoreLoaded]);
 
+  // Auto-redirect logged-in users from home page to their dashboard
+  useEffect(() => {
+    if (user && currentPage === 'home' && sessionRestoreComplete) {
+      console.log('🏠 Redirecting logged-in user from home to dashboard');
+      setCurrentPage(user.role === 'artist' ? 'artist-portal' : 'operator');
+    }
+  }, [user, currentPage, sessionRestoreComplete]);
+
   // Save session state when navigation changes
   useEffect(() => {
     saveAppSession({ currentPage, operatorTab, showVideoEditor });
