@@ -296,13 +296,17 @@ const WordTimeline = ({
     e.stopPropagation();
     const word = words[index];
 
+    // Check if clicked word is part of current multi-selection FIRST
+    const isPartOfMultiSelection = selectedWordIndices.includes(index) && selectedWordIndices.length > 1;
+
+    // If part of multi-selection, ALWAYS treat as move (even if clicking resize handles)
+    // This ensures dragging any part of a selected word moves all selected words
+    const effectiveType = isPartOfMultiSelection ? 'move' : type;
+
     // Determine which indices we're dragging BEFORE any state changes
     let indicesToDrag;
 
-    if (type === 'move') {
-      // Check if clicked word is part of current multi-selection
-      const isPartOfMultiSelection = selectedWordIndices.includes(index) && selectedWordIndices.length > 1;
-
+    if (effectiveType === 'move') {
       if (isPartOfMultiSelection) {
         // Dragging a multi-selection - keep all selected words, make a copy of the array
         indicesToDrag = [...selectedWordIndices];
@@ -314,7 +318,7 @@ const WordTimeline = ({
         setLastSelectedIndex(index);
       }
     } else {
-      // For resize operations, only work with the single word
+      // For resize operations on single word, only work with that word
       indicesToDrag = [index];
     }
 
@@ -329,14 +333,14 @@ const WordTimeline = ({
 
     setDragState({
       index,
-      type,
+      type: effectiveType,
       indicesToDrag,
       initialTimes,
       startX: e.clientX,
       startTime: word.startTime,
       startDuration: word.duration || 0.5
     });
-    setIsDraggingSelection(type === 'move' && indicesToDrag.length > 1);
+    setIsDraggingSelection(effectiveType === 'move' && indicesToDrag.length > 1);
   };
 
   useEffect(() => {
