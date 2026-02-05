@@ -246,10 +246,19 @@ export default async function handler(req, res) {
 
       // ============================================
       // LATE API PROXY (uses per-artist keys)
+      // All proxy actions require artist access check
       // ============================================
 
       case 'accounts':
         // GET /accounts - Fetch all connected accounts for this artist's Late account
+        if (!artistId) {
+          return res.status(400).json({ error: 'artistId required' });
+        }
+        const canAccessAccounts = await canUserAccessArtist(userEmail, artistId);
+        if (!canAccessAccounts) {
+          return res.status(403).json({ error: 'No access to this artist' });
+        }
+
         const accountsKey = await getArtistLateKey(artistId);
         if (!accountsKey) {
           return res.status(400).json({ error: 'No Late API key configured for this artist' });
@@ -262,6 +271,14 @@ export default async function handler(req, res) {
 
       case 'posts':
         console.log('Posts action - artistId:', artistId);
+        if (!artistId) {
+          return res.status(400).json({ error: 'artistId required' });
+        }
+        const canAccessPosts = await canUserAccessArtist(userEmail, artistId);
+        if (!canAccessPosts) {
+          return res.status(403).json({ error: 'No access to this artist' });
+        }
+
         const postsKey = await getArtistLateKey(artistId);
         console.log('Got Late key:', postsKey ? 'yes' : 'no');
         if (!postsKey) {
@@ -292,6 +309,13 @@ export default async function handler(req, res) {
       case 'delete':
         if (!postId) {
           return res.status(400).json({ error: 'postId required for delete' });
+        }
+        if (!artistId) {
+          return res.status(400).json({ error: 'artistId required' });
+        }
+        const canDelete = await canUserAccessArtist(userEmail, artistId);
+        if (!canDelete) {
+          return res.status(403).json({ error: 'No access to this artist' });
         }
 
         const deleteKey = await getArtistLateKey(artistId);
