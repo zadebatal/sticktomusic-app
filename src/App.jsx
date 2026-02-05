@@ -477,7 +477,8 @@ const StickToMusic = () => {
     return () => unsubscribe();
   }, []);
 
-  // Load allowed users from Firestore (ONLY when authenticated)
+  // Load allowed users from Firestore (ALWAYS - needed for login whitelist check)
+  // This must load even before authentication so we can verify new users trying to log in
   useEffect(() => {
     // Don't subscribe to Firestore until auth is checked
     if (!authChecked) {
@@ -485,15 +486,9 @@ const StickToMusic = () => {
       return;
     }
 
-    // If not authenticated, set loaded and clear users
-    if (!currentAuthUser) {
-      console.log('👤 No auth user, skipping Firestore load');
-      setFirestoreLoaded(true);
-      setAllowedUsers([]);
-      return;
-    }
-
-    console.log('📥 Loading allowedUsers from Firestore for:', currentAuthUser.email);
+    // Always load allowedUsers - needed for login whitelist check
+    // Even unauthenticated users need this to verify they're on the whitelist
+    console.log('📥 Loading allowedUsers from Firestore...');
     const unsubscribe = onSnapshot(
       collection(db, 'allowedUsers'),
       (snapshot) => {
@@ -507,11 +502,12 @@ const StickToMusic = () => {
       },
       (error) => {
         console.error('❌ Error loading allowed users:', error);
-        setFirestoreLoaded(true); // Still set loaded to prevent infinite loading
+        // If Firestore fails (e.g., permissions), still allow login for conductors
+        setFirestoreLoaded(true);
       }
     );
     return () => unsubscribe();
-  }, [authChecked, currentAuthUser]);
+  }, [authChecked]);
 
   // Track if we've already initialized Boon artist (prevents double-calls)
   const boonInitializedRef = useRef(false);
@@ -1361,6 +1357,18 @@ const StickToMusic = () => {
       );
       const email = userCredential.user.email;
 
+      // Check whitelist - but if Firestore hasn't loaded yet, try to load it first
+      // This handles the case where a new user's page hasn't loaded allowedUsers yet
+      if (!firestoreLoaded) {
+        console.log('⏳ Firestore not loaded yet, waiting...');
+        // Wait up to 3 seconds for Firestore to load
+        let waited = 0;
+        while (!firestoreLoaded && waited < 3000) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          waited += 100;
+        }
+      }
+
       // Check whitelist
       if (!isEmailAllowed(email)) {
         await signOut(auth);
@@ -1410,6 +1418,16 @@ const StickToMusic = () => {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const email = result.user.email;
+
+      // Check whitelist - but if Firestore hasn't loaded yet, wait for it
+      if (!firestoreLoaded) {
+        console.log('⏳ Firestore not loaded yet, waiting...');
+        let waited = 0;
+        while (!firestoreLoaded && waited < 3000) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          waited += 100;
+        }
+      }
 
       // Check whitelist
       if (!isEmailAllowed(email)) {
