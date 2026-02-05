@@ -2890,7 +2890,7 @@ const StickToMusic = () => {
                 operatorTab === 'analytics' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
               }`}
             >
-              📊 Analytics
+              Analytics
             </button>
             {/* Applications tab - visible to all */}
             <button
@@ -2909,7 +2909,7 @@ const StickToMusic = () => {
                   operatorTab === 'settings' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
                 }`}
               >
-                ⚙️ Settings
+                Settings
               </button>
             )}
           </div>
