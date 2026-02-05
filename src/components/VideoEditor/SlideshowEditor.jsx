@@ -997,6 +997,20 @@ const SlideshowEditor = ({
                   Add Text
                 </button>
 
+                {/* Add Audio Button */}
+                <button
+                  style={styles.addAudioButton}
+                  onClick={() => slideshowAudioInputRef.current?.click()}
+                  title="Add audio to slideshow"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 18V5l12-2v13"/>
+                    <circle cx="6" cy="18" r="3"/>
+                    <circle cx="18" cy="16" r="3"/>
+                  </svg>
+                  Add Audio
+                </button>
+
                 {/* AI Transcribe Button */}
                 {selectedAudio && (
                   <button
@@ -1888,6 +1902,18 @@ const styles = {
     border: '1px solid rgba(99, 102, 241, 0.5)',
     borderRadius: '8px',
     color: '#a5b4fc',
+    cursor: 'pointer',
+    fontSize: '13px'
+  },
+  addAudioButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 16px',
+    backgroundColor: 'rgba(251, 146, 60, 0.2)',
+    border: '1px solid rgba(251, 146, 60, 0.5)',
+    borderRadius: '8px',
+    color: '#fdba74',
     cursor: 'pointer',
     fontSize: '13px'
   },
