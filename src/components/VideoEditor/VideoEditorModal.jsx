@@ -105,12 +105,15 @@ const VideoEditorModal = ({
   // Refs
   const audioRef = useRef(null);
   const videoRef = useRef(null);
+  const videoRefB = useRef(null); // Second video element for double-buffering
+  const activeVideoRef = useRef('A'); // Track which video is currently active
   const timelineRef = useRef(null);
   const animationRef = useRef(null);
   const previousTrimHashRef = useRef(null);
   const isPlayingRef = useRef(false); // Ref to avoid stale closure in animation loop
   const videoCache = useRef(new Map()); // Cache for preloaded video blobs
   const preloadQueue = useRef([]); // Queue for videos being preloaded
+  const lastClipIdRef = useRef(null); // Track last clip to detect changes
   // Track if we're still in initial load phase (loading existing video with words)
   // This prevents clearing words due to minor duration changes when audio loads
   const initialLoadPhaseRef = useRef(existingVideo?.words?.length > 0);
@@ -307,23 +310,24 @@ const VideoEditorModal = ({
     };
   }, [isPlaying, selectedAudio, duration]);
 
-  // Sync video with audio time
+  // Sync video with audio time (use active video element)
   useEffect(() => {
-    if (videoRef.current && currentClip?.url) {
+    const activeVideo = activeVideoRef.current === 'A' ? videoRef.current : videoRefB.current;
+    if (activeVideo && currentClip?.url) {
       // Calculate position within the clip
       const clipStartTime = currentClip.startTime || 0;
       const clipDuration = currentClip.duration || 2;
       const positionInClip = (currentTime - clipStartTime) % clipDuration;
 
       // Set video time if significantly different
-      if (Math.abs(videoRef.current.currentTime - positionInClip) > 0.3) {
-        videoRef.current.currentTime = positionInClip;
+      if (Math.abs(activeVideo.currentTime - positionInClip) > 0.3) {
+        activeVideo.currentTime = positionInClip;
       }
 
       if (isPlaying) {
-        videoRef.current.play().catch(() => {});
+        activeVideo.play().catch(() => {});
       } else {
-        videoRef.current.pause();
+        activeVideo.pause();
       }
     }
   }, [currentClip, currentTime, isPlaying]);
@@ -368,21 +372,50 @@ const VideoEditorModal = ({
     };
   }, [progressDragging, trimmedDuration, handleSeek]);
 
-  // Handle clip changes - load new video
+  // Double-buffered video loading for smooth clip transitions
   useEffect(() => {
     const clipUrl = getClipUrl(currentClip);
-    if (videoRef.current && clipUrl) {
-      // If video source changed, reload
-      if (videoRef.current.src !== clipUrl) {
-        console.log('[VideoEditorModal] Loading video:', clipUrl.substring(0, 60));
-        videoRef.current.src = clipUrl;
-        videoRef.current.load();
+    if (!clipUrl) return;
+
+    const clipChanged = lastClipIdRef.current !== currentClip?.id;
+    lastClipIdRef.current = currentClip?.id;
+
+    if (!clipChanged) return;
+
+    // Get the inactive video element to preload next clip
+    const activeVideo = activeVideoRef.current === 'A' ? videoRef.current : videoRefB.current;
+    const inactiveVideo = activeVideoRef.current === 'A' ? videoRefB.current : videoRef.current;
+
+    if (activeVideo && activeVideo.src !== clipUrl) {
+      // Check if inactive video already has this clip loaded
+      if (inactiveVideo && inactiveVideo.src === clipUrl && inactiveVideo.readyState >= 3) {
+        // Swap videos - the inactive one is ready!
+        activeVideoRef.current = activeVideoRef.current === 'A' ? 'B' : 'A';
         if (isPlaying) {
-          videoRef.current.play().catch(() => {});
+          inactiveVideo.play().catch(() => {});
+        }
+        activeVideo.pause();
+      } else {
+        // Load into active video
+        activeVideo.src = clipUrl;
+        activeVideo.load();
+        if (isPlaying) {
+          activeVideo.play().catch(() => {});
         }
       }
     }
-  }, [currentClip?.url, currentClip?.id, currentClip?.localUrl, getClipUrl, isPlaying]);
+
+    // Preload NEXT clip into inactive video
+    const currentIndex = clips.findIndex(c => c.id === currentClip?.id);
+    if (currentIndex >= 0 && currentIndex < clips.length - 1) {
+      const nextClip = clips[currentIndex + 1];
+      const nextUrl = getClipUrl(nextClip);
+      if (inactiveVideo && nextUrl && inactiveVideo.src !== nextUrl) {
+        inactiveVideo.src = nextUrl;
+        inactiveVideo.load();
+      }
+    }
+  }, [currentClip?.url, currentClip?.id, currentClip?.localUrl, getClipUrl, isPlaying, clips]);
 
   // Preload upcoming clips for smoother playback
   useEffect(() => {
@@ -1256,28 +1289,62 @@ const VideoEditorModal = ({
                 {/* Hidden audio element for playback */}
                 <audio ref={audioRef} style={{ display: 'none' }} />
 
-                {/* Video preview - shows current clip or fallback */}
+                {/* Video preview - double-buffered for smooth transitions */}
                 {(currentClip?.url || currentClip?.localUrl || category?.videos?.[0]?.url || category?.videos?.[0]?.localUrl) ? (
                   <>
+                    {/* Primary video element (A) */}
                     <video
                       ref={videoRef}
                       src={getClipUrl(currentClip) || getClipUrl(category?.videos?.[0])}
                       style={{
                         ...styles.previewVideo,
-                        display: videoError ? 'none' : 'block'
+                        display: videoError ? 'none' : 'block',
+                        opacity: activeVideoRef.current === 'A' ? 1 : 0,
+                        position: 'absolute',
+                        top: 0,
+                        left: 0
                       }}
                       muted
                       loop
                       playsInline
                       preload="auto"
-                      autoPlay={isPlaying}
+                      autoPlay={isPlaying && activeVideoRef.current === 'A'}
                       crossOrigin="anonymous"
-                      onLoadStart={() => { setVideoLoading(true); setVideoError(null); }}
-                      onCanPlay={() => setVideoLoading(false)}
+                      onLoadStart={() => { if (activeVideoRef.current === 'A') { setVideoLoading(true); setVideoError(null); } }}
+                      onCanPlay={() => { if (activeVideoRef.current === 'A') setVideoLoading(false); }}
                       onError={(e) => {
-                        console.error('Video load error:', e);
-                        setVideoError('Unable to load video. This may be due to CORS restrictions.');
-                        setVideoLoading(false);
+                        console.error('Video A load error:', e);
+                        if (activeVideoRef.current === 'A') {
+                          setVideoError('Unable to load video. This may be due to CORS restrictions.');
+                          setVideoLoading(false);
+                        }
+                      }}
+                    />
+                    {/* Secondary video element (B) - for preloading next clip */}
+                    <video
+                      ref={videoRefB}
+                      style={{
+                        ...styles.previewVideo,
+                        display: videoError ? 'none' : 'block',
+                        opacity: activeVideoRef.current === 'B' ? 1 : 0,
+                        position: 'absolute',
+                        top: 0,
+                        left: 0
+                      }}
+                      muted
+                      loop
+                      playsInline
+                      preload="auto"
+                      autoPlay={isPlaying && activeVideoRef.current === 'B'}
+                      crossOrigin="anonymous"
+                      onLoadStart={() => { if (activeVideoRef.current === 'B') { setVideoLoading(true); setVideoError(null); } }}
+                      onCanPlay={() => { if (activeVideoRef.current === 'B') setVideoLoading(false); }}
+                      onError={(e) => {
+                        console.error('Video B load error:', e);
+                        if (activeVideoRef.current === 'B') {
+                          setVideoError('Unable to load video. This may be due to CORS restrictions.');
+                          setVideoLoading(false);
+                        }
                       }}
                     />
                     {videoLoading && !videoError && (
