@@ -1764,33 +1764,33 @@ const VideoEditorModal = ({
                             boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
                           }}>
                             {category.lyrics.map(lyric => (
-                              <button
+                              <div
                                 key={lyric.id}
                                 style={{
                                   width: '100%',
                                   padding: '10px 12px',
                                   backgroundColor: 'transparent',
-                                  border: 'none',
                                   borderBottom: '1px solid #2d2d3d',
                                   color: '#e5e7eb',
                                   textAlign: 'left',
                                   cursor: 'pointer',
-                                  fontSize: '13px',
-                                  transition: 'background-color 0.2s'
+                                  fontSize: '13px'
                                 }}
-                                onClick={() => {
-                                  setLyrics(lyric.content);
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  console.log('Loading lyric:', lyric.title, lyric.content);
+                                  setLyrics(lyric.content || '');
                                   setShowLyricBankPicker(false);
-                                  toast.success(`Loaded "${lyric.title}"! Use Quick Edit or Word Timeline to sync.`);
+                                  toast.success(`Loaded "${lyric.title}"!`);
                                 }}
-                                onMouseEnter={(e) => e.target.style.backgroundColor = '#2d2d3d'}
-                                onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2d2d3d'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                               >
-                                <div style={{ fontWeight: '500', marginBottom: '2px' }}>{lyric.title}</div>
-                                <div style={{ fontSize: '11px', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <div style={{ fontWeight: '500', marginBottom: '2px', pointerEvents: 'none' }}>{lyric.title}</div>
+                                <div style={{ fontSize: '11px', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
                                   {lyric.content?.substring(0, 50)}...
                                 </div>
-                              </button>
+                              </div>
                             ))}
                           </div>
                         )}
