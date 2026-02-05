@@ -11,6 +11,18 @@ import {
   needsSync,
   addMockData
 } from '../../services/analyticsService';
+import {
+  SpotifyMomentumCard,
+  GrowthDriversCard,
+  TimelineOverlayChart,
+  SpotifyTab,
+  ConfidenceBadge
+} from './SpotifyComponents';
+import {
+  getVideoAttributionSummary,
+  getSongAttributionSummary,
+  computeAttribution
+} from '../../services/spotifyAttributionService';
 
 /**
  * AnalyticsDashboard - Main analytics view
@@ -50,7 +62,9 @@ const AnalyticsDashboard = ({
   const [lastUpdated, setLastUpdated] = useState(null);
   const [selectedSong, setSelectedSong] = useState(null);
   const [chartPeriod, setChartPeriod] = useState('daily');
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'songs' | 'videos'
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'songs' | 'videos' | 'spotify'
+  const [videoAttributions, setVideoAttributions] = useState([]);
+  const [songAttributions, setSongAttributions] = useState([]);
 
   // Handle artist change
   const handleArtistChange = (newArtistId) => {
@@ -88,9 +102,20 @@ const AnalyticsDashboard = ({
       setTimeSeriesData(getTimeSeriesData(chartPeriod, 30));
     }
 
+    // Load Spotify attribution data
+    try {
+      if (currentArtistId) {
+        computeAttribution(currentArtistId);
+        setVideoAttributions(getVideoAttributionSummary(currentArtistId));
+        setSongAttributions(getSongAttributionSummary(currentArtistId));
+      }
+    } catch (error) {
+      console.error('Error loading attribution data:', error);
+    }
+
     setLastUpdated(stored.lastUpdated);
     setIsLoading(false);
-  }, [chartPeriod]);
+  }, [chartPeriod, currentArtistId]);
 
   // Initial load
   useEffect(() => {
@@ -293,7 +318,7 @@ const AnalyticsDashboard = ({
 
       {/* Tab Navigation */}
       <div style={styles.tabNav}>
-        {['overview', 'songs', 'videos'].map(tab => (
+        {['overview', 'songs', 'videos', 'spotify'].map(tab => (
           <button
             key={tab}
             style={{
@@ -305,6 +330,7 @@ const AnalyticsDashboard = ({
             {tab === 'overview' && '📈 Overview'}
             {tab === 'songs' && '🎵 Songs'}
             {tab === 'videos' && '🎬 Videos'}
+            {tab === 'spotify' && '🎧 Spotify'}
           </button>
         ))}
       </div>
@@ -312,6 +338,12 @@ const AnalyticsDashboard = ({
       {/* Overview Tab */}
       {activeTab === 'overview' && (
         <>
+          {/* Spotify Growth Section - New Row */}
+          <div style={styles.spotifyGrowthRow}>
+            <SpotifyMomentumCard artistId={currentArtistId} />
+            <GrowthDriversCard artistId={currentArtistId} />
+          </div>
+
           {/* Overview Stats Cards */}
           <div style={styles.statsGrid}>
             <div style={styles.statCard}>
@@ -484,6 +516,9 @@ const AnalyticsDashboard = ({
             </div>
           </div>
 
+          {/* Spotify Timeline Overlay */}
+          <TimelineOverlayChart artistId={currentArtistId} days={30} />
+
           {/* Top Videos Table */}
           <div style={styles.card}>
             <h3 style={styles.cardTitle}>🔥 Top Performing Videos</h3>
@@ -527,46 +562,62 @@ const AnalyticsDashboard = ({
         </>
       )}
 
-      {/* Songs Tab */}
+      {/* Songs Tab - Enhanced with Spotify Attribution */}
       {activeTab === 'songs' && (
         <div style={styles.songsTab}>
           <div style={styles.songsGrid}>
-            {songPerformance.map((song, i) => (
-              <div
-                key={song.audioId}
-                style={styles.songCard}
-                onClick={() => setSelectedSong(song.audioId)}
-              >
-                <div style={styles.songCardHeader}>
-                  <span style={styles.songCardRank}>#{i + 1}</span>
-                  <span style={styles.songCardIcon}>🎵</span>
-                </div>
-                <h4 style={styles.songCardName}>{song.audioName}</h4>
-                <p style={styles.songCardMeta}>{song.videoCount} videos</p>
-                <div style={styles.songCardStats}>
-                  <div style={styles.songCardStat}>
-                    <span style={styles.songCardStatValue}>{formatNumber(song.totalViews)}</span>
-                    <span style={styles.songCardStatLabel}>views</span>
+            {songPerformance.map((song, i) => {
+              // Find Spotify attribution data for this song
+              const songAttr = songAttributions.find(s => s.audioId === song.audioId) || {};
+              return (
+                <div
+                  key={song.audioId}
+                  style={styles.songCard}
+                  onClick={() => setSelectedSong(song.audioId)}
+                >
+                  <div style={styles.songCardHeader}>
+                    <span style={styles.songCardRank}>#{i + 1}</span>
+                    {songAttr.momentumScore !== null && songAttr.momentumScore !== undefined && (
+                      <span style={styles.songMomentumBadge}>
+                        🎧 {songAttr.momentumScore}
+                      </span>
+                    )}
+                    <span style={styles.songCardIcon}>🎵</span>
                   </div>
-                  <div style={styles.songCardStat}>
-                    <span style={styles.songCardStatValue}>{formatNumber(song.totalLikes)}</span>
-                    <span style={styles.songCardStatLabel}>likes</span>
+                  <h4 style={styles.songCardName}>{song.audioName}</h4>
+                  <p style={styles.songCardMeta}>{song.videoCount} videos</p>
+                  <div style={styles.songCardStats}>
+                    <div style={styles.songCardStat}>
+                      <span style={styles.songCardStatValue}>{formatNumber(song.totalViews)}</span>
+                      <span style={styles.songCardStatLabel}>views</span>
+                    </div>
+                    <div style={styles.songCardStat}>
+                      <span style={styles.songCardStatValue}>{formatNumber(song.totalLikes)}</span>
+                      <span style={styles.songCardStatLabel}>likes</span>
+                    </div>
+                    <div style={styles.songCardStat}>
+                      <span style={styles.songCardStatValue}>{formatPercent(song.avgEngagement)}</span>
+                      <span style={styles.songCardStatLabel}>eng.</span>
+                    </div>
                   </div>
-                  <div style={styles.songCardStat}>
-                    <span style={styles.songCardStatValue}>{formatPercent(song.avgEngagement)}</span>
-                    <span style={styles.songCardStatLabel}>eng.</span>
+                  <div style={styles.songCardAvg}>
+                    Avg {formatNumber(song.avgViewsPerVideo)} views/video
                   </div>
+                  {/* Spotify Attribution Lift */}
+                  {(songAttr.totalAttributedLift || 0) > 0 && (
+                    <div style={styles.songAttrLift}>
+                      <span style={styles.attrLiftLabel}>Spotify Lift (7d)</span>
+                      <span style={styles.attrLiftValue}>+{songAttr.totalAttributedLift.toFixed(1)}</span>
+                    </div>
+                  )}
                 </div>
-                <div style={styles.songCardAvg}>
-                  Avg {formatNumber(song.avgViewsPerVideo)} views/video
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* Videos Tab */}
+      {/* Videos Tab - Enhanced with Spotify Attribution */}
       {activeTab === 'videos' && (
         <div style={styles.videosTab}>
           <div style={styles.videoTable}>
@@ -574,37 +625,70 @@ const AnalyticsDashboard = ({
               <span style={{ ...styles.videoTableCell, width: '40px' }}>#</span>
               <span style={{ ...styles.videoTableCell, flex: 2 }}>Video</span>
               <span style={styles.videoTableCell}>Song</span>
-              <span style={styles.videoTableCell}>Category</span>
-              <span style={styles.videoTableCell}>Handle</span>
+              <span style={styles.videoTableCell}>Platform</span>
               <span style={styles.videoTableCell}>Views</span>
-              <span style={styles.videoTableCell}>Likes</span>
-              <span style={styles.videoTableCell}>Comments</span>
               <span style={styles.videoTableCell}>Engagement</span>
+              <span style={styles.videoTableCell}>Spotify Lift</span>
+              <span style={styles.videoTableCell}>Contribution</span>
+              <span style={styles.videoTableCell}>Confidence</span>
+              <span style={styles.videoTableCell}>Time to Impact</span>
             </div>
-            {topVideos.map((video, i) => (
-              <div key={video.videoId} style={styles.videoTableRow}>
-                <span style={{ ...styles.videoTableCell, width: '40px' }}>{i + 1}</span>
-                <span style={{ ...styles.videoTableCell, flex: 2, fontWeight: '500' }}>
-                  {video.videoName}
-                </span>
-                <span style={styles.videoTableCell}>
-                  <span
-                    style={styles.songLink}
-                    onClick={() => setSelectedSong(video.audioId)}
-                  >
-                    {video.audioName?.slice(0, 15)}...
+            {(videoAttributions.length > 0 ? videoAttributions : topVideos).map((video, i) => {
+              // Find attribution data for this video
+              const attr = videoAttributions.find(v => v.videoId === video.videoId) || video;
+              return (
+                <div key={video.videoId} style={styles.videoTableRow}>
+                  <span style={{ ...styles.videoTableCell, width: '40px' }}>{i + 1}</span>
+                  <span style={{ ...styles.videoTableCell, flex: 2, fontWeight: '500' }}>
+                    {video.videoName}
                   </span>
-                </span>
-                <span style={styles.videoTableCell}>{video.categoryName}</span>
-                <span style={styles.videoTableCell}>{video.handle}</span>
-                <span style={styles.videoTableCell}>{formatNumber(video.views)}</span>
-                <span style={styles.videoTableCell}>{formatNumber(video.likes)}</span>
-                <span style={styles.videoTableCell}>{formatNumber(video.comments)}</span>
-                <span style={styles.videoTableCell}>{formatPercent(video.engagementRate)}</span>
-              </div>
-            ))}
+                  <span style={styles.videoTableCell}>
+                    <span
+                      style={styles.songLink}
+                      onClick={() => setSelectedSong(video.audioId)}
+                    >
+                      {video.audioName?.slice(0, 12) || '—'}...
+                    </span>
+                  </span>
+                  <span style={styles.videoTableCell}>{video.platform || '—'}</span>
+                  <span style={styles.videoTableCell}>{formatNumber(video.views)}</span>
+                  <span style={styles.videoTableCell}>{formatPercent(video.engagementRate)}</span>
+                  <span style={{
+                    ...styles.videoTableCell,
+                    color: (attr.spotifyLift7d || 0) > 0 ? '#10b981' : '#6b7280'
+                  }}>
+                    {(attr.spotifyLift7d || 0) > 0 ? '+' : ''}{(attr.spotifyLift7d || 0).toFixed(1)}
+                  </span>
+                  <span style={styles.videoTableCell}>
+                    {(attr.contributionPct || 0).toFixed(1)}%
+                  </span>
+                  <span style={styles.videoTableCell}>
+                    <ConfidenceBadge
+                      level={attr.confidenceLabel || 'None'}
+                      score={attr.confidenceScore}
+                    />
+                  </span>
+                  <span style={styles.videoTableCell}>
+                    {attr.timeToImpact ? `${attr.timeToImpact}h` : '—'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Attribution methodology note */}
+          <div style={styles.attributionNote}>
+            💡 <strong>Spotify Lift</strong> shows attributed growth points.
+            <strong> Contribution %</strong> shows this video's share of total attributed lift.
+            <strong> Time to Impact</strong> shows hours between post and detected growth event.
+            <em> Attribution is probabilistic, not proven causation.</em>
           </div>
         </div>
+      )}
+
+      {/* Spotify Tab */}
+      {activeTab === 'spotify' && (
+        <SpotifyTab artistId={currentArtistId} />
       )}
     </div>
   );
@@ -617,6 +701,23 @@ const styles = {
     backgroundColor: '#0a0a0f',
     minHeight: '100vh',
     color: '#fff'
+  },
+  // Spotify Growth Row (Overview)
+  spotifyGrowthRow: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '24px',
+    marginBottom: '24px'
+  },
+  attributionNote: {
+    marginTop: '16px',
+    padding: '12px 16px',
+    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    border: '1px solid rgba(139, 92, 246, 0.2)',
+    borderRadius: '8px',
+    fontSize: '12px',
+    color: '#a78bfa',
+    lineHeight: '1.6'
   },
   header: {
     display: 'flex',
@@ -1117,6 +1218,32 @@ const styles = {
     padding: '8px',
     backgroundColor: 'rgba(16, 185, 129, 0.1)',
     borderRadius: '6px'
+  },
+  songMomentumBadge: {
+    fontSize: '10px',
+    color: '#10b981',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    fontWeight: '600'
+  },
+  songAttrLift: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: '8px',
+    padding: '8px 12px',
+    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    borderRadius: '6px'
+  },
+  attrLiftLabel: {
+    fontSize: '11px',
+    color: '#a78bfa'
+  },
+  attrLiftValue: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#a78bfa'
   },
   // Videos tab
   videosTab: {

@@ -80,6 +80,26 @@ service cloud.firestore {
       allow write: if isConductor();
     }
 
+    // Spotify Snapshots collection - immutable time-series data
+    // - Operators can read snapshots for their assigned artists
+    // - Only server can write (via Admin SDK scheduled jobs)
+    match /spotifySnapshots/{snapshotId} {
+      allow read: if isOperatorOrAbove();
+      allow write: if false; // Server-only via Admin SDK
+    }
+
+    // Growth Events collection - detected Spotify growth events
+    match /growthEvents/{eventId} {
+      allow read: if isOperatorOrAbove();
+      allow write: if false; // Server-only via Admin SDK
+    }
+
+    // Post Attributions collection - calculated attribution data
+    match /postAttributions/{attrId} {
+      allow read: if isOperatorOrAbove();
+      allow write: if false; // Server-only via Admin SDK
+    }
+
     // Artist Secrets collection (Late API keys, etc.)
     // SECURITY: NO client access - only serverless functions via Admin SDK
     // This keeps API keys completely secure from browser exposure
