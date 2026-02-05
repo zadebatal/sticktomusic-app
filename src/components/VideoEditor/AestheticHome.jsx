@@ -382,49 +382,84 @@ const AestheticHome = ({
             {/* Video Mode View */}
             {studioMode === 'videos' && (
               <div style={styles.modeView}>
-                <div style={styles.banksAndActions}>
+                <div style={{
+                  ...styles.banksAndActions,
+                  ...(isMobile ? { flexDirection: 'column', gap: '24px', padding: '16px' } : {})
+                }}>
                   {/* Banks Column */}
                   <div style={styles.banksColumn}>
                     <h3 style={styles.columnTitle}>BANKS</h3>
 
                     {/* Clips Bank */}
-                    <div style={styles.bankItem}>
+                    <div style={{
+                      ...styles.bankItem,
+                      ...(isMobile ? { padding: '14px', flexWrap: 'wrap', gap: '10px' } : {})
+                    }}>
                       <div style={styles.bankHeader}>
                         <span style={{...styles.bankIcon, color: '#14b8a6'}}>🎬</span>
                         <span style={styles.bankName}>Clips ({selectedCategory.videos?.length || 0})</span>
                       </div>
-                      <button style={{...styles.bankAddButton, borderColor: '#14b8a6', color: '#14b8a6'}} onClick={() => videoInputRef.current?.click()}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <label
+                        htmlFor="video-bank-input"
+                        style={{
+                          ...styles.bankAddButton,
+                          borderColor: '#14b8a6',
+                          color: '#14b8a6',
+                          cursor: 'pointer',
+                          ...(isMobile ? { padding: '10px 16px', fontSize: '14px', minHeight: '44px' } : {})
+                        }}
+                      >
+                        <svg width={isMobile ? 16 : 12} height={isMobile ? 16 : 12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                         </svg>
                         Add
-                      </button>
-                      <input ref={videoInputRef} type="file" accept="video/*" multiple onChange={handleVideoUpload} style={{ display: 'none' }} />
+                      </label>
+                      <input id="video-bank-input" ref={videoInputRef} type="file" accept="video/*" multiple onChange={handleVideoUpload} style={{ display: 'none' }} />
                     </div>
 
                     {/* Audio Bank */}
-                    <div style={styles.bankItem}>
+                    <div style={{
+                      ...styles.bankItem,
+                      ...(isMobile ? { padding: '14px', flexWrap: 'wrap', gap: '10px' } : {})
+                    }}>
                       <div style={styles.bankHeader}>
                         <span style={{...styles.bankIcon, color: '#22c55e'}}>🎵</span>
                         <span style={styles.bankName}>Audio ({selectedCategory.audio?.length || 0})</span>
                       </div>
-                      <button style={{...styles.bankAddButton, borderColor: '#22c55e', color: '#22c55e'}} onClick={() => audioInputRef.current?.click()}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <label
+                        htmlFor="audio-bank-input"
+                        style={{
+                          ...styles.bankAddButton,
+                          borderColor: '#22c55e',
+                          color: '#22c55e',
+                          cursor: 'pointer',
+                          ...(isMobile ? { padding: '10px 16px', fontSize: '14px', minHeight: '44px' } : {})
+                        }}
+                      >
+                        <svg width={isMobile ? 16 : 12} height={isMobile ? 16 : 12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                         </svg>
                         Add
-                      </button>
-                      <input ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioUpload} style={{ display: 'none' }} />
+                      </label>
+                      <input id="audio-bank-input" ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioUpload} style={{ display: 'none' }} />
                     </div>
 
                     {/* Lyrics Bank */}
-                    <div style={styles.bankItem}>
+                    <div style={{
+                      ...styles.bankItem,
+                      ...(isMobile ? { padding: '14px', flexWrap: 'wrap', gap: '10px' } : {})
+                    }}>
                       <div style={styles.bankHeader}>
                         <span style={styles.bankIcon}>📝</span>
                         <span style={styles.bankName}>Lyrics ({(selectedCategory.lyrics || []).length})</span>
                       </div>
                       <button
-                        style={{...styles.bankAddButton, borderColor: '#a855f7', color: '#a855f7'}}
+                        style={{
+                          ...styles.bankAddButton,
+                          borderColor: '#a855f7',
+                          color: '#a855f7',
+                          ...(isMobile ? { padding: '10px 16px', fontSize: '14px', minHeight: '44px' } : {})
+                        }}
                         onClick={() => {
                           const text = prompt('Enter lyrics to add to bank:');
                           if (text?.trim()) {
@@ -435,7 +470,7 @@ const AestheticHome = ({
                           }
                         }}
                       >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <svg width={isMobile ? 16 : 12} height={isMobile ? 16 : 12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                         </svg>
                         Add
@@ -448,7 +483,10 @@ const AestheticHome = ({
                     <h3 style={styles.columnTitle}>ACTIONS</h3>
 
                     <button
-                      style={styles.actionButton}
+                      style={{
+                        ...styles.actionButton,
+                        ...(isMobile ? { padding: '16px', fontSize: '15px' } : {})
+                      }}
                       onClick={onMakeVideo || onCreateContent}
                       disabled={selectedCategory.videos?.length === 0 && selectedCategory.audio?.length === 0}
                     >
@@ -457,7 +495,10 @@ const AestheticHome = ({
                     </button>
 
                     <button
-                      style={styles.actionButtonPurple}
+                      style={{
+                        ...styles.actionButtonPurple,
+                        ...(isMobile ? { padding: '16px', fontSize: '15px' } : {})
+                      }}
                       onClick={onShowBatchPipeline}
                       disabled={selectedCategory.videos?.length === 0 || selectedCategory.audio?.length === 0}
                       title="Generate up to 10 videos at once"
@@ -467,7 +508,10 @@ const AestheticHome = ({
                     </button>
 
                     <button
-                      style={styles.actionButtonGreen}
+                      style={{
+                        ...styles.actionButtonGreen,
+                        ...(isMobile ? { padding: '16px', fontSize: '15px' } : {})
+                      }}
                       onClick={onViewContent}
                       title="View created videos and drafts"
                     >
@@ -484,9 +528,9 @@ const AestheticHome = ({
                     <h4 style={styles.expandedBankTitle}>Video Clips</h4>
                     <div style={styles.assetGrid}>
                       {(selectedCategory.videos || []).length === 0 ? (
-                        <div style={styles.emptyState} onClick={() => videoInputRef.current?.click()}>
-                          <span>Click to add video clips</span>
-                        </div>
+                        <label htmlFor="video-bank-input" style={{...styles.emptyState, cursor: 'pointer'}}>
+                          <span>Tap to add video clips</span>
+                        </label>
                       ) : (
                         (selectedCategory.videos || []).map(video => (
                           <VideoCard
@@ -505,9 +549,9 @@ const AestheticHome = ({
                     <h4 style={{...styles.expandedBankTitle, color: '#22c55e'}}>🎵 Audio Bank</h4>
                     <div style={styles.audioGrid}>
                       {(selectedCategory.audio || []).length === 0 ? (
-                        <div style={{...styles.emptyState, borderColor: '#22c55e'}} onClick={() => audioInputRef.current?.click()}>
-                          <span style={{color: '#22c55e'}}>Click to add audio</span>
-                        </div>
+                        <label htmlFor="audio-bank-input" style={{...styles.emptyState, borderColor: '#22c55e', cursor: 'pointer'}}>
+                          <span style={{color: '#22c55e'}}>Tap to add audio</span>
+                        </label>
                       ) : (
                         (selectedCategory.audio || []).map(audio => (
                           <div key={audio.id} style={styles.audioCard}>
@@ -551,63 +595,110 @@ const AestheticHome = ({
             {/* Slideshow Mode View */}
             {studioMode === 'slideshows' && (
               <div style={styles.modeView}>
-                <div style={styles.banksAndActions}>
+                <div style={{
+                  ...styles.banksAndActions,
+                  ...(isMobile ? { flexDirection: 'column', gap: '24px', padding: '16px' } : {})
+                }}>
                   {/* Banks Column */}
                   <div style={styles.banksColumn}>
                     <h3 style={styles.columnTitle}>BANKS</h3>
 
                     {/* Image A Bank */}
-                    <div style={styles.bankItem}>
+                    <div style={{
+                      ...styles.bankItem,
+                      ...(isMobile ? { padding: '14px', flexWrap: 'wrap', gap: '10px' } : {})
+                    }}>
                       <div style={styles.bankHeader}>
                         <span style={{...styles.bankIcon, color: '#14b8a6'}}>🖼️</span>
                         <span style={styles.bankName}>Image A ({(selectedCategory.imagesA || []).length})</span>
                       </div>
-                      <button style={{...styles.bankAddButton, borderColor: '#14b8a6', color: '#14b8a6'}} onClick={() => imageAInputRef.current?.click()}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <label
+                        htmlFor="image-a-bank-input"
+                        style={{
+                          ...styles.bankAddButton,
+                          borderColor: '#14b8a6',
+                          color: '#14b8a6',
+                          cursor: 'pointer',
+                          ...(isMobile ? { padding: '10px 16px', fontSize: '14px', minHeight: '44px' } : {})
+                        }}
+                      >
+                        <svg width={isMobile ? 16 : 12} height={isMobile ? 16 : 12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                         </svg>
                         Add
-                      </button>
-                      <input ref={imageAInputRef} type="file" accept="image/*" multiple onChange={(e) => handleImageUpload(e, 'A')} style={{ display: 'none' }} />
+                      </label>
+                      <input id="image-a-bank-input" ref={imageAInputRef} type="file" accept="image/*" multiple onChange={(e) => handleImageUpload(e, 'A')} style={{ display: 'none' }} />
                     </div>
 
                     {/* Image B Bank */}
-                    <div style={styles.bankItem}>
+                    <div style={{
+                      ...styles.bankItem,
+                      ...(isMobile ? { padding: '14px', flexWrap: 'wrap', gap: '10px' } : {})
+                    }}>
                       <div style={styles.bankHeader}>
                         <span style={{...styles.bankIcon, color: '#f59e0b'}}>🖼️</span>
                         <span style={styles.bankName}>Image B ({(selectedCategory.imagesB || []).length})</span>
                       </div>
-                      <button style={{...styles.bankAddButton, borderColor: '#f59e0b', color: '#f59e0b'}} onClick={() => imageBInputRef.current?.click()}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <label
+                        htmlFor="image-b-bank-input"
+                        style={{
+                          ...styles.bankAddButton,
+                          borderColor: '#f59e0b',
+                          color: '#f59e0b',
+                          cursor: 'pointer',
+                          ...(isMobile ? { padding: '10px 16px', fontSize: '14px', minHeight: '44px' } : {})
+                        }}
+                      >
+                        <svg width={isMobile ? 16 : 12} height={isMobile ? 16 : 12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                         </svg>
                         Add
-                      </button>
-                      <input ref={imageBInputRef} type="file" accept="image/*" multiple onChange={(e) => handleImageUpload(e, 'B')} style={{ display: 'none' }} />
+                      </label>
+                      <input id="image-b-bank-input" ref={imageBInputRef} type="file" accept="image/*" multiple onChange={(e) => handleImageUpload(e, 'B')} style={{ display: 'none' }} />
                     </div>
 
                     {/* Audio Bank (for slideshows) */}
-                    <div style={styles.bankItem}>
+                    <div style={{
+                      ...styles.bankItem,
+                      ...(isMobile ? { padding: '14px', flexWrap: 'wrap', gap: '10px' } : {})
+                    }}>
                       <div style={styles.bankHeader}>
                         <span style={{...styles.bankIcon, color: '#22c55e'}}>🎵</span>
                         <span style={styles.bankName}>Audio ({(selectedCategory.audio || []).length})</span>
                       </div>
-                      <button style={{...styles.bankAddButton, borderColor: '#22c55e', color: '#22c55e'}} onClick={() => audioInputRef.current?.click()}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <label
+                        htmlFor="audio-bank-input"
+                        style={{
+                          ...styles.bankAddButton,
+                          borderColor: '#22c55e',
+                          color: '#22c55e',
+                          cursor: 'pointer',
+                          ...(isMobile ? { padding: '10px 16px', fontSize: '14px', minHeight: '44px' } : {})
+                        }}
+                      >
+                        <svg width={isMobile ? 16 : 12} height={isMobile ? 16 : 12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                         </svg>
                         Add
-                      </button>
+                      </label>
                     </div>
 
                     {/* Lyrics Bank */}
-                    <div style={styles.bankItem}>
+                    <div style={{
+                      ...styles.bankItem,
+                      ...(isMobile ? { padding: '14px', flexWrap: 'wrap', gap: '10px' } : {})
+                    }}>
                       <div style={styles.bankHeader}>
                         <span style={styles.bankIcon}>📝</span>
                         <span style={styles.bankName}>Lyrics ({(selectedCategory.lyrics || []).length})</span>
                       </div>
                       <button
-                        style={{...styles.bankAddButton, borderColor: '#a855f7', color: '#a855f7'}}
+                        style={{
+                          ...styles.bankAddButton,
+                          borderColor: '#a855f7',
+                          color: '#a855f7',
+                          ...(isMobile ? { padding: '10px 16px', fontSize: '14px', minHeight: '44px' } : {})
+                        }}
                         onClick={() => {
                           const text = prompt('Enter lyrics to add to bank:');
                           if (text?.trim()) {
@@ -618,7 +709,7 @@ const AestheticHome = ({
                           }
                         }}
                       >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <svg width={isMobile ? 16 : 12} height={isMobile ? 16 : 12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                         </svg>
                         Add
@@ -631,7 +722,10 @@ const AestheticHome = ({
                     <h3 style={styles.columnTitle}>ACTIONS</h3>
 
                     <button
-                      style={styles.actionButton}
+                      style={{
+                        ...styles.actionButton,
+                        ...(isMobile ? { padding: '16px', fontSize: '15px' } : {})
+                      }}
                       onClick={() => onMakeSlideshow?.()}
                       disabled={(selectedCategory.imagesA || []).length === 0 && (selectedCategory.imagesB || []).length === 0}
                     >
@@ -640,7 +734,10 @@ const AestheticHome = ({
                     </button>
 
                     <button
-                      style={styles.actionButtonPurple}
+                      style={{
+                        ...styles.actionButtonPurple,
+                        ...(isMobile ? { padding: '16px', fontSize: '15px' } : {})
+                      }}
                       onClick={() => {
                         onMakeSlideshow?.({ batch: true });
                         // Auto-navigate to slideshow library after batch creation
@@ -654,7 +751,10 @@ const AestheticHome = ({
                     </button>
 
                     <button
-                      style={styles.actionButtonGreen}
+                      style={{
+                        ...styles.actionButtonGreen,
+                        ...(isMobile ? { padding: '16px', fontSize: '15px' } : {})
+                      }}
                       title="View created slideshows"
                       onClick={() => onViewContent?.({ type: 'slideshows' })}
                     >
@@ -671,9 +771,9 @@ const AestheticHome = ({
                     <h4 style={{...styles.expandedBankTitle, color: '#14b8a6'}}>Image A Bank</h4>
                     <div style={styles.imageGrid}>
                       {(selectedCategory.imagesA || []).length === 0 ? (
-                        <div style={{...styles.emptyState, borderColor: '#14b8a6'}} onClick={() => imageAInputRef.current?.click()}>
-                          <span style={{color: '#14b8a6'}}>Click to add Image A</span>
-                        </div>
+                        <label htmlFor="image-a-bank-input" style={{...styles.emptyState, borderColor: '#14b8a6', cursor: 'pointer'}}>
+                          <span style={{color: '#14b8a6'}}>Tap to add Image A</span>
+                        </label>
                       ) : (
                         (selectedCategory.imagesA || []).map(image => (
                           <ImageCard
@@ -691,9 +791,9 @@ const AestheticHome = ({
                     <h4 style={{...styles.expandedBankTitle, color: '#f59e0b'}}>Image B Bank</h4>
                     <div style={styles.imageGrid}>
                       {(selectedCategory.imagesB || []).length === 0 ? (
-                        <div style={{...styles.emptyState, borderColor: '#f59e0b'}} onClick={() => imageBInputRef.current?.click()}>
-                          <span style={{color: '#f59e0b'}}>Click to add Image B</span>
-                        </div>
+                        <label htmlFor="image-b-bank-input" style={{...styles.emptyState, borderColor: '#f59e0b', cursor: 'pointer'}}>
+                          <span style={{color: '#f59e0b'}}>Tap to add Image B</span>
+                        </label>
                       ) : (
                         (selectedCategory.imagesB || []).map(image => (
                           <ImageCard
@@ -711,9 +811,9 @@ const AestheticHome = ({
                     <h4 style={{...styles.expandedBankTitle, color: '#22c55e'}}>🎵 Audio Bank</h4>
                     <div style={styles.audioGrid}>
                       {(selectedCategory.audio || []).length === 0 ? (
-                        <div style={{...styles.emptyState, borderColor: '#22c55e'}} onClick={() => audioInputRef.current?.click()}>
-                          <span style={{color: '#22c55e'}}>Click to add audio</span>
-                        </div>
+                        <label htmlFor="audio-bank-input" style={{...styles.emptyState, borderColor: '#22c55e', cursor: 'pointer'}}>
+                          <span style={{color: '#22c55e'}}>Tap to add audio</span>
+                        </label>
                       ) : (
                         (selectedCategory.audio || []).map(audio => (
                           <div key={audio.id} style={styles.audioCard}>
