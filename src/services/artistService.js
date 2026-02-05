@@ -130,6 +130,7 @@ export const createArtist = async (db, artistData) => {
       lateApiKey: artistData.lateApiKey || '',
       lateAccountIds: artistData.lateAccountIds || {},
       metrics: { views: 0, engagement: 0, rate: 0 },
+      ownerOperatorId: artistData.ownerOperatorId || null, // Which operator owns this artist (null = conductor only)
       createdAt: new Date().toISOString()
     };
 

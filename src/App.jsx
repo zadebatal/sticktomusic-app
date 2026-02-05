@@ -82,9 +82,11 @@ const googleProvider = new GoogleAuthProvider();
 // Stripe Configuration - loaded from environment variable for security
 const STRIPE_PUBLISHABLE_KEY = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY;
 
-// Operator emails (these users get operator access)
-// Can be overridden via REACT_APP_OPERATOR_EMAILS environment variable (comma-separated)
-const OPERATOR_EMAILS = (process.env.REACT_APP_OPERATOR_EMAILS || 'zade@sticktomusic.com,zadebatal@gmail.com')
+// Conductor emails (these users get full conductor/super-admin access)
+// Can be overridden via REACT_APP_CONDUCTOR_EMAILS environment variable (comma-separated)
+// Conductors can see ALL artists and onboard operators
+// Operators (added via allowedUsers) can only see their assigned artists
+const CONDUCTOR_EMAILS = (process.env.REACT_APP_CONDUCTOR_EMAILS || process.env.REACT_APP_CONDUCTOR_EMAILS || 'zade@sticktomusic.com,zadebatal@gmail.com')
   .split(',')
   .map(email => email.trim().toLowerCase())
   .filter(Boolean);
@@ -327,7 +329,7 @@ const StickToMusic = () => {
 
   // Add Artist modal
   const [showAddArtistModal, setShowAddArtistModal] = useState(false);
-  const [addArtistForm, setAddArtistForm] = useState({ name: '', tier: 'Scale', cdTier: 'CD Lite', error: null, isLoading: false });
+  const [addArtistForm, setAddArtistForm] = useState({ name: '', tier: 'Scale', cdTier: 'CD Lite', assignedOperatorId: '', error: null, isLoading: false });
 
   // Firestore data - allowed users loaded from database
   const [allowedUsers, setAllowedUsers] = useState([]);
@@ -451,10 +453,24 @@ const StickToMusic = () => {
       const newArtist = await createArtist(db, {
         name: addArtistForm.name.trim(),
         tier: addArtistForm.tier,
-        cdTier: addArtistForm.cdTier
+        cdTier: addArtistForm.cdTier,
+        ownerOperatorId: addArtistForm.assignedOperatorId || null
       });
 
       console.log('✅ Created new artist:', newArtist);
+
+      // If assigned to an operator, update their assignedArtistIds
+      if (addArtistForm.assignedOperatorId) {
+        const operatorUser = allowedUsers.find(u => u.id === addArtistForm.assignedOperatorId);
+        if (operatorUser) {
+          const operatorRef = doc(db, 'allowedUsers', operatorUser.id);
+          const currentAssigned = operatorUser.assignedArtistIds || [];
+          await updateDoc(operatorRef, {
+            assignedArtistIds: [...currentAssigned, newArtist.id]
+          });
+          console.log('✅ Assigned artist to operator:', operatorUser.email);
+        }
+      }
 
       // Select the new artist
       setCurrentArtistId(newArtist.id);
@@ -462,7 +478,7 @@ const StickToMusic = () => {
 
       // Close modal and reset form
       setShowAddArtistModal(false);
-      setAddArtistForm({ name: '', tier: 'Scale', cdTier: 'CD Lite', error: null, isLoading: false });
+      setAddArtistForm({ name: '', tier: 'Scale', cdTier: 'CD Lite', assignedOperatorId: '', error: null, isLoading: false });
     } catch (error) {
       console.error('Failed to create artist:', error);
       setAddArtistForm(prev => ({ ...prev, error: error.message || 'Failed to create artist', isLoading: false }));
@@ -476,23 +492,24 @@ const StickToMusic = () => {
     if (currentAuthUser) {
       const email = currentAuthUser.email;
 
-      // Check if user is allowed (operators always allowed)
-      if (OPERATOR_EMAILS.includes(email?.toLowerCase())) {
+      // Check if user is a conductor (super-admin with full access)
+      if (CONDUCTOR_EMAILS.includes(email?.toLowerCase())) {
         const newUser = {
           email: email,
-          role: 'operator',
+          role: 'conductor',
           name: currentAuthUser.displayName || email.split('@')[0],
           artistId: null
         };
-        console.log('👑 Setting operator user:', newUser);
+        console.log('👑 Setting conductor user:', newUser);
         setUser(newUser);
       } else if (allowedUsers.some(u => u.email?.toLowerCase() === email?.toLowerCase() && u.status === 'active')) {
         const userData = allowedUsers.find(u => u.email?.toLowerCase() === email?.toLowerCase());
         const newUser = {
           email: email,
-          role: userData?.role || 'artist',
+          role: userData?.role || 'artist', // 'operator' or 'artist'
           name: userData?.name || currentAuthUser.displayName || email.split('@')[0],
-          artistId: userData?.artistId || null
+          artistId: userData?.artistId || null,
+          assignedArtistIds: userData?.assignedArtistIds || [] // Artists this operator can manage
         };
         console.log('🎨 Setting allowed user:', newUser);
         setUser(newUser);
@@ -576,7 +593,7 @@ const StickToMusic = () => {
   const isEmailAllowed = (email) => {
     const normalizedEmail = email?.toLowerCase();
     // Always allow operator emails (fallback if Firestore has issues)
-    if (OPERATOR_EMAILS.includes(normalizedEmail)) {
+    if (CONDUCTOR_EMAILS.includes(normalizedEmail)) {
       return true;
     }
     // Check Firestore allowedUsers
@@ -593,8 +610,18 @@ const StickToMusic = () => {
   const getUserRole = (email) => {
     const userData = getAllowedUserData(email);
     if (userData?.role) return userData.role;
-    if (OPERATOR_EMAILS.includes(email?.toLowerCase())) return 'operator';
+    if (CONDUCTOR_EMAILS.includes(email?.toLowerCase())) return 'conductor';
     return 'artist';
+  };
+
+  // Helper to check if user has admin access (conductor or operator)
+  const isAdminUser = (userObj) => {
+    return userObj?.role === 'conductor' || userObj?.role === 'operator';
+  };
+
+  // Helper to check if user is a conductor (super-admin)
+  const isConductor = (userObj) => {
+    return userObj?.role === 'conductor';
   };
 
   // Helper to get artist info from Firestore
@@ -2712,19 +2739,22 @@ const StickToMusic = () => {
               <div className="flex items-center gap-6">
                 <button onClick={() => setCurrentPage(user ? (user.role === 'artist' ? 'artist-portal' : 'operator') : 'home')} className="text-xl font-bold hover:text-zinc-300 transition">StickToMusic</button>
                 <span className="text-zinc-600">|</span>
-                <span className="text-zinc-400">Operator Dashboard</span>
+                <span className="text-zinc-400">{isConductor(user) ? 'Conductor Dashboard' : 'Operator Dashboard'}</span>
               </div>
               <div className="flex items-center gap-4">
-                <button
-                  onClick={() => setOperatorTab('settings')}
-                  className="p-2 text-zinc-500 hover:text-white transition rounded-lg hover:bg-zinc-800"
-                  aria-label="Settings"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </button>
+                {/* Settings gear icon - only for conductors */}
+                {isConductor(user) && (
+                  <button
+                    onClick={() => setOperatorTab('settings')}
+                    className="p-2 text-zinc-500 hover:text-white transition rounded-lg hover:bg-zinc-800"
+                    aria-label="Settings"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </button>
+                )}
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-sm font-bold">
                     {user?.name?.[0] || 'O'}
@@ -2767,23 +2797,39 @@ const StickToMusic = () => {
             >
               📊 Analytics
             </button>
-            {['applications', 'settings'].map(tab => (
+            {/* Applications tab - visible to all */}
+            <button
+              onClick={() => setOperatorTab('applications')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
+                operatorTab === 'applications' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+              }`}
+            >
+              Applications
+            </button>
+            {/* Settings tab - only visible to conductors */}
+            {isConductor(user) && (
               <button
-                key={tab}
-                onClick={() => setOperatorTab(tab)}
+                onClick={() => setOperatorTab('settings')}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
-                  operatorTab === tab ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  operatorTab === 'settings' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
                 }`}
               >
-                {tab === 'settings' ? '⚙️ Settings' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                ⚙️ Settings
               </button>
-            ))}
+            )}
           </div>
 
           {/* Artists Tab */}
           {operatorTab === 'artists' && (() => {
             // Use Firestore artists if available, fallback to static list
-            const displayArtists = firestoreArtists.length > 0 ? firestoreArtists : operatorArtists;
+            let displayArtists = firestoreArtists.length > 0 ? firestoreArtists : operatorArtists;
+
+            // Filter artists for operators (non-conductors) - they only see their assigned artists
+            if (!isConductor(user) && user?.assignedArtistIds?.length > 0) {
+              displayArtists = displayArtists.filter(artist =>
+                user.assignedArtistIds.includes(artist.id)
+              );
+            }
 
             return (
               <div className="space-y-6">
@@ -2792,13 +2838,16 @@ const StickToMusic = () => {
                     <h1 className="text-2xl font-bold">Artists</h1>
                     <p className="text-sm text-zinc-500">{displayArtists.length} active artist{displayArtists.length !== 1 ? 's' : ''}</p>
                   </div>
-                  <button
-                    onClick={() => setShowAddArtistModal(true)}
-                    className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium transition flex items-center gap-2"
-                  >
-                    <span className="text-lg">+</span>
-                    Add Artist
-                  </button>
+                  {/* Only conductors can add artists */}
+                  {isConductor(user) && (
+                    <button
+                      onClick={() => setShowAddArtistModal(true)}
+                      className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium transition flex items-center gap-2"
+                    >
+                      <span className="text-lg">+</span>
+                      Add Artist
+                    </button>
+                  )}
                 </div>
                 {displayArtists.length === 0 ? (
                   <SharedEmptyState
@@ -4950,10 +4999,10 @@ const StickToMusic = () => {
                     <div className="flex items-center justify-between py-3 border-b border-zinc-800">
                       <div>
                         <p className="font-medium">Role</p>
-                        <p className="text-sm text-zinc-500 capitalize">{user?.role || 'operator'}</p>
+                        <p className="text-sm text-zinc-500 capitalize">{user?.role === 'conductor' ? 'Conductor' : user?.role === 'operator' ? 'Operator' : user?.role || 'operator'}</p>
                       </div>
                       <span className="px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full text-sm">
-                        {user?.role === 'operator' ? 'Admin' : user?.role === 'artist' ? 'Artist' : 'Admin'}
+                        {user?.role === 'conductor' ? 'Super Admin' : user?.role === 'operator' ? 'Admin' : user?.role === 'artist' ? 'Artist' : 'Admin'}
                       </span>
                     </div>
                   </div>
@@ -5058,8 +5107,9 @@ const StickToMusic = () => {
                           const formData = new FormData(e.target);
                           const email = formData.get('newUserEmail')?.trim();
                           const name = formData.get('newUserName')?.trim();
+                          const role = formData.get('newUserRole') || 'artist';
                           if (email && name) {
-                            const success = await addUserToAllowed(email, name, 'artist');
+                            const success = await addUserToAllowed(email, name, role);
                             if (success) {
                               e.target.reset();
                             }
@@ -5067,28 +5117,41 @@ const StickToMusic = () => {
                             showToast('Please enter both email and name', 'error');
                           }
                         }}
-                        className="flex flex-col sm:flex-row gap-3"
+                        className="space-y-3"
                       >
-                        <input
-                          type="email"
-                          name="newUserEmail"
-                          placeholder="artist@email.com"
-                          className="flex-1 px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
-                          required
-                        />
-                        <input
-                          type="text"
-                          name="newUserName"
-                          placeholder="Artist Name"
-                          className="flex-1 px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
-                          required
-                        />
-                        <button
-                          type="submit"
-                          className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 transition whitespace-nowrap"
-                        >
-                          Add User
-                        </button>
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <input
+                            type="email"
+                            name="newUserEmail"
+                            placeholder="user@email.com"
+                            className="flex-1 px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                            required
+                          />
+                          <input
+                            type="text"
+                            name="newUserName"
+                            placeholder="User Name"
+                            className="flex-1 px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                            required
+                          />
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <select
+                            name="newUserRole"
+                            defaultValue="artist"
+                            className="flex-1 px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                          >
+                            <option value="artist">Artist</option>
+                            <option value="operator">Operator (Sub-Admin)</option>
+                          </select>
+                          <button
+                            type="submit"
+                            className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 transition whitespace-nowrap"
+                          >
+                            Add User
+                          </button>
+                        </div>
+                        <p className="text-xs text-zinc-500">Operators can manage assigned artists. Artists can only view their own data.</p>
                       </form>
                     </div>
 
@@ -5116,7 +5179,7 @@ const StickToMusic = () => {
                                 <span className="px-2 py-0.5 rounded text-xs bg-purple-500/20 text-purple-400">
                                   {u.role || 'artist'}
                                 </span>
-                                {!OPERATOR_EMAILS.includes(u.email?.toLowerCase()) && (
+                                {!CONDUCTOR_EMAILS.includes(u.email?.toLowerCase()) && (
                                   <button
                                     onClick={async () => {
                                       if (window.confirm(`Remove ${u.name} from allowed users?`)) {
@@ -5170,7 +5233,7 @@ const StickToMusic = () => {
 
         <footer className="border-t border-zinc-800 mt-12">
           <div className="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center">
-            <span className="text-zinc-600 text-sm">StickToMusic Operator © 2025</span>
+            <span className="text-zinc-600 text-sm">StickToMusic {isConductor(user) ? 'Conductor' : 'Operator'} © 2025</span>
           </div>
         </footer>
 
@@ -5238,6 +5301,23 @@ const StickToMusic = () => {
                     <option value="CD Pro">CD Pro</option>
                     <option value="None">None</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">Assign to Operator</label>
+                  <select
+                    value={addArtistForm.assignedOperatorId}
+                    onChange={e => setAddArtistForm(prev => ({ ...prev, assignedOperatorId: e.target.value }))}
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
+                  >
+                    <option value="">Conductor only (unassigned)</option>
+                    {allowedUsers
+                      .filter(u => u.role === 'operator' && u.status === 'active')
+                      .map(op => (
+                        <option key={op.id} value={op.id}>{op.name} ({op.email})</option>
+                      ))
+                    }
+                  </select>
+                  <p className="text-xs text-zinc-500 mt-1">Select which operator can manage this artist</p>
                 </div>
                 <div className="flex gap-3 pt-4">
                   <button
@@ -6028,7 +6108,7 @@ const StickToMusic = () => {
                 { label: 'Pricing', action: () => { setCurrentPage('pricing'); setShowQuickSearch(false); }, icon: '💰', category: 'Pages' },
                 { label: 'How It Works', action: () => { setCurrentPage('how-it-works'); setShowQuickSearch(false); }, icon: '📖', category: 'Pages' },
                 { label: 'Apply / Intake Form', action: () => { setCurrentPage('intake'); setShowQuickSearch(false); }, icon: '📝', category: 'Pages' },
-                { label: 'Operator Dashboard', action: () => { setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '⚙️', category: 'Dashboards' },
+                { label: isConductor(user) ? 'Conductor Dashboard' : 'Operator Dashboard', action: () => { setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '⚙️', category: 'Dashboards' },
                 { label: 'Artist Portal', action: () => { setCurrentPage('artist-portal'); setShowQuickSearch(false); }, icon: '🎵', category: 'Dashboards' },
                 { label: 'Artists Tab', action: () => { setOperatorTab('artists'); setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '👥', category: 'Operator' },
                 { label: 'Pages Tab', action: () => { setOperatorTab('pages'); setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '📱', category: 'Operator' },
