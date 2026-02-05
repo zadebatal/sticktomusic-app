@@ -2170,6 +2170,17 @@ const VideoEditorModal = ({
                 onUpdateLyrics(lyricId, { words: wordsToSave });
               }
             }}
+            onAddToBank={(lyricData) => {
+              // Add new lyrics with words to the bank
+              if (onAddLyrics) {
+                console.log(`Adding new lyric to bank: "${lyricData.title}" with ${lyricData.words?.length || 0} words`);
+                onAddLyrics({
+                  title: lyricData.title,
+                  content: lyricData.content,
+                  words: lyricData.words
+                });
+              }
+            }}
           />
         )}
 

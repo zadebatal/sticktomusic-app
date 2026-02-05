@@ -1138,6 +1138,7 @@ const VideoStudio = ({
       id: `lyrics_${Date.now()}`,
       title: lyricsData.title || 'Untitled Lyrics',
       content: lyricsData.content || '',
+      words: lyricsData.words || null, // Include pre-timed words if provided
       createdAt: new Date().toISOString()
     };
 

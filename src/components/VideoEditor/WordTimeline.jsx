@@ -26,7 +26,8 @@ const WordTimeline = ({
   onClose,
   audioRef, // Add audioRef for direct time tracking
   loadedBankLyricId = null, // ID of lyric loaded from bank (if any)
-  onSaveToBank // Callback to save word timings back to bank
+  onSaveToBank, // Callback to save word timings back to bank (update existing)
+  onAddToBank // Callback to add new lyrics to bank (create new)
 }) => {
   const [zoom, setZoom] = useState(() => {
     try {
@@ -49,6 +50,7 @@ const WordTimeline = ({
   const [editingWordId, setEditingWordId] = useState(null); // Which word is being edited inline
   const [editText, setEditText] = useState(''); // Text being edited
   const [deleteConfirm, setDeleteConfirm] = useState({ show: false, index: -1, text: '' }); // Delete confirmation
+  const [saveToBankPrompt, setSaveToBankPrompt] = useState({ show: false, name: '' }); // Save to bank prompt
   const timelineRef = useRef(null);
   const animationRef = useRef(null);
   const editInputRef = useRef(null);
@@ -1418,11 +1420,16 @@ const WordTimeline = ({
           <button
             style={styles.saveButton}
             onClick={() => {
-              // Save to bank if this lyric was loaded from the bank
+              // If loaded from bank, save back to that entry
               if (loadedBankLyricId && onSaveToBank) {
                 onSaveToBank(loadedBankLyricId, words);
+                onClose();
+              } else if (words.length > 0 && onAddToBank) {
+                // Not from bank but has words - prompt to save to bank
+                setSaveToBankPrompt({ show: true, name: '' });
+              } else {
+                onClose();
               }
-              onClose();
             }}
           >
             Save word timings
@@ -1441,6 +1448,81 @@ const WordTimeline = ({
             <div style={styles.confirmButtons}>
               <button style={styles.confirmCancel} onClick={cancelDelete}>Cancel</button>
               <button style={styles.confirmDelete} onClick={confirmDelete}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save to Bank Prompt */}
+      {saveToBankPrompt.show && (
+        <div style={styles.confirmOverlay}>
+          <div style={{...styles.confirmDialog, minWidth: '350px'}}>
+            <h3 style={styles.confirmTitle}>💾 Save to Lyric Bank?</h3>
+            <p style={styles.confirmMessage}>
+              Save these {words.length} words with their timing to your lyric bank for reuse.
+            </p>
+            <input
+              type="text"
+              value={saveToBankPrompt.name}
+              onChange={(e) => setSaveToBankPrompt(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="Enter a name for this lyric..."
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                backgroundColor: '#1f1f2e',
+                border: '1px solid #374151',
+                borderRadius: '6px',
+                color: '#fff',
+                fontSize: '14px',
+                marginBottom: '16px',
+                outline: 'none'
+              }}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && saveToBankPrompt.name.trim()) {
+                  const content = words.map(w => w.text).join(' ');
+                  onAddToBank({
+                    title: saveToBankPrompt.name.trim(),
+                    content,
+                    words
+                  });
+                  setSaveToBankPrompt({ show: false, name: '' });
+                  onClose();
+                }
+              }}
+            />
+            <div style={styles.confirmButtons}>
+              <button
+                style={styles.confirmCancel}
+                onClick={() => {
+                  setSaveToBankPrompt({ show: false, name: '' });
+                  onClose();
+                }}
+              >
+                Skip
+              </button>
+              <button
+                style={{
+                  ...styles.saveButton,
+                  opacity: saveToBankPrompt.name.trim() ? 1 : 0.5,
+                  cursor: saveToBankPrompt.name.trim() ? 'pointer' : 'not-allowed'
+                }}
+                disabled={!saveToBankPrompt.name.trim()}
+                onClick={() => {
+                  if (saveToBankPrompt.name.trim()) {
+                    const content = words.map(w => w.text).join(' ');
+                    onAddToBank({
+                      title: saveToBankPrompt.name.trim(),
+                      content,
+                      words
+                    });
+                    setSaveToBankPrompt({ show: false, name: '' });
+                    onClose();
+                  }
+                }}
+              >
+                Save to Bank
+              </button>
             </div>
           </div>
         </div>
