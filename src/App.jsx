@@ -34,6 +34,9 @@ import {
   deleteArtist
 } from './services/artistService';
 
+// Late Service - for per-artist Late connection status
+import { getArtistLateKeyStatus, setArtistLateKey } from './services/lateService';
+
 // Firebase imports
 import { initializeApp, getApps } from 'firebase/app';
 import {
@@ -470,12 +473,61 @@ const StickToMusic = () => {
     return () => unsubscribe();
   }, [authChecked, currentAuthUser]);
 
+  // Check Late connection status for an artist
+  const checkArtistLateStatus = async (artistId) => {
+    if (!artistId) {
+      setArtistLateConnected(false);
+      return false;
+    }
+
+    setCheckingLateStatus(true);
+    try {
+      const status = await getArtistLateKeyStatus(artistId);
+      console.log('🔗 Late status for artist', artistId, ':', status);
+      setArtistLateConnected(status.configured);
+      return status.configured;
+    } catch (error) {
+      console.error('Error checking Late status:', error);
+      setArtistLateConnected(false);
+      return false;
+    } finally {
+      setCheckingLateStatus(false);
+    }
+  };
+
   // Handle artist change
-  const handleArtistChange = (newArtistId) => {
+  const handleArtistChange = async (newArtistId) => {
     console.log('🎵 Switching to artist:', newArtistId);
     setCurrentArtistId(newArtistId);
     setLastArtistId(newArtistId);
+
+    // Clear Late posts while checking status
+    setLatePosts([]);
+    setLastSynced(null);
+
+    // Check if new artist has Late connected
+    const hasLate = await checkArtistLateStatus(newArtistId);
+
+    // If artist has Late connected, fetch their posts
+    if (hasLate) {
+      try {
+        const result = await lateApi.fetchScheduledPosts(1, newArtistId);
+        if (result.success) {
+          setLatePosts(result.posts || []);
+          setLastSynced(new Date());
+        }
+      } catch (error) {
+        console.error('Error fetching Late posts for new artist:', error);
+      }
+    }
   };
+
+  // Check Late status when currentArtistId changes (including initial load)
+  useEffect(() => {
+    if (currentArtistId && authChecked && currentAuthUser) {
+      checkArtistLateStatus(currentArtistId);
+    }
+  }, [currentArtistId, authChecked, currentAuthUser]);
 
   // Handle adding a new artist
   const handleAddArtist = async (e) => {
@@ -996,6 +1048,11 @@ const StickToMusic = () => {
   const [lateAccounts, setLateAccounts] = useState([]);
   const [showLateAccounts, setShowLateAccounts] = useState(false);
   const [latePosts, setLatePosts] = useState([]);
+  const [artistLateConnected, setArtistLateConnected] = useState(false); // Track if current artist has Late connected
+  const [checkingLateStatus, setCheckingLateStatus] = useState(false);
+  const [showLateConnectModal, setShowLateConnectModal] = useState(false);
+  const [lateApiKeyInput, setLateApiKeyInput] = useState('');
+  const [connectingLate, setConnectingLate] = useState(false);
   const [contentView, setContentView] = useState('list'); // 'list' or 'calendar'
   const [deletingPostId, setDeletingPostId] = useState(null);
   const [lastSynced, setLastSynced] = useState(null);
@@ -3328,30 +3385,75 @@ const StickToMusic = () => {
               }
             };
 
+            // Get current artist name for display
+            const currentArtist = firestoreArtists.find(a => a.id === currentArtistId) ||
+                                  operatorArtists.find(a => String(a.id) === currentArtistId);
+            const artistName = currentArtist?.name || 'this artist';
+
             return (
               <div>
                 {/* Page Header */}
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h1 className="text-2xl font-bold">Schedule</h1>
-                    <p className="text-sm text-zinc-500">{latePosts.length} scheduled post{latePosts.length !== 1 ? 's' : ''}</p>
+                    <p className="text-sm text-zinc-500">
+                      {artistLateConnected
+                        ? `${latePosts.length} scheduled post${latePosts.length !== 1 ? 's' : ''}`
+                        : `Late not connected for ${artistName}`
+                      }
+                    </p>
                   </div>
                   <div className="flex gap-3">
-                    <button
-                      onClick={handleSync}
-                      disabled={syncing}
-                      className="px-4 py-2 bg-zinc-800 text-white rounded-lg text-sm font-medium hover:bg-zinc-700 transition disabled:opacity-50"
-                    >
-                      {syncing ? 'Syncing...' : '🔄 Sync from Late'}
-                    </button>
-                    <button
-                      onClick={() => setShowScheduleModal(true)}
-                      className="px-4 py-2 bg-white text-black rounded-lg text-sm font-medium hover:bg-zinc-200 transition"
-                    >
-                      + Batch Schedule
-                    </button>
+                    {artistLateConnected ? (
+                      <>
+                        <button
+                          onClick={handleSync}
+                          disabled={syncing}
+                          className="px-4 py-2 bg-zinc-800 text-white rounded-lg text-sm font-medium hover:bg-zinc-700 transition disabled:opacity-50"
+                        >
+                          {syncing ? 'Syncing...' : '🔄 Sync from Late'}
+                        </button>
+                        <button
+                          onClick={() => setShowScheduleModal(true)}
+                          className="px-4 py-2 bg-white text-black rounded-lg text-sm font-medium hover:bg-zinc-200 transition"
+                        >
+                          + Batch Schedule
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => setShowLateConnectModal(true)}
+                        className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-500 transition"
+                      >
+                        🔗 Connect Late Account
+                      </button>
+                    )}
                   </div>
                 </div>
+
+                {/* Late Not Connected Banner */}
+                {!artistLateConnected && !checkingLateStatus && (
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center mb-6">
+                    <div className="text-4xl mb-4">🔗</div>
+                    <h3 className="text-xl font-semibold mb-2">Connect Late for {artistName}</h3>
+                    <p className="text-zinc-400 mb-6 max-w-md mx-auto">
+                      To schedule and manage posts for {artistName}, connect their Late account by entering the API key.
+                    </p>
+                    <button
+                      onClick={() => setShowLateConnectModal(true)}
+                      className="px-6 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-500 transition"
+                    >
+                      Connect Late Account
+                    </button>
+                  </div>
+                )}
+
+                {checkingLateStatus && (
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center mb-6">
+                    <div className="animate-spin text-4xl mb-4">⏳</div>
+                    <p className="text-zinc-400">Checking Late connection status...</p>
+                  </div>
+                )}
 
                 {/* Batch Schedule Modal */}
                 {showScheduleModal && (
@@ -5389,6 +5491,82 @@ const StickToMusic = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* LATE CONNECT MODAL */}
+        {showLateConnectModal && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => { setShowLateConnectModal(false); setLateApiKeyInput(''); }}>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+                <h2 className="text-xl font-bold">Connect Late Account</h2>
+                <button onClick={() => { setShowLateConnectModal(false); setLateApiKeyInput(''); }} className="text-zinc-500 hover:text-white">✕</button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-zinc-400 text-sm">
+                  Enter the Late API key for <strong className="text-white">{firestoreArtists.find(a => a.id === currentArtistId)?.name || 'this artist'}</strong> to connect their posting account.
+                </p>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">Late API Key</label>
+                  <input
+                    type="password"
+                    value={lateApiKeyInput}
+                    onChange={e => setLateApiKeyInput(e.target.value)}
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-purple-500 font-mono"
+                    placeholder="Enter Late API key"
+                    autoFocus
+                  />
+                  <p className="mt-2 text-xs text-zinc-500">
+                    Get your API key from <a href="https://getlate.dev/settings/api" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">Late Settings → API</a>
+                  </p>
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => { setShowLateConnectModal(false); setLateApiKeyInput(''); }}
+                    className="flex-1 py-3 bg-zinc-800 text-white rounded-xl font-semibold hover:bg-zinc-700 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!lateApiKeyInput.trim()) {
+                        showToast('Please enter an API key', 'error');
+                        return;
+                      }
+                      setConnectingLate(true);
+                      try {
+                        await setArtistLateKey(currentArtistId, lateApiKeyInput.trim());
+                        setArtistLateConnected(true);
+                        setShowLateConnectModal(false);
+                        setLateApiKeyInput('');
+                        showToast('Late account connected successfully!', 'success');
+                        // Fetch posts after connecting
+                        const result = await lateApi.fetchScheduledPosts(1, currentArtistId);
+                        if (result.success) {
+                          setLatePosts(result.posts || []);
+                          setLastSynced(new Date());
+                        }
+                      } catch (error) {
+                        console.error('Error connecting Late:', error);
+                        showToast(`Failed to connect: ${error.message}`, 'error');
+                      } finally {
+                        setConnectingLate(false);
+                      }
+                    }}
+                    disabled={connectingLate || !lateApiKeyInput.trim()}
+                    className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-500 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {connectingLate ? (
+                      <>
+                        <span className="animate-spin">⟳</span>
+                        Connecting...
+                      </>
+                    ) : '🔗 Connect'}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
