@@ -24,7 +24,9 @@ const WordTimeline = ({
   isPlaying,
   onPlayPause,
   onClose,
-  audioRef // Add audioRef for direct time tracking
+  audioRef, // Add audioRef for direct time tracking
+  loadedBankLyricId = null, // ID of lyric loaded from bank (if any)
+  onSaveToBank // Callback to save word timings back to bank
 }) => {
   const [zoom, setZoom] = useState(() => {
     try {
@@ -1413,7 +1415,18 @@ const WordTimeline = ({
         </div>
 
         <div style={styles.footer}>
-          <button style={styles.saveButton} onClick={onClose}>Save word timings</button>
+          <button
+            style={styles.saveButton}
+            onClick={() => {
+              // Save to bank if this lyric was loaded from the bank
+              if (loadedBankLyricId && onSaveToBank) {
+                onSaveToBank(loadedBankLyricId, words);
+              }
+              onClose();
+            }}
+          >
+            Save word timings
+          </button>
         </div>
       </div>
 

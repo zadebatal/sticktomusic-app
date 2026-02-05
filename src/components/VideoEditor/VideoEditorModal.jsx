@@ -91,6 +91,7 @@ const VideoEditorModal = ({
 
   // Lyric bank picker state
   const [showLyricBankPicker, setShowLyricBankPicker] = useState(false);
+  const [loadedBankLyricId, setLoadedBankLyricId] = useState(null); // Track which lyric from bank is loaded
 
   // Progress bar dragging state
   const [progressDragging, setProgressDragging] = useState(false);
@@ -1781,21 +1782,30 @@ const VideoEditorModal = ({
                                   const content = lyric.content || '';
                                   console.log('Loading lyric:', lyric.title, content);
 
-                                  // Parse lyrics into words with evenly spaced timing
-                                  const lyricWords = content.split(/\s+/).filter(w => w.trim().length > 0);
-                                  const effectiveDuration = selectedAudio?.duration || duration || 30;
-                                  const interval = lyricWords.length > 0 ? effectiveDuration / lyricWords.length : 1;
+                                  let newWords;
 
-                                  const newWords = lyricWords.map((text, i) => ({
-                                    id: `word_${Date.now()}_${i}`,
-                                    text,
-                                    startTime: i * interval,
-                                    duration: interval * 0.8
-                                  }));
+                                  // Check if lyric has pre-saved word timings
+                                  if (lyric.words && lyric.words.length > 0) {
+                                    // Use saved word timings
+                                    console.log(`Loading ${lyric.words.length} pre-timed words from bank`);
+                                    newWords = lyric.words;
+                                  } else {
+                                    // Parse lyrics into words stacked at beginning with 0.5s duration each
+                                    const lyricWords = content.split(/\s+/).filter(w => w.trim().length > 0);
+                                    const wordDuration = 0.5;
 
-                                  console.log(`Created ${newWords.length} words from bank lyrics`);
+                                    newWords = lyricWords.map((text, i) => ({
+                                      id: `word_${Date.now()}_${i}`,
+                                      text,
+                                      startTime: i * wordDuration,
+                                      duration: wordDuration
+                                    }));
+                                    console.log(`Created ${newWords.length} words from bank lyrics (stacked at start)`);
+                                  }
+
                                   setLyrics(content);
                                   setWords(newWords);
+                                  setLoadedBankLyricId(lyric.id); // Track which lyric is loaded for saving
                                   setShowLyricBankPicker(false);
                                   // Auto-open Word Timeline so user can adjust timing
                                   setShowWordTimeline(true);
@@ -2152,6 +2162,14 @@ const VideoEditorModal = ({
             onPlayPause={handlePlayPause}
             onClose={() => setShowWordTimeline(false)}
             audioRef={audioRef}
+            loadedBankLyricId={loadedBankLyricId}
+            onSaveToBank={(lyricId, wordsToSave) => {
+              // Save word timings back to the lyric bank entry
+              if (lyricId && onUpdateLyrics) {
+                console.log(`Saving ${wordsToSave.length} words to lyric bank entry:`, lyricId);
+                onUpdateLyrics(lyricId, { words: wordsToSave });
+              }
+            }}
           />
         )}
 
