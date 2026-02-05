@@ -80,6 +80,13 @@ service cloud.firestore {
       allow write: if isConductor();
     }
 
+    // Artist Secrets collection (Late API keys, etc.)
+    // SECURITY: NO client access - only serverless functions via Admin SDK
+    // This keeps API keys completely secure from browser exposure
+    match /artistSecrets/{artistId} {
+      allow read, write: if false; // Server-only via Admin SDK
+    }
+
     // Catch-all: deny everything else
     match /{document=**} {
       allow read, write: if false;

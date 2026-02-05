@@ -32,12 +32,19 @@ async function getFirebaseToken() {
 
 /**
  * Make authenticated request to our Late API proxy
+ * @param {string} action - API action
+ * @param {string} method - HTTP method
+ * @param {Object} body - Request body
+ * @param {string} artistId - Artist ID for per-artist Late API key lookup
  */
-async function proxyRequest(action, method = 'GET', body = null) {
+async function proxyRequest(action, method = 'GET', body = null, artistId = null) {
   const token = await getFirebaseToken();
 
   const url = new URL(LATE_PROXY, window.location.origin);
   url.searchParams.set('action', action);
+  if (artistId) {
+    url.searchParams.set('artistId', artistId);
+  }
 
   const options = {
     method,
@@ -107,11 +114,76 @@ export function isLateConnected() {
   }
 }
 
-export async function fetchLateAccounts() {
-  if (!isLateConnected()) return [];
+// ============================================
+// PER-ARTIST LATE API KEY MANAGEMENT
+// Keys are stored securely server-side, never exposed to client
+// ============================================
+
+/**
+ * Save Late API key for an artist (securely stored server-side)
+ * @param {string} artistId - Artist ID
+ * @param {string} lateApiKey - Late API key to store
+ */
+export async function setArtistLateKey(artistId, lateApiKey) {
+  if (!artistId || !lateApiKey) {
+    throw new Error('artistId and lateApiKey are required');
+  }
+
+  return proxyRequest('setKey', 'POST', { artistId, lateApiKey });
+}
+
+/**
+ * Remove Late API key for an artist
+ * @param {string} artistId - Artist ID
+ */
+export async function removeArtistLateKey(artistId) {
+  if (!artistId) {
+    throw new Error('artistId is required');
+  }
+
+  const token = await getFirebaseToken();
+  const url = new URL(LATE_PROXY, window.location.origin);
+  url.searchParams.set('action', 'removeKey');
+  url.searchParams.set('artistId', artistId);
+
+  const response = await fetch(url.toString(), {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(error.error || `API Error: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Check if Late API key is configured for an artist
+ * @param {string} artistId - Artist ID
+ * @returns {Promise<{configured: boolean, updatedAt: string|null}>}
+ */
+export async function getArtistLateKeyStatus(artistId) {
+  if (!artistId) {
+    return { configured: false, updatedAt: null };
+  }
 
   try {
-    const data = await proxyRequest('accounts');
+    return await proxyRequest('keyStatus', 'GET', null, artistId);
+  } catch (error) {
+    console.error('Failed to check Late key status:', error);
+    return { configured: false, updatedAt: null };
+  }
+}
+
+// ============================================
+// LATE API FUNCTIONS (now accept artistId)
+// ============================================
+
+export async function fetchLateAccounts(artistId = null) {
+  try {
+    const data = await proxyRequest('accounts', 'GET', null, artistId);
     const accounts = (data.accounts || data.data || []).map(account => ({
       id: account.id || account.account_id,
       platform: (account.platform || account.type || '').toLowerCase(),
@@ -124,33 +196,35 @@ export async function fetchLateAccounts() {
     return accounts.filter(a => a.isActive);
   } catch (error) {
     console.error('Failed to fetch Late accounts:', error);
-    if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-      clearLateToken();
-    }
     throw error;
   }
 }
 
-export async function validateLateToken(token) {
+export async function validateLateToken(artistId = null) {
   // Token validation now happens server-side
-  // This just checks if we can successfully call the proxy
+  // This just checks if we can successfully call the proxy for this artist
   try {
-    await proxyRequest('accounts');
+    await proxyRequest('accounts', 'GET', null, artistId);
     return true;
   } catch {
     return false;
   }
 }
 
-export async function connectLate(token) {
-  // Note: The actual Late API key should be set in Vercel environment variables
-  // This function now just marks the connection as active after verifying
-  const isValid = await validateLateToken(token);
+export async function connectLate(artistId, lateApiKey = null) {
+  // If lateApiKey provided, save it securely first
+  if (lateApiKey && artistId) {
+    await setArtistLateKey(artistId, lateApiKey);
+  }
+
+  // Verify connection works
+  const isValid = await validateLateToken(artistId);
   if (!isValid) {
     throw new Error('Invalid Late API configuration');
   }
+
   storeLateConnection(true);
-  const accounts = await fetchLateAccounts();
+  const accounts = await fetchLateAccounts(artistId);
   return { success: true, accounts };
 }
 
@@ -159,9 +233,7 @@ export function disconnectLate() {
   return { success: true };
 }
 
-export async function schedulePost({ videoUrl, caption, accountIds, scheduledTime, user }) {
-  if (!isLateConnected()) throw new Error('Not connected to Late');
-
+export async function schedulePost({ videoUrl, caption, accountIds, scheduledTime, user, artistId }) {
   // Operator check at API boundary (defense-in-depth)
   assertLateAccess(user, 'schedulePost');
 
@@ -174,17 +246,19 @@ export async function schedulePost({ videoUrl, caption, accountIds, scheduledTim
     payload.scheduled_at = new Date(scheduledTime).toISOString();
   }
 
-  return proxyRequest('posts', 'POST', payload);
+  return proxyRequest('posts', 'POST', payload, artistId);
 }
 
-export async function deletePost(postId, user) {
-  if (!isLateConnected()) throw new Error('Not connected to Late');
+export async function deletePost(postId, user, artistId = null) {
   assertLateAccess(user, 'deletePost');
 
   const token = await getFirebaseToken();
   const url = new URL(LATE_PROXY, window.location.origin);
   url.searchParams.set('action', 'delete');
   url.searchParams.set('postId', postId);
+  if (artistId) {
+    url.searchParams.set('artistId', artistId);
+  }
 
   const response = await fetch(url.toString(), {
     method: 'DELETE',
@@ -200,13 +274,14 @@ export async function deletePost(postId, user) {
   return response.json();
 }
 
-export async function fetchScheduledPosts(page = 1) {
-  if (!isLateConnected()) return { posts: [], total: 0 };
-
+export async function fetchScheduledPosts(page = 1, artistId = null) {
   const token = await getFirebaseToken();
   const url = new URL(LATE_PROXY, window.location.origin);
   url.searchParams.set('action', 'posts');
   url.searchParams.set('page', page.toString());
+  if (artistId) {
+    url.searchParams.set('artistId', artistId);
+  }
 
   const response = await fetch(url.toString(), {
     headers: {

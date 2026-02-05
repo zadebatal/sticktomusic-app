@@ -26,7 +26,8 @@ import {
 const LAST_ARTIST_KEY = 'stm_last_artist_id';
 const CATEGORIES_PREFIX = 'stm_categories_';
 const ANALYTICS_PREFIX = 'stm_analytics_';
-const LATE_CONFIG_PREFIX = 'stm_late_config_';
+// NOTE: Late API keys are now stored securely server-side in artistSecrets collection
+// The client should use lateService.setArtistLateKey() and lateService.getArtistLateKeyStatus()
 
 // Legacy keys (for migration)
 const LEGACY_CATEGORIES_KEY = 'stm_video_studio_categories';
@@ -127,7 +128,7 @@ export const createArtist = async (db, artistData) => {
       }),
       totalPages: 0,
       lateConnected: false,
-      lateApiKey: artistData.lateApiKey || '',
+      // NOTE: Late API keys stored securely in artistSecrets collection (server-side only)
       lateAccountIds: artistData.lateAccountIds || {},
       metrics: { views: 0, engagement: 0, rate: 0 },
       ownerOperatorId: artistData.ownerOperatorId || null, // Which operator owns this artist (null = conductor only)
@@ -196,10 +197,7 @@ export const initializeArtistData = (artistId) => {
     snapshots: [],
     lastUpdated: null
   }));
-  localStorage.setItem(`${LATE_CONFIG_PREFIX}${artistId}`, JSON.stringify({
-    apiKey: '',
-    accountIds: {}
-  }));
+  // NOTE: Late API keys are stored securely server-side via lateService.setArtistLateKey()
 };
 
 /**
@@ -208,7 +206,7 @@ export const initializeArtistData = (artistId) => {
 export const clearArtistData = (artistId) => {
   localStorage.removeItem(`${CATEGORIES_PREFIX}${artistId}`);
   localStorage.removeItem(`${ANALYTICS_PREFIX}${artistId}`);
-  localStorage.removeItem(`${LATE_CONFIG_PREFIX}${artistId}`);
+  // NOTE: To remove Late API key, use lateService.removeArtistLateKey(artistId)
 };
 
 // ============================================
@@ -266,29 +264,11 @@ export const saveArtistAnalytics = (artistId, analytics) => {
   }
 };
 
-/**
- * Get Late config for an artist
- */
-export const getArtistLateConfig = (artistId) => {
-  try {
-    const data = localStorage.getItem(`${LATE_CONFIG_PREFIX}${artistId}`);
-    return data ? JSON.parse(data) : { apiKey: '', accountIds: {} };
-  } catch (error) {
-    console.error('Error getting artist Late config:', error);
-    return { apiKey: '', accountIds: {} };
-  }
-};
-
-/**
- * Save Late config for an artist
- */
-export const saveArtistLateConfig = (artistId, config) => {
-  try {
-    localStorage.setItem(`${LATE_CONFIG_PREFIX}${artistId}`, JSON.stringify(config));
-  } catch (error) {
-    console.error('Error saving artist Late config:', error);
-  }
-};
+// Late API key management has moved to secure server-side storage
+// Use these functions from lateService instead:
+// - setArtistLateKey(artistId, lateApiKey) - Save key securely
+// - removeArtistLateKey(artistId) - Remove key
+// - getArtistLateKeyStatus(artistId) - Check if key is configured
 
 // ============================================
 // Migration
@@ -409,8 +389,7 @@ export default {
   saveArtistCategories,
   getArtistAnalytics,
   saveArtistAnalytics,
-  getArtistLateConfig,
-  saveArtistLateConfig,
+  // Late API key management is in lateService (secure server-side storage)
   needsMigration,
   migrateExistingData,
   ensureBoonArtistExists
