@@ -1039,7 +1039,7 @@ const StickToMusic = () => {
     }
 
     // Refresh posts
-    const result = await lateApi.fetchScheduledPosts();
+    const result = await lateApi.fetchScheduledPosts(1, currentArtistId);
     if (result.success) {
       setLatePosts(result.posts || []);
     }
@@ -2610,7 +2610,7 @@ const StickToMusic = () => {
                     <button
                       onClick={async () => {
                         setSyncing(true);
-                        const result = await lateApi.fetchScheduledPosts();
+                        const result = await lateApi.fetchScheduledPosts(1, currentArtistId);
                         setSyncing(false);
                         if (result.success) {
                           setLatePosts(Array.isArray(result.posts) ? result.posts : []);
@@ -3247,7 +3247,7 @@ const StickToMusic = () => {
             const handleSync = async () => {
               setSyncing(true);
               setSyncStatus('Syncing with Late...');
-              const result = await lateApi.fetchScheduledPosts();
+              const result = await lateApi.fetchScheduledPosts(1, currentArtistId);
               setSyncing(false);
               if (result.success) {
                 const posts = Array.isArray(result.posts) ? result.posts : [];
