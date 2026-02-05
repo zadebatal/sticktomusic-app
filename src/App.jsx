@@ -582,6 +582,14 @@ const StickToMusic = () => {
     if (currentAuthUser) {
       const email = currentAuthUser.email;
 
+      // Debug: Log Firebase Auth user data
+      console.log('🔍 Firebase Auth user:', {
+        email: currentAuthUser.email,
+        displayName: currentAuthUser.displayName,
+        photoURL: currentAuthUser.photoURL,
+        providerData: currentAuthUser.providerData
+      });
+
       // Check if user is a conductor (super-admin with full access)
       if (CONDUCTOR_EMAILS.includes(email?.toLowerCase())) {
         const newUser = {
