@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Artists collection - allow authenticated users full access
+    match /artists/{artistId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Allowed users collection (existing)
+    match /allowedUsers/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // Applications collection (existing)
+    match /applications/{appId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
