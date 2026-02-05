@@ -1781,8 +1781,8 @@ const VideoEditorModal = ({
                                   console.log('Loading lyric:', lyric.title, lyric.content);
                                   setLyrics(lyric.content || '');
                                   setShowLyricBankPicker(false);
-                                  // Auto-open Quick Edit so user can see the loaded lyrics
-                                  setShowLyricsEditor(true);
+                                  // Auto-open Word Timeline so user can sync the lyrics
+                                  setShowWordTimeline(true);
                                 }}
                                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2d2d3d'}
                                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
