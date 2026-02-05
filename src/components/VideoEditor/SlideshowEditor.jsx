@@ -457,14 +457,21 @@ const SlideshowEditor = ({
     setTranscribedLyrics(null);
   }, [transcribedLyrics, selectedAudio, onAddLyrics]);
 
-  // Handle audio file upload directly in slideshow editor
+  // Handle audio file upload directly in slideshow editor - just add it without opening trimmer
   const handleSlideshowAudioUpload = useCallback((e) => {
     const file = e.target.files?.[0];
     if (file) {
       const url = URL.createObjectURL(file);
-      // Open trimmer for the uploaded audio
-      setAudioToTrim({ file, url, localUrl: url, name: file.name, duration: 0 });
-      setShowAudioTrimmer(true);
+      // Just add the audio directly - user can trim later if needed
+      setSelectedAudio({
+        id: `audio_${Date.now()}`,
+        file,
+        url,
+        localUrl: url,
+        name: file.name,
+        startTime: 0,
+        endTime: null // Full track by default
+      });
     }
     e.target.value = '';
   }, []);
