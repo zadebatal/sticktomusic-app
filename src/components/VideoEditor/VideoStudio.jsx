@@ -129,11 +129,23 @@ const VideoStudio = ({
 }) => {
   // Current artist ID - used for namespaced storage
   const [currentArtistId, setCurrentArtistId] = useState(initialArtistId);
+  // Track previous artist ID to detect actual changes (not just re-renders)
+  const prevArtistIdRef = useRef(initialArtistId);
 
   // Update parent when artist changes
   const handleArtistIdChange = (newArtistId) => {
+    if (newArtistId === currentArtistId) return; // No change
+
+    console.log('[VideoStudio] Artist switching from', currentArtistId, 'to', newArtistId);
     setCurrentArtistId(newArtistId);
     setLastArtistId(newArtistId);
+
+    // Also update selectedArtist to match
+    const newArtist = artists.find(a => a.id === newArtistId);
+    if (newArtist) {
+      setSelectedArtist(newArtist);
+    }
+
     if (onArtistChange) {
       onArtistChange(newArtistId);
     }
@@ -334,6 +346,8 @@ const VideoStudio = ({
   const [editingVideo, setEditingVideo] = useState(null);
   const [showEditor, setShowEditor] = useState(savedSession?.showEditor || false);
   const [showBatchPipeline, setShowBatchPipeline] = useState(false);
+  // Batch lyric settings passed from editor (words and textStyle to apply to all batch videos)
+  const [batchLyricSettings, setBatchLyricSettings] = useState(null);
 
   // Slideshow editor state
   const [showSlideshowEditor, setShowSlideshowEditor] = useState(false);
@@ -371,15 +385,18 @@ const VideoStudio = ({
 
   // Reload data when artist changes
   useEffect(() => {
-    if (currentArtistId && currentArtistId !== initialArtistId) {
-      console.log('[VideoStudio] Artist changed to:', currentArtistId);
+    // Only reload if artist actually changed (compare against ref, not prop)
+    if (currentArtistId && currentArtistId !== prevArtistIdRef.current) {
+      console.log('[VideoStudio] Artist changed from', prevArtistIdRef.current, 'to', currentArtistId);
 
       // Load categories for new artist
       const artistCategories = loadArtistCategories(currentArtistId);
       if (artistCategories.length > 0) {
+        console.log('[VideoStudio] Loaded', artistCategories.length, 'categories for', currentArtistId);
         setCategories(artistCategories);
       } else {
         // Initialize with defaults for new artist
+        console.log('[VideoStudio] No categories found, using defaults for', currentArtistId);
         setCategories(defaultCategories);
       }
 
@@ -394,8 +411,11 @@ const VideoStudio = ({
       // Clear selections
       setSelectedCategory(null);
       setStudioMode(null);
+
+      // Update ref to current artist
+      prevArtistIdRef.current = currentArtistId;
     }
-  }, [currentArtistId, initialArtistId]);
+  }, [currentArtistId]);
 
   // Initialize with first artist and restore session
   useEffect(() => {
@@ -1503,7 +1523,10 @@ const VideoStudio = ({
             onAddLyrics={handleAddLyrics}
             onUpdateLyrics={handleUpdateLyrics}
             onDeleteLyrics={handleDeleteLyrics}
-            onShowBatchPipeline={() => setShowBatchPipeline(true)}
+            onShowBatchPipeline={(settings) => {
+              setBatchLyricSettings(settings || null);
+              setShowBatchPipeline(true);
+            }}
             onClose={handleCloseEditor}
           />
         </EditorErrorBoundary>
@@ -1529,7 +1552,12 @@ const VideoStudio = ({
           category={selectedCategory}
           lateAccountIds={lateAccountIds}
           onSchedulePost={onSchedulePost}
-          onClose={() => setShowBatchPipeline(false)}
+          initialWords={batchLyricSettings?.words}
+          initialTextStyle={batchLyricSettings?.textStyle}
+          onClose={() => {
+            setShowBatchPipeline(false);
+            setBatchLyricSettings(null); // Clear settings when closing
+          }}
           onSaveLyrics={(audioId, lyricsData) => handleSaveLyricsToAudio(audioId, lyricsData)}
           onVideosCreated={(videos) => {
             // Add created videos to category

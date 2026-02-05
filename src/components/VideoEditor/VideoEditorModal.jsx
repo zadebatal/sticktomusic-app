@@ -89,6 +89,9 @@ const VideoEditorModal = ({
   // Close confirmation state
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
+  // Batch lyric settings prompt state
+  const [showBatchLyricPrompt, setShowBatchLyricPrompt] = useState(false);
+
   // Lyric bank picker state
   const [showLyricBankPicker, setShowLyricBankPicker] = useState(false);
   const [loadedBankLyricId, setLoadedBankLyricId] = useState(null); // Track which lyric from bank is loaded
@@ -2089,8 +2092,23 @@ const VideoEditorModal = ({
               <button
                 style={styles.batchButton}
                 onClick={() => {
-                  onClose();
-                  onShowBatchPipeline();
+                  // Check if there are word timings or custom text styles to carry over
+                  const hasWordTimings = words && words.length > 0;
+                  const hasCustomTextStyle = textStyle && (
+                    textStyle.outline !== undefined ||
+                    textStyle.fontSize !== 48 ||
+                    textStyle.fontFamily !== 'Inter, sans-serif' ||
+                    textStyle.textCase !== 'default'
+                  );
+
+                  if (hasWordTimings || hasCustomTextStyle) {
+                    // Show prompt asking if they want to apply these to batch
+                    setShowBatchLyricPrompt(true);
+                  } else {
+                    // No custom settings, proceed directly
+                    onClose();
+                    onShowBatchPipeline();
+                  }
                 }}
                 title="Generate up to 10 videos at once"
               >
@@ -2330,6 +2348,77 @@ const VideoEditorModal = ({
                   onClick={() => handleLyricsPromptResponse(true)}
                 >
                   Yes, Save to Song
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Batch Lyric Settings Prompt */}
+        {showBatchLyricPrompt && (
+          <div style={styles.lyricsOverlay}>
+            <div style={{...styles.lyricsModal, maxWidth: '480px'}}>
+              <h3 style={styles.lyricsTitle}>🎬 Apply Lyric Settings to Batch?</h3>
+              <p style={{ color: '#9CA3AF', fontSize: '14px', marginBottom: '16px' }}>
+                You have custom lyric settings configured. Do you want to apply them to all videos in the batch?
+              </p>
+              <div style={{
+                backgroundColor: '#1f1f2e',
+                padding: '12px',
+                borderRadius: '8px',
+                marginBottom: '16px',
+                fontSize: '13px',
+                color: '#9ca3af'
+              }}>
+                {words && words.length > 0 && (
+                  <div style={{ marginBottom: '8px' }}>
+                    <span style={{ color: '#8B5CF6' }}>✓</span> Word timings: {words.length} words synced
+                  </div>
+                )}
+                {textStyle && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {textStyle.outline && (
+                      <span style={{ padding: '4px 8px', backgroundColor: '#374151', borderRadius: '4px', fontSize: '12px' }}>
+                        {textStyle.outline ? 'Outline' : 'No outline'}
+                      </span>
+                    )}
+                    {textStyle.textCase && textStyle.textCase !== 'default' && (
+                      <span style={{ padding: '4px 8px', backgroundColor: '#374151', borderRadius: '4px', fontSize: '12px' }}>
+                        {textStyle.textCase.toUpperCase()}
+                      </span>
+                    )}
+                    {textStyle.displayMode && textStyle.displayMode !== 'word' && (
+                      <span style={{ padding: '4px 8px', backgroundColor: '#374151', borderRadius: '4px', fontSize: '12px' }}>
+                        {textStyle.displayMode === 'line' ? 'Build line' : textStyle.displayMode}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div style={styles.lyricsActions}>
+                <button
+                  style={styles.cancelButton}
+                  onClick={() => {
+                    setShowBatchLyricPrompt(false);
+                    onClose();
+                    onShowBatchPipeline(); // Proceed without lyric settings
+                  }}
+                >
+                  No, Fresh Start
+                </button>
+                <button
+                  style={{...styles.confirmButton, background: 'linear-gradient(135deg, #8B5CF6, #7C3AED)'}}
+                  onClick={() => {
+                    setShowBatchLyricPrompt(false);
+                    onClose();
+                    // Pass words and textStyle to batch pipeline
+                    onShowBatchPipeline({
+                      words: words,
+                      textStyle: textStyle
+                    });
+                  }}
+                >
+                  ✨ Apply to All Videos
                 </button>
               </div>
             </div>

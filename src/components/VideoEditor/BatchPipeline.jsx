@@ -124,7 +124,9 @@ const BatchPipeline = ({
   onVideosCreated,
   onSaveLyrics,
   onEditVideo,           // Open video in full editor
-  onNavigateToLibrary    // Navigate to content library
+  onNavigateToLibrary,   // Navigate to content library
+  initialWords = null,   // Word timings from editor (applies to all batch videos)
+  initialTextStyle = null // Text style from editor (applies to all batch videos)
 }) => {
   // Stage management
   const [stage, setStage] = useState(STAGES.OPTIONS);
@@ -138,8 +140,11 @@ const BatchPipeline = ({
   const [beatPattern, setBeatPattern] = useState('every-2'); // Default: every 2 beats
 
   // Text overlay options
-  const [useTextOverlay, setUseTextOverlay] = useState(false);
+  // Auto-enable if initialWords are provided from editor
+  const [useTextOverlay, setUseTextOverlay] = useState(initialWords?.length > 0);
   const [selectedLyrics, setSelectedLyrics] = useState(null);
+  // Track if we're using initial settings from editor
+  const [usingInitialSettings, setUsingInitialSettings] = useState(initialWords?.length > 0);
 
   // Beat detection
   const { beats, bpm, isAnalyzing, analyzeAudio } = useBeatDetection();
@@ -391,20 +396,32 @@ const BatchPipeline = ({
       const clips = generateClipSequence(audioDuration, selectedClips, clipStrategy);
       console.log('[BatchPipeline] Generated clips:', clips.length);
 
+      // Determine words: prioritize initialWords from editor, then selected lyrics, then empty
+      const wordsToUse = useTextOverlay
+        ? (usingInitialSettings && initialWords?.length > 0
+            ? initialWords
+            : (selectedLyrics?.words || []))
+        : [];
+
+      // Determine textStyle: prioritize initialTextStyle from editor, then category default
+      const textStyleToUse = (usingInitialSettings && initialTextStyle)
+        ? initialTextStyle
+        : (category?.defaultPreset?.textStyle || {
+            fontSize: 48,
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: '600',
+            color: '#ffffff',
+            outline: true,
+            outlineColor: '#000000'
+          });
+
       const videoData = {
         id: `preview_${Date.now()}`,
         title: `${category.name} Preview`,
         clips,
         audio: selectedAudio,
-        words: useTextOverlay && selectedLyrics ? selectedLyrics.words : [],
-        textStyle: category?.defaultPreset?.textStyle || {
-          fontSize: 48,
-          fontFamily: 'Inter, sans-serif',
-          fontWeight: '600',
-          color: '#ffffff',
-          outline: true,
-          outlineColor: '#000000'
-        },
+        words: wordsToUse,
+        textStyle: textStyleToUse,
         cropMode: '9:16',
         duration: Math.min(audioDuration, 10)
       };
@@ -426,7 +443,7 @@ const BatchPipeline = ({
     } finally {
       setIsGeneratingPreview(false);
     }
-  }, [selectedAudio, selectedClips, clipStrategy, generateClipSequence, useTextOverlay, selectedLyrics, category, previewUrl]);
+  }, [selectedAudio, selectedClips, clipStrategy, generateClipSequence, useTextOverlay, selectedLyrics, category, previewUrl, usingInitialSettings, initialWords, initialTextStyle]);
 
   // Generate all video RECIPES (instant - no rendering!)
   const handleGenerate = useCallback(async () => {
@@ -481,21 +498,33 @@ const BatchPipeline = ({
         hashtags = defaultHashtags;
       }
 
+      // Determine words: prioritize initialWords from editor, then selected lyrics
+      const wordsForVideo = useTextOverlay
+        ? (usingInitialSettings && initialWords?.length > 0
+            ? initialWords
+            : (selectedLyrics?.words || []))
+        : [];
+
+      // Determine textStyle: prioritize initialTextStyle from editor, then category default
+      const textStyleForVideo = (usingInitialSettings && initialTextStyle)
+        ? initialTextStyle
+        : (category?.defaultPreset?.textStyle || {
+            fontSize: 48,
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: '600',
+            color: '#ffffff',
+            outline: true,
+            outlineColor: '#000000'
+          });
+
       // Create video RECIPE (not rendered yet!)
       const videoRecipe = {
         id: `batch_${Date.now()}_${i}`,
         title: `${category.name} ${i + 1}`,
         clips,
         audio: selectedAudio,
-        words: useTextOverlay && selectedLyrics ? selectedLyrics.words : [],
-        textStyle: category?.defaultPreset?.textStyle || {
-          fontSize: 48,
-          fontFamily: 'Inter, sans-serif',
-          fontWeight: '600',
-          color: '#ffffff',
-          outline: true,
-          outlineColor: '#000000'
-        },
+        words: wordsForVideo,
+        textStyle: textStyleForVideo,
         cropMode: '9:16',
         duration: audioDuration,
         caption,
@@ -515,7 +544,7 @@ const BatchPipeline = ({
     setGeneratedVideos(videos);
     setCaptions(videos.map(v => v.caption));
     setStage(STAGES.VIDEO_BANK);  // Go to video bank to preview
-  }, [selectedAudio, selectedClips, quantity, clipStrategy, generateClipSequence, useTextOverlay, selectedLyrics, category, captionTemplate, defaultHashtags, hasCaptionBank]);
+  }, [selectedAudio, selectedClips, quantity, clipStrategy, generateClipSequence, useTextOverlay, selectedLyrics, category, captionTemplate, defaultHashtags, hasCaptionBank, usingInitialSettings, initialWords, initialTextStyle]);
 
   // Save videos as drafts to library
   const handleSaveAsDrafts = useCallback(() => {
@@ -1028,13 +1057,61 @@ const BatchPipeline = ({
                   <input
                     type="checkbox"
                     checked={useTextOverlay}
-                    onChange={e => setUseTextOverlay(e.target.checked)}
+                    onChange={e => {
+                      setUseTextOverlay(e.target.checked);
+                      // If disabling, also clear initial settings usage
+                      if (!e.target.checked) {
+                        setUsingInitialSettings(false);
+                      }
+                    }}
                   />
                   <span style={{ color: 'white' }}>Add text overlay (lyrics)</span>
                 </label>
               </div>
 
-              {useTextOverlay && savedLyricsForAudio.length > 0 && (
+              {/* Show indicator when using initial settings from editor */}
+              {useTextOverlay && usingInitialSettings && initialWords?.length > 0 && (
+                <div style={{
+                  ...styles.row,
+                  backgroundColor: 'rgba(139, 92, 246, 0.15)',
+                  border: '1px solid rgba(139, 92, 246, 0.3)',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  marginTop: '8px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                    <div>
+                      <div style={{ color: '#a78bfa', fontSize: '13px', fontWeight: '500', marginBottom: '4px' }}>
+                        ✨ Using lyrics from editor
+                      </div>
+                      <div style={{ color: '#9ca3af', fontSize: '12px' }}>
+                        {initialWords.length} words with timing • {initialTextStyle?.outline ? 'Outline' : 'No outline'}
+                        {initialTextStyle?.textCase && initialTextStyle.textCase !== 'default' ? ` • ${initialTextStyle.textCase.toUpperCase()}` : ''}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setUsingInitialSettings(false);
+                        setSelectedLyrics(null);
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: 'rgba(255,255,255,0.1)',
+                        border: 'none',
+                        borderRadius: '6px',
+                        color: '#9ca3af',
+                        fontSize: '12px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Use different lyrics
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Show lyrics dropdown only if NOT using initial settings */}
+              {useTextOverlay && !usingInitialSettings && savedLyricsForAudio.length > 0 && (
                 <div style={styles.row}>
                   <div style={styles.col}>
                     <label style={styles.label}>Select Lyrics Template</label>
