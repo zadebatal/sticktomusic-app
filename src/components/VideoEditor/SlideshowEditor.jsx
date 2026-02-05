@@ -115,8 +115,8 @@ const SlideshowEditor = ({
             batchSlides.push({
               id: `slide_${Date.now()}_${i}`,
               index: i,
-              backgroundImage: randomImage.localUrl || randomImage.url,
-              thumbnail: randomImage.localUrl || randomImage.url,
+              backgroundImage: randomImage.url || randomImage.localUrl,
+              thumbnail: randomImage.url || randomImage.localUrl,
               sourceBank: randomImage.sourceBank,
               sourceImageId: randomImage.id,
               textOverlays: [],
@@ -197,8 +197,8 @@ const SlideshowEditor = ({
 
     const randomImage = otherImages[Math.floor(Math.random() * otherImages.length)];
     setSlideBackground(
-      randomImage.localUrl || randomImage.url,
-      randomImage.localUrl || randomImage.url,
+      randomImage.url || randomImage.localUrl,
+      randomImage.url || randomImage.localUrl,
       currentSlide.sourceBank,
       randomImage.id
     );
@@ -836,14 +836,14 @@ const SlideshowEditor = ({
                       onDragStart={(e) => {
                         e.dataTransfer.setData('application/json', JSON.stringify({
                           ...image,
-                          url: image.localUrl || image.url,
-                          thumbnail: image.localUrl || image.url,
+                          url: image.url || image.localUrl,
+                          thumbnail: image.url || image.localUrl,
                           sourceBank: activeBank // Track which bank this came from
                         }));
                       }}
                     >
                       <img
-                        src={image.localUrl || image.url}
+                        src={image.url || image.localUrl}
                         alt={image.name}
                         style={styles.clipThumbnail}
                       />

@@ -916,8 +916,8 @@ const VideoStudio = ({
           {
             id: `slide_${Date.now()}_${i}_0`,
             index: 0,
-            backgroundImage: imageA.localUrl || imageA.url,
-            thumbnail: imageA.localUrl || imageA.url,
+            backgroundImage: imageA.url || imageA.localUrl,
+            thumbnail: imageA.url || imageA.localUrl,
             sourceBank: 'imageA',
             sourceImageId: imageA.id,
             textOverlays: [],
@@ -926,8 +926,8 @@ const VideoStudio = ({
           {
             id: `slide_${Date.now()}_${i}_1`,
             index: 1,
-            backgroundImage: imageB.localUrl || imageB.url,
-            thumbnail: imageB.localUrl || imageB.url,
+            backgroundImage: imageB.url || imageB.localUrl,
+            thumbnail: imageB.url || imageB.localUrl,
             sourceBank: 'imageB',
             sourceImageId: imageB.id,
             textOverlays: [],

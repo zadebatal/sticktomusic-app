@@ -824,7 +824,7 @@ const ImageCard = ({ image, onDelete }) => {
 
   return (
     <div style={styles.imageCard} onMouseEnter={() => setShowActions(true)} onMouseLeave={() => setShowActions(false)}>
-      <img src={image.localUrl || image.url} alt={image.name} style={styles.imageThumb} />
+      <img src={image.url || image.localUrl} alt={image.name} style={styles.imageThumb} />
       {showActions && (
         <button style={styles.imageDeleteBtn} onClick={onDelete} title="Delete">✕</button>
       )}
