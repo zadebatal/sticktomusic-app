@@ -87,13 +87,21 @@ const ExportAndPostModal = ({
       });
 
       setVideoUrl(url);
-      setStage(EXPORT_STAGE.READY);
+
+      // Go directly to scheduler instead of showing intermediate screen
+      if (onSchedulePost) {
+        onSchedulePost({ videoUrl: url, video, category });
+        onClose(); // Close this modal
+      } else {
+        // No scheduler available, show the ready screen as fallback
+        setStage(EXPORT_STAGE.READY);
+      }
     } catch (err) {
       console.error('Export/upload error:', err);
       setError(err.message || 'Failed to export or upload video');
       setStage(EXPORT_STAGE.OPTIONS);
     }
-  }, [video]);
+  }, [video, onSchedulePost, category, onClose]);
 
   // Schedule post via Late API
   const handleSchedulePost = useCallback(async () => {
