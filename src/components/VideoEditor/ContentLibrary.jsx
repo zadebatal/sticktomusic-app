@@ -559,9 +559,9 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onEdit, onDelete
     action();
   };
 
-  // Get thumbnail from first slide
-  const thumbnail = slideshow.slides?.[0]?.imageA?.localUrl ||
-                    slideshow.slides?.[0]?.imageA?.url ||
+  // Get thumbnail from first slide - prefer Firebase URL over blob URL
+  const thumbnail = slideshow.slides?.[0]?.imageA?.url ||
+                    slideshow.slides?.[0]?.imageA?.localUrl ||
                     slideshow.slides?.[0]?.thumbnail ||
                     slideshow.slides?.[0]?.backgroundImage;
 
