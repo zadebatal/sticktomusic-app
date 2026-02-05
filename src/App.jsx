@@ -204,12 +204,16 @@ const lateApi = {
         const url = artistId
           ? `${LATE_API_PROXY}?action=posts&page=${currentPage}&artistId=${artistId}`
           : `${LATE_API_PROXY}?action=posts&page=${currentPage}`;
+        console.log('📡 Fetching Late posts from:', url);
         const response = await fetch(url, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
+        console.log('📡 Late API response status:', response.status);
         if (!response.ok) throw new Error(`Failed: ${response.status}`);
         const data = await response.json();
-        const posts = data.posts || data || [];
+        console.log('📡 Late API raw response:', JSON.stringify(data, null, 2));
+        const posts = data.posts || data.data || data || [];
+        console.log('📡 Extracted posts count:', posts.length);
 
         if (Array.isArray(posts) && posts.length > 0) {
           allPosts = [...allPosts, ...posts];
