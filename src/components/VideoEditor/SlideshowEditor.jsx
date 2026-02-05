@@ -405,7 +405,11 @@ const SlideshowEditor = ({
     setShowTextEditorPanel(true);
   }, []);
 
-  // Handle AI transcription completion - add lyrics to bank and to slide
+  // State for showing "save to bank" option after transcription
+  const [transcribedLyrics, setTranscribedLyrics] = useState(null);
+  const [showSaveToBankPrompt, setShowSaveToBankPrompt] = useState(false);
+
+  // Handle AI transcription completion - add lyrics to slide and offer to save to bank
   const handleTranscriptionComplete = useCallback((result) => {
     if (result?.text) {
       // Add text overlay with the transcribed lyrics
@@ -430,9 +434,28 @@ const SlideshowEditor = ({
       ));
       setEditingTextId(newOverlay.id);
       setShowTextEditorPanel(true);
+
+      // Store transcribed lyrics and show save prompt
+      setTranscribedLyrics(result.text);
+      setShowSaveToBankPrompt(true);
     }
     setShowLyricAnalyzer(false);
   }, [selectedSlideIndex]);
+
+  // Save transcribed lyrics to lyric bank
+  const handleSaveToLyricBank = useCallback(() => {
+    if (transcribedLyrics && onAddLyrics) {
+      const title = selectedAudio?.name || 'Transcribed Lyrics';
+      onAddLyrics({
+        id: `lyric_${Date.now()}`,
+        title: title.replace(/\.[^/.]+$/, ''), // Remove file extension
+        content: transcribedLyrics,
+        createdAt: new Date().toISOString()
+      });
+    }
+    setShowSaveToBankPrompt(false);
+    setTranscribedLyrics(null);
+  }, [transcribedLyrics, selectedAudio, onAddLyrics]);
 
   // Handle audio file upload directly in slideshow editor
   const handleSlideshowAudioUpload = useCallback((e) => {
@@ -1278,6 +1301,51 @@ const SlideshowEditor = ({
           />
         )}
 
+        {/* Save to Lyric Bank Prompt */}
+        {showSaveToBankPrompt && transcribedLyrics && (
+          <div style={styles.saveToBankOverlay}>
+            <div style={styles.saveToBankModal}>
+              <div style={styles.saveToBankHeader}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2">
+                  <path d="M9 12l2 2 4-4"/>
+                  <circle cx="12" cy="12" r="10"/>
+                </svg>
+                <h3 style={styles.saveToBankTitle}>Lyrics Transcribed!</h3>
+              </div>
+              <p style={styles.saveToBankText}>
+                Would you like to save these lyrics to your Lyric Bank for future use?
+              </p>
+              <div style={styles.saveToBankPreview}>
+                <div style={styles.saveToBankPreviewText}>
+                  {transcribedLyrics.slice(0, 150)}{transcribedLyrics.length > 150 ? '...' : ''}
+                </div>
+              </div>
+              <div style={styles.saveToBankActions}>
+                <button
+                  style={styles.saveToBankSkipBtn}
+                  onClick={() => {
+                    setShowSaveToBankPrompt(false);
+                    setTranscribedLyrics(null);
+                  }}
+                >
+                  Skip
+                </button>
+                <button
+                  style={styles.saveToBankSaveBtn}
+                  onClick={handleSaveToLyricBank}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
+                    <polyline points="17,21 17,13 7,13 7,21"/>
+                    <polyline points="7,3 7,8 15,8"/>
+                  </svg>
+                  Save to Lyric Bank
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Audio Trimmer Modal */}
         {showAudioTrimmer && audioToTrim && (
           <AudioClipSelector
@@ -1302,6 +1370,20 @@ const SlideshowEditor = ({
  * TextEditorPanel - Flowstage-style side panel for text editing
  * Shows all text overlays on slide, allows editing, and pulling from lyric bank
  */
+// Available fonts for text overlays
+const AVAILABLE_FONTS = [
+  { name: 'Inter', value: "'Inter', sans-serif" },
+  { name: 'Arial', value: 'Arial, sans-serif' },
+  { name: 'Georgia', value: 'Georgia, serif' },
+  { name: 'Times New Roman', value: "'Times New Roman', serif" },
+  { name: 'Courier New', value: "'Courier New', monospace" },
+  { name: 'Impact', value: 'Impact, sans-serif' },
+  { name: 'Comic Sans', value: "'Comic Sans MS', cursive" },
+  { name: 'Trebuchet', value: "'Trebuchet MS', sans-serif" },
+  { name: 'Verdana', value: 'Verdana, sans-serif' },
+  { name: 'Palatino', value: "'Palatino Linotype', serif" }
+];
+
 const TextEditorPanel = ({
   slide,
   editingTextId,
@@ -1411,6 +1493,24 @@ const TextEditorPanel = ({
                 })}
               >A+</button>
             </div>
+          </div>
+
+          {/* Font Family */}
+          <div style={textPanelStyles.control}>
+            <span>Font</span>
+            <select
+              value={selectedOverlay.style.fontFamily}
+              onChange={(e) => onUpdateOverlay(selectedOverlay.id, {
+                style: { ...selectedOverlay.style, fontFamily: e.target.value }
+              })}
+              style={textPanelStyles.fontSelect}
+            >
+              {AVAILABLE_FONTS.map(font => (
+                <option key={font.name} value={font.value} style={{ fontFamily: font.value }}>
+                  {font.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Alignment */}
@@ -2430,6 +2530,17 @@ const textPanelStyles = {
     cursor: 'pointer',
     padding: 0
   },
+  fontSelect: {
+    flex: 1,
+    padding: '8px 12px',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    border: '1px solid rgba(255,255,255,0.2)',
+    borderRadius: '6px',
+    color: '#fff',
+    fontSize: '13px',
+    cursor: 'pointer',
+    outline: 'none'
+  },
   lyricSection: {
     padding: '16px'
   },
@@ -2487,6 +2598,88 @@ const textPanelStyles = {
     color: '#c4b5fd',
     cursor: 'pointer',
     fontSize: '12px'
+  },
+  // Save to Lyric Bank prompt styles
+  saveToBankOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000
+  },
+  saveToBankModal: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: '16px',
+    padding: '24px',
+    maxWidth: '420px',
+    width: '90%',
+    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+  },
+  saveToBankHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginBottom: '16px'
+  },
+  saveToBankTitle: {
+    margin: 0,
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#fff'
+  },
+  saveToBankText: {
+    color: '#9ca3af',
+    fontSize: '14px',
+    lineHeight: '1.5',
+    marginBottom: '16px'
+  },
+  saveToBankPreview: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: '8px',
+    padding: '12px',
+    marginBottom: '20px'
+  },
+  saveToBankPreviewText: {
+    color: '#e4e4e7',
+    fontSize: '13px',
+    lineHeight: '1.5',
+    fontStyle: 'italic'
+  },
+  saveToBankActions: {
+    display: 'flex',
+    gap: '12px'
+  },
+  saveToBankSkipBtn: {
+    flex: 1,
+    padding: '12px',
+    backgroundColor: 'transparent',
+    border: '1px solid rgba(255, 255, 255, 0.2)',
+    borderRadius: '8px',
+    color: '#9ca3af',
+    fontSize: '14px',
+    cursor: 'pointer',
+    transition: 'all 0.2s'
+  },
+  saveToBankSaveBtn: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '12px',
+    backgroundColor: '#8b5cf6',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#fff',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s'
   }
 };
 
