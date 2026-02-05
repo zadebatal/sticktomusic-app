@@ -435,23 +435,36 @@ const AestheticHome = ({
                     </div>
                   </div>
 
-                  {/* Audio List */}
+                  {/* Audio Bank Grid - matches Slideshow styling */}
                   <div style={styles.expandedBank}>
-                    <h4 style={styles.expandedBankTitle}>Audio Tracks</h4>
-                    <div style={styles.audioList}>
+                    <h4 style={{...styles.expandedBankTitle, color: '#22c55e'}}>🎵 Audio Bank</h4>
+                    <div style={styles.audioGrid}>
                       {(selectedCategory.audio || []).length === 0 ? (
-                        <div style={styles.emptyStateSmall} onClick={() => audioInputRef.current?.click()}>
-                          <span>Click to add audio</span>
+                        <div style={{...styles.emptyState, borderColor: '#22c55e'}} onClick={() => audioInputRef.current?.click()}>
+                          <span style={{color: '#22c55e'}}>Click to add audio</span>
                         </div>
                       ) : (
                         (selectedCategory.audio || []).map(audio => (
-                          <AudioItem
-                            key={audio.id}
-                            audio={audio}
-                            onEdit={() => handleEditAudio(audio)}
-                            onDelete={() => setDeleteAudioConfirm({ isOpen: true, audioId: audio.id, audioName: audio.name || 'this audio' })}
-                            onRename={(newName) => onRenameBankAudio?.(audio.id, newName)}
-                          />
+                          <div key={audio.id} style={styles.audioCard}>
+                            <div style={styles.audioCardIcon}>🎵</div>
+                            <div style={styles.audioCardInfo}>
+                              <div style={styles.audioCardName}>{audio.name}</div>
+                              <div style={styles.audioCardDuration}>
+                                {audio.duration ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}` : '--:--'}
+                              </div>
+                            </div>
+                            <button
+                              style={styles.audioDeleteBtn}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteAudioConfirm({ isOpen: true, audioId: audio.id, audioName: audio.name || 'this audio' });
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14"/>
+                              </svg>
+                            </button>
+                          </div>
                         ))
                       )}
                     </div>
