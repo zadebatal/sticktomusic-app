@@ -51,13 +51,23 @@ if (!getApps().length) {
  * Falls back to global LATE_API_KEY if no artist-specific key
  */
 async function getArtistLateKey(artistId) {
+  console.log('getArtistLateKey called with artistId:', artistId);
+  console.log('db initialized:', !!db);
+  console.log('Global LATE_API_KEY exists:', !!process.env.LATE_API_KEY);
+
   if (!artistId || !db) {
+    console.log('Using global key (no artistId or no db)');
     return process.env.LATE_API_KEY;
   }
 
   try {
     const secretDoc = await db.collection('artistSecrets').doc(artistId).get();
+    console.log('artistSecrets doc exists:', secretDoc.exists);
+    if (secretDoc.exists) {
+      console.log('artistSecrets has lateApiKey:', !!secretDoc.data().lateApiKey);
+    }
     if (secretDoc.exists && secretDoc.data().lateApiKey) {
+      console.log('Using artist-specific key');
       return secretDoc.data().lateApiKey;
     }
   } catch (error) {
@@ -65,6 +75,7 @@ async function getArtistLateKey(artistId) {
   }
 
   // Fall back to global key
+  console.log('Falling back to global key');
   return process.env.LATE_API_KEY;
 }
 
