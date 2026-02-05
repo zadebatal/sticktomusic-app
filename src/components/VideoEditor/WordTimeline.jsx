@@ -464,8 +464,11 @@ const WordTimeline = ({
 
   // Start marquee selection on mouse down in empty timeline space
   const handleTimelineMouseDown = (e) => {
-    // Don't start marquee if clicking on playhead or word blocks
-    if (e.target !== timelineRef.current && !e.target.closest('[data-timeline-inner]')) return;
+    // Don't start marquee if clicking on word blocks (they have their own drag handlers)
+    if (e.target.closest('[data-word-block]')) return;
+    // Don't start marquee if clicking on playhead
+    if (e.target.closest('[data-playhead]')) return;
+    // Don't start if already dragging
     if (dragState || playheadDragging) return;
 
     const rect = timelineRef.current?.getBoundingClientRect();
@@ -1024,6 +1027,7 @@ const WordTimeline = ({
               </div>
               {/* Draggable Playhead */}
               <div
+                data-playhead
                 style={{
                   ...styles.playhead,
                   left: timeToPixels(displayTime),
@@ -1058,6 +1062,7 @@ const WordTimeline = ({
               {words.map((word, index) => (
                 <div
                   key={word.id || index}
+                  data-word-block
                   style={{
                     ...styles.wordBlock,
                     left: timeToPixels(word.startTime),
