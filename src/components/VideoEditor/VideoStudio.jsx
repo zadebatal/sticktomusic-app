@@ -1458,8 +1458,23 @@ const VideoStudio = ({
           </div>
         </div>
 
-        <div style={styles.headerRight}>
-          <button onClick={onClose} style={styles.closeButton}>
+        <div style={{
+          ...styles.headerRight,
+          ...(isMobile ? { order: 2, marginLeft: 'auto' } : {})
+        }}>
+          <button
+            onClick={onClose}
+            style={{
+              ...styles.closeButton,
+              ...(isMobile ? {
+                width: '44px',
+                height: '44px',
+                minWidth: '44px',
+                minHeight: '44px',
+                zIndex: 10
+              } : {})
+            }}
+          >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18"/>
               <line x1="6" y1="6" x2="18" y2="18"/>
