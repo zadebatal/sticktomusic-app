@@ -308,6 +308,10 @@ const VideoStudio = ({
   const [showSlideshowEditor, setShowSlideshowEditor] = useState(false);
   const [editingSlideshow, setEditingSlideshow] = useState(null);
 
+  // Studio mode (lifted from AestheticHome for breadcrumb visibility)
+  // null = mode selection, 'videos' = video mode, 'slideshows' = slideshow mode
+  const [studioMode, setStudioMode] = useState(null);
+
   // Save to localStorage when categories change
   useEffect(() => {
     const success = saveCategories(categories);
@@ -341,9 +345,12 @@ const VideoStudio = ({
       // Find the saved category
       const category = categories.find(c => c.id === saved.categoryId);
       if (category) {
-        console.log('[Session] Restoring:', saved.currentView, category.name, 'editor:', saved.showEditor);
+        console.log('[Session] Restoring:', saved.currentView, category.name, 'editor:', saved.showEditor, 'mode:', saved.studioMode);
         setSelectedCategory(category);
         setCurrentView(saved.currentView || 'home');
+        if (saved.studioMode) {
+          setStudioMode(saved.studioMode);
+        }
         // showEditor is already set from initial state
       }
     }
@@ -358,9 +365,10 @@ const VideoStudio = ({
       currentView,
       categoryId: selectedCategory?.id || null,
       artistId: selectedArtist?.id || null,
-      showEditor
+      showEditor,
+      studioMode
     });
-  }, [currentView, selectedCategory?.id, selectedArtist?.id, showEditor, sessionRestored]);
+  }, [currentView, selectedCategory?.id, selectedArtist?.id, showEditor, studioMode, sessionRestored]);
 
   // Get categories for selected artist
   const artistCategories = categories.filter(c =>
@@ -370,6 +378,10 @@ const VideoStudio = ({
   // Handlers
   const handleSelectCategory = useCallback((category) => {
     setSelectedCategory(category);
+    // Reset studio mode when selecting a new category
+    if (!category) {
+      setStudioMode(null);
+    }
   }, []);
 
   const handleCreateContent = useCallback(() => {
@@ -379,6 +391,7 @@ const VideoStudio = ({
   const handleMakeVideo = useCallback((existingVideo = null) => {
     setEditingVideo(existingVideo);
     setShowEditor(true);
+    setStudioMode('videos'); // Ensure studioMode is set for breadcrumb
   }, []);
 
   const handleCloseEditor = useCallback(() => {
@@ -426,6 +439,7 @@ const VideoStudio = ({
     setEditingVideo(null);
     // Navigate to content library after saving
     setCurrentView('library');
+    setStudioMode('videos');
   }, [selectedCategory]);
 
   const handleUploadVideos = useCallback(async (files) => {
@@ -971,6 +985,7 @@ const VideoStudio = ({
       setSlideshowBatchMode(false);
       setEditingSlideshow(options);
       setShowSlideshowEditor(true);
+      setStudioMode('slideshows'); // Ensure studioMode is set for breadcrumb
     }
   }, [selectedCategory, setCategories, setSelectedCategory, setCurrentView]);
 
@@ -1189,7 +1204,7 @@ const VideoStudio = ({
       <header style={styles.header}>
         <div style={styles.headerLeft}>
           <button
-            onClick={() => { setCurrentView('home'); setSelectedCategory(null); }}
+            onClick={() => { setCurrentView('home'); setSelectedCategory(null); setStudioMode(null); }}
             style={styles.logoButton}
             title="Back to categories"
           >
@@ -1201,29 +1216,93 @@ const VideoStudio = ({
         </div>
 
         <div style={styles.headerCenter}>
-          {selectedCategory && currentView !== 'home' && (
-            <div style={styles.breadcrumb}>
-              <button
-                style={styles.breadcrumbLink}
-                onClick={() => { setCurrentView('home'); setSelectedCategory(null); }}
-              >
-                {selectedArtist?.name}
-              </button>
-              <span style={styles.breadcrumbSep}>/</span>
-              <button
-                style={styles.breadcrumbLink}
-                onClick={() => setCurrentView('home')}
-              >
-                {selectedCategory.name}
-              </button>
-              {currentView === 'library' && (
-                <>
-                  <span style={styles.breadcrumbSep}>/</span>
-                  <span style={styles.breadcrumbCurrent}>Content</span>
-                </>
-              )}
-            </div>
-          )}
+          {/* Comprehensive Breadcrumb Navigation */}
+          <div style={styles.breadcrumb}>
+            {/* Root: Categories */}
+            <button
+              style={{
+                ...styles.breadcrumbLink,
+                ...((!selectedCategory && !showEditor && !showSlideshowEditor) ? styles.breadcrumbCurrent : {})
+              }}
+              onClick={() => {
+                setCurrentView('home');
+                setSelectedCategory(null);
+                setStudioMode(null);
+                setShowEditor(false);
+                setShowSlideshowEditor(false);
+              }}
+            >
+              Categories
+            </button>
+
+            {/* Category Name */}
+            {selectedCategory && (
+              <>
+                <span style={styles.breadcrumbSep}>/</span>
+                <button
+                  style={{
+                    ...styles.breadcrumbLink,
+                    ...((currentView === 'home' && !studioMode && !showEditor && !showSlideshowEditor) ? styles.breadcrumbCurrent : {})
+                  }}
+                  onClick={() => {
+                    setCurrentView('home');
+                    setStudioMode(null);
+                    setShowEditor(false);
+                    setShowSlideshowEditor(false);
+                  }}
+                >
+                  {selectedCategory.name}
+                </button>
+              </>
+            )}
+
+            {/* Mode: Videos or Slideshows */}
+            {selectedCategory && (studioMode || currentView === 'library' || currentView === 'slideshows' || showEditor || showSlideshowEditor) && (
+              <>
+                <span style={styles.breadcrumbSep}>/</span>
+                <button
+                  style={{
+                    ...styles.breadcrumbLink,
+                    ...((currentView === 'home' && studioMode && !showEditor && !showSlideshowEditor) ? styles.breadcrumbCurrent : {})
+                  }}
+                  onClick={() => {
+                    setCurrentView('home');
+                    // Keep studioMode, determine from context
+                    const mode = studioMode || (currentView === 'slideshows' || showSlideshowEditor ? 'slideshows' : 'videos');
+                    setStudioMode(mode);
+                    setShowEditor(false);
+                    setShowSlideshowEditor(false);
+                  }}
+                >
+                  {(studioMode === 'slideshows' || currentView === 'slideshows' || showSlideshowEditor) ? 'Slideshows' : 'Videos'}
+                </button>
+              </>
+            )}
+
+            {/* Dashboard (Content Library) */}
+            {selectedCategory && (currentView === 'library' || currentView === 'slideshows') && !showEditor && !showSlideshowEditor && (
+              <>
+                <span style={styles.breadcrumbSep}>/</span>
+                <span style={styles.breadcrumbCurrent}>Dashboard</span>
+              </>
+            )}
+
+            {/* Editor */}
+            {selectedCategory && showEditor && (
+              <>
+                <span style={styles.breadcrumbSep}>/</span>
+                <span style={styles.breadcrumbCurrent}>Editor</span>
+              </>
+            )}
+
+            {/* Slideshow Editor */}
+            {selectedCategory && showSlideshowEditor && (
+              <>
+                <span style={styles.breadcrumbSep}>/</span>
+                <span style={styles.breadcrumbCurrent}>Editor</span>
+              </>
+            )}
+          </div>
         </div>
 
         <div style={styles.headerRight}>
@@ -1247,6 +1326,9 @@ const VideoStudio = ({
             selectedCategory={selectedCategory}
             onSelectCategory={handleSelectCategory}
             onCreateCategory={handleCreateCategory}
+            // Studio mode (lifted for breadcrumb)
+            studioMode={studioMode}
+            onSetStudioMode={setStudioMode}
             // Video banks
             onUploadVideos={handleUploadVideos}
             onUploadAudio={handleUploadAudio}
@@ -1267,7 +1349,11 @@ const VideoStudio = ({
             onCreateContent={handleCreateContent}
             onMakeVideo={handleMakeVideo}
             onShowBatchPipeline={() => setShowBatchPipeline(true)}
-            onViewContent={(options) => setCurrentView(options?.type === 'slideshows' ? 'slideshows' : 'library')}
+            onViewContent={(options) => {
+              const isSlideshows = options?.type === 'slideshows';
+              setCurrentView(isSlideshows ? 'slideshows' : 'library');
+              setStudioMode(isSlideshows ? 'slideshows' : 'videos');
+            }}
             onMakeSlideshow={handleMakeSlideshow}
             onEditSlideshow={(slideshow) => handleMakeSlideshow(slideshow)}
             onDeleteSlideshow={handleDeleteSlideshow}
@@ -1370,6 +1456,7 @@ const VideoStudio = ({
             // Navigate to content library to view drafts
             setShowBatchPipeline(false);
             setCurrentView('library');
+            setStudioMode('videos');
           }}
         />
       )}
@@ -1460,8 +1547,11 @@ const styles = {
   breadcrumb: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    fontSize: '13px'
+    gap: '6px',
+    fontSize: '13px',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    padding: '6px 12px',
+    borderRadius: '6px'
   },
   breadcrumbLink: {
     background: 'none',
@@ -1470,13 +1560,16 @@ const styles = {
     cursor: 'pointer',
     padding: '4px 8px',
     borderRadius: '4px',
-    fontSize: '13px'
+    fontSize: '13px',
+    transition: 'color 0.2s, background-color 0.2s'
   },
   breadcrumbSep: {
     color: '#4b5563'
   },
   breadcrumbCurrent: {
-    color: '#fff'
+    color: '#fff',
+    fontWeight: '500',
+    cursor: 'default'
   },
   closeButton: {
     display: 'flex',

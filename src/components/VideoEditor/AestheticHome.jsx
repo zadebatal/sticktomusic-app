@@ -20,6 +20,9 @@ const AestheticHome = ({
   selectedCategory,
   onSelectCategory,
   onCreateCategory,
+  // Studio mode (lifted to VideoStudio for breadcrumb)
+  studioMode,
+  onSetStudioMode,
   // Video mode banks
   onUploadVideos,
   onUploadAudio,
@@ -45,8 +48,8 @@ const AestheticHome = ({
   onDeleteSlideshow,
   onMakeVideo
 }) => {
-  // Studio mode: null = mode selection, 'videos' = video mode, 'slideshows' = slideshow mode
-  const [studioMode, setStudioMode] = useState(null);
+  // Use the lifted studioMode setter
+  const setStudioMode = onSetStudioMode || (() => {});
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryDesc, setNewCategoryDesc] = useState('');
