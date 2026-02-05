@@ -217,10 +217,17 @@ export default async function handler(req, res) {
           return res.status(403).json({ error: 'No access to this artist' });
         }
 
+        // Check artist-specific key first
         const secretDoc = await db.collection('artistSecrets').doc(artistId).get();
-        const hasKey = secretDoc.exists && !!secretDoc.data()?.lateApiKey;
+        const hasArtistKey = secretDoc.exists && !!secretDoc.data()?.lateApiKey;
+
+        // Also check for global fallback key (for backward compatibility)
+        const hasGlobalKey = !!process.env.LATE_API_KEY;
+
         return res.status(200).json({
-          configured: hasKey,
+          configured: hasArtistKey || hasGlobalKey,
+          hasArtistSpecificKey: hasArtistKey,
+          hasGlobalFallback: hasGlobalKey,
           updatedAt: secretDoc.exists ? secretDoc.data()?.updatedAt : null
         });
 
