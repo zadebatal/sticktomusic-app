@@ -1261,6 +1261,13 @@ const StickToMusic = () => {
       const role = getUserRole(email);
       const artistInfo = getArtistInfo(email);
 
+      // Debug: Log Google user data
+      console.log('🔍 Google user data:', {
+        displayName: result.user.displayName,
+        photoURL: result.user.photoURL,
+        email: result.user.email
+      });
+
       setUser({
         email: email,
         role: role,
