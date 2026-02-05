@@ -5188,6 +5188,82 @@ const StickToMusic = () => {
             onSchedulePost={lateApi.schedulePost}
           />
         )}
+
+        {/* ADD ARTIST MODAL */}
+        {showAddArtistModal && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowAddArtistModal(false)}>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+                <h2 className="text-xl font-bold">Add New Artist</h2>
+                <button onClick={() => setShowAddArtistModal(false)} className="text-zinc-500 hover:text-white">✕</button>
+              </div>
+              <form onSubmit={handleAddArtist} className="p-6 space-y-4">
+                {addArtistForm.error && (
+                  <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                    {addArtistForm.error}
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">Artist Name</label>
+                  <input
+                    type="text"
+                    value={addArtistForm.name}
+                    onChange={e => setAddArtistForm(prev => ({ ...prev, name: e.target.value, error: null }))}
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
+                    placeholder="Artist name"
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">Tier</label>
+                  <select
+                    value={addArtistForm.tier}
+                    onChange={e => setAddArtistForm(prev => ({ ...prev, tier: e.target.value }))}
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
+                  >
+                    <option value="Scale">Scale</option>
+                    <option value="Growth">Growth</option>
+                    <option value="Starter">Starter</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">Content Distribution</label>
+                  <select
+                    value={addArtistForm.cdTier}
+                    onChange={e => setAddArtistForm(prev => ({ ...prev, cdTier: e.target.value }))}
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
+                  >
+                    <option value="CD Lite">CD Lite</option>
+                    <option value="CD Pro">CD Pro</option>
+                    <option value="None">None</option>
+                  </select>
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddArtistModal(false)}
+                    className="flex-1 py-3 bg-zinc-800 text-white rounded-xl font-medium hover:bg-zinc-700 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={addArtistForm.isLoading}
+                    className="flex-1 py-3 bg-violet-600 text-white rounded-xl font-semibold hover:bg-violet-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {addArtistForm.isLoading ? (
+                      <>
+                        <span className="animate-spin">⟳</span>
+                        Creating...
+                      </>
+                    ) : 'Create Artist'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -5863,82 +5939,6 @@ const StickToMusic = () => {
                   Log in
                 </button>
               </p>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ADD ARTIST MODAL */}
-      {showAddArtistModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowAddArtistModal(false)}>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
-              <h2 className="text-xl font-bold">Add New Artist</h2>
-              <button onClick={() => setShowAddArtistModal(false)} className="text-zinc-500 hover:text-white">✕</button>
-            </div>
-            <form onSubmit={handleAddArtist} className="p-6 space-y-4">
-              {addArtistForm.error && (
-                <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
-                  {addArtistForm.error}
-                </div>
-              )}
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Artist Name</label>
-                <input
-                  type="text"
-                  value={addArtistForm.name}
-                  onChange={e => setAddArtistForm(prev => ({ ...prev, name: e.target.value, error: null }))}
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
-                  placeholder="Artist name"
-                  required
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Tier</label>
-                <select
-                  value={addArtistForm.tier}
-                  onChange={e => setAddArtistForm(prev => ({ ...prev, tier: e.target.value }))}
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
-                >
-                  <option value="Scale">Scale</option>
-                  <option value="Growth">Growth</option>
-                  <option value="Starter">Starter</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Content Distribution</label>
-                <select
-                  value={addArtistForm.cdTier}
-                  onChange={e => setAddArtistForm(prev => ({ ...prev, cdTier: e.target.value }))}
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
-                >
-                  <option value="CD Lite">CD Lite</option>
-                  <option value="CD Pro">CD Pro</option>
-                  <option value="None">None</option>
-                </select>
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowAddArtistModal(false)}
-                  className="flex-1 py-3 bg-zinc-800 text-white rounded-xl font-medium hover:bg-zinc-700 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={addArtistForm.isLoading}
-                  className="flex-1 py-3 bg-violet-600 text-white rounded-xl font-semibold hover:bg-violet-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {addArtistForm.isLoading ? (
-                    <>
-                      <span className="animate-spin">⟳</span>
-                      Creating...
-                    </>
-                  ) : 'Create Artist'}
-                </button>
-              </div>
             </form>
           </div>
         </div>
