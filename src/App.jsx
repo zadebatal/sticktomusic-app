@@ -109,9 +109,12 @@ const LATE_ACCOUNT_IDS = {
 
 // Late API Functions - now using secure serverless proxy
 const lateApi = {
-  async fetchAccounts() {
+  async fetchAccounts(artistId = null) {
     try {
-      const response = await fetch(`${LATE_API_PROXY}?action=accounts`);
+      const url = artistId
+        ? `${LATE_API_PROXY}?action=accounts&artistId=${artistId}`
+        : `${LATE_API_PROXY}?action=accounts`;
+      const response = await fetch(url);
       if (!response.ok) throw new Error(`Failed: ${response.status}`);
       const data = await response.json();
       // Handle different response formats
@@ -123,7 +126,7 @@ const lateApi = {
     }
   },
 
-  async schedulePost({ platforms, caption, videoUrl, scheduledFor }) {
+  async schedulePost({ platforms, caption, videoUrl, scheduledFor, artistId = null }) {
     try {
       // Validate required fields
       if (!platforms || !Array.isArray(platforms) || platforms.length === 0) {
@@ -153,7 +156,10 @@ const lateApi = {
 
       console.log('Sending to Late:', JSON.stringify(payload, null, 2));
 
-      const response = await fetch(LATE_API_PROXY, {
+      const url = artistId
+        ? `${LATE_API_PROXY}?artistId=${artistId}`
+        : LATE_API_PROXY;
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -169,22 +175,25 @@ const lateApi = {
     }
   },
 
-  async fetchScheduledPosts() {
+  async fetchScheduledPosts(page = 1, artistId = null) {
     try {
       // Fetch all pages of posts
       let allPosts = [];
-      let page = 1;
+      let currentPage = page;
       let hasMore = true;
 
       while (hasMore) {
-        const response = await fetch(`${LATE_API_PROXY}?action=posts&page=${page}`);
+        const url = artistId
+          ? `${LATE_API_PROXY}?action=posts&page=${currentPage}&artistId=${artistId}`
+          : `${LATE_API_PROXY}?action=posts&page=${currentPage}`;
+        const response = await fetch(url);
         if (!response.ok) throw new Error(`Failed: ${response.status}`);
         const data = await response.json();
         const posts = data.posts || data || [];
 
         if (Array.isArray(posts) && posts.length > 0) {
           allPosts = [...allPosts, ...posts];
-          page++;
+          currentPage++;
           // Stop if we got fewer than the limit (last page)
           if (posts.length < 50) hasMore = false;
         } else {
@@ -192,7 +201,7 @@ const lateApi = {
         }
 
         // Safety limit to prevent infinite loops
-        if (page > 20) hasMore = false;
+        if (currentPage > 20) hasMore = false;
       }
 
       return { success: true, posts: allPosts };
@@ -202,9 +211,12 @@ const lateApi = {
     }
   },
 
-  async deletePost(postId) {
+  async deletePost(postId, artistId = null) {
     try {
-      const response = await fetch(`${LATE_API_PROXY}?action=delete&postId=${postId}`, {
+      const url = artistId
+        ? `${LATE_API_PROXY}?action=delete&postId=${postId}&artistId=${artistId}`
+        : `${LATE_API_PROXY}?action=delete&postId=${postId}`;
+      const response = await fetch(url, {
         method: 'DELETE'
       });
       if (!response.ok) {
@@ -1015,7 +1027,7 @@ const StickToMusic = () => {
     let failCount = 0;
 
     for (const postId of selectedPosts) {
-      const result = await lateApi.deletePost(postId);
+      const result = await lateApi.deletePost(postId, currentArtistId);
       if (result.success) {
         successCount++;
       } else {
@@ -1317,7 +1329,7 @@ const StickToMusic = () => {
   const fetchLateAccounts = async () => {
     setSyncing(true);
     setSyncStatus('Fetching Late accounts...');
-    const result = await lateApi.fetchAccounts();
+    const result = await lateApi.fetchAccounts(currentArtistId);
     setSyncing(false);
     if (result.success) {
       const accounts = Array.isArray(result.accounts) ? result.accounts : [];
@@ -3200,7 +3212,8 @@ const StickToMusic = () => {
                   platforms: platformsPayload,
                   caption: fullCaption,
                   videoUrl: post.videoUrl,
-                  scheduledFor
+                  scheduledFor,
+                  artistId: currentArtistId
                 });
 
                 if (result.success) {
@@ -3279,7 +3292,7 @@ const StickToMusic = () => {
             const handleDeletePost = async (postId) => {
               setDeleteConfirmModal({ show: false, postId: null, caption: '' });
               setDeletingPostId(postId);
-              const result = await lateApi.deletePost(postId);
+              const result = await lateApi.deletePost(postId, currentArtistId);
               setDeletingPostId(null);
               if (result.success) {
                 setLatePosts(prev => prev.filter(p => p._id !== postId));
@@ -5248,7 +5261,7 @@ const StickToMusic = () => {
             artistId={currentArtistId}
             onArtistChange={handleArtistChange}
             lateAccountIds={LATE_ACCOUNT_IDS}
-            onSchedulePost={lateApi.schedulePost}
+            onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: currentArtistId })}
           />
         )}
 
