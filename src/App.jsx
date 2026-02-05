@@ -3275,10 +3275,20 @@ const StickToMusic = () => {
                     });
                     const uniquePages = Object.values(grouped);
 
-                    // Handle linking accounts
+                    // Handle linking accounts - use row keys (first accountId) for selection
+                    // but collect ALL accountIds from selected rows when actually linking
                     const handleLinkSelected = () => {
-                      if (selectedAccountsToLink.length >= 2) {
-                        linkAccounts(artist.id, selectedAccountsToLink);
+                      // Get all account IDs from selected rows
+                      const allAccountIds = [];
+                      uniquePages.forEach(page => {
+                        // Check if this row is selected (by its first accountId)
+                        if (selectedAccountsToLink.includes(page.linkedAccountIds[0])) {
+                          allAccountIds.push(...page.linkedAccountIds);
+                        }
+                      });
+
+                      if (allAccountIds.length >= 2) {
+                        linkAccounts(artist.id, allAccountIds);
                         setSelectedAccountsToLink([]);
                         setAccountLinkingMode(false);
                         // Force re-render by updating latePages reference
@@ -3291,11 +3301,12 @@ const StickToMusic = () => {
                       setLatePages([...latePages]);
                     };
 
-                    const toggleAccountSelection = (accountId) => {
+                    // Toggle selection using only the first accountId as row key
+                    const toggleRowSelection = (rowKey) => {
                       setSelectedAccountsToLink(prev =>
-                        prev.includes(accountId)
-                          ? prev.filter(id => id !== accountId)
-                          : [...prev, accountId]
+                        prev.includes(rowKey)
+                          ? prev.filter(id => id !== rowKey)
+                          : [...prev, rowKey]
                       );
                     };
 
@@ -3353,8 +3364,8 @@ const StickToMusic = () => {
                                     <td className="p-3 sm:p-4">
                                       <input
                                         type="checkbox"
-                                        checked={page.linkedAccountIds.some(id => selectedAccountsToLink.includes(id))}
-                                        onChange={() => page.linkedAccountIds.forEach(id => toggleAccountSelection(id))}
+                                        checked={selectedAccountsToLink.includes(page.linkedAccountIds[0])}
+                                        onChange={() => toggleRowSelection(page.linkedAccountIds[0])}
                                         className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-purple-600 focus:ring-purple-500"
                                       />
                                     </td>
