@@ -624,8 +624,15 @@ const WordTimeline = ({
     };
 
     const handleMouseUp = () => {
-      // Set flag to prevent the click event from clearing the selection
-      justFinishedMarqueeRef.current = true;
+      // Only set flag if there was actual dragging (marquee had some size)
+      // This allows simple clicks to pass through to the click handler for seeking
+      const hasDragged = marqueeSelection && (
+        Math.abs(marqueeSelection.currentX - marqueeSelection.startX) > 5 ||
+        Math.abs(marqueeSelection.currentY - marqueeSelection.startY) > 5
+      );
+      if (hasDragged) {
+        justFinishedMarqueeRef.current = true;
+      }
       setMarqueeSelection(null);
     };
 
@@ -969,11 +976,11 @@ const WordTimeline = ({
         return;
       }
 
-      // Space to toggle play/pause (when not editing and not in an input)
+      // Space to toggle play/pause (when not editing and not in a text input)
       if (e.key === ' ' && !editingWordId && !deleteConfirm.show) {
-        // Don't trigger if focus is on a button or input
+        // Don't trigger if focus is on an input or textarea (but buttons are OK)
         const tagName = document.activeElement?.tagName?.toLowerCase();
-        if (tagName === 'input' || tagName === 'textarea' || tagName === 'button') {
+        if (tagName === 'input' || tagName === 'textarea') {
           return;
         }
         e.preventDefault();
