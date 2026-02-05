@@ -40,6 +40,7 @@ const WordTimeline = ({
   const [isDraggingSelection, setIsDraggingSelection] = useState(false); // Track if we're dragging selected words
   // Marquee selection state
   const [marqueeSelection, setMarqueeSelection] = useState(null); // { startX, startY, currentX, currentY }
+  const justFinishedMarqueeRef = useRef(false); // Prevent click from clearing selection after marquee
   const [autoCensor, setAutoCensor] = useState(true);
   const [localTime, setLocalTime] = useState(currentTime); // Local playhead time for smooth animation
   const [editingWordId, setEditingWordId] = useState(null); // Which word is being edited inline
@@ -425,6 +426,13 @@ const WordTimeline = ({
 
   const handleTimelineClick = (e) => {
     if (dragState || playheadDragging || marqueeSelection) return;
+
+    // Don't clear selection if we just finished a marquee selection
+    if (justFinishedMarqueeRef.current) {
+      justFinishedMarqueeRef.current = false;
+      return;
+    }
+
     const rect = timelineRef.current?.getBoundingClientRect();
     if (!rect) return;
     const scrollLeft = timelineRef.current?.scrollLeft || 0;
@@ -503,6 +511,8 @@ const WordTimeline = ({
     };
 
     const handleMouseUp = () => {
+      // Set flag to prevent the click event from clearing the selection
+      justFinishedMarqueeRef.current = true;
       setMarqueeSelection(null);
     };
 
