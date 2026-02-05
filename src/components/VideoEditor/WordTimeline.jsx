@@ -50,6 +50,9 @@ const WordTimeline = ({
   const timelineRef = useRef(null);
   const animationRef = useRef(null);
   const editInputRef = useRef(null);
+  const waveformCanvasRef = useRef(null);
+  const [waveformData, setWaveformData] = useState(null); // Array of peak values for waveform
+  const [audioBufferReady, setAudioBufferReady] = useState(false); // Track when buffer is decoded
 
   // Undo history (stores previous word states)
   const historyRef = useRef([]);
@@ -80,9 +83,11 @@ const WordTimeline = ({
         const response = await fetch(audioRef.current.src);
         const arrayBuffer = await response.arrayBuffer();
         scrubBufferRef.current = await scrubContextRef.current.decodeAudioData(arrayBuffer);
-        console.log('[Scrub] Audio buffer ready for scrubbing');
+        setAudioBufferReady(true);
+        console.log('[Scrub] Audio buffer ready for scrubbing and waveform');
       } catch (err) {
         console.warn('[Scrub] Could not init scrub audio:', err.message);
+        setAudioBufferReady(false);
       }
     };
 
@@ -125,6 +130,83 @@ const WordTimeline = ({
     source.start(0, globalTime, snippetDuration);
     scrubSourceRef.current = source;
   }, [audioRef]);
+
+  // Generate waveform data from audio buffer
+  useEffect(() => {
+    if (!audioBufferReady || !scrubBufferRef.current) return;
+
+    const buffer = scrubBufferRef.current;
+    const startBoundary = audioRef?.current?._startBoundary || 0;
+    const sampleRate = buffer.sampleRate;
+
+    // Get the relevant portion of the audio (trimmed range)
+    const startSample = Math.floor(startBoundary * sampleRate);
+    const endSample = Math.floor((startBoundary + duration) * sampleRate);
+    const channelData = buffer.getChannelData(0); // Use first channel
+
+    // Calculate number of peaks we need (one per 2 pixels at zoom 1)
+    const peaksPerSecond = 40; // 40 peaks per second gives good resolution
+    const totalPeaks = Math.ceil(duration * peaksPerSecond);
+    const samplesPerPeak = Math.floor((endSample - startSample) / totalPeaks);
+
+    if (samplesPerPeak <= 0) return;
+
+    const peaks = [];
+    for (let i = 0; i < totalPeaks; i++) {
+      const start = startSample + (i * samplesPerPeak);
+      const end = Math.min(start + samplesPerPeak, channelData.length);
+
+      let max = 0;
+      for (let j = start; j < end; j++) {
+        const abs = Math.abs(channelData[j] || 0);
+        if (abs > max) max = abs;
+      }
+      peaks.push(max);
+    }
+
+    setWaveformData(peaks);
+    console.log('[Waveform] Generated', peaks.length, 'peaks');
+  }, [audioBufferReady, duration, audioRef]);
+
+  // Draw waveform on canvas when zoom changes or waveform data updates
+  useEffect(() => {
+    if (!waveformData || !waveformCanvasRef.current) return;
+
+    const canvas = waveformCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const width = getTimelineWidth();
+    const height = 50; // Waveform height
+
+    // Set canvas size
+    canvas.width = width;
+    canvas.height = height;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+
+    // Draw waveform
+    const barWidth = width / waveformData.length;
+    const centerY = height / 2;
+
+    ctx.fillStyle = 'rgba(139, 92, 246, 0.4)'; // Purple, semi-transparent
+
+    waveformData.forEach((peak, i) => {
+      const x = i * barWidth;
+      const barHeight = peak * height * 0.9; // Scale to 90% of height
+
+      // Draw bar centered vertically
+      ctx.fillRect(x, centerY - barHeight / 2, Math.max(1, barWidth - 0.5), barHeight);
+    });
+
+    // Add a subtle gradient overlay
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, 'rgba(139, 92, 246, 0.1)');
+    gradient.addColorStop(0.5, 'rgba(139, 92, 246, 0)');
+    gradient.addColorStop(1, 'rgba(139, 92, 246, 0.1)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
+  }, [waveformData, zoom, duration]);
 
   // Save current state to undo history
   const saveToHistory = useCallback(() => {
@@ -1038,6 +1120,11 @@ const WordTimeline = ({
                   </div>
                 ))}
               </div>
+              {/* Audio Waveform */}
+              <canvas
+                ref={waveformCanvasRef}
+                style={styles.waveformCanvas}
+              />
               {/* Draggable Playhead */}
               <div
                 data-playhead
@@ -1295,15 +1382,16 @@ const styles = {
   clearSelectionBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '18px', height: '18px', backgroundColor: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '4px', color: '#a78bfa', cursor: 'pointer', padding: 0 },
   timelineContainer: { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px 20px', backgroundColor: '#0a0a0f' },
   playButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', backgroundColor: '#7c3aed', border: 'none', borderRadius: '50%', color: '#fff', cursor: 'pointer', flexShrink: 0 },
-  timeline: { flex: 1, height: '70px', backgroundColor: '#1a1a2e', borderRadius: '8px', overflowX: 'auto', overflowY: 'hidden', position: 'relative', cursor: 'pointer' },
+  timeline: { flex: 1, height: '90px', backgroundColor: '#1a1a2e', borderRadius: '8px', overflowX: 'auto', overflowY: 'hidden', position: 'relative', cursor: 'pointer' },
   timelineInner: { position: 'relative', height: '100%', minWidth: '100%' },
   marqueeBox: { position: 'absolute', backgroundColor: 'rgba(139, 92, 246, 0.2)', border: '1px solid rgba(139, 92, 246, 0.5)', borderRadius: '2px', pointerEvents: 'none', zIndex: 100 },
   timeRuler: { position: 'absolute', top: 0, left: 0, right: 0, height: '20px', pointerEvents: 'none' },
   timeMarker: { position: 'absolute', top: 0, height: '100%' },
   timeMarkerLine: { width: '1px', height: '8px', backgroundColor: 'rgba(255,255,255,0.2)' },
   timeMarkerLabel: { position: 'absolute', top: '8px', left: '-8px', fontSize: '9px', color: '#6b7280', fontFamily: 'monospace' },
+  waveformCanvas: { position: 'absolute', top: '20px', left: 0, height: '50px', pointerEvents: 'none', opacity: 0.8 },
   playhead: { position: 'absolute', top: 0, bottom: 0, zIndex: 20 },
-  wordBlock: { position: 'absolute', top: '24px', height: '38px', backgroundColor: '#7c3aed', border: '1px solid #9333ea', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', userSelect: 'none', overflow: 'hidden', transition: 'background-color 0.1s, box-shadow 0.1s', zIndex: 5 },
+  wordBlock: { position: 'absolute', top: '28px', height: '34px', backgroundColor: 'rgba(124, 58, 237, 0.9)', border: '1px solid #9333ea', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', userSelect: 'none', overflow: 'hidden', transition: 'background-color 0.1s, box-shadow 0.1s', zIndex: 5 },
   wordBlockSelected: { backgroundColor: '#9333ea', border: '2px solid #a855f7', boxShadow: '0 2px 8px rgba(168, 85, 247, 0.5)' },
   wordBlockCurrent: { backgroundColor: '#22c55e', border: '2px solid #4ade80' },
   resizeHandle: { position: 'absolute', left: 0, top: 0, bottom: 0, width: '6px', cursor: 'ew-resize', backgroundColor: 'transparent' },
