@@ -230,16 +230,21 @@ export default async function handler(req, res) {
         break;
 
       case 'posts':
+        console.log('Posts action - artistId:', artistId);
         const postsKey = await getArtistLateKey(artistId);
+        console.log('Got Late key:', postsKey ? 'yes' : 'no');
         if (!postsKey) {
           return res.status(400).json({ error: 'No Late API key configured for this artist' });
         }
 
         if (req.method === 'GET') {
           // GET /posts - Fetch scheduled posts
-          response = await fetch(`${LATE_API_BASE}/posts?page=${page}&limit=50`, {
+          const postsUrl = `${LATE_API_BASE}/posts?page=${page}&limit=50`;
+          console.log('Fetching:', postsUrl);
+          response = await fetch(postsUrl, {
             headers: { 'Authorization': `Bearer ${postsKey}` }
           });
+          console.log('Late API response status:', response.status);
         } else if (req.method === 'POST') {
           // POST /posts - Create new scheduled post
           response = await fetch(`${LATE_API_BASE}/posts`, {
@@ -286,6 +291,10 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Late API proxy error:', error);
-    return res.status(500).json({ error: error.message });
+    console.error('Error stack:', error.stack);
+    return res.status(500).json({
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 }
