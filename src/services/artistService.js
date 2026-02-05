@@ -374,6 +374,113 @@ export const ensureBoonArtistExists = async (db) => {
   }
 };
 
+// ============================================
+// LINKED ACCOUNTS - Group Late accounts together
+// ============================================
+
+const LINKED_ACCOUNTS_PREFIX = 'stm_linked_accounts_';
+
+/**
+ * Get linked account groups for an artist
+ * Each group contains multiple Late account IDs that should be displayed as one row
+ * @param {string} artistId - Artist ID
+ * @returns {Array} Array of account groups: [{ id, name, accountIds: [] }]
+ */
+export const getLinkedAccountGroups = (artistId) => {
+  if (!artistId) return [];
+  try {
+    const saved = localStorage.getItem(`${LINKED_ACCOUNTS_PREFIX}${artistId}`);
+    return saved ? JSON.parse(saved) : [];
+  } catch (e) {
+    console.error('Error loading linked accounts:', e);
+    return [];
+  }
+};
+
+/**
+ * Save linked account groups for an artist
+ * @param {string} artistId - Artist ID
+ * @param {Array} groups - Array of account groups
+ */
+export const saveLinkedAccountGroups = (artistId, groups) => {
+  if (!artistId) return false;
+  try {
+    localStorage.setItem(`${LINKED_ACCOUNTS_PREFIX}${artistId}`, JSON.stringify(groups));
+    return true;
+  } catch (e) {
+    console.error('Error saving linked accounts:', e);
+    return false;
+  }
+};
+
+/**
+ * Link multiple Late accounts together as one group
+ * @param {string} artistId - Artist ID
+ * @param {Array} accountIds - Array of Late account IDs to link
+ * @param {string} groupName - Optional display name for the group
+ * @returns {Object} The created/updated group
+ */
+export const linkAccounts = (artistId, accountIds, groupName = null) => {
+  if (!artistId || !accountIds || accountIds.length < 2) return null;
+
+  const groups = getLinkedAccountGroups(artistId);
+
+  // Remove these accounts from any existing groups
+  groups.forEach(group => {
+    group.accountIds = group.accountIds.filter(id => !accountIds.includes(id));
+  });
+
+  // Remove empty groups
+  const filteredGroups = groups.filter(g => g.accountIds.length > 0);
+
+  // Create new group
+  const newGroup = {
+    id: `group_${Date.now()}`,
+    name: groupName,
+    accountIds: accountIds
+  };
+
+  filteredGroups.push(newGroup);
+  saveLinkedAccountGroups(artistId, filteredGroups);
+
+  return newGroup;
+};
+
+/**
+ * Unlink an account from its group
+ * @param {string} artistId - Artist ID
+ * @param {string} accountId - Late account ID to unlink
+ */
+export const unlinkAccount = (artistId, accountId) => {
+  if (!artistId || !accountId) return;
+
+  const groups = getLinkedAccountGroups(artistId);
+
+  // Remove account from all groups
+  groups.forEach(group => {
+    group.accountIds = group.accountIds.filter(id => id !== accountId);
+  });
+
+  // Remove groups with less than 2 accounts (no point in a group of 1)
+  const filteredGroups = groups.filter(g => g.accountIds.length >= 2);
+
+  saveLinkedAccountGroups(artistId, filteredGroups);
+};
+
+/**
+ * Get the group ID for a given account, if any
+ * @param {string} artistId - Artist ID
+ * @param {string} accountId - Late account ID
+ * @returns {string|null} Group ID or null if not in a group
+ */
+export const getAccountGroupId = (artistId, accountId) => {
+  if (!artistId || !accountId) return null;
+
+  const groups = getLinkedAccountGroups(artistId);
+  const group = groups.find(g => g.accountIds.includes(accountId));
+  return group ? group.id : null;
+};
+
 export default {
   getLastArtistId,
   setLastArtistId,
@@ -392,5 +499,11 @@ export default {
   // Late API key management is in lateService (secure server-side storage)
   needsMigration,
   migrateExistingData,
-  ensureBoonArtistExists
+  ensureBoonArtistExists,
+  // Linked accounts (group Late accounts together)
+  getLinkedAccountGroups,
+  saveLinkedAccountGroups,
+  linkAccounts,
+  unlinkAccount,
+  getAccountGroupId
 };

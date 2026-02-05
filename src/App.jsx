@@ -31,7 +31,10 @@ import {
   setLastArtistId,
   createArtist,
   updateArtist,
-  deleteArtist
+  deleteArtist,
+  getLinkedAccountGroups,
+  linkAccounts,
+  unlinkAccount
 } from './services/artistService';
 
 // Late Service - for per-artist Late connection status
@@ -1201,6 +1204,10 @@ const StickToMusic = () => {
   const [showLateConnectModal, setShowLateConnectModal] = useState(false);
   const [lateApiKeyInput, setLateApiKeyInput] = useState('');
   const [connectingLate, setConnectingLate] = useState(false);
+
+  // Account linking state (for grouping Late accounts with different handles)
+  const [accountLinkingMode, setAccountLinkingMode] = useState(false);
+  const [selectedAccountsToLink, setSelectedAccountsToLink] = useState([]);
 
   // Video Upload state
   const [showVideoUploadModal, setShowVideoUploadModal] = useState(false);
@@ -3230,46 +3237,153 @@ const StickToMusic = () => {
                   ) : artistsWithPages.map(artist => {
                     const artistPages = filteredPages.filter(p => p.artist === artist.name);
                     if (artistPages.length === 0) return null;
-                    // Group by handle
+
+                    // Get linked account groups for this artist
+                    const linkedGroups = getLinkedAccountGroups(artist.id);
+
+                    // Create a map of lateAccountId -> groupId
+                    const accountToGroup = {};
+                    linkedGroups.forEach(group => {
+                      group.accountIds.forEach(accId => {
+                        accountToGroup[accId] = group.id;
+                      });
+                    });
+
+                    // Group pages: first by linked group, then by handle for ungrouped
                     const grouped = {};
                     artistPages.forEach(page => {
-                      if (!grouped[page.handle]) {
-                        grouped[page.handle] = { ...page, platforms: [page.platform], totalFollowers: page.followers, totalViews: page.views };
+                      const groupId = accountToGroup[page.lateAccountId];
+                      const key = groupId || page.handle; // Use group ID if linked, otherwise handle
+
+                      if (!grouped[key]) {
+                        grouped[key] = {
+                          ...page,
+                          handles: [{ handle: page.handle, platform: page.platform }],
+                          platforms: [page.platform],
+                          totalFollowers: page.followers,
+                          totalViews: page.views,
+                          linkedAccountIds: [page.lateAccountId],
+                          isLinkedGroup: !!groupId
+                        };
                       } else {
-                        grouped[page.handle].platforms.push(page.platform);
-                        grouped[page.handle].totalFollowers += page.followers;
-                        grouped[page.handle].totalViews += page.views;
+                        grouped[key].handles.push({ handle: page.handle, platform: page.platform });
+                        grouped[key].platforms.push(page.platform);
+                        grouped[key].totalFollowers += page.followers;
+                        grouped[key].totalViews += page.views;
+                        grouped[key].linkedAccountIds.push(page.lateAccountId);
                       }
                     });
                     const uniquePages = Object.values(grouped);
 
+                    // Handle linking accounts
+                    const handleLinkSelected = () => {
+                      if (selectedAccountsToLink.length >= 2) {
+                        linkAccounts(artist.id, selectedAccountsToLink);
+                        setSelectedAccountsToLink([]);
+                        setAccountLinkingMode(false);
+                        // Force re-render by updating latePages reference
+                        setLatePages([...latePages]);
+                      }
+                    };
+
+                    const handleUnlinkAccount = (accountId) => {
+                      unlinkAccount(artist.id, accountId);
+                      setLatePages([...latePages]);
+                    };
+
+                    const toggleAccountSelection = (accountId) => {
+                      setSelectedAccountsToLink(prev =>
+                        prev.includes(accountId)
+                          ? prev.filter(id => id !== accountId)
+                          : [...prev, accountId]
+                      );
+                    };
+
                     return (
                       <div key={artist.id}>
-                        <h3 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">{artist.name}</h3>
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">{artist.name}</h3>
+                          <div className="flex gap-2">
+                            {accountLinkingMode ? (
+                              <>
+                                <button
+                                  onClick={handleLinkSelected}
+                                  disabled={selectedAccountsToLink.length < 2}
+                                  className="px-3 py-1 text-xs bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-700 disabled:text-zinc-500 rounded-lg transition"
+                                >
+                                  Link Selected ({selectedAccountsToLink.length})
+                                </button>
+                                <button
+                                  onClick={() => { setAccountLinkingMode(false); setSelectedAccountsToLink([]); }}
+                                  className="px-3 py-1 text-xs bg-zinc-700 hover:bg-zinc-600 rounded-lg transition"
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => setAccountLinkingMode(true)}
+                                className="px-3 py-1 text-xs text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition"
+                              >
+                                🔗 Link Accounts
+                              </button>
+                            )}
+                          </div>
+                        </div>
                         <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-x-auto">
                           <table className="w-full min-w-[600px]">
                             <thead>
                               <tr className="border-b border-zinc-800">
+                                {accountLinkingMode && (
+                                  <th className="w-10 p-3 sm:p-4"></th>
+                                )}
                                 <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Handle</th>
                                 <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Platforms</th>
                                 <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Niche</th>
                                 <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Followers</th>
                                 <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Views</th>
                                 <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Status</th>
+                                {!accountLinkingMode && <th className="w-10 p-3 sm:p-4"></th>}
                               </tr>
                             </thead>
                             <tbody>
                               {uniquePages.map((page) => (
-                                <tr key={page.handle} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition">
-                                  <td className="p-3 sm:p-4 font-mono text-xs sm:text-sm">{page.handle}</td>
+                                <tr key={page.linkedAccountIds.join('-')} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition">
+                                  {accountLinkingMode && (
+                                    <td className="p-3 sm:p-4">
+                                      <input
+                                        type="checkbox"
+                                        checked={page.linkedAccountIds.some(id => selectedAccountsToLink.includes(id))}
+                                        onChange={() => page.linkedAccountIds.forEach(id => toggleAccountSelection(id))}
+                                        className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-purple-600 focus:ring-purple-500"
+                                      />
+                                    </td>
+                                  )}
+                                  <td className="p-3 sm:p-4 font-mono text-xs sm:text-sm">
+                                    {page.handles.length === 1 ? (
+                                      page.handles[0].handle
+                                    ) : (
+                                      <div className="space-y-1">
+                                        {page.handles.map((h, i) => (
+                                          <div key={i} className="flex items-center gap-2">
+                                            <span>{h.handle}</span>
+                                            <span className={`px-1.5 py-0.5 rounded text-[10px] ${getPlatformConfig(h.platform).bgColor} ${getPlatformConfig(h.platform).textColor}`}>
+                                              {getPlatformConfig(h.platform).label}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </td>
                                   <td className="p-3 sm:p-4">
                                     <div className="flex gap-1 flex-wrap">
-                                      {page.platforms.map(p => {
+                                      {page.platforms.map((p, idx) => {
                                         const config = getPlatformConfig(p);
-                                        const url = getPlatformUrl(p, page.handle);
+                                        const handleForPlatform = page.handles.find(h => h.platform === p)?.handle || page.handle;
+                                        const url = getPlatformUrl(p, handleForPlatform);
                                         return (
                                           <a
-                                            key={p}
+                                            key={`${p}-${idx}`}
                                             href={url}
                                             target="_blank"
                                             rel="noopener noreferrer"
@@ -3287,6 +3401,19 @@ const StickToMusic = () => {
                                   <td className="p-3 sm:p-4">
                                     <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(page.status)}`}>{page.status}</span>
                                   </td>
+                                  {!accountLinkingMode && (
+                                    <td className="p-3 sm:p-4">
+                                      {page.isLinkedGroup && (
+                                        <button
+                                          onClick={() => page.linkedAccountIds.forEach(id => handleUnlinkAccount(id))}
+                                          className="text-zinc-500 hover:text-red-400 transition text-xs"
+                                          title="Unlink accounts"
+                                        >
+                                          🔓
+                                        </button>
+                                      )}
+                                    </td>
+                                  )}
                                 </tr>
                               ))}
                             </tbody>
