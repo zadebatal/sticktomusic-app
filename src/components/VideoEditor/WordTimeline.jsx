@@ -343,6 +343,51 @@ const WordTimeline = ({
     }
   }, [displayTime, isPlaying, timeToPixels, playheadDragging]);
 
+  // Trackpad pinch-to-zoom handler
+  const handleTimelineWheel = useCallback((e) => {
+    // Pinch zoom is reported as wheel event with ctrlKey on trackpads
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+
+      // Calculate zoom change based on wheel delta
+      const zoomSensitivity = 0.01;
+      const delta = -e.deltaY * zoomSensitivity;
+
+      // Get cursor position relative to timeline for zoom centering
+      const rect = timelineRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const scrollLeft = timelineRef.current?.scrollLeft || 0;
+      const cursorX = e.clientX - rect.left + scrollLeft;
+      const cursorTime = pixelsToTime(cursorX);
+
+      // Calculate new zoom level
+      const newZoom = Math.max(0.5, Math.min(3, zoom + delta));
+
+      if (newZoom !== zoom) {
+        setZoom(newZoom);
+
+        // Adjust scroll position to keep cursor position stable
+        requestAnimationFrame(() => {
+          if (!timelineRef.current) return;
+          const newPixelsPerSecond = 80 * newZoom;
+          const newCursorX = cursorTime * newPixelsPerSecond;
+          const cursorOffset = e.clientX - rect.left;
+          timelineRef.current.scrollLeft = newCursorX - cursorOffset;
+        });
+      }
+    }
+  }, [zoom, pixelsToTime]);
+
+  // Attach wheel handler with passive: false to allow preventDefault
+  useEffect(() => {
+    const timeline = timelineRef.current;
+    if (!timeline) return;
+
+    timeline.addEventListener('wheel', handleTimelineWheel, { passive: false });
+    return () => timeline.removeEventListener('wheel', handleTimelineWheel);
+  }, [handleTimelineWheel]);
+
   // Handle word block click for selection (with modifier keys)
   const handleWordClick = (e, index) => {
     e.stopPropagation();
