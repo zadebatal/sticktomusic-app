@@ -667,18 +667,25 @@ const StickToMusic = () => {
     setAddArtistForm(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
+      // For operators, auto-assign to themselves if no operator selected
+      // For conductors, use the selected operator (or none)
+      const currentUserRecord = allowedUsers.find(u => u.email?.toLowerCase() === user?.email?.toLowerCase());
+      const assignToOperatorId = isConductor(user)
+        ? addArtistForm.assignedOperatorId || null
+        : currentUserRecord?.id || null; // Operators auto-assign to themselves
+
       const newArtist = await createArtist(db, {
         name: addArtistForm.name.trim(),
         tier: addArtistForm.tier,
         cdTier: addArtistForm.cdTier,
-        ownerOperatorId: addArtistForm.assignedOperatorId || null
+        ownerOperatorId: assignToOperatorId
       });
 
       console.log('✅ Created new artist:', newArtist);
 
-      // If assigned to an operator, update their assignedArtistIds
-      if (addArtistForm.assignedOperatorId) {
-        const operatorUser = allowedUsers.find(u => u.id === addArtistForm.assignedOperatorId);
+      // Auto-assign artist to the operator (either selected or self)
+      if (assignToOperatorId) {
+        const operatorUser = allowedUsers.find(u => u.id === assignToOperatorId);
         if (operatorUser) {
           const operatorRef = doc(db, 'allowedUsers', operatorUser.id);
           const currentAssigned = operatorUser.assignedArtistIds || [];
@@ -3077,9 +3084,11 @@ const StickToMusic = () => {
             let displayArtists = firestoreArtists.length > 0 ? firestoreArtists : operatorArtists;
 
             // Filter artists for operators (non-conductors) - they only see their assigned artists
-            if (!isConductor(user) && user?.assignedArtistIds?.length > 0) {
+            // If operator has no assigned artists, they see none (not all)
+            if (!isConductor(user)) {
+              const assignedIds = user?.assignedArtistIds || [];
               displayArtists = displayArtists.filter(artist =>
-                user.assignedArtistIds.includes(artist.id)
+                assignedIds.includes(artist.id)
               );
             }
 
@@ -3090,8 +3099,8 @@ const StickToMusic = () => {
                     <h1 className="text-2xl font-bold">Artists</h1>
                     <p className="text-sm text-zinc-500">{displayArtists.length} active artist{displayArtists.length !== 1 ? 's' : ''}</p>
                   </div>
-                  {/* Only conductors can add artists */}
-                  {isConductor(user) && (
+                  {/* Conductors and operators can add artists */}
+                  {(isConductor(user) || user?.role === 'operator') && (
                     <button
                       onClick={() => setShowAddArtistModal(true)}
                       className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium transition flex items-center gap-2"
@@ -5877,23 +5886,30 @@ const StickToMusic = () => {
                     <option value="None">None</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-2">Assign to Operator</label>
-                  <select
-                    value={addArtistForm.assignedOperatorId}
-                    onChange={e => setAddArtistForm(prev => ({ ...prev, assignedOperatorId: e.target.value }))}
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
-                  >
-                    <option value="">Conductor only (unassigned)</option>
-                    {allowedUsers
-                      .filter(u => u.role === 'operator' && u.status === 'active')
-                      .map(op => (
-                        <option key={op.id} value={op.id}>{op.name} ({op.email})</option>
-                      ))
-                    }
-                  </select>
-                  <p className="text-xs text-zinc-500 mt-1">Select which operator can manage this artist</p>
-                </div>
+                {/* Only show operator assignment for conductors - operators auto-assign to themselves */}
+                {isConductor(user) ? (
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-2">Assign to Operator</label>
+                    <select
+                      value={addArtistForm.assignedOperatorId}
+                      onChange={e => setAddArtistForm(prev => ({ ...prev, assignedOperatorId: e.target.value }))}
+                      className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
+                    >
+                      <option value="">Conductor only (unassigned)</option>
+                      {allowedUsers
+                        .filter(u => u.role === 'operator' && u.status === 'active')
+                        .map(op => (
+                          <option key={op.id} value={op.id}>{op.name} ({op.email})</option>
+                        ))
+                      }
+                    </select>
+                    <p className="text-xs text-zinc-500 mt-1">Select which operator can manage this artist</p>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-violet-500/10 border border-violet-500/30 rounded-xl">
+                    <p className="text-sm text-violet-400">This artist will be assigned to your account</p>
+                  </div>
+                )}
                 <div className="flex gap-3 pt-4">
                   <button
                     type="button"
