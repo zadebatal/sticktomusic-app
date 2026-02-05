@@ -127,6 +127,15 @@ const VideoStudio = ({
   onSchedulePost,
   onArtistChange = null // Callback when artist selection changes
 }) => {
+  // Mobile responsive detection
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Current artist ID - used for namespaced storage
   const [currentArtistId, setCurrentArtistId] = useState(initialArtistId);
   // Track previous artist ID to detect actual changes (not just re-renders)
@@ -1300,8 +1309,14 @@ const VideoStudio = ({
   return (
     <div style={styles.container}>
       {/* Header */}
-      <header style={styles.header}>
-        <div style={styles.headerLeft}>
+      <header style={{
+        ...styles.header,
+        ...(isMobile ? { padding: '10px 12px', flexWrap: 'wrap', gap: '8px' } : {})
+      }}>
+        <div style={{
+          ...styles.headerLeft,
+          ...(isMobile ? { minWidth: 0 } : {})
+        }}>
           <button
             onClick={() => { setCurrentView('home'); setSelectedCategory(null); setStudioMode(null); }}
             style={styles.logoButton}
@@ -1310,16 +1325,22 @@ const VideoStudio = ({
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polygon points="5,3 19,12 5,21" fill="currentColor"/>
             </svg>
-            <span style={styles.logoText}>Studio</span>
+            {!isMobile && <span style={styles.logoText}>Studio</span>}
           </button>
 
           {/* Artist Selector - only show if multiple artists */}
           {artists.length > 1 && (
-            <div style={styles.artistSelector}>
+            <div style={{
+              ...styles.artistSelector,
+              ...(isMobile ? { marginLeft: '8px', paddingLeft: '8px' } : {})
+            }}>
               <select
                 value={currentArtistId || ''}
                 onChange={(e) => handleArtistIdChange(e.target.value)}
-                style={styles.artistSelect}
+                style={{
+                  ...styles.artistSelect,
+                  ...(isMobile ? { maxWidth: '100px', fontSize: '12px', padding: '6px 24px 6px 8px' } : {})
+                }}
               >
                 {artists.map(artist => (
                   <option key={artist.id} value={artist.id}>
@@ -1333,17 +1354,23 @@ const VideoStudio = ({
             </div>
           )}
 
-          {/* Single artist indicator */}
-          {artists.length === 1 && currentArtistId && (
+          {/* Single artist indicator - hide on mobile */}
+          {!isMobile && artists.length === 1 && currentArtistId && (
             <span style={styles.singleArtistLabel}>
               {artists[0]?.name}
             </span>
           )}
         </div>
 
-        <div style={styles.headerCenter}>
+        <div style={{
+          ...styles.headerCenter,
+          ...(isMobile ? { flex: '1 1 auto', order: 3, width: '100%', justifyContent: 'flex-start' } : {})
+        }}>
           {/* Comprehensive Breadcrumb Navigation */}
-          <div style={styles.breadcrumb}>
+          <div style={{
+            ...styles.breadcrumb,
+            ...(isMobile ? { fontSize: '11px', padding: '4px 8px', overflowX: 'auto', maxWidth: '100%' } : {})
+          }}>
             {/* Root: Categories */}
             <button
               style={{

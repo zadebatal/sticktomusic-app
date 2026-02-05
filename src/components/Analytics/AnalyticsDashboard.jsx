@@ -46,6 +46,15 @@ const AnalyticsDashboard = ({
   onSyncLate = null,
   latePosts = []
 }) => {
+  // Mobile responsive detection
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Current artist (for multi-artist support)
   const [currentArtistId, setCurrentArtistId] = useState(initialArtistId);
 
@@ -273,11 +282,20 @@ const AnalyticsDashboard = ({
   }
 
   return (
-    <div style={styles.container}>
+    <div style={{
+      ...styles.container,
+      ...(isMobile ? { padding: '16px' } : {})
+    }}>
       {/* Header */}
-      <div style={styles.header}>
+      <div style={{
+        ...styles.header,
+        ...(isMobile ? { flexDirection: 'column', alignItems: 'flex-start', gap: '12px' } : {})
+      }}>
         <div style={styles.headerLeft}>
-          <h1 style={styles.title}>📊 Analytics Dashboard</h1>
+          <h1 style={{
+            ...styles.title,
+            ...(isMobile ? { fontSize: '22px' } : {})
+          }}>📊 Analytics Dashboard</h1>
 
           {/* Artist Selector - only show if multiple artists */}
           {artists.length > 1 && (
@@ -350,13 +368,19 @@ const AnalyticsDashboard = ({
       {activeTab === 'overview' && (
         <>
           {/* Spotify Growth Section - New Row */}
-          <div style={styles.spotifyGrowthRow}>
+          <div style={{
+            ...styles.spotifyGrowthRow,
+            ...(isMobile ? { gridTemplateColumns: '1fr', gap: '16px' } : {})
+          }}>
             <SpotifyMomentumCard artistId={currentArtistId} />
             <GrowthDriversCard artistId={currentArtistId} />
           </div>
 
           {/* Overview Stats Cards */}
-          <div style={styles.statsGrid}>
+          <div style={{
+            ...styles.statsGrid,
+            ...(isMobile ? { gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' } : {})
+          }}>
             <div style={styles.statCard}>
               <div style={styles.statIcon}>👁️</div>
               <div style={styles.statValue}>{formatNumber(totalStats?.totalViews)}</div>
@@ -384,7 +408,10 @@ const AnalyticsDashboard = ({
           </div>
 
           {/* Main Grid */}
-          <div style={styles.mainGrid}>
+          <div style={{
+            ...styles.mainGrid,
+            ...(isMobile ? { gridTemplateColumns: '1fr', gap: '16px' } : {})
+          }}>
             {/* Left Column */}
             <div style={styles.leftColumn}>
               {/* Performance Chart */}

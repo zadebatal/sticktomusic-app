@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import AudioClipSelector from './AudioClipSelector';
 import LyricBank from './LyricBank';
 import { ConfirmDialog } from '../ui';
@@ -55,6 +55,22 @@ const AestheticHome = ({
   const [newCategoryDesc, setNewCategoryDesc] = useState('');
   const [pendingAudio, setPendingAudio] = useState(null);
   const [editingAudio, setEditingAudio] = useState(null);
+
+  // Mobile responsive state
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  // Track window resize for mobile detection
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      // Auto-close sidebar when resizing to desktop
+      if (!mobile) setMobileSidebarOpen(false);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // File input refs
   const videoInputRef = useRef(null);
@@ -169,8 +185,48 @@ const AestheticHome = ({
 
   return (
     <div style={styles.container}>
+      {/* Mobile sidebar toggle button */}
+      {isMobile && !mobileSidebarOpen && (
+        <button
+          onClick={() => setMobileSidebarOpen(true)}
+          style={styles.mobileSidebarToggle}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+          <span style={{ marginLeft: '8px', fontSize: '13px' }}>Categories</span>
+        </button>
+      )}
+
+      {/* Mobile sidebar overlay */}
+      {isMobile && mobileSidebarOpen && (
+        <div
+          style={styles.mobileSidebarOverlay}
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar - Categories */}
-      <aside style={styles.sidebar}>
+      <aside style={{
+        ...styles.sidebar,
+        ...(isMobile ? styles.sidebarMobile : {}),
+        ...(isMobile && !mobileSidebarOpen ? styles.sidebarMobileHidden : {}),
+        ...(isMobile && mobileSidebarOpen ? styles.sidebarMobileOpen : {})
+      }}>
+        {/* Mobile close button */}
+        {isMobile && (
+          <button
+            onClick={() => setMobileSidebarOpen(false)}
+            style={styles.mobileSidebarClose}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        )}
         <div style={styles.sidebarSection}>
           <div style={styles.sidebarHeader}>
             <h3 style={styles.sidebarTitle}>Categories</h3>
@@ -185,7 +241,7 @@ const AestheticHome = ({
                   ...styles.categoryItem,
                   ...(selectedCategory?.id === category.id ? styles.categoryItemActive : {})
                 }}
-                onClick={() => { onSelectCategory(category); setStudioMode(null); }}
+                onClick={() => { onSelectCategory(category); setStudioMode(null); setMobileSidebarOpen(false); }}
               >
                 <div style={styles.categoryThumb}>
                   {category.thumbnail ? (
@@ -228,7 +284,10 @@ const AestheticHome = ({
       </aside>
 
       {/* Main Content */}
-      <main style={styles.main}>
+      <main style={{
+        ...styles.main,
+        ...(isMobile ? { padding: '16px' } : {})
+      }}>
         {selectedCategory ? (
           <>
             {/* Header with back navigation */}
@@ -254,10 +313,16 @@ const AestheticHome = ({
 
             {/* Mode Selection View */}
             {!studioMode && (
-              <div style={styles.modeSelection}>
+              <div style={{
+                ...styles.modeSelection,
+                ...(isMobile ? { paddingTop: '20px' } : {})
+              }}>
                 <h2 style={styles.modeTitle}>What do you want to create?</h2>
 
-                <div style={styles.modeCards}>
+                <div style={{
+                  ...styles.modeCards,
+                  ...(isMobile ? { flexDirection: 'column', alignItems: 'center', gap: '16px' } : {})
+                }}>
                   {/* Videos Mode Card */}
                   <div style={styles.modeCard}>
                     <button style={styles.modeCardMain} onClick={() => setStudioMode('videos')}>
@@ -887,10 +952,72 @@ const ImageCard = ({ image, onDelete }) => {
 // ============================================
 
 const styles = {
-  container: { display: 'flex', height: '100%', backgroundColor: '#0a0a0f' },
+  container: { display: 'flex', height: '100%', backgroundColor: '#0a0a0f', position: 'relative' },
+
+  // Mobile sidebar toggle button
+  mobileSidebarToggle: {
+    position: 'fixed',
+    bottom: '20px',
+    left: '20px',
+    zIndex: 100,
+    display: 'flex',
+    alignItems: 'center',
+    padding: '12px 16px',
+    backgroundColor: '#7c3aed',
+    border: 'none',
+    borderRadius: '12px',
+    color: '#fff',
+    cursor: 'pointer',
+    boxShadow: '0 4px 12px rgba(124, 58, 237, 0.4)'
+  },
+
+  // Mobile sidebar overlay (dark backdrop)
+  mobileSidebarOverlay: {
+    position: 'fixed',
+    inset: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    zIndex: 199
+  },
+
+  // Mobile sidebar close button
+  mobileSidebarClose: {
+    position: 'absolute',
+    top: '12px',
+    right: '12px',
+    width: '32px',
+    height: '32px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#9ca3af',
+    cursor: 'pointer'
+  },
 
   // Sidebar
-  sidebar: { width: '220px', borderRight: '1px solid #1f1f2e', padding: '16px', overflowY: 'auto' },
+  sidebar: { width: '220px', borderRight: '1px solid #1f1f2e', padding: '16px', overflowY: 'auto', flexShrink: 0 },
+
+  // Mobile sidebar styles
+  sidebarMobile: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: '280px',
+    maxWidth: '85vw',
+    zIndex: 200,
+    backgroundColor: '#0a0a0f',
+    transition: 'transform 0.3s ease',
+    boxShadow: '4px 0 24px rgba(0, 0, 0, 0.5)'
+  },
+  sidebarMobileHidden: {
+    transform: 'translateX(-100%)'
+  },
+  sidebarMobileOpen: {
+    transform: 'translateX(0)'
+  },
   sidebarSection: { marginBottom: '20px' },
   sidebarHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' },
   sidebarTitle: { fontSize: '12px', fontWeight: '600', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 },
