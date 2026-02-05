@@ -17,6 +17,9 @@ import {
 // Video Studio - Flowstage-inspired workflow
 import { VideoStudio } from './components/VideoEditor';
 
+// Analytics Dashboard
+import { AnalyticsDashboard } from './components/Analytics';
+
 // Domain enforcement utilities
 import { isUserOperator } from './utils/roles';
 
@@ -2650,6 +2653,15 @@ const StickToMusic = () => {
             >
               Studio
             </button>
+            {/* Analytics */}
+            <button
+              onClick={() => setOperatorTab('analytics')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
+                operatorTab === 'analytics' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+              }`}
+            >
+              📊 Analytics
+            </button>
             {['applications', 'settings'].map(tab => (
               <button
                 key={tab}
@@ -4577,6 +4589,11 @@ const StickToMusic = () => {
                 </div>
               ))}
             </div>
+          )}
+
+          {/* Analytics Tab */}
+          {operatorTab === 'analytics' && (
+            <AnalyticsDashboard />
           )}
 
           {/* Applications Tab */}
