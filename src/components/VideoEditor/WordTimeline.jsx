@@ -296,18 +296,32 @@ const WordTimeline = ({
     e.stopPropagation();
     const word = words[index];
 
-    // Handle selection with click first
-    if (type === 'move') {
-      handleWordClick(e, index);
-    }
+    // Determine which indices we're dragging BEFORE any state changes
+    let indicesToDrag;
 
-    // Determine which indices we're dragging
-    let indicesToDrag = selectedWordIndices.includes(index) ? selectedWordIndices : [index];
+    if (type === 'move') {
+      // Check if clicked word is part of current multi-selection
+      const isPartOfMultiSelection = selectedWordIndices.includes(index) && selectedWordIndices.length > 1;
+
+      if (isPartOfMultiSelection) {
+        // Dragging a multi-selection - keep all selected words, make a copy of the array
+        indicesToDrag = [...selectedWordIndices];
+      } else {
+        // Clicking on unselected word or single selection - select just this word
+        indicesToDrag = [index];
+        // Update selection to this word only
+        setSelectedWordIndices([index]);
+        setLastSelectedIndex(index);
+      }
+    } else {
+      // For resize operations, only work with the single word
+      indicesToDrag = [index];
+    }
 
     // Save to history before dragging starts
     saveToHistory();
 
-    // For move operations, store initial times for ALL selected words
+    // Store initial times for ALL words being dragged
     const initialTimes = {};
     indicesToDrag.forEach(idx => {
       initialTimes[idx] = words[idx].startTime;
