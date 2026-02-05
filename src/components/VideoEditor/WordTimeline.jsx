@@ -29,6 +29,15 @@ const WordTimeline = ({
   onSaveToBank, // Callback to save word timings back to bank (update existing)
   onAddToBank // Callback to add new lyrics to bank (create new)
 }) => {
+  // Mobile responsive detection
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const [zoom, setZoom] = useState(() => {
     try {
       const saved = localStorage.getItem('stm_wordtimeline_zoom');
@@ -1076,29 +1085,69 @@ const WordTimeline = ({
   };
 
   return (
-    <div style={styles.overlay}>
-      <div ref={modalRef} tabIndex={-1} style={{ ...styles.modal, outline: 'none' }} onKeyDown={handleModalKeyDown}>
-        <div style={styles.header}>
-          <h2 style={styles.title}>Word timeline</h2>
-          <button style={styles.closeButton} onClick={onClose}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <div style={{
+      ...styles.overlay,
+      ...(isMobile ? { padding: 0 } : {})
+    }}>
+      <div ref={modalRef} tabIndex={-1} style={{
+        ...styles.modal,
+        outline: 'none',
+        ...(isMobile ? {
+          width: '100%',
+          maxWidth: '100%',
+          maxHeight: '100vh',
+          height: '100vh',
+          borderRadius: 0
+        } : {})
+      }} onKeyDown={handleModalKeyDown}>
+        <div style={{
+          ...styles.header,
+          ...(isMobile ? { padding: '12px 16px' } : {})
+        }}>
+          <h2 style={{
+            ...styles.title,
+            ...(isMobile ? { fontSize: '16px' } : {})
+          }}>Word timeline</h2>
+          <button style={{
+            ...styles.closeButton,
+            ...(isMobile ? { width: '40px', height: '40px' } : {})
+          }} onClick={onClose}>
+            <svg width={isMobile ? 24 : 20} height={isMobile ? 24 : 20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
           </button>
         </div>
 
-        <div style={styles.toolbar}>
+        <div style={{
+          ...styles.toolbar,
+          ...(isMobile ? {
+            padding: '8px 12px',
+            gap: '8px',
+            maxHeight: '140px',
+            overflowY: 'auto'
+          } : {})
+        }}>
           <div style={styles.timeDisplay}>
             <span style={styles.currentTimeText}>{formatTime(displayTime)}</span>
             <span style={styles.totalTime}> / {formatTime(duration)}</span>
             <span style={styles.originalTime}>(Original: {formatTime(duration)})</span>
           </div>
-          <div style={styles.toolbarButtons}>
+          <div style={{
+            ...styles.toolbarButtons,
+            ...(isMobile ? {
+              gap: '6px',
+              justifyContent: 'flex-start',
+              overflowX: 'auto',
+              WebkitOverflowScrolling: 'touch',
+              flexWrap: 'nowrap'
+            } : {})
+          }}>
             <button
               style={{
                 ...styles.toolButton,
                 opacity: hasWordAtPlayhead ? 1 : 0.5,
-                cursor: hasWordAtPlayhead ? 'pointer' : 'not-allowed'
+                cursor: hasWordAtPlayhead ? 'pointer' : 'not-allowed',
+                ...(isMobile ? { padding: '10px 14px', fontSize: '12px', whiteSpace: 'nowrap' } : {})
               }}
               onClick={handleCombineWords}
               disabled={!hasWordAtPlayhead}
@@ -1110,7 +1159,8 @@ const WordTimeline = ({
               style={{
                 ...styles.toolButton,
                 opacity: hasWordAtPlayhead ? 1 : 0.5,
-                cursor: hasWordAtPlayhead ? 'pointer' : 'not-allowed'
+                cursor: hasWordAtPlayhead ? 'pointer' : 'not-allowed',
+                ...(isMobile ? { padding: '10px 14px', fontSize: '12px', whiteSpace: 'nowrap' } : {})
               }}
               onClick={handleCutWord}
               disabled={!hasWordAtPlayhead}
@@ -1118,12 +1168,16 @@ const WordTimeline = ({
             >
               ✂️ Cut
             </button>
-            <button style={styles.toolButtonPrimary} onClick={handleAddWord}>Add</button>
+            <button style={{
+              ...styles.toolButtonPrimary,
+              ...(isMobile ? { padding: '10px 16px', fontSize: '12px' } : {})
+            }} onClick={handleAddWord}>Add</button>
             <button
               style={{
                 ...styles.toolButton,
                 opacity: hasWordAtPlayhead ? 1 : 0.5,
-                cursor: hasWordAtPlayhead ? 'pointer' : 'not-allowed'
+                cursor: hasWordAtPlayhead ? 'pointer' : 'not-allowed',
+                ...(isMobile ? { padding: '10px 14px', fontSize: '12px', whiteSpace: 'nowrap' } : {})
               }}
               onClick={handleDeleteWord}
               disabled={!hasWordAtPlayhead}
@@ -1131,35 +1185,56 @@ const WordTimeline = ({
             >
               Delete
             </button>
-            <div style={styles.zoomControl}>
-              <span>Zoom</span>
-              <input type="range" min="0.5" max="3" step="0.1" value={zoom} onChange={(e) => setZoom(parseFloat(e.target.value))} style={styles.zoomSlider} />
-            </div>
+            {!isMobile && (
+              <div style={styles.zoomControl}>
+                <span>Zoom</span>
+                <input type="range" min="0.5" max="3" step="0.1" value={zoom} onChange={(e) => setZoom(parseFloat(e.target.value))} style={styles.zoomSlider} />
+              </div>
+            )}
             <div style={styles.caseButtons}>
               <button
-                style={{...styles.caseButton, opacity: hasWordAtPlayhead ? 1 : 0.5}}
+                style={{
+                  ...styles.caseButton,
+                  opacity: hasWordAtPlayhead ? 1 : 0.5,
+                  ...(isMobile ? { padding: '10px 12px' } : {})
+                }}
                 onClick={() => handleChangeCase('lower')}
                 disabled={!hasWordAtPlayhead}
               >aa</button>
               <button
-                style={{...styles.caseButton, opacity: hasWordAtPlayhead ? 1 : 0.5}}
+                style={{
+                  ...styles.caseButton,
+                  opacity: hasWordAtPlayhead ? 1 : 0.5,
+                  ...(isMobile ? { padding: '10px 12px' } : {})
+                }}
                 onClick={() => handleChangeCase('title')}
                 disabled={!hasWordAtPlayhead}
               >Aa</button>
               <button
-                style={{...styles.caseButton, opacity: hasWordAtPlayhead ? 1 : 0.5}}
+                style={{
+                  ...styles.caseButton,
+                  opacity: hasWordAtPlayhead ? 1 : 0.5,
+                  ...(isMobile ? { padding: '10px 12px' } : {})
+                }}
                 onClick={() => handleChangeCase('upper')}
                 disabled={!hasWordAtPlayhead}
               >AA</button>
             </div>
-            <button style={styles.legatoButton} onClick={handleMakeLegato}>Make legato</button>
-            <label style={styles.censorLabel}>
-              <input type="checkbox" checked={autoCensor} onChange={(e) => setAutoCensor(e.target.checked)} />
-              Auto-censor
-            </label>
+            {!isMobile && (
+              <button style={styles.legatoButton} onClick={handleMakeLegato}>Make legato</button>
+            )}
+            {!isMobile && (
+              <label style={styles.censorLabel}>
+                <input type="checkbox" checked={autoCensor} onChange={(e) => setAutoCensor(e.target.checked)} />
+                Auto-censor
+              </label>
+            )}
             {/* Selection indicator */}
             {selectedWordIndices.length > 0 && (
-              <div style={styles.selectionIndicator}>
+              <div style={{
+                ...styles.selectionIndicator,
+                ...(isMobile ? { padding: '6px 10px', whiteSpace: 'nowrap' } : {})
+              }}>
                 <span>{selectedWordIndices.length} selected</span>
                 <button style={styles.clearSelectionBtn} onClick={clearSelection} title="Clear selection (Esc)">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1171,15 +1246,34 @@ const WordTimeline = ({
           </div>
         </div>
 
-        <div style={styles.timelineContainer}>
-          <button style={styles.playButton} onClick={onPlayPause}>
+        <div style={{
+          ...styles.timelineContainer,
+          ...(isMobile ? { padding: '12px 16px', gap: '10px' } : {})
+        }}>
+          <button style={{
+            ...styles.playButton,
+            ...(isMobile ? { width: '48px', height: '48px' } : {})
+          }} onClick={onPlayPause}>
             {isPlaying ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              <svg width={isMobile ? 20 : 16} height={isMobile ? 20 : 16} viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
             ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <svg width={isMobile ? 20 : 16} height={isMobile ? 20 : 16} viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
             )}
           </button>
-          <div ref={timelineRef} style={styles.timeline} onClick={handleTimelineClick} onMouseDown={handleTimelineMouseDown}>
+          <div
+            ref={timelineRef}
+            style={{
+              ...styles.timeline,
+              ...(isMobile ? {
+                height: '140px',
+                touchAction: 'pan-x',
+                WebkitOverflowScrolling: 'touch'
+              } : {})
+            }}
+            onClick={handleTimelineClick}
+            onMouseDown={handleTimelineMouseDown}
+            onTouchStart={isMobile ? handleTimelineMouseDown : undefined}
+          >
             <div data-timeline-inner style={{ ...styles.timelineInner, width: getTimelineWidth() }}>
               {/* Marquee Selection Box */}
               {marqueeSelection && (
@@ -1248,17 +1342,26 @@ const WordTimeline = ({
                   style={{
                     ...styles.wordBlock,
                     left: timeToPixels(word.startTime),
-                    width: Math.max(30, timeToPixels(word.duration || 0.5)),
+                    width: Math.max(isMobile ? 40 : 30, timeToPixels(word.duration || 0.5)),
+                    ...(isMobile ? { height: '46px', top: '24px' } : {}),
                     ...(isWordSelected(index) ? styles.wordBlockSelected : {}),
                     ...(currentWord?.id === word.id && !isWordSelected(index) ? styles.wordBlockCurrent : {})
                   }}
                   onMouseDown={(e) => handleWordMouseDown(e, index, 'move')}
+                  onTouchStart={isMobile ? (e) => handleWordMouseDown(e, index, 'move') : undefined}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
                     startEditingWord(word.id, word.text);
                   }}
                 >
-                  <div style={styles.resizeHandle} onMouseDown={(e) => handleWordMouseDown(e, index, 'resize-left')} />
+                  <div
+                    style={{
+                      ...styles.resizeHandle,
+                      ...(isMobile ? { width: '12px' } : {})
+                    }}
+                    onMouseDown={(e) => handleWordMouseDown(e, index, 'resize-left')}
+                    onTouchStart={isMobile ? (e) => handleWordMouseDown(e, index, 'resize-left') : undefined}
+                  />
                   {editingWordId === word.id ? (
                     <input
                       ref={editInputRef}
@@ -1267,22 +1370,50 @@ const WordTimeline = ({
                       onChange={(e) => setEditText(e.target.value)}
                       onKeyDown={handleEditKeyDown}
                       onBlur={saveInlineEdit}
-                      style={styles.inlineEditInput}
+                      style={{
+                        ...styles.inlineEditInput,
+                        ...(isMobile ? { fontSize: '14px' } : {})
+                      }}
                       onClick={(e) => e.stopPropagation()}
                     />
                   ) : (
-                    <span style={styles.wordText}>{censorWord(word.text).slice(0, 8)}{word.text.length > 8 ? '...' : ''}</span>
+                    <span style={{
+                      ...styles.wordText,
+                      ...(isMobile ? { fontSize: '12px' } : {})
+                    }}>{censorWord(word.text).slice(0, 8)}{word.text.length > 8 ? '...' : ''}</span>
                   )}
-                  <div style={{ ...styles.resizeHandle, right: 0, left: 'auto' }} onMouseDown={(e) => handleWordMouseDown(e, index, 'resize-right')} />
+                  <div
+                    style={{
+                      ...styles.resizeHandle,
+                      right: 0,
+                      left: 'auto',
+                      ...(isMobile ? { width: '12px' } : {})
+                    }}
+                    onMouseDown={(e) => handleWordMouseDown(e, index, 'resize-right')}
+                    onTouchStart={isMobile ? (e) => handleWordMouseDown(e, index, 'resize-right') : undefined}
+                  />
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        <div style={styles.bottomSections}>
-          <div style={styles.linePreviewSection}>
-            <h4 style={styles.sectionTitle}>Line build preview (Shift+click to multi-select)</h4>
+        <div style={{
+          ...styles.bottomSections,
+          ...(isMobile ? {
+            gridTemplateColumns: '1fr',
+            minHeight: '150px',
+            maxHeight: '200px'
+          } : {})
+        }}>
+          <div style={{
+            ...styles.linePreviewSection,
+            ...(isMobile ? { padding: '12px 16px' } : {})
+          }}>
+            <h4 style={{
+              ...styles.sectionTitle,
+              ...(isMobile ? { fontSize: '13px', marginBottom: '8px' } : {})
+            }}>{isMobile ? 'Line preview (tap to select)' : 'Line build preview (Shift+click to multi-select)'}</h4>
             <div style={styles.linesContainer}>
               {getLines().map((line, lineIndex) => (
                 <div key={lineIndex} style={styles.lineRow}>
@@ -1416,9 +1547,15 @@ const WordTimeline = ({
           </div>
         </div>
 
-        <div style={styles.footer}>
+        <div style={{
+          ...styles.footer,
+          ...(isMobile ? { padding: '12px 16px' } : {})
+        }}>
           <button
-            style={styles.saveButton}
+            style={{
+              ...styles.saveButton,
+              ...(isMobile ? { width: '100%', padding: '14px 20px', fontSize: '15px' } : {})
+            }}
             onClick={() => {
               // If loaded from bank, save back to that entry
               if (loadedBankLyricId && onSaveToBank) {
@@ -1440,12 +1577,18 @@ const WordTimeline = ({
       {/* Delete Confirmation Dialog */}
       {deleteConfirm.show && (
         <div style={styles.confirmOverlay}>
-          <div style={styles.confirmDialog}>
+          <div style={{
+            ...styles.confirmDialog,
+            ...(isMobile ? { width: '90%', maxWidth: '90%', padding: '20px' } : {})
+          }}>
             <h3 style={styles.confirmTitle}>Delete word?</h3>
             <p style={styles.confirmMessage}>
               Are you sure you want to delete "{deleteConfirm.text}"?
             </p>
-            <div style={styles.confirmButtons}>
+            <div style={{
+              ...styles.confirmButtons,
+              ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
+            }}>
               <button style={styles.confirmCancel} onClick={cancelDelete}>Cancel</button>
               <button style={styles.confirmDelete} onClick={confirmDelete}>Delete</button>
             </div>
@@ -1456,7 +1599,11 @@ const WordTimeline = ({
       {/* Save to Bank Prompt */}
       {saveToBankPrompt.show && (
         <div style={styles.confirmOverlay}>
-          <div style={{...styles.confirmDialog, minWidth: '350px'}}>
+          <div style={{
+            ...styles.confirmDialog,
+            minWidth: isMobile ? 'auto' : '350px',
+            ...(isMobile ? { width: '90%', maxWidth: '90%', padding: '20px' } : {})
+          }}>
             <h3 style={styles.confirmTitle}>💾 Save to Lyric Bank?</h3>
             <p style={styles.confirmMessage}>
               Save these {words.length} words with their timing to your lyric bank for reuse.
@@ -1468,16 +1615,16 @@ const WordTimeline = ({
               placeholder="Enter a name for this lyric..."
               style={{
                 width: '100%',
-                padding: '10px 12px',
+                padding: isMobile ? '14px' : '10px 12px',
                 backgroundColor: '#1f1f2e',
                 border: '1px solid #374151',
                 borderRadius: '6px',
                 color: '#fff',
-                fontSize: '14px',
+                fontSize: isMobile ? '16px' : '14px',
                 marginBottom: '16px',
                 outline: 'none'
               }}
-              autoFocus
+              autoFocus={!isMobile}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && saveToBankPrompt.name.trim()) {
                   const content = words.map(w => w.text).join(' ');
@@ -1491,9 +1638,15 @@ const WordTimeline = ({
                 }
               }}
             />
-            <div style={styles.confirmButtons}>
+            <div style={{
+              ...styles.confirmButtons,
+              ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
+            }}>
               <button
-                style={styles.confirmCancel}
+                style={{
+                  ...styles.confirmCancel,
+                  ...(isMobile ? { width: '100%', padding: '14px' } : {})
+                }}
                 onClick={() => {
                   setSaveToBankPrompt({ show: false, name: '' });
                   onClose();
@@ -1505,7 +1658,8 @@ const WordTimeline = ({
                 style={{
                   ...styles.saveButton,
                   opacity: saveToBankPrompt.name.trim() ? 1 : 0.5,
-                  cursor: saveToBankPrompt.name.trim() ? 'pointer' : 'not-allowed'
+                  cursor: saveToBankPrompt.name.trim() ? 'pointer' : 'not-allowed',
+                  ...(isMobile ? { width: '100%', padding: '14px' } : {})
                 }}
                 disabled={!saveToBankPrompt.name.trim()}
                 onClick={() => {

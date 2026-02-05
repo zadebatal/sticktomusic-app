@@ -30,6 +30,16 @@ const VideoEditorModal = ({
   onShowBatchPipeline,
   onClose
 }) => {
+  // Mobile responsive detection
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+  const [mobilePreviewExpanded, setMobilePreviewExpanded] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Media state
   const [selectedAudio, setSelectedAudio] = useState(existingVideo?.audio || null);
   const [clips, setClips] = useState(existingVideo?.clips || []);
@@ -1255,25 +1265,42 @@ const VideoEditorModal = ({
 
   return (
     <div
-      style={styles.overlay}
+      style={{
+        ...styles.overlay,
+        ...(isMobile ? { padding: 0 } : {})
+      }}
       onClick={(e) => e.target === e.currentTarget && handleCloseRequest()}
       role="dialog"
       aria-modal="true"
       aria-labelledby="video-editor-title"
     >
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+      <div style={{
+        ...styles.modal,
+        ...(isMobile ? {
+          maxWidth: '100%',
+          maxHeight: '100vh',
+          height: '100vh',
+          borderRadius: 0
+        } : {})
+      }} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div style={styles.header}>
+        <div style={{
+          ...styles.header,
+          ...(isMobile ? { padding: '12px 16px' } : {})
+        }}>
           <button
             id="video-editor-title"
-            style={styles.studioButton}
+            style={{
+              ...styles.studioButton,
+              ...(isMobile ? { padding: '6px 10px', fontSize: '14px' } : {})
+            }}
             onClick={handleCloseRequest}
             title="Back to categories"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width={isMobile ? 18 : 20} height={isMobile ? 18 : 20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polygon points="5,3 19,12 5,21" fill="currentColor"/>
             </svg>
-            <span>Studio</span>
+            {!isMobile && <span>Studio</span>}
           </button>
           <button
             style={styles.closeButton}
@@ -1288,9 +1315,23 @@ const VideoEditorModal = ({
           </button>
         </div>
 
-        <div style={styles.body}>
-          {/* Left - Preview */}
-          <div style={styles.previewSection}>
+        <div style={{
+          ...styles.body,
+          ...(isMobile ? { flexDirection: 'column', overflow: 'auto' } : {})
+        }}>
+          {/* Preview Section - Collapsible on mobile */}
+          <div style={{
+            ...styles.previewSection,
+            ...(isMobile ? {
+              width: '100%',
+              padding: '12px 16px',
+              borderRight: 'none',
+              borderBottom: '1px solid #1f1f2e',
+              flexShrink: 0,
+              maxHeight: mobilePreviewExpanded ? '60vh' : '220px',
+              transition: 'max-height 0.3s ease'
+            } : {})
+          }}>
             <div style={styles.previewContainer}>
               <div style={styles.preview}>
                 {/* Hidden audio element for playback */}
@@ -1494,18 +1535,42 @@ const VideoEditorModal = ({
                 <span style={styles.timeDisplay}>
                   {formatTime(currentTime)} / {formatTime(trimmedDuration)}
                 </span>
-                <button style={styles.fullscreenButton}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="15 3 21 3 21 9"/>
-                    <polyline points="9 21 3 21 3 15"/>
-                    <line x1="21" y1="3" x2="14" y2="10"/>
-                    <line x1="3" y1="21" x2="10" y2="14"/>
-                  </svg>
-                </button>
+                {!isMobile && (
+                  <button style={styles.fullscreenButton}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="15 3 21 3 21 9"/>
+                      <polyline points="9 21 3 21 3 15"/>
+                      <line x1="21" y1="3" x2="14" y2="10"/>
+                      <line x1="3" y1="21" x2="10" y2="14"/>
+                    </svg>
+                  </button>
+                )}
+                {/* Mobile expand/collapse button */}
+                {isMobile && (
+                  <button
+                    style={{
+                      padding: '8px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      color: '#9ca3af',
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => setMobilePreviewExpanded(!mobilePreviewExpanded)}
+                    title={mobilePreviewExpanded ? 'Collapse preview' : 'Expand preview'}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      {mobilePreviewExpanded ? (
+                        <polyline points="18 15 12 9 6 15" />
+                      ) : (
+                        <polyline points="6 9 12 15 18 9" />
+                      )}
+                    </svg>
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Preset Selector */}
+            {/* Preset Selector - Hide on mobile to save space (moved to styles tab) */}
             <div style={styles.presetSection}>
               <span style={styles.presetLabel}>Apply preset</span>
               <select
@@ -1523,22 +1588,32 @@ const VideoEditorModal = ({
               </select>
             </div>
 
-            <button style={styles.makePresetButton} onClick={() => {
-              const name = prompt('Preset name:');
-              if (name) {
-                // Include all relevant settings in the preset
-                onSavePreset({ name, settings: { ...textStyle, cropMode } });
-              }
-            }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-              </svg>
-              Make this a preset
-            </button>
+            {!isMobile && (
+              <button style={styles.makePresetButton} onClick={() => {
+                const name = prompt('Preset name:');
+                if (name) {
+                  // Include all relevant settings in the preset
+                  onSavePreset({ name, settings: { ...textStyle, cropMode } });
+                }
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+                Make this a preset
+              </button>
+            )}
           </div>
 
           {/* Right - Controls */}
-          <div style={styles.controlsSection}>
+          <div style={{
+            ...styles.controlsSection,
+            ...(isMobile ? {
+              padding: '16px',
+              flex: 1,
+              overflowY: 'auto',
+              WebkitOverflowScrolling: 'touch'
+            } : {})
+          }}>
             {/* Audio Selector */}
             {!selectedAudio && (
               <div style={styles.audioSelector}>
@@ -1563,22 +1638,41 @@ const VideoEditorModal = ({
 
             {selectedAudio && (
               <>
-                {/* Tabs */}
-                <div style={styles.tabs}>
+                {/* Tabs - scrollable on mobile */}
+                <div style={{
+                  ...styles.tabs,
+                  ...(isMobile ? {
+                    overflowX: 'auto',
+                    WebkitOverflowScrolling: 'touch',
+                    scrollbarWidth: 'none',
+                    msOverflowStyle: 'none',
+                    marginBottom: '12px',
+                    paddingBottom: '4px'
+                  } : {})
+                }}>
                   <button
-                    style={activeTab === 'caption' ? styles.tabActive : styles.tab}
+                    style={{
+                      ...(activeTab === 'caption' ? styles.tabActive : styles.tab),
+                      ...(isMobile ? { padding: '10px 16px', fontSize: '13px', whiteSpace: 'nowrap' } : {})
+                    }}
                     onClick={() => setActiveTab('caption')}
                   >
                     Caption
                   </button>
                   <button
-                    style={activeTab === 'styles' ? styles.tabActive : styles.tab}
+                    style={{
+                      ...(activeTab === 'styles' ? styles.tabActive : styles.tab),
+                      ...(isMobile ? { padding: '10px 16px', fontSize: '13px', whiteSpace: 'nowrap' } : {})
+                    }}
                     onClick={() => setActiveTab('styles')}
                   >
                     Styles
                   </button>
                   <button
-                    style={activeTab === 'lyrics' ? {...styles.tabActive, color: '#a78bfa'} : {...styles.tab, color: '#8b5cf6'}}
+                    style={{
+                      ...(activeTab === 'lyrics' ? {...styles.tabActive, color: '#a78bfa'} : {...styles.tab, color: '#8b5cf6'}),
+                      ...(isMobile ? { padding: '10px 16px', fontSize: '13px', whiteSpace: 'nowrap' } : {})
+                    }}
                     onClick={() => setActiveTab('lyrics')}
                   >
                     📝 Lyrics
@@ -2078,19 +2172,45 @@ const VideoEditorModal = ({
         </div>
 
         {/* Footer */}
-        <div style={styles.footer}>
-          <div style={styles.footerLeft}>
-            <button style={styles.resetButton}>Reset to saved</button>
+        <div style={{
+          ...styles.footer,
+          ...(isMobile ? {
+            flexDirection: 'column',
+            gap: '12px',
+            padding: '12px 16px'
+          } : {})
+        }}>
+          <div style={{
+            ...styles.footerLeft,
+            ...(isMobile ? { width: '100%', justifyContent: 'center' } : {})
+          }}>
+            {!isMobile && <button style={styles.resetButton}>Reset to saved</button>}
             {lastSaved && (
               <span style={styles.autoSaveIndicator}>
                 ✓ Auto-saved {lastSaved.toLocaleTimeString()}
               </span>
             )}
           </div>
-          <div style={styles.footerRight}>
+          <div style={{
+            ...styles.footerRight,
+            ...(isMobile ? {
+              width: '100%',
+              justifyContent: 'center',
+              flexWrap: 'wrap',
+              gap: '8px'
+            } : {})
+          }}>
             {onShowBatchPipeline && (
               <button
-                style={styles.batchButton}
+                style={{
+                  ...styles.batchButton,
+                  ...(isMobile ? {
+                    padding: '12px 16px',
+                    fontSize: '14px',
+                    flex: isMobile ? '1 1 calc(50% - 4px)' : undefined,
+                    marginRight: 0
+                  } : {})
+                }}
                 onClick={() => {
                   // Check if there are word timings or custom text styles to carry over
                   const hasWordTimings = words && words.length > 0;
@@ -2118,12 +2238,37 @@ const VideoEditorModal = ({
                   <rect x="3" y="14" width="7" height="7" rx="1"/>
                   <rect x="14" y="14" width="7" height="7" rx="1"/>
                 </svg>
-                Make 10 at once
+                {isMobile ? 'Batch' : 'Make 10 at once'}
               </button>
             )}
-            <span style={styles.shortcutHint}>⌘S to save</span>
-            <button style={styles.cancelButton} onClick={onClose}>Cancel</button>
-            <button style={styles.confirmButton} onClick={handleSave}>Confirm</button>
+            {!isMobile && <span style={styles.shortcutHint}>⌘S to save</span>}
+            <button
+              style={{
+                ...styles.cancelButton,
+                ...(isMobile ? {
+                  padding: '12px 20px',
+                  fontSize: '14px',
+                  flex: onShowBatchPipeline ? '1 1 calc(50% - 4px)' : '1'
+                } : {})
+              }}
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              style={{
+                ...styles.confirmButton,
+                ...(isMobile ? {
+                  padding: '12px 20px',
+                  fontSize: '14px',
+                  flex: '1',
+                  width: '100%'
+                } : {})
+              }}
+              onClick={handleSave}
+            >
+              Confirm
+            </button>
           </div>
         </div>
 
@@ -2138,29 +2283,60 @@ const VideoEditorModal = ({
               }
             }}
           >
-            <div style={styles.lyricsModal}>
+            <div style={{
+            ...styles.lyricsModal,
+            ...(isMobile ? {
+              width: '95%',
+              maxWidth: '95%',
+              maxHeight: '90vh',
+              overflow: 'auto'
+            } : {})
+          }}>
               <h3 style={styles.lyricsTitle}>Edit Lyrics</h3>
               <textarea
                 value={lyrics}
                 onChange={(e) => setLyrics(e.target.value)}
                 placeholder="Enter your lyrics here, one word or line per row..."
-                style={styles.lyricsTextarea}
-                autoFocus
+                style={{
+                  ...styles.lyricsTextarea,
+                  ...(isMobile ? { minHeight: '150px', fontSize: '16px' } : {})
+                }}
+                autoFocus={!isMobile}
               />
-              <div style={styles.lyricsSyncOptions}>
-                <span>Sync method:</span>
-                <button style={styles.syncButton} onClick={() => handleSyncLyrics('beat')}>
-                  Sync to beats
-                </button>
-                <button style={styles.syncButton} onClick={() => handleSyncLyrics('even')}>
-                  Spread evenly
-                </button>
+              <div style={{
+                ...styles.lyricsSyncOptions,
+                ...(isMobile ? { flexDirection: 'column', alignItems: 'stretch', gap: '8px' } : {})
+              }}>
+                <span style={isMobile ? { marginBottom: '4px' } : {}}>Sync method:</span>
+                <div style={{ display: 'flex', gap: '8px', ...(isMobile ? { width: '100%' } : {}) }}>
+                  <button style={{
+                    ...styles.syncButton,
+                    ...(isMobile ? { flex: 1, padding: '12px' } : {})
+                  }} onClick={() => handleSyncLyrics('beat')}>
+                    Sync to beats
+                  </button>
+                  <button style={{
+                    ...styles.syncButton,
+                    ...(isMobile ? { flex: 1, padding: '12px' } : {})
+                  }} onClick={() => handleSyncLyrics('even')}>
+                    Spread evenly
+                  </button>
+                </div>
               </div>
-              <div style={styles.lyricsActions}>
-                <button style={styles.cancelButton} onClick={() => setShowLyricsEditor(false)}>
+              <div style={{
+                ...styles.lyricsActions,
+                ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
+              }}>
+                <button style={{
+                  ...styles.cancelButton,
+                  ...(isMobile ? { width: '100%', padding: '14px' } : {})
+                }} onClick={() => setShowLyricsEditor(false)}>
                   Cancel
                 </button>
-                <button style={styles.confirmButton} onClick={() => setShowLyricsEditor(false)}>
+                <button style={{
+                  ...styles.confirmButton,
+                  ...(isMobile ? { width: '100%', padding: '14px' } : {})
+                }} onClick={() => setShowLyricsEditor(false)}>
                   Done
                 </button>
               </div>
@@ -2205,7 +2381,11 @@ const VideoEditorModal = ({
         {/* API Key Modal */}
         {showApiKeyModal && (
           <div style={styles.lyricsOverlay}>
-            <div style={{...styles.lyricsModal, maxWidth: '400px'}}>
+            <div style={{
+              ...styles.lyricsModal,
+              maxWidth: '400px',
+              ...(isMobile ? { width: '95%', maxWidth: '95%' } : {})
+            }}>
               <h3 style={styles.lyricsTitle}>🔑 OpenAI API Key</h3>
               <p style={{ color: '#9CA3AF', fontSize: '14px', marginBottom: '16px' }}>
                 AI transcription uses OpenAI Whisper (great for music/vocals).
@@ -2226,24 +2406,34 @@ const VideoEditorModal = ({
                   }
                 }}
                 placeholder="Enter your OpenAI API key (sk-...)..."
-                autoFocus
+                autoFocus={!isMobile}
                 style={{
                   width: '100%',
-                  padding: '12px',
+                  padding: isMobile ? '14px' : '12px',
                   background: '#1F2937',
                   border: '1px solid #374151',
                   borderRadius: '8px',
                   color: '#fff',
-                  fontSize: '14px',
+                  fontSize: isMobile ? '16px' : '14px',
                   marginBottom: '16px'
                 }}
               />
-              <div style={styles.lyricsActions}>
-                <button style={styles.cancelButton} onClick={() => { setShowApiKeyModal(false); setApiKeyInput(''); }}>
+              <div style={{
+                ...styles.lyricsActions,
+                ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
+              }}>
+                <button style={{
+                  ...styles.cancelButton,
+                  ...(isMobile ? { width: '100%', padding: '14px' } : {})
+                }} onClick={() => { setShowApiKeyModal(false); setApiKeyInput(''); }}>
                   Cancel
                 </button>
                 <button
-                  style={{...styles.confirmButton, background: 'linear-gradient(135deg, #8B5CF6, #6D28D9)'}}
+                  style={{
+                    ...styles.confirmButton,
+                    background: 'linear-gradient(135deg, #8B5CF6, #6D28D9)',
+                    ...(isMobile ? { width: '100%', padding: '14px' } : {})
+                  }}
                   onClick={handleSaveApiKey}
                   disabled={!apiKeyInput.trim()}
                 >
@@ -2296,15 +2486,25 @@ const VideoEditorModal = ({
                 <div>🎬 Clips: {recoveryData.clips?.length || 0}</div>
                 <div>💬 Words: {recoveryData.words?.length || 0}</div>
               </div>
-              <div style={styles.lyricsActions}>
+              <div style={{
+                ...styles.lyricsActions,
+                ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
+              }}>
                 <button
-                  style={styles.cancelButton}
+                  style={{
+                    ...styles.cancelButton,
+                    ...(isMobile ? { width: '100%', padding: '14px' } : {})
+                  }}
                   onClick={handleDiscardDraft}
                 >
                   Start Fresh
                 </button>
                 <button
-                  style={{...styles.confirmButton, background: 'linear-gradient(135deg, #10b981, #059669)'}}
+                  style={{
+                    ...styles.confirmButton,
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    ...(isMobile ? { width: '100%', padding: '14px' } : {})
+                  }}
                   onClick={handleRestoreDraft}
                 >
                   ✨ Restore Draft
@@ -2317,7 +2517,11 @@ const VideoEditorModal = ({
         {/* Save Lyrics to Song Prompt */}
         {showSaveLyricsPrompt && (
           <div style={styles.lyricsOverlay}>
-            <div style={{...styles.lyricsModal, maxWidth: '420px'}}>
+            <div style={{
+              ...styles.lyricsModal,
+              maxWidth: '420px',
+              ...(isMobile ? { width: '95%', maxWidth: '95%' } : {})
+            }}>
               <h3 style={styles.lyricsTitle}>💾 Save Lyrics to Song?</h3>
               <p style={{ color: '#9CA3AF', fontSize: '14px', marginBottom: '16px' }}>
                 You've created timed lyrics for <strong style={{ color: '#fff' }}>{selectedAudio?.name || 'this song'}</strong>.
@@ -2336,15 +2540,24 @@ const VideoEditorModal = ({
                   "{words.slice(0, 5).map(w => w.text).join(' ')}{words.length > 5 ? '...' : ''}"
                 </div>
               </div>
-              <div style={styles.lyricsActions}>
+              <div style={{
+                ...styles.lyricsActions,
+                ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
+              }}>
                 <button
-                  style={styles.cancelButton}
+                  style={{
+                    ...styles.cancelButton,
+                    ...(isMobile ? { width: '100%', padding: '14px' } : {})
+                  }}
                   onClick={() => handleLyricsPromptResponse(false)}
                 >
                   No, Just This Video
                 </button>
                 <button
-                  style={styles.confirmButton}
+                  style={{
+                    ...styles.confirmButton,
+                    ...(isMobile ? { width: '100%', padding: '14px' } : {})
+                  }}
                   onClick={() => handleLyricsPromptResponse(true)}
                 >
                   Yes, Save to Song
@@ -2357,7 +2570,11 @@ const VideoEditorModal = ({
         {/* Batch Lyric Settings Prompt */}
         {showBatchLyricPrompt && (
           <div style={styles.lyricsOverlay}>
-            <div style={{...styles.lyricsModal, maxWidth: '480px'}}>
+            <div style={{
+              ...styles.lyricsModal,
+              maxWidth: '480px',
+              ...(isMobile ? { width: '95%', maxWidth: '95%' } : {})
+            }}>
               <h3 style={styles.lyricsTitle}>🎬 Apply Lyric Settings to Batch?</h3>
               <p style={{ color: '#9CA3AF', fontSize: '14px', marginBottom: '16px' }}>
                 You have custom lyric settings configured. Do you want to apply them to all videos in the batch?
@@ -2395,9 +2612,15 @@ const VideoEditorModal = ({
                   </div>
                 )}
               </div>
-              <div style={styles.lyricsActions}>
+              <div style={{
+                ...styles.lyricsActions,
+                ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
+              }}>
                 <button
-                  style={styles.cancelButton}
+                  style={{
+                    ...styles.cancelButton,
+                    ...(isMobile ? { width: '100%', padding: '14px' } : {})
+                  }}
                   onClick={() => {
                     setShowBatchLyricPrompt(false);
                     onClose();
@@ -2407,7 +2630,11 @@ const VideoEditorModal = ({
                   No, Fresh Start
                 </button>
                 <button
-                  style={{...styles.confirmButton, background: 'linear-gradient(135deg, #8B5CF6, #7C3AED)'}}
+                  style={{
+                    ...styles.confirmButton,
+                    background: 'linear-gradient(135deg, #8B5CF6, #7C3AED)',
+                    ...(isMobile ? { width: '100%', padding: '14px' } : {})
+                  }}
                   onClick={() => {
                     setShowBatchLyricPrompt(false);
                     onClose();
@@ -2428,7 +2655,11 @@ const VideoEditorModal = ({
         {/* Close Confirmation Dialog */}
         {showCloseConfirm && (
           <div style={styles.lyricsOverlay}>
-            <div style={{...styles.lyricsModal, maxWidth: '380px'}}>
+            <div style={{
+              ...styles.lyricsModal,
+              maxWidth: '380px',
+              ...(isMobile ? { width: '95%', maxWidth: '95%' } : {})
+            }}>
               <h3 style={styles.lyricsTitle}>Close Editor?</h3>
               <p style={{ color: '#9CA3AF', fontSize: '14px', marginBottom: '16px' }}>
                 You have unsaved work. Are you sure you want to close?
@@ -2445,15 +2676,25 @@ const VideoEditorModal = ({
                 {clips.length > 0 && <div>🎬 {clips.length} clips</div>}
                 {words.length > 0 && <div>💬 {words.length} words timed</div>}
               </div>
-              <div style={styles.lyricsActions}>
+              <div style={{
+                ...styles.lyricsActions,
+                ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
+              }}>
                 <button
-                  style={styles.cancelButton}
+                  style={{
+                    ...styles.cancelButton,
+                    ...(isMobile ? { width: '100%', padding: '14px' } : {})
+                  }}
                   onClick={() => setShowCloseConfirm(false)}
                 >
                   Keep Editing
                 </button>
                 <button
-                  style={{...styles.confirmButton, background: 'linear-gradient(135deg, #ef4444, #dc2626)'}}
+                  style={{
+                    ...styles.confirmButton,
+                    background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                    ...(isMobile ? { width: '100%', padding: '14px' } : {})
+                  }}
                   onClick={handleConfirmClose}
                 >
                   Close Anyway

@@ -22,6 +22,15 @@ const AudioClipSelector = ({
   initialStart = 0,
   initialEnd = null
 }) => {
+  // Mobile responsive detection
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const [isLoading, setIsLoading] = useState(true);
   const [duration, setDuration] = useState(0);
   const [inPoint, setInPoint] = useState(initialStart);
@@ -446,35 +455,86 @@ const AudioClipSelector = ({
   const selectedDuration = outPoint - inPoint;
 
   return (
-    <div style={styles.overlay}>
-      <div style={styles.modal}>
+    <div style={{
+      ...styles.overlay,
+      ...(isMobile ? { padding: 0 } : {})
+    }}>
+      <div style={{
+        ...styles.modal,
+        ...(isMobile ? {
+          maxWidth: '100%',
+          height: '100vh',
+          maxHeight: '100vh',
+          borderRadius: 0,
+          display: 'flex',
+          flexDirection: 'column'
+        } : {})
+      }}>
         {/* Header */}
-        <div style={styles.header}>
+        <div style={{
+          ...styles.header,
+          ...(isMobile ? { padding: '16px' } : {})
+        }}>
           <div style={styles.headerLeft}>
-            <span style={styles.headerIcon}>🎵</span>
+            <span style={{
+              ...styles.headerIcon,
+              ...(isMobile ? { fontSize: '24px' } : {})
+            }}>🎵</span>
             <div>
-              <h2 style={styles.title}>Select Audio Region</h2>
-              <p style={styles.subtitle}>Drag the green (IN) and orange (OUT) markers, or press I/O keys</p>
+              <h2 style={{
+                ...styles.title,
+                ...(isMobile ? { fontSize: '16px' } : {})
+              }}>Select Audio Region</h2>
+              {!isMobile && <p style={styles.subtitle}>Drag the green (IN) and orange (OUT) markers, or press I/O keys</p>}
             </div>
           </div>
-          <button style={styles.closeButton} onClick={onCancel}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <button style={{
+            ...styles.closeButton,
+            ...(isMobile ? { width: '44px', height: '44px' } : {})
+          }} onClick={onCancel}>
+            <svg width={isMobile ? 24 : 20} height={isMobile ? 24 : 20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
           </button>
         </div>
 
         {/* Quick Presets */}
-        <div style={styles.presets}>
-          <span style={styles.presetLabel}>Quick select from playhead:</span>
-          <button style={styles.preset} onClick={() => applyPreset('15')}>15s</button>
-          <button style={styles.preset} onClick={() => applyPreset('30')}>30s</button>
-          <button style={styles.preset} onClick={() => applyPreset('60')}>60s</button>
-          <button style={styles.presetFull} onClick={() => applyPreset('full')}>Full Track</button>
+        <div style={{
+          ...styles.presets,
+          ...(isMobile ? {
+            padding: '10px 16px',
+            flexWrap: 'wrap',
+            gap: '6px'
+          } : {})
+        }}>
+          {!isMobile && <span style={styles.presetLabel}>Quick select from playhead:</span>}
+          <button style={{
+            ...styles.preset,
+            ...(isMobile ? { padding: '10px 16px', fontSize: '14px' } : {})
+          }} onClick={() => applyPreset('15')}>15s</button>
+          <button style={{
+            ...styles.preset,
+            ...(isMobile ? { padding: '10px 16px', fontSize: '14px' } : {})
+          }} onClick={() => applyPreset('30')}>30s</button>
+          <button style={{
+            ...styles.preset,
+            ...(isMobile ? { padding: '10px 16px', fontSize: '14px' } : {})
+          }} onClick={() => applyPreset('60')}>60s</button>
+          <button style={{
+            ...styles.presetFull,
+            ...(isMobile ? { padding: '10px 16px', fontSize: '14px', marginLeft: 0, flex: 1 } : {})
+          }} onClick={() => applyPreset('full')}>Full</button>
         </div>
 
         {/* Waveform */}
-        <div style={styles.waveformSection}>
+        <div style={{
+          ...styles.waveformSection,
+          ...(isMobile ? {
+            padding: '16px',
+            flex: 1,
+            overflow: 'hidden'
+          } : {})
+        }}>
           {isLoading ? (
             <div style={styles.loading}>
               <div style={styles.spinner} />
@@ -483,13 +543,17 @@ const AudioClipSelector = ({
           ) : (
             <div
               ref={containerRef}
-              style={styles.canvasContainer}
+              style={{
+                ...styles.canvasContainer,
+                ...(isMobile ? { touchAction: 'none' } : {})
+              }}
               onMouseDown={handleMouseDown}
+              onTouchStart={isMobile ? handleMouseDown : undefined}
             >
               <canvas
                 ref={canvasRef}
-                width={700}
-                height={140}
+                width={isMobile ? Math.min(window.innerWidth - 32, 700) : 700}
+                height={isMobile ? 120 : 140}
                 style={styles.canvas}
               />
             </div>
@@ -497,12 +561,25 @@ const AudioClipSelector = ({
         </div>
 
         {/* Time Display */}
-        <div style={styles.timeRow}>
+        <div style={{
+          ...styles.timeRow,
+          ...(isMobile ? {
+            flexDirection: 'row',
+            gap: '8px',
+            padding: '12px 16px'
+          } : {})
+        }}>
           {/* IN Point */}
-          <div style={styles.timeBlock}>
-            <div style={styles.timeLabel}>
+          <div style={{
+            ...styles.timeBlock,
+            ...(isMobile ? { flex: 1, padding: '8px' } : {})
+          }}>
+            <div style={{
+              ...styles.timeLabel,
+              ...(isMobile ? { fontSize: '10px' } : {})
+            }}>
               <span style={styles.inDot} />
-              IN POINT
+              IN
             </div>
             {editingTime === 'in' ? (
               <input
@@ -511,29 +588,50 @@ const AudioClipSelector = ({
                 onChange={(e) => setEditTimeValue(e.target.value)}
                 onBlur={handleTimeInputConfirm}
                 onKeyDown={(e) => e.key === 'Enter' && handleTimeInputConfirm()}
-                style={styles.timeInput}
-                autoFocus
+                style={{
+                  ...styles.timeInput,
+                  ...(isMobile ? { fontSize: '16px', padding: '8px' } : {})
+                }}
+                autoFocus={!isMobile}
               />
             ) : (
-              <button style={styles.timeValue} onClick={() => handleTimeEdit('in')}>
+              <button style={{
+                ...styles.timeValue,
+                ...(isMobile ? { fontSize: '18px', padding: '8px' } : {})
+              }} onClick={() => handleTimeEdit('in')}>
                 {formatTime(inPoint)}
               </button>
             )}
-            <span style={styles.timeHint}>Press I to set</span>
+            {!isMobile && <span style={styles.timeHint}>Press I to set</span>}
           </div>
 
           {/* Duration */}
-          <div style={styles.durationBlock}>
-            <div style={styles.durationLabel}>DURATION</div>
-            <div style={styles.durationValue}>{formatTime(selectedDuration)}</div>
-            <div style={styles.durationSub}>{selectedDuration.toFixed(1)} seconds</div>
+          <div style={{
+            ...styles.durationBlock,
+            ...(isMobile ? { flex: 1, padding: '8px' } : {})
+          }}>
+            <div style={{
+              ...styles.durationLabel,
+              ...(isMobile ? { fontSize: '10px' } : {})
+            }}>DURATION</div>
+            <div style={{
+              ...styles.durationValue,
+              ...(isMobile ? { fontSize: '18px' } : {})
+            }}>{formatTime(selectedDuration)}</div>
+            {!isMobile && <div style={styles.durationSub}>{selectedDuration.toFixed(1)} seconds</div>}
           </div>
 
           {/* OUT Point */}
-          <div style={styles.timeBlock}>
-            <div style={styles.timeLabel}>
+          <div style={{
+            ...styles.timeBlock,
+            ...(isMobile ? { flex: 1, padding: '8px' } : {})
+          }}>
+            <div style={{
+              ...styles.timeLabel,
+              ...(isMobile ? { fontSize: '10px' } : {})
+            }}>
               <span style={styles.outDot} />
-              OUT POINT
+              OUT
             </div>
             {editingTime === 'out' ? (
               <input
@@ -542,53 +640,93 @@ const AudioClipSelector = ({
                 onChange={(e) => setEditTimeValue(e.target.value)}
                 onBlur={handleTimeInputConfirm}
                 onKeyDown={(e) => e.key === 'Enter' && handleTimeInputConfirm()}
-                style={styles.timeInput}
-                autoFocus
+                style={{
+                  ...styles.timeInput,
+                  ...(isMobile ? { fontSize: '16px', padding: '8px' } : {})
+                }}
+                autoFocus={!isMobile}
               />
             ) : (
-              <button style={styles.timeValue} onClick={() => handleTimeEdit('out')}>
+              <button style={{
+                ...styles.timeValue,
+                ...(isMobile ? { fontSize: '18px', padding: '8px' } : {})
+              }} onClick={() => handleTimeEdit('out')}>
                 {formatTime(outPoint)}
               </button>
             )}
-            <span style={styles.timeHint}>Press O to set</span>
+            {!isMobile && <span style={styles.timeHint}>Press O to set</span>}
           </div>
         </div>
 
         {/* Playback Controls */}
-        <div style={styles.playbackRow}>
-          <button style={styles.playButton} onClick={togglePlayback}>
+        <div style={{
+          ...styles.playbackRow,
+          ...(isMobile ? { padding: '12px 16px', gap: '12px' } : {})
+        }}>
+          <button style={{
+            ...styles.playButton,
+            ...(isMobile ? { width: '52px', height: '52px' } : {})
+          }} onClick={togglePlayback}>
             {isPlaying ? (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <svg width={isMobile ? 28 : 24} height={isMobile ? 28 : 24} viewBox="0 0 24 24" fill="currentColor">
                 <rect x="6" y="4" width="4" height="16" rx="1"/>
                 <rect x="14" y="4" width="4" height="16" rx="1"/>
               </svg>
             ) : (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <svg width={isMobile ? 28 : 24} height={isMobile ? 28 : 24} viewBox="0 0 24 24" fill="currentColor">
                 <polygon points="5,3 19,12 5,21"/>
               </svg>
             )}
           </button>
           <div style={styles.playbackInfo}>
-            <span style={styles.playbackTime}>{formatTime(playheadTime)}</span>
+            <span style={{
+              ...styles.playbackTime,
+              ...(isMobile ? { fontSize: '18px' } : {})
+            }}>{formatTime(playheadTime)}</span>
             <span style={styles.playbackSep}>/</span>
-            <span style={styles.playbackDuration}>{formatTime(duration)}</span>
+            <span style={{
+              ...styles.playbackDuration,
+              ...(isMobile ? { fontSize: '14px' } : {})
+            }}>{formatTime(duration)}</span>
           </div>
-          <div style={styles.shortcuts}>
-            <span style={styles.shortcut}><kbd>Space</kbd> Play</span>
-            <span style={styles.shortcut}><kbd>I</kbd> Set IN</span>
-            <span style={styles.shortcut}><kbd>O</kbd> Set OUT</span>
-            <span style={styles.shortcut}><kbd>←→</kbd> Scrub</span>
-          </div>
+          {!isMobile && (
+            <div style={styles.shortcuts}>
+              <span style={styles.shortcut}><kbd>Space</kbd> Play</span>
+              <span style={styles.shortcut}><kbd>I</kbd> Set IN</span>
+              <span style={styles.shortcut}><kbd>O</kbd> Set OUT</span>
+              <span style={styles.shortcut}><kbd>←→</kbd> Scrub</span>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
-        <div style={styles.footer}>
-          <div style={styles.footerInfo}>
+        <div style={{
+          ...styles.footer,
+          ...(isMobile ? {
+            flexDirection: 'column',
+            gap: '12px',
+            padding: '16px'
+          } : {})
+        }}>
+          <div style={{
+            ...styles.footerInfo,
+            ...(isMobile ? { textAlign: 'center' } : {})
+          }}>
             Selected: <strong>{formatTime(selectedDuration)}</strong> of {formatTime(duration)}
           </div>
-          <div style={styles.footerActions}>
-            <button style={styles.cancelButton} onClick={onCancel}>Cancel</button>
-            {onSaveClip && (
+          <div style={{
+            ...styles.footerActions,
+            ...(isMobile ? {
+              width: '100%',
+              flexDirection: 'column',
+              gap: '8px'
+            } : {})
+          }}>
+            <button style={{
+              ...styles.cancelButton,
+              ...(isMobile ? { width: '100%', padding: '14px', fontSize: '15px' } : {})
+            }} onClick={onCancel}>Cancel</button>
+            {onSaveClip && !isMobile && (
               <button
                 style={styles.saveClipButton}
                 onClick={() => {
@@ -602,7 +740,10 @@ const AudioClipSelector = ({
               </button>
             )}
             <button
-              style={styles.saveButton}
+              style={{
+                ...styles.saveButton,
+                ...(isMobile ? { width: '100%', padding: '14px', fontSize: '15px' } : {})
+              }}
               onClick={() => {
                 // Check if audio was trimmed (not using full track)
                 const isTrimmed = inPoint > 0.1 || (duration > 0 && Math.abs(outPoint - duration) > 0.1);
@@ -731,22 +872,30 @@ const AudioClipSelector = ({
         {/* Save Trimmed Clip Prompt - Shows when user clicks "Use This Clip" on trimmed audio */}
         {showSaveTrimmedPrompt && (
           <div style={styles.saveClipOverlay} onClick={() => setShowSaveTrimmedPrompt(false)}>
-            <div style={styles.saveTrimmedModal} onClick={e => e.stopPropagation()}>
+            <div style={{
+              ...styles.saveTrimmedModal,
+              ...(isMobile ? { width: '90%', maxWidth: '90%', padding: '20px' } : {})
+            }} onClick={e => e.stopPropagation()}>
               <h3 style={styles.saveTrimmedTitle}>💾 Save Trimmed Version?</h3>
               <p style={styles.saveTrimmedDesc}>
                 You've trimmed this audio to <strong>{formatTime(selectedDuration)}</strong>.
                 Save it to your library for easy reuse?
               </p>
-              <p style={styles.saveTrimmedNote}>
-                The original full-length audio will remain untouched.
-              </p>
+              {!isMobile && (
+                <p style={styles.saveTrimmedNote}>
+                  The original full-length audio will remain untouched.
+                </p>
+              )}
               <input
                 type="text"
                 value={trimmedClipName}
                 onChange={e => setTrimmedClipName(e.target.value)}
                 placeholder="Name your trimmed version..."
-                style={styles.saveClipInput}
-                autoFocus
+                style={{
+                  ...styles.saveClipInput,
+                  ...(isMobile ? { fontSize: '16px', padding: '14px' } : {})
+                }}
+                autoFocus={!isMobile}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && trimmedClipName.trim()) {
                     onSaveClip({
@@ -760,9 +909,15 @@ const AudioClipSelector = ({
                   }
                 }}
               />
-              <div style={styles.saveTrimmedActions}>
+              <div style={{
+                ...styles.saveTrimmedActions,
+                ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
+              }}>
                 <button
-                  style={styles.skipButton}
+                  style={{
+                    ...styles.skipButton,
+                    ...(isMobile ? { width: '100%', padding: '14px', fontSize: '15px' } : {})
+                  }}
                   onClick={() => {
                     // Skip saving, just use the clip
                     onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration });
@@ -775,7 +930,8 @@ const AudioClipSelector = ({
                   style={{
                     ...styles.saveButton,
                     opacity: trimmedClipName.trim() ? 1 : 0.5,
-                    cursor: trimmedClipName.trim() ? 'pointer' : 'not-allowed'
+                    cursor: trimmedClipName.trim() ? 'pointer' : 'not-allowed',
+                    ...(isMobile ? { width: '100%', padding: '14px', fontSize: '15px' } : {})
                   }}
                   onClick={() => {
                     if (trimmedClipName.trim()) {

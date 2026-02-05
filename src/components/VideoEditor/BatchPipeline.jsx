@@ -128,6 +128,15 @@ const BatchPipeline = ({
   initialWords = null,   // Word timings from editor (applies to all batch videos)
   initialTextStyle = null // Text style from editor (applies to all batch videos)
 }) => {
+  // Mobile responsive detection
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Stage management
   const [stage, setStage] = useState(STAGES.OPTIONS);
   const [error, setError] = useState(null);
@@ -610,20 +619,21 @@ const BatchPipeline = ({
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 2000,
-      padding: '20px'
+      padding: isMobile ? 0 : '20px'
     },
     modal: {
       background: '#18181b',
-      borderRadius: '16px',
+      borderRadius: isMobile ? 0 : '16px',
       width: '100%',
-      maxWidth: '900px',
-      maxHeight: '90vh',
+      maxWidth: isMobile ? '100%' : '900px',
+      maxHeight: isMobile ? '100vh' : '90vh',
+      height: isMobile ? '100vh' : 'auto',
       overflow: 'hidden',
       display: 'flex',
       flexDirection: 'column'
     },
     header: {
-      padding: '20px 24px',
+      padding: isMobile ? '16px' : '20px 24px',
       borderBottom: '1px solid #27272a',
       display: 'flex',
       justifyContent: 'space-between',
@@ -631,7 +641,7 @@ const BatchPipeline = ({
     },
     title: {
       margin: 0,
-      fontSize: '20px',
+      fontSize: isMobile ? '18px' : '20px',
       fontWeight: '600',
       color: 'white'
     },
@@ -639,13 +649,15 @@ const BatchPipeline = ({
       background: 'none',
       border: 'none',
       color: '#71717a',
-      fontSize: '24px',
-      cursor: 'pointer'
+      fontSize: isMobile ? '28px' : '24px',
+      cursor: 'pointer',
+      padding: isMobile ? '8px' : 0
     },
     content: {
-      padding: '24px',
+      padding: isMobile ? '16px' : '24px',
       overflowY: 'auto',
-      flex: 1
+      flex: 1,
+      WebkitOverflowScrolling: 'touch'
     },
     section: {
       marginBottom: '24px'
@@ -664,18 +676,18 @@ const BatchPipeline = ({
       letterSpacing: '0.05em'
     },
     selectAllBtn: {
-      padding: '6px 12px',
+      padding: isMobile ? '10px 14px' : '6px 12px',
       background: '#27272a',
       border: '1px solid #3f3f46',
       borderRadius: '6px',
       color: '#e4e4e7',
-      fontSize: '12px',
+      fontSize: isMobile ? '14px' : '12px',
       cursor: 'pointer'
     },
     grid: {
       display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
-      gap: '8px'
+      gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(70px, 1fr))' : 'repeat(auto-fill, minmax(80px, 1fr))',
+      gap: isMobile ? '6px' : '8px'
     },
     clipCard: (selected) => ({
       position: 'relative',
@@ -752,12 +764,12 @@ const BatchPipeline = ({
       marginBottom: '6px'
     },
     btn: {
-      padding: '12px 24px',
+      padding: isMobile ? '14px 20px' : '12px 24px',
       borderRadius: '8px',
       border: 'none',
       fontWeight: '600',
       cursor: 'pointer',
-      fontSize: '14px',
+      fontSize: isMobile ? '15px' : '14px',
       transition: 'all 0.15s'
     },
     primaryBtn: {
@@ -779,11 +791,13 @@ const BatchPipeline = ({
       cursor: 'not-allowed'
     },
     footer: {
-      padding: '16px 24px',
+      padding: isMobile ? '16px' : '16px 24px',
       borderTop: '1px solid #27272a',
       display: 'flex',
+      flexDirection: isMobile ? 'column' : 'row',
+      gap: isMobile ? '12px' : 0,
       justifyContent: 'space-between',
-      alignItems: 'center'
+      alignItems: isMobile ? 'stretch' : 'center'
     },
     error: {
       background: '#7f1d1d',
@@ -830,12 +844,12 @@ const BatchPipeline = ({
     },
     beatPatternGrid: {
       display: 'grid',
-      gridTemplateColumns: 'repeat(3, 1fr)',
+      gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
       gap: '8px',
       marginTop: '8px'
     },
     beatPatternBtn: (selected) => ({
-      padding: '10px 12px',
+      padding: isMobile ? '12px' : '10px 12px',
       background: selected ? '#8b5cf6' : '#27272a',
       border: selected ? '2px solid #a78bfa' : '1px solid #3f3f46',
       borderRadius: '8px',
@@ -856,15 +870,16 @@ const BatchPipeline = ({
     videoList: {
       display: 'flex',
       flexDirection: 'column',
-      gap: '12px'
+      gap: isMobile ? '8px' : '12px'
     },
     videoRow: {
       display: 'flex',
-      gap: '12px',
-      padding: '12px',
+      flexDirection: isMobile ? 'column' : 'row',
+      gap: isMobile ? '8px' : '12px',
+      padding: isMobile ? '10px' : '12px',
       background: '#27272a',
       borderRadius: '8px',
-      alignItems: 'center'
+      alignItems: isMobile ? 'stretch' : 'center'
     },
     videoThumb: {
       width: '60px',

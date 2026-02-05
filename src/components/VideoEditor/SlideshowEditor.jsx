@@ -26,6 +26,15 @@ const SlideshowEditor = ({
   onAddLyrics,
   lateAccountIds = {}
 }) => {
+  // Mobile responsive detection
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Slideshow state
   const [name, setName] = useState(existingSlideshow?.name || 'Untitled Slideshow');
   const [aspectRatio, setAspectRatio] = useState(existingSlideshow?.aspectRatio || '9:16');
@@ -663,26 +672,53 @@ const SlideshowEditor = ({
     }
   }, [selectedHandle, exportedImages, lateAccountIds, scheduleDate, scheduleTime, caption, hashtags, platforms, onSchedulePost, onClose]);
 
+  // Mobile panel state
+  const [mobilePanelTab, setMobilePanelTab] = useState('preview'); // 'preview' | 'banks' | 'text'
+
   return (
-    <div style={styles.overlay}>
-      <div style={styles.modal}>
+    <div style={{
+      ...styles.overlay,
+      ...(isMobile ? { padding: 0 } : {})
+    }}>
+      <div style={{
+        ...styles.modal,
+        ...(isMobile ? {
+          width: '100%',
+          height: '100vh',
+          borderRadius: 0
+        } : {})
+      }}>
         {/* Header */}
-        <header style={styles.header}>
-          <div style={styles.headerLeft}>
+        <header style={{
+          ...styles.header,
+          ...(isMobile ? {
+            padding: '12px 16px',
+            flexWrap: 'wrap',
+            gap: '8px'
+          } : {})
+        }}>
+          <div style={{
+            ...styles.headerLeft,
+            ...(isMobile ? { order: 1, flex: '1 1 auto' } : {})
+          }}>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              style={styles.nameInput}
+              style={{
+                ...styles.nameInput,
+                ...(isMobile ? { width: '100%', fontSize: '16px' } : {})
+              }}
               placeholder="Slideshow name..."
             />
           </div>
 
-          <div style={styles.headerCenter}>
-            {/* Aspect Ratio Toggle */}
-            <div style={styles.aspectToggle}>
-              <button
-                style={{
+          {!isMobile && (
+            <div style={styles.headerCenter}>
+              {/* Aspect Ratio Toggle */}
+              <div style={styles.aspectToggle}>
+                <button
+                  style={{
                   ...styles.aspectButton,
                   ...(aspectRatio === '9:16' ? styles.aspectButtonActive : {})
                 }}
@@ -723,20 +759,29 @@ const SlideshowEditor = ({
               </div>
             )}
           </div>
+          )}
 
-          <div style={styles.headerRight}>
-            <button style={styles.saveButton} onClick={handleSave}>
-              Save Draft
-            </button>
+          <div style={{
+            ...styles.headerRight,
+            ...(isMobile ? { order: 2, gap: '8px' } : {})
+          }}>
+            {!isMobile && (
+              <button style={styles.saveButton} onClick={handleSave}>
+                Save Draft
+              </button>
+            )}
             <button
-              style={styles.exportButton}
+              style={{
+                ...styles.exportButton,
+                ...(isMobile ? { padding: '10px 16px', fontSize: '13px' } : {})
+              }}
               onClick={handleExport}
               disabled={isExporting || slides.filter(s => s.backgroundImage).length === 0}
             >
               {isExporting ? (
                 <>
                   <span style={styles.exportSpinner} />
-                  Exporting {exportProgress}%
+                  {isMobile ? `${exportProgress}%` : `Exporting ${exportProgress}%`}
                 </>
               ) : (
                 <>
@@ -745,12 +790,15 @@ const SlideshowEditor = ({
                     <polyline points="7 10 12 15 17 10"/>
                     <line x1="12" y1="15" x2="12" y2="3"/>
                   </svg>
-                  Export Carousel
+                  {isMobile ? 'Export' : 'Export Carousel'}
                 </>
               )}
             </button>
-            <button style={styles.closeButton} onClick={onClose}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <button style={{
+              ...styles.closeButton,
+              ...(isMobile ? { padding: '10px' } : {})
+            }} onClick={onClose}>
+              <svg width={isMobile ? 24 : 20} height={isMobile ? 24 : 20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="18" y1="6" x2="6" y2="18"/>
                 <line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
@@ -758,10 +806,77 @@ const SlideshowEditor = ({
           </div>
         </header>
 
+        {/* Mobile Tab Bar */}
+        {isMobile && (
+          <div style={{
+            display: 'flex',
+            borderBottom: '1px solid rgba(255,255,255,0.1)',
+            backgroundColor: '#1a1a2e'
+          }}>
+            <button
+              style={{
+                flex: 1,
+                padding: '12px',
+                border: 'none',
+                backgroundColor: mobilePanelTab === 'preview' ? '#6366f1' : 'transparent',
+                color: mobilePanelTab === 'preview' ? '#fff' : '#9ca3af',
+                fontSize: '13px',
+                fontWeight: '500',
+                cursor: 'pointer'
+              }}
+              onClick={() => setMobilePanelTab('preview')}
+            >
+              Preview
+            </button>
+            <button
+              style={{
+                flex: 1,
+                padding: '12px',
+                border: 'none',
+                backgroundColor: mobilePanelTab === 'banks' ? '#6366f1' : 'transparent',
+                color: mobilePanelTab === 'banks' ? '#fff' : '#9ca3af',
+                fontSize: '13px',
+                fontWeight: '500',
+                cursor: 'pointer'
+              }}
+              onClick={() => setMobilePanelTab('banks')}
+            >
+              Media
+            </button>
+            <button
+              style={{
+                flex: 1,
+                padding: '12px',
+                border: 'none',
+                backgroundColor: mobilePanelTab === 'text' ? '#6366f1' : 'transparent',
+                color: mobilePanelTab === 'text' ? '#fff' : '#9ca3af',
+                fontSize: '13px',
+                fontWeight: '500',
+                cursor: 'pointer'
+              }}
+              onClick={() => setMobilePanelTab('text')}
+            >
+              Text
+            </button>
+          </div>
+        )}
+
         {/* Main Content */}
-        <div style={styles.content}>
+        <div style={{
+          ...styles.content,
+          ...(isMobile ? { flexDirection: 'column' } : {})
+        }}>
           {/* Left Panel - Content Banks */}
-          <div style={styles.leftPanel}>
+          {(!isMobile || mobilePanelTab === 'banks') && (
+          <div style={{
+            ...styles.leftPanel,
+            ...(isMobile ? {
+              width: '100%',
+              height: isMobile ? '100%' : 'auto',
+              borderRight: 'none',
+              borderBottom: '1px solid rgba(255,255,255,0.1)'
+            } : {})
+          }}>
             <div style={styles.bankTabs}>
               <button
                 style={{
@@ -946,12 +1061,25 @@ const SlideshowEditor = ({
               )}
             </div>
           </div>
+          )}
 
           {/* Right Panel - Canvas & Filmstrip */}
-          <div style={styles.rightPanel}>
+          {(!isMobile || mobilePanelTab === 'preview') && (
+          <div style={{
+            ...styles.rightPanel,
+            ...(isMobile ? {
+              width: '100%',
+              flex: 1
+            } : {})
+          }}>
             {/* Canvas Preview */}
             <div
-              style={styles.canvasContainer}
+              style={{
+                ...styles.canvasContainer,
+                ...(isMobile ? {
+                  padding: '16px'
+                } : {})
+              }}
               onDragOver={handleDragOver}
               onDrop={handleDrop}
             >
@@ -959,8 +1087,8 @@ const SlideshowEditor = ({
                 ref={previewRef}
                 style={{
                   ...styles.canvas,
-                  width: previewDimensions.width,
-                  height: previewDimensions.height,
+                  width: isMobile ? Math.min(window.innerWidth - 32, previewDimensions.width) : previewDimensions.width,
+                  height: isMobile ? Math.min((window.innerWidth - 32) * (16/9), previewDimensions.height) : previewDimensions.height,
                   aspectRatio: '9/16'  // Always fixed 9:16 preview
                 }}
               >
@@ -1410,6 +1538,98 @@ const SlideshowEditor = ({
               </div>
             </div>
           </div>
+          )}
+
+          {/* Mobile Text Panel */}
+          {isMobile && mobilePanelTab === 'text' && currentSlide && (
+            <div style={{
+              flex: 1,
+              backgroundColor: '#16162a',
+              overflow: 'auto',
+              WebkitOverflowScrolling: 'touch',
+              padding: '16px'
+            }}>
+              <TextEditorPanel
+                slide={currentSlide}
+                editingTextId={editingTextId}
+                lyrics={lyrics}
+                templates={textTemplates}
+                onSelectText={(text) => {
+                  const newOverlay = {
+                    id: `text_${Date.now()}`,
+                    text: text,
+                    style: {
+                      fontFamily: 'Inter, sans-serif',
+                      fontSize: 48,
+                      fontWeight: '600',
+                      color: '#ffffff',
+                      textAlign: 'center',
+                      outline: true,
+                      outlineColor: '#000000'
+                    },
+                    position: { x: 50, y: 50, width: 80, height: 20 }
+                  };
+                  setSlides(prev => prev.map((slide, i) =>
+                    i === selectedSlideIndex
+                      ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] }
+                      : slide
+                  ));
+                  setEditingTextId(newOverlay.id);
+                  setMobilePanelTab('preview');
+                }}
+                onAddTextOverlay={() => {
+                  const newOverlay = {
+                    id: `text_${Date.now()}`,
+                    text: 'New Text',
+                    style: {
+                      fontFamily: 'Inter, sans-serif',
+                      fontSize: 48,
+                      fontWeight: '600',
+                      color: '#ffffff',
+                      textAlign: 'center',
+                      outline: true,
+                      outlineColor: '#000000'
+                    },
+                    position: { x: 50, y: 50, width: 80, height: 20 }
+                  };
+                  setSlides(prev => prev.map((slide, i) =>
+                    i === selectedSlideIndex
+                      ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] }
+                      : slide
+                  ));
+                  setEditingTextId(newOverlay.id);
+                }}
+                onSelectOverlay={(overlayId) => setEditingTextId(overlayId)}
+                onUpdateOverlay={(overlayId, updates) => {
+                  setSlides(prev => prev.map((slide, idx) =>
+                    idx === selectedSlideIndex
+                      ? {
+                          ...slide,
+                          textOverlays: slide.textOverlays.map(overlay =>
+                            overlay.id === overlayId ? { ...overlay, ...updates } : overlay
+                          )
+                        }
+                      : slide
+                  ));
+                }}
+                onRemoveOverlay={(overlayId) => {
+                  setSlides(prev => prev.map((slide, idx) =>
+                    idx === selectedSlideIndex
+                      ? {
+                          ...slide,
+                          textOverlays: slide.textOverlays.filter(o => o.id !== overlayId)
+                        }
+                      : slide
+                  ));
+                  setEditingTextId(null);
+                }}
+                onAddLyrics={onAddLyrics}
+                onSaveTemplate={handleSaveTemplate}
+                onClose={() => setMobilePanelTab('preview')}
+                isMobile={true}
+              />
+            </div>
+          )}
         </div>
 
         {/* Schedule Panel (shown after export) */}
@@ -1709,7 +1929,8 @@ const TextEditorPanel = ({
   onRemoveOverlay,
   onAddLyrics,
   onSaveTemplate,
-  onClose
+  onClose,
+  isMobile = false
 }) => {
   const [showLyricPicker, setShowLyricPicker] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
@@ -1717,7 +1938,10 @@ const TextEditorPanel = ({
   const selectedOverlay = textOverlays.find(o => o.id === editingTextId);
 
   return (
-    <div style={textPanelStyles.panel}>
+    <div style={{
+      ...textPanelStyles.panel,
+      ...(isMobile ? { width: '100%', position: 'relative', borderLeft: 'none' } : {})
+    }}>
       {/* Panel Header */}
       <div style={textPanelStyles.header}>
         <h3 style={textPanelStyles.title}>
