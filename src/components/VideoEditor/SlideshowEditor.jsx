@@ -207,11 +207,14 @@ const SlideshowEditor = ({
     );
   }, [currentSlide, imagesA, imagesB, setSlideBackground]);
 
-  // Audio playback controls
+  // Audio playback controls - just add audio directly, user can trim later
   const handleSelectAudio = useCallback((audio) => {
-    // Open trimmer for the selected audio
-    setAudioToTrim(audio);
-    setShowAudioTrimmer(true);
+    // Add audio directly without opening trimmer
+    setSelectedAudio({
+      ...audio,
+      startTime: audio.startTime || 0,
+      endTime: audio.endTime || null // Full track by default
+    });
   }, []);
 
   const handleAudioTrimSave = useCallback(({ startTime, endTime, duration }) => {
@@ -799,12 +802,30 @@ const SlideshowEditor = ({
                           {formatTime(selectedAudio.trimmedDuration || selectedAudio.duration || 0)}
                           {selectedAudio.isTrimmed && <span style={styles.trimmedBadge}>Trimmed</span>}
                         </div>
-                        <button style={styles.removeAudioBtn} onClick={handleRemoveAudio}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                          </svg>
-                          Remove
-                        </button>
+                        <div style={styles.selectedAudioActions}>
+                          <button
+                            style={styles.trimAudioBtn}
+                            onClick={() => {
+                              setAudioToTrim(selectedAudio);
+                              setShowAudioTrimmer(true);
+                            }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <circle cx="6" cy="6" r="3"/>
+                              <circle cx="6" cy="18" r="3"/>
+                              <line x1="20" y1="4" x2="8.12" y2="15.88"/>
+                              <line x1="14.47" y1="14.48" x2="20" y2="20"/>
+                              <line x1="8.12" y1="8.12" x2="12" y2="12"/>
+                            </svg>
+                            Trim
+                          </button>
+                          <button style={styles.removeAudioBtn} onClick={handleRemoveAudio}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                            Remove
+                          </button>
+                        </div>
                       </div>
                     )}
                     {/* Audio Track List */}
@@ -2395,11 +2416,27 @@ const styles = {
     color: '#22c55e',
     borderRadius: '4px'
   },
+  selectedAudioActions: {
+    display: 'flex',
+    gap: '8px',
+    marginTop: '8px'
+  },
+  trimAudioBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '6px 10px',
+    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+    border: '1px solid rgba(99, 102, 241, 0.3)',
+    borderRadius: '6px',
+    color: '#a5b4fc',
+    fontSize: '12px',
+    cursor: 'pointer'
+  },
   removeAudioBtn: {
     display: 'flex',
     alignItems: 'center',
     gap: '4px',
-    marginTop: '8px',
     padding: '6px 10px',
     backgroundColor: 'rgba(239, 68, 68, 0.2)',
     border: '1px solid rgba(239, 68, 68, 0.3)',
