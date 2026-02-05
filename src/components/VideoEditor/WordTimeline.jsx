@@ -51,6 +51,7 @@ const WordTimeline = ({
   const animationRef = useRef(null);
   const editInputRef = useRef(null);
   const waveformCanvasRef = useRef(null);
+  const modalRef = useRef(null);
   const [waveformData, setWaveformData] = useState(null); // Array of peak values for waveform
   const [audioBufferReady, setAudioBufferReady] = useState(false); // Track when buffer is decoded
 
@@ -968,10 +969,18 @@ const WordTimeline = ({
         return;
       }
 
-      // Space to toggle play/pause (when not editing)
+      // Space to toggle play/pause (when not editing and not in an input)
       if (e.key === ' ' && !editingWordId && !deleteConfirm.show) {
+        // Don't trigger if focus is on a button or input
+        const tagName = document.activeElement?.tagName?.toLowerCase();
+        if (tagName === 'input' || tagName === 'textarea' || tagName === 'button') {
+          return;
+        }
         e.preventDefault();
-        playPause?.();
+        e.stopPropagation();
+        if (typeof playPause === 'function') {
+          playPause();
+        }
         return;
       }
 
@@ -993,9 +1002,14 @@ const WordTimeline = ({
   const effectiveIndex = getEffectiveWordIndex();
   const hasWordAtPlayhead = effectiveIndex >= 0;
 
+  // Auto-focus modal for keyboard events
+  useEffect(() => {
+    modalRef.current?.focus();
+  }, []);
+
   return (
     <div style={styles.overlay}>
-      <div style={styles.modal}>
+      <div ref={modalRef} tabIndex={-1} style={{ ...styles.modal, outline: 'none' }}>
         <div style={styles.header}>
           <h2 style={styles.title}>Word timeline</h2>
           <button style={styles.closeButton} onClick={onClose}>
@@ -1385,7 +1399,7 @@ const styles = {
   timeline: { flex: 1, height: '120px', backgroundColor: '#1a1a2e', borderRadius: '8px', overflowX: 'auto', overflowY: 'hidden', position: 'relative', cursor: 'pointer' },
   timelineInner: { position: 'relative', height: '100%', minWidth: '100%' },
   marqueeBox: { position: 'absolute', backgroundColor: 'rgba(139, 92, 246, 0.2)', border: '1px solid rgba(139, 92, 246, 0.5)', borderRadius: '2px', pointerEvents: 'none', zIndex: 100 },
-  timeRuler: { position: 'absolute', top: 0, left: 0, right: 0, height: '20px', pointerEvents: 'none' },
+  timeRuler: { position: 'absolute', top: 0, left: 0, right: 0, height: '20px', cursor: 'pointer' },
   timeMarker: { position: 'absolute', top: 0, height: '100%' },
   timeMarkerLine: { width: '1px', height: '8px', backgroundColor: 'rgba(255,255,255,0.2)' },
   timeMarkerLabel: { position: 'absolute', top: '8px', left: '-8px', fontSize: '9px', color: '#6b7280', fontFamily: 'monospace' },
