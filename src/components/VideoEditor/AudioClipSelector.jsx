@@ -39,6 +39,8 @@ const AudioClipSelector = ({
   const [clipName, setClipName] = useState('');
   const [showUseClipPrompt, setShowUseClipPrompt] = useState(false);
   const [savedClipData, setSavedClipData] = useState(null);
+  const [showSaveTrimmedPrompt, setShowSaveTrimmedPrompt] = useState(false);
+  const [trimmedClipName, setTrimmedClipName] = useState('');
 
   const audioRef = useRef(null);
   const canvasRef = useRef(null);
@@ -602,20 +604,18 @@ const AudioClipSelector = ({
             <button
               style={styles.saveButton}
               onClick={() => {
-                // Auto-save to library if audio was trimmed (not using full track)
+                // Check if audio was trimmed (not using full track)
                 const isTrimmed = inPoint > 0.1 || (duration > 0 && Math.abs(outPoint - duration) > 0.1);
                 if (isTrimmed && onSaveClip) {
+                  // Show prompt to save trimmed version with a name
                   const baseName = audioName || 'Audio';
-                  const autoClipName = `${baseName.replace(/\.[^/.]+$/, '')} (${formatTimeShort(inPoint)}-${formatTimeShort(outPoint)})`;
-                  onSaveClip({
-                    name: autoClipName,
-                    startTime: inPoint,
-                    endTime: outPoint,
-                    clipDuration: selectedDuration,
-                    autoSaved: true
-                  });
+                  const defaultName = `${baseName.replace(/\.[^/.]+$/, '')} (${formatTimeShort(inPoint)}-${formatTimeShort(outPoint)})`;
+                  setTrimmedClipName(defaultName);
+                  setShowSaveTrimmedPrompt(true);
+                } else {
+                  // Not trimmed, just use directly
+                  onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration });
                 }
-                onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration });
               }}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -722,6 +722,76 @@ const AudioClipSelector = ({
                   }}
                 >
                   ✨ Use Now
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Save Trimmed Clip Prompt - Shows when user clicks "Use This Clip" on trimmed audio */}
+        {showSaveTrimmedPrompt && (
+          <div style={styles.saveClipOverlay} onClick={() => setShowSaveTrimmedPrompt(false)}>
+            <div style={styles.saveTrimmedModal} onClick={e => e.stopPropagation()}>
+              <h3 style={styles.saveTrimmedTitle}>💾 Save Trimmed Version?</h3>
+              <p style={styles.saveTrimmedDesc}>
+                You've trimmed this audio to <strong>{formatTime(selectedDuration)}</strong>.
+                Save it to your library for easy reuse?
+              </p>
+              <p style={styles.saveTrimmedNote}>
+                The original full-length audio will remain untouched.
+              </p>
+              <input
+                type="text"
+                value={trimmedClipName}
+                onChange={e => setTrimmedClipName(e.target.value)}
+                placeholder="Name your trimmed version..."
+                style={styles.saveClipInput}
+                autoFocus
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && trimmedClipName.trim()) {
+                    onSaveClip({
+                      name: trimmedClipName.trim(),
+                      startTime: inPoint,
+                      endTime: outPoint,
+                      clipDuration: selectedDuration
+                    });
+                    onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration });
+                    setShowSaveTrimmedPrompt(false);
+                  }
+                }}
+              />
+              <div style={styles.saveTrimmedActions}>
+                <button
+                  style={styles.skipButton}
+                  onClick={() => {
+                    // Skip saving, just use the clip
+                    onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration });
+                    setShowSaveTrimmedPrompt(false);
+                  }}
+                >
+                  Skip & Use
+                </button>
+                <button
+                  style={{
+                    ...styles.saveButton,
+                    opacity: trimmedClipName.trim() ? 1 : 0.5,
+                    cursor: trimmedClipName.trim() ? 'pointer' : 'not-allowed'
+                  }}
+                  onClick={() => {
+                    if (trimmedClipName.trim()) {
+                      onSaveClip({
+                        name: trimmedClipName.trim(),
+                        startTime: inPoint,
+                        endTime: outPoint,
+                        clipDuration: selectedDuration
+                      });
+                      onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration });
+                      setShowSaveTrimmedPrompt(false);
+                    }
+                  }}
+                  disabled={!trimmedClipName.trim()}
+                >
+                  💾 Save & Use
                 </button>
               </div>
             </div>
@@ -1139,6 +1209,49 @@ const styles = {
     cursor: 'pointer',
     fontSize: '14px',
     fontWeight: '600'
+  },
+  // Save Trimmed Modal styles
+  saveTrimmedModal: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: '16px',
+    padding: '28px',
+    width: '100%',
+    maxWidth: '440px',
+    border: '1px solid rgba(139, 92, 246, 0.3)'
+  },
+  saveTrimmedTitle: {
+    fontSize: '20px',
+    fontWeight: '600',
+    color: '#fff',
+    margin: '0 0 12px 0'
+  },
+  saveTrimmedDesc: {
+    fontSize: '14px',
+    color: '#d1d5db',
+    margin: '0 0 8px 0',
+    lineHeight: '1.5'
+  },
+  saveTrimmedNote: {
+    fontSize: '12px',
+    color: '#6b7280',
+    margin: '0 0 20px 0',
+    fontStyle: 'italic'
+  },
+  saveTrimmedActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '12px'
+  },
+  skipButton: {
+    padding: '12px 20px',
+    backgroundColor: 'transparent',
+    border: '1px solid #4b5563',
+    borderRadius: '8px',
+    color: '#9ca3af',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '500',
+    transition: 'all 0.15s'
   }
 };
 
