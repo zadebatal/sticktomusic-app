@@ -6,7 +6,11 @@ import VideoEditorModal from './VideoEditorModal';
 import BatchPipeline from './BatchPipeline';
 import SlideshowEditor from './SlideshowEditor';
 import { uploadFile, deleteFile, getMediaDuration, generateThumbnail } from '../../services/firebaseStorage';
-import { saveCategories, loadCategories, savePresets, loadPresets, cleanupStorage } from '../../services/storageService';
+import {
+  saveCategories, loadCategories, savePresets, loadPresets, cleanupStorage,
+  saveArtistCategories, loadArtistCategories, saveArtistPresets, loadArtistPresets,
+  setLastArtistId, hasLegacyData, migrateToArtistStorage
+} from '../../services/storageService';
 import { VIDEO_STATUS } from '../../utils/status';
 
 /**
@@ -118,9 +122,22 @@ const saveSessionState = (state) => {
 const VideoStudio = ({
   onClose,
   artists = [],
+  artistId: initialArtistId = null,
   lateAccountIds = {},
-  onSchedulePost
+  onSchedulePost,
+  onArtistChange = null // Callback when artist selection changes
 }) => {
+  // Current artist ID - used for namespaced storage
+  const [currentArtistId, setCurrentArtistId] = useState(initialArtistId);
+
+  // Update parent when artist changes
+  const handleArtistIdChange = (newArtistId) => {
+    setCurrentArtistId(newArtistId);
+    setLastArtistId(newArtistId);
+    if (onArtistChange) {
+      onArtistChange(newArtistId);
+    }
+  };
   // React Router hooks for URL-based navigation within studio
   const navigate = useNavigate();
   const location = useLocation();
@@ -288,13 +305,27 @@ const VideoStudio = ({
     }
   ];
 
-  // Load from localStorage or use defaults
+  // Load from artist-namespaced localStorage or use defaults
   const [categories, setCategories] = useState(() => {
+    // If we have an artistId, use namespaced storage
+    if (initialArtistId) {
+      // Check if migration is needed
+      if (hasLegacyData()) {
+        migrateToArtistStorage(initialArtistId);
+      }
+      const saved = loadArtistCategories(initialArtistId);
+      return saved.length > 0 ? saved : defaultCategories;
+    }
+    // Fallback to global storage for backwards compatibility
     const saved = loadCategories();
     return saved.length > 0 ? saved : defaultCategories;
   });
 
   const [presets, setPresets] = useState(() => {
+    if (initialArtistId) {
+      const saved = loadArtistPresets(initialArtistId);
+      return saved.length > 0 ? saved : defaultPresets;
+    }
     const saved = loadPresets();
     return saved.length > 0 ? saved : defaultPresets;
   });
@@ -314,20 +345,57 @@ const VideoStudio = ({
 
   // Save to localStorage when categories change
   useEffect(() => {
-    const success = saveCategories(categories);
+    // Use artist-namespaced storage if we have an artistId
+    const saveFn = currentArtistId
+      ? (cats) => saveArtistCategories(currentArtistId, cats)
+      : saveCategories;
+
+    const success = saveFn(categories);
     if (!success) {
       // Storage quota exceeded - try cleanup and retry
       console.warn('Storage save failed, attempting cleanup...');
       cleanupStorage();
       // Retry save after cleanup
-      saveCategories(categories);
+      saveFn(categories);
     }
-  }, [categories]);
+  }, [categories, currentArtistId]);
 
   // Save to localStorage when presets change
   useEffect(() => {
-    savePresets(presets);
-  }, [presets]);
+    if (currentArtistId) {
+      saveArtistPresets(currentArtistId, presets);
+    } else {
+      savePresets(presets);
+    }
+  }, [presets, currentArtistId]);
+
+  // Reload data when artist changes
+  useEffect(() => {
+    if (currentArtistId && currentArtistId !== initialArtistId) {
+      console.log('[VideoStudio] Artist changed to:', currentArtistId);
+
+      // Load categories for new artist
+      const artistCategories = loadArtistCategories(currentArtistId);
+      if (artistCategories.length > 0) {
+        setCategories(artistCategories);
+      } else {
+        // Initialize with defaults for new artist
+        setCategories(defaultCategories);
+      }
+
+      // Load presets for new artist
+      const artistPresets = loadArtistPresets(currentArtistId);
+      if (artistPresets.length > 0) {
+        setPresets(artistPresets);
+      } else {
+        setPresets(defaultPresets);
+      }
+
+      // Clear selections
+      setSelectedCategory(null);
+      setStudioMode(null);
+    }
+  }, [currentArtistId, initialArtistId]);
 
   // Initialize with first artist and restore session
   useEffect(() => {
@@ -1214,6 +1282,33 @@ const VideoStudio = ({
             </svg>
             <span style={styles.logoText}>Studio</span>
           </button>
+
+          {/* Artist Selector - only show if multiple artists */}
+          {artists.length > 1 && (
+            <div style={styles.artistSelector}>
+              <select
+                value={currentArtistId || ''}
+                onChange={(e) => handleArtistIdChange(e.target.value)}
+                style={styles.artistSelect}
+              >
+                {artists.map(artist => (
+                  <option key={artist.id} value={artist.id}>
+                    {artist.name}
+                  </option>
+                ))}
+              </select>
+              <svg style={styles.artistSelectIcon} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="6,9 12,15 18,9" />
+              </svg>
+            </div>
+          )}
+
+          {/* Single artist indicator */}
+          {artists.length === 1 && currentArtistId && (
+            <span style={styles.singleArtistLabel}>
+              {artists[0]?.name}
+            </span>
+          )}
         </div>
 
         <div style={styles.headerCenter}>
@@ -1544,6 +1639,40 @@ const styles = {
   logoText: {
     fontSize: '15px',
     fontWeight: '600'
+  },
+  artistSelector: {
+    position: 'relative',
+    marginLeft: '12px',
+    paddingLeft: '12px',
+    borderLeft: '1px solid #2a2a3e'
+  },
+  artistSelect: {
+    appearance: 'none',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    border: '1px solid #2a2a3e',
+    borderRadius: '6px',
+    padding: '6px 28px 6px 10px',
+    color: '#fff',
+    fontSize: '13px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    outline: 'none'
+  },
+  artistSelectIcon: {
+    position: 'absolute',
+    right: '8px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    pointerEvents: 'none',
+    color: '#9ca3af'
+  },
+  singleArtistLabel: {
+    marginLeft: '12px',
+    paddingLeft: '12px',
+    borderLeft: '1px solid #2a2a3e',
+    fontSize: '13px',
+    fontWeight: '500',
+    color: '#9ca3af'
   },
   breadcrumb: {
     display: 'flex',

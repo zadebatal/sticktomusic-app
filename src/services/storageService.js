@@ -21,6 +21,12 @@ const STORAGE_KEYS = {
   LYRIC_TEMPLATES: 'stm_lyric_templates'
 };
 
+// Artist-namespaced storage keys
+const ARTIST_CATEGORIES_PREFIX = 'stm_categories_';
+const ARTIST_PRESETS_PREFIX = 'stm_presets_';
+const LAST_ARTIST_KEY = 'stm_last_artist_id';
+const LEGACY_CATEGORIES_KEY = 'stm_video_studio_categories';
+
 /**
  * Save data to localStorage with error handling
  */
@@ -95,10 +101,164 @@ export function saveCategories(categories) {
 }
 
 /**
- * Load all categories
+ * Load all categories (legacy - non-namespaced)
  */
 export function loadCategories() {
   return loadFromStorage(STORAGE_KEYS.CATEGORIES, []);
+}
+
+// ==================== ARTIST-NAMESPACED CATEGORIES ====================
+
+/**
+ * Save categories for a specific artist
+ * @param {string} artistId - The artist ID for namespacing
+ * @param {Array} categories - Categories to save
+ */
+export function saveArtistCategories(artistId, categories) {
+  if (!artistId) {
+    console.warn('saveArtistCategories called without artistId, falling back to global storage');
+    return saveCategories(categories);
+  }
+
+  // Filter out blob URLs and strip thumbnails (they're huge base64 strings)
+  const cleanedCategories = categories.map(cat => ({
+    ...cat,
+    // Clean videos - remove thumbnails and blob URLs
+    videos: (cat.videos || [])
+      .filter(v => v.url && !v.url.startsWith('blob:'))
+      .map(v => ({
+        ...v,
+        thumbnail: null // Don't store base64 thumbnails - they fill localStorage
+      })),
+    // Clean audio - remove blob URLs
+    audio: (cat.audio || [])
+      .filter(a => a.url && !a.url.startsWith('blob:')),
+    // Clean created videos - strip clip thumbnails too
+    createdVideos: (cat.createdVideos || []).map(video => ({
+      ...video,
+      clips: (video.clips || []).map(clip => ({
+        ...clip,
+        thumbnail: null // Strip clip thumbnails too
+      }))
+    }))
+  }));
+
+  // INVARIANT CHECK: Verify no blob URLs remain after cleaning
+  if (process.env.NODE_ENV === 'development') {
+    const blobViolations = findBlobUrls(cleanedCategories);
+    if (blobViolations.length > 0) {
+      console.error('[STORAGE VIOLATION] Blob URLs found after cleaning:', blobViolations);
+    }
+  }
+
+  return saveToStorage(`${ARTIST_CATEGORIES_PREFIX}${artistId}`, cleanedCategories);
+}
+
+/**
+ * Load categories for a specific artist
+ * @param {string} artistId - The artist ID for namespacing
+ */
+export function loadArtistCategories(artistId) {
+  if (!artistId) {
+    console.warn('loadArtistCategories called without artistId, falling back to global storage');
+    return loadCategories();
+  }
+  return loadFromStorage(`${ARTIST_CATEGORIES_PREFIX}${artistId}`, []);
+}
+
+/**
+ * Save presets for a specific artist
+ * @param {string} artistId - The artist ID for namespacing
+ * @param {Array} presets - Presets to save
+ */
+export function saveArtistPresets(artistId, presets) {
+  if (!artistId) {
+    return savePresets(presets);
+  }
+  return saveToStorage(`${ARTIST_PRESETS_PREFIX}${artistId}`, presets);
+}
+
+/**
+ * Load presets for a specific artist
+ * @param {string} artistId - The artist ID for namespacing
+ */
+export function loadArtistPresets(artistId) {
+  if (!artistId) {
+    return loadPresets();
+  }
+  return loadFromStorage(`${ARTIST_PRESETS_PREFIX}${artistId}`, []);
+}
+
+/**
+ * Get the last selected artist ID
+ */
+export function getLastArtistId() {
+  return localStorage.getItem(LAST_ARTIST_KEY);
+}
+
+/**
+ * Set the last selected artist ID
+ */
+export function setLastArtistId(artistId) {
+  if (artistId) {
+    localStorage.setItem(LAST_ARTIST_KEY, artistId);
+  }
+}
+
+/**
+ * Check if legacy data exists that needs migration
+ */
+export function hasLegacyData() {
+  const legacyCategories = localStorage.getItem(LEGACY_CATEGORIES_KEY);
+  const globalCategories = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+  return !!(legacyCategories || (globalCategories && globalCategories !== '[]'));
+}
+
+/**
+ * Migrate legacy global data to artist-namespaced storage
+ * @param {string} artistId - The artist ID to migrate data to
+ */
+export function migrateToArtistStorage(artistId) {
+  if (!artistId) {
+    console.error('Cannot migrate without artistId');
+    return false;
+  }
+
+  console.log('[Migration] Starting migration for artist:', artistId);
+
+  // Check for existing namespaced data
+  const existing = loadFromStorage(`${ARTIST_CATEGORIES_PREFIX}${artistId}`, null);
+  if (existing && existing.length > 0) {
+    console.log('[Migration] Artist already has data, skipping migration');
+    return true;
+  }
+
+  // Try legacy key first
+  let legacyCategories = loadFromStorage(LEGACY_CATEGORIES_KEY, null);
+
+  // Fall back to current global storage
+  if (!legacyCategories) {
+    legacyCategories = loadFromStorage(STORAGE_KEYS.CATEGORIES, null);
+  }
+
+  if (legacyCategories && legacyCategories.length > 0) {
+    console.log('[Migration] Migrating', legacyCategories.length, 'categories to artist namespace');
+    saveToStorage(`${ARTIST_CATEGORIES_PREFIX}${artistId}`, legacyCategories);
+
+    // Also migrate presets
+    const globalPresets = loadFromStorage(STORAGE_KEYS.PRESETS, []);
+    if (globalPresets.length > 0) {
+      saveToStorage(`${ARTIST_PRESETS_PREFIX}${artistId}`, globalPresets);
+    }
+
+    // Mark migration complete
+    localStorage.setItem('stm_migration_complete_' + artistId, new Date().toISOString());
+    console.log('[Migration] Migration complete!');
+    return true;
+  }
+
+  console.log('[Migration] No legacy data to migrate');
+  return false;
 }
 
 // ==================== PRESETS ====================
@@ -240,6 +400,16 @@ export default {
   loadCategories,
   savePresets,
   loadPresets,
+  // Artist-namespaced functions
+  saveArtistCategories,
+  loadArtistCategories,
+  saveArtistPresets,
+  loadArtistPresets,
+  getLastArtistId,
+  setLastArtistId,
+  hasLegacyData,
+  migrateToArtistStorage,
+  // Other functions
   saveApiKey,
   loadApiKey,
   clearApiKey,

@@ -25,7 +25,16 @@ import {
  * - Song detail view
  */
 
-const AnalyticsDashboard = ({ lateAccessToken, onClose }) => {
+const AnalyticsDashboard = ({
+  lateAccessToken,
+  onClose,
+  artistId: initialArtistId = null,
+  artists = [],
+  onArtistChange = null
+}) => {
+  // Current artist (for multi-artist support)
+  const [currentArtistId, setCurrentArtistId] = useState(initialArtistId);
+
   // Data state
   const [analytics, setAnalytics] = useState(null);
   const [totalStats, setTotalStats] = useState(null);
@@ -42,6 +51,18 @@ const AnalyticsDashboard = ({ lateAccessToken, onClose }) => {
   const [selectedSong, setSelectedSong] = useState(null);
   const [chartPeriod, setChartPeriod] = useState('daily');
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'songs' | 'videos'
+
+  // Handle artist change
+  const handleArtistChange = (newArtistId) => {
+    setCurrentArtistId(newArtistId);
+    setIsLoading(true);
+    if (onArtistChange) {
+      onArtistChange(newArtistId);
+    }
+  };
+
+  // Current artist name for display
+  const currentArtistName = artists.find(a => a.id === currentArtistId)?.name || 'All Artists';
 
   // Load analytics data
   const loadAnalytics = useCallback(() => {
@@ -221,6 +242,31 @@ const AnalyticsDashboard = ({ lateAccessToken, onClose }) => {
       <div style={styles.header}>
         <div style={styles.headerLeft}>
           <h1 style={styles.title}>📊 Analytics Dashboard</h1>
+
+          {/* Artist Selector - only show if multiple artists */}
+          {artists.length > 1 && (
+            <div style={styles.artistSelector}>
+              <select
+                value={currentArtistId || ''}
+                onChange={(e) => handleArtistChange(e.target.value)}
+                style={styles.artistSelect}
+              >
+                {artists.map(artist => (
+                  <option key={artist.id} value={artist.id}>
+                    {artist.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Single artist indicator */}
+          {artists.length === 1 && (
+            <span style={styles.singleArtistLabel}>
+              {artists[0]?.name}
+            </span>
+          )}
+
           <span style={styles.lastUpdated}>
             Last updated: {formatDate(lastUpdated)}
           </span>
@@ -595,6 +641,29 @@ const styles = {
   lastUpdated: {
     fontSize: '13px',
     color: '#6b7280'
+  },
+  artistSelector: {
+    position: 'relative'
+  },
+  artistSelect: {
+    appearance: 'none',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    border: '1px solid #2a2a3e',
+    borderRadius: '6px',
+    padding: '6px 28px 6px 10px',
+    color: '#fff',
+    fontSize: '13px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    outline: 'none'
+  },
+  singleArtistLabel: {
+    fontSize: '13px',
+    fontWeight: '500',
+    color: '#a78bfa',
+    backgroundColor: 'rgba(167, 139, 250, 0.1)',
+    padding: '4px 12px',
+    borderRadius: '6px'
   },
   refreshButton: {
     display: 'flex',

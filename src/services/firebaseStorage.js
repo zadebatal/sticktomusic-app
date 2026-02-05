@@ -5,6 +5,7 @@
 
 import { initializeApp, getApps } from 'firebase/app';
 import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
+import { getFirestore } from 'firebase/firestore';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -25,6 +26,10 @@ if (getApps().length === 0) {
 }
 
 const storage = getStorage(firebaseApp);
+const db = getFirestore(firebaseApp);
+
+// Export for use in other services
+export { firebaseApp, db };
 
 /**
  * Upload a file to Firebase Storage

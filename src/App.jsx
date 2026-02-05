@@ -23,6 +23,17 @@ import { AnalyticsDashboard } from './components/Analytics';
 // Domain enforcement utilities
 import { isUserOperator } from './utils/roles';
 
+// Artist Service for multi-artist management
+import {
+  subscribeToArtists,
+  ensureBoonArtistExists,
+  getLastArtistId,
+  setLastArtistId,
+  createArtist,
+  updateArtist,
+  deleteArtist
+} from './services/artistService';
+
 // Firebase imports
 import { initializeApp, getApps } from 'firebase/app';
 import {
@@ -314,9 +325,18 @@ const StickToMusic = () => {
   const [showSignupModal, setShowSignupModal] = useState(false);
   const [signupForm, setSignupForm] = useState({ email: '', password: '', name: '', role: 'artist', error: null });
 
+  // Add Artist modal
+  const [showAddArtistModal, setShowAddArtistModal] = useState(false);
+  const [addArtistForm, setAddArtistForm] = useState({ name: '', tier: 'Scale', cdTier: 'CD Lite', error: null, isLoading: false });
+
   // Firestore data - allowed users loaded from database
   const [allowedUsers, setAllowedUsers] = useState([]);
   const [firestoreLoaded, setFirestoreLoaded] = useState(false);
+
+  // Multi-artist state - artists loaded from Firestore
+  const [firestoreArtists, setFirestoreArtists] = useState([]);
+  const [currentArtistId, setCurrentArtistId] = useState(() => getLastArtistId());
+  const [artistsLoaded, setArtistsLoaded] = useState(false);
 
   // Master auth listener - tracks Firebase auth state
   useEffect(() => {
@@ -363,6 +383,83 @@ const StickToMusic = () => {
     );
     return () => unsubscribe();
   }, [authChecked, currentAuthUser]);
+
+  // Subscribe to artists from Firestore (for multi-artist support)
+  useEffect(() => {
+    if (!authChecked || !currentAuthUser) {
+      setArtistsLoaded(true);
+      return;
+    }
+
+    console.log('📥 Loading artists from Firestore...');
+
+    // First ensure Boon exists and migrate any legacy data
+    ensureBoonArtistExists(db).then((boonArtist) => {
+      if (boonArtist && !currentArtistId) {
+        console.log('🎵 Setting default artist to Boon:', boonArtist.id);
+        setCurrentArtistId(boonArtist.id);
+        setLastArtistId(boonArtist.id);
+      }
+    });
+
+    // Subscribe to real-time artist updates
+    const unsubscribe = subscribeToArtists(db, (artists) => {
+      console.log('✅ Loaded artists:', artists.length, artists.map(a => a.name).join(', '));
+      setFirestoreArtists(artists);
+      setArtistsLoaded(true);
+
+      // If no artist selected yet, select the first one or use remembered one
+      if (!currentArtistId && artists.length > 0) {
+        const lastId = getLastArtistId();
+        const artistToSelect = lastId && artists.find(a => a.id === lastId)
+          ? lastId
+          : artists[0].id;
+        setCurrentArtistId(artistToSelect);
+        setLastArtistId(artistToSelect);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [authChecked, currentAuthUser]);
+
+  // Handle artist change
+  const handleArtistChange = (newArtistId) => {
+    console.log('🎵 Switching to artist:', newArtistId);
+    setCurrentArtistId(newArtistId);
+    setLastArtistId(newArtistId);
+  };
+
+  // Handle adding a new artist
+  const handleAddArtist = async (e) => {
+    e.preventDefault();
+    if (!addArtistForm.name.trim()) {
+      setAddArtistForm(prev => ({ ...prev, error: 'Artist name is required' }));
+      return;
+    }
+
+    setAddArtistForm(prev => ({ ...prev, isLoading: true, error: null }));
+
+    try {
+      const newArtist = await createArtist(db, {
+        name: addArtistForm.name.trim(),
+        tier: addArtistForm.tier,
+        cdTier: addArtistForm.cdTier
+      });
+
+      console.log('✅ Created new artist:', newArtist);
+
+      // Select the new artist
+      setCurrentArtistId(newArtist.id);
+      setLastArtistId(newArtist.id);
+
+      // Close modal and reset form
+      setShowAddArtistModal(false);
+      setAddArtistForm({ name: '', tier: 'Scale', cdTier: 'CD Lite', error: null, isLoading: false });
+    } catch (error) {
+      console.error('Failed to create artist:', error);
+      setAddArtistForm(prev => ({ ...prev, error: error.message || 'Failed to create artist', isLoading: false }));
+    }
+  };
 
   // Set the app-level user state based on currentAuthUser and allowedUsers
   useEffect(() => {
@@ -2676,61 +2773,86 @@ const StickToMusic = () => {
           </div>
 
           {/* Artists Tab */}
-          {operatorTab === 'artists' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h1 className="text-2xl font-bold">Artists</h1>
-                  <p className="text-sm text-zinc-500">{operatorArtists.length} active artist{operatorArtists.length !== 1 ? 's' : ''}</p>
+          {operatorTab === 'artists' && (() => {
+            // Use Firestore artists if available, fallback to static list
+            const displayArtists = firestoreArtists.length > 0 ? firestoreArtists : operatorArtists;
+
+            return (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h1 className="text-2xl font-bold">Artists</h1>
+                    <p className="text-sm text-zinc-500">{displayArtists.length} active artist{displayArtists.length !== 1 ? 's' : ''}</p>
+                  </div>
+                  <button
+                    onClick={() => setShowAddArtistModal(true)}
+                    className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium transition flex items-center gap-2"
+                  >
+                    <span className="text-lg">+</span>
+                    Add Artist
+                  </button>
                 </div>
-              </div>
-              {operatorArtists.length === 0 ? (
-                <SharedEmptyState
-                  icon="🎵"
-                  title="No artists yet"
-                  description="Artists will appear here once they're onboarded to the platform."
-                  actionLabel="Review Applications"
-                  onAction={() => setOperatorTab('applications')}
-                />
-              ) : operatorArtists.map((artist) => (
-                <div key={artist.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-                  <div className="flex flex-col md:flex-row justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center text-lg font-bold">
-                        {artist.name[0]}
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold">{artist.name}</h3>
-                        <div className="flex gap-2 text-sm text-zinc-500">
-                          <span>{artist.tier}</span>
-                          {artist.cdTier && <><span>•</span><span>{artist.cdTier}</span></>}
-                          <span>•</span>
-                          <span>Since {artist.activeSince}</span>
+                {displayArtists.length === 0 ? (
+                  <SharedEmptyState
+                    icon="🎵"
+                    title="No artists yet"
+                    description="Add your first artist to get started with content creation."
+                    actionLabel="Add Artist"
+                    onAction={() => setShowAddArtistModal(true)}
+                  />
+                ) : displayArtists.map((artist) => (
+                  <div
+                    key={artist.id}
+                    className={`bg-zinc-900 border rounded-xl p-6 transition cursor-pointer hover:border-zinc-600 ${
+                      currentArtistId === artist.id ? 'border-violet-500' : 'border-zinc-800'
+                    }`}
+                    onClick={() => handleArtistChange(artist.id)}
+                  >
+                    <div className="flex flex-col md:flex-row justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold ${
+                          currentArtistId === artist.id ? 'bg-violet-600 text-white' : 'bg-zinc-800'
+                        }`}>
+                          {artist.name[0]}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-semibold">{artist.name}</h3>
+                            {currentArtistId === artist.id && (
+                              <span className="px-2 py-0.5 bg-violet-500/20 text-violet-400 text-xs rounded-full">Active</span>
+                            )}
+                          </div>
+                          <div className="flex gap-2 text-sm text-zinc-500">
+                            <span>{artist.tier}</span>
+                            {artist.cdTier && <><span>•</span><span>{artist.cdTier}</span></>}
+                            <span>•</span>
+                            <span>Since {artist.activeSince}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <div className="text-center">
-                        <p className="text-2xl font-bold">{artist.totalPages}</p>
-                        <p className="text-xs text-zinc-500">Pages</p>
+                      <div className="flex items-center gap-6">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold">{artist.totalPages || 0}</p>
+                          <p className="text-xs text-zinc-500">Pages</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold">{formatNumber(artist.metrics?.views || 0)}</p>
+                          <p className="text-xs text-zinc-500">Views</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold">{artist.metrics?.rate || 0}%</p>
+                          <p className="text-xs text-zinc-500">Eng. Rate</p>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs ${getStatusColor(artist.status)}`}>
+                          {artist.status}
+                        </span>
                       </div>
-                      <div className="text-center">
-                        <p className="text-2xl font-bold">{formatNumber(artist.metrics.views)}</p>
-                        <p className="text-xs text-zinc-500">Views</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-2xl font-bold">{artist.metrics.rate}%</p>
-                        <p className="text-xs text-zinc-500">Eng. Rate</p>
-                      </div>
-                      <span className={`px-3 py-1 rounded-full text-xs ${getStatusColor(artist.status)}`}>
-                        {artist.status}
-                      </span>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            );
+          })()}
 
           {/* Pages Tab */}
           {operatorTab === 'pages' && (() => {
@@ -4593,7 +4715,14 @@ const StickToMusic = () => {
 
           {/* Analytics Tab */}
           {operatorTab === 'analytics' && (
-            <AnalyticsDashboard />
+            <AnalyticsDashboard
+              artistId={currentArtistId}
+              artists={firestoreArtists.length > 0
+                ? firestoreArtists.map(a => ({ id: a.id, name: a.name }))
+                : operatorArtists.map(a => ({ id: String(a.id), name: a.name }))
+              }
+              onArtistChange={handleArtistChange}
+            />
           )}
 
           {/* Applications Tab */}
@@ -5041,7 +5170,12 @@ const StickToMusic = () => {
         {showVideoEditor && (
           <VideoStudio
             onClose={() => setShowVideoEditor(false)}
-            artists={operatorArtists.map(a => ({ id: a.id, name: a.name }))}
+            artists={firestoreArtists.length > 0
+              ? firestoreArtists.map(a => ({ id: a.id, name: a.name }))
+              : operatorArtists.map(a => ({ id: String(a.id), name: a.name }))
+            }
+            artistId={currentArtistId}
+            onArtistChange={handleArtistChange}
             lateAccountIds={LATE_ACCOUNT_IDS}
             onSchedulePost={lateApi.schedulePost}
           />
@@ -5721,6 +5855,82 @@ const StickToMusic = () => {
                   Log in
                 </button>
               </p>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD ARTIST MODAL */}
+      {showAddArtistModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowAddArtistModal(false)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+              <h2 className="text-xl font-bold">Add New Artist</h2>
+              <button onClick={() => setShowAddArtistModal(false)} className="text-zinc-500 hover:text-white">✕</button>
+            </div>
+            <form onSubmit={handleAddArtist} className="p-6 space-y-4">
+              {addArtistForm.error && (
+                <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                  {addArtistForm.error}
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">Artist Name</label>
+                <input
+                  type="text"
+                  value={addArtistForm.name}
+                  onChange={e => setAddArtistForm(prev => ({ ...prev, name: e.target.value, error: null }))}
+                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
+                  placeholder="Artist name"
+                  required
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">Tier</label>
+                <select
+                  value={addArtistForm.tier}
+                  onChange={e => setAddArtistForm(prev => ({ ...prev, tier: e.target.value }))}
+                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
+                >
+                  <option value="Scale">Scale</option>
+                  <option value="Growth">Growth</option>
+                  <option value="Starter">Starter</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">Content Distribution</label>
+                <select
+                  value={addArtistForm.cdTier}
+                  onChange={e => setAddArtistForm(prev => ({ ...prev, cdTier: e.target.value }))}
+                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
+                >
+                  <option value="CD Lite">CD Lite</option>
+                  <option value="CD Pro">CD Pro</option>
+                  <option value="None">None</option>
+                </select>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAddArtistModal(false)}
+                  className="flex-1 py-3 bg-zinc-800 text-white rounded-xl font-medium hover:bg-zinc-700 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={addArtistForm.isLoading}
+                  className="flex-1 py-3 bg-violet-600 text-white rounded-xl font-semibold hover:bg-violet-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {addArtistForm.isLoading ? (
+                    <>
+                      <span className="animate-spin">⟳</span>
+                      Creating...
+                    </>
+                  ) : 'Create Artist'}
+                </button>
+              </div>
             </form>
           </div>
         </div>
