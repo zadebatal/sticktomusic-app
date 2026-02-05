@@ -384,6 +384,9 @@ const StickToMusic = () => {
     return () => unsubscribe();
   }, [authChecked, currentAuthUser]);
 
+  // Track if we've already initialized Boon artist (prevents double-calls)
+  const boonInitializedRef = useRef(false);
+
   // Subscribe to artists from Firestore (for multi-artist support)
   useEffect(() => {
     if (!authChecked || !currentAuthUser) {
@@ -393,14 +396,19 @@ const StickToMusic = () => {
 
     console.log('📥 Loading artists from Firestore...');
 
-    // First ensure Boon exists and migrate any legacy data
-    ensureBoonArtistExists(db).then((boonArtist) => {
-      if (boonArtist && !currentArtistId) {
-        console.log('🎵 Setting default artist to Boon:', boonArtist.id);
-        setCurrentArtistId(boonArtist.id);
-        setLastArtistId(boonArtist.id);
-      }
-    });
+    // First ensure Boon exists and migrate any legacy data (only once)
+    if (!boonInitializedRef.current) {
+      boonInitializedRef.current = true;
+      ensureBoonArtistExists(db).then((boonArtist) => {
+        if (boonArtist && !currentArtistId) {
+          console.log('🎵 Setting default artist to Boon:', boonArtist.id);
+          setCurrentArtistId(boonArtist.id);
+          setLastArtistId(boonArtist.id);
+        }
+      }).catch((err) => {
+        console.warn('Could not ensure Boon exists:', err.message);
+      });
+    }
 
     // Subscribe to real-time artist updates
     const unsubscribe = subscribeToArtists(db, (artists) => {
