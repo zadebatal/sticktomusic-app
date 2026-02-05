@@ -359,6 +359,11 @@ const VideoStudio = ({
 
   // Save to localStorage when categories change
   useEffect(() => {
+    // Don't save if artist just changed - wait for load effect to run first
+    if (currentArtistId && currentArtistId !== prevArtistIdRef.current) {
+      return;
+    }
+
     // Use artist-namespaced storage if we have an artistId
     const saveFn = currentArtistId
       ? (cats) => saveArtistCategories(currentArtistId, cats)
@@ -376,6 +381,11 @@ const VideoStudio = ({
 
   // Save to localStorage when presets change
   useEffect(() => {
+    // Don't save if artist just changed - wait for load effect to run first
+    if (currentArtistId && currentArtistId !== prevArtistIdRef.current) {
+      return;
+    }
+
     if (currentArtistId) {
       saveArtistPresets(currentArtistId, presets);
     } else {
