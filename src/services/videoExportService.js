@@ -64,70 +64,81 @@ const loadFFmpeg = async (onProgress = () => {}) => {
 };
 
 /**
- * Convert WebM blob to MP4 using FFmpeg.wasm
- * @param {Blob} webmBlob - The WebM video blob
+ * Process video: add audio and convert to MP4 if needed
+ * @param {Blob} videoBlob - The video blob (WebM or MP4)
  * @param {Function} onProgress - Progress callback
  * @param {Object} audioInfo - Optional audio info { buffer, startTime }
+ * @param {boolean} isNativeMP4 - Whether the input is already MP4
  */
-const convertToMP4 = async (webmBlob, onProgress = () => {}, audioInfo = null) => {
-  console.log('[VideoExport] Converting WebM to MP4...');
+const processVideo = async (videoBlob, onProgress = () => {}, audioInfo = null, isNativeMP4 = false) => {
+  const hasAudio = !!audioInfo?.buffer;
+
+  // If native MP4 and no audio needed, return as-is
+  if (isNativeMP4 && !hasAudio) {
+    console.log('[VideoExport] Native MP4 with no audio, returning as-is');
+    return videoBlob;
+  }
+
+  // If native MP4 with audio, just mux audio (fast)
+  // If WebM, need to convert to MP4 (slower but necessary)
+  const needsVideoConversion = !isNativeMP4;
+
+  console.log('[VideoExport] Processing video:', {
+    needsVideoConversion,
+    hasAudio,
+    inputSize: (videoBlob.size / 1024 / 1024).toFixed(2) + 'MB'
+  });
 
   try {
     const ffmpeg = await loadFFmpeg(onProgress);
 
-    // Write input video file
-    const inputName = 'input.webm';
+    const inputExt = isNativeMP4 ? 'mp4' : 'webm';
+    const inputName = `input.${inputExt}`;
     const audioName = 'audio.mp3';
     const outputName = 'output.mp4';
 
-    await ffmpeg.writeFile(inputName, await fetchFile(webmBlob));
+    await ffmpeg.writeFile(inputName, await fetchFile(videoBlob));
 
     // Build FFmpeg command
     let ffmpegArgs = ['-i', inputName];
-    let hasAudio = false;
 
-    // Add audio input if buffer was pre-fetched
-    if (audioInfo?.buffer) {
-      try {
-        console.log('[VideoExport] Adding pre-fetched audio track...');
-        await ffmpeg.writeFile(audioName, new Uint8Array(audioInfo.buffer));
-
-        const audioStart = audioInfo.startTime || 0;
-        ffmpegArgs.push('-ss', String(audioStart), '-i', audioName);
-        hasAudio = true;
-      } catch (audioErr) {
-        console.warn('[VideoExport] Failed to add audio, continuing without:', audioErr);
-      }
+    // Add audio input if available
+    if (hasAudio) {
+      await ffmpeg.writeFile(audioName, new Uint8Array(audioInfo.buffer));
+      const audioStart = audioInfo.startTime || 0;
+      ffmpegArgs.push('-ss', String(audioStart), '-i', audioName);
     }
 
-    // Add encoding parameters
-    ffmpegArgs.push(
-      '-c:v', 'libx264',
-      '-preset', 'ultrafast',
-      '-tune', 'fastdecode',
-      '-crf', '26',
-      '-pix_fmt', 'yuv420p',
-      '-threads', '0'
-    );
+    // Video encoding
+    if (needsVideoConversion) {
+      // Need to re-encode WebM to H.264
+      ffmpegArgs.push(
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '28',           // Higher CRF = faster, slightly lower quality
+        '-pix_fmt', 'yuv420p'
+      );
+    } else {
+      // Native MP4 - just copy video stream
+      ffmpegArgs.push('-c:v', 'copy');
+    }
 
-    // Add audio encoding if we have audio - use faster settings
+    // Audio encoding
     if (hasAudio) {
       ffmpegArgs.push(
         '-c:a', 'aac',
-        '-b:a', '96k', // Lower bitrate for faster encoding (still good for social media)
-        '-ac', '2',    // Stereo
-        '-ar', '44100', // Standard sample rate
-        '-shortest'    // End when shortest input ends
+        '-b:a', '96k',
+        '-shortest'
       );
     }
 
     ffmpegArgs.push('-movflags', '+faststart', outputName);
 
+    console.log('[VideoExport] FFmpeg args:', ffmpegArgs.join(' '));
     await ffmpeg.exec(ffmpegArgs);
 
-    // Read output file
     const data = await ffmpeg.readFile(outputName);
-    const mp4Blob = new Blob([data.buffer], { type: 'video/mp4' });
+    const outputBlob = new Blob([data.buffer], { type: 'video/mp4' });
 
     // Clean up
     await ffmpeg.deleteFile(inputName);
@@ -136,11 +147,12 @@ const convertToMP4 = async (webmBlob, onProgress = () => {}, audioInfo = null) =
       try { await ffmpeg.deleteFile(audioName); } catch (e) { /* ignore */ }
     }
 
-    console.log('[VideoExport] MP4 conversion complete:', (mp4Blob.size / 1024 / 1024).toFixed(2), 'MB');
-    return mp4Blob;
+    console.log('[VideoExport] Processing complete:', (outputBlob.size / 1024 / 1024).toFixed(2), 'MB');
+    return outputBlob;
   } catch (error) {
-    console.error('[VideoExport] MP4 conversion failed:', error);
-    throw error;
+    console.error('[VideoExport] Processing failed:', error);
+    // Return original blob as fallback
+    return videoBlob;
   }
 };
 
@@ -273,16 +285,20 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
   const videoTrack = canvasStream.getVideoTracks()[0];
   const combinedStream = canvasStream;
 
-  // Determine best codec - prefer VP8 for faster encoding
+  // Prefer MP4/H.264 if browser supports it (Chrome, Edge) - avoids FFmpeg conversion!
+  // Fall back to WebM which will need FFmpeg conversion later
   const mimeTypes = [
-    'video/webm;codecs=vp8',
+    'video/mp4;codecs=avc1',    // H.264 in MP4 - best for TikTok
+    'video/mp4;codecs=h264',    // Alternative H.264
+    'video/mp4',                 // Generic MP4
+    'video/webm;codecs=vp8',    // WebM fallback
     'video/webm;codecs=vp9',
-    'video/webm',
-    'video/mp4'
+    'video/webm'
   ];
 
   let mimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type)) || 'video/webm';
-  console.log('[VideoExport] Using codec:', mimeType);
+  const isMP4Native = mimeType.includes('mp4');
+  console.log('[VideoExport] Using codec:', mimeType, isMP4Native ? '(native MP4!)' : '(will need conversion)');
 
   const recorder = new MediaRecorder(combinedStream, {
     mimeType,
@@ -395,7 +411,8 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
       const blob = new Blob(chunks, { type: mimeType });
       console.log('[VideoExport] Render complete:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
       onProgress(safeProgress(100));
-      resolve(blob);
+      // Return blob and whether it's native MP4
+      resolve({ blob, isNativeMP4: isMP4Native });
     };
 
     recorder.onerror = (err) => {
@@ -447,7 +464,6 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
  */
 export const renderVideo = async (videoData, onProgress = () => {}, options = {}) => {
   const { clips, audio, duration } = videoData;
-  const { convertToMP4: shouldConvert = true } = options;
 
   if (!clips || clips.length === 0) {
     throw new Error('No clips to render');
@@ -487,38 +503,26 @@ export const renderVideo = async (videoData, onProgress = () => {}, options = {}
       }
     }
 
-    // Phase 1: Render WebM (0-70%) - runs in parallel with audio fetch
-    const webmProgress = (p) => onProgress(safeProgress(p * 0.7));
-    const webmBlob = await renderWithCanvas(videoData, webmProgress);
+    // Phase 1: Render video (0-70%) - runs in parallel with audio fetch
+    const renderProgress = (p) => onProgress(safeProgress(p * 0.7));
+    const { blob: videoBlob, isNativeMP4 } = await renderWithCanvas(videoData, renderProgress);
 
-    // Phase 2: Convert to MP4 if requested (70-100%)
-    if (shouldConvert) {
-      onProgress(safeProgress(70));
-      console.log('[VideoExport] Converting to MP4 for TikTok compatibility...');
+    // Phase 2: Process video - add audio and convert to MP4 if needed (70-100%)
+    onProgress(safeProgress(70));
 
-      // Get pre-fetched audio buffer (should already be ready)
-      if (audioBufferPromise) {
-        const audioBuffer = await audioBufferPromise;
-        if (audioBuffer) {
-          audioInfo.buffer = audioBuffer;
-        }
-      }
-
-      try {
-        const mp4Progress = (p) => onProgress(safeProgress(70 + p * 0.3));
-        const mp4Blob = await convertToMP4(webmBlob, mp4Progress, audioInfo);
-        onProgress(safeProgress(100));
-        return mp4Blob;
-      } catch (conversionError) {
-        console.warn('[VideoExport] MP4 conversion failed, returning WebM:', conversionError);
-        // Fall back to WebM if conversion fails
-        onProgress(safeProgress(100));
-        return webmBlob;
+    // Get pre-fetched audio buffer (should already be ready)
+    if (audioBufferPromise) {
+      const audioBuffer = await audioBufferPromise;
+      if (audioBuffer) {
+        audioInfo.buffer = audioBuffer;
       }
     }
 
+    // Process: add audio and/or convert to MP4
+    const processProgress = (p) => onProgress(safeProgress(70 + p * 0.3));
+    const finalBlob = await processVideo(videoBlob, processProgress, audioInfo, isNativeMP4);
     onProgress(safeProgress(100));
-    return webmBlob;
+    return finalBlob;
   } catch (canvasError) {
     console.error('[VideoExport] Canvas render failed:', canvasError);
     throw new Error(`Video rendering failed: ${canvasError.message}`);
