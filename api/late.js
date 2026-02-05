@@ -48,35 +48,47 @@ if (!getApps().length) {
 
 /**
  * Get Late API key for a specific artist
- * Falls back to global LATE_API_KEY if no artist-specific key
+ * Global LATE_API_KEY only used for the artist specified in LATE_API_KEY_ARTIST_ID
  */
 async function getArtistLateKey(artistId) {
   console.log('getArtistLateKey called with artistId:', artistId);
   console.log('db initialized:', !!db);
   console.log('Global LATE_API_KEY exists:', !!process.env.LATE_API_KEY);
+  console.log('LATE_API_KEY_ARTIST_ID:', process.env.LATE_API_KEY_ARTIST_ID);
 
-  if (!artistId || !db) {
-    console.log('Using global key (no artistId or no db)');
+  // Check artist-specific key in Firestore first
+  if (artistId && db) {
+    try {
+      const secretDoc = await db.collection('artistSecrets').doc(artistId).get();
+      console.log('artistSecrets doc exists:', secretDoc.exists);
+      if (secretDoc.exists && secretDoc.data().lateApiKey) {
+        console.log('Using artist-specific key from Firestore');
+        return secretDoc.data().lateApiKey;
+      }
+    } catch (error) {
+      console.error('Error fetching artist Late key:', error.message);
+    }
+  }
+
+  // Only use global key if this artist is the designated global key artist
+  const globalKeyArtistId = process.env.LATE_API_KEY_ARTIST_ID;
+  if (process.env.LATE_API_KEY && globalKeyArtistId && artistId === globalKeyArtistId) {
+    console.log('Using global key for designated artist:', globalKeyArtistId);
     return process.env.LATE_API_KEY;
   }
 
-  try {
-    const secretDoc = await db.collection('artistSecrets').doc(artistId).get();
-    console.log('artistSecrets doc exists:', secretDoc.exists);
-    if (secretDoc.exists) {
-      console.log('artistSecrets has lateApiKey:', !!secretDoc.data().lateApiKey);
-    }
-    if (secretDoc.exists && secretDoc.data().lateApiKey) {
-      console.log('Using artist-specific key');
-      return secretDoc.data().lateApiKey;
-    }
-  } catch (error) {
-    console.error('Error fetching artist Late key:', error.message);
-  }
+  // No key found for this artist
+  console.log('No Late key found for artist:', artistId);
+  return null;
+}
 
-  // Fall back to global key
-  console.log('Falling back to global key');
-  return process.env.LATE_API_KEY;
+/**
+ * Check if an artist has Late configured (either specific key or is the global key artist)
+ */
+function isArtistLateConfigured(artistId, hasArtistKey) {
+  if (hasArtistKey) return true;
+  const globalKeyArtistId = process.env.LATE_API_KEY_ARTIST_ID;
+  return process.env.LATE_API_KEY && globalKeyArtistId && artistId === globalKeyArtistId;
 }
 
 /**
@@ -217,17 +229,18 @@ export default async function handler(req, res) {
           return res.status(403).json({ error: 'No access to this artist' });
         }
 
-        // Check artist-specific key first
+        // Check artist-specific key in Firestore
         const secretDoc = await db.collection('artistSecrets').doc(artistId).get();
         const hasArtistKey = secretDoc.exists && !!secretDoc.data()?.lateApiKey;
 
-        // Also check for global fallback key (for backward compatibility)
-        const hasGlobalKey = !!process.env.LATE_API_KEY;
+        // Check if this artist is the designated global key artist
+        const globalKeyArtistId = process.env.LATE_API_KEY_ARTIST_ID;
+        const isGlobalKeyArtist = process.env.LATE_API_KEY && globalKeyArtistId && artistId === globalKeyArtistId;
 
         return res.status(200).json({
-          configured: hasArtistKey || hasGlobalKey,
+          configured: hasArtistKey || isGlobalKeyArtist,
           hasArtistSpecificKey: hasArtistKey,
-          hasGlobalFallback: hasGlobalKey,
+          isGlobalKeyArtist: isGlobalKeyArtist,
           updatedAt: secretDoc.exists ? secretDoc.data()?.updatedAt : null
         });
 
