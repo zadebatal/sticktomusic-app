@@ -97,6 +97,10 @@ const ContentLibrary = ({
   // Posting Module state
   const [showPostingModule, setShowPostingModule] = useState(false);
 
+  // Slideshow posting state
+  const [postingSlideshow, setPostingSlideshow] = useState(null);
+  const [showSlideshowPostingModal, setShowSlideshowPostingModal] = useState(false);
+
   // Get content array based on type
   const items = isSlideshow
     ? (category?.slideshows || [])
@@ -260,6 +264,10 @@ const ContentLibrary = ({
                   onToggleSelect={() => toggleItemSelection(item.id)}
                   onEdit={() => onEditSlideshow?.(item)}
                   onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
+                  onPost={() => {
+                    setPostingSlideshow(item);
+                    setShowSlideshowPostingModal(true);
+                  }}
                 />
               ) : (
                 <VideoCard
@@ -299,7 +307,7 @@ const ContentLibrary = ({
               </svg>
               Delete {selectedItems.length}
             </button>
-            {!isSlideshow && (
+            {!isSlideshow ? (
               <>
                 <button style={styles.batchBtnExport} onClick={() => setExportingVideo(selectedItems[0])}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -314,6 +322,18 @@ const ContentLibrary = ({
                   </svg>
                   Schedule {selectedItems.length} Post{selectedItems.length > 1 ? 's' : ''}
                 </button>
+              </>
+            ) : (
+              <>
+                {/* Check if any selected slideshows are exported */}
+                {selectedItems.some(s => s.exportedImages?.length > 0) && (
+                  <button style={styles.batchBtnPost} onClick={() => setShowSlideshowPostingModal(true)}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                    Schedule {selectedItems.filter(s => s.exportedImages?.length > 0).length} Carousel{selectedItems.filter(s => s.exportedImages?.length > 0).length > 1 ? 's' : ''}
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -384,6 +404,20 @@ const ContentLibrary = ({
           onRenderVideo={handleRenderVideo}
           onClose={() => {
             setShowPostingModule(false);
+            clearSelection();
+          }}
+        />
+      )}
+
+      {/* Slideshow Posting Modal */}
+      {showSlideshowPostingModal && (
+        <SlideshowPostingModal
+          slideshows={postingSlideshow ? [postingSlideshow] : selectedItems.filter(s => s.exportedImages?.length > 0)}
+          lateAccountIds={lateAccountIds}
+          onSchedulePost={onSchedulePost}
+          onClose={() => {
+            setShowSlideshowPostingModal(false);
+            setPostingSlideshow(null);
             clearSelection();
           }}
         />
@@ -517,7 +551,7 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
   );
 };
 
-const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onEdit, onDelete }) => {
+const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onEdit, onDelete, onPost }) => {
   const [showActions, setShowActions] = useState(false);
 
   const handleActionClick = (e, action) => {
@@ -528,7 +562,11 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onEdit, onDelete
   // Get thumbnail from first slide
   const thumbnail = slideshow.slides?.[0]?.imageA?.localUrl ||
                     slideshow.slides?.[0]?.imageA?.url ||
-                    slideshow.slides?.[0]?.thumbnail;
+                    slideshow.slides?.[0]?.thumbnail ||
+                    slideshow.slides?.[0]?.backgroundImage;
+
+  // Check if slideshow has been exported (has carousel images)
+  const isExported = slideshow.exportedImages?.length > 0 || slideshow.status === 'rendered';
 
   return (
     <div
@@ -568,8 +606,22 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onEdit, onDelete
           {slideshow.slides?.length || 0} slides
         </div>
 
-        {/* Recipe badge if has audio */}
-        {slideshow.audio && (
+        {/* Status badge - exported or needs export */}
+        {isExported ? (
+          <div style={{
+            position: 'absolute',
+            top: '8px',
+            right: '8px',
+            background: 'rgba(34, 197, 94, 0.9)',
+            color: '#fff',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            fontSize: '10px',
+            fontWeight: '600'
+          }}>
+            ✓ Ready
+          </div>
+        ) : (
           <div style={{
             position: 'absolute',
             top: '8px',
@@ -581,13 +633,18 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onEdit, onDelete
             fontSize: '10px',
             fontWeight: '600'
           }}>
-            ⚡ Recipe
+            ⚡ Draft
           </div>
         )}
 
         {showActions && (
           <div style={styles.videoActions}>
             <button style={styles.actionBtn} onClick={(e) => handleActionClick(e, onEdit)}>Edit</button>
+            {isExported ? (
+              <button style={styles.actionBtnPost} onClick={(e) => handleActionClick(e, onPost)}>Post</button>
+            ) : (
+              <button style={{...styles.actionBtnPost, background: '#f59e0b'}} onClick={(e) => handleActionClick(e, onEdit)}>Export</button>
+            )}
             <button style={styles.actionBtnDel} onClick={(e) => handleActionClick(e, onDelete)}>✕</button>
           </div>
         )}
@@ -599,6 +656,398 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onEdit, onDelete
       </div>
     </div>
   );
+};
+
+/**
+ * SlideshowPostingModal - Modal for scheduling carousel posts
+ */
+const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onClose }) => {
+  const [selectedHandle, setSelectedHandle] = useState('');
+  const [scheduleDate, setScheduleDate] = useState(new Date().toISOString().split('T')[0]);
+  const [scheduleTime, setScheduleTime] = useState('14:00');
+  const [platforms, setPlatforms] = useState({ tiktok: true, instagram: true });
+  const [caption, setCaption] = useState('');
+  const [hashtags, setHashtags] = useState('#carousel #slideshow #fyp');
+  const [isScheduling, setIsScheduling] = useState(false);
+
+  const availableHandles = Object.keys(lateAccountIds);
+
+  const handleSchedule = async () => {
+    if (!selectedHandle) {
+      alert('Please select an account');
+      return;
+    }
+
+    const accountMapping = lateAccountIds[selectedHandle];
+    if (!accountMapping) {
+      alert(`No Late.co account mapping found for ${selectedHandle}`);
+      return;
+    }
+
+    setIsScheduling(true);
+
+    try {
+      // Schedule each slideshow as a carousel post
+      for (const slideshow of slideshows) {
+        if (!slideshow.exportedImages?.length) continue;
+
+        // Get the appropriate account ID based on platform
+        const platformAccountId = platforms.tiktok
+          ? accountMapping.tiktok
+          : accountMapping.instagram;
+
+        if (!platformAccountId) {
+          console.warn(`No account ID for selected platform on ${selectedHandle}`);
+          continue;
+        }
+
+        // Create scheduled date
+        const scheduledTime = new Date(`${scheduleDate}T${scheduleTime}`);
+
+        // Schedule the post via onSchedulePost
+        if (onSchedulePost) {
+          await onSchedulePost({
+            type: 'carousel',
+            slideshow: slideshow,
+            images: slideshow.exportedImages,
+            handle: selectedHandle,
+            accountId: platformAccountId,
+            platforms,
+            scheduledTime: scheduledTime.toISOString(),
+            caption: `${caption}\n\n${hashtags}`.trim()
+          });
+        }
+      }
+
+      alert(`Scheduled ${slideshows.length} carousel post${slideshows.length > 1 ? 's' : ''}!`);
+      onClose();
+    } catch (err) {
+      console.error('[SlideshowPostingModal] Schedule failed:', err);
+      alert(`Failed to schedule: ${err.message}`);
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
+  // Total images across all slideshows
+  const totalImages = slideshows.reduce((sum, s) => sum + (s.exportedImages?.length || 0), 0);
+
+  return (
+    <div style={slideshowPostingStyles.overlay}>
+      <div style={slideshowPostingStyles.modal}>
+        <div style={slideshowPostingStyles.header}>
+          <h3 style={slideshowPostingStyles.title}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="4" width="18" height="18" rx="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            Schedule Carousel{slideshows.length > 1 ? 's' : ''}
+          </h3>
+          <button style={slideshowPostingStyles.closeBtn} onClick={onClose}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Preview */}
+        <div style={slideshowPostingStyles.preview}>
+          <div style={slideshowPostingStyles.previewImages}>
+            {slideshows.slice(0, 3).map((slideshow, i) => (
+              <img
+                key={i}
+                src={slideshow.exportedImages?.[0]?.url || slideshow.slides?.[0]?.thumbnail}
+                alt={`Slideshow ${i + 1}`}
+                style={slideshowPostingStyles.previewImg}
+              />
+            ))}
+            {slideshows.length > 3 && (
+              <div style={slideshowPostingStyles.previewMore}>+{slideshows.length - 3}</div>
+            )}
+          </div>
+          <span style={slideshowPostingStyles.previewText}>
+            {slideshows.length} carousel{slideshows.length > 1 ? 's' : ''} • {totalImages} images
+          </span>
+        </div>
+
+        {/* Account Selection */}
+        <div style={slideshowPostingStyles.field}>
+          <label style={slideshowPostingStyles.label}>Account</label>
+          <select
+            value={selectedHandle}
+            onChange={(e) => setSelectedHandle(e.target.value)}
+            style={slideshowPostingStyles.select}
+          >
+            <option value="">Select account...</option>
+            {availableHandles.map(handle => (
+              <option key={handle} value={handle}>{handle}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Date & Time */}
+        <div style={slideshowPostingStyles.row}>
+          <div style={slideshowPostingStyles.field}>
+            <label style={slideshowPostingStyles.label}>Date</label>
+            <input
+              type="date"
+              value={scheduleDate}
+              onChange={(e) => setScheduleDate(e.target.value)}
+              style={slideshowPostingStyles.input}
+            />
+          </div>
+          <div style={slideshowPostingStyles.field}>
+            <label style={slideshowPostingStyles.label}>Time</label>
+            <input
+              type="time"
+              value={scheduleTime}
+              onChange={(e) => setScheduleTime(e.target.value)}
+              style={slideshowPostingStyles.input}
+            />
+          </div>
+        </div>
+
+        {/* Platforms */}
+        <div style={slideshowPostingStyles.field}>
+          <label style={slideshowPostingStyles.label}>Platforms</label>
+          <div style={slideshowPostingStyles.checkboxRow}>
+            <label style={slideshowPostingStyles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={platforms.instagram}
+                onChange={(e) => setPlatforms(p => ({ ...p, instagram: e.target.checked }))}
+              />
+              Instagram
+            </label>
+            <label style={slideshowPostingStyles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={platforms.tiktok}
+                onChange={(e) => setPlatforms(p => ({ ...p, tiktok: e.target.checked }))}
+              />
+              TikTok
+            </label>
+          </div>
+        </div>
+
+        {/* Caption */}
+        <div style={slideshowPostingStyles.field}>
+          <label style={slideshowPostingStyles.label}>Caption</label>
+          <textarea
+            value={caption}
+            onChange={(e) => setCaption(e.target.value)}
+            style={slideshowPostingStyles.textarea}
+            placeholder="Write a caption..."
+            rows={2}
+          />
+        </div>
+
+        {/* Hashtags */}
+        <div style={slideshowPostingStyles.field}>
+          <label style={slideshowPostingStyles.label}>Hashtags</label>
+          <input
+            type="text"
+            value={hashtags}
+            onChange={(e) => setHashtags(e.target.value)}
+            style={slideshowPostingStyles.hashtagInput}
+            placeholder="#hashtag1 #hashtag2..."
+          />
+        </div>
+
+        {/* Actions */}
+        <div style={slideshowPostingStyles.actions}>
+          <button style={slideshowPostingStyles.cancelBtn} onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            style={slideshowPostingStyles.scheduleBtn}
+            onClick={handleSchedule}
+            disabled={isScheduling || !selectedHandle}
+          >
+            {isScheduling ? 'Scheduling...' : `Schedule ${slideshows.length} Post${slideshows.length > 1 ? 's' : ''}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const slideshowPostingStyles = {
+  overlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000
+  },
+  modal: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: '16px',
+    padding: '24px',
+    maxWidth: '480px',
+    width: '90%',
+    maxHeight: '90vh',
+    overflow: 'auto',
+    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+  },
+  header: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '20px'
+  },
+  title: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    margin: 0,
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#fff'
+  },
+  closeBtn: {
+    padding: '8px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: '#9ca3af',
+    cursor: 'pointer',
+    borderRadius: '8px'
+  },
+  preview: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: '12px',
+    padding: '16px',
+    marginBottom: '20px'
+  },
+  previewImages: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '8px'
+  },
+  previewImg: {
+    width: '60px',
+    height: '80px',
+    objectFit: 'cover',
+    borderRadius: '8px'
+  },
+  previewMore: {
+    width: '60px',
+    height: '80px',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: '8px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '14px',
+    color: '#9ca3af'
+  },
+  previewText: {
+    fontSize: '13px',
+    color: '#9ca3af'
+  },
+  field: {
+    marginBottom: '16px'
+  },
+  row: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '12px'
+  },
+  label: {
+    display: 'block',
+    fontSize: '12px',
+    fontWeight: '500',
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    marginBottom: '6px'
+  },
+  select: {
+    width: '100%',
+    padding: '10px 12px',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '8px',
+    color: '#fff',
+    fontSize: '14px',
+    cursor: 'pointer'
+  },
+  input: {
+    width: '100%',
+    padding: '10px 12px',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '8px',
+    color: '#fff',
+    fontSize: '14px',
+    boxSizing: 'border-box'
+  },
+  checkboxRow: {
+    display: 'flex',
+    gap: '16px'
+  },
+  checkboxLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '14px',
+    color: '#e4e4e7',
+    cursor: 'pointer'
+  },
+  textarea: {
+    width: '100%',
+    padding: '10px 12px',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '8px',
+    color: '#fff',
+    fontSize: '14px',
+    resize: 'none',
+    boxSizing: 'border-box'
+  },
+  hashtagInput: {
+    width: '100%',
+    padding: '10px 12px',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '8px',
+    color: '#a78bfa',
+    fontSize: '14px',
+    boxSizing: 'border-box'
+  },
+  actions: {
+    display: 'flex',
+    gap: '12px',
+    marginTop: '20px'
+  },
+  cancelBtn: {
+    flex: 1,
+    padding: '12px',
+    backgroundColor: 'transparent',
+    border: '1px solid rgba(255, 255, 255, 0.2)',
+    borderRadius: '8px',
+    color: '#9ca3af',
+    fontSize: '14px',
+    cursor: 'pointer'
+  },
+  scheduleBtn: {
+    flex: 1,
+    padding: '12px',
+    backgroundColor: '#22c55e',
+    border: 'none',
+    borderRadius: '8px',
+    color: '#fff',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer'
+  }
 };
 
 const styles = {
