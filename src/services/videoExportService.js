@@ -67,7 +67,7 @@ const loadFFmpeg = async (onProgress = () => {}) => {
  * Convert WebM blob to MP4 using FFmpeg.wasm
  * @param {Blob} webmBlob - The WebM video blob
  * @param {Function} onProgress - Progress callback
- * @param {Object} audioInfo - Optional audio info { url, startTime }
+ * @param {Object} audioInfo - Optional audio info { buffer, startTime }
  */
 const convertToMP4 = async (webmBlob, onProgress = () => {}, audioInfo = null) => {
   console.log('[VideoExport] Converting WebM to MP4...');
@@ -84,19 +84,19 @@ const convertToMP4 = async (webmBlob, onProgress = () => {}, audioInfo = null) =
 
     // Build FFmpeg command
     let ffmpegArgs = ['-i', inputName];
+    let hasAudio = false;
 
-    // Add audio input if provided
-    if (audioInfo?.url) {
+    // Add audio input if buffer was pre-fetched
+    if (audioInfo?.buffer) {
       try {
-        console.log('[VideoExport] Adding audio track...');
-        const audioResponse = await fetch(audioInfo.url);
-        const audioBuffer = await audioResponse.arrayBuffer();
-        await ffmpeg.writeFile(audioName, new Uint8Array(audioBuffer));
+        console.log('[VideoExport] Adding pre-fetched audio track...');
+        await ffmpeg.writeFile(audioName, new Uint8Array(audioInfo.buffer));
 
         const audioStart = audioInfo.startTime || 0;
         ffmpegArgs.push('-ss', String(audioStart), '-i', audioName);
+        hasAudio = true;
       } catch (audioErr) {
-        console.warn('[VideoExport] Failed to load audio, continuing without:', audioErr);
+        console.warn('[VideoExport] Failed to add audio, continuing without:', audioErr);
       }
     }
 
@@ -110,12 +110,14 @@ const convertToMP4 = async (webmBlob, onProgress = () => {}, audioInfo = null) =
       '-threads', '0'
     );
 
-    // Add audio encoding if we have audio input
-    if (audioInfo?.url) {
+    // Add audio encoding if we have audio - use faster settings
+    if (hasAudio) {
       ffmpegArgs.push(
         '-c:a', 'aac',
-        '-b:a', '128k',
-        '-shortest' // End when shortest input ends
+        '-b:a', '96k', // Lower bitrate for faster encoding (still good for social media)
+        '-ac', '2',    // Stereo
+        '-ar', '44100', // Standard sample rate
+        '-shortest'    // End when shortest input ends
       );
     }
 
@@ -130,7 +132,7 @@ const convertToMP4 = async (webmBlob, onProgress = () => {}, audioInfo = null) =
     // Clean up
     await ffmpeg.deleteFile(inputName);
     await ffmpeg.deleteFile(outputName);
-    if (audioInfo?.url) {
+    if (hasAudio) {
       try { await ffmpeg.deleteFile(audioName); } catch (e) { /* ignore */ }
     }
 
@@ -461,7 +463,31 @@ export const renderVideo = async (videoData, onProgress = () => {}, options = {}
 
   // Use Canvas + MediaRecorder (most reliable)
   try {
-    // Phase 1: Render WebM (0-70%)
+    // Pre-fetch audio in parallel with canvas rendering for speed
+    let audioBufferPromise = null;
+    let audioInfo = null;
+
+    if (audio?.url || audio?.localUrl) {
+      const audioLocalUrl = audio.localUrl;
+      const isAudioBlobUrl = audioLocalUrl && audioLocalUrl.startsWith('blob:');
+      const audioUrl = isAudioBlobUrl ? audio.url : (audioLocalUrl || audio.url);
+
+      if (audioUrl) {
+        console.log('[VideoExport] Pre-fetching audio in parallel...');
+        audioBufferPromise = fetch(audioUrl)
+          .then(res => res.arrayBuffer())
+          .catch(err => {
+            console.warn('[VideoExport] Audio pre-fetch failed:', err);
+            return null;
+          });
+
+        audioInfo = {
+          startTime: audio.startTime || 0
+        };
+      }
+    }
+
+    // Phase 1: Render WebM (0-70%) - runs in parallel with audio fetch
     const webmProgress = (p) => onProgress(safeProgress(p * 0.7));
     const webmBlob = await renderWithCanvas(videoData, webmProgress);
 
@@ -470,15 +496,12 @@ export const renderVideo = async (videoData, onProgress = () => {}, options = {}
       onProgress(safeProgress(70));
       console.log('[VideoExport] Converting to MP4 for TikTok compatibility...');
 
-      // Prepare audio info for FFmpeg muxing
-      let audioInfo = null;
-      if (audio?.url || audio?.localUrl) {
-        const audioLocalUrl = audio.localUrl;
-        const isAudioBlobUrl = audioLocalUrl && audioLocalUrl.startsWith('blob:');
-        audioInfo = {
-          url: isAudioBlobUrl ? audio.url : (audioLocalUrl || audio.url),
-          startTime: audio.startTime || 0
-        };
+      // Get pre-fetched audio buffer (should already be ready)
+      if (audioBufferPromise) {
+        const audioBuffer = await audioBufferPromise;
+        if (audioBuffer) {
+          audioInfo.buffer = audioBuffer;
+        }
       }
 
       try {
