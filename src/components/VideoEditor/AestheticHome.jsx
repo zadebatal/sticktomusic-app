@@ -325,10 +325,10 @@ const AestheticHome = ({
                     {/* Clips Bank */}
                     <div style={styles.bankItem}>
                       <div style={styles.bankHeader}>
-                        <span style={styles.bankIcon}>🎬</span>
+                        <span style={{...styles.bankIcon, color: '#14b8a6'}}>🎬</span>
                         <span style={styles.bankName}>Clips ({selectedCategory.videos?.length || 0})</span>
                       </div>
-                      <button style={styles.bankAddButton} onClick={() => videoInputRef.current?.click()}>
+                      <button style={{...styles.bankAddButton, borderColor: '#14b8a6', color: '#14b8a6'}} onClick={() => videoInputRef.current?.click()}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                         </svg>
@@ -340,10 +340,10 @@ const AestheticHome = ({
                     {/* Audio Bank */}
                     <div style={styles.bankItem}>
                       <div style={styles.bankHeader}>
-                        <span style={styles.bankIcon}>🎵</span>
+                        <span style={{...styles.bankIcon, color: '#22c55e'}}>🎵</span>
                         <span style={styles.bankName}>Audio ({selectedCategory.audio?.length || 0})</span>
                       </div>
-                      <button style={styles.bankAddButton} onClick={() => audioInputRef.current?.click()}>
+                      <button style={{...styles.bankAddButton, borderColor: '#22c55e', color: '#22c55e'}} onClick={() => audioInputRef.current?.click()}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                         </svg>
