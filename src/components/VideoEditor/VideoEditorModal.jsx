@@ -1778,10 +1778,26 @@ const VideoEditorModal = ({
                                 }}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  console.log('Loading lyric:', lyric.title, lyric.content);
-                                  setLyrics(lyric.content || '');
+                                  const content = lyric.content || '';
+                                  console.log('Loading lyric:', lyric.title, content);
+
+                                  // Parse lyrics into words with evenly spaced timing
+                                  const lyricWords = content.split(/\s+/).filter(w => w.trim().length > 0);
+                                  const effectiveDuration = selectedAudio?.duration || duration || 30;
+                                  const interval = lyricWords.length > 0 ? effectiveDuration / lyricWords.length : 1;
+
+                                  const newWords = lyricWords.map((text, i) => ({
+                                    id: `word_${Date.now()}_${i}`,
+                                    text,
+                                    startTime: i * interval,
+                                    duration: interval * 0.8
+                                  }));
+
+                                  console.log(`Created ${newWords.length} words from bank lyrics`);
+                                  setLyrics(content);
+                                  setWords(newWords);
                                   setShowLyricBankPicker(false);
-                                  // Auto-open Word Timeline so user can sync the lyrics
+                                  // Auto-open Word Timeline so user can adjust timing
                                   setShowWordTimeline(true);
                                 }}
                                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2d2d3d'}
