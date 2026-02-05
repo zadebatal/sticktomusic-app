@@ -109,16 +109,17 @@ const SlideshowEditor = ({
   const lyrics = category?.lyrics || [];
   const activeContent = activeBank === 'imageA' ? imagesA : activeBank === 'imageB' ? imagesB : activeBank === 'audio' ? audioTracks : [];
 
-  // Dimensions based on aspect ratio
-  const dimensions = aspectRatio === '9:16'
+  // Export dimensions based on aspect ratio (used during export only)
+  const exportDimensions = aspectRatio === '9:16'
     ? { width: 1080, height: 1920 }
     : { width: 1080, height: 1440 };
 
-  // Preview dimensions (scaled down)
+  // Preview dimensions - always fixed 9:16 portrait (phone-style)
+  // Aspect ratio setting only affects how images are cropped during export
   const previewScale = 0.25;
   const previewDimensions = {
-    width: dimensions.width * previewScale,
-    height: dimensions.height * previewScale
+    width: 1080 * previewScale,  // Fixed width
+    height: 1920 * previewScale  // Fixed 9:16 height
   };
 
   // Get current slide (defined early so callbacks can reference it)
@@ -960,7 +961,7 @@ const SlideshowEditor = ({
                   ...styles.canvas,
                   width: previewDimensions.width,
                   height: previewDimensions.height,
-                  aspectRatio: aspectRatio === '9:16' ? '9/16' : '3/4'
+                  aspectRatio: '9/16'  // Always fixed 9:16 preview
                 }}
               >
                 {/* Background Image - Click to open text editor */}
@@ -980,6 +981,44 @@ const SlideshowEditor = ({
                     </svg>
                     <p>Drag an image here</p>
                   </div>
+                )}
+
+                {/* 4:3 Crop Indicator - shows what area will be exported */}
+                {aspectRatio === '4:3' && (
+                  <>
+                    {/* Top crop overlay */}
+                    <div style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: 'calc((100% - (100% * 0.75)) / 2)', // 4:3 is 75% of 9:16 height, crop top
+                      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                      borderBottom: '2px dashed rgba(255, 255, 255, 0.4)',
+                      pointerEvents: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px' }}>Cropped</span>
+                    </div>
+                    {/* Bottom crop overlay */}
+                    <div style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      height: 'calc((100% - (100% * 0.75)) / 2)', // 4:3 is 75% of 9:16 height, crop bottom
+                      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                      borderTop: '2px dashed rgba(255, 255, 255, 0.4)',
+                      pointerEvents: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px' }}>Cropped</span>
+                    </div>
+                  </>
                 )}
 
                 {/* Text Overlays */}
