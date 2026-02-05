@@ -3050,12 +3050,15 @@ const StickToMusic = () => {
 
           {/* Pages Tab */}
           {operatorTab === 'pages' && (() => {
+            // Use Firestore artists if available, fallback to static list
+            const artistsList = firestoreArtists.length > 0 ? firestoreArtists : operatorArtists;
+
             const filteredPages = worldPages.filter(p =>
               (selectedArtist === 'all' || p.artist === selectedArtist) &&
               (selectedPlatform === 'all' || p.platform === selectedPlatform)
             );
             // Group by artist for display
-            const artistsWithPages = operatorArtists.filter(a =>
+            const artistsWithPages = artistsList.filter(a =>
               selectedArtist === 'all' || a.name === selectedArtist
             );
 
@@ -3072,7 +3075,7 @@ const StickToMusic = () => {
                     <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Artist</label>
                     <div className="flex gap-1">
                       <button onClick={() => setSelectedArtist('all')} className={`px-3 py-1.5 rounded-lg text-sm transition ${selectedArtist === 'all' ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>All</button>
-                      {operatorArtists.map(a => (
+                      {artistsList.map(a => (
                         <button key={a.id} onClick={() => setSelectedArtist(a.name)} className={`px-3 py-1.5 rounded-lg text-sm transition ${selectedArtist === a.name ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>{a.name}</button>
                       ))}
                     </div>
