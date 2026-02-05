@@ -38,6 +38,8 @@ const WordTimeline = ({
   const [dragState, setDragState] = useState(null);
   const [playheadDragging, setPlayheadDragging] = useState(false);
   const [isDraggingSelection, setIsDraggingSelection] = useState(false); // Track if we're dragging selected words
+  // Marquee selection state
+  const [marqueeSelection, setMarqueeSelection] = useState(null); // { startX, startY, currentX, currentY }
   const [autoCensor, setAutoCensor] = useState(true);
   const [localTime, setLocalTime] = useState(currentTime); // Local playhead time for smooth animation
   const [editingWordId, setEditingWordId] = useState(null); // Which word is being edited inline
@@ -422,7 +424,7 @@ const WordTimeline = ({
   }, [playheadDragging, pixelsToTime, duration, onSeek, playScrubSnippet]);
 
   const handleTimelineClick = (e) => {
-    if (dragState || playheadDragging) return;
+    if (dragState || playheadDragging || marqueeSelection) return;
     const rect = timelineRef.current?.getBoundingClientRect();
     if (!rect) return;
     const scrollLeft = timelineRef.current?.scrollLeft || 0;
@@ -437,6 +439,81 @@ const WordTimeline = ({
       clearSelection();
     }
   };
+
+  // Start marquee selection on mouse down in empty timeline space
+  const handleTimelineMouseDown = (e) => {
+    // Don't start marquee if clicking on playhead or word blocks
+    if (e.target !== timelineRef.current && !e.target.closest('[data-timeline-inner]')) return;
+    if (dragState || playheadDragging) return;
+
+    const rect = timelineRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const scrollLeft = timelineRef.current?.scrollLeft || 0;
+    const startX = e.clientX - rect.left + scrollLeft;
+    const startY = e.clientY - rect.top;
+
+    setMarqueeSelection({
+      startX,
+      startY,
+      currentX: startX,
+      currentY: startY
+    });
+
+    // Clear existing selection unless shift is held
+    if (!e.shiftKey) {
+      clearSelection();
+    }
+  };
+
+  // Marquee selection effect
+  useEffect(() => {
+    if (!marqueeSelection) return;
+
+    const handleMouseMove = (e) => {
+      const rect = timelineRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const scrollLeft = timelineRef.current?.scrollLeft || 0;
+      const currentX = e.clientX - rect.left + scrollLeft;
+      const currentY = e.clientY - rect.top;
+
+      setMarqueeSelection(prev => ({
+        ...prev,
+        currentX,
+        currentY
+      }));
+
+      // Calculate which words fall within the marquee
+      const minX = Math.min(marqueeSelection.startX, currentX);
+      const maxX = Math.max(marqueeSelection.startX, currentX);
+
+      const selectedIndices = [];
+      words.forEach((word, index) => {
+        const wordLeft = timeToPixels(word.startTime);
+        const wordRight = wordLeft + timeToPixels(word.duration || 0.5);
+
+        // Check if word overlaps with marquee (horizontal overlap is enough)
+        if (wordRight >= minX && wordLeft <= maxX) {
+          selectedIndices.push(index);
+        }
+      });
+
+      setSelectedWordIndices(selectedIndices);
+    };
+
+    const handleMouseUp = () => {
+      setMarqueeSelection(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [marqueeSelection, words, timeToPixels, clearSelection]);
 
   const handleAddWord = () => {
     const text = prompt('Enter word text:');
@@ -898,8 +975,20 @@ const WordTimeline = ({
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
             )}
           </button>
-          <div ref={timelineRef} style={styles.timeline} onClick={handleTimelineClick}>
-            <div style={{ ...styles.timelineInner, width: getTimelineWidth() }}>
+          <div ref={timelineRef} style={styles.timeline} onClick={handleTimelineClick} onMouseDown={handleTimelineMouseDown}>
+            <div data-timeline-inner style={{ ...styles.timelineInner, width: getTimelineWidth() }}>
+              {/* Marquee Selection Box */}
+              {marqueeSelection && (
+                <div
+                  style={{
+                    ...styles.marqueeBox,
+                    left: Math.min(marqueeSelection.startX, marqueeSelection.currentX),
+                    top: Math.min(marqueeSelection.startY, marqueeSelection.currentY),
+                    width: Math.abs(marqueeSelection.currentX - marqueeSelection.startX),
+                    height: Math.abs(marqueeSelection.currentY - marqueeSelection.startY)
+                  }}
+                />
+              )}
               {/* Time Ruler */}
               <div style={styles.timeRuler}>
                 {Array.from({ length: Math.ceil(duration) + 1 }, (_, i) => (
@@ -1166,6 +1255,7 @@ const styles = {
   playButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', backgroundColor: '#7c3aed', border: 'none', borderRadius: '50%', color: '#fff', cursor: 'pointer', flexShrink: 0 },
   timeline: { flex: 1, height: '70px', backgroundColor: '#1a1a2e', borderRadius: '8px', overflowX: 'auto', overflowY: 'hidden', position: 'relative', cursor: 'pointer' },
   timelineInner: { position: 'relative', height: '100%', minWidth: '100%' },
+  marqueeBox: { position: 'absolute', backgroundColor: 'rgba(139, 92, 246, 0.2)', border: '1px solid rgba(139, 92, 246, 0.5)', borderRadius: '2px', pointerEvents: 'none', zIndex: 100 },
   timeRuler: { position: 'absolute', top: 0, left: 0, right: 0, height: '20px', pointerEvents: 'none' },
   timeMarker: { position: 'absolute', top: 0, height: '100%' },
   timeMarkerLine: { width: '1px', height: '8px', backgroundColor: 'rgba(255,255,255,0.2)' },
