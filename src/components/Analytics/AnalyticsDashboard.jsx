@@ -42,7 +42,9 @@ const AnalyticsDashboard = ({
   onClose,
   artistId: initialArtistId = null,
   artists = [],
-  onArtistChange = null
+  onArtistChange = null,
+  onSyncLate = null,
+  latePosts = []
 }) => {
   // Current artist (for multi-artist support)
   const [currentArtistId, setCurrentArtistId] = useState(initialArtistId);
@@ -130,10 +132,19 @@ const AnalyticsDashboard = ({
   // Sync with Late API
   const handleSync = async () => {
     setIsSyncing(true);
-    // In real implementation, this would call syncAnalytics with actual videos
-    // For now, just refresh the data
-    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
-    loadAnalytics();
+    try {
+      if (onSyncLate) {
+        const result = await onSyncLate();
+        console.log('📊 Analytics sync result:', result);
+        if (result.success) {
+          console.log(`📊 Synced ${result.posts?.length || 0} posts from Late`);
+        }
+      }
+      // Refresh analytics data after sync
+      loadAnalytics();
+    } catch (error) {
+      console.error('Error syncing with Late:', error);
+    }
     setIsSyncing(false);
   };
 

@@ -4818,6 +4818,15 @@ const StickToMusic = () => {
                 : operatorArtists.map(a => ({ id: String(a.id), name: a.name }))
               }
               onArtistChange={handleArtistChange}
+              onSyncLate={async () => {
+                const result = await lateApi.fetchScheduledPosts(1, currentArtistId);
+                if (result.success) {
+                  setLatePosts(result.posts || []);
+                  return { success: true, posts: result.posts || [] };
+                }
+                return result;
+              }}
+              latePosts={latePosts}
             />
           )}
 
