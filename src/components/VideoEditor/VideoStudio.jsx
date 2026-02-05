@@ -1265,6 +1265,7 @@ const VideoStudio = ({
             onDeleteLyrics={handleDeleteLyrics}
             // Actions
             onCreateContent={handleCreateContent}
+            onMakeVideo={handleMakeVideo}
             onShowBatchPipeline={() => setShowBatchPipeline(true)}
             onViewContent={(options) => setCurrentView(options?.type === 'slideshows' ? 'slideshows' : 'library')}
             onMakeSlideshow={handleMakeSlideshow}
