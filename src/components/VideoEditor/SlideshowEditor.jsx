@@ -51,6 +51,9 @@ const SlideshowEditor = ({
   // AI Transcription state
   const [showLyricAnalyzer, setShowLyricAnalyzer] = useState(false);
 
+  // Audio picker dropdown state
+  const [showAudioPicker, setShowAudioPicker] = useState(false);
+
   // Audio upload ref for slideshow
   const slideshowAudioInputRef = useRef(null);
 
@@ -1004,19 +1007,79 @@ const SlideshowEditor = ({
                   Add Text
                 </button>
 
-                {/* Add Audio Button */}
-                <button
-                  style={styles.addAudioButton}
-                  onClick={() => slideshowAudioInputRef.current?.click()}
-                  title="Add audio to slideshow"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 18V5l12-2v13"/>
-                    <circle cx="6" cy="18" r="3"/>
-                    <circle cx="18" cy="16" r="3"/>
-                  </svg>
-                  Add Audio
-                </button>
+                {/* Add Audio Button with Dropdown */}
+                <div style={{ position: 'relative' }}>
+                  <button
+                    style={styles.addAudioButton}
+                    onClick={() => setShowAudioPicker(!showAudioPicker)}
+                    title="Add audio to slideshow"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M9 18V5l12-2v13"/>
+                      <circle cx="6" cy="18" r="3"/>
+                      <circle cx="18" cy="16" r="3"/>
+                    </svg>
+                    Add Audio
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: '4px' }}>
+                      <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                  </button>
+
+                  {/* Audio Picker Dropdown */}
+                  {showAudioPicker && (
+                    <div style={styles.audioPickerDropdown}>
+                      <div style={styles.audioPickerHeader}>Select Audio</div>
+
+                      {/* Existing audio from bank */}
+                      {audioTracks.length > 0 ? (
+                        <div style={styles.audioPickerList}>
+                          {audioTracks.map(audio => (
+                            <button
+                              key={audio.id}
+                              style={styles.audioPickerItem}
+                              onClick={() => {
+                                setSelectedAudio({
+                                  ...audio,
+                                  startTime: audio.startTime || 0,
+                                  endTime: audio.endTime || null
+                                });
+                                setShowAudioPicker(false);
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M9 18V5l12-2v13"/>
+                                <circle cx="6" cy="18" r="3"/>
+                                <circle cx="18" cy="16" r="3"/>
+                              </svg>
+                              <span style={styles.audioPickerItemName}>{audio.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={styles.audioPickerEmpty}>No audio in bank</div>
+                      )}
+
+                      {/* Divider */}
+                      <div style={styles.audioPickerDivider} />
+
+                      {/* Upload new option */}
+                      <button
+                        style={styles.audioPickerUpload}
+                        onClick={() => {
+                          slideshowAudioInputRef.current?.click();
+                          setShowAudioPicker(false);
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                          <polyline points="17 8 12 3 7 8"/>
+                          <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        Upload New Audio
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 {/* AI Transcribe Button */}
                 {selectedAudio && (
@@ -1923,6 +1986,77 @@ const styles = {
     color: '#fdba74',
     cursor: 'pointer',
     fontSize: '13px'
+  },
+  audioPickerDropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    marginTop: '8px',
+    width: '220px',
+    backgroundColor: '#1f1f2e',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '12px',
+    boxShadow: '0 10px 40px rgba(0, 0, 0, 0.5)',
+    zIndex: 100,
+    overflow: 'hidden'
+  },
+  audioPickerHeader: {
+    padding: '10px 12px',
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+  },
+  audioPickerList: {
+    maxHeight: '150px',
+    overflowY: 'auto'
+  },
+  audioPickerItem: {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '10px 12px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: '#e4e4e7',
+    cursor: 'pointer',
+    fontSize: '13px',
+    textAlign: 'left',
+    transition: 'background-color 0.15s'
+  },
+  audioPickerItemName: {
+    flex: 1,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap'
+  },
+  audioPickerEmpty: {
+    padding: '16px 12px',
+    fontSize: '12px',
+    color: '#6b7280',
+    textAlign: 'center'
+  },
+  audioPickerDivider: {
+    height: '1px',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    margin: '4px 0'
+  },
+  audioPickerUpload: {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '10px 12px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: '#fdba74',
+    cursor: 'pointer',
+    fontSize: '13px',
+    textAlign: 'left',
+    transition: 'background-color 0.15s'
   },
   rerollButton: {
     display: 'flex',
