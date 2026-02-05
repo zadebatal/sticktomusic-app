@@ -588,6 +588,7 @@ const StickToMusic = () => {
           email: email,
           role: 'conductor',
           name: currentAuthUser.displayName || email.split('@')[0],
+          photoURL: currentAuthUser.photoURL || null,
           artistId: null
         };
         console.log('👑 Setting conductor user:', newUser);
@@ -598,6 +599,7 @@ const StickToMusic = () => {
           email: email,
           role: userData?.role || 'artist', // 'operator' or 'artist'
           name: userData?.name || currentAuthUser.displayName || email.split('@')[0],
+          photoURL: currentAuthUser.photoURL || null,
           artistId: userData?.artistId || null,
           assignedArtistIds: userData?.assignedArtistIds || [] // Artists this operator can manage
         };
@@ -2261,9 +2263,13 @@ const StickToMusic = () => {
                 onClick={() => setCurrentPage(user.role === 'artist' ? 'artist-portal' : 'operator')}
                 className="flex items-center gap-2 text-zinc-300 hover:text-white transition"
               >
-                <div className="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold">
-                  {user.name[0]}
-                </div>
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt="" className="w-7 h-7 rounded-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold">
+                    {user.name[0]}
+                  </div>
+                )}
                 <span className="text-sm">{user.name}</span>
               </button>
               <button onClick={handleLogout} className="text-zinc-500 hover:text-white transition text-sm">
@@ -2285,9 +2291,15 @@ const StickToMusic = () => {
           {user && (
             <button
               onClick={() => setCurrentPage(user.role === 'artist' ? 'artist-portal' : 'operator')}
-              className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold"
+              className="w-8 h-8 rounded-full overflow-hidden"
             >
-              {user.name[0]}
+              {user.photoURL ? (
+                <img src={user.photoURL} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              ) : (
+                <div className="w-full h-full bg-purple-600 flex items-center justify-center text-xs font-bold">
+                  {user.name[0]}
+                </div>
+              )}
             </button>
           )}
           <button
