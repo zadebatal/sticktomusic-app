@@ -89,6 +89,9 @@ const VideoEditorModal = ({
   // Close confirmation state
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
+  // Lyric bank picker state
+  const [showLyricBankPicker, setShowLyricBankPicker] = useState(false);
+
   // Progress bar dragging state
   const [progressDragging, setProgressDragging] = useState(false);
   const progressBarRef = useRef(null);
@@ -1724,6 +1727,73 @@ const VideoEditorModal = ({
                         >
                           🎚️ Word Timeline
                         </button>
+                      </div>
+
+                      {/* From Bank Button & Dropdown */}
+                      <div style={{ position: 'relative', marginTop: '8px' }}>
+                        <button
+                          style={{
+                            ...styles.editLyricsButton,
+                            width: '100%',
+                            background: (category?.lyrics?.length || 0) === 0 ? '#374151' : 'linear-gradient(135deg, #14b8a6, #0d9488)',
+                            color: (category?.lyrics?.length || 0) === 0 ? '#6b7280' : '#fff',
+                            cursor: (category?.lyrics?.length || 0) === 0 ? 'not-allowed' : 'pointer',
+                            opacity: (category?.lyrics?.length || 0) === 0 ? 0.6 : 1
+                          }}
+                          onClick={() => setShowLyricBankPicker(!showLyricBankPicker)}
+                          disabled={(category?.lyrics?.length || 0) === 0}
+                          title={(category?.lyrics?.length || 0) === 0 ? 'No lyrics in bank' : 'Load lyrics from bank'}
+                        >
+                          📚 From Bank ({category?.lyrics?.length || 0})
+                        </button>
+
+                        {/* Lyric Bank Dropdown */}
+                        {showLyricBankPicker && (category?.lyrics?.length || 0) > 0 && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '100%',
+                            left: 0,
+                            right: 0,
+                            marginTop: '4px',
+                            backgroundColor: '#1f1f2e',
+                            border: '1px solid #374151',
+                            borderRadius: '8px',
+                            maxHeight: '200px',
+                            overflowY: 'auto',
+                            zIndex: 100,
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+                          }}>
+                            {category.lyrics.map(lyric => (
+                              <button
+                                key={lyric.id}
+                                style={{
+                                  width: '100%',
+                                  padding: '10px 12px',
+                                  backgroundColor: 'transparent',
+                                  border: 'none',
+                                  borderBottom: '1px solid #2d2d3d',
+                                  color: '#e5e7eb',
+                                  textAlign: 'left',
+                                  cursor: 'pointer',
+                                  fontSize: '13px',
+                                  transition: 'background-color 0.2s'
+                                }}
+                                onClick={() => {
+                                  setLyrics(lyric.content);
+                                  setShowLyricBankPicker(false);
+                                  toast.success(`Loaded "${lyric.title}"! Use Quick Edit or Word Timeline to sync.`);
+                                }}
+                                onMouseEnter={(e) => e.target.style.backgroundColor = '#2d2d3d'}
+                                onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                              >
+                                <div style={{ fontWeight: '500', marginBottom: '2px' }}>{lyric.title}</div>
+                                <div style={{ fontSize: '11px', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {lyric.content?.substring(0, 50)}...
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       {!selectedAudio && !isTranscribing && (
                         <p style={{ color: '#6b7280', fontSize: '11px', marginTop: '6px' }}>
