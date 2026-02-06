@@ -30,6 +30,9 @@ import {
   SMART_COLLECTION_IDS,
   // Firestore async functions
   subscribeToLibrary,
+  subscribeToCollections,
+  saveCollectionToFirestore,
+  deleteCollectionFromFirestore,
   addToLibraryAsync,
   removeFromLibraryAsync
 } from '../../services/libraryService';
@@ -98,35 +101,54 @@ const LibraryBrowser = ({
   const fileInputRef = useRef(null);
 
   // Load data when artistId changes or refresh is triggered
-  // Use Firestore subscription if db is available
+  // Use Firestore subscriptions if db is available
   useEffect(() => {
     if (!artistId) return;
 
     console.log('[LibraryBrowser] Loading data for artist:', artistId, 'refreshTrigger:', refreshTrigger, 'db:', !!db);
 
-    // Load collections from localStorage (will migrate later)
-    setCollections(getCollections(artistId));
+    const unsubscribes = [];
 
-    // For library, use Firestore real-time subscription if db is available
     if (db) {
-      console.log('[LibraryBrowser] Setting up Firestore subscription');
-      const unsubscribe = subscribeToLibrary(db, artistId, (items) => {
-        console.log('[LibraryBrowser] Received', items.length, 'items from Firestore');
+      // Firestore real-time subscription for library
+      console.log('[LibraryBrowser] Setting up Firestore subscriptions');
+      unsubscribes.push(subscribeToLibrary(db, artistId, (items) => {
+        console.log('[LibraryBrowser] Received', items.length, 'library items from Firestore');
         setLibrary(items);
-      });
-      return () => unsubscribe();
+      }));
+
+      // Firestore real-time subscription for collections
+      unsubscribes.push(subscribeToCollections(db, artistId, (cols) => {
+        console.log('[LibraryBrowser] Received', cols.length, 'collections from Firestore');
+        setCollections(cols);
+      }));
     } else {
       // Fallback to localStorage
       setLibrary(getLibrary(artistId));
+      setCollections(getCollections(artistId));
     }
+
+    return () => unsubscribes.forEach(unsub => unsub());
   }, [db, artistId, refreshTrigger]);
 
   const loadData = () => {
-    // Still needed for collections and as fallback
+    // Still needed for local mutations that update localStorage
+    // Firestore subscriptions will auto-update, but we also refresh from localStorage
+    // for immediate UI feedback before Firestore snapshot arrives
     if (!db) {
       setLibrary(getLibrary(artistId));
     }
     setCollections(getCollections(artistId));
+  };
+
+  // After any collection mutation, sync the updated collection to Firestore
+  const syncCollection = (collectionId) => {
+    if (!db || !collectionId) return;
+    const cols = getCollections(artistId);
+    const col = cols.find(c => c.id === collectionId && c.type !== 'smart' && !c.id?.startsWith('smart_'));
+    if (col) {
+      saveCollectionToFirestore(db, artistId, col).catch(console.error);
+    }
   };
 
   // Filter and search - uses in-memory library state (from Firestore subscription)
@@ -242,6 +264,7 @@ const LibraryBrowser = ({
     if (dragIds.length > 0) {
       assignToBank(artistId, activeView, dragIds, bank);
       loadData();
+      syncCollection(activeView);
     }
     setDraggedItem(null);
     setDragOverBank(null);
@@ -560,6 +583,7 @@ const LibraryBrowser = ({
     if (action === 'removeFromFolder') {
       removeFromCollection(artistId, collectionId, mediaId);
       loadData();
+      syncCollection(collectionId);
     } else if (action === 'deleteEverywhere') {
       removeFromLibrary(artistId, mediaId);
       loadData();
@@ -571,7 +595,7 @@ const LibraryBrowser = ({
   const handleCreateCollection = () => {
     if (!newCollectionName.trim()) return;
 
-    createNewCollection(artistId, {
+    const newCol = createNewCollection(artistId, {
       name: newCollectionName.trim(),
       description: ''
     });
@@ -579,6 +603,10 @@ const LibraryBrowser = ({
     setNewCollectionName('');
     setShowNewCollectionModal(false);
     loadData();
+    // Sync new collection to Firestore — read it back from localStorage since createNewCollection returns void
+    const updatedCols = getCollections(artistId);
+    const created = updatedCols.find(c => c.name === newCollectionName.trim() && c.type !== 'smart');
+    if (created) syncCollection(created.id);
   };
 
   // Handle delete collection
@@ -592,6 +620,7 @@ const LibraryBrowser = ({
         setActiveView('library');
       }
       loadData();
+      deleteCollectionFromFirestore(db, artistId, collectionId).catch(console.error);
     }
   };
 
@@ -599,6 +628,7 @@ const LibraryBrowser = ({
   const handleAddToCollection = (mediaIds, collectionId) => {
     addToCollection(artistId, collectionId, mediaIds);
     loadData();
+    syncCollection(collectionId);
     setContextMenu(null);
   };
 
@@ -646,9 +676,11 @@ const LibraryBrowser = ({
     if (dragIds.length > 0) {
       addToCollection(artistId, collectionId, dragIds);
       loadData();
+      syncCollection(collectionId);
     } else if (draggedItem) {
       addToCollection(artistId, collectionId, draggedItem.id);
       loadData();
+      syncCollection(collectionId);
     }
     setDraggedItem(null);
   };
@@ -1030,6 +1062,7 @@ const LibraryBrowser = ({
     removeFromBank(artistId, activeView, mediaIds);
     setSelectedBankItems(prev => ({ ...prev, [bank]: new Set() }));
     loadData();
+    syncCollection(activeView);
   };
 
   // Filter collections to only show ones that have items matching current mode
@@ -1050,6 +1083,7 @@ const LibraryBrowser = ({
     setRenamingCollectionId(null);
     setRenameText('');
     loadData();
+    syncCollection(collectionId);
   };
 
   // Get user collections for context menu
@@ -1805,9 +1839,9 @@ const LibraryBrowser = ({
                         const col = collections.find(c => c.id === activeView);
                         return col?.textBank1 || [];
                       })()}
-                      onAdd={(text) => { addToTextBank(artistId, activeView, 1, text); loadData(); }}
-                      onRemove={(index) => { removeFromTextBank(artistId, activeView, 1, index); loadData(); }}
-                      onUpdate={(texts) => { updateTextBank(artistId, activeView, 1, texts); loadData(); }}
+                      onAdd={(text) => { addToTextBank(artistId, activeView, 1, text); loadData(); syncCollection(activeView); }}
+                      onRemove={(index) => { removeFromTextBank(artistId, activeView, 1, index); loadData(); syncCollection(activeView); }}
+                      onUpdate={(texts) => { updateTextBank(artistId, activeView, 1, texts); loadData(); syncCollection(activeView); }}
                     />
                     {/* Text Bank 2 */}
                     <TextBankPanel
@@ -1818,9 +1852,9 @@ const LibraryBrowser = ({
                         const col = collections.find(c => c.id === activeView);
                         return col?.textBank2 || [];
                       })()}
-                      onAdd={(text) => { addToTextBank(artistId, activeView, 2, text); loadData(); }}
-                      onRemove={(index) => { removeFromTextBank(artistId, activeView, 2, index); loadData(); }}
-                      onUpdate={(texts) => { updateTextBank(artistId, activeView, 2, texts); loadData(); }}
+                      onAdd={(text) => { addToTextBank(artistId, activeView, 2, text); loadData(); syncCollection(activeView); }}
+                      onRemove={(index) => { removeFromTextBank(artistId, activeView, 2, index); loadData(); syncCollection(activeView); }}
+                      onUpdate={(texts) => { updateTextBank(artistId, activeView, 2, texts); loadData(); syncCollection(activeView); }}
                     />
                     {/* Template Editor Button */}
                     <div style={{ padding: '8px', flexShrink: 0 }}>
@@ -1973,6 +2007,7 @@ const LibraryBrowser = ({
                     onClick={() => {
                       assignToBank(artistId, collection.id, contextMenu.media.id, 'A');
                       loadData();
+                      syncCollection(collection.id);
                       setContextMenu(null);
                     }}
                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(99,102,241,0.1)'}
@@ -1991,6 +2026,7 @@ const LibraryBrowser = ({
                     onClick={() => {
                       assignToBank(artistId, collection.id, contextMenu.media.id, 'B');
                       loadData();
+                      syncCollection(collection.id);
                       setContextMenu(null);
                     }}
                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(34,197,94,0.1)'}
@@ -2019,6 +2055,7 @@ const LibraryBrowser = ({
               onClick={() => {
                 removeFromCollection(artistId, activeView, contextMenu.media.id);
                 loadData();
+                syncCollection(activeView);
                 setContextMenu(null);
               }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(245,158,11,0.1)'}
@@ -2258,6 +2295,7 @@ const LibraryBrowser = ({
                 onClick={() => {
                   saveTextTemplates(artistId, activeView, [editingTemplate]);
                   loadData();
+                  syncCollection(activeView);
                   setShowTemplateEditor(false);
                 }}
                 style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: '#6366f1', color: '#fff', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}

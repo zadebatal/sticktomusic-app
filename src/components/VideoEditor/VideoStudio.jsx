@@ -18,6 +18,7 @@ import {
   completeOnboarding,
   getLibrary,
   getCreatedContent,
+  saveCreatedContent,
   addCreatedVideo,
   updateCreatedVideo,
   deleteCreatedVideo,
@@ -315,34 +316,12 @@ const VideoStudio = ({
   useEffect(() => {
     if (firestoreContentLoaded || !db || !currentArtistId) return;
     loadCreatedContentAsync(db, currentArtistId).then(content => {
+      // loadCreatedContentAsync already saves Firestore data to localStorage
+      // Just bump version to trigger useMemo recompute so UI shows the loaded data
       if (content && (content.slideshows?.length > 0 || content.videos?.length > 0)) {
-        // Merge Firestore data with any localStorage data
-        const localContent = getCreatedContent(currentArtistId);
-        const localSlideshowIds = new Set(localContent.slideshows.map(s => s.id));
-        const localVideoIds = new Set(localContent.videos.map(v => v.id));
-        let merged = false;
-
-        // Add any Firestore slideshows not in localStorage
-        content.slideshows.forEach(ss => {
-          if (!localSlideshowIds.has(ss.id)) {
-            localContent.slideshows.push(ss);
-            merged = true;
-          }
-        });
-        content.videos.forEach(v => {
-          if (!localVideoIds.has(v.id)) {
-            localContent.videos.push(v);
-            merged = true;
-          }
-        });
-
-        if (merged) {
-          // Save merged content to localStorage
-          const { saveCreatedContent } = require('../../services/libraryService');
-          saveCreatedContent(currentArtistId, localContent);
-          setCreatedContentVersion(v => v + 1);
-        }
+        console.log('[VideoStudio] Loaded created content from Firestore:', content.slideshows?.length, 'slideshows,', content.videos?.length, 'videos');
       }
+      setCreatedContentVersion(v => v + 1);
       setFirestoreContentLoaded(true);
     }).catch(err => {
       console.warn('[VideoStudio] Failed to load created content from Firestore:', err);

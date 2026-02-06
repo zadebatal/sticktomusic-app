@@ -1627,6 +1627,95 @@ export const getCollectionsAsync = async (db, artistId) => {
 };
 
 /**
+ * Subscribe to collections in real-time
+ * @param {Object} db - Firestore instance
+ * @param {string} artistId
+ * @param {Function} callback - Called with updated collections array (including smart collections)
+ * @returns {Function} Unsubscribe function
+ */
+export const subscribeToCollections = (db, artistId, callback) => {
+  if (!db || !artistId) {
+    callback(getCollections(artistId));
+    return () => {};
+  }
+
+  const collectionsRef = collection(db, 'artists', artistId, 'library', 'data', 'collections');
+
+  return onSnapshot(
+    collectionsRef,
+    (snapshot) => {
+      const firestoreCollections = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      if (firestoreCollections.length > 0) {
+        // Firestore has data — use it as the source of truth
+        // Save to localStorage for offline access
+        try {
+          localStorage.setItem(getCollectionsKey(artistId), JSON.stringify(firestoreCollections));
+        } catch (e) {}
+
+        const smartCollections = createSmartCollections();
+        callback([...smartCollections, ...firestoreCollections]);
+      } else {
+        // Firestore empty — check localStorage and upload if data exists
+        const localCollections = getCollections(artistId);
+        const userCollections = localCollections.filter(c => c.type !== 'smart' && !c.id?.startsWith('smart_'));
+
+        if (userCollections.length > 0) {
+          // Upload local collections to Firestore
+          userCollections.forEach(col => {
+            const docRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', col.id);
+            setDoc(docRef, { ...col, updatedAt: serverTimestamp() }).catch(console.error);
+          });
+        }
+
+        callback(localCollections);
+      }
+    },
+    (error) => {
+      console.error('[Collections] Firestore subscription error:', error);
+      callback(getCollections(artistId));
+    }
+  );
+};
+
+/**
+ * Save collection to Firestore
+ * @param {Object} db - Firestore instance
+ * @param {string} artistId
+ * @param {Object} collectionData
+ * @returns {Promise<void>}
+ */
+export const saveCollectionToFirestore = async (db, artistId, collectionData) => {
+  if (!db || !artistId || !collectionData?.id) return;
+  try {
+    const docRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', collectionData.id);
+    await setDoc(docRef, { ...collectionData, updatedAt: serverTimestamp() });
+  } catch (error) {
+    console.error('[Collections] Failed to save to Firestore:', error);
+  }
+};
+
+/**
+ * Delete collection from Firestore
+ * @param {Object} db - Firestore instance
+ * @param {string} artistId
+ * @param {string} collectionId
+ * @returns {Promise<void>}
+ */
+export const deleteCollectionFromFirestore = async (db, artistId, collectionId) => {
+  if (!db || !artistId || !collectionId) return;
+  try {
+    const docRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', collectionId);
+    await deleteDoc(docRef);
+  } catch (error) {
+    console.error('[Collections] Failed to delete from Firestore:', error);
+  }
+};
+
+/**
  * Create collection (Firestore + localStorage)
  * @param {Object} db - Firestore instance
  * @param {string} artistId
@@ -1877,6 +1966,9 @@ export default {
 
   // Collections (Firestore async)
   getCollectionsAsync,
+  subscribeToCollections,
+  saveCollectionToFirestore,
+  deleteCollectionFromFirestore,
   createNewCollectionAsync,
 
   // Created Content

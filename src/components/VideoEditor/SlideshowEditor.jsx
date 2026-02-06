@@ -83,6 +83,12 @@ const SlideshowEditor = ({
   // Selected default template for new text overlays
   const [selectedDefaultTemplate, setSelectedDefaultTemplate] = useState(null);
 
+  // Batch generate state
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchCount, setBatchCount] = useState(10);
+  const [batchSlidesPerShow, setBatchSlidesPerShow] = useState(5);
+  const [isBatchGenerating, setIsBatchGenerating] = useState(false);
+
   // Save templates to localStorage when they change
   useEffect(() => {
     localStorage.setItem('slideshowTextTemplates', JSON.stringify(textTemplates));
@@ -944,6 +950,132 @@ const SlideshowEditor = ({
     onClose?.();
   }, [name, aspectRatio, slides, selectedAudio, existingSlideshow, onSave, onClose]);
 
+  // Batch generate slideshows
+  const handleBatchGenerate = useCallback(async () => {
+    setIsBatchGenerating(true);
+
+    try {
+      // Get images from all available sources
+      // For Image A: use category imagesA or collection bankA
+      // For Image B: use category imagesB or collection bankB
+      const imgA = category?.imagesA || [];
+      const imgB = category?.imagesB || [];
+
+      // Also check collection banks
+      let collBankA = [];
+      let collBankB = [];
+      if (collections.length > 0) {
+        for (const col of collections) {
+          if (col.bankA?.length > 0) {
+            const bankAMedia = libraryImages.filter(img => col.bankA.includes(img.id));
+            collBankA = [...collBankA, ...bankAMedia];
+          }
+          if (col.bankB?.length > 0) {
+            const bankBMedia = libraryImages.filter(img => col.bankB.includes(img.id));
+            collBankB = [...collBankB, ...bankBMedia];
+          }
+        }
+      }
+
+      const allImgA = [...imgA, ...collBankA];
+      const allImgB = [...imgB, ...collBankB];
+
+      if (allImgA.length === 0 && allImgB.length === 0) {
+        alert('No images in banks. Add images to Bank A and Bank B first.');
+        return;
+      }
+
+      // Get text banks from collections
+      let textBank1 = [];
+      let textBank2 = [];
+      for (const col of collections) {
+        if (col.textBank1?.length > 0) textBank1 = [...textBank1, ...col.textBank1];
+        if (col.textBank2?.length > 0) textBank2 = [...textBank2, ...col.textBank2];
+      }
+
+      // Get the selected template for text styling
+      const template = selectedDefaultTemplate || null;
+
+      // Generate batch slideshows
+      const generated = [];
+      for (let i = 0; i < batchCount; i++) {
+        const slidesList = [];
+        for (let s = 0; s < batchSlidesPerShow; s++) {
+          // Alternate between bank A and B images
+          const useA = s % 2 === 0;
+          const bank = useA ? allImgA : allImgB;
+          const imgIndex = Math.floor(Math.random() * bank.length);
+          const img = bank.length > 0 ? bank[imgIndex] : null;
+
+          const slide = {
+            id: `slide_${Date.now()}_${i}_${s}`,
+            backgroundImage: img?.url || img?.src || null,
+            textOverlays: []
+          };
+
+          // Add text from text banks if available
+          if (textBank1.length > 0 || textBank2.length > 0) {
+            if (textBank1.length > 0) {
+              const textIdx = Math.floor(Math.random() * textBank1.length);
+              slide.textOverlays.push({
+                id: `text_${Date.now()}_${i}_${s}_1`,
+                text: textBank1[textIdx],
+                position: template?.text1Style?.position || { x: 50, y: 30 },
+                fontFamily: template?.text1Style?.fontFamily || 'Inter, sans-serif',
+                fontSize: template?.text1Style?.fontSize || 48,
+                fontWeight: template?.text1Style?.fontWeight || '700',
+                color: template?.text1Style?.color || '#ffffff',
+                outline: template?.text1Style?.outline ?? true,
+                outlineColor: template?.text1Style?.outlineColor || 'rgba(0,0,0,0.5)'
+              });
+            }
+            if (textBank2.length > 0) {
+              const textIdx = Math.floor(Math.random() * textBank2.length);
+              slide.textOverlays.push({
+                id: `text_${Date.now()}_${i}_${s}_2`,
+                text: textBank2[textIdx],
+                position: template?.text2Style?.position || { x: 50, y: 70 },
+                fontFamily: template?.text2Style?.fontFamily || 'Inter, sans-serif',
+                fontSize: template?.text2Style?.fontSize || 36,
+                fontWeight: template?.text2Style?.fontWeight || '400',
+                color: template?.text2Style?.color || '#ffffff',
+                outline: template?.text2Style?.outline ?? true,
+                outlineColor: template?.text2Style?.outlineColor || 'rgba(0,0,0,0.5)'
+              });
+            }
+          }
+
+          slidesList.push(slide);
+        }
+
+        const slideshow = {
+          id: `slideshow_${Date.now()}_${i}`,
+          name: `Batch ${i + 1}`,
+          aspectRatio,
+          slides: slidesList,
+          audio: selectedAudio,
+          status: 'draft',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        generated.push(slideshow);
+      }
+
+      // Save each generated slideshow
+      for (const ss of generated) {
+        onSave?.(ss);
+        // Small delay to avoid ID collisions
+        await new Promise(r => setTimeout(r, 10));
+      }
+
+      setShowBatchModal(false);
+      alert(`Generated ${generated.length} slideshows!`);
+    } finally {
+      setIsBatchGenerating(false);
+    }
+  }, [batchCount, batchSlidesPerShow, category, collections, libraryImages, selectedDefaultTemplate, aspectRatio, selectedAudio, onSave]);
+
   // Export slideshow as carousel images
   const handleExport = useCallback(async () => {
     // Check if there are slides with backgrounds
@@ -1155,6 +1287,26 @@ const SlideshowEditor = ({
             ...styles.headerRight,
             ...(isMobile ? { order: 2, gap: '8px' } : {})
           }}>
+            {!isMobile && (
+              <button
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: 'rgba(168, 85, 247, 0.2)',
+                  border: '1px solid rgba(168, 85, 247, 0.4)',
+                  borderRadius: '8px',
+                  color: '#c084fc',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                onClick={() => setShowBatchModal(true)}
+              >
+                ⚡ Batch Generate
+              </button>
+            )}
             {!isMobile && (
               <button style={styles.saveButton} onClick={handleSave}>
                 Save Draft
@@ -2524,6 +2676,232 @@ const SlideshowEditor = ({
               setAudioToTrim(null);
             }}
           />
+        )}
+
+        {/* Batch Generate Modal */}
+        {showBatchModal && (
+          <div style={styles.overlay}>
+            <div style={{
+              ...styles.modal,
+              maxWidth: '500px',
+              width: '90vw'
+            }}>
+              <div style={styles.header}>
+                <div style={styles.headerLeft}>
+                  <h2 style={{ margin: '0', color: '#fff', fontSize: '18px', fontWeight: '600' }}>
+                    Batch Generate Slideshows
+                  </h2>
+                </div>
+                <button
+                  style={{
+                    ...styles.closeButton,
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#9ca3af'
+                  }}
+                  onClick={() => setShowBatchModal(false)}
+                >
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+
+              <div style={{
+                flex: 1,
+                overflowY: 'auto',
+                padding: '24px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '24px'
+              }}>
+                {/* Summary Section */}
+                <div style={{
+                  backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                  border: '1px solid rgba(99, 102, 241, 0.3)',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  color: '#c7d2fe'
+                }}>
+                  <div style={{ fontSize: '13px', lineHeight: '1.6' }}>
+                    <div>
+                      <strong>Bank Status:</strong>
+                    </div>
+                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#a5b4fc' }}>
+                      Images A: {(category?.imagesA || []).length + (collections.reduce((sum, col) => sum + (col.bankA?.length || 0), 0))} images
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#a5b4fc' }}>
+                      Images B: {(category?.imagesB || []).length + (collections.reduce((sum, col) => sum + (col.bankB?.length || 0), 0))} images
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#a5b4fc' }}>
+                      Text Bank 1: {collections.reduce((sum, col) => sum + (col.textBank1?.length || 0), 0)} items
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#a5b4fc' }}>
+                      Text Bank 2: {collections.reduce((sum, col) => sum + (col.textBank2?.length || 0), 0)} items
+                    </div>
+                    {selectedDefaultTemplate && (
+                      <div style={{ marginTop: '8px', fontSize: '12px', color: '#c084fc' }}>
+                        Template: <strong>{selectedDefaultTemplate.name}</strong>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Number of Slideshows */}
+                <div>
+                  <label style={{
+                    display: 'block',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    color: '#d1d5db',
+                    marginBottom: '8px'
+                  }}>
+                    Number of Slideshows
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {[10, 25, 50].map(count => (
+                      <button
+                        key={count}
+                        onClick={() => setBatchCount(count)}
+                        style={{
+                          flex: 1,
+                          padding: '10px 12px',
+                          backgroundColor: batchCount === count ? '#6366f1' : 'rgba(255,255,255,0.1)',
+                          border: '1px solid ' + (batchCount === count ? '#6366f1' : 'rgba(255,255,255,0.2)'),
+                          borderRadius: '8px',
+                          color: batchCount === count ? '#fff' : '#9ca3af',
+                          fontSize: '13px',
+                          fontWeight: '500',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        {count}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="number"
+                    min="1"
+                    max="500"
+                    value={batchCount}
+                    onChange={(e) => setBatchCount(Math.max(1, parseInt(e.target.value) || 10))}
+                    style={{
+                      width: '100%',
+                      marginTop: '8px',
+                      padding: '8px 12px',
+                      backgroundColor: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '6px',
+                      color: '#fff',
+                      fontSize: '13px',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+
+                {/* Slides Per Slideshow */}
+                <div>
+                  <label style={{
+                    display: 'block',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    color: '#d1d5db',
+                    marginBottom: '8px'
+                  }}>
+                    Slides Per Slideshow
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="30"
+                    value={batchSlidesPerShow}
+                    onChange={(e) => setBatchSlidesPerShow(Math.max(1, parseInt(e.target.value) || 5))}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      backgroundColor: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '6px',
+                      color: '#fff',
+                      fontSize: '13px',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+
+                {/* Warning Message */}
+                <div style={{
+                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  fontSize: '13px',
+                  color: '#fca5a5'
+                }}>
+                  ⚠️ Will generate <strong>{batchCount}</strong> slideshows with <strong>{batchSlidesPerShow}</strong> slides each. This may take a few seconds.
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{
+                display: 'flex',
+                gap: '12px',
+                padding: '16px 24px',
+                borderTop: '1px solid rgba(255,255,255,0.1)',
+                backgroundColor: '#1a1a2e'
+              }}>
+                <button
+                  onClick={() => setShowBatchModal(false)}
+                  style={{
+                    flex: 1,
+                    padding: '10px 16px',
+                    backgroundColor: 'rgba(255,255,255,0.1)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    borderRadius: '8px',
+                    color: '#d1d5db',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    cursor: 'pointer'
+                  }}
+                  disabled={isBatchGenerating}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleBatchGenerate}
+                  disabled={isBatchGenerating || ((category?.imagesA || []).length === 0 && (category?.imagesB || []).length === 0)}
+                  style={{
+                    flex: 1,
+                    padding: '10px 16px',
+                    backgroundColor: isBatchGenerating ? '#6366f1' : '#6366f1',
+                    border: '1px solid #6366f1',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    cursor: isBatchGenerating ? 'not-allowed' : 'pointer',
+                    opacity: isBatchGenerating ? 0.7 : 1
+                  }}
+                >
+                  {isBatchGenerating ? (
+                    <>
+                      <span style={{
+                        display: 'inline-block',
+                        animation: 'spin 1s linear infinite',
+                        marginRight: '6px'
+                      }}>⟳</span>
+                      Generating...
+                    </>
+                  ) : (
+                    '⚡ Generate'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
