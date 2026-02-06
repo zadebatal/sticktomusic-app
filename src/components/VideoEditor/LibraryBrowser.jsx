@@ -1767,7 +1767,7 @@ const LibraryBrowser = ({
                         )}
                       </div>
                       <div style={{
-                        flex: 1, overflowY: 'auto', padding: '8px', minHeight: 0,
+                        flex: 1, overflowY: 'auto', padding: '16px', minHeight: 0,
                         display: 'flex', flexWrap: 'wrap',
                         gap: '8px', alignContent: 'start'
                       }}>
@@ -1852,7 +1852,7 @@ const LibraryBrowser = ({
                         )}
                       </div>
                       <div style={{
-                        flex: 1, overflowY: 'auto', padding: '8px', minHeight: 0,
+                        flex: 1, overflowY: 'auto', padding: '16px', minHeight: 0,
                         display: 'flex', flexWrap: 'wrap',
                         gap: '8px', alignContent: 'start'
                       }}>
