@@ -7457,4 +7457,3 @@ const StickToMusic = () => {
 };
 
 export default StickToMusic;
-// Trigger Vercel rebuild with CRA settings - Fri Feb  6 14:22:49 UTC 2026
