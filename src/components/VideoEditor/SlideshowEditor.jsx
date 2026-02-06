@@ -1621,7 +1621,7 @@ const SlideshowEditor = ({
                 />
               ) : activeBank === 'audio' ? (
                 /* Audio Bank Panel */
-                audioTracks.length === 0 ? (
+                (!selectedAudio && audioTracks.length === 0) ? (
                   <div style={styles.emptyBank}>
                     <p>No audio tracks</p>
                     <p style={styles.emptySubtext}>Upload audio to get started</p>
@@ -1675,7 +1675,7 @@ const SlideshowEditor = ({
                         </div>
                       </div>
                     )}
-                    {/* Audio Track List */}
+                    {/* Audio Track List from bank */}
                     {audioTracks.map(audio => (
                       <div
                         key={audio.id}
@@ -1697,6 +1697,21 @@ const SlideshowEditor = ({
                         </button>
                       </div>
                     ))}
+                    {/* Add more audio button when audio already exists */}
+                    <button
+                      style={{
+                        ...styles.uploadAudioBtn,
+                        marginTop: '8px',
+                        width: '100%',
+                        opacity: 0.7
+                      }}
+                      onClick={() => slideshowAudioInputRef.current?.click()}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 5v14M5 12h14"/>
+                      </svg>
+                      Replace Audio
+                    </button>
                   </div>
                 )
               ) : (() => {

@@ -1518,7 +1518,7 @@ const StudioHome = ({
                     }}
                     onClick={() => handleLaunchSlideshowEditor()}
                   >
-                    Create Slideshow
+                    Create Slideshow (up to 50)
                   </button>
                 </div>
               </div>
