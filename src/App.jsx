@@ -705,8 +705,9 @@ const StickToMusic = () => {
       // Auto-assign artist to the operator (either selected or self)
       if (assignToOperatorId) {
         const operatorUser = allowedUsers.find(u => u.id === assignToOperatorId);
-        if (operatorUser) {
-          const operatorRef = doc(db, 'allowedUsers', operatorUser.id);
+        if (operatorUser && operatorUser.email) {
+          // Use email as doc ID — matches Firestore security rules (allowedUsers/{email})
+          const operatorRef = doc(db, 'allowedUsers', operatorUser.email.toLowerCase());
           const currentAssigned = operatorUser.assignedArtistIds || [];
           await updateDoc(operatorRef, {
             assignedArtistIds: [...currentAssigned, newArtist.id]
@@ -5829,7 +5830,8 @@ const StickToMusic = () => {
                                     onClick={async () => {
                                       if (window.confirm(`Remove ${u.name} from allowed users?`)) {
                                         try {
-                                          const userRef = doc(db, 'allowedUsers', u.id);
+                                          // Use email as doc ID — matches Firestore security rules
+                                          const userRef = doc(db, 'allowedUsers', u.email?.toLowerCase() || u.id);
                                           await updateDoc(userRef, { status: 'inactive' });
                                           showToast(`${u.name} deactivated`, 'success');
                                         } catch (error) {

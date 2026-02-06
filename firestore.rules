@@ -75,7 +75,9 @@ service cloud.firestore {
     // - Any authenticated user can read (to check their own status)
     match /allowedUsers/{userEmail} {
       allow read: if isAuthenticated();
-      allow write: if isConductor();
+      allow create, delete: if isConductor();
+      // Operators can update their own doc (e.g. assignedArtistIds), conductors can update any
+      allow update: if isConductor() || (isOperatorOrAbove() && request.auth.token.email == userEmail);
     }
 
     // Applications collection (artist signup applications)
