@@ -96,6 +96,12 @@ const SlideshowEditor = ({
   // Audio upload ref for slideshow
   const slideshowAudioInputRef = useRef(null);
 
+  // Image drag/resize state
+  const [isDraggingImage, setIsDraggingImage] = useState(false);
+  const [isResizingImage, setIsResizingImage] = useState(false);
+  const [imgDragStart, setImgDragStart] = useState({ x: 0, y: 0 });
+  const [imgTransformStart, setImgTransformStart] = useState({ scale: 1, offsetX: 0, offsetY: 0 });
+
   // Export state
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
@@ -201,7 +207,8 @@ const SlideshowEditor = ({
         sourceBank: selectedSource,
         sourceImageId: img.id,
         textOverlays: [],
-        duration: 3
+        duration: 3,
+        imageTransform: { scale: 1, offsetX: 0, offsetY: 0 }
       };
     }).filter(Boolean);
     if (newSlides.length > 0) {
@@ -227,7 +234,8 @@ const SlideshowEditor = ({
           sourceBank: 'library',
           sourceImageId: img.id,
           textOverlays: [],
-          duration: 3
+          duration: 3,
+          imageTransform: { scale: 1, offsetX: 0, offsetY: 0 }
         }));
         setSlides(initSlides);
       } else if (batchMode && (imagesA.length > 0 || imagesB.length > 0)) {
@@ -249,7 +257,8 @@ const SlideshowEditor = ({
               sourceBank: randomImage.sourceBank,
               sourceImageId: randomImage.id,
               textOverlays: [],
-              duration: 3
+              duration: 3,
+              imageTransform: { scale: 1, offsetX: 0, offsetY: 0 }
             });
           }
           setSlides(batchSlides);
@@ -293,7 +302,8 @@ const SlideshowEditor = ({
               sourceBank: 'imageA',
               sourceImageId: imgA.id,
               textOverlays: [],
-              duration: 3
+              duration: 3,
+              imageTransform: { scale: 1, offsetX: 0, offsetY: 0 }
             },
             {
               id: `slide_${Date.now()}_1`,
@@ -303,7 +313,8 @@ const SlideshowEditor = ({
               sourceBank: 'imageB',
               sourceImageId: imgB.id,
               textOverlays: [],
-              duration: 3
+              duration: 3,
+              imageTransform: { scale: 1, offsetX: 0, offsetY: 0 }
             }
           ]);
           // Set source to this collection's Bank A by default
@@ -324,7 +335,8 @@ const SlideshowEditor = ({
       backgroundImage: null,
       backgroundVideo: null,
       textOverlays: [],
-      duration: 3 // Default 3 seconds per slide for video export
+      duration: 3, // Default 3 seconds per slide for video export
+      imageTransform: { scale: 1, offsetX: 0, offsetY: 0 }
     };
     setSlides(prev => [...prev, newSlide]);
     setSelectedSlideIndex(slides.length);
@@ -376,8 +388,18 @@ const SlideshowEditor = ({
             backgroundImage: imageUrl,
             thumbnail: thumbnail || imageUrl,
             sourceBank: sourceBank || slide.sourceBank,
-            sourceImageId: sourceImageId || slide.sourceImageId
+            sourceImageId: sourceImageId || slide.sourceImageId,
+            imageTransform: { scale: 1, offsetX: 0, offsetY: 0 }
           }
+        : slide
+    ));
+  }, [selectedSlideIndex]);
+
+  // Update image transform (scale + position) for current slide
+  const updateSlideTransform = useCallback((transform) => {
+    setSlides(prev => prev.map((slide, i) =>
+      i === selectedSlideIndex
+        ? { ...slide, imageTransform: transform }
         : slide
     ));
   }, [selectedSlideIndex]);
@@ -550,6 +572,63 @@ const SlideshowEditor = ({
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Image drag handlers for pan/move
+  const handleImageMouseDown = useCallback((e) => {
+    if (e.button !== 0) return; // Left click only
+    e.preventDefault();
+    e.stopPropagation();
+    const transform = currentSlide?.imageTransform || { scale: 1, offsetX: 0, offsetY: 0 };
+    setIsDraggingImage(true);
+    setImgDragStart({ x: e.clientX, y: e.clientY });
+    setImgTransformStart({ ...transform });
+  }, [currentSlide]);
+
+  const handleResizeMouseDown = useCallback((e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const transform = currentSlide?.imageTransform || { scale: 1, offsetX: 0, offsetY: 0 };
+    setIsResizingImage(true);
+    setImgDragStart({ x: e.clientX, y: e.clientY });
+    setImgTransformStart({ ...transform });
+  }, [currentSlide]);
+
+  useEffect(() => {
+    if (!isDraggingImage && !isResizingImage) return;
+
+    const handleMouseMove = (e) => {
+      if (isDraggingImage) {
+        const dx = e.clientX - imgDragStart.x;
+        const dy = e.clientY - imgDragStart.y;
+        updateSlideTransform({
+          ...imgTransformStart,
+          offsetX: imgTransformStart.offsetX + dx,
+          offsetY: imgTransformStart.offsetY + dy
+        });
+      } else if (isResizingImage) {
+        const dy = imgDragStart.y - e.clientY; // drag up = scale up
+        const scaleDelta = dy / 200; // sensitivity
+        const newScale = Math.max(0.2, Math.min(5, imgTransformStart.scale + scaleDelta));
+        updateSlideTransform({
+          ...imgTransformStart,
+          scale: newScale
+        });
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingImage(false);
+      setIsResizingImage(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingImage, isResizingImage, imgDragStart, imgTransformStart, updateSlideTransform]);
 
   // Handle drag over
   const handleDragOver = useCallback((e) => {
@@ -1420,14 +1499,51 @@ const SlideshowEditor = ({
                   aspectRatio: '9/16'  // Always fixed 9:16 preview
                 }}
               >
-                {/* Background Image - Click to open text editor */}
+                {/* Background Image - Draggable and resizable */}
                 {currentSlide?.backgroundImage ? (
-                  <img
-                    src={currentSlide.backgroundImage}
-                    alt="Slide background"
-                    style={styles.canvasBackground}
-                    onClick={handleSlideClick}
-                  />
+                  <>
+                    <img
+                      src={currentSlide.backgroundImage}
+                      alt="Slide background"
+                      style={{
+                        position: 'absolute',
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        transform: `scale(${(currentSlide.imageTransform?.scale || 1)}) translate(${(currentSlide.imageTransform?.offsetX || 0)}px, ${(currentSlide.imageTransform?.offsetY || 0)}px)`,
+                        transformOrigin: 'center center',
+                        cursor: isDraggingImage ? 'grabbing' : 'grab',
+                        userSelect: 'none',
+                        pointerEvents: 'auto'
+                      }}
+                      onMouseDown={handleImageMouseDown}
+                      draggable={false}
+                    />
+                    {/* Resize handle - bottom right corner */}
+                    <div
+                      onMouseDown={handleResizeMouseDown}
+                      style={{
+                        position: 'absolute',
+                        bottom: 4,
+                        right: 4,
+                        width: 20,
+                        height: 20,
+                        cursor: 'nwse-resize',
+                        zIndex: 10,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: 4,
+                        backgroundColor: 'rgba(99, 102, 241, 0.8)',
+                        border: '1px solid rgba(255,255,255,0.5)'
+                      }}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="white">
+                        <path d="M9 1v8H1" fill="none" stroke="white" strokeWidth="1.5"/>
+                        <path d="M6 4v5H1" fill="none" stroke="white" strokeWidth="1.5" opacity="0.5"/>
+                      </svg>
+                    </div>
+                  </>
                 ) : (
                   <div style={styles.canvasPlaceholder}>
                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">

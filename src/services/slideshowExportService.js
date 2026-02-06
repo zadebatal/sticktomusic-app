@@ -86,6 +86,7 @@ const renderSlideToCanvas = async (slide, dimensions) => {
   if (slide.backgroundImage) {
     try {
       const img = await loadImage(slide.backgroundImage);
+      const transform = slide.imageTransform || { scale: 1, offsetX: 0, offsetY: 0 };
 
       // Calculate scaling to cover the canvas (similar to object-fit: cover)
       const imgAspect = img.width / img.height;
@@ -94,20 +95,31 @@ const renderSlideToCanvas = async (slide, dimensions) => {
       let drawWidth, drawHeight, offsetX, offsetY;
 
       if (imgAspect > canvasAspect) {
-        // Image is wider - fit height, crop sides
         drawHeight = dimensions.height;
         drawWidth = drawHeight * imgAspect;
         offsetX = (dimensions.width - drawWidth) / 2;
         offsetY = 0;
       } else {
-        // Image is taller - fit width, crop top/bottom
         drawWidth = dimensions.width;
         drawHeight = drawWidth / imgAspect;
         offsetX = 0;
         offsetY = (dimensions.height - drawHeight) / 2;
       }
 
+      // Apply user transform (scale + pan) — scale from center, then offset
+      // The preview canvas is 270x480 (previewScale=0.25), export is 1080x1920
+      // offsetX/Y are in preview pixels, scale to export dimensions
+      const exportScale = dimensions.width / 270; // 1080/270 = 4
+      const userScale = transform.scale;
+      const userOffsetX = (transform.offsetX || 0) * exportScale;
+      const userOffsetY = (transform.offsetY || 0) * exportScale;
+
+      ctx.save();
+      ctx.translate(dimensions.width / 2, dimensions.height / 2);
+      ctx.scale(userScale, userScale);
+      ctx.translate(-dimensions.width / 2 + userOffsetX, -dimensions.height / 2 + userOffsetY);
       ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+      ctx.restore();
     } catch (err) {
       console.warn('Failed to draw background image:', err);
     }
