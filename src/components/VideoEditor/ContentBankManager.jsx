@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
+import { useToast, ConfirmDialog } from '../ui';
 
 /**
  * Content Bank Manager - Manages artist-specific content libraries
@@ -16,6 +17,8 @@ const ContentBankManager = ({
   onToggleNeverUse,
   onSelectClipForPreview
 }) => {
+  const { error: toastError } = useToast();
+  const [deleteClipConfirm, setDeleteClipConfirm] = useState({ isOpen: false, clipId: null });
   const [isCreating, setIsCreating] = useState(false);
   const [newBankName, setNewBankName] = useState('');
   const [dragOver, setDragOver] = useState(false);
@@ -36,7 +39,7 @@ const ContentBankManager = ({
     setDragOver(false);
 
     if (!selectedBank) {
-      alert('Please select a content bank first');
+      toastError('Please select a content bank first');
       return;
     }
 
@@ -332,9 +335,7 @@ const ContentBankManager = ({
                   <button
                     style={styles.clipActionDelete}
                     onClick={() => {
-                      if (window.confirm('Delete this clip?')) {
-                        onDeleteClip?.(clip.id);
-                      }
+                      setDeleteClipConfirm({ isOpen: true, clipId: clip.id });
                     }}
                     title="Delete"
                   >
@@ -352,6 +353,20 @@ const ContentBankManager = ({
           )}
         </div>
       )}
+
+      {/* H-01: Confirm dialog for clip deletion */}
+      <ConfirmDialog
+        isOpen={deleteClipConfirm.isOpen}
+        title="Delete this clip?"
+        message="This will permanently remove the clip from this bank."
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        onConfirm={() => {
+          onDeleteClip?.(deleteClipConfirm.clipId);
+          setDeleteClipConfirm({ isOpen: false, clipId: null });
+        }}
+        onCancel={() => setDeleteClipConfirm({ isOpen: false, clipId: null })}
+      />
     </div>
   );
 };

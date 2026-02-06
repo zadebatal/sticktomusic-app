@@ -116,6 +116,7 @@ const AudioClipSelector = ({
       audioContext.close();
     } catch (err) {
       console.error('Waveform generation failed:', err);
+      try { audioContext.close(); } catch (e) { /* H-06: ensure cleanup even on error */ }
       setWaveformData(Array(300).fill(0).map(() => Math.random() * 0.5 + 0.2));
     }
   };

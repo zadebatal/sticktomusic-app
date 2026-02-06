@@ -16,6 +16,7 @@ import LibraryBrowser from './LibraryBrowser';
 import CollectionPicker from './CollectionPicker';
 import AudioClipSelector from './AudioClipSelector';
 import LyricBank from './LyricBank';
+import { useToast, ConfirmDialog } from '../ui';
 import {
   getLibrary,
   getCollections,
@@ -78,8 +79,24 @@ const StudioHome = ({
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [libraryRefreshTrigger, setLibraryRefreshTrigger] = useState(0);
 
+  // Toast for non-blocking feedback (H-02: replaces alert())
+  const { success: toastSuccess, error: toastError } = useToast();
+
+  // Confirm dialog state (H-01: replaces window.confirm())
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null, confirmVariant: 'default' });
+
   // Upload cancellation
   const cancelFunctionsRef = useRef([]);
+
+  // H-07: Track blob URLs for cleanup on unmount
+  const blobUrlsRef = useRef([]);
+  useEffect(() => {
+    return () => {
+      blobUrlsRef.current.forEach(url => {
+        try { URL.revokeObjectURL(url); } catch (e) { /* ignore */ }
+      });
+    };
+  }, []);
 
   // Audio clip selector
   const [pendingAudio, setPendingAudio] = useState(null);
@@ -93,29 +110,45 @@ const StudioHome = ({
   });
 
   // Delete selected media from library
-  const handleDeleteSelected = useCallback(async (mediaType) => {
+  const handleDeleteSelected = useCallback((mediaType) => {
     const items = mediaType === 'videos' ? selectedMedia.videos : selectedMedia.images;
     if (items.length === 0) return;
     const label = mediaType === 'videos' ? 'clip' : 'image';
-    if (!window.confirm(`Delete ${items.length} ${label}${items.length > 1 ? 's' : ''} from your library? This cannot be undone.`)) return;
-    for (const item of items) {
-      await removeFromLibraryAsync(db, artistId, item.id);
-    }
-    setSelectedMedia(prev => ({ ...prev, [mediaType]: [] }));
-    setLibraryRefreshTrigger(t => t + 1);
+    setConfirmDialog({
+      isOpen: true,
+      title: `Delete ${items.length} ${label}${items.length > 1 ? 's' : ''}?`,
+      message: 'This will permanently remove them from your library. This cannot be undone.',
+      confirmVariant: 'destructive',
+      onConfirm: async () => {
+        for (const item of items) {
+          await removeFromLibraryAsync(db, artistId, item.id);
+        }
+        setSelectedMedia(prev => ({ ...prev, [mediaType]: [] }));
+        setLibraryRefreshTrigger(t => t + 1);
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+      }
+    });
   }, [selectedMedia, db, artistId]);
 
-  const handleDeleteAll = useCallback(async (mediaType) => {
+  const handleDeleteAll = useCallback((mediaType) => {
     const label = mediaType === 'videos' ? 'video clips' : 'images';
-    if (!window.confirm(`Delete ALL ${label} from your library? This cannot be undone.`)) return;
-    const allItems = library.filter(item =>
-      mediaType === 'videos' ? item.type === 'video' : item.type === 'image'
-    );
-    for (const item of allItems) {
-      await removeFromLibraryAsync(db, artistId, item.id);
-    }
-    setSelectedMedia(prev => ({ ...prev, [mediaType]: [] }));
-    setLibraryRefreshTrigger(t => t + 1);
+    setConfirmDialog({
+      isOpen: true,
+      title: `Delete ALL ${label}?`,
+      message: 'This will permanently remove all items from your library. This cannot be undone.',
+      confirmVariant: 'destructive',
+      onConfirm: async () => {
+        const allItems = library.filter(item =>
+          mediaType === 'videos' ? item.type === 'video' : item.type === 'image'
+        );
+        for (const item of allItems) {
+          await removeFromLibraryAsync(db, artistId, item.id);
+        }
+        setSelectedMedia(prev => ({ ...prev, [mediaType]: [] }));
+        setLibraryRefreshTrigger(t => t + 1);
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+      }
+    });
   }, [library, db, artistId]);
 
   // File input refs
@@ -223,7 +256,7 @@ const StudioHome = ({
 
     if (!artistId) {
       console.error('[StudioHome] No artistId - cannot save to library');
-      alert('Error: No artist selected. Please select an artist first.');
+      toastError('No artist selected. Please select an artist first.');
       return;
     }
 
@@ -308,8 +341,9 @@ const StudioHome = ({
 
         uploadedItems.push(item);
 
-        // Keep local URL for current session
+        // Keep local URL for current session (revoked on unmount via blobUrlsRef)
         item.localUrl = localUrl;
+        blobUrlsRef.current.push(localUrl);
 
       } catch (error) {
         console.error('[StudioHome] Upload FAILED for:', file.name, 'Error:', error.message);
@@ -329,17 +363,17 @@ const StudioHome = ({
         setLibraryRefreshTrigger(prev => prev + 1);
       } catch (saveError) {
         console.error('[StudioHome] Failed to save to library:', saveError);
-        alert('Files uploaded but failed to save to library: ' + saveError.message);
+        toastError('Files uploaded but failed to save to library: ' + saveError.message);
       }
     }
 
     // Show feedback about what happened
     if (failedFiles.length > 0) {
       const failedNames = failedFiles.map(f => f.name).join(', ');
-      alert(`Upload failed for: ${failedNames}\n\nError: ${failedFiles[0].error}\n\nCheck browser console for details.`);
+      toastError(`Upload failed for: ${failedNames} — ${failedFiles[0].error}`);
     } else if (uploadedItems.length === 0) {
       console.error('[StudioHome] No items were successfully uploaded');
-      alert('No files were uploaded. Please check if Firebase is configured correctly.');
+      toastError('No files were uploaded. Check if Firebase is configured correctly.');
     } else {
       console.log('[StudioHome] Upload complete!', uploadedItems.length, 'files added to library');
     }
@@ -389,7 +423,7 @@ const StudioHome = ({
 
     if (!artistId) {
       console.error('[StudioHome] No artistId - cannot save audio clip');
-      alert('Error: No artist selected. Please select an artist first.');
+      toastError('No artist selected. Please select an artist first.');
       return;
     }
 
@@ -404,7 +438,7 @@ const StudioHome = ({
 
     if (!calculatedDuration || calculatedDuration < 1) {
       console.error('[StudioHome] Invalid or too short duration:', calculatedDuration, 'clipData:', JSON.stringify(clipData));
-      alert('Error: Audio duration is invalid or too short (must be at least 1 second). Please try again.');
+      toastError('Audio duration is invalid or too short (must be at least 1 second).');
       return;
     }
 
@@ -451,7 +485,7 @@ const StudioHome = ({
 
     } catch (error) {
       console.error('[StudioHome] Audio upload failed:', error);
-      alert('Audio upload failed: ' + error.message);
+      toastError('Audio upload failed: ' + error.message);
     }
 
     setPendingAudio(null);
@@ -609,7 +643,7 @@ const StudioHome = ({
     const template = col.textTemplates?.[0] || null;
 
     if (bankAImages.length === 0 && bankBImages.length === 0) {
-      alert('Please add images to Bank A and/or Bank B first.');
+      toastError('Please add images to Bank A and/or Bank B first.');
       return;
     }
 
@@ -701,7 +735,7 @@ const StudioHome = ({
     setCreatedContent(content);
     setBatchGenerating(false);
     setShowBatchModal(false);
-    alert(`Generated ${slideshows.length} slideshow drafts! View them in your library.`);
+    toastSuccess(`Generated ${slideshows.length} slideshow drafts! View them in your library.`);
   }, [batchCount, batchSlidesPerShow, batchAudio, selectedCollection, collections, library, artistId, db]);
 
 
@@ -1565,6 +1599,17 @@ const StudioHome = ({
           </div>
         </div>
       )}
+
+      {/* H-01: Unified confirm dialog (replaces window.confirm) */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel="Delete"
+        confirmVariant={confirmDialog.confirmVariant || 'destructive'}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

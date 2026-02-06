@@ -367,11 +367,8 @@ const ContentLibrary = ({
         </div>
       )}
 
-      {/* Footer */}
-      <div style={styles.footer}>
-        <button style={styles.footerButton}>Edit category</button>
-        <button style={styles.footerButton}>Upload your own videos</button>
-      </div>
+      {/* Footer — removed dead "Edit category" and "Upload your own videos" buttons (C-10)
+         Category editing is available in the sidebar; uploads via the header upload buttons. */}
 
       {/* Export/Post Modal */}
       {exportingVideo && (

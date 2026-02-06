@@ -204,13 +204,15 @@ const BatchPipeline = ({
     return selectedAudio.savedLyrics || [];
   }, [selectedAudio]);
 
-  // Auto-select audio if only one option (better UX)
+  // Auto-select audio if only one option — but only once on mount (C-11 fix)
+  const hasUserInteractedAudio = useRef(false);
   useEffect(() => {
+    if (hasUserInteractedAudio.current) return; // User already manually changed selection
     if (!selectedAudio && availableAudio.length === 1) {
       console.log('[BatchPipeline] Auto-selecting single audio option');
       setSelectedAudio(availableAudio[0]);
     }
-  }, [availableAudio, selectedAudio]);
+  }, [availableAudio]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Analyze beats when audio is selected
   useEffect(() => {
@@ -959,7 +961,8 @@ const BatchPipeline = ({
                     style={styles.audioCard(selectedAudio?.id === audio.id)}
                     onClick={() => {
                       console.log('[BatchPipeline] Audio clicked:', audio.id, audio.name);
-                      setSelectedAudio(audio);
+                      hasUserInteractedAudio.current = true; // C-11: prevent auto-reselect after manual choice
+                      setSelectedAudio(selectedAudio?.id === audio.id ? null : audio); // Toggle: click again to deselect
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

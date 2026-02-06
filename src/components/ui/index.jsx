@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState, createContext, useContext } from 'react';
+import React, { useEffect, useCallback, useState, useRef, createContext, useContext } from 'react';
 
 /**
  * Shared UI Components for StickToMusic
@@ -25,6 +25,16 @@ export const useToast = () => {
 
 export const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
+  const timeoutRefs = useRef(new Map()); // M-21: track timeouts for cleanup
+
+  // M-21: Clean up all timeouts on unmount
+  useEffect(() => {
+    const refs = timeoutRefs.current;
+    return () => {
+      refs.forEach(timeoutId => clearTimeout(timeoutId));
+      refs.clear();
+    };
+  }, []);
 
   const addToast = useCallback((message, type = 'success', duration = 4000) => {
     const id = Date.now() + Math.random();
@@ -33,9 +43,11 @@ export const ToastProvider = ({ children }) => {
       const updated = [...prev, { id, message, type }].slice(-3);
       return updated;
     });
-    setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
+      timeoutRefs.current.delete(id);
     }, duration);
+    timeoutRefs.current.set(id, timeoutId);
     return id;
   }, []);
 
