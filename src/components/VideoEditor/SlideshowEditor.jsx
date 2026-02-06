@@ -332,27 +332,44 @@ const SlideshowEditor = ({
 
   // Audio playback controls - just add audio directly, user can trim later
   const handleSelectAudio = useCallback((audio) => {
-    // Add audio directly without opening trimmer
-    setSelectedAudio({
-      ...audio,
-      startTime: audio.startTime || 0,
-      endTime: audio.endTime || null // Full track by default
-    });
+    // Auto-open the audio editor/trimmer when audio is selected
+    setAudioToTrim(audio);
+    setShowAudioTrimmer(true);
   }, []);
 
   const handleAudioTrimSave = useCallback(({ startTime, endTime, duration }) => {
     if (!audioToTrim) return;
 
-    setSelectedAudio({
+    const editedAudio = {
       ...audioToTrim,
       startTime,
       endTime,
       trimmedDuration: endTime - startTime,
       isTrimmed: true
-    });
+    };
+    setSelectedAudio(editedAudio);
     setShowAudioTrimmer(false);
     setAudioToTrim(null);
-  }, [audioToTrim]);
+
+    // Prompt to save this edited version
+    if (window.confirm(`Save this trimmed version of "${audioToTrim.name}" (${(endTime - startTime).toFixed(1)}s) to your library?`)) {
+      // Save trimmed audio metadata back to library
+      if (db && artistId) {
+        import('../../services/libraryService').then(({ addToLibraryAsync }) => {
+          addToLibraryAsync(db, artistId, {
+            name: `${audioToTrim.name} (trimmed)`,
+            url: audioToTrim.url || audioToTrim.localUrl,
+            type: 'audio',
+            duration: endTime - startTime,
+            startTime,
+            endTime,
+            isTrimmed: true,
+            originalId: audioToTrim.id
+          }).catch(err => console.warn('[SlideshowEditor] Failed to save trimmed audio:', err));
+        });
+      }
+    }
+  }, [audioToTrim, db, artistId]);
 
   const handlePlayPause = useCallback(() => {
     if (!audioRef.current || !selectedAudio) return;

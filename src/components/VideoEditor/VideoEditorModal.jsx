@@ -2214,7 +2214,9 @@ const VideoEditorModal = ({
                     ) : (
                       <div style={styles.clipsRow}>
                         {clips.map((clip, index) => {
-                          const clipWidth = Math.max(50, (clip.duration || 1) * 40 * timelineScale);
+                          const pxPerSec = 40 * timelineScale;
+                          const clipWidth = Math.max(50, (clip.duration || 1) * pxPerSec);
+                          const thumbWidth = 68; // fixed thumbnail width at start of clip
                           return (
                           <div
                             key={clip.id}
@@ -2226,6 +2228,8 @@ const VideoEditorModal = ({
                               ...styles.clipItem,
                               width: `${clipWidth}px`,
                               minWidth: '50px',
+                              display: 'flex',
+                              flexDirection: 'row',
                               ...(selectedClips.includes(index) ? styles.clipItemSelected : {}),
                               ...(clipDrag.dragging && clipDrag.fromIndex === index ? { opacity: 0.5 } : {}),
                               ...(clipDrag.dragging && clipDrag.toIndex === index && clipDrag.fromIndex !== index ? {
@@ -2249,8 +2253,8 @@ const VideoEditorModal = ({
                                   bottom: 0,
                                   width: '12px',
                                   cursor: 'col-resize',
-                                  zIndex: 2,
-                                  background: 'linear-gradient(to right, rgba(167,139,250,0.3), transparent)',
+                                  zIndex: 3,
+                                  background: 'linear-gradient(to right, rgba(167,139,250,0.4), transparent)',
                                   opacity: 0,
                                   transition: 'opacity 0.15s',
                                 }}
@@ -2258,14 +2262,44 @@ const VideoEditorModal = ({
                                 onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}
                               />
                             )}
-                            {clip.thumbnail ? (
-                              <img src={clip.thumbnail} alt="" style={styles.clipThumb} draggable={false} />
-                            ) : (
-                              <video src={getClipUrl(clip)} style={styles.clipThumb} muted preload="metadata" />
+                            {/* Thumbnail pinned at start */}
+                            <div style={{
+                              width: `${Math.min(thumbWidth, clipWidth - 4)}px`,
+                              height: '100%',
+                              flexShrink: 0,
+                              overflow: 'hidden',
+                              position: 'relative'
+                            }}>
+                              {clip.thumbnail ? (
+                                <img src={clip.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} draggable={false} />
+                              ) : (
+                                <video src={getClipUrl(clip)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted preload="metadata" />
+                              )}
+                            </div>
+                            {/* Colored duration bar extending right */}
+                            {clipWidth > thumbWidth + 4 && (
+                              <div style={{
+                                flex: 1,
+                                height: '100%',
+                                background: selectedClips.includes(index)
+                                  ? 'linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%)'
+                                  : 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)',
+                                display: 'flex',
+                                alignItems: 'flex-end',
+                                justifyContent: 'flex-end',
+                                padding: '4px 6px'
+                              }}>
+                                <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.7)' }}>
+                                  {clip.duration?.toFixed(1)}s
+                                </span>
+                              </div>
                             )}
-                            <span style={styles.clipDuration}>
-                              {clip.duration?.toFixed(1)}s
-                            </span>
+                            {/* Duration label for short clips */}
+                            {clipWidth <= thumbWidth + 4 && (
+                              <span style={styles.clipDuration}>
+                                {clip.duration?.toFixed(1)}s
+                              </span>
+                            )}
                             {clip.locked && <span style={styles.clipLock}>🔒</span>}
                             {/* Right resize handle */}
                             {!clip.locked && (
@@ -2278,8 +2312,8 @@ const VideoEditorModal = ({
                                   bottom: 0,
                                   width: '12px',
                                   cursor: 'col-resize',
-                                  zIndex: 2,
-                                  background: 'linear-gradient(to left, rgba(167,139,250,0.3), transparent)',
+                                  zIndex: 3,
+                                  background: 'linear-gradient(to left, rgba(167,139,250,0.4), transparent)',
                                   opacity: 0,
                                   transition: 'opacity 0.15s',
                                 }}
@@ -3498,9 +3532,9 @@ const styles = {
   },
   clipItem: {
     position: 'relative',
-    height: '120px',
+    height: '64px',
     backgroundColor: '#1f1f2e',
-    borderRadius: '6px',
+    borderRadius: '4px',
     overflow: 'hidden',
     cursor: 'pointer',
     border: '2px solid transparent',

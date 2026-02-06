@@ -73,13 +73,16 @@ const LibraryBrowser = ({
   const [isDragSelecting, setIsDragSelecting] = useState(false);
   const [dragStart, setDragStart] = useState(null); // {x, y} in page coords
   const [dragEnd, setDragEnd] = useState(null);
-  const [dragThresholdMet, setDragThresholdMet] = useState(false);
+  const dragThresholdMetRef = useRef(false); // Use ref to avoid stale closure
   const gridRef = useRef(null);
   const mediaCardRefs = useRef({});
   // Ref to hold current displayedMedia for use in drag selection effect
   const displayedMediaRef = useRef([]);
   // Track last clicked index for shift-click range selection
   const lastClickedIndexRef = useRef(null);
+  // Track drag coordinates in refs for reliable mouseup access
+  const dragStartRef = useRef(null);
+  const dragEndRef = useRef(null);
 
   const fileInputRef = useRef(null);
 
@@ -202,9 +205,12 @@ const LibraryBrowser = ({
     // Only respond to left mouse button
     if (e.button !== 0) return;
 
-    setDragStart({ x: e.clientX, y: e.clientY });
+    const pos = { x: e.clientX, y: e.clientY };
+    setDragStart(pos);
     setDragEnd(null);
-    setDragThresholdMet(false);
+    dragStartRef.current = pos;
+    dragEndRef.current = null;
+    dragThresholdMetRef.current = false;
     setIsDragSelecting(true);
   };
 
@@ -212,29 +218,34 @@ const LibraryBrowser = ({
     if (!isDragSelecting || !dragStart) return;
 
     const handleMouseMove = (e) => {
-      const dx = e.clientX - dragStart.x;
-      const dy = e.clientY - dragStart.y;
+      const start = dragStartRef.current;
+      if (!start) return;
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
       if (distance > 8) {
-        setDragThresholdMet(true);
-        e.preventDefault(); // Prevent native drag/text selection
+        dragThresholdMetRef.current = true;
+        e.preventDefault();
       }
 
-      setDragEnd({ x: e.clientX, y: e.clientY });
+      const pos = { x: e.clientX, y: e.clientY };
+      dragEndRef.current = pos;
+      setDragEnd(pos); // For visual rectangle rendering
     };
 
-    const handleMouseUp = (e) => {
-      if (dragThresholdMet && dragStart && dragEnd) {
-        // Drag-select: compute selection rectangle
+    const handleMouseUp = () => {
+      const start = dragStartRef.current;
+      const end = dragEndRef.current;
+
+      if (dragThresholdMetRef.current && start && end) {
         const selectionRect = {
-          left: Math.min(dragStart.x, dragEnd.x),
-          top: Math.min(dragStart.y, dragEnd.y),
-          right: Math.max(dragStart.x, dragEnd.x),
-          bottom: Math.max(dragStart.y, dragEnd.y)
+          left: Math.min(start.x, end.x),
+          top: Math.min(start.y, end.y),
+          right: Math.max(start.x, end.x),
+          bottom: Math.max(start.y, end.y)
         };
 
-        // Check which media cards intersect the selection
         const newSelection = [];
         displayedMediaRef.current.forEach(media => {
           const el = mediaCardRefs.current[media.id];
@@ -250,7 +261,6 @@ const LibraryBrowser = ({
           }
         });
 
-        // Call onSelectMedia for each newly selected item so parent state stays in sync
         if (onSelectMedia && newSelection.length > 0) {
           newSelection.forEach(mediaId => {
             const media = displayedMediaRef.current.find(m => m.id === mediaId);
@@ -262,12 +272,13 @@ const LibraryBrowser = ({
 
         setSelectedForBulk(newSelection);
       }
-      // If threshold wasn't met, it was a click - let the onClick handler deal with it
 
       setIsDragSelecting(false);
       setDragStart(null);
       setDragEnd(null);
-      setDragThresholdMet(false);
+      dragStartRef.current = null;
+      dragEndRef.current = null;
+      dragThresholdMetRef.current = false;
     };
 
     document.addEventListener('mousemove', handleMouseMove);
@@ -276,7 +287,7 @@ const LibraryBrowser = ({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragSelecting, dragStart, dragEnd, dragThresholdMet, onSelectMedia, selectedMediaIds]);
+  }, [isDragSelecting, dragStart, onSelectMedia, selectedMediaIds]);
 
   // Generate thumbnail for video
   const generateThumbnail = async (videoUrl, mediaId) => {
