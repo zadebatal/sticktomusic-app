@@ -425,39 +425,61 @@ const StudioHome = ({
   // MEDIA SELECTION
   // =====================
 
-  const handleSelectMedia = (media) => {
+  // macOS-style selection handler:
+  // - exclusive: true → select only this item (single click)
+  // - replaceAll: [...] → replace entire selection (shift+click range, lasso drag)
+  // - no options → toggle (Cmd/Ctrl+click)
+  const handleSelectMedia = (media, options = {}) => {
+    const { exclusive = false, replaceAll = null } = options;
+
     if (media.type === MEDIA_TYPES.VIDEO) {
-      // Toggle video selection
-      setSelectedMedia(prev => {
-        const isSelected = prev.videos.some(v => v.id === media.id);
-        return {
-          ...prev,
-          videos: isSelected
-            ? prev.videos.filter(v => v.id !== media.id)
-            : [...prev.videos, media]
-        };
-      });
+      if (replaceAll) {
+        // Lasso drag or shift+click range: replace entire selection
+        setSelectedMedia(prev => ({ ...prev, videos: replaceAll }));
+      } else if (exclusive) {
+        // Single click: select only this one
+        setSelectedMedia(prev => ({ ...prev, videos: [media] }));
+      } else {
+        // Cmd/Ctrl+click: toggle in/out
+        setSelectedMedia(prev => {
+          const isSelected = prev.videos.some(v => v.id === media.id);
+          return {
+            ...prev,
+            videos: isSelected
+              ? prev.videos.filter(v => v.id !== media.id)
+              : [...prev.videos, media]
+          };
+        });
+      }
     } else if (media.type === MEDIA_TYPES.AUDIO) {
-      // Single audio selection
+      // Audio is always single-select toggle
       setSelectedMedia(prev => ({
         ...prev,
         audio: prev.audio?.id === media.id ? null : media
       }));
     } else if (media.type === MEDIA_TYPES.IMAGE) {
-      // Toggle image selection
-      setSelectedMedia(prev => {
-        const isSelected = prev.images.some(i => i.id === media.id);
-        return {
-          ...prev,
-          images: isSelected
-            ? prev.images.filter(i => i.id !== media.id)
-            : [...prev.images, media]
-        };
-      });
+      if (replaceAll) {
+        setSelectedMedia(prev => ({ ...prev, images: replaceAll }));
+      } else if (exclusive) {
+        setSelectedMedia(prev => ({ ...prev, images: [media] }));
+      } else {
+        // Cmd/Ctrl+click: toggle in/out
+        setSelectedMedia(prev => {
+          const isSelected = prev.images.some(i => i.id === media.id);
+          return {
+            ...prev,
+            images: isSelected
+              ? prev.images.filter(i => i.id !== media.id)
+              : [...prev.images, media]
+          };
+        });
+      }
     }
 
-    // Increment use count
-    incrementUseCount(artistId, media.id);
+    // Increment use count (skip for bulk operations)
+    if (!replaceAll) {
+      incrementUseCount(artistId, media.id);
+    }
   };
 
   // =====================
@@ -523,6 +545,9 @@ const StudioHome = ({
 
   const videoCount = createdContent.videos.length;
   const slideshowCount = createdContent.slideshows.length;
+  const draftVideos = createdContent.videos.filter(v => v.status === 'draft' || v.status === 'DRAFT');
+  const draftSlideshows = createdContent.slideshows.filter(s => s.status === 'draft' || s.status === 'DRAFT');
+  const totalDrafts = draftVideos.length + draftSlideshows.length;
 
   const libraryVideos = library.filter(m => m.type === MEDIA_TYPES.VIDEO);
   const libraryAudio = library.filter(m => m.type === MEDIA_TYPES.AUDIO);
@@ -822,6 +847,30 @@ const StudioHome = ({
                 <div style={styles.modeName}>Audio</div>
                 <div style={styles.modeCount}>{libraryAudio.length} clips</div>
               </div>
+
+              {/* Drafts entry point on dashboard */}
+              {totalDrafts > 0 && (
+                <div
+                  style={{
+                    ...styles.modeCard,
+                    borderColor: 'rgba(251, 191, 36, 0.25)'
+                  }}
+                  onClick={() => {
+                    const type = draftVideos.length >= draftSlideshows.length ? 'videos' : 'slideshows';
+                    onViewContent?.({ type });
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.borderColor = '#fbbf24'}
+                  onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(251, 191, 36, 0.25)'}
+                >
+                  <div style={styles.modeIcon}>📝</div>
+                  <div style={styles.modeName}>Drafts</div>
+                  <div style={styles.modeCount}>
+                    {draftVideos.length} video{draftVideos.length !== 1 ? 's' : ''}
+                    {' • '}
+                    {draftSlideshows.length} slideshow{draftSlideshows.length !== 1 ? 's' : ''}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -939,6 +988,14 @@ const StudioHome = ({
                   {selectedMedia.audio && ` • Audio: ${selectedMedia.audio.name}`}
                 </div>
                 <div style={styles.actionButtons}>
+                  {draftVideos.length > 0 && (
+                    <button
+                      style={{...styles.actionButton, ...styles.secondaryButton}}
+                      onClick={() => onViewContent?.({ type: 'videos' })}
+                    >
+                      View Drafts ({draftVideos.length})
+                    </button>
+                  )}
                   <button
                     style={{...styles.actionButton, ...styles.secondaryButton}}
                     onClick={() => onViewContent?.({ type: 'videos' })}
@@ -1018,6 +1075,14 @@ const StudioHome = ({
                   )}
                 </div>
                 <div style={styles.actionButtons}>
+                  {draftSlideshows.length > 0 && (
+                    <button
+                      style={{...styles.actionButton, ...styles.secondaryButton}}
+                      onClick={() => onViewContent?.({ type: 'slideshows' })}
+                    >
+                      View Drafts ({draftSlideshows.length})
+                    </button>
+                  )}
                   <button
                     style={{...styles.actionButton, ...styles.secondaryButton}}
                     onClick={() => onViewContent?.({ type: 'slideshows' })}

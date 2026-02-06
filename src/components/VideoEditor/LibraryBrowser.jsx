@@ -262,15 +262,11 @@ const LibraryBrowser = ({
         });
 
         if (onSelectMedia && newSelection.length > 0) {
-          newSelection.forEach(mediaId => {
-            const media = displayedMediaRef.current.find(m => m.id === mediaId);
-            if (media && !selectedMediaIds.includes(mediaId)) {
-              onSelectMedia(media);
-            }
-          });
+          const items = newSelection.map(id => displayedMediaRef.current.find(m => m.id === id)).filter(Boolean);
+          if (items.length > 0) {
+            onSelectMedia(items[0], { replaceAll: items });
+          }
         }
-
-        setSelectedForBulk(newSelection);
       }
 
       setIsDragSelecting(false);
@@ -429,28 +425,32 @@ const LibraryBrowser = ({
     }
   };
 
-  // Handle media selection
+  // Handle media selection — macOS-style:
+  // Single click = exclusive select (deselect all others)
+  // Cmd/Ctrl+click = toggle item in/out of selection
+  // Shift+click = range select from last clicked
   const handleMediaClick = (media, e) => {
     const clickedIndex = displayedMedia.findIndex(m => m.id === media.id);
+    const isMetaKey = e?.metaKey || e?.ctrlKey;
+
     if (e?.shiftKey && allowMultiSelect && lastClickedIndexRef.current !== null && onSelectMedia) {
-      // Shift-click: select range between last click and this click
+      // Shift+click: range select
       const start = Math.min(lastClickedIndexRef.current, clickedIndex);
       const end = Math.max(lastClickedIndexRef.current, clickedIndex);
+      const rangeItems = [];
       for (let i = start; i <= end; i++) {
-        const item = displayedMedia[i];
-        if (item && !selectedMediaIds.includes(item.id)) {
-          onSelectMedia(item);
-        }
+        if (displayedMedia[i]) rangeItems.push(displayedMedia[i]);
       }
-      setSelectedForBulk(prev => {
-        const newSet = new Set(prev);
-        for (let i = start; i <= end; i++) {
-          if (displayedMedia[i]) newSet.add(displayedMedia[i].id);
-        }
-        return [...newSet];
-      });
-    } else if (onSelectMedia) {
+      if (rangeItems.length > 0) {
+        onSelectMedia(rangeItems[0], { replaceAll: rangeItems });
+      }
+    } else if (isMetaKey && allowMultiSelect && onSelectMedia) {
+      // Cmd/Ctrl+click: toggle this item in/out
       onSelectMedia(media);
+      lastClickedIndexRef.current = clickedIndex;
+    } else if (onSelectMedia) {
+      // Regular click: exclusive select (deselect all, select only this)
+      onSelectMedia(media, { exclusive: true });
       lastClickedIndexRef.current = clickedIndex;
     }
   };
@@ -678,11 +678,8 @@ const LibraryBrowser = ({
       borderRadius: '8px',
       overflow: 'hidden',
       cursor: 'pointer',
-      border: '2px solid transparent',
-      transition: 'all 0.2s'
-    },
-    mediaCardSelected: {
-      borderColor: '#6366f1'
+      border: '1px solid transparent',
+      transition: 'all 0.15s ease'
     },
     mediaThumbnail: {
       width: '100%',
@@ -1139,31 +1136,58 @@ const LibraryBrowser = ({
               style={styles.mediaGrid}
               onMouseDown={handleGridMouseDown}
             >
-              {displayedMedia.map(media => (
+              {displayedMedia.map(media => {
+                const isSelected = selectedMediaIds.includes(media.id);
+                return (
                 <div
                   key={media.id}
                   ref={el => { if (el) mediaCardRefs.current[media.id] = el; }}
                   style={{
                     ...styles.mediaCard,
-                    ...(selectedMediaIds.includes(media.id) || selectedForBulk.includes(media.id)
-                      ? styles.mediaCardSelected
-                      : {})
+                    ...(isSelected ? { border: '1px solid rgba(99, 102, 241, 0.5)' } : {})
                   }}
                   onClick={(e) => handleMediaClick(media, e)}
                   onContextMenu={(e) => handleContextMenu(e, media)}
                   draggable={!allowMultiSelect}
                   onDragStart={(e) => allowMultiSelect ? e.preventDefault() : handleDragStart(e, media)}
                   onMouseEnter={(e) => {
-                    if (!selectedMediaIds.includes(media.id)) {
-                      e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.5)';
+                    if (!isSelected) {
+                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (!selectedMediaIds.includes(media.id)) {
-                      e.currentTarget.style.borderColor = 'transparent';
+                    if (!isSelected) {
+                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
                     }
                   }}
                 >
+                  {/* Selection overlay — macOS-style subtle tint + checkmark */}
+                  {isSelected && (
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                      zIndex: 1,
+                      pointerEvents: 'none',
+                      borderRadius: '7px'
+                    }}>
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '6px',
+                        right: '6px',
+                        width: '18px',
+                        height: '18px',
+                        backgroundColor: '#6366f1',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '11px',
+                        color: '#fff',
+                        fontWeight: 'bold'
+                      }}>✓</div>
+                    </div>
+                  )}
                   {/* Thumbnail */}
                   {media.type === MEDIA_TYPES.VIDEO && (
                     <video
@@ -1209,7 +1233,8 @@ const LibraryBrowser = ({
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

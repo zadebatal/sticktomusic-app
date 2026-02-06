@@ -1209,29 +1209,31 @@ const SlideshowEditor = ({
                     </div>
                   )}
                   <div style={styles.clipGrid}>
-                    {displayImages.map(image => (
+                    {displayImages.map(image => {
+                      const isSel = selectedBankImages.includes(image.id);
+                      return (
                       <div
                         key={image.id}
                         style={{
                           ...styles.clipCard,
-                          border: selectedBankImages.includes(image.id) ? '2px solid #7c3aed' : '2px solid transparent',
+                          border: isSel ? '1px solid rgba(99, 102, 241, 0.5)' : '1px solid transparent',
                           position: 'relative'
                         }}
                         draggable
                         onClick={(e) => {
-                          if (e.shiftKey || e.metaKey || e.ctrlKey) {
-                            // Multi-select with modifier key
+                          const isMetaKey = e.metaKey || e.ctrlKey;
+                          if (isMetaKey) {
+                            // Cmd/Ctrl+click: toggle in/out
                             setSelectedBankImages(prev =>
                               prev.includes(image.id)
                                 ? prev.filter(id => id !== image.id)
                                 : [...prev, image.id]
                             );
                           } else {
-                            // Toggle select on regular click
+                            // Regular click: exclusive select
                             setSelectedBankImages(prev =>
-                              prev.includes(image.id)
-                                ? prev.filter(id => id !== image.id)
-                                : [...prev, image.id]
+                              prev.length === 1 && prev[0] === image.id
+                                ? [] : [image.id]
                             );
                           }
                         }}
@@ -1243,13 +1245,26 @@ const SlideshowEditor = ({
                             sourceBank: selectedSource === 'bankA' ? 'imageA' : selectedSource === 'bankB' ? 'imageB' : selectedSource
                           }));
                         }}
+                        onMouseEnter={(e) => {
+                          if (!isSel) e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSel) e.currentTarget.style.backgroundColor = '';
+                        }}
                       >
-                        {selectedBankImages.includes(image.id) && (
+                        {/* Selection overlay — subtle tint + checkmark */}
+                        {isSel && (
                           <div style={{
-                            position: 'absolute', top: 2, right: 2, width: '18px', height: '18px',
-                            backgroundColor: '#7c3aed', borderRadius: '50%', display: 'flex',
-                            alignItems: 'center', justifyContent: 'center', zIndex: 3, fontSize: '10px', color: 'white'
-                          }}>✓</div>
+                            position: 'absolute', inset: 0,
+                            backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                            zIndex: 1, pointerEvents: 'none', borderRadius: '6px'
+                          }}>
+                            <div style={{
+                              position: 'absolute', bottom: 3, right: 3, width: '16px', height: '16px',
+                              backgroundColor: '#6366f1', borderRadius: '50%', display: 'flex',
+                              alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#fff', fontWeight: 'bold'
+                            }}>✓</div>
+                          </div>
                         )}
                         <img
                           src={image.url || image.localUrl}
@@ -1258,7 +1273,8 @@ const SlideshowEditor = ({
                         />
                         <span style={styles.clipName}>{image.name?.slice(0, 15) || 'Untitled'}</span>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   </>
                 );
