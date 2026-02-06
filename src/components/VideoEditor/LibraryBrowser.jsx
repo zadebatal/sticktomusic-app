@@ -205,7 +205,7 @@ const LibraryBrowser = ({
   // Compute from component state (library + collections) instead of localStorage
   // so it stays in sync with Firestore subscription data
   const collectionBanks = (() => {
-    if (!isUserCollectionView || mode === 'videos') return null;
+    if (!isUserCollectionView || mode === 'videos' || mode === 'audio') return null;
     const col = collections.find(c => c.id === activeView);
     if (!col) return null;
     const allMedia = library.filter(item => (col.mediaIds || []).includes(item.id));
@@ -513,7 +513,7 @@ const LibraryBrowser = ({
   // Handle delete — smart: if viewing a collection, ask remove-from-folder vs delete-everywhere
   const [showDeleteModal, setShowDeleteModal] = useState(null); // { mediaId, collectionId? }
 
-  const handleDelete = (mediaId) => {
+  const handleDelete = async (mediaId) => {
     const isInCollectionView = activeView !== 'library' && activeView !== 'favorites'
       && !collections.find(c => c.id === activeView && c.type === COLLECTION_TYPES.SMART);
 
@@ -522,10 +522,21 @@ const LibraryBrowser = ({
       setShowDeleteModal({ mediaId, collectionId: activeView });
     } else {
       if (window.confirm('Delete this item from your library? This cannot be undone.')) {
-        removeFromLibrary(artistId, mediaId);
+        await removeFromLibraryAsync(db, artistId, mediaId);
         loadData();
       }
     }
+  };
+
+  // Bulk delete selected items
+  const handleBulkDelete = async () => {
+    if (selectedMediaIds.length === 0) return;
+    if (!window.confirm(`Delete ${selectedMediaIds.length} item${selectedMediaIds.length > 1 ? 's' : ''} from your library? This cannot be undone.`)) return;
+    for (const id of selectedMediaIds) {
+      await removeFromLibraryAsync(db, artistId, id);
+    }
+    onSelectMultiple?.([]);
+    loadData();
   };
 
   const handleSmartDelete = (action) => {
@@ -1111,6 +1122,21 @@ const LibraryBrowser = ({
             <option value="name">Name</option>
             <option value="mostUsed">Most Used</option>
           </select>
+
+          {selectedMediaIds.length > 0 && (
+            <button
+              onClick={handleBulkDelete}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '4px 10px', borderRadius: '6px',
+                border: '1px solid rgba(239,68,68,0.4)',
+                backgroundColor: 'rgba(239,68,68,0.1)',
+                color: '#ef4444', fontSize: '12px', cursor: 'pointer'
+              }}
+            >
+              🗑 Delete {selectedMediaIds.length}
+            </button>
+          )}
 
           <label style={styles.uploadButton}>
             <span>⬆️</span>
