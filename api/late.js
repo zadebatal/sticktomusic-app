@@ -28,7 +28,8 @@ const ALLOWED_ORIGINS = [
 // Also allow Vercel preview deployments
 const isVercelPreview = (origin) => {
   if (!origin) return false;
-  return origin.includes('sticktomusic') && origin.endsWith('.vercel.app');
+  // Strict match: only allow <hash>-sticktomusic-<hash>.vercel.app or sticktomusic-app*.vercel.app
+  return /^https:\/\/[a-z0-9-]*sticktomusic[a-z0-9-]*\.vercel\.app$/i.test(origin);
 };
 
 // Check if origin is localhost (any port) for development
@@ -105,7 +106,7 @@ function isArtistLateConfigured(artistId, hasArtistKey) {
  * Check if user has access to an artist (operator assigned or conductor)
  */
 async function canUserAccessArtist(userEmail, artistId) {
-  if (!db || !artistId) return true; // If no artistId, allow (backward compat)
+  if (!db || !artistId) return false; // Deny access when artistId or db is missing
 
   try {
     const userDoc = await db.collection('allowedUsers').doc(userEmail).get();

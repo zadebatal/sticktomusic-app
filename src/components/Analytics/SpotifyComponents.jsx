@@ -483,8 +483,9 @@ export const SpotifySetupCard = ({ artistId, onConfigured }) => {
     try {
       // Call the validation endpoint
       const token = await getFirebaseToken();
+      const params = new URLSearchParams({ action: 'validateArtist', spotifyArtistId: spotifyArtistId.trim() });
       const response = await fetch(
-        `/api/spotify?action=validateArtist&spotifyArtistId=${spotifyArtistId.trim()}`,
+        `/api/spotify?${params}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
