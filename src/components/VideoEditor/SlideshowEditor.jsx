@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
 import { subscribeToLibrary, getCollectionsAsync, MEDIA_TYPES } from '../../services/libraryService';
+import { useToast } from '../ui';
 import LyricBank from './LyricBank';
 import AudioClipSelector from './AudioClipSelector';
 import LyricAnalyzer from './LyricAnalyzer';
@@ -32,6 +33,8 @@ const SlideshowEditor = ({
 }) => {
   // Mobile responsive detection
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+
+  const { success: toastSuccess, error: toastError } = useToast();
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -619,14 +622,31 @@ const SlideshowEditor = ({
       audioRef.current.play().catch(console.error);
       setIsPlaying(true);
 
-      // Animation loop for time updates
+      // Animation loop for time updates + slide auto-advance
       const updateTime = () => {
         if (audioRef.current) {
           const startBound = selectedAudio.startTime || 0;
           const endBound = selectedAudio.endTime || audioRef.current.duration;
           const actualTime = audioRef.current.currentTime;
+          const elapsed = actualTime - startBound;
 
-          setCurrentTime(actualTime - startBound);
+          setCurrentTime(elapsed);
+
+          // Auto-advance slides based on cumulative duration
+          if (slides.length > 1) {
+            let cumulative = 0;
+            for (let i = 0; i < slides.length; i++) {
+              cumulative += slides[i].duration || 3;
+              if (elapsed < cumulative) {
+                setSelectedSlideIndex(i);
+                break;
+              }
+              // If past all slides, loop to first
+              if (i === slides.length - 1) {
+                setSelectedSlideIndex(0);
+              }
+            }
+          }
 
           // Loop back if past end boundary
           if (actualTime >= endBound) {
@@ -637,7 +657,7 @@ const SlideshowEditor = ({
       };
       animationRef.current = requestAnimationFrame(updateTime);
     }
-  }, [isPlaying, selectedAudio]);
+  }, [isPlaying, selectedAudio, slides]);
 
   const handleRemoveAudio = useCallback(() => {
     if (audioRef.current) {
@@ -982,7 +1002,7 @@ const SlideshowEditor = ({
       const allImgB = [...imgB, ...collBankB];
 
       if (allImgA.length === 0 && allImgB.length === 0) {
-        alert('No images in banks. Add images to Bank A and Bank B first.');
+        toastError('No images in banks. Add images to Bank A and Bank B first.');
         return;
       }
 
@@ -1071,7 +1091,7 @@ const SlideshowEditor = ({
       }
 
       setShowBatchModal(false);
-      alert(`Generated ${generated.length} slideshows!`);
+      toastSuccess(`Generated ${generated.length} slideshows!`);
     } finally {
       setIsBatchGenerating(false);
     }
@@ -1082,7 +1102,7 @@ const SlideshowEditor = ({
     // Check if there are slides with backgrounds
     const slidesWithContent = slides.filter(s => s.backgroundImage);
     if (slidesWithContent.length === 0) {
-      alert('Please add at least one image to your slides before exporting.');
+      toastError('Please add at least one image to your slides before exporting.');
       return;
     }
 
@@ -1119,11 +1139,11 @@ const SlideshowEditor = ({
       if (onSchedulePost && availableHandles.length > 0) {
         setShowSchedulePanel(true);
       } else {
-        alert(`Successfully exported ${images.length} carousel images!`);
+        toastSuccess(`Successfully exported ${images.length} carousel images!`);
       }
     } catch (err) {
       console.error('[Export] Failed:', err);
-      alert(`Export failed: ${err.message}`);
+      toastError(`Export failed: ${err.message}`);
     } finally {
       setIsExporting(false);
       setExportProgress(0);
@@ -1133,18 +1153,18 @@ const SlideshowEditor = ({
   // Schedule the carousel post
   const handleSchedule = useCallback(async () => {
     if (!selectedHandle) {
-      alert('Please select an account');
+      toastError('Please select an account');
       return;
     }
 
     if (exportedImages.length === 0) {
-      alert('Please export the slideshow first');
+      toastError('Please export the slideshow first');
       return;
     }
 
     const accountMapping = lateAccountIds[selectedHandle];
     if (!accountMapping) {
-      alert(`No Late.co account mapping found for ${selectedHandle}`);
+      toastError(`No Late.co account mapping found for ${selectedHandle}`);
       return;
     }
 
@@ -1170,7 +1190,7 @@ const SlideshowEditor = ({
       }
 
       if (platformsArray.length === 0) {
-        alert('Please select at least one platform');
+        toastError('Please select at least one platform');
         setIsScheduling(false);
         return;
       }
@@ -1184,12 +1204,12 @@ const SlideshowEditor = ({
         scheduledFor: scheduledFor.toISOString()
       });
 
-      alert(`Successfully scheduled carousel to ${platformsArray.map(p => p.platform).join(' & ')}!`);
+      toastSuccess(`Scheduled carousel to ${platformsArray.map(p => p.platform).join(' & ')}!`);
       setShowSchedulePanel(false);
       onClose?.();
     } catch (err) {
       console.error('[Schedule] Failed:', err);
-      alert(`Scheduling failed: ${err.message}`);
+      toastError(`Scheduling failed: ${err.message}`);
     } finally {
       setIsScheduling(false);
     }
@@ -2553,7 +2573,7 @@ const SlideshowEditor = ({
                 style={styles.scheduleSkipBtn}
                 onClick={() => {
                   setShowSchedulePanel(false);
-                  alert(`Exported ${exportedImages.length} images! You can schedule them later.`);
+                  toastSuccess(`Exported ${exportedImages.length} images! You can schedule them later.`);
                 }}
               >
                 Skip for now
@@ -3174,7 +3194,7 @@ const TextEditorPanel = ({
                   content: selectedOverlay.text.trim(),
                   createdAt: new Date().toISOString()
                 });
-                alert('Saved to Lyric Bank!');
+                toastSuccess('Saved to Lyric Bank!');
               }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

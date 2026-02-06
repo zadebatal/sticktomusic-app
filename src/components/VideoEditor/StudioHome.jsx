@@ -642,9 +642,16 @@ const StudioHome = ({
     const textBank2 = col.textBank2 || [];
     const template = col.textTemplates?.[0] || null;
 
+    // Validate: at least one bank must have images
     if (bankAImages.length === 0 && bankBImages.length === 0) {
       toastError('Please add images to Bank A and/or Bank B first.');
       return;
+    }
+
+    // Warn if only one bank is populated
+    if (bankAImages.length === 0 || bankBImages.length === 0) {
+      const emptyBank = bankAImages.length === 0 ? 'A' : 'B';
+      console.warn(`[Batch] Bank ${emptyBank} is empty — will use images from the other bank as fallback.`);
     }
 
     setBatchGenerating(true);
@@ -652,22 +659,36 @@ const StudioHome = ({
     const randomFrom = (arr) => arr.length > 0 ? arr[Math.floor(Math.random() * arr.length)] : null;
 
     const slideshows = [];
+    let skippedSlides = 0;
+
     for (let i = 0; i < batchCount; i++) {
       const slides = [];
       for (let s = 0; s < batchSlidesPerShow; s++) {
-        // Alternate between Bank A and Bank B
+        // Alternate between Bank A and Bank B: even slides = A, odd = B
         const useA = s % 2 === 0;
         const bank = useA ? bankAImages : bankBImages;
         const fallbackBank = useA ? bankBImages : bankAImages;
         const img = randomFrom(bank.length > 0 ? bank : fallbackBank);
 
+        // Skip slides with no image (both banks exhausted somehow)
+        if (!img) {
+          skippedSlides++;
+          continue;
+        }
+
+        const imageUrl = img.url || img.localUrl;
+        if (!imageUrl) {
+          skippedSlides++;
+          continue;
+        }
+
         const slide = {
           id: `slide_${Date.now()}_${i}_${s}`,
           index: s,
-          backgroundImage: img ? (img.url || img.localUrl) : null,
-          thumbnail: img ? (img.url || img.localUrl) : null,
+          backgroundImage: imageUrl,
+          thumbnail: imageUrl,
           sourceBank: useA ? 'imageA' : 'imageB',
-          sourceImageId: img?.id,
+          sourceImageId: img.id,
           textOverlays: [],
           imageTransform: { scale: 1, offsetX: 0, offsetY: 0 },
           duration: 3
@@ -679,24 +700,32 @@ const StudioHome = ({
 
         if (textBankForSlide.length > 0) {
           const randomText = randomFrom(textBankForSlide);
-          slide.textOverlays.push({
-            id: `text_${Date.now()}_${i}_${s}`,
-            text: randomText,
-            position: textStyleForSlide?.position || { x: 50, y: 50 },
-            style: {
-              fontFamily: textStyleForSlide?.fontFamily || 'Inter, sans-serif',
-              fontSize: textStyleForSlide?.fontSize || 48,
-              fontWeight: textStyleForSlide?.fontWeight || '700',
-              color: textStyleForSlide?.color || '#ffffff',
-              textAlign: 'center',
-              outline: textStyleForSlide?.outline !== false,
-              outlineColor: textStyleForSlide?.outlineColor || 'rgba(0,0,0,0.5)'
-            }
-          });
+          if (randomText) {
+            slide.textOverlays.push({
+              id: `text_${Date.now()}_${i}_${s}`,
+              text: randomText,
+              position: textStyleForSlide?.position || { x: 50, y: 50 },
+              style: {
+                fontFamily: textStyleForSlide?.fontFamily || 'Inter, sans-serif',
+                fontSize: textStyleForSlide?.fontSize || 48,
+                fontWeight: textStyleForSlide?.fontWeight || '700',
+                color: textStyleForSlide?.color || '#ffffff',
+                textAlign: 'center',
+                outline: textStyleForSlide?.outline !== false,
+                outlineColor: textStyleForSlide?.outlineColor || 'rgba(0,0,0,0.5)'
+              }
+            });
+          }
         }
 
         slides.push(slide);
       }
+
+      // Only create slideshow if it has at least 1 slide
+      if (slides.length === 0) continue;
+
+      // Re-index slides after any skips
+      slides.forEach((slide, idx) => { slide.index = idx; });
 
       const slideshow = {
         id: `slideshow_${Date.now()}_${i}`,
@@ -708,8 +737,9 @@ const StudioHome = ({
           url: batchAudio.url || batchAudio.localUrl,
           localUrl: batchAudio.localUrl || batchAudio.url,
           name: batchAudio.name,
-          startTime: 0,
-          endTime: null
+          startTime: batchAudio.metadata?.startTime || 0,
+          endTime: batchAudio.metadata?.endTime || batchAudio.duration || null,
+          duration: batchAudio.duration || null
         } : null,
         status: 'draft',
         collectionId: selectedCollection,
@@ -735,8 +765,13 @@ const StudioHome = ({
     setCreatedContent(content);
     setBatchGenerating(false);
     setShowBatchModal(false);
-    toastSuccess(`Generated ${slideshows.length} slideshow drafts! View them in your library.`);
-  }, [batchCount, batchSlidesPerShow, batchAudio, selectedCollection, collections, library, artistId, db]);
+    if (slideshows.length === 0) {
+      toastError('Could not generate any slideshows — no valid images found in banks.');
+    } else {
+      const skippedMsg = skippedSlides > 0 ? ` (${skippedSlides} blank slides skipped)` : '';
+      toastSuccess(`Generated ${slideshows.length} slideshow drafts!${skippedMsg} View them in your library.`);
+    }
+  }, [batchCount, batchSlidesPerShow, batchAudio, selectedCollection, collections, library, artistId, db, toastError, toastSuccess]);
 
 
   // =====================

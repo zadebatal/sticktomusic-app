@@ -37,6 +37,7 @@ import {
   removeFromLibraryAsync
 } from '../../services/libraryService';
 import { uploadFile } from '../../services/firebaseStorage';
+import { useToast } from '../ui';
 
 const LibraryBrowser = ({
   db = null, // Firestore instance for cross-device sync
@@ -52,6 +53,8 @@ const LibraryBrowser = ({
   compact = false,
   refreshTrigger = 0 // Increment to force refresh
 }) => {
+  const { success: toastSuccess } = useToast();
+
   // State
   const [library, setLibrary] = useState([]);
   const [collections, setCollections] = useState([]);
@@ -265,6 +268,7 @@ const LibraryBrowser = ({
       assignToBank(artistId, activeView, dragIds, bank);
       loadData();
       syncCollection(activeView);
+      toastSuccess(`Added ${dragIds.length} item${dragIds.length > 1 ? 's' : ''} to Bank ${bank}`);
     }
     setDraggedItem(null);
     setDragOverBank(null);
