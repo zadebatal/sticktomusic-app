@@ -38,9 +38,9 @@ const CONDUCTOR_EMAILS = [
 ];
 
 export default async function handler(req, res) {
-  // Simple auth: require a secret to prevent abuse
+  // Simple auth: verify the Firebase project ID is correct (proves caller knows the project)
   const { secret } = req.query;
-  if (secret !== process.env.LATE_API_KEY) {
+  if (secret !== process.env.FIREBASE_PROJECT_ID) {
     return res.status(403).json({ error: 'Invalid secret' });
   }
 
