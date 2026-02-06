@@ -1,17 +1,32 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import AestheticHome from './AestheticHome';
+import StudioHome from './StudioHome';
 import ContentLibrary from './ContentLibrary';
 import VideoEditorModal from './VideoEditorModal';
 import BatchPipeline from './BatchPipeline';
 import SlideshowEditor from './SlideshowEditor';
+// OnboardingModal removed - auto-setup Music Artist template instead
 import { uploadFile, deleteFile, getMediaDuration, generateThumbnail } from '../../services/firebaseStorage';
 import {
   saveCategories, loadCategories, savePresets, loadPresets, cleanupStorage,
   saveArtistCategories, loadArtistCategories, saveArtistPresets, loadArtistPresets,
   setLastArtistId, hasLegacyData, migrateToArtistStorage
 } from '../../services/storageService';
+import {
+  getOnboardingStatus,
+  completeOnboarding,
+  getLibrary,
+  getCreatedContent,
+  addCreatedVideo,
+  updateCreatedVideo,
+  MEDIA_TYPES,
+  STARTER_TEMPLATES
+} from '../../services/libraryService';
 import { VIDEO_STATUS } from '../../utils/status';
+
+// Feature flag: Set to true to use new Library/Collections system
+const USE_LIBRARY_SYSTEM = true;
 
 /**
  * ErrorBoundary - Catches errors in VideoEditorModal to prevent blank page crashes
@@ -120,6 +135,7 @@ const saveSessionState = (state) => {
 };
 
 const VideoStudio = ({
+  db = null, // Firestore instance for cross-device sync
   onClose,
   artists = [],
   artistId: initialArtistId = null,
@@ -365,6 +381,23 @@ const VideoStudio = ({
   // Studio mode (lifted from AestheticHome for breadcrumb visibility)
   // null = mode selection, 'videos' = video mode, 'slideshows' = slideshow mode
   const [studioMode, setStudioMode] = useState(null);
+
+  // Library system state (new system)
+  const [libraryMedia, setLibraryMedia] = useState({ videos: [], audio: [], images: [] });
+  const [selectedLibraryMedia, setSelectedLibraryMedia] = useState({ videos: [], audio: null, images: [] });
+  const [pullFromCollection, setPullFromCollection] = useState(null);
+
+  // Auto-setup Music Artist template if onboarding not completed (no modal)
+  useEffect(() => {
+    if (USE_LIBRARY_SYSTEM && currentArtistId) {
+      const status = getOnboardingStatus(currentArtistId);
+      if (!status.completed) {
+        // Auto-complete with Music Artist template
+        completeOnboarding(currentArtistId, STARTER_TEMPLATES.MUSIC_ARTIST.id);
+        console.log('[Studio] Auto-completed onboarding with Music Artist template');
+      }
+    }
+  }, [currentArtistId]);
 
   // Save to localStorage when categories change
   useEffect(() => {
@@ -1483,9 +1516,56 @@ const VideoStudio = ({
         </div>
       </header>
 
+      {/* Onboarding removed - Music Artist template auto-applied */}
+
       {/* Main Content */}
       <main style={styles.main}>
-        {currentView === 'home' && (
+        {currentView === 'home' && USE_LIBRARY_SYSTEM && !selectedCategory && (
+          <StudioHome
+            db={db}
+            artistId={currentArtistId}
+            artists={artists}
+            studioMode={studioMode}
+            onSetStudioMode={setStudioMode}
+            onMakeVideo={(options) => {
+              // If coming from library system, create a temporary category-like structure
+              if (options?.libraryVideos || options?.libraryAudio) {
+                setSelectedLibraryMedia({
+                  videos: options.libraryVideos || [],
+                  audio: options.libraryAudio || null,
+                  images: []
+                });
+                setPullFromCollection(options.pullFromCollection);
+              }
+              handleMakeVideo(options?.existingVideo || null);
+            }}
+            onMakeSlideshow={(options) => {
+              if (options?.libraryImages) {
+                setSelectedLibraryMedia(prev => ({
+                  ...prev,
+                  images: options.libraryImages || []
+                }));
+              }
+              handleMakeSlideshow(options?.existingSlideshow || null);
+            }}
+            onViewContent={(options) => {
+              // For now, create a default category to view content
+              const isSlideshows = options?.type === 'slideshows';
+              setCurrentView(isSlideshows ? 'slideshows' : 'library');
+              setStudioMode(isSlideshows ? 'slideshows' : 'videos');
+              // Select first category if none selected
+              if (!selectedCategory && artistCategories.length > 0) {
+                setSelectedCategory(artistCategories[0]);
+              }
+            }}
+            onShowBatchPipeline={() => setShowBatchPipeline(true)}
+            onAddLyrics={handleAddLyrics}
+            onUpdateLyrics={handleUpdateLyrics}
+            onDeleteLyrics={handleDeleteLyrics}
+          />
+        )}
+
+        {currentView === 'home' && (!USE_LIBRARY_SYSTEM || selectedCategory) && (
           <AestheticHome
             artists={artists}
             selectedArtist={selectedArtist}

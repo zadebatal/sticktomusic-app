@@ -492,13 +492,31 @@ const StickToMusic = () => {
     const unsubscribe = onSnapshot(
       collection(db, 'allowedUsers'),
       (snapshot) => {
-        const users = snapshot.docs.map(doc => ({
+        const rawUsers = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }));
+
+        // Deduplicate by email, keeping highest-privilege role (conductor > operator > artist)
+        const roleOrder = { conductor: 3, operator: 2, artist: 1 };
+        const userMap = new Map();
+        rawUsers.forEach(user => {
+          const email = user.email?.toLowerCase();
+          if (!email) return;
+
+          const existing = userMap.get(email);
+          const currentPriority = roleOrder[user.role] || 0;
+          const existingPriority = existing ? (roleOrder[existing.role] || 0) : -1;
+
+          if (currentPriority > existingPriority) {
+            userMap.set(email, user);
+          }
+        });
+
+        const users = Array.from(userMap.values());
         setAllowedUsers(users);
         setFirestoreLoaded(true);
-        console.log('✅ Loaded allowed users:', users.length);
+        console.log('✅ Loaded allowed users:', users.length, '(deduped from', rawUsers.length, ')');
       },
       (error) => {
         console.error('❌ Error loading allowed users:', error);
@@ -1095,7 +1113,7 @@ const StickToMusic = () => {
     },
     {
       title: 'Content Tab',
-      description: 'Schedule and manage posts across all world pages. Sync with Late to see scheduled content.',
+      description: 'Schedule and manage posts across all world pages. Sync to see scheduled content.',
       target: 'content'
     },
     {
@@ -3029,7 +3047,7 @@ const StickToMusic = () => {
             className="flex gap-1 sm:gap-2 mb-4 sm:mb-8 border-b border-zinc-800 pb-3 sm:pb-4 overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0"
             style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
-            {['artists', 'pages', 'content', 'campaigns', 'banks'].map(tab => (
+            {['artists', 'pages', 'content', 'campaigns'].map(tab => (
               <button
                 key={tab}
                 onClick={() => { setOperatorTab(tab); setMobileMenuOpen(false); }}
@@ -3808,25 +3826,25 @@ const StickToMusic = () => {
                         onClick={() => setShowLateConnectModal(true)}
                         className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-500 transition"
                       >
-                        🔗 Connect Late Account
+                        🔗 Enable Sync
                       </button>
                     )}
                   </div>
                 </div>
 
-                {/* Late Not Connected Banner */}
+                {/* Sync Not Enabled Banner */}
                 {!artistLateConnected && !checkingLateStatus && (
                   <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center mb-6">
                     <div className="text-4xl mb-4">🔗</div>
-                    <h3 className="text-xl font-semibold mb-2">Connect Late for {artistName}</h3>
+                    <h3 className="text-xl font-semibold mb-2">Enable Sync for {artistName}</h3>
                     <p className="text-zinc-400 mb-6 max-w-md mx-auto">
-                      To schedule and manage posts for {artistName}, connect their Late account by entering the API key.
+                      To schedule and manage posts for {artistName}, enable sync by connecting their posting account.
                     </p>
                     <button
                       onClick={() => setShowLateConnectModal(true)}
                       className="px-6 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-500 transition"
                     >
-                      Connect Late Account
+                      Enable Sync
                     </button>
                   </div>
                 )}
@@ -3834,7 +3852,7 @@ const StickToMusic = () => {
                 {checkingLateStatus && (
                   <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 text-center mb-6">
                     <div className="animate-spin text-4xl mb-4">⏳</div>
-                    <p className="text-zinc-400">Checking Late connection status...</p>
+                    <p className="text-zinc-400">Checking sync status...</p>
                   </div>
                 )}
 
@@ -4223,7 +4241,7 @@ const StickToMusic = () => {
                   </div>
                 </div>
 
-                {/* Late Accounts Modal */}
+                {/* Connected Accounts Modal */}
                 {showLateAccounts && (
                   <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowLateAccounts(false)}>
                     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -4232,7 +4250,7 @@ const StickToMusic = () => {
                         <button onClick={() => setShowLateAccounts(false)} className="text-zinc-500 hover:text-white">✕</button>
                       </div>
                       <div className="p-6 overflow-y-auto max-h-[60vh]">
-                        <p className="text-sm text-zinc-500 mb-4">8 accounts connected via Late API:</p>
+                        <p className="text-sm text-zinc-500 mb-4">8 accounts synced:</p>
                         <div className="space-y-3">
                           {Object.entries(LATE_ACCOUNT_IDS).map(([handle, ids]) => (
                             <div key={handle} className="bg-zinc-800 rounded-lg p-4">
@@ -4397,7 +4415,7 @@ const StickToMusic = () => {
                   return (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                        <p className="text-zinc-500 text-xs mb-1">{hasFilters ? 'Filtered Posts' : 'From Late API'}</p>
+                        <p className="text-zinc-500 text-xs mb-1">{hasFilters ? 'Filtered Posts' : 'Synced Posts'}</p>
                         <p className="text-2xl font-bold text-purple-400">{filteredStatsData.length}{hasFilters && <span className="text-sm text-zinc-500 ml-1">/ {latePosts.length}</span>}</p>
                       </div>
                       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
@@ -5581,26 +5599,14 @@ const StickToMusic = () => {
                   </div>
                 </div>
 
-                {/* Late Integration Section */}
+                {/* Sync Integration Section */}
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-                  <h3 className="text-lg font-semibold mb-4">Late Integration</h3>
+                  <h3 className="text-lg font-semibold mb-4">Sync Settings</h3>
                   <div className="space-y-4">
-                    <label className="flex items-center justify-between py-3 border-b border-zinc-800 cursor-pointer">
-                      <div>
-                        <p className="font-medium">Auto-Sync</p>
-                        <p className="text-sm text-zinc-500">Automatically sync with Late every hour</p>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={settings.autoSync}
-                        onChange={(e) => setSettings(prev => ({ ...prev, autoSync: e.target.checked }))}
-                        className="w-5 h-5 rounded bg-zinc-800 border-zinc-700 text-purple-600 focus:ring-purple-500"
-                      />
-                    </label>
                     <div className="flex items-center justify-between py-3">
                       <div>
                         <p className="font-medium">Connected Accounts</p>
-                        <p className="text-sm text-zinc-500">8 accounts connected via Late API</p>
+                        <p className="text-sm text-zinc-500">8 accounts connected</p>
                       </div>
                       <button
                         onClick={() => setShowLateAccounts(true)}
@@ -5824,6 +5830,7 @@ const StickToMusic = () => {
         {/* Video Studio Modal - Flowstage-inspired workflow */}
         {showVideoEditor && (
           <VideoStudio
+            db={db}
             onClose={() => setShowVideoEditor(false)}
             artists={firestoreArtists.length > 0
               ? firestoreArtists.map(a => ({ id: a.id, name: a.name }))
@@ -5874,18 +5881,6 @@ const StickToMusic = () => {
                     <option value="Starter">Starter</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-2">Content Distribution</label>
-                  <select
-                    value={addArtistForm.cdTier}
-                    onChange={e => setAddArtistForm(prev => ({ ...prev, cdTier: e.target.value }))}
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
-                  >
-                    <option value="CD Lite">CD Lite</option>
-                    <option value="CD Pro">CD Pro</option>
-                    <option value="None">None</option>
-                  </select>
-                </div>
                 {/* Only show operator assignment for conductors - operators auto-assign to themselves */}
                 {isConductor(user) ? (
                   <div>
@@ -5895,7 +5890,6 @@ const StickToMusic = () => {
                       onChange={e => setAddArtistForm(prev => ({ ...prev, assignedOperatorId: e.target.value }))}
                       className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
                     >
-                      <option value="">Conductor only (unassigned)</option>
                       {allowedUsers
                         .filter(u => u.role === 'operator' && u.status === 'active')
                         .map(op => (
@@ -6347,30 +6341,30 @@ const StickToMusic = () => {
           </div>
         )}
 
-        {/* LATE CONNECT MODAL */}
+        {/* SYNC CONNECT MODAL */}
         {showLateConnectModal && (
           <div className="fixed inset-0 bg-black/80 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={() => { setShowLateConnectModal(false); setLateApiKeyInput(''); }}>
             <div className="bg-zinc-900 border border-zinc-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
               <div className="p-4 sm:p-6 border-b border-zinc-800 flex justify-between items-center">
-                <h2 className="text-lg sm:text-xl font-bold">Connect Late Account</h2>
+                <h2 className="text-lg sm:text-xl font-bold">Enable Sync</h2>
                 <button onClick={() => { setShowLateConnectModal(false); setLateApiKeyInput(''); }} className="text-zinc-500 hover:text-white text-2xl">✕</button>
               </div>
               <div className="p-4 sm:p-6 space-y-4">
                 <p className="text-zinc-400 text-sm">
-                  Enter the Late API key for <strong className="text-white">{firestoreArtists.find(a => a.id === currentArtistId)?.name || 'this artist'}</strong> to connect their posting account.
+                  Enter the API key for <strong className="text-white">{firestoreArtists.find(a => a.id === currentArtistId)?.name || 'this artist'}</strong> to enable social media sync.
                 </p>
                 <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-2">Late API Key</label>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">Sync API Key</label>
                   <input
                     type="password"
                     value={lateApiKeyInput}
                     onChange={e => setLateApiKeyInput(e.target.value)}
                     className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-purple-500 font-mono"
-                    placeholder="Enter Late API key"
+                    placeholder="Enter API key"
                     autoFocus
                   />
                   <p className="mt-2 text-xs text-zinc-500">
-                    Get your API key from <a href="https://getlate.dev/settings/api" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">Late Settings → API</a>
+                    Get your API key from <a href="https://getlate.dev/settings/api" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">your account settings</a>
                   </p>
                 </div>
                 <div className="flex gap-3 pt-2">
@@ -6393,7 +6387,7 @@ const StickToMusic = () => {
                         setArtistLateConnected(true);
                         setShowLateConnectModal(false);
                         setLateApiKeyInput('');
-                        showToast('Late account connected successfully!', 'success');
+                        showToast('Sync enabled successfully!', 'success');
                         // Fetch posts after connecting
                         const result = await lateApi.fetchScheduledPosts(1, currentArtistId);
                         if (result.success) {
@@ -7194,7 +7188,6 @@ const StickToMusic = () => {
                 { label: 'Pages Tab', action: () => { setOperatorTab('pages'); setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '📱', category: 'Operator' },
                 { label: 'Content / Schedule', action: () => { setOperatorTab('content'); setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '📅', category: 'Operator' },
                 { label: 'Campaigns', action: () => { setOperatorTab('campaigns'); setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '🎯', category: 'Operator' },
-                { label: 'Content Banks', action: () => { setOperatorTab('banks'); setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '📦', category: 'Operator' },
                 { label: 'Applications', action: () => { setOperatorTab('applications'); setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '📋', category: 'Operator' },
                 { label: 'New Campaign', action: () => { setShowCampaignModal(true); setCurrentPage('operator'); setOperatorTab('campaigns'); setShowQuickSearch(false); }, icon: '➕', category: 'Actions' },
                 { label: 'New Schedule', action: () => { setShowScheduleModal(true); setCurrentPage('operator'); setOperatorTab('content'); setShowQuickSearch(false); }, icon: '➕', category: 'Actions' },

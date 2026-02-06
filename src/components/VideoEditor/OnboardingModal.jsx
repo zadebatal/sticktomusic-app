@@ -1,0 +1,324 @@
+/**
+ * OnboardingModal - First-time template selection
+ * Shows when user first enters the studio to help them set up their organization
+ */
+
+import React, { useState } from 'react';
+import { STARTER_TEMPLATES, completeOnboarding, skipOnboarding } from '../../services/libraryService';
+
+const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
+  // Default to Music Artist template since this is an app for musicians
+  const [selectedTemplate, setSelectedTemplate] = useState(STARTER_TEMPLATES.MUSIC_ARTIST);
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  const templates = Object.values(STARTER_TEMPLATES);
+
+  const handleSelectTemplate = (template) => {
+    setSelectedTemplate(template);
+  };
+
+  const handleConfirm = () => {
+    if (!selectedTemplate) return;
+
+    setIsAnimating(true);
+
+    // Complete onboarding with selected template
+    completeOnboarding(artistId, selectedTemplate.id);
+
+    setTimeout(() => {
+      onComplete(selectedTemplate);
+    }, 300);
+  };
+
+  const handleSkip = () => {
+    setIsAnimating(true);
+    skipOnboarding(artistId);
+
+    setTimeout(() => {
+      onComplete(null);
+    }, 300);
+  };
+
+  const styles = {
+    overlay: {
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.85)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 10000,
+      padding: isMobile ? '16px' : '32px',
+      opacity: isAnimating ? 0 : 1,
+      transition: 'opacity 0.3s ease'
+    },
+    modal: {
+      backgroundColor: '#1a1a1a',
+      borderRadius: '16px',
+      maxWidth: '800px',
+      width: '100%',
+      maxHeight: '90vh',
+      overflow: 'auto',
+      border: '1px solid rgba(255, 255, 255, 0.1)'
+    },
+    header: {
+      padding: isMobile ? '24px 20px 16px' : '32px 32px 24px',
+      borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+      textAlign: 'center'
+    },
+    welcomeIcon: {
+      fontSize: '48px',
+      marginBottom: '16px'
+    },
+    title: {
+      fontSize: isMobile ? '24px' : '28px',
+      fontWeight: '600',
+      color: '#ffffff',
+      margin: '0 0 8px 0'
+    },
+    subtitle: {
+      fontSize: isMobile ? '14px' : '16px',
+      color: 'rgba(255, 255, 255, 0.6)',
+      margin: 0,
+      lineHeight: 1.5
+    },
+    content: {
+      padding: isMobile ? '20px' : '32px'
+    },
+    sectionTitle: {
+      fontSize: '14px',
+      fontWeight: '600',
+      color: 'rgba(255, 255, 255, 0.5)',
+      textTransform: 'uppercase',
+      letterSpacing: '1px',
+      marginBottom: '16px'
+    },
+    templatesGrid: {
+      display: 'grid',
+      gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
+      gap: '12px'
+    },
+    templateCard: {
+      padding: '20px',
+      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+      borderRadius: '12px',
+      border: '2px solid transparent',
+      cursor: 'pointer',
+      transition: 'all 0.2s ease',
+      textAlign: 'left'
+    },
+    templateCardSelected: {
+      backgroundColor: 'rgba(99, 102, 241, 0.15)',
+      borderColor: '#6366f1'
+    },
+    templateCardHover: {
+      backgroundColor: 'rgba(255, 255, 255, 0.08)'
+    },
+    templateIcon: {
+      fontSize: '32px',
+      marginBottom: '12px'
+    },
+    templateName: {
+      fontSize: '18px',
+      fontWeight: '600',
+      color: '#ffffff',
+      marginBottom: '4px'
+    },
+    templateDescription: {
+      fontSize: '14px',
+      color: 'rgba(255, 255, 255, 0.5)',
+      marginBottom: '12px'
+    },
+    templateCollections: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: '6px'
+    },
+    collectionTag: {
+      fontSize: '12px',
+      padding: '4px 8px',
+      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+      borderRadius: '4px',
+      color: 'rgba(255, 255, 255, 0.7)'
+    },
+    footer: {
+      padding: isMobile ? '20px' : '24px 32px',
+      borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: '16px',
+      flexDirection: isMobile ? 'column' : 'row'
+    },
+    skipButton: {
+      padding: '12px 24px',
+      backgroundColor: 'transparent',
+      border: '1px solid rgba(255, 255, 255, 0.2)',
+      borderRadius: '8px',
+      color: 'rgba(255, 255, 255, 0.6)',
+      fontSize: '14px',
+      fontWeight: '500',
+      cursor: 'pointer',
+      transition: 'all 0.2s ease',
+      width: isMobile ? '100%' : 'auto',
+      order: isMobile ? 2 : 1
+    },
+    confirmButton: {
+      padding: '12px 32px',
+      backgroundColor: selectedTemplate ? '#6366f1' : 'rgba(99, 102, 241, 0.3)',
+      border: 'none',
+      borderRadius: '8px',
+      color: selectedTemplate ? '#ffffff' : 'rgba(255, 255, 255, 0.5)',
+      fontSize: '14px',
+      fontWeight: '600',
+      cursor: selectedTemplate ? 'pointer' : 'not-allowed',
+      transition: 'all 0.2s ease',
+      width: isMobile ? '100%' : 'auto',
+      order: isMobile ? 1 : 2
+    },
+    previewSection: {
+      marginTop: '24px',
+      padding: '20px',
+      backgroundColor: 'rgba(99, 102, 241, 0.1)',
+      borderRadius: '12px',
+      border: '1px solid rgba(99, 102, 241, 0.2)'
+    },
+    previewTitle: {
+      fontSize: '14px',
+      fontWeight: '600',
+      color: '#6366f1',
+      marginBottom: '12px'
+    },
+    previewList: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '8px'
+    },
+    previewItem: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      fontSize: '14px',
+      color: 'rgba(255, 255, 255, 0.8)'
+    },
+    previewIcon: {
+      fontSize: '16px'
+    }
+  };
+
+  return (
+    <div style={styles.overlay}>
+      <div style={styles.modal}>
+        <div style={styles.header}>
+          <div style={styles.welcomeIcon}>🎬</div>
+          <h1 style={styles.title}>Welcome to Your Studio</h1>
+          <p style={styles.subtitle}>
+            Choose a template to get started with pre-organized collections,
+            or start fresh and create your own system.
+          </p>
+        </div>
+
+        <div style={styles.content}>
+          <div style={styles.sectionTitle}>Choose Your Template</div>
+
+          <div style={styles.templatesGrid}>
+            {templates.map((template) => (
+              <div
+                key={template.id}
+                style={{
+                  ...styles.templateCard,
+                  ...(selectedTemplate?.id === template.id ? styles.templateCardSelected : {})
+                }}
+                onClick={() => handleSelectTemplate(template)}
+                onMouseEnter={(e) => {
+                  if (selectedTemplate?.id !== template.id) {
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (selectedTemplate?.id !== template.id) {
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                  }
+                }}
+              >
+                <div style={styles.templateIcon}>{template.icon}</div>
+                <div style={styles.templateName}>{template.name}</div>
+                <div style={styles.templateDescription}>{template.description}</div>
+
+                {template.collections.length > 0 && (
+                  <div style={styles.templateCollections}>
+                    {template.collections.slice(0, 4).map((col, idx) => (
+                      <span key={idx} style={styles.collectionTag}>
+                        {col.name}
+                      </span>
+                    ))}
+                    {template.collections.length > 4 && (
+                      <span style={styles.collectionTag}>
+                        +{template.collections.length - 4} more
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {selectedTemplate && selectedTemplate.collections.length > 0 && (
+            <div style={styles.previewSection}>
+              <div style={styles.previewTitle}>
+                Collections that will be created:
+              </div>
+              <div style={styles.previewList}>
+                {selectedTemplate.collections.map((col, idx) => (
+                  <div key={idx} style={styles.previewItem}>
+                    <span style={styles.previewIcon}>📁</span>
+                    <strong>{col.name}</strong>
+                    <span style={{ color: 'rgba(255,255,255,0.5)' }}>— {col.description}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={styles.footer}>
+          <button
+            style={styles.skipButton}
+            onClick={handleSkip}
+            onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.4)'}
+            onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)'}
+          >
+            Skip for now
+          </button>
+          <button
+            style={styles.confirmButton}
+            onClick={handleConfirm}
+            disabled={!selectedTemplate}
+            onMouseEnter={(e) => {
+              if (selectedTemplate) {
+                e.currentTarget.style.backgroundColor = '#5558e3';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (selectedTemplate) {
+                e.currentTarget.style.backgroundColor = '#6366f1';
+              }
+            }}
+          >
+            {selectedTemplate?.id === 'template_custom'
+              ? 'Start Fresh'
+              : selectedTemplate
+                ? `Use ${selectedTemplate.name} Template`
+                : 'Select a Template'
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default OnboardingModal;

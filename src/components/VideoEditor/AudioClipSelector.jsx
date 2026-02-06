@@ -747,6 +747,13 @@ const AudioClipSelector = ({
               onClick={() => {
                 // Check if audio was trimmed (not using full track)
                 const isTrimmed = inPoint > 0.1 || (duration > 0 && Math.abs(outPoint - duration) > 0.1);
+                console.log('[AudioClipSelector] Use This Clip clicked:', {
+                  inPoint,
+                  outPoint,
+                  selectedDuration,
+                  fullDuration: duration,
+                  isTrimmed
+                });
                 if (isTrimmed && onSaveClip) {
                   // Show prompt to save trimmed version with a name
                   const baseName = audioName || 'Audio';
@@ -755,6 +762,7 @@ const AudioClipSelector = ({
                   setShowSaveTrimmedPrompt(true);
                 } else {
                   // Not trimmed, just use directly
+                  console.log('[AudioClipSelector] Calling onSave with:', { startTime: inPoint, endTime: outPoint, duration: selectedDuration });
                   onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration });
                 }
               }}
@@ -920,6 +928,7 @@ const AudioClipSelector = ({
                   }}
                   onClick={() => {
                     // Skip saving, just use the clip
+                    console.log('[AudioClipSelector] Skip & Use clicked:', { startTime: inPoint, endTime: outPoint, duration: selectedDuration });
                     onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration });
                     setShowSaveTrimmedPrompt(false);
                   }}
@@ -935,6 +944,7 @@ const AudioClipSelector = ({
                   }}
                   onClick={() => {
                     if (trimmedClipName.trim()) {
+                      console.log('[AudioClipSelector] Save & Use clicked:', { startTime: inPoint, endTime: outPoint, duration: selectedDuration });
                       onSaveClip({
                         name: trimmedClipName.trim(),
                         startTime: inPoint,
