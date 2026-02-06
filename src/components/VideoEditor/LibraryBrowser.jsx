@@ -201,11 +201,11 @@ const LibraryBrowser = ({
     && !activeView.startsWith('smart_')
     && collections.some(c => c.id === activeView && c.type !== COLLECTION_TYPES.SMART);
 
-  // Get bank data when viewing a user collection
+  // Get bank data when viewing a user collection (images/slideshow only, not videos)
   // Compute from component state (library + collections) instead of localStorage
   // so it stays in sync with Firestore subscription data
   const collectionBanks = (() => {
-    if (!isUserCollectionView) return null;
+    if (!isUserCollectionView || mode === 'videos') return null;
     const col = collections.find(c => c.id === activeView);
     if (!col) return null;
     const allMedia = library.filter(item => (col.mediaIds || []).includes(item.id));
