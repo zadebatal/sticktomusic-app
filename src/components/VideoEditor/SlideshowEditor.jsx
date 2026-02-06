@@ -53,6 +53,9 @@ const SlideshowEditor = ({
   const [collections, setCollections] = useState([]);
   const [selectedSource, setSelectedSource] = useState('bankA'); // 'bankA' | 'bankB' | 'all' | collection ID
 
+  // Filmstrip drag-and-drop state
+  const [filmstripDropIndex, setFilmstripDropIndex] = useState(null);
+
   // Audio state
   const [selectedAudio, setSelectedAudio] = useState(existingSlideshow?.audio || null);
   const [showAudioTrimmer, setShowAudioTrimmer] = useState(false);
@@ -839,6 +842,70 @@ const SlideshowEditor = ({
       }
     }
   }, [setSlideBackground]);
+
+  // Handle filmstrip drag over — determine insert index from cursor position
+  const handleFilmstripDragOver = useCallback((e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    const scrollContainer = e.currentTarget;
+    const slideElements = scrollContainer.querySelectorAll('[data-filmstrip-slide]');
+    if (slideElements.length === 0) {
+      setFilmstripDropIndex(0);
+      return;
+    }
+    const mouseX = e.clientX;
+    let insertIndex = slideElements.length; // default: append at end
+    for (let i = 0; i < slideElements.length; i++) {
+      const rect = slideElements[i].getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      if (mouseX < midX) {
+        insertIndex = i;
+        break;
+      }
+    }
+    setFilmstripDropIndex(insertIndex);
+  }, []);
+
+  const handleFilmstripDragLeave = useCallback((e) => {
+    // Only clear if truly leaving the filmstrip (not entering a child)
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setFilmstripDropIndex(null);
+    }
+  }, []);
+
+  // Handle filmstrip drop — insert a new slide with the dropped image at the drop position
+  const handleFilmstripDrop = useCallback((e) => {
+    e.preventDefault();
+    const data = e.dataTransfer.getData('application/json');
+    if (data) {
+      try {
+        const clipData = JSON.parse(data);
+        const imageUrl = clipData.url || clipData.localUrl;
+        const thumbnail = clipData.thumbnail || imageUrl;
+        const insertAt = filmstripDropIndex != null ? filmstripDropIndex : slides.length;
+        const newSlide = {
+          id: `slide_${Date.now()}`,
+          index: insertAt,
+          backgroundImage: imageUrl,
+          thumbnail: thumbnail,
+          sourceBank: clipData.sourceBank || null,
+          sourceImageId: clipData.id || null,
+          textOverlays: [],
+          duration: 3,
+          imageTransform: { scale: 1, offsetX: 0, offsetY: 0 }
+        };
+        setSlides(prev => {
+          const updated = [...prev];
+          updated.splice(insertAt, 0, newSlide);
+          return updated.map((s, i) => ({ ...s, index: i }));
+        });
+        setSelectedSlideIndex(insertAt);
+      } catch (err) {
+        console.warn('Invalid filmstrip drop data:', err);
+      }
+    }
+    setFilmstripDropIndex(null);
+  }, [filmstripDropIndex, slides.length]);
 
   // Default text style (can be overridden by selected template)
   const getDefaultTextStyle = useCallback(() => {
@@ -2615,67 +2682,83 @@ const SlideshowEditor = ({
               />
             )}
 
-            {/* Slide Filmstrip */}
+            {/* Slide Filmstrip — drop zone for bank images */}
             <div style={styles.filmstrip}>
-              <div style={styles.filmstripScroll}>
+              <div
+                style={styles.filmstripScroll}
+                onDragOver={handleFilmstripDragOver}
+                onDragLeave={handleFilmstripDragLeave}
+                onDrop={handleFilmstripDrop}
+              >
                 {slides.map((slide, index) => (
-                  <div
-                    key={slide.id}
-                    style={{
-                      ...styles.filmstripSlide,
-                      ...(index === selectedSlideIndex ? styles.filmstripSlideActive : {})
-                    }}
-                    onClick={() => setSelectedSlideIndex(index)}
-                  >
-                    {slide.backgroundImage ? (
-                      <img
-                        src={slide.thumbnail || slide.backgroundImage}
-                        alt={`Slide ${index + 1}`}
-                        style={styles.filmstripThumbnail}
-                      />
-                    ) : (
-                      <div style={styles.filmstripEmpty}>
-                        <span>{index + 1}</span>
-                      </div>
+                  <React.Fragment key={slide.id}>
+                    {/* Drop indicator before this slide */}
+                    {filmstripDropIndex === index && (
+                      <div style={styles.filmstripDropIndicator} />
                     )}
-                    {slides.length > 1 && (
-                    <button
+                    <div
+                      data-filmstrip-slide="true"
                       style={{
-                        ...styles.removeSlideButton,
-                        position: 'absolute',
-                        top: '2px',
-                        right: '2px',
-                        width: '20px',
-                        height: '20px',
-                        borderRadius: '50%',
-                        background: 'rgba(239, 68, 68, 0.8)',
-                        border: 'none',
-                        color: '#fff',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: 0,
-                        zIndex: 2,
-                        opacity: 1,
-                        transition: 'background 0.15s'
+                        ...styles.filmstripSlide,
+                        ...(index === selectedSlideIndex ? styles.filmstripSlideActive : {})
                       }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 1)'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.8)'}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeSlide(slide.id);
-                      }}
-                      title="Remove slide"
+                      onClick={() => setSelectedSlideIndex(index)}
                     >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                        <line x1="18" y1="6" x2="6" y2="18"/>
-                        <line x1="6" y1="6" x2="18" y2="18"/>
-                      </svg>
-                    </button>
-                    )}
-                  </div>
+                      {slide.backgroundImage ? (
+                        <img
+                          src={slide.thumbnail || slide.backgroundImage}
+                          alt={`Slide ${index + 1}`}
+                          style={styles.filmstripThumbnail}
+                        />
+                      ) : (
+                        <div style={styles.filmstripEmpty}>
+                          <span>{index + 1}</span>
+                        </div>
+                      )}
+                      {slides.length > 1 && (
+                      <button
+                        style={{
+                          ...styles.removeSlideButton,
+                          position: 'absolute',
+                          top: '2px',
+                          right: '2px',
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '50%',
+                          background: 'rgba(239, 68, 68, 0.8)',
+                          border: 'none',
+                          color: '#fff',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: 0,
+                          zIndex: 2,
+                          opacity: 1,
+                          transition: 'background 0.15s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 1)'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.8)'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeSlide(slide.id);
+                        }}
+                        title="Remove slide"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                          <line x1="18" y1="6" x2="6" y2="18"/>
+                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                      )}
+                    </div>
+                  </React.Fragment>
                 ))}
+
+                {/* Drop indicator after last slide */}
+                {filmstripDropIndex === slides.length && (
+                  <div style={styles.filmstripDropIndicator} />
+                )}
 
                 {/* Add Slide Button */}
                 <button style={styles.addSlideButton} onClick={addSlide}>
@@ -4155,6 +4238,16 @@ const styles = {
     color: '#4b5563',
     fontSize: '18px',
     fontWeight: '600'
+  },
+  filmstripDropIndicator: {
+    width: '3px',
+    minWidth: '3px',
+    height: '80px',
+    backgroundColor: '#6366f1',
+    borderRadius: '2px',
+    flexShrink: 0,
+    boxShadow: '0 0 8px rgba(99, 102, 241, 0.6)',
+    margin: '0 2px'
   },
   removeSlideButton: {
     position: 'absolute',
