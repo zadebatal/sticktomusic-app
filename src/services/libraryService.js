@@ -1455,10 +1455,24 @@ export const getCollectionsAsync = async (db, artistId) => {
       const snapshot = await getDocs(collectionsRef);
       if (!snapshot.empty) {
         const userCollections = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Merge localStorage bankA/bankB onto Firestore results
+        // (banks are saved to localStorage by assignToBank and may not yet be in Firestore)
+        const localCollections = getUserCollections(artistId);
+        const mergedCollections = userCollections.map(col => {
+          const localCol = localCollections.find(lc => lc.id === col.id);
+          if (localCol) {
+            return {
+              ...col,
+              bankA: localCol.bankA || col.bankA || [],
+              bankB: localCol.bankB || col.bankB || [],
+            };
+          }
+          return col;
+        });
         // Always include smart collections (computed client-side)
         const smartCollections = createSmartCollections();
-        console.log('[Library] Collections from Firestore:', userCollections.length);
-        return [...smartCollections, ...userCollections];
+        console.log('[Library] Collections from Firestore:', mergedCollections.length, '(with localStorage bank merge)');
+        return [...smartCollections, ...mergedCollections];
       }
     } catch (error) {
       console.warn('[Library] Firestore collections read failed:', error.message);
