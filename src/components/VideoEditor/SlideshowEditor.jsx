@@ -249,12 +249,11 @@ const SlideshowEditor = ({
     ? { width: 1080, height: 1920 }
     : { width: 1080, height: 1440 };
 
-  // Preview dimensions - always fixed 9:16 portrait (phone-style)
-  // Aspect ratio setting only affects how images are cropped during export
+  // Preview dimensions - match the selected aspect ratio
   const previewScale = 0.25;
   const previewDimensions = {
-    width: 1080 * previewScale,  // Fixed width
-    height: 1920 * previewScale  // Fixed 9:16 height
+    width: exportDimensions.width * previewScale,
+    height: exportDimensions.height * previewScale
   };
 
   // Get current slide (defined early so callbacks can reference it)
@@ -1311,7 +1310,7 @@ const SlideshowEditor = ({
                   ...styles.bankTabTeal,
                   ...(activeBank === 'imageA' ? styles.bankTabActiveTeal : {})
                 }}
-                onClick={() => setActiveBank('imageA')}
+                onClick={() => { setActiveBank('imageA'); setSelectedSource('bankA'); }}
               >
                 Image A
               </button>
@@ -1321,7 +1320,7 @@ const SlideshowEditor = ({
                   ...styles.bankTabAmber,
                   ...(activeBank === 'imageB' ? styles.bankTabActiveAmber : {})
                 }}
-                onClick={() => setActiveBank('imageB')}
+                onClick={() => { setActiveBank('imageB'); setSelectedSource('bankB'); }}
               >
                 Image B
               </button>
@@ -1605,8 +1604,8 @@ const SlideshowEditor = ({
                 style={{
                   ...styles.canvas,
                   width: isMobile ? Math.min(window.innerWidth - 32, previewDimensions.width) : previewDimensions.width,
-                  height: isMobile ? Math.min((window.innerWidth - 32) * (16/9), previewDimensions.height) : previewDimensions.height,
-                  aspectRatio: '9/16'  // Always fixed 9:16 preview
+                  height: isMobile ? Math.min((window.innerWidth - 32) * (exportDimensions.height / exportDimensions.width), previewDimensions.height) : previewDimensions.height,
+                  aspectRatio: aspectRatio === '4:3' ? '3/4' : '9/16'
                 }}
               >
                 {/* Background Image - Draggable and resizable */}
@@ -1675,13 +1674,14 @@ const SlideshowEditor = ({
                       top: 0,
                       left: 0,
                       right: 0,
-                      height: 'calc((100% - (100% * 0.75)) / 2)', // 4:3 is 75% of 9:16 height, crop top
+                      height: 'calc((100% - (100% * 0.75)) / 2)',
                       backgroundColor: 'rgba(0, 0, 0, 0.5)',
                       borderBottom: '2px dashed rgba(255, 255, 255, 0.4)',
                       pointerEvents: 'none',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center'
+                      justifyContent: 'center',
+                      zIndex: 8
                     }}>
                       <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px' }}>Cropped</span>
                     </div>
@@ -1691,13 +1691,14 @@ const SlideshowEditor = ({
                       bottom: 0,
                       left: 0,
                       right: 0,
-                      height: 'calc((100% - (100% * 0.75)) / 2)', // 4:3 is 75% of 9:16 height, crop bottom
+                      height: 'calc((100% - (100% * 0.75)) / 2)',
                       backgroundColor: 'rgba(0, 0, 0, 0.5)',
                       borderTop: '2px dashed rgba(255, 255, 255, 0.4)',
                       pointerEvents: 'none',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center'
+                      justifyContent: 'center',
+                      zIndex: 8
                     }}>
                       <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px' }}>Cropped</span>
                     </div>
