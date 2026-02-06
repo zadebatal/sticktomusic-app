@@ -211,7 +211,10 @@ const SlideshowEditor = ({
     setSelectedBankImages([]);
   }, [selectedBankImages, activeImages, activeContent, libraryImages, slides.length, selectedSource]);
 
-  // Initialize with at least one slide, or generate batch, or use initialImages
+  // Auto-start: check collection banks for random initial images
+  const [autoStartAttempted, setAutoStartAttempted] = useState(false);
+
+  // Initialize with at least one slide, or generate batch, or use initialImages, or auto-start from banks
   useEffect(() => {
     if (slides.length === 0) {
       if (initialImages && initialImages.length > 0) {
@@ -253,10 +256,65 @@ const SlideshowEditor = ({
           setName('Batch Slideshow ' + new Date().toLocaleTimeString());
         }
       } else {
+        // Default: add empty slide — will be replaced by auto-start if banks load
         addSlide();
       }
     }
   }, [batchMode]);
+
+  // Auto-start from collection banks: once collections load, if slides are empty/blank
+  // and any collection has bankA + bankB populated, auto-create 2 slides
+  useEffect(() => {
+    if (autoStartAttempted) return;
+    if (!collections || collections.length === 0) return;
+    if (initialImages?.length > 0 || batchMode) return;
+
+    // Check if current slides are just a single empty slide (the default addSlide)
+    const isDefaultEmpty = slides.length <= 1 && !slides[0]?.backgroundImage;
+    if (!isDefaultEmpty) return;
+
+    // Find any collection with both bankA and bankB populated
+    for (const col of collections) {
+      const bankAIds = col.bankA || [];
+      const bankBIds = col.bankB || [];
+      if (bankAIds.length > 0 && bankBIds.length > 0) {
+        // Resolve bank images from library
+        const bankAImages = libraryImages.filter(img => bankAIds.includes(img.id));
+        const bankBImages = libraryImages.filter(img => bankBIds.includes(img.id));
+        if (bankAImages.length > 0 && bankBImages.length > 0) {
+          const imgA = bankAImages[Math.floor(Math.random() * bankAImages.length)];
+          const imgB = bankBImages[Math.floor(Math.random() * bankBImages.length)];
+          setSlides([
+            {
+              id: `slide_${Date.now()}_0`,
+              index: 0,
+              backgroundImage: imgA.url || imgA.localUrl,
+              thumbnail: imgA.url || imgA.localUrl,
+              sourceBank: 'imageA',
+              sourceImageId: imgA.id,
+              textOverlays: [],
+              duration: 3
+            },
+            {
+              id: `slide_${Date.now()}_1`,
+              index: 1,
+              backgroundImage: imgB.url || imgB.localUrl,
+              thumbnail: imgB.url || imgB.localUrl,
+              sourceBank: 'imageB',
+              sourceImageId: imgB.id,
+              textOverlays: [],
+              duration: 3
+            }
+          ]);
+          // Set source to this collection's Bank A by default
+          setSelectedSource(`${col.id}:bankA`);
+          setAutoStartAttempted(true);
+          return;
+        }
+      }
+    }
+    setAutoStartAttempted(true);
+  }, [collections, libraryImages, slides, initialImages, batchMode, autoStartAttempted]);
 
   // Add a new slide
   const addSlide = useCallback(() => {

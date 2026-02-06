@@ -534,7 +534,9 @@ const StudioHome = ({
         existingSlideshow,
         libraryImages: selectedMedia.images,
         libraryAudio: selectedMedia.audio,
-        pullFromCollection: selectedCollection
+        pullFromCollection: selectedCollection,
+        // Pass collection bank info so editor can auto-start from banks
+        collectionId: selectedCollection || null
       });
     }
   };
@@ -1127,8 +1129,7 @@ const StudioHome = ({
                   <button
                     style={{
                       ...styles.actionButton,
-                      ...styles.primaryButton,
-                      opacity: selectedMedia.images.length === 0 ? 0.5 : 1
+                      ...styles.primaryButton
                     }}
                     onClick={() => handleLaunchSlideshowEditor()}
                   >

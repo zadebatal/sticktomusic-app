@@ -1765,6 +1765,9 @@ const VideoStudio = ({
                   images: options.libraryImages || []
                 }));
               }
+              if (options?.collectionId) {
+                setPullFromCollection(options.collectionId);
+              }
               handleMakeSlideshow(options?.existingSlideshow || null);
             }}
             onViewContent={(options) => {
