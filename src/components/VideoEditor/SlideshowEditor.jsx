@@ -260,14 +260,15 @@ const SlideshowEditor = ({
   // Get current slide (defined early so callbacks can reference it)
   const currentSlide = slides[selectedSlideIndex];
 
-  // Selected images in bank for bulk add
-  const [selectedBankImages, setSelectedBankImages] = useState([]);
+  // Selected images in bank for bulk add — use Set for O(1) lookups
+  const [selectedBankImages, setSelectedBankImages] = useState(new Set());
 
   // Add selected bank images as slides
   const addSelectedImagesToSlides = useCallback(() => {
-    if (selectedBankImages.length === 0) return;
+    if (selectedBankImages.size === 0) return;
     const allImages = [...(activeImages || []), ...(activeContent || [])];
-    const newSlides = selectedBankImages.map((imgId, i) => {
+    const selectedArr = Array.from(selectedBankImages);
+    const newSlides = selectedArr.map((imgId, i) => {
       const img = allImages.find(im => im.id === imgId) || libraryImages.find(im => im.id === imgId);
       if (!img) return null;
       return {
@@ -286,11 +287,34 @@ const SlideshowEditor = ({
       setSlides(prev => [...prev, ...newSlides]);
       setSelectedSlideIndex(slides.length);
     }
-    setSelectedBankImages([]);
+    setSelectedBankImages(new Set());
   }, [selectedBankImages, activeImages, activeContent, libraryImages, slides.length, selectedSource]);
 
   // Auto-start: check collection banks for random initial images
   const [autoStartAttempted, setAutoStartAttempted] = useState(false);
+  const [sourceAutoSwitched, setSourceAutoSwitched] = useState(false);
+
+  // Auto-switch source dropdown to collection banks when category banks are empty
+  useEffect(() => {
+    if (sourceAutoSwitched) return;
+    if (!collections || collections.length === 0) return;
+    // Only auto-switch if category banks are empty
+    if (imagesA.length > 0 || imagesB.length > 0) return;
+
+    // Find first collection with populated banks
+    for (const col of collections) {
+      if (col.bankA?.length > 0) {
+        setSelectedSource(`${col.id}:bankA`);
+        setSourceAutoSwitched(true);
+        return;
+      }
+      if (col.bankB?.length > 0) {
+        setSelectedSource(`${col.id}:bankB`);
+        setSourceAutoSwitched(true);
+        return;
+      }
+    }
+  }, [collections, imagesA.length, imagesB.length, sourceAutoSwitched]);
 
   // Initialize with at least one slide, or generate batch, or use initialImages, or auto-start from banks
   useEffect(() => {
@@ -340,7 +364,8 @@ const SlideshowEditor = ({
         addSlide();
       }
     }
-  }, [batchMode]);
+  // eslint-disable-next-line
+  }, [batchMode, imagesA.length, imagesB.length]);
 
   // Auto-start from collection banks: once collections load, if slides are empty/blank
   // and any collection has bankA + bankB populated, auto-create 2 slides
@@ -475,9 +500,9 @@ const SlideshowEditor = ({
     ));
   }, [selectedSlideIndex]);
 
-  // Re-roll: Replace current slide's image with random different image from same bank
-  const handleReroll = useCallback(() => {
-    if (!currentSlide?.sourceBank) return;
+  // Gather all reroll-eligible images for the current slide's bank
+  const getRerollBank = useCallback(() => {
+    if (!currentSlide?.sourceBank) return [];
 
     // First try category-level banks
     let bank = currentSlide.sourceBank === 'imageA' ? imagesA : currentSlide.sourceBank === 'imageB' ? imagesB : [];
@@ -487,7 +512,6 @@ const SlideshowEditor = ({
       const isA = currentSlide.sourceBank === 'imageA';
       const isB = currentSlide.sourceBank === 'imageB';
       if (isA || isB) {
-        // Gather images from ALL collections' matching bank
         const bankKey = isA ? 'bankA' : 'bankB';
         const allBankIds = [];
         collections.forEach(col => {
@@ -506,7 +530,18 @@ const SlideshowEditor = ({
       bank = activeImages || [];
     }
 
-    const otherImages = bank.filter(img => img.id !== currentSlide.sourceImageId);
+    // Fallback: try all library images
+    if (bank.length === 0) {
+      bank = libraryImages || [];
+    }
+
+    return bank;
+  }, [currentSlide, imagesA, imagesB, collections, libraryImages, activeImages]);
+
+  // Re-roll: Replace current slide's image with random different image from same bank
+  const handleReroll = useCallback(() => {
+    const bank = getRerollBank();
+    const otherImages = bank.filter(img => img.id !== currentSlide?.sourceImageId);
     if (otherImages.length === 0) return;
 
     const randomImage = otherImages[Math.floor(Math.random() * otherImages.length)];
@@ -516,7 +551,7 @@ const SlideshowEditor = ({
       currentSlide.sourceBank,
       randomImage.id
     );
-  }, [currentSlide, imagesA, imagesB, collections, libraryImages, activeImages, setSlideBackground]);
+  }, [currentSlide, getRerollBank, setSlideBackground]);
 
   // Audio playback controls - just add audio directly, user can trim later
   const handleSelectAudio = useCallback((audio) => {
@@ -1421,8 +1456,9 @@ const SlideshowEditor = ({
                   </div>
                 )
               ) : (() => {
-                const displayImages = (selectedSource !== 'bankA' && selectedSource !== 'bankB' && (activeBank === 'imageA' || activeBank === 'imageB')) ? activeImages : activeContent;
-                const sourceName = selectedSource === 'bankA' ? 'Image A' : selectedSource === 'bankB' ? 'Image B' : selectedSource === 'all' ? 'Library' : 'Collection';
+                // Always use activeImages which respects the selectedSource dropdown
+                const displayImages = (activeBank === 'imageA' || activeBank === 'imageB') ? activeImages : activeContent;
+                const sourceName = selectedSource === 'bankA' ? 'Image A' : selectedSource === 'bankB' ? 'Image B' : selectedSource === 'all' ? 'Library' : collections.find(c => selectedSource.startsWith(c.id))?.name || 'Collection';
                 return displayImages.length === 0 ? (
                   <div style={styles.emptyBank}>
                     <p>No images in {sourceName}</p>
@@ -1430,7 +1466,7 @@ const SlideshowEditor = ({
                   </div>
                 ) : (
                   <>
-                  {selectedBankImages.length > 0 && (
+                  {selectedBankImages.size > 0 && (
                     <div style={{ display: 'flex', gap: '8px', padding: '4px 0', marginBottom: '4px' }}>
                       <button
                         onClick={addSelectedImagesToSlides}
@@ -1446,10 +1482,10 @@ const SlideshowEditor = ({
                           fontWeight: '600'
                         }}
                       >
-                        Add {selectedBankImages.length} to Slides
+                        Add {selectedBankImages.size} to Slides
                       </button>
                       <button
-                        onClick={() => setSelectedBankImages([])}
+                        onClick={() => setSelectedBankImages(new Set())}
                         style={{
                           padding: '6px 8px',
                           backgroundColor: 'transparent',
@@ -1466,7 +1502,7 @@ const SlideshowEditor = ({
                   )}
                   <div style={styles.clipGrid}>
                     {displayImages.map(image => {
-                      const isSel = selectedBankImages.includes(image.id);
+                      const isSel = selectedBankImages.has(image.id);
                       return (
                       <div
                         key={image.id}
@@ -1480,16 +1516,17 @@ const SlideshowEditor = ({
                           const isMetaKey = e.metaKey || e.ctrlKey;
                           if (isMetaKey) {
                             // Cmd/Ctrl+click: toggle in/out
-                            setSelectedBankImages(prev =>
-                              prev.includes(image.id)
-                                ? prev.filter(id => id !== image.id)
-                                : [...prev, image.id]
-                            );
+                            setSelectedBankImages(prev => {
+                              const next = new Set(prev);
+                              if (next.has(image.id)) next.delete(image.id);
+                              else next.add(image.id);
+                              return next;
+                            });
                           } else {
-                            // Regular click: exclusive select
+                            // Regular click: exclusive select or deselect
                             setSelectedBankImages(prev =>
-                              prev.length === 1 && prev[0] === image.id
-                                ? [] : [image.id]
+                              prev.size === 1 && prev.has(image.id)
+                                ? new Set() : new Set([image.id])
                             );
                           }
                         }}
@@ -1587,7 +1624,8 @@ const SlideshowEditor = ({
                         transformOrigin: 'center center',
                         cursor: isDraggingImage ? 'grabbing' : 'grab',
                         userSelect: 'none',
-                        pointerEvents: 'auto'
+                        pointerEvents: 'auto',
+                        zIndex: 1
                       }}
                       onMouseDown={handleImageMouseDown}
                       draggable={false}
@@ -1768,15 +1806,12 @@ const SlideshowEditor = ({
                 </button>
 
                 {/* Re-roll Button (only show when slide has an image) */}
-                {currentSlide?.backgroundImage && currentSlide?.sourceBank && (
+                {currentSlide?.backgroundImage && (
                   <button
                     style={styles.rerollButton}
                     onClick={handleReroll}
                     title="Replace with random image from same bank"
-                    disabled={
-                      (currentSlide.sourceBank === 'imageA' && imagesA.length <= 1) ||
-                      (currentSlide.sourceBank === 'imageB' && imagesB.length <= 1)
-                    }
+                    disabled={getRerollBank().filter(img => img.id !== currentSlide?.sourceImageId).length === 0}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M23 4v6h-6"/>
@@ -3118,7 +3153,8 @@ const styles = {
   },
   textOverlay: {
     position: 'absolute',
-    userSelect: 'none'
+    userSelect: 'none',
+    zIndex: 5
   },
   canvasActions: {
     display: 'flex',

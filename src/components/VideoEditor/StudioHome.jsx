@@ -64,6 +64,7 @@ const StudioHome = ({
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [activeTab, setActiveTab] = useState('media'); // 'media' | 'lyrics'
   const [selectedCollection, setSelectedCollection] = useState(null);
+  const [autoCollectionSet, setAutoCollectionSet] = useState(false);
 
   // Library State
   const [library, setLibrary] = useState([]);
@@ -189,6 +190,26 @@ const StudioHome = ({
     setLyrics(getLyrics(artistId));
     setCreatedContent(getCreatedContent(artistId));
   }, [artistId]);
+
+  // Auto-select first collection with banks when in slideshow mode and none is selected
+  useEffect(() => {
+    if (autoCollectionSet || selectedCollection) return;
+    if (!studioMode || studioMode !== 'slideshows') return;
+    if (collections.length === 0) return;
+
+    // Find a collection with bankA or bankB populated
+    const colWithBanks = collections.find(c =>
+      (c.bankA?.length > 0 || c.bankB?.length > 0) && c.type !== 'smart'
+    );
+    if (colWithBanks) {
+      setSelectedCollection(colWithBanks.id);
+    } else if (collections.filter(c => c.type !== 'smart').length > 0) {
+      // Just select the first non-smart collection
+      setSelectedCollection(collections.filter(c => c.type !== 'smart')[0].id);
+    }
+    setAutoCollectionSet(true);
+  // eslint-disable-next-line
+  }, [collections, studioMode, selectedCollection, autoCollectionSet]);
 
   // =====================
   // UPLOAD HANDLERS
