@@ -386,10 +386,35 @@ const SlideshowEditor = ({
   const handleReroll = useCallback(() => {
     if (!currentSlide?.sourceBank) return;
 
-    const bank = currentSlide.sourceBank === 'imageA' ? imagesA : imagesB;
-    const otherImages = bank.filter(img => img.id !== currentSlide.sourceImageId);
+    // First try category-level banks
+    let bank = currentSlide.sourceBank === 'imageA' ? imagesA : currentSlide.sourceBank === 'imageB' ? imagesB : [];
 
-    if (otherImages.length === 0) return; // No other images available
+    // If category banks are empty, try collection-level banks
+    if (bank.length === 0 && collections?.length > 0) {
+      const isA = currentSlide.sourceBank === 'imageA';
+      const isB = currentSlide.sourceBank === 'imageB';
+      if (isA || isB) {
+        // Gather images from ALL collections' matching bank
+        const bankKey = isA ? 'bankA' : 'bankB';
+        const allBankIds = [];
+        collections.forEach(col => {
+          if (col[bankKey]?.length > 0) {
+            allBankIds.push(...col[bankKey]);
+          }
+        });
+        if (allBankIds.length > 0) {
+          bank = libraryImages.filter(img => allBankIds.includes(img.id));
+        }
+      }
+    }
+
+    // Also try activeImages as fallback
+    if (bank.length === 0) {
+      bank = activeImages || [];
+    }
+
+    const otherImages = bank.filter(img => img.id !== currentSlide.sourceImageId);
+    if (otherImages.length === 0) return;
 
     const randomImage = otherImages[Math.floor(Math.random() * otherImages.length)];
     setSlideBackground(
@@ -398,7 +423,7 @@ const SlideshowEditor = ({
       currentSlide.sourceBank,
       randomImage.id
     );
-  }, [currentSlide, imagesA, imagesB, setSlideBackground]);
+  }, [currentSlide, imagesA, imagesB, collections, libraryImages, activeImages, setSlideBackground]);
 
   // Audio playback controls - just add audio directly, user can trim later
   const handleSelectAudio = useCallback((audio) => {
