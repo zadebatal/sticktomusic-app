@@ -72,6 +72,7 @@ import {
   where,
   getDocs,
   addDoc,
+  setDoc,
   updateDoc,
   doc,
   onSnapshot
@@ -1999,7 +2000,8 @@ const StickToMusic = () => {
         artistProfile.applicationId = applicationData.id || null;
       }
 
-      await addDoc(collection(db, 'allowedUsers'), artistProfile);
+      // Use email as document ID — Firestore security rules look up allowedUsers by email
+      await setDoc(doc(db, 'allowedUsers', email.toLowerCase()), artistProfile);
       showToast(`${name} added to allowed users!`, 'success');
       return true;
     } catch (error) {

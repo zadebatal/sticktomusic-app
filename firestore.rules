@@ -52,7 +52,7 @@ service cloud.firestore {
     // - Artists: no direct access (they use their portal)
     match /artists/{artistId} {
       allow read: if isOperatorOrAbove();
-      allow create: if isConductor();
+      allow create: if isOperatorOrAbove();
       allow update, delete: if isConductor() || canAccessArtist(artistId);
 
       // Library subcollections (media items, collections, onboarding)

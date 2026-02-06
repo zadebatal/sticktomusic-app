@@ -122,9 +122,10 @@ export default async function handler(req, res) {
         }
 
         if (existingUser.empty) {
-          // Add new user to allowedUsers with full profile
+          // Add new user to allowedUsers with email as document ID
+          // (Firestore security rules look up allowedUsers by email as doc ID)
           artistProfile.createdAt = new Date().toISOString();
-          await db.collection('allowedUsers').add(artistProfile);
+          await db.collection('allowedUsers').doc(customerEmail.toLowerCase()).set(artistProfile);
           console.log(`✅ Added new user with full profile: ${customerEmail}`);
         } else {
           // Update existing user status to active
