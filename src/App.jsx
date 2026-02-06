@@ -659,7 +659,7 @@ const StickToMusic = () => {
               views: account.total_views || account.views || 0,
               status: account.is_active !== false ? 'active' : 'inactive',
               profileImage: account.profile_image || account.avatar,
-              lateAccountId: account.id || account.account_id
+              lateAccountId: String(account.id || account.account_id || `fallback_${index}`)
             });
           });
         }
@@ -1230,6 +1230,7 @@ const StickToMusic = () => {
   // Account linking state - scoped per artist to prevent cross-contamination
   const [accountLinkingArtistId, setAccountLinkingArtistId] = useState(null); // null = off, artistId = linking for that artist
   const [selectedAccountsToLink, setSelectedAccountsToLink] = useState([]);
+  const [linkVersion, setLinkVersion] = useState(0); // Incremented to force re-render after linking/unlinking
 
   // Video Upload state
   const [showVideoUploadModal, setShowVideoUploadModal] = useState(false);
@@ -3287,21 +3288,22 @@ const StickToMusic = () => {
                     const artistPages = filteredPages.filter(p => p.artist === artist.name);
                     if (artistPages.length === 0) return null;
 
-                    // Get linked account groups for this artist
+                    // Get linked account groups for this artist (linkVersion forces re-read)
+                    void linkVersion; // Reference linkVersion to ensure re-render on link changes
                     const linkedGroups = getLinkedAccountGroups(artist.id);
 
-                    // Create a map of lateAccountId -> groupId
+                    // Create a map of lateAccountId -> groupId (string-coerce for safety)
                     const accountToGroup = {};
                     linkedGroups.forEach(group => {
                       group.accountIds.forEach(accId => {
-                        accountToGroup[accId] = group.id;
+                        accountToGroup[String(accId)] = group.id;
                       });
                     });
 
                     // Group pages: first by linked group, then by handle for ungrouped
                     const grouped = {};
                     artistPages.forEach(page => {
-                      const groupId = accountToGroup[page.lateAccountId];
+                      const groupId = accountToGroup[String(page.lateAccountId)];
                       const key = groupId || page.handle; // Use group ID if linked, otherwise handle
 
                       if (!grouped[key]) {
@@ -3339,14 +3341,16 @@ const StickToMusic = () => {
                         linkAccounts(artist.id, allAccountIds);
                         setSelectedAccountsToLink([]);
                         setAccountLinkingArtistId(null);
-                        // Force re-render by updating latePages reference
-                        setLatePages([...latePages]);
+                        // Force re-render via dedicated counter + latePages reference
+                        setLinkVersion(v => v + 1);
+                        setLatePages(prev => [...prev]);
                       }
                     };
 
                     const handleUnlinkAccount = (accountId) => {
                       unlinkAccount(artist.id, accountId);
-                      setLatePages([...latePages]);
+                      setLinkVersion(v => v + 1);
+                      setLatePages(prev => [...prev]);
                     };
 
                     // Toggle selection using only the first accountId as row key
@@ -3409,7 +3413,11 @@ const StickToMusic = () => {
                             </thead>
                             <tbody>
                               {uniquePages.map((page) => (
-                                <tr key={page.linkedAccountIds.join('-')} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition">
+                                <tr
+                                  key={page.linkedAccountIds.join('-')}
+                                  className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition"
+                                  style={page.isLinkedGroup ? { borderLeft: '3px solid #8b5cf6' } : undefined}
+                                >
                                   {isLinkingThisArtist && (
                                     <td className="p-3 sm:p-4">
                                       <div
@@ -3440,20 +3448,32 @@ const StickToMusic = () => {
                                     </td>
                                   )}
                                   <td className="p-3 sm:p-4 font-mono text-xs sm:text-sm">
-                                    {page.handles.length === 1 ? (
-                                      page.handles[0].handle
-                                    ) : (
-                                      <div className="space-y-1">
-                                        {page.handles.map((h, i) => (
-                                          <div key={i} className="flex items-center gap-2">
-                                            <span>{h.handle}</span>
-                                            <span className={`px-1.5 py-0.5 rounded text-[10px] ${getPlatformConfig(h.platform).bgColor} ${getPlatformConfig(h.platform).textColor}`}>
-                                              {getPlatformConfig(h.platform).label}
-                                            </span>
+                                    <div className="flex items-start gap-2">
+                                      {page.isLinkedGroup && (
+                                        <span style={{ fontSize: '10px', color: '#8b5cf6', marginTop: '2px' }} title="Linked accounts">
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                                          </svg>
+                                        </span>
+                                      )}
+                                      <div>
+                                        {page.handles.length === 1 ? (
+                                          page.handles[0].handle
+                                        ) : (
+                                          <div className="space-y-1">
+                                            {page.handles.map((h, i) => (
+                                              <div key={i} className="flex items-center gap-2">
+                                                <span>{h.handle}</span>
+                                                <span className={`px-1.5 py-0.5 rounded text-[10px] ${getPlatformConfig(h.platform).bgColor} ${getPlatformConfig(h.platform).textColor}`}>
+                                                  {getPlatformConfig(h.platform).label}
+                                                </span>
+                                              </div>
+                                            ))}
                                           </div>
-                                        ))}
+                                        )}
                                       </div>
-                                    )}
+                                    </div>
                                   </td>
                                   <td className="p-3 sm:p-4">
                                     <div className="flex gap-1 flex-wrap">
@@ -3489,7 +3509,11 @@ const StickToMusic = () => {
                                           className="text-zinc-500 hover:text-red-400 transition text-xs"
                                           title="Unlink accounts"
                                         >
-                                          🔓
+                                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M18.84 12.25l1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                                            <path d="M5.16 11.75l-1.72 1.71a5 5 0 0 0 7.07 7.07l1.72-1.71"/>
+                                            <line x1="1" y1="1" x2="23" y2="23"/>
+                                          </svg>
                                         </button>
                                       )}
                                     </td>

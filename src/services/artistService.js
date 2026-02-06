@@ -423,11 +423,14 @@ export const saveLinkedAccountGroups = (artistId, groups) => {
 export const linkAccounts = (artistId, accountIds, groupName = null) => {
   if (!artistId || !accountIds || accountIds.length < 2) return null;
 
+  // String-coerce all IDs for consistent matching
+  const stringIds = accountIds.map(id => String(id));
+
   const groups = getLinkedAccountGroups(artistId);
 
   // Remove these accounts from any existing groups
   groups.forEach(group => {
-    group.accountIds = group.accountIds.filter(id => !accountIds.includes(id));
+    group.accountIds = group.accountIds.filter(id => !stringIds.includes(String(id)));
   });
 
   // Remove empty groups
@@ -437,7 +440,7 @@ export const linkAccounts = (artistId, accountIds, groupName = null) => {
   const newGroup = {
     id: `group_${Date.now()}`,
     name: groupName,
-    accountIds: accountIds
+    accountIds: stringIds
   };
 
   filteredGroups.push(newGroup);
@@ -454,11 +457,12 @@ export const linkAccounts = (artistId, accountIds, groupName = null) => {
 export const unlinkAccount = (artistId, accountId) => {
   if (!artistId || !accountId) return;
 
+  const stringId = String(accountId);
   const groups = getLinkedAccountGroups(artistId);
 
-  // Remove account from all groups
+  // Remove account from all groups (string-coerce for safety)
   groups.forEach(group => {
-    group.accountIds = group.accountIds.filter(id => id !== accountId);
+    group.accountIds = group.accountIds.filter(id => String(id) !== stringId);
   });
 
   // Remove groups with less than 2 accounts (no point in a group of 1)
@@ -476,8 +480,9 @@ export const unlinkAccount = (artistId, accountId) => {
 export const getAccountGroupId = (artistId, accountId) => {
   if (!artistId || !accountId) return null;
 
+  const stringId = String(accountId);
   const groups = getLinkedAccountGroups(artistId);
-  const group = groups.find(g => g.accountIds.includes(accountId));
+  const group = groups.find(g => g.accountIds.some(id => String(id) === stringId));
   return group ? group.id : null;
 };
 
