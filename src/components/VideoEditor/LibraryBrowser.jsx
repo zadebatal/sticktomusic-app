@@ -420,15 +420,27 @@ const LibraryBrowser = ({
 
   // Handle media selection
   const handleMediaClick = (media, e) => {
-    if (e?.shiftKey && allowMultiSelect) {
-      // Multi-select
-      if (selectedForBulk.includes(media.id)) {
-        setSelectedForBulk(prev => prev.filter(id => id !== media.id));
-      } else {
-        setSelectedForBulk(prev => [...prev, media.id]);
+    const clickedIndex = displayedMedia.findIndex(m => m.id === media.id);
+    if (e?.shiftKey && allowMultiSelect && lastClickedIndexRef.current !== null && onSelectMedia) {
+      // Shift-click: select range between last click and this click
+      const start = Math.min(lastClickedIndexRef.current, clickedIndex);
+      const end = Math.max(lastClickedIndexRef.current, clickedIndex);
+      for (let i = start; i <= end; i++) {
+        const item = displayedMedia[i];
+        if (item && !selectedMediaIds.includes(item.id)) {
+          onSelectMedia(item);
+        }
       }
+      setSelectedForBulk(prev => {
+        const newSet = new Set(prev);
+        for (let i = start; i <= end; i++) {
+          if (displayedMedia[i]) newSet.add(displayedMedia[i].id);
+        }
+        return [...newSet];
+      });
     } else if (onSelectMedia) {
       onSelectMedia(media);
+      lastClickedIndexRef.current = clickedIndex;
     }
   };
 
@@ -1128,8 +1140,8 @@ const LibraryBrowser = ({
                   }}
                   onClick={(e) => handleMediaClick(media, e)}
                   onContextMenu={(e) => handleContextMenu(e, media)}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, media)}
+                  draggable={!allowMultiSelect}
+                  onDragStart={(e) => allowMultiSelect ? e.preventDefault() : handleDragStart(e, media)}
                   onMouseEnter={(e) => {
                     if (!selectedMediaIds.includes(media.id)) {
                       e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.5)';

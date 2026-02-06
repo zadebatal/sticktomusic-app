@@ -1211,6 +1211,8 @@ const VideoStudio = ({
   const handleCloseSlideshowEditor = useCallback(() => {
     setShowSlideshowEditor(false);
     setEditingSlideshow(null);
+    // Clear selected images so they don't persist into next editor session
+    setSelectedLibraryMedia(prev => ({ ...prev, images: [] }));
   }, []);
 
   const handleSaveSlideshow = useCallback((slideshowData) => {
@@ -1915,6 +1917,7 @@ const VideoStudio = ({
             slideshows: []
           }}
           existingSlideshow={editingSlideshow}
+          initialImages={selectedLibraryMedia?.images || []}
           batchMode={slideshowBatchMode}
           onSave={handleSaveSlideshow}
           onClose={handleCloseSlideshowEditor}

@@ -1077,7 +1077,8 @@ const VideoEditorModal = ({
 
     const handleResizeMove = (e) => {
       const deltaX = e.clientX - clipResize.startX;
-      const pixelsPerSecond = 40;
+      // pixelsPerSecond must match the rendering formula: duration * 40 * timelineScale
+      const pixelsPerSecond = 40 * timelineScale;
       const deltaSec = deltaX / pixelsPerSecond;
       let newDuration;
       if (clipResize.edge === 'right') {
@@ -1099,7 +1100,7 @@ const VideoEditorModal = ({
       document.removeEventListener('mousemove', handleResizeMove);
       document.removeEventListener('mouseup', handleResizeEnd);
     };
-  }, [clipResize, handleUpdateClipDuration]);
+  }, [clipResize, handleUpdateClipDuration, timelineScale]);
 
   const handleApplyPreset = useCallback((preset) => {
     setSelectedPreset(preset);
@@ -1634,7 +1635,10 @@ const VideoEditorModal = ({
                   {formatTime(currentTime)} / {formatTime(trimmedDuration)}
                 </span>
                 {!isMobile && (
-                  <button style={styles.fullscreenButton}>
+                  <button style={styles.fullscreenButton} onClick={() => {
+                    const el = document.querySelector('video[data-preview]') || document.querySelector('.video-preview');
+                    if (el?.requestFullscreen) el.requestFullscreen();
+                  }} title="Fullscreen">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <polyline points="15 3 21 3 21 9"/>
                       <polyline points="9 21 3 21 3 15"/>
@@ -2208,8 +2212,10 @@ const VideoEditorModal = ({
                         <p>Click clips above to add, or use Cut by beat</p>
                       </div>
                     ) : (
-                      <div style={{...styles.clipsRow, transform: `scaleX(${timelineScale})`, transformOrigin: 'left center'}}>
-                        {clips.map((clip, index) => (
+                      <div style={styles.clipsRow}>
+                        {clips.map((clip, index) => {
+                          const clipWidth = Math.max(50, (clip.duration || 1) * 40 * timelineScale);
+                          return (
                           <div
                             key={clip.id}
                             draggable={!clip.locked && !clipResize.active}
@@ -2218,9 +2224,8 @@ const VideoEditorModal = ({
                             onDragEnd={handleClipDragEnd}
                             style={{
                               ...styles.clipItem,
-                              minWidth: '80px',
-                              width: '80px',
-                              flexShrink: 0,
+                              width: `${clipWidth}px`,
+                              minWidth: '50px',
                               ...(selectedClips.includes(index) ? styles.clipItemSelected : {}),
                               ...(clipDrag.dragging && clipDrag.fromIndex === index ? { opacity: 0.5 } : {}),
                               ...(clipDrag.dragging && clipDrag.toIndex === index && clipDrag.fromIndex !== index ? {
@@ -2228,7 +2233,8 @@ const VideoEditorModal = ({
                                 marginLeft: '-3px'
                               } : {}),
                               cursor: clip.locked ? 'not-allowed' : 'grab',
-                              position: 'relative'
+                              position: 'relative',
+                              transition: clipResize.active ? 'none' : 'width 0.15s ease-out'
                             }}
                             onClick={(e) => handleClipSelect(index, e)}
                           >
@@ -2241,15 +2247,15 @@ const VideoEditorModal = ({
                                   left: 0,
                                   top: 0,
                                   bottom: 0,
-                                  width: '6px',
+                                  width: '12px',
                                   cursor: 'col-resize',
                                   zIndex: 2,
-                                  background: 'transparent',
-                                  borderLeft: '2px solid transparent',
-                                  transition: 'border-color 0.15s',
+                                  background: 'linear-gradient(to right, rgba(167,139,250,0.3), transparent)',
+                                  opacity: 0,
+                                  transition: 'opacity 0.15s',
                                 }}
-                                onMouseEnter={(e) => e.currentTarget.style.borderLeftColor = '#a78bfa'}
-                                onMouseLeave={(e) => e.currentTarget.style.borderLeftColor = 'transparent'}
+                                onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                                onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}
                               />
                             )}
                             {clip.thumbnail ? (
@@ -2270,19 +2276,20 @@ const VideoEditorModal = ({
                                   right: 0,
                                   top: 0,
                                   bottom: 0,
-                                  width: '6px',
+                                  width: '12px',
                                   cursor: 'col-resize',
                                   zIndex: 2,
-                                  background: 'transparent',
-                                  borderRight: '2px solid transparent',
-                                  transition: 'border-color 0.15s',
+                                  background: 'linear-gradient(to left, rgba(167,139,250,0.3), transparent)',
+                                  opacity: 0,
+                                  transition: 'opacity 0.15s',
                                 }}
-                                onMouseEnter={(e) => e.currentTarget.style.borderRightColor = '#a78bfa'}
-                                onMouseLeave={(e) => e.currentTarget.style.borderRightColor = 'transparent'}
+                                onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                                onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}
                               />
                             )}
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -2340,7 +2347,7 @@ const VideoEditorModal = ({
                     <div style={styles.cutButtons}>
                       <button style={styles.cutButton} onClick={handleCutByWord}>Cut by word</button>
                       <button style={styles.cutButton} onClick={handleCutByBeat}>Cut by beat</button>
-                      <button style={styles.cutButton}>Record cuts</button>
+                      <button style={{...styles.cutButton, opacity: 0.5, cursor: 'not-allowed'}} title="Coming soon" disabled>Record cuts</button>
                     </div>
                   </div>
                 </div>
@@ -2362,7 +2369,21 @@ const VideoEditorModal = ({
             ...styles.footerLeft,
             ...(isMobile ? { width: '100%', justifyContent: 'center' } : {})
           }}>
-            {!isMobile && <button style={styles.resetButton}>Reset to saved</button>}
+            {!isMobile && <button style={styles.resetButton} onClick={() => {
+              if (window.confirm('Reset all changes to last saved state?')) {
+                // Restore from auto-saved draft if available
+                const key = `video_editor_autosave_${selectedAudio?.name || 'default'}`;
+                try {
+                  const saved = localStorage.getItem(key);
+                  if (saved) {
+                    const data = JSON.parse(saved);
+                    if (data.clips) setClips(data.clips);
+                    if (data.words) setWords(data.words);
+                    if (data.textStyle) setTextStyle(data.textStyle);
+                  }
+                } catch(e) { console.warn('Reset failed:', e); }
+              }
+            }}>Reset to saved</button>}
             {lastSaved && (
               <span style={styles.autoSaveIndicator}>
                 ✓ Auto-saved {lastSaved.toLocaleTimeString()}
@@ -3477,8 +3498,7 @@ const styles = {
   },
   clipItem: {
     position: 'relative',
-    width: '80px',
-    aspectRatio: '9/16',
+    height: '120px',
     backgroundColor: '#1f1f2e',
     borderRadius: '6px',
     overflow: 'hidden',

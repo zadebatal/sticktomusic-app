@@ -22,6 +22,7 @@ const SlideshowEditor = ({
   artistId = null,
   category,
   existingSlideshow = null,
+  initialImages = [],
   batchMode = false,
   onSave,
   onClose,
@@ -170,10 +171,51 @@ const SlideshowEditor = ({
   // Get current slide (defined early so callbacks can reference it)
   const currentSlide = slides[selectedSlideIndex];
 
-  // Initialize with at least one slide, or generate batch of 10 in batch mode
+  // Selected images in bank for bulk add
+  const [selectedBankImages, setSelectedBankImages] = useState([]);
+
+  // Add selected bank images as slides
+  const addSelectedImagesToSlides = useCallback(() => {
+    if (selectedBankImages.length === 0) return;
+    const allImages = [...(activeImages || []), ...(activeContent || [])];
+    const newSlides = selectedBankImages.map((imgId, i) => {
+      const img = allImages.find(im => im.id === imgId) || libraryImages.find(im => im.id === imgId);
+      if (!img) return null;
+      return {
+        id: `slide_${Date.now()}_${i}`,
+        index: slides.length + i,
+        backgroundImage: img.url || img.localUrl,
+        thumbnail: img.url || img.localUrl,
+        sourceBank: selectedSource,
+        sourceImageId: img.id,
+        textOverlays: [],
+        duration: 3
+      };
+    }).filter(Boolean);
+    if (newSlides.length > 0) {
+      setSlides(prev => [...prev, ...newSlides]);
+      setSelectedSlideIndex(slides.length);
+    }
+    setSelectedBankImages([]);
+  }, [selectedBankImages, activeImages, activeContent, libraryImages, slides.length, selectedSource]);
+
+  // Initialize with at least one slide, or generate batch, or use initialImages
   useEffect(() => {
     if (slides.length === 0) {
-      if (batchMode && (imagesA.length > 0 || imagesB.length > 0)) {
+      if (initialImages && initialImages.length > 0) {
+        // Create slides from images passed from StudioHome
+        const initSlides = initialImages.map((img, i) => ({
+          id: `slide_${Date.now()}_${i}`,
+          index: i,
+          backgroundImage: img.url || img.localUrl,
+          thumbnail: img.url || img.localUrl,
+          sourceBank: 'library',
+          sourceImageId: img.id,
+          textOverlays: [],
+          duration: 3
+        }));
+        setSlides(initSlides);
+      } else if (batchMode && (imagesA.length > 0 || imagesB.length > 0)) {
         // Batch mode: Generate 10 slides randomly from A/B banks
         const allImages = [
           ...imagesA.map(img => ({ ...img, sourceBank: 'imageA' })),
@@ -1114,12 +1156,68 @@ const SlideshowEditor = ({
                     <p style={styles.emptySubtext}>Upload images in the Aesthetic Home</p>
                   </div>
                 ) : (
+                  <>
+                  {selectedBankImages.length > 0 && (
+                    <div style={{ display: 'flex', gap: '8px', padding: '4px 0', marginBottom: '4px' }}>
+                      <button
+                        onClick={addSelectedImagesToSlides}
+                        style={{
+                          flex: 1,
+                          padding: '6px 12px',
+                          backgroundColor: '#7c3aed',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          fontWeight: '600'
+                        }}
+                      >
+                        Add {selectedBankImages.length} to Slides
+                      </button>
+                      <button
+                        onClick={() => setSelectedBankImages([])}
+                        style={{
+                          padding: '6px 8px',
+                          backgroundColor: 'transparent',
+                          color: 'rgba(255,255,255,0.6)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  )}
                   <div style={styles.clipGrid}>
                     {displayImages.map(image => (
                       <div
                         key={image.id}
-                        style={styles.clipCard}
+                        style={{
+                          ...styles.clipCard,
+                          border: selectedBankImages.includes(image.id) ? '2px solid #7c3aed' : '2px solid transparent',
+                          position: 'relative'
+                        }}
                         draggable
+                        onClick={(e) => {
+                          if (e.shiftKey || e.metaKey || e.ctrlKey) {
+                            // Multi-select with modifier key
+                            setSelectedBankImages(prev =>
+                              prev.includes(image.id)
+                                ? prev.filter(id => id !== image.id)
+                                : [...prev, image.id]
+                            );
+                          } else {
+                            // Toggle select on regular click
+                            setSelectedBankImages(prev =>
+                              prev.includes(image.id)
+                                ? prev.filter(id => id !== image.id)
+                                : [...prev, image.id]
+                            );
+                          }
+                        }}
                         onDragStart={(e) => {
                           e.dataTransfer.setData('application/json', JSON.stringify({
                             ...image,
@@ -1129,6 +1227,13 @@ const SlideshowEditor = ({
                           }));
                         }}
                       >
+                        {selectedBankImages.includes(image.id) && (
+                          <div style={{
+                            position: 'absolute', top: 2, right: 2, width: '18px', height: '18px',
+                            backgroundColor: '#7c3aed', borderRadius: '50%', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center', zIndex: 3, fontSize: '10px', color: 'white'
+                          }}>✓</div>
+                        )}
                         <img
                           src={image.url || image.localUrl}
                           alt={image.name}
@@ -1138,6 +1243,7 @@ const SlideshowEditor = ({
                       </div>
                     ))}
                   </div>
+                  </>
                 );
               })()}
             </div>
