@@ -96,6 +96,77 @@ const SlideshowEditor = ({
   // Audio upload ref for slideshow
   const slideshowAudioInputRef = useRef(null);
 
+  // Undo/Redo history
+  const historyRef = useRef([]);
+  const historyIndexRef = useRef(-1);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const isUndoRedoRef = useRef(false); // Flag to skip recording during undo/redo
+
+  // Push current slides state to history (called on meaningful changes)
+  const pushHistory = useCallback((slidesSnapshot) => {
+    if (isUndoRedoRef.current) return; // Don't record during undo/redo
+    const history = historyRef.current;
+    const idx = historyIndexRef.current;
+    // Trim any forward history (redo states) when new action occurs
+    historyRef.current = history.slice(0, idx + 1);
+    historyRef.current.push(JSON.parse(JSON.stringify(slidesSnapshot)));
+    // Cap history at 50 entries
+    if (historyRef.current.length > 50) {
+      historyRef.current = historyRef.current.slice(-50);
+    }
+    historyIndexRef.current = historyRef.current.length - 1;
+    setCanUndo(historyIndexRef.current > 0);
+    setCanRedo(false);
+  }, []);
+
+  // Track slides changes and push to history
+  useEffect(() => {
+    if (isUndoRedoRef.current) {
+      isUndoRedoRef.current = false;
+      return;
+    }
+    if (slides.length > 0) {
+      pushHistory(slides);
+    }
+  }, [slides, pushHistory]);
+
+  const handleUndo = useCallback(() => {
+    if (historyIndexRef.current <= 0) return;
+    isUndoRedoRef.current = true;
+    historyIndexRef.current -= 1;
+    const prevState = JSON.parse(JSON.stringify(historyRef.current[historyIndexRef.current]));
+    setSlides(prevState);
+    setCanUndo(historyIndexRef.current > 0);
+    setCanRedo(true);
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    if (historyIndexRef.current >= historyRef.current.length - 1) return;
+    isUndoRedoRef.current = true;
+    historyIndexRef.current += 1;
+    const nextState = JSON.parse(JSON.stringify(historyRef.current[historyIndexRef.current]));
+    setSlides(nextState);
+    setCanUndo(true);
+    setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
+  }, []);
+
+  // Keyboard shortcut: Cmd+Z / Ctrl+Z for undo, Cmd+Shift+Z / Ctrl+Shift+Z for redo
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo]);
+
   // Image drag/resize state
   const [isDraggingImage, setIsDraggingImage] = useState(false);
   const [isResizingImage, setIsResizingImage] = useState(false);
@@ -1670,6 +1741,30 @@ const SlideshowEditor = ({
 
               {/* Canvas Actions */}
               <div style={styles.canvasActions}>
+                {/* Undo / Redo */}
+                <button
+                  style={{ ...styles.rerollButton, opacity: canUndo ? 1 : 0.35, pointerEvents: canUndo ? 'auto' : 'none' }}
+                  onClick={handleUndo}
+                  title="Undo (⌘Z)"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 10h10a5 5 0 015 5v0a5 5 0 01-5 5H3"/>
+                    <path d="M7 6l-4 4 4 4"/>
+                  </svg>
+                  Undo
+                </button>
+                <button
+                  style={{ ...styles.rerollButton, opacity: canRedo ? 1 : 0.35, pointerEvents: canRedo ? 'auto' : 'none' }}
+                  onClick={handleRedo}
+                  title="Redo (⌘⇧Z)"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 10H11a5 5 0 00-5 5v0a5 5 0 005 5h10"/>
+                    <path d="M17 6l4 4-4 4"/>
+                  </svg>
+                  Redo
+                </button>
+
                 {/* Re-roll Button (only show when slide has an image) */}
                 {currentSlide?.backgroundImage && currentSlide?.sourceBank && (
                   <button
