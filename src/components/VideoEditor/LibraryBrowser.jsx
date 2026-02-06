@@ -21,6 +21,10 @@ import {
   removeFromBank,
   getCollectionBanks,
   searchLibrary,
+  addToTextBank,
+  removeFromTextBank,
+  updateTextBank,
+  saveTextTemplates,
   MEDIA_TYPES,
   COLLECTION_TYPES,
   SMART_COLLECTION_IDS,
@@ -71,6 +75,9 @@ const LibraryBrowser = ({
   const [thumbnailCache, setThumbnailCache] = useState({});
   const [renamingCollectionId, setRenamingCollectionId] = useState(null);
   const [renameText, setRenameText] = useState('');
+  const [bankTab, setBankTab] = useState('images'); // 'images' | 'text'
+  const [showTemplateEditor, setShowTemplateEditor] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState(null);
 
   // Drag selection state
   const [isDragSelecting, setIsDragSelecting] = useState(false);
@@ -1015,6 +1022,125 @@ const LibraryBrowser = ({
   // Get user collections for context menu
   const userCollections = getUserCollections(artistId);
 
+  // TextBankPanel component
+  const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate }) => {
+    const [newText, setNewText] = React.useState('');
+    const [editingIndex, setEditingIndex] = React.useState(null);
+    const [editText, setEditText] = React.useState('');
+
+    return (
+      <div style={{
+        flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)',
+        minHeight: 0
+      }}>
+        <div style={{
+          padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{
+              width: '18px', height: '18px', borderRadius: '4px',
+              backgroundColor: color, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '10px', fontWeight: 700, color: '#000'
+            }}>{bankNum}</span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color }}>{label}</span>
+            <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>{texts.length}</span>
+          </div>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+          {texts.length === 0 ? (
+            <div style={{ padding: '12px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
+              No text lines yet. Add some below.
+            </div>
+          ) : texts.map((text, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px',
+              borderRadius: '6px', marginBottom: '4px',
+              backgroundColor: 'rgba(255,255,255,0.03)',
+              fontSize: '12px', color: 'rgba(255,255,255,0.8)'
+            }}>
+              {editingIndex === i ? (
+                <input
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const updated = [...texts];
+                      updated[i] = editText;
+                      onUpdate(updated);
+                      setEditingIndex(null);
+                    }
+                    if (e.key === 'Escape') setEditingIndex(null);
+                  }}
+                  onBlur={() => {
+                    const updated = [...texts];
+                    updated[i] = editText;
+                    onUpdate(updated);
+                    setEditingIndex(null);
+                  }}
+                  autoFocus
+                  style={{
+                    flex: 1, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(99,102,241,0.4)',
+                    borderRadius: '4px', padding: '2px 6px', color: '#fff', fontSize: '12px'
+                  }}
+                />
+              ) : (
+                <span
+                  style={{ flex: 1, cursor: 'pointer' }}
+                  onClick={() => { setEditingIndex(i); setEditText(text); }}
+                  title="Click to edit"
+                >
+                  {text}
+                </span>
+              )}
+              <button
+                onClick={() => onRemove(i)}
+                style={{
+                  background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)',
+                  cursor: 'pointer', fontSize: '14px', padding: '0 4px', flexShrink: 0
+                }}
+                title="Remove"
+              >×</button>
+            </div>
+          ))}
+        </div>
+        {/* Add new text input */}
+        <div style={{
+          padding: '8px', borderTop: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex', gap: '6px', flexShrink: 0
+        }}>
+          <input
+            value={newText}
+            onChange={(e) => setNewText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && newText.trim()) {
+                onAdd(newText.trim());
+                setNewText('');
+              }
+            }}
+            placeholder={`Add ${label.toLowerCase()} line...`}
+            style={{
+              flex: 1, padding: '6px 10px', borderRadius: '6px',
+              border: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(0,0,0,0.2)',
+              color: '#fff', fontSize: '12px'
+            }}
+          />
+          <button
+            onClick={() => { if (newText.trim()) { onAdd(newText.trim()); setNewText(''); } }}
+            disabled={!newText.trim()}
+            style={{
+              padding: '6px 12px', borderRadius: '6px', border: 'none',
+              backgroundColor: newText.trim() ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.05)',
+              color: newText.trim() ? '#a5b4fc' : 'rgba(255,255,255,0.2)',
+              fontSize: '12px', cursor: newText.trim() ? 'pointer' : 'default'
+            }}
+          >+</button>
+        </div>
+      </div>
+    );
+  };
+
   // Shared media card renderer — used by both the main grid and bank columns
   const renderMediaCard = (media, isSelected) => (
     <div
@@ -1350,96 +1476,175 @@ const LibraryBrowser = ({
                 </div>
               </div>
 
-              {/* Right half — Bank A and Bank B stacked */}
-              <div style={{
-                flex: 1, display: 'flex', flexDirection: 'column', gap: '8px',
-                overflow: 'hidden', minWidth: 0
-              }}>
-                {/* Bank A */}
-                <div
-                  style={{
-                    flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-                    borderRadius: '10px',
-                    border: dragOverBank === 'A' ? '2px dashed rgba(99, 102, 241, 0.6)' : '1px solid rgba(255,255,255,0.08)',
-                    backgroundColor: dragOverBank === 'A' ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBank('A'); }}
-                  onDragLeave={() => setDragOverBank(null)}
-                  onDrop={(e) => handleDropOnBank(e, 'A')}
-                >
-                  <div style={{
-                    padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px',
-                    borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0,
-                    background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.06), transparent)'
-                  }}>
-                    <div style={{
-                      width: '22px', height: '22px', borderRadius: '6px',
-                      background: 'linear-gradient(135deg, #6366f1, #818cf8)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '11px', fontWeight: 700, color: '#fff'
-                    }}>A</div>
-                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#c4b5fd' }}>Bank A</span>
-                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginLeft: 'auto' }}>
-                      {collectionBanks.bankA.length}
-                    </span>
-                  </div>
-                  <div style={{
-                    flex: 1, overflowY: 'auto', padding: '8px',
-                    display: 'grid',
-                    gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? '60px' : '80px'}, 1fr))`,
-                    gap: '6px', alignContent: 'start'
-                  }}>
-                    {collectionBanks.bankA.length === 0 ? (
-                      <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
-                        Drag images here
-                      </div>
-                    ) : collectionBanks.bankA.map(media => renderMediaCard(media, selectedMediaIds.includes(media.id)))}
-                  </div>
+              {/* Right half — Banks with tabs */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+                {/* Tab bar */}
+                <div style={{ display: 'flex', gap: '2px', padding: '4px', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '8px', marginBottom: '8px', flexShrink: 0 }}>
+                  <button
+                    onClick={() => setBankTab('images')}
+                    style={{
+                      flex: 1, padding: '6px 12px', borderRadius: '6px', border: 'none',
+                      fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                      backgroundColor: bankTab === 'images' ? 'rgba(99,102,241,0.2)' : 'transparent',
+                      color: bankTab === 'images' ? '#a5b4fc' : 'rgba(255,255,255,0.4)'
+                    }}
+                  >
+                    Image Banks
+                  </button>
+                  <button
+                    onClick={() => setBankTab('text')}
+                    style={{
+                      flex: 1, padding: '6px 12px', borderRadius: '6px', border: 'none',
+                      fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                      backgroundColor: bankTab === 'text' ? 'rgba(99,102,241,0.2)' : 'transparent',
+                      color: bankTab === 'text' ? '#a5b4fc' : 'rgba(255,255,255,0.4)'
+                    }}
+                  >
+                    Text Banks
+                  </button>
                 </div>
 
-                {/* Bank B */}
-                <div
-                  style={{
-                    flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-                    borderRadius: '10px',
-                    border: dragOverBank === 'B' ? '2px dashed rgba(34, 197, 94, 0.6)' : '1px solid rgba(255,255,255,0.08)',
-                    backgroundColor: dragOverBank === 'B' ? 'rgba(34, 197, 94, 0.05)' : 'transparent',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBank('B'); }}
-                  onDragLeave={() => setDragOverBank(null)}
-                  onDrop={(e) => handleDropOnBank(e, 'B')}
-                >
-                  <div style={{
-                    padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px',
-                    borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0,
-                    background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.06), transparent)'
-                  }}>
-                    <div style={{
-                      width: '22px', height: '22px', borderRadius: '6px',
-                      background: 'linear-gradient(135deg, #22c55e, #4ade80)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '11px', fontWeight: 700, color: '#fff'
-                    }}>B</div>
-                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#86efac' }}>Bank B</span>
-                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginLeft: 'auto' }}>
-                      {collectionBanks.bankB.length}
-                    </span>
-                  </div>
-                  <div style={{
-                    flex: 1, overflowY: 'auto', padding: '8px',
-                    display: 'grid',
-                    gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? '60px' : '80px'}, 1fr))`,
-                    gap: '6px', alignContent: 'start'
-                  }}>
-                    {collectionBanks.bankB.length === 0 ? (
-                      <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
-                        Drag images here
+                {bankTab === 'images' ? (
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden' }}>
+                    {/* Bank A */}
+                    <div
+                      style={{
+                        flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                        borderRadius: '10px',
+                        border: dragOverBank === 'A' ? '2px dashed rgba(99, 102, 241, 0.6)' : '1px solid rgba(255,255,255,0.08)',
+                        backgroundColor: dragOverBank === 'A' ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBank('A'); }}
+                      onDragLeave={() => setDragOverBank(null)}
+                      onDrop={(e) => handleDropOnBank(e, 'A')}
+                    >
+                      <div style={{
+                        padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px',
+                        borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0,
+                        background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.06), transparent)'
+                      }}>
+                        <div style={{
+                          width: '22px', height: '22px', borderRadius: '6px',
+                          background: 'linear-gradient(135deg, #6366f1, #818cf8)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '11px', fontWeight: 700, color: '#fff'
+                        }}>A</div>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: '#c4b5fd' }}>Bank A</span>
+                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginLeft: 'auto' }}>
+                          {collectionBanks.bankA.length}
+                        </span>
                       </div>
-                    ) : collectionBanks.bankB.map(media => renderMediaCard(media, selectedMediaIds.includes(media.id)))}
+                      <div style={{
+                        flex: 1, overflowY: 'auto', padding: '8px',
+                        display: 'grid',
+                        gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? '60px' : '80px'}, 1fr))`,
+                        gap: '6px', alignContent: 'start'
+                      }}>
+                        {collectionBanks.bankA.length === 0 ? (
+                          <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
+                            Drag images here
+                          </div>
+                        ) : collectionBanks.bankA.map(media => renderMediaCard(media, selectedMediaIds.includes(media.id)))}
+                      </div>
+                    </div>
+
+                    {/* Bank B */}
+                    <div
+                      style={{
+                        flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                        borderRadius: '10px',
+                        border: dragOverBank === 'B' ? '2px dashed rgba(34, 197, 94, 0.6)' : '1px solid rgba(255,255,255,0.08)',
+                        backgroundColor: dragOverBank === 'B' ? 'rgba(34, 197, 94, 0.05)' : 'transparent',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBank('B'); }}
+                      onDragLeave={() => setDragOverBank(null)}
+                      onDrop={(e) => handleDropOnBank(e, 'B')}
+                    >
+                      <div style={{
+                        padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px',
+                        borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0,
+                        background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.06), transparent)'
+                      }}>
+                        <div style={{
+                          width: '22px', height: '22px', borderRadius: '6px',
+                          background: 'linear-gradient(135deg, #22c55e, #4ade80)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '11px', fontWeight: 700, color: '#fff'
+                        }}>B</div>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: '#86efac' }}>Bank B</span>
+                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginLeft: 'auto' }}>
+                          {collectionBanks.bankB.length}
+                        </span>
+                      </div>
+                      <div style={{
+                        flex: 1, overflowY: 'auto', padding: '8px',
+                        display: 'grid',
+                        gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? '60px' : '80px'}, 1fr))`,
+                        gap: '6px', alignContent: 'start'
+                      }}>
+                        {collectionBanks.bankB.length === 0 ? (
+                          <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
+                            Drag images here
+                          </div>
+                        ) : collectionBanks.bankB.map(media => renderMediaCard(media, selectedMediaIds.includes(media.id)))}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden' }}>
+                    {/* Text Bank 1 */}
+                    <TextBankPanel
+                      bankNum={1}
+                      label="Text Bank 1"
+                      color="#c4b5fd"
+                      texts={(() => {
+                        const col = collections.find(c => c.id === activeView);
+                        return col?.textBank1 || [];
+                      })()}
+                      onAdd={(text) => { addToTextBank(artistId, activeView, 1, text); loadData(); }}
+                      onRemove={(index) => { removeFromTextBank(artistId, activeView, 1, index); loadData(); }}
+                      onUpdate={(texts) => { updateTextBank(artistId, activeView, 1, texts); loadData(); }}
+                    />
+                    {/* Text Bank 2 */}
+                    <TextBankPanel
+                      bankNum={2}
+                      label="Text Bank 2"
+                      color="#86efac"
+                      texts={(() => {
+                        const col = collections.find(c => c.id === activeView);
+                        return col?.textBank2 || [];
+                      })()}
+                      onAdd={(text) => { addToTextBank(artistId, activeView, 2, text); loadData(); }}
+                      onRemove={(index) => { removeFromTextBank(artistId, activeView, 2, index); loadData(); }}
+                      onUpdate={(texts) => { updateTextBank(artistId, activeView, 2, texts); loadData(); }}
+                    />
+                    {/* Template Editor Button */}
+                    <div style={{ padding: '8px', flexShrink: 0 }}>
+                      <button
+                        onClick={() => {
+                          const col = collections.find(c => c.id === activeView);
+                          const existing = col?.textTemplates?.[0] || {
+                            id: `template_${Date.now()}`,
+                            name: 'Default',
+                            text1Style: { fontFamily: 'Inter, sans-serif', fontSize: 48, fontWeight: '700', color: '#ffffff', position: { x: 50, y: 30 }, outline: true, outlineColor: 'rgba(0,0,0,0.5)' },
+                            text2Style: { fontFamily: 'Inter, sans-serif', fontSize: 36, fontWeight: '400', color: '#ffffff', position: { x: 50, y: 70 }, outline: true, outlineColor: 'rgba(0,0,0,0.5)' }
+                          };
+                          setEditingTemplate(existing);
+                          setShowTemplateEditor(true);
+                        }}
+                        style={{
+                          width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px dashed rgba(255,255,255,0.15)',
+                          backgroundColor: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: '12px',
+                          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                        }}
+                      >
+                        🎨 Edit Text Style Template
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ) : displayedMedia.length === 0 ? (
@@ -1726,6 +1931,135 @@ const LibraryBrowser = ({
               >
                 Create
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Text Template Editor Modal */}
+      {showTemplateEditor && editingTemplate && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }} onClick={() => setShowTemplateEditor(false)}>
+          <div style={{
+            backgroundColor: '#1a1a2e', borderRadius: '16px', padding: '24px',
+            width: '400px', maxHeight: '80vh', overflowY: 'auto'
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 16px', fontSize: '16px', color: '#fff' }}>Text Style Template</h3>
+
+            {[1, 2].map(num => {
+              const key = `text${num}Style`;
+              const style = editingTemplate[key];
+              const labelColor = num === 1 ? '#c4b5fd' : '#86efac';
+              return (
+                <div key={num} style={{ marginBottom: '16px', padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(255,255,255,0.03)' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: labelColor, marginBottom: '10px' }}>Text {num} Style</div>
+
+                  {/* Font Family */}
+                  <div style={{ marginBottom: '8px' }}>
+                    <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '2px' }}>Font</label>
+                    <select
+                      value={style.fontFamily}
+                      onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], fontFamily: e.target.value } }))}
+                      style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: '#0f0f1a', color: '#fff', fontSize: '13px' }}
+                    >
+                      {['Inter, sans-serif', 'Georgia, serif', 'Courier New, monospace', 'Impact, sans-serif', 'Arial Black, sans-serif', 'Playfair Display, serif', 'Oswald, sans-serif', 'Bebas Neue, sans-serif'].map(f => (
+                        <option key={f} value={f} style={{ fontFamily: f }}>{f.split(',')[0]}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Font Size */}
+                  <div style={{ marginBottom: '8px' }}>
+                    <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '2px' }}>Size: {style.fontSize}px</label>
+                    <input type="range" min="16" max="96" value={style.fontSize}
+                      onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], fontSize: parseInt(e.target.value) } }))}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+
+                  {/* Font Weight */}
+                  <div style={{ marginBottom: '8px' }}>
+                    <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '2px' }}>Weight</label>
+                    <select
+                      value={style.fontWeight}
+                      onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], fontWeight: e.target.value } }))}
+                      style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: '#0f0f1a', color: '#fff', fontSize: '13px' }}
+                    >
+                      {['300', '400', '500', '600', '700', '800', '900'].map(w => (
+                        <option key={w} value={w}>{w === '300' ? 'Light' : w === '400' ? 'Regular' : w === '500' ? 'Medium' : w === '600' ? 'Semibold' : w === '700' ? 'Bold' : w === '800' ? 'Extra Bold' : 'Black'}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Color */}
+                  <div style={{ marginBottom: '8px' }}>
+                    <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '2px' }}>Color</label>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <input type="color" value={style.color}
+                        onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], color: e.target.value } }))}
+                        style={{ width: '32px', height: '32px', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                      />
+                      <input type="text" value={style.color}
+                        onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], color: e.target.value } }))}
+                        style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: '#0f0f1a', color: '#fff', fontSize: '13px' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Position */}
+                  <div style={{ marginBottom: '8px' }}>
+                    <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '2px' }}>Position</label>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {[
+                        { label: 'Top', pos: { x: 50, y: 20 } },
+                        { label: 'Center', pos: { x: 50, y: 50 } },
+                        { label: 'Bottom', pos: { x: 50, y: 80 } }
+                      ].map(p => (
+                        <button key={p.label}
+                          onClick={() => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], position: p.pos } }))}
+                          style={{
+                            flex: 1, padding: '6px', borderRadius: '6px', border: 'none', fontSize: '11px', cursor: 'pointer',
+                            backgroundColor: style.position.y === p.pos.y ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.05)',
+                            color: style.position.y === p.pos.y ? '#a5b4fc' : 'rgba(255,255,255,0.4)'
+                          }}
+                        >{p.label}</button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Outline */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>
+                      <input type="checkbox" checked={style.outline}
+                        onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], outline: e.target.checked } }))}
+                      /> Text outline
+                    </label>
+                    {style.outline && (
+                      <input type="color" value={style.outlineColor || '#000000'}
+                        onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], outlineColor: e.target.value } }))}
+                        style={{ width: '24px', height: '24px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+              <button
+                onClick={() => setShowTemplateEditor(false)}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: '13px', cursor: 'pointer' }}
+              >Cancel</button>
+              <button
+                onClick={() => {
+                  saveTextTemplates(artistId, activeView, [editingTemplate]);
+                  loadData();
+                  setShowTemplateEditor(false);
+                }}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: '#6366f1', color: '#fff', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+              >Save Template</button>
             </div>
           </div>
         </div>

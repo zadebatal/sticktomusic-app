@@ -25,6 +25,7 @@ import {
   addManyToLibrary,
   getCreatedContent,
   addCreatedVideo,
+  addCreatedSlideshow,
   getLyrics,
   addLyrics,
   updateLyrics,
@@ -119,6 +120,13 @@ const StudioHome = ({
   const videoInputRef = useRef(null);
   const audioInputRef = useRef(null);
   const imageInputRef = useRef(null);
+
+  // Batch generate state
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchCount, setBatchCount] = useState(10);
+  const [batchAudio, setBatchAudio] = useState(null);
+  const [batchSlidesPerShow, setBatchSlidesPerShow] = useState(2);
+  const [batchGenerating, setBatchGenerating] = useState(false);
 
   // Mobile detection
   useEffect(() => {
@@ -567,6 +575,107 @@ const StudioHome = ({
       });
     }
   };
+
+  const handleBatchGenerate = useCallback(() => {
+    const col = collections.find(c => c.id === selectedCollection);
+    if (!col) return;
+
+    const bankAImages = library.filter(item => (col.bankA || []).includes(item.id));
+    const bankBImages = library.filter(item => (col.bankB || []).includes(item.id));
+    const textBank1 = col.textBank1 || [];
+    const textBank2 = col.textBank2 || [];
+    const template = col.textTemplates?.[0] || null;
+
+    if (bankAImages.length === 0 && bankBImages.length === 0) {
+      alert('Please add images to Bank A and/or Bank B first.');
+      return;
+    }
+
+    setBatchGenerating(true);
+
+    const randomFrom = (arr) => arr.length > 0 ? arr[Math.floor(Math.random() * arr.length)] : null;
+
+    const slideshows = [];
+    for (let i = 0; i < batchCount; i++) {
+      const slides = [];
+      for (let s = 0; s < batchSlidesPerShow; s++) {
+        // Alternate between Bank A and Bank B
+        const useA = s % 2 === 0;
+        const bank = useA ? bankAImages : bankBImages;
+        const fallbackBank = useA ? bankBImages : bankAImages;
+        const img = randomFrom(bank.length > 0 ? bank : fallbackBank);
+
+        const slide = {
+          id: `slide_${Date.now()}_${i}_${s}`,
+          index: s,
+          backgroundImage: img ? (img.url || img.localUrl) : null,
+          thumbnail: img ? (img.url || img.localUrl) : null,
+          sourceBank: useA ? 'imageA' : 'imageB',
+          sourceImageId: img?.id,
+          textOverlays: [],
+          imageTransform: { scale: 1, offsetX: 0, offsetY: 0 },
+          duration: 3
+        };
+
+        // Add text overlay from text banks
+        const textBankForSlide = s === 0 ? textBank1 : s === 1 ? textBank2 : (s % 2 === 0 ? textBank1 : textBank2);
+        const textStyleForSlide = s === 0 ? template?.text1Style : s === 1 ? template?.text2Style : (s % 2 === 0 ? template?.text1Style : template?.text2Style);
+
+        if (textBankForSlide.length > 0) {
+          const randomText = randomFrom(textBankForSlide);
+          slide.textOverlays.push({
+            id: `text_${Date.now()}_${i}_${s}`,
+            text: randomText,
+            position: textStyleForSlide?.position || { x: 50, y: 50 },
+            style: {
+              fontFamily: textStyleForSlide?.fontFamily || 'Inter, sans-serif',
+              fontSize: textStyleForSlide?.fontSize || 48,
+              fontWeight: textStyleForSlide?.fontWeight || '700',
+              color: textStyleForSlide?.color || '#ffffff',
+              textAlign: 'center',
+              outline: textStyleForSlide?.outline !== false,
+              outlineColor: textStyleForSlide?.outlineColor || 'rgba(0,0,0,0.5)'
+            }
+          });
+        }
+
+        slides.push(slide);
+      }
+
+      const slideshow = {
+        id: `slideshow_${Date.now()}_${i}`,
+        name: `${col.name} #${i + 1}`,
+        aspectRatio: '9:16',
+        slides,
+        audio: batchAudio ? {
+          id: batchAudio.id,
+          url: batchAudio.url || batchAudio.localUrl,
+          localUrl: batchAudio.localUrl || batchAudio.url,
+          name: batchAudio.name,
+          startTime: 0,
+          endTime: null
+        } : null,
+        status: 'draft',
+        collectionId: selectedCollection,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      slideshows.push(slideshow);
+    }
+
+    // Save all as drafts
+    slideshows.forEach(ss => {
+      addCreatedSlideshow(artistId, ss);
+    });
+
+    // Refresh created content
+    setCreatedContent(getCreatedContent(artistId));
+    setBatchGenerating(false);
+    setShowBatchModal(false);
+    alert(`Generated ${slideshows.length} slideshow drafts! View them in your library.`);
+  }, [batchCount, batchSlidesPerShow, batchAudio, selectedCollection, collections, library, artistId]);
+
 
   // =====================
   // COMPUTED VALUES
@@ -1218,6 +1327,14 @@ const StudioHome = ({
                     View Library
                   </button>
                   <button
+                    style={{...styles.actionButton, ...styles.secondaryButton, borderColor: 'rgba(99,102,241,0.3)', color: '#a5b4fc'}}
+                    onClick={() => setShowBatchModal(true)}
+                    disabled={!selectedCollection}
+                    title={selectedCollection ? 'Generate multiple slideshows from banks' : 'Select a collection first'}
+                  >
+                    ⚡ Batch Generate
+                  </button>
+                  <button
                     style={{
                       ...styles.actionButton,
                       ...styles.primaryButton
@@ -1296,6 +1413,87 @@ const StudioHome = ({
           )}
         </div>
       </div>
+
+      {/* Batch Generate Modal */}
+      {showBatchModal && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }} onClick={() => setShowBatchModal(false)}>
+          <div style={{
+            backgroundColor: '#1a1a2e', borderRadius: '16px', padding: '24px',
+            width: '440px', maxHeight: '80vh', overflowY: 'auto'
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#fff' }}>Batch Generate Slideshows</h3>
+            <p style={{ margin: '0 0 20px', fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>
+              Generate multiple slideshows from the current collection's banks
+            </p>
+
+            {/* Collection Info */}
+            <div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'rgba(99,102,241,0.1)', marginBottom: '16px', fontSize: '12px', color: '#a5b4fc' }}>
+              Collection: {collections.find(c => c.id === selectedCollection)?.name || 'None selected'}
+              {(() => {
+                const col = collections.find(c => c.id === selectedCollection);
+                if (!col) return ' — Select a collection first';
+                const aCount = col.bankA?.length || 0;
+                const bCount = col.bankB?.length || 0;
+                const t1Count = col.textBank1?.length || 0;
+                const t2Count = col.textBank2?.length || 0;
+                return ` • Bank A: ${aCount} • Bank B: ${bCount} • Text 1: ${t1Count} • Text 2: ${t2Count}`;
+              })()}
+            </div>
+
+            {/* Count */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px' }}>Number of Slideshows</label>
+              <input type="number" min="1" max="50" value={batchCount}
+                onChange={e => setBatchCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: '#0f0f1a', color: '#fff', fontSize: '14px' }}
+              />
+            </div>
+
+            {/* Slides per show */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px' }}>Slides per Slideshow</label>
+              <input type="number" min="2" max="20" value={batchSlidesPerShow}
+                onChange={e => setBatchSlidesPerShow(Math.max(2, Math.min(20, parseInt(e.target.value) || 2)))}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: '#0f0f1a', color: '#fff', fontSize: '14px' }}
+              />
+            </div>
+
+            {/* Audio selection */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px' }}>Audio Track (used for all)</label>
+              <select
+                value={batchAudio?.id || ''}
+                onChange={e => {
+                  const audio = library.filter(item => item.type === 'audio').find(a => a.id === e.target.value);
+                  setBatchAudio(audio || null);
+                }}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: '#0f0f1a', color: '#fff', fontSize: '14px' }}
+              >
+                <option value="">No audio</option>
+                {library.filter(item => item.type === 'audio').map(audio => (
+                  <option key={audio.id} value={audio.id}>{audio.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Generate button */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => setShowBatchModal(false)}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: '13px', cursor: 'pointer' }}
+              >Cancel</button>
+              <button
+                onClick={handleBatchGenerate}
+                disabled={batchGenerating || !selectedCollection}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: batchGenerating ? '#4338ca' : '#6366f1', color: '#fff', fontSize: '13px', fontWeight: 600, cursor: batchGenerating ? 'wait' : 'pointer' }}
+              >{batchGenerating ? 'Generating...' : `Generate ${batchCount} Slideshows`}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Audio Clip Selector Modal */}
       {pendingAudio && (
