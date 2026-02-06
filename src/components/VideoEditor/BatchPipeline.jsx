@@ -205,7 +205,7 @@ const BatchPipeline = ({
       console.log('[BatchPipeline] Auto-selecting single audio option');
       setSelectedAudio(availableAudio[0]);
     }
-  }, [availableAudio]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [availableAudio]); // eslint-disable-line
 
   // Analyze beats when audio is selected
   useEffect(() => {
