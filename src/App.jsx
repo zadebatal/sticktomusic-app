@@ -3306,6 +3306,7 @@ const StickToMusic = () => {
                       if (!grouped[key]) {
                         grouped[key] = {
                           ...page,
+                          rowKey: key, // Unique key per row for selection UI
                           handles: [{ handle: page.handle, platform: page.platform }],
                           platforms: [page.platform],
                           totalFollowers: page.followers,
@@ -3323,14 +3324,12 @@ const StickToMusic = () => {
                     });
                     const uniquePages = Object.values(grouped);
 
-                    // Handle linking accounts - use row keys (first accountId) for selection
-                    // but collect ALL accountIds from selected rows when actually linking
+                    // Handle linking accounts - use rowKey for selection UI,
+                    // but collect ALL linkedAccountIds from selected rows when actually linking
                     const handleLinkSelected = () => {
-                      // Get all account IDs from selected rows
                       const allAccountIds = [];
                       uniquePages.forEach(page => {
-                        // Check if this row is selected (by its first accountId)
-                        if (selectedAccountsToLink.includes(page.linkedAccountIds[0])) {
+                        if (selectedAccountsToLink.includes(page.rowKey)) {
                           allAccountIds.push(...page.linkedAccountIds);
                         }
                       });
@@ -3413,15 +3412,15 @@ const StickToMusic = () => {
                                   {isLinkingThisArtist && (
                                     <td className="p-3 sm:p-4">
                                       <div
-                                        onClick={(e) => { e.stopPropagation(); toggleRowSelection(page.linkedAccountIds[0]); }}
+                                        onClick={(e) => { e.stopPropagation(); toggleRowSelection(page.rowKey); }}
                                         style={{
                                           width: '18px',
                                           height: '18px',
                                           borderRadius: '4px',
-                                          border: selectedAccountsToLink.includes(page.linkedAccountIds[0])
+                                          border: selectedAccountsToLink.includes(page.rowKey)
                                             ? '2px solid #8b5cf6'
                                             : '2px solid #52525b',
-                                          backgroundColor: selectedAccountsToLink.includes(page.linkedAccountIds[0])
+                                          backgroundColor: selectedAccountsToLink.includes(page.rowKey)
                                             ? '#8b5cf6'
                                             : 'transparent',
                                           cursor: 'pointer',
@@ -3431,7 +3430,7 @@ const StickToMusic = () => {
                                           transition: 'all 0.15s'
                                         }}
                                       >
-                                        {selectedAccountsToLink.includes(page.linkedAccountIds[0]) && (
+                                        {selectedAccountsToLink.includes(page.rowKey) && (
                                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
                                             <polyline points="20 6 9 17 4 12"/>
                                           </svg>

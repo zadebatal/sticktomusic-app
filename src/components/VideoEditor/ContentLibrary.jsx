@@ -457,41 +457,49 @@ const ContentLibrary = ({
         }} onClick={() => setPreviewingVideo(null)}>
           <div style={{
             position: 'relative',
-            width: 'min(360px, 45vh * 9 / 16)',
-            height: 'min(640px, 80vh)',
+            width: 'min(320px, 80vh * 9 / 16)',
+            maxHeight: '85vh',
             aspectRatio: '9 / 16',
-            backgroundColor: '#000', borderRadius: 12, overflow: 'hidden'
+            backgroundColor: '#000', borderRadius: 16, overflow: 'hidden',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.5)'
           }} onClick={e => e.stopPropagation()}>
             <button onClick={() => setPreviewingVideo(null)} style={{
-              position: 'absolute', top: 8, right: 8, zIndex: 10,
+              position: 'absolute', top: 10, right: 10, zIndex: 10,
               background: 'rgba(0,0,0,0.6)', border: 'none', color: 'white',
               borderRadius: '50%', width: 32, height: 32, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+              backdropFilter: 'blur(4px)'
             }}>×</button>
             {previewingVideo.cloudUrl ? (
               <video
                 src={previewingVideo.cloudUrl}
                 controls
                 autoPlay
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                playsInline
+                style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }}
               />
             ) : previewingVideo.clips?.length > 0 ? (
               <video
                 src={previewingVideo.clips[0].url || previewingVideo.clips[0].localUrl}
                 controls
                 autoPlay
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                playsInline
+                style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }}
               />
             ) : (
               <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>
                 No preview available - video needs to be rendered first
               </div>
             )}
-            <div style={{ padding: '12px 16px', borderTop: '1px solid #333' }}>
+            <div style={{
+              position: 'absolute', bottom: 0, left: 0, right: 0,
+              padding: '24px 16px 16px',
+              background: 'linear-gradient(transparent, rgba(0,0,0,0.8))'
+            }}>
               <div style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>
                 {previewingVideo.name || previewingVideo.textOverlay || 'Untitled Video'}
               </div>
-              <div style={{ color: '#888', fontSize: 12, marginTop: 4 }}>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 4 }}>
                 {previewingVideo.status} · {previewingVideo.clips?.length || 0} clips
                 {previewingVideo.cloudUrl && ' · Rendered'}
               </div>

@@ -1716,25 +1716,129 @@ const VideoEditorModal = ({
               WebkitOverflowScrolling: 'touch'
             } : {})
           }}>
-            {/* Audio Selector */}
+            {/* Audio Selector — Redesigned module */}
             {!selectedAudio && (
-              <div style={styles.audioSelector}>
-                <h3 style={styles.sectionTitle}>Select Audio</h3>
-                <div style={styles.audioList}>
-                  {category?.audio?.map(audio => (
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                  <div style={{
+                    width: '36px', height: '36px', borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
+                      <path d="M9 18V5l12-2v13"/>
+                      <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#fff' }}>Select Audio</h3>
+                    <p style={{ margin: 0, fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>Choose a track for your video</p>
+                  </div>
+                </div>
+
+                {/* Use Source Video Audio option */}
+                {clips?.length > 0 && clips[0]?.url && (
+                  <button
+                    onClick={() => handleAudioSelect({
+                      id: '__source_video__',
+                      name: 'Source Video Audio',
+                      url: clips[0].url || clips[0].localUrl,
+                      localUrl: clips[0].localUrl || clips[0].url,
+                      isSourceAudio: true
+                    })}
+                    style={{
+                      width: '100%', padding: '14px 16px', borderRadius: '12px',
+                      border: '1px solid rgba(34, 197, 94, 0.3)',
+                      background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0.15))',
+                      color: '#86efac', cursor: 'pointer', textAlign: 'left',
+                      display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px',
+                      transition: 'all 0.15s ease', fontSize: '13px'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.5)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.3)'; e.currentTarget.style.transform = 'none'; }}
+                  >
+                    <div style={{
+                      width: '40px', height: '40px', borderRadius: '10px',
+                      backgroundColor: 'rgba(34, 197, 94, 0.15)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                    }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
+                        <path d="M15.6 11.6C15.6 13.6 13.6 14.6 12 14.6C10.4 14.6 8.4 13.6 8.4 11.6V6C8.4 4 10 2.4 12 2.4C14 2.4 15.6 4 15.6 6V11.6Z"/>
+                        <path d="M19 11.6C19 15.5 15.9 18.6 12 18.6C8.1 18.6 5 15.5 5 11.6"/>
+                        <path d="M12 18.6V22"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 600, color: '#86efac' }}>Use Source Video Audio</div>
+                      <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>Keep the original audio from your video clip</div>
+                    </div>
+                  </button>
+                )}
+
+                {/* Divider */}
+                {clips?.length > 0 && clips[0]?.url && category?.audio?.length > 0 && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '12px', margin: '4px 0 12px',
+                    color: 'rgba(255,255,255,0.25)', fontSize: '11px'
+                  }}>
+                    <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
+                    <span>or choose a track</span>
+                    <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
+                  </div>
+                )}
+
+                {/* Audio tracks list */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {category?.audio?.map((audio, idx) => (
                     <button
                       key={audio.id}
-                      style={styles.audioItem}
+                      style={{
+                        width: '100%', padding: '12px 14px', borderRadius: '10px',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                        color: '#fff', cursor: 'pointer', textAlign: 'left',
+                        display: 'flex', alignItems: 'center', gap: '12px',
+                        transition: 'all 0.15s ease', fontSize: '13px'
+                      }}
                       onClick={() => handleAudioSelect(audio)}
+                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.1)'; e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.3)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.04)'; e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)'; e.currentTarget.style.transform = 'none'; }}
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-                        <path d="M15.54 8.46a5 5 0 010 7.07"/>
+                      <div style={{
+                        width: '40px', height: '40px', borderRadius: '10px',
+                        background: `linear-gradient(135deg, hsl(${(idx * 47) % 360}, 60%, 25%), hsl(${(idx * 47 + 30) % 360}, 60%, 35%))`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                      }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round">
+                          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                          <path d="M15.54 8.46a5 5 0 010 7.07"/>
+                          <path d="M19.07 4.93a10 10 0 010 14.14"/>
+                        </svg>
+                      </div>
+                      <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <div style={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{audio.name}</div>
+                        {audio.duration && (
+                          <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', marginTop: '2px' }}>
+                            {Math.floor(audio.duration / 60)}:{String(Math.floor(audio.duration % 60)).padStart(2, '0')}
+                          </div>
+                        )}
+                      </div>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2">
+                        <polyline points="9 18 15 12 9 6"/>
                       </svg>
-                      <span>{audio.name}</span>
                     </button>
                   ))}
                 </div>
+
+                {(!category?.audio || category.audio.length === 0) && !(clips?.length > 0 && clips[0]?.url) && (
+                  <div style={{
+                    padding: '24px', textAlign: 'center', color: 'rgba(255,255,255,0.3)',
+                    fontSize: '13px', borderRadius: '12px',
+                    border: '1px dashed rgba(255,255,255,0.1)'
+                  }}>
+                    No audio tracks available for this category
+                  </div>
+                )}
               </div>
             )}
 

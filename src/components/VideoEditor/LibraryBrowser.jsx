@@ -462,12 +462,36 @@ const LibraryBrowser = ({
     loadData();
   };
 
-  // Handle delete
+  // Handle delete — smart: if viewing a collection, ask remove-from-folder vs delete-everywhere
+  const [showDeleteModal, setShowDeleteModal] = useState(null); // { mediaId, collectionId? }
+
   const handleDelete = (mediaId) => {
-    if (window.confirm('Delete this item from your library? This cannot be undone.')) {
+    const isInCollectionView = activeView !== 'library' && activeView !== 'favorites'
+      && !collections.find(c => c.id === activeView && c.type === COLLECTION_TYPES.SMART);
+
+    if (isInCollectionView) {
+      // Show smart delete modal
+      setShowDeleteModal({ mediaId, collectionId: activeView });
+    } else {
+      if (window.confirm('Delete this item from your library? This cannot be undone.')) {
+        removeFromLibrary(artistId, mediaId);
+        loadData();
+      }
+    }
+  };
+
+  const handleSmartDelete = (action) => {
+    if (!showDeleteModal) return;
+    const { mediaId, collectionId } = showDeleteModal;
+
+    if (action === 'removeFromFolder') {
+      removeFromCollection(artistId, collectionId, mediaId);
+      loadData();
+    } else if (action === 'deleteEverywhere') {
       removeFromLibrary(artistId, mediaId);
       loadData();
     }
+    setShowDeleteModal(null);
   };
 
   // Handle create collection
@@ -505,11 +529,28 @@ const LibraryBrowser = ({
     setContextMenu(null);
   };
 
-  // Handle drag and drop
+  // Handle drag and drop (supports multi-select drag)
   const handleDragStart = (e, media) => {
+    // If this item is selected and there are multiple selected, drag all of them
+    const isSelected = selectedMediaIds.includes(media.id);
+    const dragIds = (isSelected && selectedMediaIds.length > 1) ? selectedMediaIds : [media.id];
+
     setDraggedItem(media);
     e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setData('text/plain', JSON.stringify(dragIds));
+
+    // Show count badge on drag image
+    if (dragIds.length > 1) {
+      const badge = document.createElement('div');
+      badge.textContent = `${dragIds.length} items`;
+      badge.style.cssText = 'position:fixed;top:-100px;padding:6px 12px;background:#6366f1;color:#fff;border-radius:8px;font-size:13px;font-weight:600;';
+      document.body.appendChild(badge);
+      e.dataTransfer.setDragImage(badge, 40, 20);
+      setTimeout(() => document.body.removeChild(badge), 0);
+    }
   };
+
+  const [dragOverCollection, setDragOverCollection] = useState(null);
 
   const handleDragOver = (e) => {
     e.preventDefault();
@@ -518,7 +559,21 @@ const LibraryBrowser = ({
 
   const handleDropOnCollection = (e, collectionId) => {
     e.preventDefault();
-    if (draggedItem) {
+    setDragOverCollection(null);
+
+    // Try to get multi-select drag IDs from dataTransfer
+    let dragIds = [];
+    try {
+      const data = e.dataTransfer.getData('text/plain');
+      dragIds = JSON.parse(data);
+    } catch (err) {
+      // Fallback to single dragged item
+    }
+
+    if (dragIds.length > 0) {
+      addToCollection(artistId, collectionId, dragIds);
+      loadData();
+    } else if (draggedItem) {
       addToCollection(artistId, collectionId, draggedItem.id);
       loadData();
     }
@@ -986,27 +1041,37 @@ const LibraryBrowser = ({
                     key={collection.id}
                     style={{
                       ...styles.sidebarItem,
-                      ...(activeView === collection.id ? styles.sidebarItemActive : {})
+                      ...(activeView === collection.id ? styles.sidebarItemActive : {}),
+                      ...(dragOverCollection === collection.id ? {
+                        backgroundColor: 'rgba(99, 102, 241, 0.25)',
+                        border: '1px dashed rgba(99, 102, 241, 0.6)',
+                        transform: 'scale(1.02)',
+                        transition: 'all 0.15s ease'
+                      } : {})
                     }}
                     onClick={() => {
                       if (renamingCollectionId !== collection.id) {
                         setActiveView(collection.id);
                       }
                     }}
-                    onDragOver={handleDragOver}
+                    onDragOver={(e) => {
+                      handleDragOver(e);
+                      setDragOverCollection(collection.id);
+                    }}
+                    onDragLeave={() => setDragOverCollection(null)}
                     onDrop={(e) => handleDropOnCollection(e, collection.id)}
                     onMouseEnter={(e) => {
-                      if (renamingCollectionId !== collection.id) {
+                      if (renamingCollectionId !== collection.id && dragOverCollection !== collection.id) {
                         e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.1)';
                       }
                     }}
                     onMouseLeave={(e) => {
-                      if (activeView !== collection.id && renamingCollectionId !== collection.id) {
+                      if (activeView !== collection.id && renamingCollectionId !== collection.id && dragOverCollection !== collection.id) {
                         e.currentTarget.style.backgroundColor = 'transparent';
                       }
                     }}
                   >
-                    <span style={styles.sidebarItemIcon}>📁</span>
+                    <span style={styles.sidebarItemIcon}>{dragOverCollection === collection.id ? '📂' : '📁'}</span>
                     {renamingCollectionId === collection.id ? (
                       <input
                         type="text"
@@ -1153,8 +1218,8 @@ const LibraryBrowser = ({
                   }}
                   onClick={(e) => handleMediaClick(media, e)}
                   onContextMenu={(e) => handleContextMenu(e, media)}
-                  draggable={!allowMultiSelect}
-                  onDragStart={(e) => allowMultiSelect ? e.preventDefault() : handleDragStart(e, media)}
+                  draggable={true}
+                  onDragStart={(e) => handleDragStart(e, media)}
                   onMouseEnter={(e) => {
                     if (!isSelected) {
                       e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
@@ -1314,6 +1379,24 @@ const LibraryBrowser = ({
 
           <div style={styles.contextMenuDivider} />
 
+          {/* Show "Remove from folder" option when in a collection view */}
+          {activeView !== 'library' && activeView !== 'favorites'
+            && !collections.find(c => c.id === activeView && c.type === COLLECTION_TYPES.SMART) && (
+            <div
+              style={{...styles.contextMenuItem, color: '#f59e0b'}}
+              onClick={() => {
+                removeFromCollection(artistId, activeView, contextMenu.media.id);
+                loadData();
+                setContextMenu(null);
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(245,158,11,0.1)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <span>📁</span>
+              <span>Remove from folder</span>
+            </div>
+          )}
+
           <div
             style={{...styles.contextMenuItem, color: '#ef4444'}}
             onClick={() => {
@@ -1324,7 +1407,59 @@ const LibraryBrowser = ({
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <span>🗑️</span>
-            <span>Delete</span>
+            <span>Delete from library</span>
+          </div>
+        </div>
+      )}
+
+      {/* Smart Delete Modal — remove from folder vs delete everywhere */}
+      {showDeleteModal && (
+        <div style={styles.modal} onClick={() => setShowDeleteModal(null)}>
+          <div style={{...styles.modalContent, maxWidth: '380px'}} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.modalTitle}>Delete Item</div>
+            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '14px', margin: '8px 0 20px', lineHeight: '1.5' }}>
+              This item is in a collection. What would you like to do?
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button
+                style={{
+                  padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(99, 102, 241, 0.3)',
+                  backgroundColor: 'rgba(99, 102, 241, 0.1)', color: '#c4b5fd', cursor: 'pointer',
+                  fontSize: '13px', fontWeight: '500', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '10px'
+                }}
+                onClick={() => handleSmartDelete('removeFromFolder')}
+              >
+                <span style={{ fontSize: '18px' }}>📁</span>
+                <div>
+                  <div style={{ fontWeight: 600 }}>Remove from this folder</div>
+                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>Stays in your library and other folders</div>
+                </div>
+              </button>
+              <button
+                style={{
+                  padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(239, 68, 68, 0.3)',
+                  backgroundColor: 'rgba(239, 68, 68, 0.08)', color: '#fca5a5', cursor: 'pointer',
+                  fontSize: '13px', fontWeight: '500', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '10px'
+                }}
+                onClick={() => handleSmartDelete('deleteEverywhere')}
+              >
+                <span style={{ fontSize: '18px' }}>🗑️</span>
+                <div>
+                  <div style={{ fontWeight: 600 }}>Delete from library</div>
+                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>Permanently remove from everywhere</div>
+                </div>
+              </button>
+            </div>
+            <button
+              style={{
+                marginTop: '16px', padding: '8px', borderRadius: '8px', border: 'none',
+                backgroundColor: 'transparent', color: 'rgba(255,255,255,0.4)', cursor: 'pointer',
+                fontSize: '12px', width: '100%', textAlign: 'center'
+              }}
+              onClick={() => setShowDeleteModal(null)}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}

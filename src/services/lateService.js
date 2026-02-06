@@ -58,11 +58,30 @@ async function proxyRequest(action, method = 'GET', body = null, artistId = null
     options.body = JSON.stringify(body);
   }
 
-  const response = await fetch(url.toString(), options);
+  let response;
+  try {
+    response = await fetch(url.toString(), options);
+  } catch (networkErr) {
+    throw new Error('Network error — check your internet connection and try again.');
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(error.error || `API Error: ${response.status}`);
+    const errorMsg = error.error || `API Error: ${response.status}`;
+
+    // Provide user-friendly error messages based on status
+    if (response.status === 400 && errorMsg.includes('No Late API key')) {
+      throw new Error('Late API key not configured for this artist. Go to Settings to add your key.');
+    } else if (response.status === 401) {
+      throw new Error('Authentication expired. Please refresh the page and try again.');
+    } else if (response.status === 403) {
+      throw new Error('You don\'t have permission to access this artist\'s Late account.');
+    } else if (response.status === 500) {
+      throw new Error(`Late sync error: ${errorMsg}. The Late.co service may be temporarily unavailable.`);
+    } else if (response.status === 502 || response.status === 504) {
+      throw new Error('Late.co is not responding. Please try again in a few minutes.');
+    }
+    throw new Error(errorMsg);
   }
 
   return response.json();

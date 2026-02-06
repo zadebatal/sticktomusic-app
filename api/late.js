@@ -357,8 +357,25 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('Late API proxy error:', error);
     console.error('Error stack:', error.stack);
+
+    // Categorize error for better client-side messaging
+    const isNetworkError = error.cause?.code === 'ECONNREFUSED' || error.cause?.code === 'ENOTFOUND'
+      || error.message?.includes('fetch failed') || error.type === 'system';
+    const isTimeoutError = error.name === 'AbortError' || error.message?.includes('timeout');
+
+    if (isNetworkError) {
+      return res.status(502).json({
+        error: 'Unable to reach Late.co — the service may be temporarily down'
+      });
+    }
+    if (isTimeoutError) {
+      return res.status(504).json({
+        error: 'Late.co request timed out — please try again'
+      });
+    }
+
     return res.status(500).json({
-      error: error.message,
+      error: error.message || 'Internal server error',
       details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
