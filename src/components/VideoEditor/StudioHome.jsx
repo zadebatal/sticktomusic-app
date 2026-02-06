@@ -919,6 +919,23 @@ const StudioHome = ({
               <div style={styles.actionBar}>
                 <div style={styles.actionInfo}>
                   {selectedMedia.videos.length} clips selected
+                  {selectedMedia.videos.length > 0 && (
+                    <button
+                      onClick={() => setSelectedMedia(prev => ({ ...prev, videos: [] }))}
+                      style={{
+                        background: 'none',
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        color: 'rgba(255,255,255,0.7)',
+                        fontSize: '11px',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        marginLeft: '8px'
+                      }}
+                    >
+                      Deselect All
+                    </button>
+                  )}
                   {selectedMedia.audio && ` • Audio: ${selectedMedia.audio.name}`}
                 </div>
                 <div style={styles.actionButtons}>
@@ -982,6 +999,23 @@ const StudioHome = ({
               <div style={styles.actionBar}>
                 <div style={styles.actionInfo}>
                   {selectedMedia.images.length} images selected
+                  {selectedMedia.images.length > 0 && (
+                    <button
+                      onClick={() => setSelectedMedia(prev => ({ ...prev, images: [] }))}
+                      style={{
+                        background: 'none',
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        color: 'rgba(255,255,255,0.7)',
+                        fontSize: '11px',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        marginLeft: '8px'
+                      }}
+                    >
+                      Deselect All
+                    </button>
+                  )}
                 </div>
                 <div style={styles.actionButtons}>
                   <button

@@ -1624,14 +1624,24 @@ const VideoStudio = ({
               </>
             )}
 
-            {/* LIBRARY-BASED MODE: When USE_LIBRARY_SYSTEM is enabled and no category is selected */}
+            {/* LIBRARY-BASED MODE: Persistent breadcrumb trail */}
             {USE_LIBRARY_SYSTEM && !selectedCategory && (
               <>
-                {/* Dashboard */}
+                {/* Dashboard - always visible, exits studio */}
+                <button
+                  style={styles.breadcrumbLink}
+                  onClick={onClose}
+                >
+                  Dashboard
+                </button>
+
+                <span style={styles.breadcrumbSep}>/</span>
+
+                {/* Studio - always visible */}
                 <button
                   style={{
                     ...styles.breadcrumbLink,
-                    ...(currentView === 'home' && !showEditor && !showSlideshowEditor ? styles.breadcrumbCurrent : {})
+                    ...(!studioMode && currentView === 'home' && !showEditor && !showSlideshowEditor ? styles.breadcrumbCurrent : {})
                   }}
                   onClick={() => {
                     setCurrentView('home');
@@ -1640,73 +1650,33 @@ const VideoStudio = ({
                     setShowSlideshowEditor(false);
                   }}
                 >
-                  Dashboard
+                  Studio
                 </button>
 
-                {/* Studio */}
-                {(currentView === 'library' || currentView === 'slideshows' || showEditor || showSlideshowEditor) && (
+                {/* Videos / Slideshows / Audio - shown when a mode is active */}
+                {(studioMode || currentView === 'library' || currentView === 'slideshows' || showEditor || showSlideshowEditor) && (
                   <>
                     <span style={styles.breadcrumbSep}>/</span>
                     <button
                       style={{
                         ...styles.breadcrumbLink,
-                        ...(currentView === 'home' && !showEditor && !showSlideshowEditor ? styles.breadcrumbCurrent : {})
+                        ...(!showEditor && !showSlideshowEditor ? styles.breadcrumbCurrent : {})
                       }}
                       onClick={() => {
-                        setCurrentView('home');
-                        setStudioMode(null);
+                        const isSlideshows = studioMode === 'slideshows' || currentView === 'slideshows' || showSlideshowEditor;
+                        setCurrentView(isSlideshows ? 'slideshows' : 'library');
                         setShowEditor(false);
                         setShowSlideshowEditor(false);
                       }}
                     >
-                      Studio
+                      {(studioMode === 'slideshows' || currentView === 'slideshows' || showSlideshowEditor)
+                        ? 'Slideshows'
+                        : (studioMode === 'audio' ? 'Audio' : 'Videos')}
                     </button>
                   </>
                 )}
 
-                {/* Videos or Slideshows */}
-                {(currentView === 'library' || currentView === 'slideshows' || showEditor || showSlideshowEditor) && (
-                  <>
-                    <span style={styles.breadcrumbSep}>/</span>
-                    <button
-                      style={{
-                        ...styles.breadcrumbLink,
-                        ...((currentView === 'library' || currentView === 'slideshows') && !showEditor && !showSlideshowEditor ? styles.breadcrumbCurrent : {})
-                      }}
-                      onClick={() => {
-                        const targetView = studioMode === 'slideshows' || currentView === 'slideshows' || showSlideshowEditor ? 'slideshows' : 'library';
-                        setCurrentView(targetView);
-                        setShowEditor(false);
-                        setShowSlideshowEditor(false);
-                      }}
-                    >
-                      {studioMode === 'slideshows' || currentView === 'slideshows' || showSlideshowEditor ? 'Slideshows' : 'Videos'}
-                    </button>
-                  </>
-                )}
-
-                {/* Dashboard */}
-                {(currentView === 'library' || currentView === 'slideshows' || showEditor || showSlideshowEditor) && (
-                  <>
-                    <span style={styles.breadcrumbSep}>/</span>
-                    <button
-                      style={{
-                        ...styles.breadcrumbLink,
-                        ...((currentView === 'library' || currentView === 'slideshows') && !showEditor && !showSlideshowEditor ? styles.breadcrumbCurrent : {})
-                      }}
-                      onClick={() => {
-                        const targetView = studioMode === 'slideshows' || currentView === 'slideshows' || showSlideshowEditor ? 'slideshows' : 'library';
-                        setCurrentView(targetView);
-                        setShowEditor(false);
-                        setShowSlideshowEditor(false);
-                      }}
-                    >
-                      Dashboard
-                    </button>
-                  </>
-                )}
-
-                {/* Editor */}
+                {/* Editor - shown when editing */}
                 {(showEditor || showSlideshowEditor) && (
                   <>
                     <span style={styles.breadcrumbSep}>/</span>
