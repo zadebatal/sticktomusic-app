@@ -12,24 +12,56 @@
  * - SPOTONTRACK_API_KEY: Spot On Track API key (optional)
  */
 
-import admin from 'firebase-admin';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
-// Initialize Firebase Admin SDK
-if (!admin.apps.length) {
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-  });
+// Initialize Firebase Admin SDK (only once)
+let db = null;
+if (!getApps().length) {
+  try {
+    initializeApp({
+      credential: cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      }),
+    });
+  } catch (e) {
+    console.error('Firebase Admin init error:', e.message);
+  }
 }
+try { db = getFirestore(); } catch(e) { console.error('Firestore init error:', e); }
 
-const db = admin.firestore();
+// Allowed origins - restrict CORS to your domains only
+const ALLOWED_ORIGINS = [
+  'https://sticktomusic.com',
+  'https://www.sticktomusic.com',
+  'https://sticktomusic-app.vercel.app'
+];
 
-// CORS headers
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || 'http://localhost:3000',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+// Also allow Vercel preview deployments
+const isVercelPreview = (origin) => {
+  if (!origin) return false;
+  return origin.includes('sticktomusic') && origin.endsWith('.vercel.app');
 };
+
+// Check if origin is localhost for development
+const isLocalhostOrigin = (origin) => {
+  if (!origin) return false;
+  return origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
+};
+
+// Get CORS headers based on request origin
+function getCorsHeaders(origin) {
+  const allowedOrigin = (ALLOWED_ORIGINS.includes(origin) || isVercelPreview(origin) || isLocalhostOrigin(origin))
+    ? origin
+    : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
+}
 
 // Spotify OAuth token cache
 let spotifyTokenCache = {
@@ -88,7 +120,8 @@ async function verifyAuthToken(authHeader) {
   }
 
   const token = authHeader.split('Bearer ')[1];
-  const decodedToken = await admin.auth().verifyIdToken(token);
+  const { getAuth } = await import('firebase-admin/auth');
+  const decodedToken = await getAuth().verifyIdToken(token);
   return decodedToken;
 }
 
@@ -124,9 +157,10 @@ async function getArtistSpotifyConfig(artistId) {
  * Save Spotify config for an artist
  */
 async function saveArtistSpotifyConfig(artistId, config) {
+  const { FieldValue } = await import('firebase-admin/firestore');
   await db.collection('artists').doc(artistId).update({
     spotifyConfig: config,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    updatedAt: FieldValue.serverTimestamp()
   });
 }
 
@@ -287,13 +321,19 @@ async function getArtistAlbums(spotifyArtistId, limit = 50) {
 // ============================================
 
 export default async function handler(req, res) {
+  const origin = req.headers.origin || '';
+  const corsHeaders = getCorsHeaders(origin);
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return res.status(200).set(CORS_HEADERS).end();
+    Object.entries(corsHeaders).forEach(([key, value]) => {
+      res.setHeader(key, value);
+    });
+    return res.status(200).end();
   }
 
   // Set CORS headers
-  Object.entries(CORS_HEADERS).forEach(([key, value]) => {
+  Object.entries(corsHeaders).forEach(([key, value]) => {
     res.setHeader(key, value);
   });
 
