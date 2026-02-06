@@ -1914,6 +1914,85 @@ export const migrateToFirestore = async (db, artistId) => {
 };
 
 // ============================================================================
+// THUMBNAIL MIGRATION — backfill thumbnails for existing images
+// ============================================================================
+
+/**
+ * Generate thumbnails for existing images that don't have one.
+ * Runs in the background, processing one image at a time.
+ * @param {Object} db - Firestore instance
+ * @param {string} artistId
+ * @param {Function} uploadFileFn - uploadFile from firebaseStorage
+ * @param {Function} onProgress - optional callback(done, total)
+ * @returns {Promise<{generated: number, skipped: number, failed: number}>}
+ */
+export const migrateThumbnails = async (db, artistId, uploadFileFn, onProgress) => {
+  const library = getLibrary(artistId);
+  const images = library.filter(item =>
+    item.type === MEDIA_TYPES.IMAGE && item.url && !item.thumbnailUrl
+  );
+
+  if (images.length === 0) return { generated: 0, skipped: 0, failed: 0 };
+
+  console.log(`[ThumbnailMigration] Found ${images.length} images without thumbnails`);
+
+  let generated = 0;
+  let failed = 0;
+
+  for (let i = 0; i < images.length; i++) {
+    const item = images[i];
+    try {
+      // Fetch image as blob to avoid CORS canvas tainting
+      const response = await fetch(item.url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+
+      // Load into Image element
+      const img = new Image();
+      img.src = blobUrl;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+
+      // Canvas resize
+      const maxSize = 300;
+      const scale = Math.min(1, maxSize / Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.naturalWidth * scale);
+      canvas.height = Math.round(img.naturalHeight * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      // Convert to JPEG blob
+      const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.7));
+      URL.revokeObjectURL(blobUrl);
+
+      if (!thumbBlob) throw new Error('Canvas toBlob returned null');
+
+      // Upload thumbnail
+      const thumbFile = new File([thumbBlob], `thumb_${item.name}`, { type: 'image/jpeg' });
+      const { url: thumbnailUrl } = await uploadFileFn(thumbFile, 'thumbnails');
+
+      // Update record in localStorage + Firestore
+      await updateLibraryItemAsync(db, artistId, item.id, { thumbnailUrl });
+
+      generated++;
+      console.log(`[ThumbnailMigration] ${generated}/${images.length} — ${item.name}`);
+    } catch (err) {
+      failed++;
+      console.warn(`[ThumbnailMigration] Failed for ${item.name}:`, err.message);
+    }
+
+    if (onProgress) onProgress(i + 1, images.length);
+  }
+
+  console.log(`[ThumbnailMigration] Done: ${generated} generated, ${failed} failed`);
+  return { generated, skipped: 0, failed };
+};
+
+// ============================================================================
 // EXPORT
 // ============================================================================
 
@@ -2003,5 +2082,6 @@ export default {
   searchLibrary,
 
   // Migration
-  migrateToFirestore
+  migrateToFirestore,
+  migrateThumbnails
 };

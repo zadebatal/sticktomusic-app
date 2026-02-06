@@ -41,7 +41,8 @@ import {
   addToLibraryAsync,
   addManyToLibraryAsync,
   removeFromLibraryAsync,
-  migrateToFirestore
+  migrateToFirestore,
+  migrateThumbnails
 } from '../../services/libraryService';
 import { uploadFile, getMediaDuration } from '../../services/firebaseStorage';
 
@@ -87,6 +88,9 @@ const StudioHome = ({
 
   // Upload cancellation
   const cancelFunctionsRef = useRef([]);
+
+  // Thumbnail migration ref (run once per session)
+  const thumbMigrationRef = useRef(false);
 
   // H-07: Track blob URLs for cleanup on unmount
   const blobUrlsRef = useRef([]);
@@ -244,6 +248,36 @@ const StudioHome = ({
     setAutoCollectionSet(true);
   // eslint-disable-next-line
   }, [collections, studioMode, selectedCollection, autoCollectionSet]);
+
+  // Background thumbnail migration for existing images
+  useEffect(() => {
+    if (thumbMigrationRef.current || !artistId || !db) return;
+    if (library.length === 0) return;
+    const needsMigration = library.some(item =>
+      item.type === 'image' && item.url && !item.thumbnailUrl
+    );
+    if (!needsMigration) return;
+    thumbMigrationRef.current = true;
+
+    // Run in background after a short delay so it doesn't block initial render
+    const timer = setTimeout(async () => {
+      try {
+        const result = await migrateThumbnails(db, artistId, uploadFile, (done, total) => {
+          if (done === total) {
+            toastSuccess(`Generated thumbnails for ${result?.generated || done} images`);
+            setLibraryRefreshTrigger(prev => prev + 1);
+          }
+        });
+        if (result.generated > 0) {
+          setLibraryRefreshTrigger(prev => prev + 1);
+        }
+      } catch (err) {
+        console.warn('[StudioHome] Thumbnail migration error:', err);
+      }
+    }, 3000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line
+  }, [library, artistId, db]);
 
   // =====================
   // UPLOAD HANDLERS
