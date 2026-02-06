@@ -308,11 +308,12 @@ const SlideshowEditor = ({
     ? { width: 1080, height: 1920 }
     : { width: 1080, height: 1440 };
 
-  // Preview dimensions - match the selected aspect ratio
+  // Preview dimensions - always 9:16 canvas; 4:3 is a crop overlay, not a shape change
   const previewScale = 0.25;
+  const baseDimensions = { width: 1080, height: 1920 }; // Always 9:16
   const previewDimensions = {
-    width: exportDimensions.width * previewScale,
-    height: exportDimensions.height * previewScale
+    width: baseDimensions.width * previewScale,
+    height: baseDimensions.height * previewScale
   };
 
   // Get current slide (defined early so callbacks can reference it)
@@ -2109,8 +2110,8 @@ const SlideshowEditor = ({
                 style={{
                   ...styles.canvas,
                   width: isMobile ? Math.min(window.innerWidth - 32, previewDimensions.width) : previewDimensions.width,
-                  height: isMobile ? Math.min((window.innerWidth - 32) * (exportDimensions.height / exportDimensions.width), previewDimensions.height) : previewDimensions.height,
-                  aspectRatio: aspectRatio === '4:3' ? '3/4' : '9/16'
+                  height: isMobile ? Math.min((window.innerWidth - 32) * (baseDimensions.height / baseDimensions.width), previewDimensions.height) : previewDimensions.height,
+                  aspectRatio: '9/16'
                 }}
               >
                 {/* Background Image - Draggable and resizable */}
