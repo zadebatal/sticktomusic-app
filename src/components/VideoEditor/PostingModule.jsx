@@ -27,8 +27,19 @@ const PostingModule = ({
   onRenderVideo,
   onClose
 }) => {
-  // Bank selection
-  const [selectedBank, setSelectedBank] = useState(category?.name || getBankNames()[0]);
+  // Bank selection — ensure it matches a valid CONTENT_BANKS key
+  const [selectedBank, setSelectedBank] = useState(() => {
+    const bankNames = getBankNames();
+    // Try exact match with category name first
+    if (category?.name && bankNames.includes(category.name)) return category.name;
+    // Try case-insensitive match
+    if (category?.name) {
+      const lower = category.name.toLowerCase();
+      const match = bankNames.find(b => b.toLowerCase() === lower);
+      if (match) return match;
+    }
+    return bankNames[0];
+  });
 
   // Posts data - each video gets its own editable content
   const [posts, setPosts] = useState([]);
@@ -81,15 +92,17 @@ const PostingModule = ({
         video: video, // Keep reference to full video for rendering
         videoUrl: video.export?.cloudUrl || video.postedUrl || video.cloudUrl || null,
         needsRender: !isVideoRendered(video),
-        thumbnail: video.thumbnail || video.export?.thumbnailUrl,
-        title: video.title || `Video ${index + 1}`,
-        caption: content.caption,
-        hashtags: content.hashtags,
-        hashtagString: content.hashtagString,
+        thumbnail: video.thumbnail || video.export?.thumbnailUrl || video.slides?.[0]?.thumbnail || null,
+        title: video.title || video.name || `Video ${index + 1}`,
+        caption: content.caption || '',
+        hashtags: content.hashtags || [],
+        hashtagString: content.hashtagString || '',
         isEditing: false
       };
     });
 
+    console.log('[PostingModule] Initialized', newPosts.length, 'posts with bank:', selectedBank,
+      'sample caption:', newPosts[0]?.caption, 'sample hashtags:', newPosts[0]?.hashtagString);
     setPosts(newPosts);
   }, [videos, selectedBank, platforms.instagram, isVideoRendered]);
 
@@ -507,8 +520,34 @@ const PostCard = ({
   onRemove
 }) => {
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const [generatedThumb, setGeneratedThumb] = useState(null);
   const captionInputRef = React.useRef(null);
   const hashtagInputRef = React.useRef(null);
+
+  // Generate thumbnail from video URL if none exists
+  React.useEffect(() => {
+    if (post.thumbnail || generatedThumb) return;
+    const videoSrc = post.videoUrl || post.video?.export?.cloudUrl || post.video?.url || post.video?.localUrl;
+    if (!videoSrc) return;
+    const video = document.createElement('video');
+    video.crossOrigin = 'anonymous';
+    video.muted = true;
+    video.src = videoSrc;
+    video.onloadeddata = () => { video.currentTime = 0.5; };
+    video.onseeked = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 160;
+        canvas.height = 284; // 9:16 aspect
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        setGeneratedThumb(canvas.toDataURL('image/jpeg', 0.7));
+      } catch (e) { /* CORS or other issue — leave placeholder */ }
+    };
+    video.onerror = () => {};
+  }, [post.thumbnail, post.videoUrl, post.video, generatedThumb]);
+
+  const thumbSrc = post.thumbnail || generatedThumb;
 
   // Calculate this post's scheduled time
   const scheduledTime = useMemo(() => {
@@ -558,8 +597,8 @@ const PostCard = ({
     <div style={styles.postCard}>
       {/* Thumbnail */}
       <div style={styles.postThumbnail}>
-        {post.thumbnail ? (
-          <img src={post.thumbnail} alt={post.title} style={styles.thumbnailImg} />
+        {thumbSrc ? (
+          <img src={thumbSrc} alt={post.title} style={styles.thumbnailImg} />
         ) : (
           <div style={styles.thumbnailPlaceholder}>📹</div>
         )}
