@@ -105,7 +105,7 @@ const LibraryBrowser = ({
   const fileInputRef = useRef(null);
 
   // Load data when artistId changes or refresh is triggered
-  // Strategy: load from localStorage FIRST for instant UI, then sync from Firestore
+  // Strategy: load from localStorage FIRST for instant UI, then merge Firestore in background
   useEffect(() => {
     if (!artistId) return;
 
@@ -117,15 +117,32 @@ const LibraryBrowser = ({
     if (cachedLibrary.length > 0) setLibrary(cachedLibrary);
     if (cachedCollections.length > 0) setCollections(cachedCollections);
 
+    // Build a cache map for merging thumbnailUrl (localStorage may have it, Firestore may not)
+    const thumbCache = new Map();
+    cachedLibrary.forEach(item => {
+      if (item.thumbnailUrl) thumbCache.set(item.id, item.thumbnailUrl);
+    });
+
     const unsubscribes = [];
 
     if (db) {
       // Firestore real-time subscription syncs in background
       unsubscribes.push(subscribeToLibrary(db, artistId, (items) => {
-        console.log('[LibraryBrowser] Firestore sync:', items.length, 'library items');
-        setLibrary(items);
-        // Keep localStorage cache fresh for next instant load
-        try { saveLibrary(artistId, items); } catch (e) {}
+        // Merge: preserve thumbnailUrl from localStorage if Firestore doesn't have it
+        const merged = items.map(item => {
+          if (!item.thumbnailUrl && thumbCache.has(item.id)) {
+            return { ...item, thumbnailUrl: thumbCache.get(item.id) };
+          }
+          // Update cache with any new thumbnailUrl from Firestore
+          if (item.thumbnailUrl) thumbCache.set(item.id, item.thumbnailUrl);
+          return item;
+        });
+
+        const withThumbs = merged.filter(i => i.thumbnailUrl).length;
+        console.log('[LibraryBrowser] Firestore sync:', merged.length, 'items,', withThumbs, 'have thumbnails');
+
+        setLibrary(merged);
+        try { saveLibrary(artistId, merged); } catch (e) {}
       }));
 
       unsubscribes.push(subscribeToCollections(db, artistId, (cols) => {
