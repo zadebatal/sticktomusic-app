@@ -1216,19 +1216,28 @@ const LibraryBrowser = ({
   };
 
   // Bank-specific media card renderer with selection and remove button
+  const bankCardSize = compact ? 64 : 80;
   const renderBankMediaCard = (media, bank) => {
     const isSelected = selectedBankItems[bank].has(media.id);
     return (
       <div
         key={media.id}
         style={{
-          ...styles.mediaCard,
           position: 'relative',
+          width: `${bankCardSize}px`,
+          height: `${bankCardSize}px`,
+          flexShrink: 0,
+          backgroundColor: 'rgba(255, 255, 255, 0.05)',
+          borderRadius: '8px',
+          overflow: 'hidden',
           cursor: 'pointer',
+          transition: 'all 0.15s ease',
           ...(isSelected ? {
             border: '2px solid #a78bfa',
             backgroundColor: 'rgba(167, 139, 250, 0.15)'
-          } : {})
+          } : {
+            border: '1px solid transparent'
+          })
         }}
         onClick={() => handleToggleBankSelect(bank, media.id)}
         onMouseEnter={(e) => {
@@ -1737,12 +1746,11 @@ const LibraryBrowser = ({
                       </div>
                       <div style={{
                         flex: 1, overflowY: 'auto', padding: '8px',
-                        display: 'grid',
-                        gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? '60px' : '80px'}, 1fr))`,
-                        gap: '6px', alignContent: 'start'
+                        display: 'flex', flexWrap: 'wrap',
+                        gap: '8px', alignContent: 'start'
                       }}>
                         {collectionBanks.bankA.length === 0 ? (
-                          <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
+                          <div style={{ width: '100%', padding: '16px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
                             Drag images here
                           </div>
                         ) : collectionBanks.bankA.map(media => renderBankMediaCard(media, 'A'))}
@@ -1823,12 +1831,11 @@ const LibraryBrowser = ({
                       </div>
                       <div style={{
                         flex: 1, overflowY: 'auto', padding: '8px',
-                        display: 'grid',
-                        gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? '60px' : '80px'}, 1fr))`,
-                        gap: '6px', alignContent: 'start'
+                        display: 'flex', flexWrap: 'wrap',
+                        gap: '8px', alignContent: 'start'
                       }}>
                         {collectionBanks.bankB.length === 0 ? (
-                          <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
+                          <div style={{ width: '100%', padding: '16px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
                             Drag images here
                           </div>
                         ) : collectionBanks.bankB.map(media => renderBankMediaCard(media, 'B'))}
