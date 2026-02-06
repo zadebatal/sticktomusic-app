@@ -61,6 +61,12 @@ service cloud.firestore {
         allow read: if isOperatorOrAbove();
         allow write: if isConductor() || canAccessArtist(artistId);
       }
+
+      // Studio data (categories, presets) - for cross-device sync
+      match /studio/{document=**} {
+        allow read: if isOperatorOrAbove();
+        allow write: if isConductor() || canAccessArtist(artistId);
+      }
     }
 
     // Content Templates collection (caption/hashtag templates per artist)

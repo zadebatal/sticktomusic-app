@@ -117,7 +117,11 @@ const AestheticHome = ({
   };
 
   const handleClipSave = (clipData) => {
-    if (pendingAudio) {
+    if (clipData.trimmedFile) {
+      // Audio was actually trimmed to a new file — upload the trimmed copy (no trim metadata needed)
+      onUploadAudio([clipData.trimmedFile], null, clipData.trimmedName);
+      setPendingAudio(null);
+    } else if (pendingAudio) {
       onUploadAudio([pendingAudio.file], {
         startTime: clipData.startTime,
         endTime: clipData.endTime,

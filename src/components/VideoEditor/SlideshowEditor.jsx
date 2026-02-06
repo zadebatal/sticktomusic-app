@@ -525,37 +525,39 @@ const SlideshowEditor = ({
     setShowAudioTrimmer(true);
   }, []);
 
-  const handleAudioTrimSave = useCallback(({ startTime, endTime, duration }) => {
+  const handleAudioTrimSave = useCallback(({ startTime, endTime, duration, trimmedFile, trimmedName }) => {
     if (!audioToTrim) return;
 
-    const editedAudio = {
-      ...audioToTrim,
-      startTime,
-      endTime,
-      trimmedDuration: endTime - startTime,
-      isTrimmed: true
-    };
-    setSelectedAudio(editedAudio);
-    setShowAudioTrimmer(false);
-    setAudioToTrim(null);
-
-    // Prompt to save this edited version
-    if (window.confirm(`Save this trimmed version of "${audioToTrim.name}" (${(endTime - startTime).toFixed(1)}s) to your library?`)) {
-      // Save trimmed audio metadata back to library
-      if (db && artistId) {
-        import('../../services/libraryService').then(({ addToLibraryAsync }) => {
-          addToLibraryAsync(db, artistId, {
-            name: `${audioToTrim.name} (trimmed)`,
-            url: audioToTrim.url || audioToTrim.localUrl,
-            type: 'audio',
-            duration: endTime - startTime,
-            startTime,
-            endTime,
-            isTrimmed: true,
-            originalId: audioToTrim.id
-          }).catch(err => console.warn('[SlideshowEditor] Failed to save trimmed audio:', err));
-        });
-      }
+    if (trimmedFile) {
+      // Audio was actually trimmed to a new file — use it directly (starts at 0)
+      const localUrl = URL.createObjectURL(trimmedFile);
+      const editedAudio = {
+        ...audioToTrim,
+        name: trimmedName || trimmedFile.name,
+        file: trimmedFile,
+        url: localUrl,
+        localUrl: localUrl,
+        startTime: 0,
+        endTime: duration,
+        trimmedDuration: duration,
+        isTrimmed: false, // It's a new independent file, not metadata-trimmed
+        duration: duration
+      };
+      setSelectedAudio(editedAudio);
+      setShowAudioTrimmer(false);
+      setAudioToTrim(null);
+    } else {
+      // Metadata-only trim (fallback or full-length selection)
+      const editedAudio = {
+        ...audioToTrim,
+        startTime,
+        endTime,
+        trimmedDuration: endTime - startTime,
+        isTrimmed: startTime > 0 || (audioToTrim.duration && Math.abs(endTime - audioToTrim.duration) > 0.1)
+      };
+      setSelectedAudio(editedAudio);
+      setShowAudioTrimmer(false);
+      setAudioToTrim(null);
     }
   }, [audioToTrim, db, artistId]);
 

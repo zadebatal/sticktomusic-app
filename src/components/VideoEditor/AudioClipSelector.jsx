@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { trimAudioToFile } from '../../utils/audioTrimmer';
 
 /**
  * AudioClipSelector - Professional dual-playhead audio region selector
@@ -50,6 +51,8 @@ const AudioClipSelector = ({
   const [savedClipData, setSavedClipData] = useState(null);
   const [showSaveTrimmedPrompt, setShowSaveTrimmedPrompt] = useState(false);
   const [trimmedClipName, setTrimmedClipName] = useState('');
+  const [isTrimming, setIsTrimming] = useState(false);
+  const [trimProgress, setTrimProgress] = useState('');
 
   const audioRef = useRef(null);
   const canvasRef = useRef(null);
@@ -454,6 +457,48 @@ const AudioClipSelector = ({
 
   const selectedDuration = outPoint - inPoint;
 
+  // Actually trim the audio to a new file and pass to parent
+  const handleTrimAndUse = useCallback(async (name) => {
+    setIsTrimming(true);
+    setTrimProgress('Preparing trim...');
+    try {
+      // Determine audio source (prefer file, then localUrl/url)
+      const source = audioFile || audioUrl;
+      if (!source) throw new Error('No audio source available');
+
+      const trimmedFile = await trimAudioToFile(
+        source,
+        inPoint,
+        outPoint,
+        name || 'Trimmed Audio',
+        (msg) => setTrimProgress(msg)
+      );
+
+      console.log('[AudioClipSelector] Trimmed audio:', {
+        name: trimmedFile.name,
+        size: `${(trimmedFile.size / 1024).toFixed(0)}KB`,
+        duration: `${selectedDuration.toFixed(1)}s`
+      });
+
+      // Pass the trimmed file to parent — starts at 0, no trim metadata needed
+      onSave({
+        startTime: 0,
+        endTime: selectedDuration,
+        duration: selectedDuration,
+        trimmedFile: trimmedFile,
+        trimmedName: name || trimmedFile.name
+      });
+    } catch (error) {
+      console.error('[AudioClipSelector] Trim failed:', error);
+      setTrimProgress('');
+      // Fall back to metadata-only approach
+      onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration });
+    } finally {
+      setIsTrimming(false);
+      setTrimProgress('');
+    }
+  }, [audioFile, audioUrl, inPoint, outPoint, selectedDuration, onSave]);
+
   return (
     <div style={{
       ...styles.overlay,
@@ -744,6 +789,7 @@ const AudioClipSelector = ({
                 ...styles.saveButton,
                 ...(isMobile ? { width: '100%', padding: '14px', fontSize: '15px' } : {})
               }}
+              disabled={isTrimming}
               onClick={() => {
                 // Check if audio was trimmed (not using full track)
                 const isTrimmed = inPoint > 0.1 || (duration > 0 && Math.abs(outPoint - duration) > 0.1);
@@ -754,16 +800,16 @@ const AudioClipSelector = ({
                   fullDuration: duration,
                   isTrimmed
                 });
-                if (isTrimmed && onSaveClip) {
-                  // Show prompt to save trimmed version with a name
+                if (isTrimmed) {
+                  // Show prompt to name the trimmed version
                   const baseName = audioName || 'Audio';
                   const defaultName = `${baseName.replace(/\.[^/.]+$/, '')} (${formatTimeShort(inPoint)}-${formatTimeShort(outPoint)})`;
                   setTrimmedClipName(defaultName);
                   setShowSaveTrimmedPrompt(true);
                 } else {
                   // Not trimmed, just use directly
-                  console.log('[AudioClipSelector] Calling onSave with:', { startTime: inPoint, endTime: outPoint, duration: selectedDuration });
-                  onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration });
+                  console.log('[AudioClipSelector] Calling onSave with full audio');
+                  onSave({ startTime: 0, endTime: duration, duration: duration });
                 }
               }}
             >
@@ -879,44 +925,40 @@ const AudioClipSelector = ({
 
         {/* Save Trimmed Clip Prompt - Shows when user clicks "Use This Clip" on trimmed audio */}
         {showSaveTrimmedPrompt && (
-          <div style={styles.saveClipOverlay} onClick={() => setShowSaveTrimmedPrompt(false)}>
+          <div style={styles.saveClipOverlay} onClick={() => !isTrimming && setShowSaveTrimmedPrompt(false)}>
             <div style={{
               ...styles.saveTrimmedModal,
               ...(isMobile ? { width: '90%', maxWidth: '90%', padding: '20px' } : {})
             }} onClick={e => e.stopPropagation()}>
-              <h3 style={styles.saveTrimmedTitle}>💾 Save Trimmed Version?</h3>
+              <h3 style={styles.saveTrimmedTitle}>✂️ Name Your Clip</h3>
               <p style={styles.saveTrimmedDesc}>
-                You've trimmed this audio to <strong>{formatTime(selectedDuration)}</strong>.
-                Save it to your library for easy reuse?
+                Saving a <strong>{formatTime(selectedDuration)}</strong> clip from your audio.
+                {!isMobile && ' The original will remain untouched.'}
               </p>
-              {!isMobile && (
-                <p style={styles.saveTrimmedNote}>
-                  The original full-length audio will remain untouched.
-                </p>
-              )}
               <input
                 type="text"
                 value={trimmedClipName}
                 onChange={e => setTrimmedClipName(e.target.value)}
-                placeholder="Name your trimmed version..."
+                placeholder="Name your trimmed clip..."
+                disabled={isTrimming}
                 style={{
                   ...styles.saveClipInput,
-                  ...(isMobile ? { fontSize: '16px', padding: '14px' } : {})
+                  ...(isMobile ? { fontSize: '16px', padding: '14px' } : {}),
+                  ...(isTrimming ? { opacity: 0.5 } : {})
                 }}
                 autoFocus={!isMobile}
                 onKeyDown={e => {
-                  if (e.key === 'Enter' && trimmedClipName.trim()) {
-                    onSaveClip({
-                      name: trimmedClipName.trim(),
-                      startTime: inPoint,
-                      endTime: outPoint,
-                      clipDuration: selectedDuration
-                    });
-                    onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration });
+                  if (e.key === 'Enter' && trimmedClipName.trim() && !isTrimming) {
+                    handleTrimAndUse(trimmedClipName.trim());
                     setShowSaveTrimmedPrompt(false);
                   }
                 }}
               />
+              {isTrimming && (
+                <p style={{ color: '#a78bfa', fontSize: '13px', margin: '8px 0 0', textAlign: 'center' }}>
+                  {trimProgress || 'Trimming...'}
+                </p>
+              )}
               <div style={{
                 ...styles.saveTrimmedActions,
                 ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
@@ -924,40 +966,32 @@ const AudioClipSelector = ({
                 <button
                   style={{
                     ...styles.skipButton,
-                    ...(isMobile ? { width: '100%', padding: '14px', fontSize: '15px' } : {})
+                    ...(isMobile ? { width: '100%', padding: '14px', fontSize: '15px' } : {}),
+                    ...(isTrimming ? { opacity: 0.5, cursor: 'not-allowed' } : {})
                   }}
+                  disabled={isTrimming}
                   onClick={() => {
-                    // Skip saving, just use the clip
-                    console.log('[AudioClipSelector] Skip & Use clicked:', { startTime: inPoint, endTime: outPoint, duration: selectedDuration });
-                    onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration });
                     setShowSaveTrimmedPrompt(false);
                   }}
                 >
-                  Skip & Use
+                  Cancel
                 </button>
                 <button
                   style={{
                     ...styles.saveButton,
-                    opacity: trimmedClipName.trim() ? 1 : 0.5,
-                    cursor: trimmedClipName.trim() ? 'pointer' : 'not-allowed',
+                    opacity: (trimmedClipName.trim() && !isTrimming) ? 1 : 0.5,
+                    cursor: (trimmedClipName.trim() && !isTrimming) ? 'pointer' : 'not-allowed',
                     ...(isMobile ? { width: '100%', padding: '14px', fontSize: '15px' } : {})
                   }}
                   onClick={() => {
-                    if (trimmedClipName.trim()) {
-                      console.log('[AudioClipSelector] Save & Use clicked:', { startTime: inPoint, endTime: outPoint, duration: selectedDuration });
-                      onSaveClip({
-                        name: trimmedClipName.trim(),
-                        startTime: inPoint,
-                        endTime: outPoint,
-                        clipDuration: selectedDuration
-                      });
-                      onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration });
+                    if (trimmedClipName.trim() && !isTrimming) {
+                      handleTrimAndUse(trimmedClipName.trim());
                       setShowSaveTrimmedPrompt(false);
                     }
                   }}
-                  disabled={!trimmedClipName.trim()}
+                  disabled={!trimmedClipName.trim() || isTrimming}
                 >
-                  💾 Save & Use
+                  {isTrimming ? '⏳ Trimming...' : '✂️ Trim & Use'}
                 </button>
               </div>
             </div>

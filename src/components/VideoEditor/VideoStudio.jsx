@@ -30,7 +30,62 @@ import {
   MEDIA_TYPES,
   STARTER_TEMPLATES
 } from '../../services/libraryService';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { VIDEO_STATUS } from '../../utils/status';
+
+// Firestore sync helpers for categories - ensures cross-device access
+const FIRESTORE_CATEGORY_DOC = 'studioData';
+
+async function saveCategoriesToFirestore(db, artistId, categories) {
+  if (!db || !artistId) return;
+  try {
+    // Strip non-serializable fields (file objects, blob URLs, thumbnails)
+    const cleanCategories = categories.map(cat => ({
+      id: cat.id,
+      artistId: cat.artistId || artistId,
+      name: cat.name || '',
+      description: cat.description || '',
+      accountHandle: cat.accountHandle || '',
+      videos: (cat.videos || [])
+        .filter(v => v.url && !v.url.startsWith('blob:'))
+        .map(({ file, localUrl, thumbnail, ...rest }) => rest),
+      audio: (cat.audio || [])
+        .filter(a => a.url && !a.url.startsWith('blob:'))
+        .map(({ file, localUrl, ...rest }) => rest),
+      createdVideos: (cat.createdVideos || []).map(v => ({
+        ...v,
+        clips: (v.clips || []).map(({ file, localUrl, thumbnail, ...rest }) => rest)
+      })),
+      imagesA: (cat.imagesA || []).filter(img => img.url && !img.url.startsWith('blob:')),
+      imagesB: (cat.imagesB || []).filter(img => img.url && !img.url.startsWith('blob:')),
+      slideshows: cat.slideshows || [],
+      lyrics: cat.lyrics || [],
+      defaultPreset: cat.defaultPreset || null,
+      captionTemplate: cat.captionTemplate || '',
+      defaultHashtags: cat.defaultHashtags || ''
+    }));
+
+    const docRef = doc(db, 'artists', artistId, 'studio', FIRESTORE_CATEGORY_DOC);
+    await setDoc(docRef, { categories: cleanCategories, updatedAt: new Date().toISOString() }, { merge: true });
+  } catch (error) {
+    console.warn('[VideoStudio] Failed to save categories to Firestore:', error.message);
+  }
+}
+
+async function loadCategoriesFromFirestore(db, artistId) {
+  if (!db || !artistId) return null;
+  try {
+    const docRef = doc(db, 'artists', artistId, 'studio', FIRESTORE_CATEGORY_DOC);
+    const snapshot = await getDoc(docRef);
+    if (snapshot.exists()) {
+      return snapshot.data().categories || null;
+    }
+    return null;
+  } catch (error) {
+    console.warn('[VideoStudio] Failed to load categories from Firestore:', error.message);
+    return null;
+  }
+}
 
 // Feature flag: Set to true to use new Library/Collections system
 const USE_LIBRARY_SYSTEM = true;
@@ -408,6 +463,21 @@ const VideoStudio = ({
   const [selectedLibraryMedia, setSelectedLibraryMedia] = useState({ videos: [], audio: null, images: [] });
   const [pullFromCollection, setPullFromCollection] = useState(null);
 
+  // On mount: try loading categories from Firestore (may have newer data than localStorage)
+  useEffect(() => {
+    if (db && initialArtistId) {
+      loadCategoriesFromFirestore(db, initialArtistId).then(firestoreCats => {
+        if (firestoreCats && firestoreCats.length > 0) {
+          console.log('[VideoStudio] Initial load: found', firestoreCats.length, 'categories in Firestore');
+          setCategories(firestoreCats);
+          // Sync to localStorage
+          saveArtistCategories(initialArtistId, firestoreCats);
+        }
+      });
+    }
+  // eslint-disable-next-line
+  }, []); // Only run once on mount
+
   // Auto-setup Music Artist template if onboarding not completed (no modal)
   useEffect(() => {
     if (USE_LIBRARY_SYSTEM && currentArtistId) {
@@ -420,7 +490,7 @@ const VideoStudio = ({
     }
   }, [currentArtistId]);
 
-  // Save to localStorage when categories change
+  // Save to localStorage + Firestore when categories change
   useEffect(() => {
     // Don't save if artist just changed - wait for load effect to run first
     if (currentArtistId && currentArtistId !== prevArtistIdRef.current) {
@@ -440,7 +510,12 @@ const VideoStudio = ({
       // Retry save after cleanup
       saveFn(categories);
     }
-  }, [categories, currentArtistId]);
+
+    // Also sync to Firestore for cross-device access (debounced via effect)
+    if (db && currentArtistId) {
+      saveCategoriesToFirestore(db, currentArtistId, categories);
+    }
+  }, [categories, currentArtistId, db]);
 
   // Save to localStorage when presets change
   useEffect(() => {
@@ -462,16 +537,36 @@ const VideoStudio = ({
     if (currentArtistId && currentArtistId !== prevArtistIdRef.current) {
       console.log('[VideoStudio] Artist changed from', prevArtistIdRef.current, 'to', currentArtistId);
 
-      // Load categories for new artist
-      const artistCategories = loadArtistCategories(currentArtistId);
-      if (artistCategories.length > 0) {
-        console.log('[VideoStudio] Loaded', artistCategories.length, 'categories for', currentArtistId);
-        setCategories(artistCategories);
-      } else {
-        // Initialize with defaults for new artist
-        console.log('[VideoStudio] No categories found, using defaults for', currentArtistId);
-        setCategories(defaultCategories);
-      }
+      // Load categories: try Firestore first (cross-device), then localStorage
+      const loadCats = async () => {
+        let loaded = false;
+
+        // Try Firestore first for cross-device sync
+        if (db) {
+          const firestoreCategories = await loadCategoriesFromFirestore(db, currentArtistId);
+          if (firestoreCategories && firestoreCategories.length > 0) {
+            console.log('[VideoStudio] Loaded', firestoreCategories.length, 'categories from Firestore for', currentArtistId);
+            setCategories(firestoreCategories);
+            // Also update localStorage for faster next load
+            saveArtistCategories(currentArtistId, firestoreCategories);
+            loaded = true;
+          }
+        }
+
+        if (!loaded) {
+          // Fall back to localStorage
+          const artistCategories = loadArtistCategories(currentArtistId);
+          if (artistCategories.length > 0) {
+            console.log('[VideoStudio] Loaded', artistCategories.length, 'categories from localStorage for', currentArtistId);
+            setCategories(artistCategories);
+          } else {
+            console.log('[VideoStudio] No categories found, using defaults for', currentArtistId);
+            setCategories(defaultCategories);
+          }
+        }
+      };
+
+      loadCats();
 
       // Load presets for new artist
       const artistPresets = loadArtistPresets(currentArtistId);
@@ -488,7 +583,7 @@ const VideoStudio = ({
       // Update ref to current artist
       prevArtistIdRef.current = currentArtistId;
     }
-  }, [currentArtistId]);
+  }, [currentArtistId, db]);
 
   // Initialize with first artist and restore session
   useEffect(() => {
@@ -724,7 +819,7 @@ const VideoStudio = ({
     setUploadProgress(null);
   }, [selectedCategory]);
 
-  const handleUploadAudio = useCallback(async (files, trimData = null) => {
+  const handleUploadAudio = useCallback(async (files, trimData = null, customName = null) => {
     if (!selectedCategory) return;
 
     setUploadProgress({ type: 'audio', current: 0, total: files.length });
@@ -733,7 +828,8 @@ const VideoStudio = ({
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       try {
-        setUploadProgress({ type: 'audio', current: i + 1, total: files.length, name: file.name });
+        const displayName = customName || file.name;
+        setUploadProgress({ type: 'audio', current: i + 1, total: files.length, name: displayName });
 
         // Upload to Firebase Storage
         const { url, path } = await uploadFile(file, 'audio', (progress) => {
@@ -748,7 +844,7 @@ const VideoStudio = ({
         try {
           fullDuration = await getMediaDuration(localBlobUrl, 'audio');
         } catch (e) {
-          console.warn('Could not get audio duration:', file.name, e.message);
+          console.warn('Could not get audio duration:', displayName, e.message);
           // Try from Firebase URL as fallback
           fullDuration = await getMediaDuration(url, 'audio').catch(() => 0);
         }
@@ -756,7 +852,7 @@ const VideoStudio = ({
         // Use trim data if provided, otherwise use full duration
         const audioData = {
           id: `audio_${Date.now()}_${i}`,
-          name: file.name,
+          name: displayName,
           url,
           localUrl: localBlobUrl, // Local blob URL for beat detection and playback (no CORS)
           file: file, // Keep original file for beat detection
