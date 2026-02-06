@@ -1146,10 +1146,42 @@ const VideoEditorModal = ({
     setShowLyricsEditor(false);
   }, [lyrics, filteredBeats, duration, selectedAudio]);
 
+  // Fetch the shared OpenAI key from server (for operators)
+  const fetchSharedOpenAIKey = useCallback(async () => {
+    try {
+      const { getAuth } = await import('firebase/auth');
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (!user) return null;
+
+      const token = await user.getIdToken();
+      const baseUrl = window.location.hostname === 'localhost'
+        ? `http://localhost:${window.location.port}`
+        : '';
+      const response = await fetch(`${baseUrl}/api/whisper?action=getKey`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) return null;
+      const data = await response.json();
+      return data.configured ? data.key : null;
+    } catch (error) {
+      console.warn('Could not fetch shared OpenAI key:', error.message);
+      return null;
+    }
+  }, []);
+
   // AI Transcription with OpenAI Whisper (much better for music/vocals)
   const handleAITranscribe = useCallback(async () => {
-    // Check for API key
-    const savedKey = loadApiKey('openai');
+    // Check for API key: try shared key first, then personal key
+    let savedKey = loadApiKey('openai');
+    if (!savedKey) {
+      // Try fetching the shared team key from server
+      savedKey = await fetchSharedOpenAIKey();
+      if (savedKey) {
+        // Save locally so we don't re-fetch every time
+        saveApiKey('openai', savedKey);
+      }
+    }
     if (!savedKey) {
       setShowApiKeyModal(true);
       return;
@@ -1331,7 +1363,7 @@ const VideoEditorModal = ({
     } finally {
       setIsTranscribing(false);
     }
-  }, [selectedAudio, duration, toast]);
+  }, [selectedAudio, duration, toast, fetchSharedOpenAIKey]);
 
   const handleSaveApiKey = useCallback(() => {
     if (apiKeyInput.trim()) {

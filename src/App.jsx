@@ -636,38 +636,49 @@ const StickToMusic = () => {
 
     setLoadingLatePages(true);
     const allPages = [];
+    const unconfigured = [];
 
     try {
       for (const artist of firestoreArtists) {
-        // Check if this artist has Late configured
-        const status = await getArtistLateKeyStatus(artist.id);
-        if (!status.configured) continue;
+        try {
+          // Check if this artist has Late configured
+          const status = await getArtistLateKeyStatus(artist.id);
+          if (!status.configured) {
+            unconfigured.push({ id: artist.id, name: artist.name });
+            continue;
+          }
 
-        // Fetch accounts from Late API
-        const result = await lateApi.fetchAccounts(artist.id);
-        if (result.success && result.accounts) {
-          // Transform Late accounts to page format
-          result.accounts.forEach((account, index) => {
-            const platform = (account.platform || account.type || '').toLowerCase();
-            allPages.push({
-              id: `${artist.id}-${account.id || index}`,
-              handle: account.username ? `@${account.username.replace('@', '')}` : (account.handle || account.name || 'Unknown'),
-              platform: platform === 'tik_tok' ? 'tiktok' : platform,
-              artist: artist.name,
-              artistId: artist.id,
-              niche: artist.niche || 'General',
-              followers: account.followers_count || account.followers || 0,
-              views: account.total_views || account.views || 0,
-              status: account.is_active !== false ? 'active' : 'inactive',
-              profileImage: account.profile_image || account.avatar,
-              lateAccountId: String(account.id || account.account_id || `fallback_${index}`)
+          // Fetch accounts from Late API
+          const result = await lateApi.fetchAccounts(artist.id);
+          if (result.success && result.accounts) {
+            // Transform Late accounts to page format
+            result.accounts.forEach((account, index) => {
+              const platform = (account.platform || account.type || '').toLowerCase();
+              allPages.push({
+                id: `${artist.id}-${account.id || index}`,
+                handle: account.username ? `@${account.username.replace('@', '')}` : (account.handle || account.name || 'Unknown'),
+                platform: platform === 'tik_tok' ? 'tiktok' : platform,
+                artist: artist.name,
+                artistId: artist.id,
+                niche: artist.niche || 'General',
+                followers: account.followers_count || account.followers || 0,
+                views: account.total_views || account.views || 0,
+                status: account.is_active !== false ? 'active' : 'inactive',
+                profileImage: account.profile_image || account.avatar,
+                lateAccountId: String(account.id || account.account_id || `fallback_${index}`)
+              });
             });
-          });
+          }
+        } catch (artistError) {
+          // If we get a 403 or other error for this artist, treat as unconfigured
+          console.warn(`Late API error for ${artist.name}:`, artistError.message);
+          unconfigured.push({ id: artist.id, name: artist.name });
         }
       }
 
       setLatePages(allPages);
-      console.log('📱 Loaded', allPages.length, 'Late pages from', firestoreArtists.length, 'artists');
+      setUnconfiguredLateArtists(unconfigured);
+      console.log('📱 Loaded', allPages.length, 'Late pages from', firestoreArtists.length, 'artists,', unconfigured.length, 'unconfigured');
     } catch (error) {
       console.error('Error loading Late pages:', error);
     } finally {
@@ -1225,6 +1236,7 @@ const StickToMusic = () => {
   const [checkingLateStatus, setCheckingLateStatus] = useState(false);
   const [latePages, setLatePages] = useState([]); // Connected accounts from Late API
   const [loadingLatePages, setLoadingLatePages] = useState(false);
+  const [unconfiguredLateArtists, setUnconfiguredLateArtists] = useState([]); // Artists without Late API keys
   const [showLateConnectModal, setShowLateConnectModal] = useState(false);
   const [lateApiKeyInput, setLateApiKeyInput] = useState('');
   const [connectingLate, setConnectingLate] = useState(false);
@@ -3052,7 +3064,7 @@ const StickToMusic = () => {
             className="flex gap-1 sm:gap-2 mb-4 sm:mb-8 border-b border-zinc-800 pb-3 sm:pb-4 overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0"
             style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
-            {['artists', 'pages', 'content', 'campaigns'].map(tab => (
+            {['artists', 'pages', 'content', 'banks', 'campaigns'].map(tab => (
               <button
                 key={tab}
                 onClick={() => { setOperatorTab(tab); setMobileMenuOpen(false); }}
@@ -3060,7 +3072,7 @@ const StickToMusic = () => {
                   operatorTab === tab ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
                 }`}
               >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab === 'banks' ? 'Banks' : tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
             {/* Studio - opens modal */}
@@ -3268,6 +3280,29 @@ const StickToMusic = () => {
                   </div>
                 </div>
 
+                {/* Unconfigured artists banner */}
+                {!loadingLatePages && unconfiguredLateArtists.length > 0 && (
+                  <div className="space-y-2 mb-6">
+                    {unconfiguredLateArtists.map(artist => (
+                      <div key={artist.id} className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <span className="text-lg">🔑</span>
+                          <div>
+                            <p className="text-sm font-medium text-white">{artist.name}</p>
+                            <p className="text-xs text-zinc-500">No Sync API key configured</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => { setCurrentArtistId(artist.id); setShowLateConnectModal(true); }}
+                          className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium rounded-lg transition"
+                        >
+                          Enter API Key
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div className="space-y-6">
                   {loadingLatePages ? (
                     <div className="flex flex-col items-center justify-center py-16">
@@ -3277,7 +3312,7 @@ const StickToMusic = () => {
                       </svg>
                       <p className="text-zinc-500">Loading pages from Late...</p>
                     </div>
-                  ) : filteredPages.length === 0 ? (
+                  ) : filteredPages.length === 0 && unconfiguredLateArtists.length === 0 ? (
                     <SharedEmptyState
                       icon="📱"
                       title="No pages found"

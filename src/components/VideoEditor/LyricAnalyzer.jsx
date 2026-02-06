@@ -51,11 +51,40 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
   const audioSource = getValidAudioSource();
   const isBlobUrl = typeof audioUrl === 'string' && audioUrl.startsWith('blob:') && !audioFile;
 
-  // Check for cached lyrics on mount
+  // Check for cached lyrics on mount, and try shared key if no personal key
   useEffect(() => {
     const storedKey = getStoredApiKey();
-    if (storedKey) setApiKey(storedKey);
-    else setShowApiKeyInput(true);
+    if (storedKey) {
+      setApiKey(storedKey);
+    } else {
+      // Try fetching shared team key
+      (async () => {
+        try {
+          const { getAuth } = await import('firebase/auth');
+          const auth = getAuth();
+          const user = auth.currentUser;
+          if (user) {
+            const token = await user.getIdToken();
+            const baseUrl = window.location.hostname === 'localhost'
+              ? `http://localhost:${window.location.port}`
+              : '';
+            const response = await fetch(`${baseUrl}/api/whisper?action=getKey`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+              const data = await response.json();
+              if (data.configured && data.key) {
+                setApiKey(data.key);
+                return;
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Could not fetch shared OpenAI key:', err.message);
+        }
+        setShowApiKeyInput(true);
+      })();
+    }
 
     // Check if we have cached lyrics for this audio file
     if (audioSource) {
