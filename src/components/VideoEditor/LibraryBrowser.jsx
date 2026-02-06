@@ -202,7 +202,21 @@ const LibraryBrowser = ({
     && collections.some(c => c.id === activeView && c.type !== COLLECTION_TYPES.SMART);
 
   // Get bank data when viewing a user collection
-  const collectionBanks = isUserCollectionView ? getCollectionBanks(artistId, activeView) : null;
+  // Compute from component state (library + collections) instead of localStorage
+  // so it stays in sync with Firestore subscription data
+  const collectionBanks = (() => {
+    if (!isUserCollectionView) return null;
+    const col = collections.find(c => c.id === activeView);
+    if (!col) return null;
+    const allMedia = library.filter(item => (col.mediaIds || []).includes(item.id));
+    const bankAIds = col.bankA || [];
+    const bankBIds = col.bankB || [];
+    return {
+      bankA: allMedia.filter(item => bankAIds.includes(item.id)),
+      bankB: allMedia.filter(item => bankBIds.includes(item.id)),
+      unassigned: allMedia.filter(item => !bankAIds.includes(item.id) && !bankBIds.includes(item.id))
+    };
+  })();
 
   // Handle drop onto a bank zone
   const handleDropOnBank = (e, bank) => {
