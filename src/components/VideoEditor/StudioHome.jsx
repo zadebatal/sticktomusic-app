@@ -251,7 +251,7 @@ const StudioHome = ({
 
   // Background thumbnail migration for existing images
   useEffect(() => {
-    if (thumbMigrationRef.current || !artistId || !db) return;
+    if (thumbMigrationRef.current || !artistId) return;
     if (library.length === 0) return;
     const needsMigration = library.some(item =>
       item.type === 'image' && item.url && !item.thumbnailUrl
@@ -259,13 +259,19 @@ const StudioHome = ({
     if (!needsMigration) return;
     thumbMigrationRef.current = true;
 
+    const count = library.filter(item => item.type === 'image' && item.url && !item.thumbnailUrl).length;
+    toastSuccess(`Generating thumbnails for ${count} images — this runs in the background...`);
+
     // Run in background after a short delay so it doesn't block initial render
     const timer = setTimeout(async () => {
       try {
-        const result = await migrateThumbnails(db, artistId, uploadFile, (done, total) => {
-          if (done === total) {
-            toastSuccess(`Generated thumbnails for ${result?.generated || done} images`);
+        const result = await migrateThumbnails(db, artistId, library, uploadFile, (done, total, generated) => {
+          // Refresh the grid every 10 images so thumbnails appear progressively
+          if (done % 10 === 0 || done === total) {
             setLibraryRefreshTrigger(prev => prev + 1);
+          }
+          if (done === total) {
+            toastSuccess(`Done! ${generated} thumbnails generated.`);
           }
         });
         if (result.generated > 0) {
@@ -274,10 +280,10 @@ const StudioHome = ({
       } catch (err) {
         console.warn('[StudioHome] Thumbnail migration error:', err);
       }
-    }, 3000);
+    }, 2000);
     return () => clearTimeout(timer);
   // eslint-disable-next-line
-  }, [library, artistId, db]);
+  }, [library, artistId]);
 
   // =====================
   // UPLOAD HANDLERS

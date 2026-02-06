@@ -1918,23 +1918,56 @@ export const migrateToFirestore = async (db, artistId) => {
 // ============================================================================
 
 /**
+ * Load an image from a URL, handling CORS gracefully.
+ * Tries fetch-as-blob first (CORS-safe for canvas), then falls back
+ * to Image element with crossOrigin attribute.
+ */
+const loadImageForCanvas = (url) => {
+  return new Promise(async (resolve, reject) => {
+    // Attempt 1: fetch as blob (avoids CORS canvas tainting)
+    try {
+      const response = await fetch(url, { mode: 'cors' });
+      if (response.ok) {
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => { resolve({ img, cleanup: () => URL.revokeObjectURL(blobUrl) }); };
+        img.onerror = () => { URL.revokeObjectURL(blobUrl); tryImgDirect(); };
+        img.src = blobUrl;
+        return;
+      }
+    } catch (e) { /* fetch failed, try fallback */ }
+
+    // Attempt 2: load Image with crossOrigin
+    tryImgDirect();
+    function tryImgDirect() {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve({ img, cleanup: () => {} });
+      img.onerror = () => reject(new Error('Could not load image (CORS)'));
+      img.src = url;
+    }
+  });
+};
+
+/**
  * Generate thumbnails for existing images that don't have one.
  * Runs in the background, processing one image at a time.
- * @param {Object} db - Firestore instance
+ * @param {Object|null} db - Firestore instance (optional)
  * @param {string} artistId
+ * @param {Array} libraryItems - current library array from state
  * @param {Function} uploadFileFn - uploadFile from firebaseStorage
- * @param {Function} onProgress - optional callback(done, total)
- * @returns {Promise<{generated: number, skipped: number, failed: number}>}
+ * @param {Function} onProgress - callback(done, total, generated)
+ * @returns {Promise<{generated: number, failed: number}>}
  */
-export const migrateThumbnails = async (db, artistId, uploadFileFn, onProgress) => {
-  const library = getLibrary(artistId);
-  const images = library.filter(item =>
+export const migrateThumbnails = async (db, artistId, libraryItems, uploadFileFn, onProgress) => {
+  const images = (libraryItems || []).filter(item =>
     item.type === MEDIA_TYPES.IMAGE && item.url && !item.thumbnailUrl
   );
 
-  if (images.length === 0) return { generated: 0, skipped: 0, failed: 0 };
+  if (images.length === 0) return { generated: 0, failed: 0 };
 
-  console.log(`[ThumbnailMigration] Found ${images.length} images without thumbnails`);
+  console.log(`[ThumbnailMigration] Starting — ${images.length} images need thumbnails`);
 
   let generated = 0;
   let failed = 0;
@@ -1942,21 +1975,10 @@ export const migrateThumbnails = async (db, artistId, uploadFileFn, onProgress) 
   for (let i = 0; i < images.length; i++) {
     const item = images[i];
     try {
-      // Fetch image as blob to avoid CORS canvas tainting
-      const response = await fetch(item.url);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
+      // Load image (handles CORS with fallback)
+      const { img, cleanup } = await loadImageForCanvas(item.url);
 
-      // Load into Image element
-      const img = new Image();
-      img.src = blobUrl;
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
-      });
-
-      // Canvas resize
+      // Canvas resize to 300px max dimension
       const maxSize = 300;
       const scale = Math.min(1, maxSize / Math.max(img.naturalWidth, img.naturalHeight));
       const canvas = document.createElement('canvas');
@@ -1964,32 +1986,31 @@ export const migrateThumbnails = async (db, artistId, uploadFileFn, onProgress) 
       canvas.height = Math.round(img.naturalHeight * scale);
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      cleanup();
 
       // Convert to JPEG blob
       const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.7));
-      URL.revokeObjectURL(blobUrl);
-
       if (!thumbBlob) throw new Error('Canvas toBlob returned null');
 
-      // Upload thumbnail
+      // Upload thumbnail to Firebase Storage
       const thumbFile = new File([thumbBlob], `thumb_${item.name}`, { type: 'image/jpeg' });
       const { url: thumbnailUrl } = await uploadFileFn(thumbFile, 'thumbnails');
 
-      // Update record in localStorage + Firestore
+      // Update record in localStorage + Firestore (Firestore update skipped if db is null)
       await updateLibraryItemAsync(db, artistId, item.id, { thumbnailUrl });
 
       generated++;
-      console.log(`[ThumbnailMigration] ${generated}/${images.length} — ${item.name}`);
+      console.log(`[ThumbnailMigration] ✓ ${i + 1}/${images.length} — ${item.name}`);
     } catch (err) {
       failed++;
-      console.warn(`[ThumbnailMigration] Failed for ${item.name}:`, err.message);
+      console.warn(`[ThumbnailMigration] ✗ ${i + 1}/${images.length} — ${item.name}:`, err.message);
     }
 
-    if (onProgress) onProgress(i + 1, images.length);
+    if (onProgress) onProgress(i + 1, images.length, generated);
   }
 
-  console.log(`[ThumbnailMigration] Done: ${generated} generated, ${failed} failed`);
-  return { generated, skipped: 0, failed };
+  console.log(`[ThumbnailMigration] Complete: ${generated} generated, ${failed} failed`);
+  return { generated, failed };
 };
 
 // ============================================================================
