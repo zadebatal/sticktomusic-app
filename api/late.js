@@ -25,6 +25,12 @@ const ALLOWED_ORIGINS = [
   'https://sticktomusic-app.vercel.app'
 ];
 
+// Also allow Vercel preview deployments
+const isVercelPreview = (origin) => {
+  if (!origin) return false;
+  return origin.includes('sticktomusic') && origin.endsWith('.vercel.app');
+};
+
 // Check if origin is localhost (any port) for development
 const isLocalhostOrigin = (origin) => {
   if (!origin) return false;
@@ -142,7 +148,7 @@ async function verifyAuth(req) {
 export default async function handler(req, res) {
   // CORS - restrict to allowed origins (allow any localhost port in dev)
   const origin = req.headers.origin;
-  if (ALLOWED_ORIGINS.includes(origin) || isLocalhostOrigin(origin)) {
+  if (ALLOWED_ORIGINS.includes(origin) || isLocalhostOrigin(origin) || isVercelPreview(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
   res.setHeader('Access-Control-Allow-Credentials', 'true');
