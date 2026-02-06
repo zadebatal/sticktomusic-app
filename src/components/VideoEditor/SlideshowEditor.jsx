@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
-import { subscribeToLibrary, getCollectionsAsync, MEDIA_TYPES } from '../../services/libraryService';
+import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, MEDIA_TYPES } from '../../services/libraryService';
 import { useToast } from '../ui';
 import LyricBank from './LyricBank';
 import AudioClipSelector from './AudioClipSelector';
@@ -48,6 +48,7 @@ const SlideshowEditor = ({
   const [slides, setSlides] = useState(existingSlideshow?.slides || []);
   const [selectedSlideIndex, setSelectedSlideIndex] = useState(0);
   const [activeBank, setActiveBank] = useState('imageA'); // 'imageA' | 'imageB' | 'audio' | 'lyrics'
+  const [editorMode, setEditorMode] = useState('single'); // 'single' | 'multi'
   const [libraryImages, setLibraryImages] = useState([]);
   const [collections, setCollections] = useState([]);
   const [selectedSource, setSelectedSource] = useState('bankA'); // 'bankA' | 'bankB' | 'all' | collection ID
@@ -212,27 +213,72 @@ const SlideshowEditor = ({
   const activeContent = activeBank === 'imageA' ? imagesA : activeBank === 'imageB' ? imagesB : activeBank === 'audio' ? audioTracks : [];
 
   // Load library images and collections when db/artistId available
+  // Strategy: instant load from localStorage, then Firestore subscription merges in background
   useEffect(() => {
-    if (!db || !artistId) return;
+    if (!artistId) return;
 
-    const unsubscribe = subscribeToLibrary(db, artistId, (items) => {
-      const images = items.filter(item => item.type === MEDIA_TYPES.IMAGE);
-      setLibraryImages(images);
+    // Instant load from localStorage for immediate UI (before Firestore fires)
+    const cachedLibrary = getLibrary(artistId);
+    if (cachedLibrary.length > 0) {
+      setLibraryImages(cachedLibrary.filter(item => item.type === MEDIA_TYPES.IMAGE));
+    }
+    // Load collections from localStorage immediately (includes bank data)
+    const cachedCols = getCollections(artistId);
+    if (cachedCols.length > 0) {
+      setCollections(cachedCols.filter(c => c.type !== 'smart'));
+    }
+
+    if (!db) return;
+
+    // Build thumbnail cache from localStorage for merge
+    const thumbCache = new Map();
+    cachedLibrary.forEach(item => {
+      if (item.thumbnailUrl) thumbCache.set(item.id, item.thumbnailUrl);
     });
 
-    // Load collections
-    getCollectionsAsync(db, artistId).then(cols => {
-      setCollections(cols.filter(c => c.type !== 'smart'));
-    }).catch(err => console.warn('[SlideshowEditor] Failed to load collections:', err));
+    const unsubscribes = [];
 
-    return () => unsubscribe();
+    // Subscribe to library with thumbnail merge
+    unsubscribes.push(subscribeToLibrary(db, artistId, (items) => {
+      const merged = items.map(item => {
+        if (!item.thumbnailUrl && thumbCache.has(item.id)) {
+          return { ...item, thumbnailUrl: thumbCache.get(item.id) };
+        }
+        if (item.thumbnailUrl) thumbCache.set(item.id, item.thumbnailUrl);
+        return item;
+      });
+      const images = merged.filter(item => item.type === MEDIA_TYPES.IMAGE);
+      setLibraryImages(images);
+    }));
+
+    // Subscribe to collections in real-time — merges localStorage banks
+    unsubscribes.push(subscribeToCollections(db, artistId, (cols) => {
+      setCollections(cols.filter(c => c.type !== 'smart'));
+    }));
+
+    return () => unsubscribes.forEach(unsub => unsub());
   }, [db, artistId]);
 
   // Compute active images based on selected source
   // Supports: 'bankA', 'bankB', 'all', collectionId, 'collectionId:bankA', 'collectionId:bankB'
+  // When category banks are empty, aggregates from all collection banks
   const activeImages = (() => {
-    if (selectedSource === 'bankA') return imagesA;
-    if (selectedSource === 'bankB') return imagesB;
+    if (selectedSource === 'bankA') {
+      // Use category bank first; if empty, aggregate from all collection bankA
+      if (imagesA.length > 0) return imagesA;
+      const allBankAIds = new Set();
+      collections.forEach(col => (col.bankA || []).forEach(id => allBankAIds.add(id)));
+      if (allBankAIds.size > 0) return libraryImages.filter(img => allBankAIds.has(img.id));
+      return imagesA;
+    }
+    if (selectedSource === 'bankB') {
+      // Use category bank first; if empty, aggregate from all collection bankB
+      if (imagesB.length > 0) return imagesB;
+      const allBankBIds = new Set();
+      collections.forEach(col => (col.bankB || []).forEach(id => allBankBIds.add(id)));
+      if (allBankBIds.size > 0) return libraryImages.filter(img => allBankBIds.has(img.id));
+      return imagesB;
+    }
     if (selectedSource === 'all') return libraryImages;
 
     // Collection bank source — format: "collectionId:bankA" or "collectionId:bankB"
@@ -250,7 +296,11 @@ const SlideshowEditor = ({
     if (col && col.mediaIds) {
       return libraryImages.filter(img => col.mediaIds.includes(img.id));
     }
-    return imagesA; // fallback
+    // Fallback: aggregate from all collection bankA
+    const fallbackIds = new Set();
+    collections.forEach(col => (col.bankA || []).forEach(id => fallbackIds.add(id)));
+    if (fallbackIds.size > 0) return libraryImages.filter(img => fallbackIds.has(img.id));
+    return imagesA;
   })();
 
   // Export dimensions based on aspect ratio (used during export only)
@@ -1308,25 +1358,46 @@ const SlideshowEditor = ({
             ...styles.headerRight,
             ...(isMobile ? { order: 2, gap: '8px' } : {})
           }}>
+            {/* Single / Multi mode toggle */}
             {!isMobile && (
-              <button
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: 'rgba(168, 85, 247, 0.2)',
-                  border: '1px solid rgba(168, 85, 247, 0.4)',
-                  borderRadius: '8px',
-                  color: '#c084fc',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-                onClick={() => setShowBatchModal(true)}
-              >
-                ⚡ Batch Generate
-              </button>
+              <div style={{
+                display: 'flex',
+                backgroundColor: 'rgba(255,255,255,0.05)',
+                borderRadius: '8px',
+                border: '1px solid rgba(255,255,255,0.1)',
+                overflow: 'hidden'
+              }}>
+                <button
+                  onClick={() => setEditorMode('single')}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: editorMode === 'single' ? '#6366f1' : 'transparent',
+                    border: 'none',
+                    color: editorMode === 'single' ? '#fff' : '#9ca3af',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  Single
+                </button>
+                <button
+                  onClick={() => setEditorMode('multi')}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: editorMode === 'multi' ? '#6366f1' : 'transparent',
+                    border: 'none',
+                    color: editorMode === 'multi' ? '#fff' : '#9ca3af',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  Multi
+                </button>
+              </div>
             )}
             {!isMobile && (
               <button style={styles.saveButton} onClick={handleSave}>
@@ -1736,9 +1807,10 @@ const SlideshowEditor = ({
                           </div>
                         )}
                         <img
-                          src={image.url || image.localUrl}
+                          src={image.thumbnailUrl || image.url || image.localUrl}
                           alt={image.name}
                           style={styles.clipThumbnail}
+                          loading="lazy"
                         />
                         <span style={styles.clipName}>{image.name?.slice(0, 15) || 'Untitled'}</span>
                       </div>
@@ -1752,7 +1824,7 @@ const SlideshowEditor = ({
           </div>
           )}
 
-          {/* Right Panel - Canvas & Filmstrip */}
+          {/* Right Panel - Canvas & Filmstrip (Single) or Batch Config (Multi) */}
           {(!isMobile || mobilePanelTab === 'preview') && (
           <div style={{
             ...styles.rightPanel,
@@ -1761,6 +1833,266 @@ const SlideshowEditor = ({
               flex: 1
             } : {})
           }}>
+
+            {/* ─── MULTI MODE: Batch Config + Live Template Preview ─── */}
+            {editorMode === 'multi' ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto', padding: '24px', gap: '20px' }}>
+                {/* Live Template Preview Card */}
+                <div style={{
+                  backgroundColor: '#1a1a2e',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)', fontSize: '13px', fontWeight: '600', color: '#d1d5db' }}>
+                    Live Preview
+                  </div>
+                  {/* Preview canvas simulating a slide */}
+                  <div style={{
+                    position: 'relative',
+                    width: '100%',
+                    paddingBottom: aspectRatio === '9:16' ? '177.78%' : '133.33%',
+                    maxHeight: '360px',
+                    overflow: 'hidden',
+                    backgroundColor: '#0f0f1a'
+                  }}>
+                    {(() => {
+                      // Get a sample image from banks for the preview
+                      const sampleImg = activeImages?.[0] || libraryImages?.[0];
+                      const template = selectedDefaultTemplate;
+                      return (
+                        <div style={{ position: 'absolute', inset: 0 }}>
+                          {sampleImg && (
+                            <img
+                              src={sampleImg.thumbnailUrl || sampleImg.url || sampleImg.localUrl}
+                              alt="Preview"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }}
+                            />
+                          )}
+                          {!sampleImg && (
+                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563', fontSize: '14px' }}>
+                              No images in banks
+                            </div>
+                          )}
+                          {/* Text overlay preview using template styles */}
+                          {(() => {
+                            const textBanks = collections.reduce((acc, col) => {
+                              if (col.textBank1?.length > 0) acc.text1.push(...col.textBank1);
+                              if (col.textBank2?.length > 0) acc.text2.push(...col.textBank2);
+                              return acc;
+                            }, { text1: [], text2: [] });
+                            return (
+                              <>
+                                {textBanks.text1.length > 0 && (
+                                  <div style={{
+                                    position: 'absolute',
+                                    top: template?.text1Style?.position?.y ? `${template.text1Style.position.y}%` : '25%',
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    fontFamily: template?.text1Style?.fontFamily || template?.style?.fontFamily || "'Inter', sans-serif",
+                                    fontSize: `${Math.min(template?.text1Style?.fontSize || template?.style?.fontSize || 48, 32)}px`,
+                                    fontWeight: template?.text1Style?.fontWeight || template?.style?.fontWeight || '700',
+                                    color: template?.text1Style?.color || template?.style?.color || '#ffffff',
+                                    textAlign: 'center',
+                                    textShadow: '0 2px 8px rgba(0,0,0,0.7)',
+                                    maxWidth: '80%',
+                                    padding: '4px 8px'
+                                  }}>
+                                    {textBanks.text1[0]?.substring(0, 40) || 'Sample Text 1'}
+                                  </div>
+                                )}
+                                {textBanks.text2.length > 0 && (
+                                  <div style={{
+                                    position: 'absolute',
+                                    top: template?.text2Style?.position?.y ? `${template.text2Style.position.y}%` : '70%',
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    fontFamily: template?.text2Style?.fontFamily || template?.style?.fontFamily || "'Inter', sans-serif",
+                                    fontSize: `${Math.min(template?.text2Style?.fontSize || template?.style?.fontSize || 36, 24)}px`,
+                                    fontWeight: template?.text2Style?.fontWeight || template?.style?.fontWeight || '400',
+                                    color: template?.text2Style?.color || template?.style?.color || '#ffffff',
+                                    textAlign: 'center',
+                                    textShadow: '0 2px 8px rgba(0,0,0,0.7)',
+                                    maxWidth: '80%',
+                                    padding: '4px 8px'
+                                  }}>
+                                    {textBanks.text2[0]?.substring(0, 40) || 'Sample Text 2'}
+                                  </div>
+                                )}
+                                {textBanks.text1.length === 0 && textBanks.text2.length === 0 && (
+                                  <div style={{
+                                    position: 'absolute', bottom: '12%', left: '50%', transform: 'translateX(-50%)',
+                                    color: 'rgba(255,255,255,0.3)', fontSize: '13px', textAlign: 'center'
+                                  }}>
+                                    Add text to collection banks to see preview
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Template Selector */}
+                <div style={{
+                  backgroundColor: 'rgba(255,255,255,0.03)',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  padding: '16px'
+                }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#d1d5db', marginBottom: '8px' }}>
+                    Text Style Template
+                  </label>
+                  <select
+                    value={selectedDefaultTemplate?.id || ''}
+                    onChange={(e) => {
+                      const template = textTemplates.find(t => t.id === e.target.value);
+                      setSelectedDefaultTemplate(template || null);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      backgroundColor: '#1a1a2e',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      borderRadius: '6px',
+                      color: '#fff',
+                      fontSize: '13px',
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="">Default Style</option>
+                    {textTemplates.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Bank Status */}
+                <div style={{
+                  backgroundColor: 'rgba(99, 102, 241, 0.08)',
+                  border: '1px solid rgba(99, 102, 241, 0.2)',
+                  borderRadius: '10px',
+                  padding: '14px 16px',
+                  fontSize: '12px',
+                  color: '#a5b4fc',
+                  lineHeight: '1.8'
+                }}>
+                  <div style={{ fontWeight: '600', color: '#c7d2fe', marginBottom: '4px' }}>Bank Status</div>
+                  <div>Bank A: {(category?.imagesA || []).length + (collections.reduce((sum, col) => sum + (col.bankA?.length || 0), 0))} images</div>
+                  <div>Bank B: {(category?.imagesB || []).length + (collections.reduce((sum, col) => sum + (col.bankB?.length || 0), 0))} images</div>
+                  <div>Text 1: {collections.reduce((sum, col) => sum + (col.textBank1?.length || 0), 0)} items</div>
+                  <div>Text 2: {collections.reduce((sum, col) => sum + (col.textBank2?.length || 0), 0)} items</div>
+                </div>
+
+                {/* Batch Settings */}
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#d1d5db', marginBottom: '6px' }}>
+                      Slideshows
+                    </label>
+                    <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                      {[5, 10, 25, 50].map(count => (
+                        <button
+                          key={count}
+                          onClick={() => setBatchCount(count)}
+                          style={{
+                            flex: 1,
+                            padding: '7px 0',
+                            backgroundColor: batchCount === count ? '#6366f1' : 'rgba(255,255,255,0.06)',
+                            border: '1px solid ' + (batchCount === count ? '#6366f1' : 'rgba(255,255,255,0.12)'),
+                            borderRadius: '6px',
+                            color: batchCount === count ? '#fff' : '#9ca3af',
+                            fontSize: '12px',
+                            fontWeight: '500',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {count}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={batchCount}
+                      onChange={(e) => setBatchCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 10)))}
+                      style={{
+                        width: '100%',
+                        padding: '7px 10px',
+                        backgroundColor: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '6px',
+                        color: '#fff',
+                        fontSize: '13px',
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#d1d5db', marginBottom: '6px' }}>
+                      Slides Each
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="30"
+                      value={batchSlidesPerShow}
+                      onChange={(e) => setBatchSlidesPerShow(Math.max(1, Math.min(30, parseInt(e.target.value) || 5)))}
+                      style={{
+                        width: '100%',
+                        padding: '7px 10px',
+                        backgroundColor: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '6px',
+                        color: '#fff',
+                        fontSize: '13px',
+                        outline: 'none',
+                        marginTop: '32px'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Generate Button */}
+                <button
+                  onClick={handleBatchGenerate}
+                  disabled={isBatchGenerating}
+                  style={{
+                    width: '100%',
+                    padding: '14px 20px',
+                    backgroundColor: isBatchGenerating ? 'rgba(99,102,241,0.5)' : '#6366f1',
+                    border: 'none',
+                    borderRadius: '10px',
+                    color: '#fff',
+                    fontSize: '15px',
+                    fontWeight: '600',
+                    cursor: isBatchGenerating ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  {isBatchGenerating ? (
+                    <><span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>&#10227;</span> Generating...</>
+                  ) : (
+                    <>Generate {batchCount} Slideshows</>
+                  )}
+                </button>
+
+                <div style={{ fontSize: '11px', color: '#6b7280', textAlign: 'center' }}>
+                  {batchCount} slideshows &times; {batchSlidesPerShow} slides = {batchCount * batchSlidesPerShow} total slides
+                </div>
+              </div>
+            ) : (
+            /* ─── SINGLE MODE: Canvas + Filmstrip ─── */
+            <>
             {/* Canvas Preview */}
             <div
               style={{
@@ -2341,6 +2673,8 @@ const SlideshowEditor = ({
                 {slides.length} / 10 slides
               </div>
             </div>
+            </>
+            )}
           </div>
           )}
 
@@ -2699,8 +3033,8 @@ const SlideshowEditor = ({
           />
         )}
 
-        {/* Batch Generate Modal */}
-        {showBatchModal && (
+        {/* Batch Generate Modal — REMOVED: now inline in Multi mode */}
+        {false && showBatchModal && (
           <div style={styles.overlay}>
             <div style={{
               ...styles.modal,

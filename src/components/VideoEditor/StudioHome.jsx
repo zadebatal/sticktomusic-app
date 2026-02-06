@@ -38,6 +38,7 @@ import {
   STARTER_TEMPLATES,
   // Firestore async functions
   subscribeToLibrary,
+  subscribeToCollections,
   addToLibraryAsync,
   addManyToLibraryAsync,
   removeFromLibraryAsync,
@@ -178,14 +179,16 @@ const StudioHome = ({
   useEffect(() => {
     if (!artistId) return;
 
-    // Load non-library data from localStorage (will migrate these later)
+    // Load non-library data from localStorage as initial state
     setCollections(getCollections(artistId));
     setLyrics(getLyrics(artistId));
     setCreatedContent(getCreatedContent(artistId));
 
-    // For library, use Firestore real-time subscription if db is available
+    const unsubscribes = [];
+
+    // For library + collections, use Firestore real-time subscription if db is available
     if (db) {
-      console.log('[StudioHome] Setting up Firestore subscription for library');
+      console.log('[StudioHome] Setting up Firestore subscriptions for library + collections');
 
       // Try to migrate localStorage data to Firestore (one-time)
       const migrationKey = `stm_migrated_${artistId}`;
@@ -198,17 +201,37 @@ const StudioHome = ({
         });
       }
 
-      // Subscribe to real-time updates
-      const unsubscribe = subscribeToLibrary(db, artistId, (items) => {
-        setLibrary(items);
+      // Build thumbnail cache from localStorage for merge
+      const cachedLib = getLibrary(artistId);
+      const thumbCache = new Map();
+      cachedLib.forEach(item => {
+        if (item.thumbnailUrl) thumbCache.set(item.id, item.thumbnailUrl);
       });
 
-      return () => unsubscribe();
+      // Subscribe to real-time library updates with thumbnail merge
+      unsubscribes.push(subscribeToLibrary(db, artistId, (items) => {
+        const merged = items.map(item => {
+          if (!item.thumbnailUrl && thumbCache.has(item.id)) {
+            return { ...item, thumbnailUrl: thumbCache.get(item.id) };
+          }
+          if (item.thumbnailUrl) thumbCache.set(item.id, item.thumbnailUrl);
+          return item;
+        });
+        setLibrary(merged);
+      }));
+
+      // Subscribe to real-time collection updates
+      unsubscribes.push(subscribeToCollections(db, artistId, (cols) => {
+        console.log('[StudioHome] Firestore collections sync:', cols.length, 'collections');
+        setCollections(cols);
+      }));
     } else {
       // Fallback to localStorage
       console.log('[StudioHome] Using localStorage (no db available)');
       setLibrary(getLibrary(artistId));
     }
+
+    return () => unsubscribes.forEach(unsub => unsub());
   }, [db, artistId]);
 
   // Diagnostic logging on mount
@@ -1083,6 +1106,8 @@ const StudioHome = ({
                 MEDIA_TYPES.IMAGE
               }
               isMobile={isMobile}
+              liveCollections={collections}
+              liveLibrary={library}
             />
           )}
         </div>
@@ -1485,14 +1510,6 @@ const StudioHome = ({
                     onClick={() => onViewContent?.({ type: 'slideshows' })}
                   >
                     View Library
-                  </button>
-                  <button
-                    style={{...styles.actionButton, ...styles.secondaryButton, borderColor: 'rgba(99,102,241,0.3)', color: '#a5b4fc'}}
-                    onClick={() => setShowBatchModal(true)}
-                    disabled={!selectedCollection}
-                    title={selectedCollection ? 'Generate multiple slideshows from banks' : 'Select a collection first'}
-                  >
-                    ⚡ Batch Generate
                   </button>
                   <button
                     style={{

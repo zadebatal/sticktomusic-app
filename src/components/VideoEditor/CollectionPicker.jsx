@@ -18,32 +18,49 @@ const CollectionPicker = ({
   mediaType = null, // Filter to specific type
   showMediaCount = true,
   isMobile = false,
-  style = {}
+  style = {},
+  // Live data props — when provided, these override localStorage reads
+  liveCollections = null,
+  liveLibrary = null
 }) => {
-  const [collections, setCollections] = useState([]);
+  const [localCollections, setLocalCollections] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [mediaCount, setMediaCount] = useState({});
   const dropdownRef = useRef(null);
 
-  // Load collections
+  // Use live props if available, otherwise fall back to localStorage
+  const collections = liveCollections || localCollections;
+
+  // Load collections from localStorage (only used when liveCollections not provided)
   useEffect(() => {
+    if (liveCollections) return; // Skip localStorage read when live data is passed
     if (artistId) {
       const allCollections = getCollections(artistId);
-      setCollections(allCollections);
-
-      // Count media per collection
-      if (showMediaCount) {
-        const counts = {};
-        allCollections.forEach(col => {
-          const media = getCollectionMedia(artistId, col.id);
-          counts[col.id] = mediaType
-            ? media.filter(m => m.type === mediaType).length
-            : media.length;
-        });
-        setMediaCount(counts);
-      }
+      setLocalCollections(allCollections);
     }
-  }, [artistId, mediaType, showMediaCount]);
+  }, [artistId, liveCollections]);
+
+  // Compute media counts — uses live data if available, includes bank images
+  useEffect(() => {
+    if (!showMediaCount || collections.length === 0) return;
+    const counts = {};
+    collections.forEach(col => {
+      if (liveLibrary) {
+        // Count from live library + bank assignments
+        const bankCount = (col.bankA?.length || 0) + (col.bankB?.length || 0);
+        const mediaIdCount = col.mediaIds?.length || 0;
+        // Use whichever is larger — banks may have IDs not in mediaIds
+        counts[col.id] = Math.max(bankCount, mediaIdCount);
+      } else {
+        // Fallback: read from localStorage
+        const media = getCollectionMedia(artistId, col.id);
+        counts[col.id] = mediaType
+          ? media.filter(m => m.type === mediaType).length
+          : media.length;
+      }
+    });
+    setMediaCount(counts);
+  }, [collections, liveLibrary, artistId, mediaType, showMediaCount]);
 
   // Close dropdown when clicking outside
   useEffect(() => {

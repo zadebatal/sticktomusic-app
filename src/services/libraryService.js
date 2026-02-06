@@ -1652,21 +1652,40 @@ export const subscribeToCollections = (db, artistId, callback) => {
       }));
 
       if (firestoreCollections.length > 0) {
-        // Firestore has data — use it as the source of truth
-        // Save to localStorage for offline access
+        // Merge localStorage bank data onto Firestore results
+        // Banks (bankA, bankB, textBank1, textBank2, textTemplates) may only exist in
+        // localStorage if they haven't been synced to Firestore yet
+        const localCollections = getUserCollections(artistId);
+        const mergedCollections = firestoreCollections.map(col => {
+          const localCol = localCollections.find(lc => lc.id === col.id);
+          if (localCol) {
+            return {
+              ...col,
+              bankA: (col.bankA?.length > 0 ? col.bankA : localCol.bankA) || [],
+              bankB: (col.bankB?.length > 0 ? col.bankB : localCol.bankB) || [],
+              textBank1: (col.textBank1?.length > 0 ? col.textBank1 : localCol.textBank1) || [],
+              textBank2: (col.textBank2?.length > 0 ? col.textBank2 : localCol.textBank2) || [],
+              textTemplates: (col.textTemplates?.length > 0 ? col.textTemplates : localCol.textTemplates) || [],
+              mediaIds: (col.mediaIds?.length > 0 ? col.mediaIds : localCol.mediaIds) || [],
+            };
+          }
+          return col;
+        });
+
+        // Save merged data to localStorage for offline access
         try {
-          localStorage.setItem(getCollectionsKey(artistId), JSON.stringify(firestoreCollections));
+          localStorage.setItem(getCollectionsKey(artistId), JSON.stringify(mergedCollections));
         } catch (e) {}
 
         const smartCollections = createSmartCollections();
-        callback([...smartCollections, ...firestoreCollections]);
+        callback([...smartCollections, ...mergedCollections]);
       } else {
         // Firestore empty — check localStorage and upload if data exists
         const localCollections = getCollections(artistId);
         const userCollections = localCollections.filter(c => c.type !== 'smart' && !c.id?.startsWith('smart_'));
 
         if (userCollections.length > 0) {
-          // Upload local collections to Firestore
+          // Upload local collections to Firestore (including banks)
           userCollections.forEach(col => {
             const docRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', col.id);
             setDoc(docRef, { ...col, updatedAt: serverTimestamp() }).catch(console.error);
