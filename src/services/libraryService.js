@@ -721,6 +721,84 @@ export const addToCollection = (artistId, collectionId, mediaIds) => {
 };
 
 /**
+ * Assign media to Bank A or Bank B within a collection
+ * @param {string} artistId
+ * @param {string} collectionId
+ * @param {string|string[]} mediaIds
+ * @param {'A'|'B'} bank - Which bank to assign to
+ */
+export const assignToBank = (artistId, collectionId, mediaIds, bank) => {
+  const idsToAssign = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
+  const bankKey = bank === 'A' ? 'bankA' : 'bankB';
+  const otherBankKey = bank === 'A' ? 'bankB' : 'bankA';
+
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection) return;
+
+  // Ensure media is in this collection first
+  collection.mediaIds = [...new Set([...collection.mediaIds, ...idsToAssign])];
+
+  // Add to target bank, remove from other bank
+  collection[bankKey] = [...new Set([...(collection[bankKey] || []), ...idsToAssign])];
+  collection[otherBankKey] = (collection[otherBankKey] || []).filter(id => !idsToAssign.includes(id));
+  collection.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
+
+  // Also update library items' collectionIds
+  const library = getLibrary(artistId);
+  library.forEach(item => {
+    if (idsToAssign.includes(item.id)) {
+      item.collectionIds = [...new Set([...(item.collectionIds || []), collectionId])];
+      item.updatedAt = new Date().toISOString();
+    }
+  });
+  saveLibrary(artistId, library);
+};
+
+/**
+ * Remove media from a bank (unassign — keeps it in the collection)
+ * @param {string} artistId
+ * @param {string} collectionId
+ * @param {string|string[]} mediaIds
+ */
+export const removeFromBank = (artistId, collectionId, mediaIds) => {
+  const idsToRemove = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
+
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection) return;
+
+  collection.bankA = (collection.bankA || []).filter(id => !idsToRemove.includes(id));
+  collection.bankB = (collection.bankB || []).filter(id => !idsToRemove.includes(id));
+  collection.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
+};
+
+/**
+ * Get collection media split by bank assignment
+ * @param {string} artistId
+ * @param {string} collectionId
+ * @returns {{ bankA: Object[], bankB: Object[], unassigned: Object[] }}
+ */
+export const getCollectionBanks = (artistId, collectionId) => {
+  const library = getLibrary(artistId);
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection) return { bankA: [], bankB: [], unassigned: [] };
+
+  const allMedia = library.filter(item => collection.mediaIds.includes(item.id));
+  const bankAIds = collection.bankA || [];
+  const bankBIds = collection.bankB || [];
+
+  return {
+    bankA: allMedia.filter(item => bankAIds.includes(item.id)),
+    bankB: allMedia.filter(item => bankBIds.includes(item.id)),
+    unassigned: allMedia.filter(item => !bankAIds.includes(item.id) && !bankBIds.includes(item.id))
+  };
+};
+
+/**
  * Remove media from a collection
  * @param {string} artistId
  * @param {string} collectionId

@@ -17,6 +17,9 @@ import {
   deleteCollection,
   addToCollection,
   removeFromCollection,
+  assignToBank,
+  removeFromBank,
+  getCollectionBanks,
   searchLibrary,
   MEDIA_TYPES,
   COLLECTION_TYPES,
@@ -192,6 +195,37 @@ const LibraryBrowser = ({
   }, [library, artistId, activeView, searchQuery, sortBy, filterType, pullFromCollection]);
 
   const displayedMedia = getDisplayedMedia();
+
+  // Determine if we're in a user collection (not library, favorites, or smart collection)
+  const isUserCollectionView = activeView !== 'library' && activeView !== 'collections'
+    && !activeView.startsWith('smart_')
+    && collections.some(c => c.id === activeView && c.type !== COLLECTION_TYPES.SMART);
+
+  // Get bank data when viewing a user collection
+  const collectionBanks = isUserCollectionView ? getCollectionBanks(artistId, activeView) : null;
+
+  // Handle drop onto a bank zone
+  const handleDropOnBank = (e, bank) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Try to get multi-select drag IDs from dataTransfer
+    let dragIds = [];
+    try {
+      const data = e.dataTransfer.getData('text/plain');
+      dragIds = JSON.parse(data);
+    } catch (err) {}
+    if (dragIds.length === 0 && draggedItem) {
+      dragIds = [draggedItem.id];
+    }
+    if (dragIds.length > 0) {
+      assignToBank(artistId, activeView, dragIds, bank);
+      loadData();
+    }
+    setDraggedItem(null);
+    setDragOverBank(null);
+  };
+
+  const [dragOverBank, setDragOverBank] = useState(null); // 'A' | 'B' | null
 
   // Keep ref in sync for use in drag selection effect
   displayedMediaRef.current = displayedMedia;
@@ -956,6 +990,74 @@ const LibraryBrowser = ({
   // Get user collections for context menu
   const userCollections = getUserCollections(artistId);
 
+  // Shared media card renderer — used by both the main grid and bank columns
+  const renderMediaCard = (media, isSelected) => (
+    <div
+      key={media.id}
+      ref={el => { if (el) mediaCardRefs.current[media.id] = el; }}
+      style={{
+        ...styles.mediaCard,
+        ...(isSelected ? { border: '1px solid rgba(99, 102, 241, 0.5)' } : {})
+      }}
+      onClick={(e) => handleMediaClick(media, e)}
+      onContextMenu={(e) => handleContextMenu(e, media)}
+      draggable={true}
+      onDragStart={(e) => handleDragStart(e, media)}
+      onMouseEnter={(e) => {
+        if (!isSelected) {
+          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!isSelected) {
+          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+        }
+      }}
+    >
+      {isSelected && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          backgroundColor: 'rgba(99, 102, 241, 0.2)',
+          zIndex: 1, pointerEvents: 'none', borderRadius: '7px'
+        }}>
+          <div style={{
+            position: 'absolute', bottom: '6px', right: '6px',
+            width: '18px', height: '18px',
+            backgroundColor: '#6366f1', borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '11px', color: '#fff', fontWeight: 'bold'
+          }}>✓</div>
+        </div>
+      )}
+      {media.type === MEDIA_TYPES.VIDEO && (
+        <video src={media.url} style={styles.mediaThumbnail} muted preload="metadata" />
+      )}
+      {media.type === MEDIA_TYPES.IMAGE && (
+        <img src={media.url} alt={media.name} style={styles.mediaThumbnail} />
+      )}
+      {media.type === MEDIA_TYPES.AUDIO && (
+        <div style={styles.audioPlaceholder}>🎵</div>
+      )}
+      <div style={styles.mediaTypeIcon}>{getTypeIcon(media.type)}</div>
+      <button
+        style={{
+          ...styles.favoriteButton,
+          color: media.isFavorite ? '#fbbf24' : 'rgba(255,255,255,0.5)'
+        }}
+        onClick={(e) => handleToggleFavorite(media.id, e)}
+      >
+        {media.isFavorite ? '★' : '☆'}
+      </button>
+      <div style={styles.mediaOverlay}>
+        <div style={styles.mediaName}>{media.name}</div>
+        <div style={styles.mediaMeta}>
+          {media.duration && formatDuration(media.duration)}
+          {media.useCount > 0 && ` • Used ${media.useCount}x`}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div style={styles.container} onClick={() => setContextMenu(null)}>
       {/* Header */}
@@ -1175,7 +1277,96 @@ const LibraryBrowser = ({
 
         {/* Content */}
         <div style={styles.content}>
-          {displayedMedia.length === 0 ? (
+          {/* Bank A / Bank B side-by-side view for user collections */}
+          {isUserCollectionView && collectionBanks ? (
+            <div style={{ display: 'flex', gap: '12px', height: '100%', overflow: 'hidden' }}>
+              {/* Bank A Column */}
+              <div
+                style={{
+                  flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                  borderRadius: '12px',
+                  border: dragOverBank === 'A' ? '2px dashed rgba(99, 102, 241, 0.6)' : '1px solid rgba(255,255,255,0.08)',
+                  backgroundColor: dragOverBank === 'A' ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
+                  transition: 'all 0.15s ease'
+                }}
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBank('A'); }}
+                onDragLeave={() => setDragOverBank(null)}
+                onDrop={(e) => handleDropOnBank(e, 'A')}
+              >
+                <div style={{
+                  padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '8px',
+                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(99, 102, 241, 0.02))'
+                }}>
+                  <div style={{
+                    width: '28px', height: '28px', borderRadius: '8px',
+                    background: 'linear-gradient(135deg, #6366f1, #818cf8)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '13px', fontWeight: 700, color: '#fff'
+                  }}>A</div>
+                  <span style={{ fontSize: '14px', fontWeight: 600, color: '#c4b5fd' }}>Bank A</span>
+                  <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', marginLeft: 'auto' }}>
+                    {collectionBanks.bankA.length} items
+                  </span>
+                </div>
+                <div style={{
+                  flex: 1, overflowY: 'auto', padding: '12px',
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? '80px' : '110px'}, 1fr))`,
+                  gap: '8px', alignContent: 'start'
+                }}>
+                  {collectionBanks.bankA.length === 0 ? (
+                    <div style={{ gridColumn: '1 / -1', padding: '24px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '12px' }}>
+                      Drag images here for Bank A
+                    </div>
+                  ) : collectionBanks.bankA.map(media => renderMediaCard(media, selectedMediaIds.includes(media.id)))}
+                </div>
+              </div>
+
+              {/* Bank B Column */}
+              <div
+                style={{
+                  flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                  borderRadius: '12px',
+                  border: dragOverBank === 'B' ? '2px dashed rgba(34, 197, 94, 0.6)' : '1px solid rgba(255,255,255,0.08)',
+                  backgroundColor: dragOverBank === 'B' ? 'rgba(34, 197, 94, 0.05)' : 'transparent',
+                  transition: 'all 0.15s ease'
+                }}
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBank('B'); }}
+                onDragLeave={() => setDragOverBank(null)}
+                onDrop={(e) => handleDropOnBank(e, 'B')}
+              >
+                <div style={{
+                  padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '8px',
+                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0.02))'
+                }}>
+                  <div style={{
+                    width: '28px', height: '28px', borderRadius: '8px',
+                    background: 'linear-gradient(135deg, #22c55e, #4ade80)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '13px', fontWeight: 700, color: '#fff'
+                  }}>B</div>
+                  <span style={{ fontSize: '14px', fontWeight: 600, color: '#86efac' }}>Bank B</span>
+                  <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', marginLeft: 'auto' }}>
+                    {collectionBanks.bankB.length} items
+                  </span>
+                </div>
+                <div style={{
+                  flex: 1, overflowY: 'auto', padding: '12px',
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? '80px' : '110px'}, 1fr))`,
+                  gap: '8px', alignContent: 'start'
+                }}>
+                  {collectionBanks.bankB.length === 0 ? (
+                    <div style={{ gridColumn: '1 / -1', padding: '24px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '12px' }}>
+                      Drag images here for Bank B
+                    </div>
+                  ) : collectionBanks.bankB.map(media => renderMediaCard(media, selectedMediaIds.includes(media.id)))}
+                </div>
+              </div>
+            </div>
+          ) : displayedMedia.length === 0 ? (
             <div style={styles.emptyState}>
               <div style={styles.emptyIcon}>📂</div>
               <div style={styles.emptyText}>
@@ -1208,102 +1399,7 @@ const LibraryBrowser = ({
             >
               {displayedMedia.map(media => {
                 const isSelected = selectedMediaIds.includes(media.id);
-                return (
-                <div
-                  key={media.id}
-                  ref={el => { if (el) mediaCardRefs.current[media.id] = el; }}
-                  style={{
-                    ...styles.mediaCard,
-                    ...(isSelected ? { border: '1px solid rgba(99, 102, 241, 0.5)' } : {})
-                  }}
-                  onClick={(e) => handleMediaClick(media, e)}
-                  onContextMenu={(e) => handleContextMenu(e, media)}
-                  draggable={true}
-                  onDragStart={(e) => handleDragStart(e, media)}
-                  onMouseEnter={(e) => {
-                    if (!isSelected) {
-                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected) {
-                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
-                    }
-                  }}
-                >
-                  {/* Selection overlay — macOS-style subtle tint + checkmark */}
-                  {isSelected && (
-                    <div style={{
-                      position: 'absolute',
-                      inset: 0,
-                      backgroundColor: 'rgba(99, 102, 241, 0.2)',
-                      zIndex: 1,
-                      pointerEvents: 'none',
-                      borderRadius: '7px'
-                    }}>
-                      <div style={{
-                        position: 'absolute',
-                        bottom: '6px',
-                        right: '6px',
-                        width: '18px',
-                        height: '18px',
-                        backgroundColor: '#6366f1',
-                        borderRadius: '50%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '11px',
-                        color: '#fff',
-                        fontWeight: 'bold'
-                      }}>✓</div>
-                    </div>
-                  )}
-                  {/* Thumbnail */}
-                  {media.type === MEDIA_TYPES.VIDEO && (
-                    <video
-                      src={media.url}
-                      style={styles.mediaThumbnail}
-                      muted
-                      preload="metadata"
-                    />
-                  )}
-                  {media.type === MEDIA_TYPES.IMAGE && (
-                    <img
-                      src={media.url}
-                      alt={media.name}
-                      style={styles.mediaThumbnail}
-                    />
-                  )}
-                  {media.type === MEDIA_TYPES.AUDIO && (
-                    <div style={styles.audioPlaceholder}>🎵</div>
-                  )}
-
-                  {/* Type Icon */}
-                  <div style={styles.mediaTypeIcon}>
-                    {getTypeIcon(media.type)}
-                  </div>
-
-                  {/* Favorite Button */}
-                  <button
-                    style={{
-                      ...styles.favoriteButton,
-                      color: media.isFavorite ? '#fbbf24' : 'rgba(255,255,255,0.5)'
-                    }}
-                    onClick={(e) => handleToggleFavorite(media.id, e)}
-                  >
-                    {media.isFavorite ? '★' : '☆'}
-                  </button>
-
-                  {/* Info Overlay */}
-                  <div style={styles.mediaOverlay}>
-                    <div style={styles.mediaName}>{media.name}</div>
-                    <div style={styles.mediaMeta}>
-                      {media.duration && formatDuration(media.duration)}
-                      {media.useCount > 0 && ` • Used ${media.useCount}x`}
-                    </div>
-                  </div>
-                </div>
-                );
+                return renderMediaCard(media, isSelected);
               })}
             </div>
           )}
@@ -1373,6 +1469,59 @@ const LibraryBrowser = ({
                   <span>📁</span>
                   <span>{collection.name}</span>
                 </div>
+              ))}
+            </>
+          )}
+
+          {/* Assign to Bank A/B — shows per-collection bank options */}
+          {userCollections.length > 0 && (contextMenu.media?.type === MEDIA_TYPES.IMAGE) && (
+            <>
+              <div style={styles.contextMenuDivider} />
+              <div style={{ padding: '8px 16px', fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>
+                Assign to Bank
+              </div>
+              {userCollections.map(collection => (
+                <React.Fragment key={`bank-${collection.id}`}>
+                  <div style={{ padding: '4px 16px 2px', fontSize: '11px', color: 'rgba(255,255,255,0.25)' }}>
+                    {collection.name}
+                  </div>
+                  <div
+                    style={{...styles.contextMenuItem, paddingLeft: '24px'}}
+                    onClick={() => {
+                      assignToBank(artistId, collection.id, contextMenu.media.id, 'A');
+                      loadData();
+                      setContextMenu(null);
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(99,102,241,0.1)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
+                    <span style={{
+                      display: 'inline-flex', width: '18px', height: '18px', borderRadius: '4px',
+                      background: 'linear-gradient(135deg, #6366f1, #818cf8)',
+                      alignItems: 'center', justifyContent: 'center',
+                      fontSize: '10px', fontWeight: 700, color: '#fff'
+                    }}>A</span>
+                    <span>Bank A</span>
+                  </div>
+                  <div
+                    style={{...styles.contextMenuItem, paddingLeft: '24px'}}
+                    onClick={() => {
+                      assignToBank(artistId, collection.id, contextMenu.media.id, 'B');
+                      loadData();
+                      setContextMenu(null);
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(34,197,94,0.1)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
+                    <span style={{
+                      display: 'inline-flex', width: '18px', height: '18px', borderRadius: '4px',
+                      background: 'linear-gradient(135deg, #22c55e, #4ade80)',
+                      alignItems: 'center', justifyContent: 'center',
+                      fontSize: '10px', fontWeight: 700, color: '#fff'
+                    }}>B</span>
+                    <span>Bank B</span>
+                  </div>
+                </React.Fragment>
               ))}
             </>
           )}

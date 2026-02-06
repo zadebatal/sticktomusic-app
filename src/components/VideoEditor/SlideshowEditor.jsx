@@ -143,11 +143,23 @@ const SlideshowEditor = ({
   }, [db, artistId]);
 
   // Compute active images based on selected source
+  // Supports: 'bankA', 'bankB', 'all', collectionId, 'collectionId:bankA', 'collectionId:bankB'
   const activeImages = (() => {
     if (selectedSource === 'bankA') return imagesA;
     if (selectedSource === 'bankB') return imagesB;
     if (selectedSource === 'all') return libraryImages;
-    // Collection ID - filter library images by collection membership
+
+    // Collection bank source — format: "collectionId:bankA" or "collectionId:bankB"
+    if (selectedSource.includes(':bank')) {
+      const [colId, bankKey] = selectedSource.split(':');
+      const col = collections.find(c => c.id === colId);
+      if (col) {
+        const bankIds = bankKey === 'bankA' ? (col.bankA || []) : (col.bankB || []);
+        return libraryImages.filter(img => bankIds.includes(img.id));
+      }
+    }
+
+    // Plain collection ID - filter library images by collection membership
     const col = collections.find(c => c.id === selectedSource);
     if (col && col.mediaIds) {
       return libraryImages.filter(img => col.mediaIds.includes(img.id));
@@ -1004,12 +1016,19 @@ const SlideshowEditor = ({
                   cursor: 'pointer'
                 }}
               >
-                <option value="bankA">Image Bank A</option>
-                <option value="bankB">Image Bank B</option>
+                <option value="bankA">Image Bank A (Category)</option>
+                <option value="bankB">Image Bank B (Category)</option>
                 {(db && artistId) && <option value="all">All Media (Library)</option>}
-                {collections.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
+                {collections.filter(c => c.type !== 'smart').map(c => {
+                  const hasBanks = (c.bankA?.length > 0 || c.bankB?.length > 0);
+                  return (
+                    <React.Fragment key={c.id}>
+                      <option value={c.id}>{c.name} — All</option>
+                      {hasBanks && <option value={`${c.id}:bankA`}>{c.name} → Bank A ({c.bankA?.length || 0})</option>}
+                      {hasBanks && <option value={`${c.id}:bankB`}>{c.name} → Bank B ({c.bankB?.length || 0})</option>}
+                    </React.Fragment>
+                  );
+                })}
               </select>
             </div>
 
@@ -1242,7 +1261,11 @@ const SlideshowEditor = ({
                             ...image,
                             url: image.url || image.localUrl,
                             thumbnail: image.url || image.localUrl,
-                            sourceBank: selectedSource === 'bankA' ? 'imageA' : selectedSource === 'bankB' ? 'imageB' : selectedSource
+                            sourceBank: selectedSource === 'bankA' ? 'imageA'
+                              : selectedSource === 'bankB' ? 'imageB'
+                              : selectedSource.includes(':bankA') ? 'imageA'
+                              : selectedSource.includes(':bankB') ? 'imageB'
+                              : selectedSource
                           }));
                         }}
                         onMouseEnter={(e) => {
