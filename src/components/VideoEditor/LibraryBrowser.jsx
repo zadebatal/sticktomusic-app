@@ -1277,92 +1277,128 @@ const LibraryBrowser = ({
 
         {/* Content */}
         <div style={styles.content}>
-          {/* Bank A / Bank B side-by-side view for user collections */}
+          {/* Collection view: all images on left, Bank A/B stacked on right */}
           {isUserCollectionView && collectionBanks ? (
             <div style={{ display: 'flex', gap: '12px', height: '100%', overflow: 'hidden' }}>
-              {/* Bank A Column */}
-              <div
-                style={{
-                  flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-                  borderRadius: '12px',
-                  border: dragOverBank === 'A' ? '2px dashed rgba(99, 102, 241, 0.6)' : '1px solid rgba(255,255,255,0.08)',
-                  backgroundColor: dragOverBank === 'A' ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
-                  transition: 'all 0.15s ease'
-                }}
-                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBank('A'); }}
-                onDragLeave={() => setDragOverBank(null)}
-                onDrop={(e) => handleDropOnBank(e, 'A')}
-              >
+              {/* Left half — all collection images */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
                 <div style={{
-                  padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '8px',
-                  borderBottom: '1px solid rgba(255,255,255,0.08)',
-                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(99, 102, 241, 0.02))'
+                  padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '8px',
+                  borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0
                 }}>
-                  <div style={{
-                    width: '28px', height: '28px', borderRadius: '8px',
-                    background: 'linear-gradient(135deg, #6366f1, #818cf8)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '13px', fontWeight: 700, color: '#fff'
-                  }}>A</div>
-                  <span style={{ fontSize: '14px', fontWeight: 600, color: '#c4b5fd' }}>Bank A</span>
-                  <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', marginLeft: 'auto' }}>
-                    {collectionBanks.bankA.length} items
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>All Images</span>
+                  <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>
+                    {displayedMedia.length} items — drag into banks →
                   </span>
                 </div>
-                <div style={{
-                  flex: 1, overflowY: 'auto', padding: '12px',
-                  display: 'grid',
-                  gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? '80px' : '110px'}, 1fr))`,
-                  gap: '8px', alignContent: 'start'
-                }}>
-                  {collectionBanks.bankA.length === 0 ? (
-                    <div style={{ gridColumn: '1 / -1', padding: '24px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '12px' }}>
-                      Drag images here for Bank A
+                <div
+                  ref={gridRef}
+                  style={{
+                    flex: 1, overflowY: 'auto', padding: '10px',
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? '80px' : '110px'}, 1fr))`,
+                    gap: '8px', alignContent: 'start',
+                    userSelect: 'none', WebkitUserSelect: 'none'
+                  }}
+                  onMouseDown={handleGridMouseDown}
+                >
+                  {displayedMedia.length === 0 ? (
+                    <div style={{ gridColumn: '1 / -1', padding: '32px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '13px' }}>
+                      This collection is empty. Drag items here to add them.
                     </div>
-                  ) : collectionBanks.bankA.map(media => renderMediaCard(media, selectedMediaIds.includes(media.id)))}
+                  ) : displayedMedia.map(media => renderMediaCard(media, selectedMediaIds.includes(media.id)))}
                 </div>
               </div>
 
-              {/* Bank B Column */}
-              <div
-                style={{
-                  flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-                  borderRadius: '12px',
-                  border: dragOverBank === 'B' ? '2px dashed rgba(34, 197, 94, 0.6)' : '1px solid rgba(255,255,255,0.08)',
-                  backgroundColor: dragOverBank === 'B' ? 'rgba(34, 197, 94, 0.05)' : 'transparent',
-                  transition: 'all 0.15s ease'
-                }}
-                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBank('B'); }}
-                onDragLeave={() => setDragOverBank(null)}
-                onDrop={(e) => handleDropOnBank(e, 'B')}
-              >
-                <div style={{
-                  padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '8px',
-                  borderBottom: '1px solid rgba(255,255,255,0.08)',
-                  background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0.02))'
-                }}>
+              {/* Right half — Bank A and Bank B stacked */}
+              <div style={{
+                flex: 1, display: 'flex', flexDirection: 'column', gap: '8px',
+                overflow: 'hidden', minWidth: 0
+              }}>
+                {/* Bank A */}
+                <div
+                  style={{
+                    flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                    borderRadius: '10px',
+                    border: dragOverBank === 'A' ? '2px dashed rgba(99, 102, 241, 0.6)' : '1px solid rgba(255,255,255,0.08)',
+                    backgroundColor: dragOverBank === 'A' ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBank('A'); }}
+                  onDragLeave={() => setDragOverBank(null)}
+                  onDrop={(e) => handleDropOnBank(e, 'A')}
+                >
                   <div style={{
-                    width: '28px', height: '28px', borderRadius: '8px',
-                    background: 'linear-gradient(135deg, #22c55e, #4ade80)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '13px', fontWeight: 700, color: '#fff'
-                  }}>B</div>
-                  <span style={{ fontSize: '14px', fontWeight: 600, color: '#86efac' }}>Bank B</span>
-                  <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', marginLeft: 'auto' }}>
-                    {collectionBanks.bankB.length} items
-                  </span>
+                    padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px',
+                    borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0,
+                    background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.06), transparent)'
+                  }}>
+                    <div style={{
+                      width: '22px', height: '22px', borderRadius: '6px',
+                      background: 'linear-gradient(135deg, #6366f1, #818cf8)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '11px', fontWeight: 700, color: '#fff'
+                    }}>A</div>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#c4b5fd' }}>Bank A</span>
+                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginLeft: 'auto' }}>
+                      {collectionBanks.bankA.length}
+                    </span>
+                  </div>
+                  <div style={{
+                    flex: 1, overflowY: 'auto', padding: '8px',
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? '60px' : '80px'}, 1fr))`,
+                    gap: '6px', alignContent: 'start'
+                  }}>
+                    {collectionBanks.bankA.length === 0 ? (
+                      <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
+                        Drag images here
+                      </div>
+                    ) : collectionBanks.bankA.map(media => renderMediaCard(media, selectedMediaIds.includes(media.id)))}
+                  </div>
                 </div>
-                <div style={{
-                  flex: 1, overflowY: 'auto', padding: '12px',
-                  display: 'grid',
-                  gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? '80px' : '110px'}, 1fr))`,
-                  gap: '8px', alignContent: 'start'
-                }}>
-                  {collectionBanks.bankB.length === 0 ? (
-                    <div style={{ gridColumn: '1 / -1', padding: '24px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '12px' }}>
-                      Drag images here for Bank B
-                    </div>
-                  ) : collectionBanks.bankB.map(media => renderMediaCard(media, selectedMediaIds.includes(media.id)))}
+
+                {/* Bank B */}
+                <div
+                  style={{
+                    flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                    borderRadius: '10px',
+                    border: dragOverBank === 'B' ? '2px dashed rgba(34, 197, 94, 0.6)' : '1px solid rgba(255,255,255,0.08)',
+                    backgroundColor: dragOverBank === 'B' ? 'rgba(34, 197, 94, 0.05)' : 'transparent',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBank('B'); }}
+                  onDragLeave={() => setDragOverBank(null)}
+                  onDrop={(e) => handleDropOnBank(e, 'B')}
+                >
+                  <div style={{
+                    padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px',
+                    borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0,
+                    background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.06), transparent)'
+                  }}>
+                    <div style={{
+                      width: '22px', height: '22px', borderRadius: '6px',
+                      background: 'linear-gradient(135deg, #22c55e, #4ade80)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '11px', fontWeight: 700, color: '#fff'
+                    }}>B</div>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#86efac' }}>Bank B</span>
+                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginLeft: 'auto' }}>
+                      {collectionBanks.bankB.length}
+                    </span>
+                  </div>
+                  <div style={{
+                    flex: 1, overflowY: 'auto', padding: '8px',
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? '60px' : '80px'}, 1fr))`,
+                    gap: '6px', alignContent: 'start'
+                  }}>
+                    {collectionBanks.bankB.length === 0 ? (
+                      <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
+                        Drag images here
+                      </div>
+                    ) : collectionBanks.bankB.map(media => renderMediaCard(media, selectedMediaIds.includes(media.id)))}
+                  </div>
                 </div>
               </div>
             </div>
