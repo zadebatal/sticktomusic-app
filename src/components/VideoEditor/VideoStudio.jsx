@@ -1723,7 +1723,27 @@ const VideoStudio = ({
           ...(isMobile ? { order: 2, marginLeft: 'auto' } : {})
         }}>
           <button
-            onClick={onClose}
+            onClick={() => {
+              // Navigate back within studio before exiting entirely
+              if (showEditor || showSlideshowEditor) {
+                // Close editor, go back to content library / dashboard
+                setShowEditor(false);
+                setShowSlideshowEditor(false);
+                const targetView = studioMode === 'slideshows' ? 'slideshows' : 'library';
+                setCurrentView(targetView);
+              } else if (currentView === 'library' || currentView === 'slideshows') {
+                // Go back to studio home
+                setCurrentView('home');
+                setStudioMode(null);
+              } else if (studioMode) {
+                // Go back to studio home
+                setCurrentView('home');
+                setStudioMode(null);
+              } else {
+                // Already at home, actually close the studio
+                onClose();
+              }
+            }}
             style={{
               ...styles.closeButton,
               ...(isMobile ? {

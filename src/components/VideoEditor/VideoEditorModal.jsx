@@ -2218,7 +2218,9 @@ const VideoEditorModal = ({
                             onDragEnd={handleClipDragEnd}
                             style={{
                               ...styles.clipItem,
-                              minWidth: `${Math.max(60, (clip.duration || 1) * 40)}px`,
+                              minWidth: '80px',
+                              width: '80px',
+                              flexShrink: 0,
                               ...(selectedClips.includes(index) ? styles.clipItemSelected : {}),
                               ...(clipDrag.dragging && clipDrag.fromIndex === index ? { opacity: 0.5 } : {}),
                               ...(clipDrag.dragging && clipDrag.toIndex === index && clipDrag.fromIndex !== index ? {

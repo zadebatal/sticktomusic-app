@@ -38,18 +38,6 @@ const SlideshowEditor = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Keyboard Delete/Backspace to remove current slide
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if ((e.key === 'Delete' || e.key === 'Backspace') && !editingTextId && slides.length > 1) {
-        e.preventDefault();
-        removeSlide(slides[selectedSlideIndex]?.id);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedSlideIndex, slides, editingTextId, removeSlide]);
-
   // Slideshow state
   const [name, setName] = useState(existingSlideshow?.name || 'Untitled Slideshow');
   const [aspectRatio, setAspectRatio] = useState(existingSlideshow?.aspectRatio || '9:16');
@@ -242,6 +230,18 @@ const SlideshowEditor = ({
       setSelectedSlideIndex(Math.max(0, slides.length - 2));
     }
   }, [slides.length, selectedSlideIndex]);
+
+  // Keyboard Delete/Backspace to remove current slide
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !editingTextId && slides.length > 1) {
+        e.preventDefault();
+        removeSlide(slides[selectedSlideIndex]?.id);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedSlideIndex, slides, editingTextId, removeSlide]);
 
   // Reorder slides
   const moveSlide = useCallback((fromIndex, toIndex) => {

@@ -448,7 +448,7 @@ const ContentLibrary = ({
         />
       )}
 
-      {/* Video Preview Modal */}
+      {/* Video Preview Modal - Always 9:16 portrait */}
       {previewingVideo && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -456,8 +456,11 @@ const ContentLibrary = ({
           display: 'flex', alignItems: 'center', justifyContent: 'center'
         }} onClick={() => setPreviewingVideo(null)}>
           <div style={{
-            position: 'relative', maxWidth: '90vw', maxHeight: '90vh',
-            backgroundColor: '#111', borderRadius: 12, overflow: 'hidden'
+            position: 'relative',
+            width: 'min(360px, 45vh * 9 / 16)',
+            height: 'min(640px, 80vh)',
+            aspectRatio: '9 / 16',
+            backgroundColor: '#000', borderRadius: 12, overflow: 'hidden'
           }} onClick={e => e.stopPropagation()}>
             <button onClick={() => setPreviewingVideo(null)} style={{
               position: 'absolute', top: 8, right: 8, zIndex: 10,
@@ -470,14 +473,14 @@ const ContentLibrary = ({
                 src={previewingVideo.cloudUrl}
                 controls
                 autoPlay
-                style={{ maxWidth: '90vw', maxHeight: '85vh' }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             ) : previewingVideo.clips?.length > 0 ? (
               <video
                 src={previewingVideo.clips[0].url || previewingVideo.clips[0].localUrl}
                 controls
                 autoPlay
-                style={{ maxWidth: '90vw', maxHeight: '85vh' }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             ) : (
               <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>

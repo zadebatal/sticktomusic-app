@@ -3412,12 +3412,31 @@ const StickToMusic = () => {
                                 <tr key={page.linkedAccountIds.join('-')} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition">
                                   {isLinkingThisArtist && (
                                     <td className="p-3 sm:p-4">
-                                      <input
-                                        type="checkbox"
-                                        checked={selectedAccountsToLink.includes(page.linkedAccountIds[0])}
-                                        onChange={() => toggleRowSelection(page.linkedAccountIds[0])}
-                                        className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-purple-600 focus:ring-purple-500"
-                                      />
+                                      <div
+                                        onClick={(e) => { e.stopPropagation(); toggleRowSelection(page.linkedAccountIds[0]); }}
+                                        style={{
+                                          width: '18px',
+                                          height: '18px',
+                                          borderRadius: '4px',
+                                          border: selectedAccountsToLink.includes(page.linkedAccountIds[0])
+                                            ? '2px solid #8b5cf6'
+                                            : '2px solid #52525b',
+                                          backgroundColor: selectedAccountsToLink.includes(page.linkedAccountIds[0])
+                                            ? '#8b5cf6'
+                                            : 'transparent',
+                                          cursor: 'pointer',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          transition: 'all 0.15s'
+                                        }}
+                                      >
+                                        {selectedAccountsToLink.includes(page.linkedAccountIds[0]) && (
+                                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                                            <polyline points="20 6 9 17 4 12"/>
+                                          </svg>
+                                        )}
+                                      </div>
                                     </td>
                                   )}
                                   <td className="p-3 sm:p-4 font-mono text-xs sm:text-sm">
