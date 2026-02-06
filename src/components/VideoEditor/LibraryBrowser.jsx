@@ -1645,7 +1645,7 @@ const LibraryBrowser = ({
               </div>
 
               {/* Right half — Banks with tabs */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
                 {/* Tab bar */}
                 <div style={{ display: 'flex', gap: '2px', padding: '4px', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '8px', marginBottom: '8px', flexShrink: 0 }}>
                   <button
@@ -1673,11 +1673,11 @@ const LibraryBrowser = ({
                 </div>
 
                 {bankTab === 'images' ? (
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden' }}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden', minHeight: 0 }}>
                     {/* Bank A */}
                     <div
                       style={{
-                        flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                        flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0,
                         borderRadius: '10px',
                         border: dragOverBank === 'A' ? '2px dashed rgba(99, 102, 241, 0.6)' : '1px solid rgba(255,255,255,0.08)',
                         backgroundColor: dragOverBank === 'A' ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
@@ -1747,7 +1747,7 @@ const LibraryBrowser = ({
                         )}
                       </div>
                       <div style={{
-                        flex: 1, overflowY: 'auto', padding: '8px',
+                        flex: 1, overflowY: 'auto', padding: '8px', minHeight: 0,
                         display: 'flex', flexWrap: 'wrap',
                         gap: '8px', alignContent: 'start'
                       }}>
@@ -1762,7 +1762,7 @@ const LibraryBrowser = ({
                     {/* Bank B */}
                     <div
                       style={{
-                        flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                        flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0,
                         borderRadius: '10px',
                         border: dragOverBank === 'B' ? '2px dashed rgba(34, 197, 94, 0.6)' : '1px solid rgba(255,255,255,0.08)',
                         backgroundColor: dragOverBank === 'B' ? 'rgba(34, 197, 94, 0.05)' : 'transparent',
@@ -1832,7 +1832,7 @@ const LibraryBrowser = ({
                         )}
                       </div>
                       <div style={{
-                        flex: 1, overflowY: 'auto', padding: '8px',
+                        flex: 1, overflowY: 'auto', padding: '8px', minHeight: 0,
                         display: 'flex', flexWrap: 'wrap',
                         gap: '8px', alignContent: 'start'
                       }}>
