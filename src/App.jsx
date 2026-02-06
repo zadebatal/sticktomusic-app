@@ -602,9 +602,11 @@ const StickToMusic = () => {
     setCurrentArtistId(newArtistId);
     setLastArtistId(newArtistId);
 
-    // Clear Late posts while checking status
+    // C-06: Clear ALL artist-dependent state — not just posts
     setLatePosts([]);
     setLastSynced(null);
+    setSelectedPosts(new Set());
+    setDayDetailDrawer({ isOpen: false, date: null, posts: [] });
 
     // Check if new artist has Late connected
     const hasLate = await checkArtistLateStatus(newArtistId);
@@ -1299,13 +1301,20 @@ const StickToMusic = () => {
     }
   };
 
-  // Bulk delete posts
-  const handleBulkDelete = async () => {
+  // Bulk delete posts — H-01: uses ConfirmDialog instead of window.confirm
+  const handleBulkDelete = () => {
     if (selectedPosts.size === 0) return;
 
-    const confirmDelete = window.confirm(`Delete ${selectedPosts.size} selected post(s)?`);
-    if (!confirmDelete) return;
+    showConfirmDialog({
+      title: `Delete ${selectedPosts.size} post${selectedPosts.size > 1 ? 's' : ''}?`,
+      message: 'This will permanently remove the selected posts from Late. This action cannot be undone.',
+      confirmLabel: `Delete ${selectedPosts.size}`,
+      confirmVariant: 'destructive',
+      onConfirm: () => executeBulkDelete()
+    });
+  };
 
+  const executeBulkDelete = async () => {
     setBulkDeleting(true);
     const deletedPosts = latePosts.filter(p => selectedPosts.has(p.id));
     let successCount = 0;
@@ -2975,18 +2984,10 @@ const StickToMusic = () => {
 
               {/* Quick Actions */}
               <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                {/* C-09: Removed dead "Download Report", "Contact Manager", "Upload Content" buttons.
+                   These had no onClick handlers. Artist actions are available through the operator dashboard. */}
                 <h3 className="font-semibold mb-4">Quick Actions</h3>
-                <div className="space-y-2">
-                  <button className="w-full py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm text-left transition">
-                    📊 Download Report
-                  </button>
-                  <button className="w-full py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm text-left transition">
-                    📧 Contact Manager
-                  </button>
-                  <button className="w-full py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm text-left transition">
-                    📁 Upload Content
-                  </button>
-                </div>
+                <p className="text-sm text-zinc-500">Contact your operator for reports, content uploads, or account management.</p>
               </div>
             </div>
           </div>
@@ -5058,7 +5059,7 @@ const StickToMusic = () => {
                           <span className="text-zinc-500">{campaign.postsScheduled} posts scheduled</span>
                           <span className="text-zinc-500">{campaign.postsPublished} published</span>
                         </div>
-                        <button className="text-sm text-purple-400 hover:text-purple-300">View Details →</button>
+                        {/* L-02: "View Details" removed — was a dead button with no handler */}
                       </div>
                     </div>
                   );

@@ -189,14 +189,7 @@ const BatchPipeline = ({
   const availableClips = category?.videos || [];
   const availableAudio = category?.audio || [];
 
-  // DEBUG: Log state on every render
-  console.log('[BatchPipeline] Render state:', {
-    selectedAudio: selectedAudio ? { id: selectedAudio.id, name: selectedAudio.name } : null,
-    selectedClipsCount: selectedClips.length,
-    availableClipsCount: availableClips.length,
-    availableAudioCount: availableAudio.length,
-    disabledCondition: !selectedAudio || selectedClips.length < 2
-  });
+  // M-16: Debug render logging removed (was firing every render, polluting console)
 
   // Saved lyrics for selected audio
   const savedLyricsForAudio = useMemo(() => {

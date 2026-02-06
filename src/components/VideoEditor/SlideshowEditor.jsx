@@ -275,12 +275,13 @@ const SlideshowEditor = ({
     const selectedArr = Array.from(selectedBankImages);
     const newSlides = selectedArr.map((imgId, i) => {
       const img = allImages.find(im => im.id === imgId) || libraryImages.find(im => im.id === imgId);
-      if (!img) return null;
+      const imageUrl = img?.url || img?.localUrl;
+      if (!img || !imageUrl) return null; // H-12: skip slides with no valid image URL
       return {
         id: `slide_${Date.now()}_${i}`,
         index: slides.length + i,
-        backgroundImage: img.url || img.localUrl,
-        thumbnail: img.url || img.localUrl,
+        backgroundImage: imageUrl,
+        thumbnail: imageUrl,
         sourceBank: selectedSource,
         sourceImageId: img.id,
         textOverlays: [],
