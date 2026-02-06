@@ -138,6 +138,7 @@ export const createMediaItem = ({
   type,
   name,
   url,
+  thumbnailUrl = null,
   storagePath = null,
   duration = null,
   width = null,
@@ -151,7 +152,8 @@ export const createMediaItem = ({
     id: `media_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     type, // video | image | audio
     name,
-    url, // Firebase Storage URL (permanent)
+    url, // Firebase Storage URL (permanent, full-res)
+    thumbnailUrl, // Firebase Storage URL (small ~300px version for grids)
     localUrl: url, // Alias for components that expect localUrl
     storagePath, // Path in Firebase Storage
     duration, // For video/audio

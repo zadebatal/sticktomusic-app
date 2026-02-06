@@ -839,7 +839,9 @@ const LibraryBrowser = ({
     },
     mediaCard: {
       position: 'relative',
-      aspectRatio: '1',
+      width: '100%',
+      paddingBottom: '100%',
+      height: 0,
       backgroundColor: 'rgba(255, 255, 255, 0.05)',
       borderRadius: '8px',
       overflow: 'hidden',
@@ -1267,7 +1269,7 @@ const LibraryBrowser = ({
           </div>
         )}
         {media.type === MEDIA_TYPES.IMAGE && (
-          <img src={media.url} alt={media.name} style={styles.mediaThumbnail} />
+          <img src={media.thumbnailUrl || media.url} alt={media.name} style={styles.mediaThumbnail} loading="lazy" />
         )}
         {media.type === MEDIA_TYPES.VIDEO && (
           <video src={media.url} style={styles.mediaThumbnail} muted preload="metadata" />
@@ -1350,7 +1352,7 @@ const LibraryBrowser = ({
         <video src={media.url} style={styles.mediaThumbnail} muted preload="metadata" />
       )}
       {media.type === MEDIA_TYPES.IMAGE && (
-        <img src={media.url} alt={media.name} style={styles.mediaThumbnail} />
+        <img src={media.thumbnailUrl || media.url} alt={media.name} style={styles.mediaThumbnail} loading="lazy" />
       )}
       {media.type === MEDIA_TYPES.AUDIO && (
         <div style={styles.audioPlaceholder}>🎵</div>

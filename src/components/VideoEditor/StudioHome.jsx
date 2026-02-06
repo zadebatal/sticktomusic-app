@@ -311,18 +311,39 @@ const StudioHome = ({
           hasEmbeddedAudio = true; // Assume true, can't reliably detect
         }
 
+        let thumbnailUrl = null;
         if (type === MEDIA_TYPES.IMAGE) {
           const img = new Image();
           img.src = localUrl;
           await new Promise(r => { img.onload = r; });
           width = img.naturalWidth;
           height = img.naturalHeight;
+
+          // Generate lightweight thumbnail for grid/library views
+          try {
+            const maxThumbSize = 300;
+            const scale = Math.min(1, maxThumbSize / Math.max(img.naturalWidth, img.naturalHeight));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(img.naturalWidth * scale);
+            canvas.height = Math.round(img.naturalHeight * scale);
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.7));
+            if (thumbBlob) {
+              const thumbFile = new File([thumbBlob], `thumb_${file.name}`, { type: 'image/jpeg' });
+              const thumbResult = await uploadFile(thumbFile, 'thumbnails');
+              thumbnailUrl = thumbResult.url;
+            }
+          } catch (thumbErr) {
+            console.warn('[StudioHome] Thumbnail generation failed:', thumbErr);
+          }
         }
 
         const item = {
           type,
           name: file.name,
           url,
+          thumbnailUrl,
           storagePath: path,
           duration,
           width,
