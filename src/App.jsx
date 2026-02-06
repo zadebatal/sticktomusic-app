@@ -1200,6 +1200,7 @@ const StickToMusic = () => {
   const [selectedPlatform, setSelectedPlatform] = useState('all');
   const [contentArtist, setContentArtist] = useState('all');
   const [contentStatus, setContentStatus] = useState('all');
+  const [contentSortOrder, setContentSortOrder] = useState('newest'); // 'newest' | 'oldest'
 
   // Batch Schedule modal state
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -3518,7 +3519,8 @@ const StickToMusic = () => {
                   grouped[key].platforms.push(post.platform);
                 }
               });
-              return Object.values(grouped).sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor));
+              const sorted = Object.values(grouped).sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor));
+              return contentSortOrder === 'newest' ? sorted.reverse() : sorted;
             };
 
             const allPosts = groupPosts(contentQueue.filter(c =>
@@ -4197,6 +4199,13 @@ const StickToMusic = () => {
                         ))}
                       </div>
                     </div>
+                    <div>
+                      <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Sort</label>
+                      <div className="flex gap-1">
+                        <button onClick={() => setContentSortOrder('newest')} className={`px-3 py-1.5 rounded-lg text-sm transition ${contentSortOrder === 'newest' ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>Newest</button>
+                        <button onClick={() => setContentSortOrder('oldest')} className={`px-3 py-1.5 rounded-lg text-sm transition ${contentSortOrder === 'oldest' ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>Oldest</button>
+                      </div>
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {selectedPosts.size > 0 && (
@@ -4515,7 +4524,7 @@ const StickToMusic = () => {
                     return acc;
                   }, {});
 
-                  const sortedDates = Object.keys(postsByDate).sort();
+                  const sortedDates = Object.keys(postsByDate).sort((a, b) => contentSortOrder === 'newest' ? b.localeCompare(a) : a.localeCompare(b));
 
                   return (
                     <div className="space-y-4">

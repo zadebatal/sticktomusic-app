@@ -37,6 +37,7 @@ import {
   subscribeToLibrary,
   addToLibraryAsync,
   addManyToLibraryAsync,
+  removeFromLibraryAsync,
   migrateToFirestore
 } from '../../services/libraryService';
 import { uploadFile, getMediaDuration } from '../../services/firebaseStorage';
@@ -87,6 +88,32 @@ const StudioHome = ({
     audio: null,
     images: []
   });
+
+  // Delete selected media from library
+  const handleDeleteSelected = useCallback(async (mediaType) => {
+    const items = mediaType === 'videos' ? selectedMedia.videos : selectedMedia.images;
+    if (items.length === 0) return;
+    const label = mediaType === 'videos' ? 'clip' : 'image';
+    if (!window.confirm(`Delete ${items.length} ${label}${items.length > 1 ? 's' : ''} from your library? This cannot be undone.`)) return;
+    for (const item of items) {
+      await removeFromLibraryAsync(db, artistId, item.id);
+    }
+    setSelectedMedia(prev => ({ ...prev, [mediaType]: [] }));
+    setLibraryRefreshTrigger(t => t + 1);
+  }, [selectedMedia, db, artistId]);
+
+  const handleDeleteAll = useCallback(async (mediaType) => {
+    const label = mediaType === 'videos' ? 'video clips' : 'images';
+    if (!window.confirm(`Delete ALL ${label} from your library? This cannot be undone.`)) return;
+    const allItems = library.filter(item =>
+      mediaType === 'videos' ? item.type === 'video' : item.type === 'image'
+    );
+    for (const item of allItems) {
+      await removeFromLibraryAsync(db, artistId, item.id);
+    }
+    setSelectedMedia(prev => ({ ...prev, [mediaType]: [] }));
+    setLibraryRefreshTrigger(t => t + 1);
+  }, [library, db, artistId]);
 
   // File input refs
   const videoInputRef = useRef(null);
@@ -1006,22 +1033,54 @@ const StudioHome = ({
                 <div style={styles.actionInfo}>
                   {selectedMedia.videos.length} clips selected
                   {selectedMedia.videos.length > 0 && (
-                    <button
-                      onClick={() => setSelectedMedia(prev => ({ ...prev, videos: [] }))}
-                      style={{
-                        background: 'none',
-                        border: '1px solid rgba(255,255,255,0.3)',
-                        color: 'rgba(255,255,255,0.7)',
-                        fontSize: '11px',
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        marginLeft: '8px'
-                      }}
-                    >
-                      Deselect All
-                    </button>
+                    <>
+                      <button
+                        onClick={() => setSelectedMedia(prev => ({ ...prev, videos: [] }))}
+                        style={{
+                          background: 'none',
+                          border: '1px solid rgba(255,255,255,0.3)',
+                          color: 'rgba(255,255,255,0.7)',
+                          fontSize: '11px',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          marginLeft: '8px'
+                        }}
+                      >
+                        Deselect All
+                      </button>
+                      <button
+                        onClick={() => handleDeleteSelected('videos')}
+                        style={{
+                          background: 'none',
+                          border: '1px solid rgba(239,68,68,0.5)',
+                          color: '#ef4444',
+                          fontSize: '11px',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          marginLeft: '4px'
+                        }}
+                      >
+                        Delete {selectedMedia.videos.length}
+                      </button>
+                    </>
                   )}
+                  <button
+                    onClick={() => handleDeleteAll('videos')}
+                    style={{
+                      background: 'none',
+                      border: '1px solid rgba(239,68,68,0.3)',
+                      color: 'rgba(239,68,68,0.6)',
+                      fontSize: '11px',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      marginLeft: '8px'
+                    }}
+                  >
+                    Delete All
+                  </button>
                   {selectedMedia.audio && ` • Audio: ${selectedMedia.audio.name}`}
                 </div>
                 <div style={styles.actionButtons}>
@@ -1094,22 +1153,54 @@ const StudioHome = ({
                 <div style={styles.actionInfo}>
                   {selectedMedia.images.length} images selected
                   {selectedMedia.images.length > 0 && (
-                    <button
-                      onClick={() => setSelectedMedia(prev => ({ ...prev, images: [] }))}
-                      style={{
-                        background: 'none',
-                        border: '1px solid rgba(255,255,255,0.3)',
-                        color: 'rgba(255,255,255,0.7)',
-                        fontSize: '11px',
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        marginLeft: '8px'
-                      }}
-                    >
-                      Deselect All
-                    </button>
+                    <>
+                      <button
+                        onClick={() => setSelectedMedia(prev => ({ ...prev, images: [] }))}
+                        style={{
+                          background: 'none',
+                          border: '1px solid rgba(255,255,255,0.3)',
+                          color: 'rgba(255,255,255,0.7)',
+                          fontSize: '11px',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          marginLeft: '8px'
+                        }}
+                      >
+                        Deselect All
+                      </button>
+                      <button
+                        onClick={() => handleDeleteSelected('images')}
+                        style={{
+                          background: 'none',
+                          border: '1px solid rgba(239,68,68,0.5)',
+                          color: '#ef4444',
+                          fontSize: '11px',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          marginLeft: '4px'
+                        }}
+                      >
+                        Delete {selectedMedia.images.length}
+                      </button>
+                    </>
                   )}
+                  <button
+                    onClick={() => handleDeleteAll('images')}
+                    style={{
+                      background: 'none',
+                      border: '1px solid rgba(239,68,68,0.3)',
+                      color: 'rgba(239,68,68,0.6)',
+                      fontSize: '11px',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      marginLeft: '8px'
+                    }}
+                  >
+                    Delete All
+                  </button>
                 </div>
                 <div style={styles.actionButtons}>
                   {draftSlideshows.length > 0 && (
