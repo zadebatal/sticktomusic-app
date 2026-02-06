@@ -545,6 +545,10 @@ const WordTimeline = ({
   const handlePlayheadMouseDown = (e) => {
     e.stopPropagation();
     setPlayheadDragging(true);
+    // Pause playback when drag starts to prevent audio from restarting
+    if (isPlaying) {
+      onPlayPause?.();
+    }
   };
 
   useEffect(() => {

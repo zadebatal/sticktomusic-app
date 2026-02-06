@@ -1226,8 +1226,8 @@ const StickToMusic = () => {
   const [lateApiKeyInput, setLateApiKeyInput] = useState('');
   const [connectingLate, setConnectingLate] = useState(false);
 
-  // Account linking state (for grouping Late accounts with different handles)
-  const [accountLinkingMode, setAccountLinkingMode] = useState(false);
+  // Account linking state - scoped per artist to prevent cross-contamination
+  const [accountLinkingArtistId, setAccountLinkingArtistId] = useState(null); // null = off, artistId = linking for that artist
   const [selectedAccountsToLink, setSelectedAccountsToLink] = useState([]);
 
   // Video Upload state
@@ -3338,7 +3338,7 @@ const StickToMusic = () => {
                       if (allAccountIds.length >= 2) {
                         linkAccounts(artist.id, allAccountIds);
                         setSelectedAccountsToLink([]);
-                        setAccountLinkingMode(false);
+                        setAccountLinkingArtistId(null);
                         // Force re-render by updating latePages reference
                         setLatePages([...latePages]);
                       }
@@ -3358,12 +3358,14 @@ const StickToMusic = () => {
                       );
                     };
 
+                    const isLinkingThisArtist = accountLinkingArtistId === artist.id;
+
                     return (
                       <div key={artist.id}>
                         <div className="flex items-center justify-between mb-3">
                           <h3 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">{artist.name}</h3>
                           <div className="flex gap-2">
-                            {accountLinkingMode ? (
+                            {isLinkingThisArtist ? (
                               <>
                                 <button
                                   onClick={handleLinkSelected}
@@ -3373,7 +3375,7 @@ const StickToMusic = () => {
                                   Link Selected ({selectedAccountsToLink.length})
                                 </button>
                                 <button
-                                  onClick={() => { setAccountLinkingMode(false); setSelectedAccountsToLink([]); }}
+                                  onClick={() => { setAccountLinkingArtistId(null); setSelectedAccountsToLink([]); }}
                                   className="px-3 py-1 text-xs bg-zinc-700 hover:bg-zinc-600 rounded-lg transition"
                                 >
                                   Cancel
@@ -3381,7 +3383,7 @@ const StickToMusic = () => {
                               </>
                             ) : (
                               <button
-                                onClick={() => setAccountLinkingMode(true)}
+                                onClick={() => { setAccountLinkingArtistId(artist.id); setSelectedAccountsToLink([]); }}
                                 className="px-3 py-1 text-xs text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition"
                               >
                                 🔗 Link Accounts
@@ -3393,7 +3395,7 @@ const StickToMusic = () => {
                           <table className="w-full min-w-[600px]">
                             <thead>
                               <tr className="border-b border-zinc-800">
-                                {accountLinkingMode && (
+                                {isLinkingThisArtist && (
                                   <th className="w-10 p-3 sm:p-4"></th>
                                 )}
                                 <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Handle</th>
@@ -3402,13 +3404,13 @@ const StickToMusic = () => {
                                 <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Followers</th>
                                 <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Views</th>
                                 <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Status</th>
-                                {!accountLinkingMode && <th className="w-10 p-3 sm:p-4"></th>}
+                                {!isLinkingThisArtist && <th className="w-10 p-3 sm:p-4"></th>}
                               </tr>
                             </thead>
                             <tbody>
                               {uniquePages.map((page) => (
                                 <tr key={page.linkedAccountIds.join('-')} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition">
-                                  {accountLinkingMode && (
+                                  {isLinkingThisArtist && (
                                     <td className="p-3 sm:p-4">
                                       <input
                                         type="checkbox"
@@ -3460,7 +3462,7 @@ const StickToMusic = () => {
                                   <td className="p-3 sm:p-4">
                                     <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(page.status)}`}>{page.status}</span>
                                   </td>
-                                  {!accountLinkingMode && (
+                                  {!isLinkingThisArtist && (
                                     <td className="p-3 sm:p-4">
                                       {page.isLinkedGroup && (
                                         <button

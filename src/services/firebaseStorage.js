@@ -53,9 +53,10 @@ export { firebaseApp, db };
  * @param {File} file - The file to upload
  * @param {string} folder - The folder path (e.g., 'videos', 'audio')
  * @param {function} onProgress - Progress callback (0-100)
+ * @param {object} options - Additional options (e.g., { onCancel: callback })
  * @returns {Promise<{url: string, path: string}>}
  */
-export async function uploadFile(file, folder = 'uploads', onProgress = null) {
+export async function uploadFile(file, folder = 'uploads', onProgress = null, options = {}) {
   // Validate file size
   if (file.size > MAX_FILE_SIZE) {
     throw new Error(`File too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
@@ -82,6 +83,14 @@ export async function uploadFile(file, folder = 'uploads', onProgress = null) {
 
   return new Promise((resolve, reject) => {
     const uploadTask = uploadBytesResumable(storageRef, file);
+
+    // Expose cancel capability to caller
+    if (options.onCancel) {
+      options.onCancel(() => {
+        console.log('Cancelling upload for:', file.name);
+        uploadTask.cancel();
+      });
+    }
 
     uploadTask.on(
       'state_changed',

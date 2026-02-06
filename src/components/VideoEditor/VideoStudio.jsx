@@ -20,6 +20,13 @@ import {
   getCreatedContent,
   addCreatedVideo,
   updateCreatedVideo,
+  deleteCreatedVideo,
+  addCreatedSlideshow,
+  updateCreatedSlideshow,
+  deleteCreatedSlideshow,
+  addLyrics as addLyricsToLibrary,
+  updateLyrics as updateLyricsInLibrary,
+  deleteLyrics as deleteLyricsFromLibrary,
   MEDIA_TYPES,
   STARTER_TEMPLATES
 } from '../../services/libraryService';
@@ -218,6 +225,7 @@ const VideoStudio = ({
   }, [location.pathname, currentView]);
   const [selectedArtist, setSelectedArtist] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [createdContentVersion, setCreatedContentVersion] = useState(0); // Bump to refresh library dashboard
   const [uploadProgress, setUploadProgress] = useState(null); // Track upload progress
   const [sessionRestored, setSessionRestored] = useState(false);
 
@@ -229,6 +237,19 @@ const VideoStudio = ({
       instagramId: ids.instagram
     }));
   }, [lateAccountIds]);
+
+  // Synthetic category for library-mode ContentLibrary (dashboard)
+  // createdContentVersion triggers re-computation after add/delete/approve/update
+  const libraryCategory = useMemo(() => {
+    if (!USE_LIBRARY_SYSTEM || !currentArtistId) return null;
+    const content = getCreatedContent(currentArtistId);
+    return {
+      id: 'library-created',
+      name: 'Created Content',
+      createdVideos: content.videos || [],
+      slideshows: content.slideshows || [],
+    };
+  }, [currentArtistId, createdContentVersion]);
 
   // Default categories for fresh installs
   // accountHandle links category to Late.co account for auto-scheduling
@@ -537,12 +558,34 @@ const VideoStudio = ({
   const handleCloseEditor = useCallback(() => {
     setShowEditor(false);
     setEditingVideo(null);
+    // Clear library selection so stale clips don't appear next time
+    setSelectedLibraryMedia({ videos: [], audio: null, images: [] });
+    setPullFromCollection(null);
   }, []);
 
   const handleSaveVideo = useCallback((videoData) => {
-    if (!selectedCategory) return;
+    // Library mode: save via libraryService when no category is selected
+    if (!selectedCategory) {
+      if (USE_LIBRARY_SYSTEM && currentArtistId) {
+        const savedVideo = addCreatedVideo(currentArtistId, {
+          ...videoData,
+          id: videoData.id || `video_${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          status: VIDEO_STATUS.DRAFT
+        });
+        console.log('[VideoStudio] Saved video via library system:', savedVideo.id);
+        setCreatedContentVersion(v => v + 1);
+        setShowEditor(false);
+        setEditingVideo(null);
+        setSelectedLibraryMedia({ videos: [], audio: null, images: [] });
+        setPullFromCollection(null);
+        setCurrentView('library');
+        setStudioMode('videos');
+      }
+      return;
+    }
 
-    // Build the updated category data
+    // Category mode: save to category (legacy flow)
     const updateCategory = (cat) => {
       if (cat.id !== selectedCategory.id) return cat;
 
@@ -580,7 +623,7 @@ const VideoStudio = ({
     // Navigate to content library after saving
     setCurrentView('library');
     setStudioMode('videos');
-  }, [selectedCategory]);
+  }, [selectedCategory, currentArtistId]);
 
   const handleUploadVideos = useCallback(async (files) => {
     if (!selectedCategory) return;
@@ -800,7 +843,11 @@ const VideoStudio = ({
 
   // Save lyrics template to an audio track
   const handleSaveLyricsToAudio = useCallback((audioId, lyricsData) => {
-    if (!selectedCategory) return;
+    if (!selectedCategory) {
+      // Library mode: log but don't crash — lyrics-to-audio is a category feature
+      console.log('[VideoStudio] Skipping lyrics-to-audio save (library mode)');
+      return;
+    }
 
     const lyricsEntry = {
       id: `lyrics_${Date.now()}`,
@@ -831,9 +878,20 @@ const VideoStudio = ({
   }, [selectedCategory]);
 
   const handleDeleteVideo = useCallback(async (videoId) => {
-    if (!selectedCategory) return;
+    // Library mode: delete via libraryService
+    if (!selectedCategory) {
+      if (USE_LIBRARY_SYSTEM && currentArtistId) {
+        const content = getCreatedContent(currentArtistId);
+        const video = content.videos.find(v => v.id === videoId);
+        if (video?.storagePath) await deleteFile(video.storagePath);
+        if (video?.thumbnailPath) await deleteFile(video.thumbnailPath);
+        deleteCreatedVideo(currentArtistId, videoId);
+        setCreatedContentVersion(v => v + 1);
+      }
+      return;
+    }
 
-    // Find the video to get its storage path
+    // Category mode: find the video to get its storage path
     const video = selectedCategory.createdVideos.find(v => v.id === videoId);
 
     // Delete from Firebase Storage if there's a storage path
@@ -969,7 +1027,17 @@ const VideoStudio = ({
   }, [selectedCategory]);
 
   const handleApproveVideo = useCallback((videoId) => {
-    if (!selectedCategory) return;
+    // Library mode: toggle approve via libraryService
+    if (!selectedCategory) {
+      if (USE_LIBRARY_SYSTEM && currentArtistId) {
+        const content = getCreatedContent(currentArtistId);
+        const video = content.videos.find(v => v.id === videoId);
+        const newStatus = video?.status === VIDEO_STATUS.APPROVED ? VIDEO_STATUS.DRAFT : VIDEO_STATUS.APPROVED;
+        updateCreatedVideo(currentArtistId, videoId, { status: newStatus });
+        setCreatedContentVersion(v => v + 1);
+      }
+      return;
+    }
 
     setCategories(prev => prev.map(cat =>
       cat.id === selectedCategory.id
@@ -988,11 +1056,18 @@ const VideoStudio = ({
         v.id === videoId ? { ...v, status: v.status === VIDEO_STATUS.APPROVED ? VIDEO_STATUS.DRAFT : VIDEO_STATUS.APPROVED } : v
       )
     } : prev);
-  }, [selectedCategory]);
+  }, [selectedCategory, currentArtistId]);
 
   // Update a video with new fields (used after rendering)
   const handleUpdateVideo = useCallback((videoId, updates) => {
-    if (!selectedCategory) return;
+    // Library mode: update via libraryService
+    if (!selectedCategory) {
+      if (USE_LIBRARY_SYSTEM && currentArtistId) {
+        updateCreatedVideo(currentArtistId, videoId, updates);
+        setCreatedContentVersion(v => v + 1);
+      }
+      return;
+    }
 
     setCategories(prev => prev.map(cat =>
       cat.id === selectedCategory.id
@@ -1011,7 +1086,7 @@ const VideoStudio = ({
         v.id === videoId ? { ...v, ...updates } : v
       )
     } : prev);
-  }, [selectedCategory]);
+  }, [selectedCategory, currentArtistId]);
 
   const handleCreateCategory = useCallback((categoryData) => {
     const newCategory = {
@@ -1049,7 +1124,11 @@ const VideoStudio = ({
   const handleMakeSlideshow = useCallback((options = null) => {
     if (options?.batch) {
       // Batch mode - create 10 separate slideshows instantly (like video batch)
-      if (!selectedCategory) return;
+      if (!selectedCategory) {
+        // Library mode: batch slideshows not supported
+        alert('Batch slideshows require a category. Please select one or use manual creation.');
+        return;
+      }
 
       const imagesA = selectedCategory.imagesA || [];
       const imagesB = selectedCategory.imagesB || [];
@@ -1127,7 +1206,7 @@ const VideoStudio = ({
       setShowSlideshowEditor(true);
       setStudioMode('slideshows'); // Ensure studioMode is set for breadcrumb
     }
-  }, [selectedCategory, setCategories, setSelectedCategory, setCurrentView]);
+  }, [selectedCategory, currentArtistId, setCategories, setSelectedCategory, setCurrentView]);
 
   const handleCloseSlideshowEditor = useCallback(() => {
     setShowSlideshowEditor(false);
@@ -1135,7 +1214,24 @@ const VideoStudio = ({
   }, []);
 
   const handleSaveSlideshow = useCallback((slideshowData) => {
-    if (!selectedCategory) return;
+    // Library mode: save via libraryService
+    if (!selectedCategory) {
+      if (USE_LIBRARY_SYSTEM && currentArtistId) {
+        const savedSlideshow = addCreatedSlideshow(currentArtistId, {
+          ...slideshowData,
+          id: slideshowData.id || `slideshow_${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          status: 'draft'
+        });
+        console.log('[VideoStudio] Saved slideshow via library system:', savedSlideshow.id);
+        setCreatedContentVersion(v => v + 1);
+        setShowSlideshowEditor(false);
+        setEditingSlideshow(null);
+        setCurrentView('slideshows');
+        setStudioMode('slideshows');
+      }
+      return;
+    }
 
     const updateCategory = (cat) => {
       if (cat.id !== selectedCategory.id) return cat;
@@ -1168,7 +1264,7 @@ const VideoStudio = ({
 
     setShowSlideshowEditor(false);
     setEditingSlideshow(null);
-  }, [selectedCategory]);
+  }, [selectedCategory, currentArtistId]);
 
   // ============================================
   // IMAGE BANK HANDLERS (for Slideshow mode)
@@ -1252,8 +1348,16 @@ const VideoStudio = ({
 
   // Delete a slideshow
   const handleDeleteSlideshow = useCallback((slideshowId) => {
-    if (!selectedCategory) return;
+    // Library mode: delete via libraryService
+    if (!selectedCategory) {
+      if (USE_LIBRARY_SYSTEM && currentArtistId) {
+        deleteCreatedSlideshow(currentArtistId, slideshowId);
+        setCreatedContentVersion(v => v + 1);
+      }
+      return;
+    }
 
+    // Category mode
     setCategories(prev => prev.map(cat =>
       cat.id === selectedCategory.id
         ? { ...cat, slideshows: (cat.slideshows || []).filter(s => s.id !== slideshowId) }
@@ -1264,7 +1368,7 @@ const VideoStudio = ({
       ...prev,
       slideshows: (prev.slideshows || []).filter(s => s.id !== slideshowId)
     } : prev);
-  }, [selectedCategory]);
+  }, [selectedCategory, currentArtistId]);
 
   // ============================================
   // LYRIC BANK HANDLERS (shared between modes)
@@ -1272,13 +1376,24 @@ const VideoStudio = ({
 
   // Add lyrics to the bank
   const handleAddLyrics = useCallback((lyricsData) => {
-    if (!selectedCategory) return;
+    // Library mode: save via libraryService
+    if (!selectedCategory) {
+      if (USE_LIBRARY_SYSTEM && currentArtistId) {
+        return addLyricsToLibrary(currentArtistId, {
+          title: lyricsData.title || 'Untitled Lyrics',
+          content: lyricsData.content || '',
+          words: lyricsData.words || null
+        });
+      }
+      return;
+    }
 
+    // Category mode
     const newLyrics = {
       id: `lyrics_${Date.now()}`,
       title: lyricsData.title || 'Untitled Lyrics',
       content: lyricsData.content || '',
-      words: lyricsData.words || null, // Include pre-timed words if provided
+      words: lyricsData.words || null,
       createdAt: new Date().toISOString()
     };
 
@@ -1294,12 +1409,19 @@ const VideoStudio = ({
     } : prev);
 
     return newLyrics;
-  }, [selectedCategory]);
+  }, [selectedCategory, currentArtistId]);
 
   // Update lyrics
   const handleUpdateLyrics = useCallback((lyricsId, updates) => {
-    if (!selectedCategory) return;
+    // Library mode
+    if (!selectedCategory) {
+      if (USE_LIBRARY_SYSTEM && currentArtistId) {
+        updateLyricsInLibrary(currentArtistId, lyricsId, updates);
+      }
+      return;
+    }
 
+    // Category mode
     setCategories(prev => prev.map(cat =>
       cat.id === selectedCategory.id
         ? {
@@ -1317,12 +1439,19 @@ const VideoStudio = ({
         l.id === lyricsId ? { ...l, ...updates, updatedAt: new Date().toISOString() } : l
       )
     } : prev);
-  }, [selectedCategory]);
+  }, [selectedCategory, currentArtistId]);
 
   // Delete lyrics from bank
   const handleDeleteLyrics = useCallback((lyricsId) => {
-    if (!selectedCategory) return;
+    // Library mode
+    if (!selectedCategory) {
+      if (USE_LIBRARY_SYSTEM && currentArtistId) {
+        deleteLyricsFromLibrary(currentArtistId, lyricsId);
+      }
+      return;
+    }
 
+    // Category mode
     setCategories(prev => prev.map(cat =>
       cat.id === selectedCategory.id
         ? { ...cat, lyrics: (cat.lyrics || []).filter(l => l.id !== lyricsId) }
@@ -1333,10 +1462,10 @@ const VideoStudio = ({
       ...prev,
       lyrics: (prev.lyrics || []).filter(l => l.id !== lyricsId)
     } : prev);
-  }, [selectedCategory]);
+  }, [selectedCategory, currentArtistId]);
 
   const categoryPresets = presets.filter(p =>
-    p.categoryId === selectedCategory?.id || p.categoryId === null
+    p.categoryId === selectedCategory?.id || p.categoryId === null || !p.categoryId
   );
 
   return (
@@ -1404,26 +1533,27 @@ const VideoStudio = ({
             ...styles.breadcrumb,
             ...(isMobile ? { fontSize: '11px', padding: '4px 8px', overflowX: 'auto', maxWidth: '100%' } : {})
           }}>
-            {/* Root: Categories */}
-            <button
-              style={{
-                ...styles.breadcrumbLink,
-                ...((!selectedCategory && !showEditor && !showSlideshowEditor) ? styles.breadcrumbCurrent : {})
-              }}
-              onClick={() => {
-                setCurrentView('home');
-                setSelectedCategory(null);
-                setStudioMode(null);
-                setShowEditor(false);
-                setShowSlideshowEditor(false);
-              }}
-            >
-              Categories
-            </button>
-
-            {/* Category Name */}
+            {/* CATEGORY-BASED MODE: When selectedCategory exists */}
             {selectedCategory && (
               <>
+                {/* Root: Categories */}
+                <button
+                  style={{
+                    ...styles.breadcrumbLink,
+                    ...((!showEditor && !showSlideshowEditor) ? styles.breadcrumbCurrent : {})
+                  }}
+                  onClick={() => {
+                    setCurrentView('home');
+                    setSelectedCategory(null);
+                    setStudioMode(null);
+                    setShowEditor(false);
+                    setShowSlideshowEditor(false);
+                  }}
+                >
+                  Categories
+                </button>
+
+                {/* Category Name */}
                 <span style={styles.breadcrumbSep}>/</span>
                 <button
                   style={{
@@ -1439,53 +1569,133 @@ const VideoStudio = ({
                 >
                   {selectedCategory.name}
                 </button>
+
+                {/* Mode: Videos or Slideshows */}
+                {(studioMode || currentView === 'library' || currentView === 'slideshows' || showEditor || showSlideshowEditor) && (
+                  <>
+                    <span style={styles.breadcrumbSep}>/</span>
+                    <button
+                      style={{
+                        ...styles.breadcrumbLink,
+                        ...((currentView === 'home' && studioMode && !showEditor && !showSlideshowEditor) ? styles.breadcrumbCurrent : {})
+                      }}
+                      onClick={() => {
+                        setCurrentView('home');
+                        // Keep studioMode, determine from context
+                        const mode = studioMode || (currentView === 'slideshows' || showSlideshowEditor ? 'slideshows' : 'videos');
+                        setStudioMode(mode);
+                        setShowEditor(false);
+                        setShowSlideshowEditor(false);
+                      }}
+                    >
+                      {(studioMode === 'slideshows' || currentView === 'slideshows' || showSlideshowEditor) ? 'Slideshows' : 'Videos'}
+                    </button>
+                  </>
+                )}
+
+                {/* Dashboard (Content Library) */}
+                {(currentView === 'library' || currentView === 'slideshows') && !showEditor && !showSlideshowEditor && (
+                  <>
+                    <span style={styles.breadcrumbSep}>/</span>
+                    <span style={styles.breadcrumbCurrent}>Dashboard</span>
+                  </>
+                )}
+
+                {/* Editor */}
+                {showEditor && (
+                  <>
+                    <span style={styles.breadcrumbSep}>/</span>
+                    <span style={styles.breadcrumbCurrent}>Editor</span>
+                  </>
+                )}
+
+                {/* Slideshow Editor */}
+                {showSlideshowEditor && (
+                  <>
+                    <span style={styles.breadcrumbSep}>/</span>
+                    <span style={styles.breadcrumbCurrent}>Editor</span>
+                  </>
+                )}
               </>
             )}
 
-            {/* Mode: Videos or Slideshows */}
-            {selectedCategory && (studioMode || currentView === 'library' || currentView === 'slideshows' || showEditor || showSlideshowEditor) && (
+            {/* LIBRARY-BASED MODE: When USE_LIBRARY_SYSTEM is enabled and no category is selected */}
+            {USE_LIBRARY_SYSTEM && !selectedCategory && (
               <>
-                <span style={styles.breadcrumbSep}>/</span>
+                {/* Dashboard */}
                 <button
                   style={{
                     ...styles.breadcrumbLink,
-                    ...((currentView === 'home' && studioMode && !showEditor && !showSlideshowEditor) ? styles.breadcrumbCurrent : {})
+                    ...(currentView === 'home' && !showEditor && !showSlideshowEditor ? styles.breadcrumbCurrent : {})
                   }}
                   onClick={() => {
                     setCurrentView('home');
-                    // Keep studioMode, determine from context
-                    const mode = studioMode || (currentView === 'slideshows' || showSlideshowEditor ? 'slideshows' : 'videos');
-                    setStudioMode(mode);
+                    setStudioMode(null);
                     setShowEditor(false);
                     setShowSlideshowEditor(false);
                   }}
                 >
-                  {(studioMode === 'slideshows' || currentView === 'slideshows' || showSlideshowEditor) ? 'Slideshows' : 'Videos'}
+                  Dashboard
                 </button>
-              </>
-            )}
 
-            {/* Dashboard (Content Library) */}
-            {selectedCategory && (currentView === 'library' || currentView === 'slideshows') && !showEditor && !showSlideshowEditor && (
-              <>
-                <span style={styles.breadcrumbSep}>/</span>
-                <span style={styles.breadcrumbCurrent}>Dashboard</span>
-              </>
-            )}
+                {/* Studio */}
+                {(currentView === 'library' || currentView === 'slideshows' || showEditor || showSlideshowEditor) && (
+                  <>
+                    <span style={styles.breadcrumbSep}>/</span>
+                    <button
+                      style={{
+                        ...styles.breadcrumbLink,
+                        ...(currentView === 'home' && !showEditor && !showSlideshowEditor ? styles.breadcrumbCurrent : {})
+                      }}
+                      onClick={() => {
+                        setCurrentView('home');
+                        setStudioMode(null);
+                        setShowEditor(false);
+                        setShowSlideshowEditor(false);
+                      }}
+                    >
+                      Studio
+                    </button>
+                  </>
+                )}
 
-            {/* Editor */}
-            {selectedCategory && showEditor && (
-              <>
-                <span style={styles.breadcrumbSep}>/</span>
-                <span style={styles.breadcrumbCurrent}>Editor</span>
-              </>
-            )}
+                {/* Videos or Slideshows - Library View */}
+                {(currentView === 'library' || currentView === 'slideshows' || showEditor || showSlideshowEditor) && (
+                  <>
+                    <span style={styles.breadcrumbSep}>/</span>
+                    <button
+                      style={{
+                        ...styles.breadcrumbLink,
+                        ...((currentView === 'library' || currentView === 'slideshows') && !showEditor && !showSlideshowEditor ? styles.breadcrumbCurrent : {})
+                      }}
+                      onClick={() => {
+                        // Navigate to the appropriate library view
+                        const targetView = studioMode === 'slideshows' || currentView === 'slideshows' || showSlideshowEditor ? 'slideshows' : 'library';
+                        setCurrentView(targetView);
+                        setShowEditor(false);
+                        setShowSlideshowEditor(false);
+                      }}
+                    >
+                      {studioMode === 'slideshows' || currentView === 'slideshows' || showSlideshowEditor ? 'Slideshows' : 'Videos'}
+                    </button>
+                  </>
+                )}
 
-            {/* Slideshow Editor */}
-            {selectedCategory && showSlideshowEditor && (
-              <>
-                <span style={styles.breadcrumbSep}>/</span>
-                <span style={styles.breadcrumbCurrent}>Editor</span>
+                {/* Editor */}
+                {showEditor && (
+                  <>
+                    <span style={styles.breadcrumbSep}>/</span>
+                    <span style={styles.breadcrumbCurrent}>Editor</span>
+                  </>
+                )}
+
+                {/* Slideshow Editor */}
+                {showSlideshowEditor && (
+                  <>
+                    <span style={styles.breadcrumbSep}>/</span>
+                    <span style={styles.breadcrumbCurrent}>Editor</span>
+                  </>
+                )}
               </>
             )}
           </div>
@@ -1608,9 +1818,9 @@ const VideoStudio = ({
           />
         )}
 
-        {currentView === 'library' && selectedCategory && (
+        {currentView === 'library' && (selectedCategory || (USE_LIBRARY_SYSTEM && libraryCategory)) && (
           <ContentLibrary
-            category={selectedCategory}
+            category={selectedCategory || libraryCategory}
             contentType="videos"
             onBack={() => setCurrentView('home')}
             onMakeVideo={handleMakeVideo}
@@ -1625,9 +1835,9 @@ const VideoStudio = ({
           />
         )}
 
-        {currentView === 'slideshows' && selectedCategory && (
+        {currentView === 'slideshows' && (selectedCategory || (USE_LIBRARY_SYSTEM && libraryCategory)) && (
           <ContentLibrary
-            category={selectedCategory}
+            category={selectedCategory || libraryCategory}
             contentType="slideshows"
             onBack={() => setCurrentView('home')}
             onMakeSlideshow={handleMakeSlideshow}
@@ -1643,10 +1853,31 @@ const VideoStudio = ({
       </main>
 
       {/* Editor Modal with ErrorBoundary to prevent blank page crashes */}
-      {showEditor && selectedCategory && (
+      {showEditor && (selectedCategory || USE_LIBRARY_SYSTEM) && (
         <EditorErrorBoundary onClose={handleCloseEditor}>
           <VideoEditorModal
-            category={selectedCategory}
+            category={selectedCategory || {
+              id: 'library-session',
+              name: 'Library',
+              videos: selectedLibraryMedia.videos.map(v => ({
+                ...v,
+                src: v.url,
+                localUrl: v.localUrl || v.url,
+                thumbnail: v.thumbnail || null,
+                name: v.name || v.metadata?.originalName || 'Clip'
+              })),
+              audio: selectedLibraryMedia.audio ? [{
+                ...selectedLibraryMedia.audio,
+                src: selectedLibraryMedia.audio.url,
+                localUrl: selectedLibraryMedia.audio.localUrl || selectedLibraryMedia.audio.url,
+                savedLyrics: []
+              }] : [],
+              lyrics: [],
+              createdVideos: [],
+              defaultPreset: null,
+              captionTemplate: '',
+              defaultHashtags: ''
+            }}
             existingVideo={editingVideo}
             presets={categoryPresets}
             onSave={handleSaveVideo}
@@ -1665,9 +1896,15 @@ const VideoStudio = ({
       )}
 
       {/* Slideshow Editor Modal */}
-      {showSlideshowEditor && selectedCategory && (
+      {showSlideshowEditor && (selectedCategory || (USE_LIBRARY_SYSTEM && currentArtistId)) && (
         <SlideshowEditor
-          category={selectedCategory}
+          category={selectedCategory || {
+            id: 'library-session',
+            name: 'Library',
+            imagesA: [],
+            imagesB: [],
+            slideshows: []
+          }}
           existingSlideshow={editingSlideshow}
           batchMode={slideshowBatchMode}
           onSave={handleSaveSlideshow}

@@ -36,6 +36,7 @@ const ContentLibrary = ({
   const [dateRange, setDateRange] = useState('all');
   const [selectedVideoIds, setSelectedVideoIds] = useState(new Set());
   const [exportingVideo, setExportingVideo] = useState(null);
+  const [previewingVideo, setPreviewingVideo] = useState(null);
 
   // Rendering state
   const [renderingVideoId, setRenderingVideoId] = useState(null);
@@ -220,6 +221,7 @@ const ContentLibrary = ({
           <select value={filter} onChange={(e) => setFilter(e.target.value)} style={styles.statusFilter}>
             <option value="all">All statuses</option>
             <option value="draft">Drafts</option>
+            <option value="completed">Completed</option>
             <option value="approved">Approved</option>
           </select>
         </div>
@@ -280,6 +282,7 @@ const ContentLibrary = ({
                   onApprove={() => onApproveVideo(item.id)}
                   onPost={() => setExportingVideo(item)}
                   onRender={() => handleRenderVideo(item)}
+                  onPreview={() => setPreviewingVideo(item)}
                   isRendering={renderingVideoId === item.id}
                   renderProgress={renderingVideoId === item.id ? renderProgress : 0}
                 />
@@ -422,11 +425,60 @@ const ContentLibrary = ({
           }}
         />
       )}
+
+      {/* Video Preview Modal */}
+      {previewingVideo && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 10000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }} onClick={() => setPreviewingVideo(null)}>
+          <div style={{
+            position: 'relative', maxWidth: '90vw', maxHeight: '90vh',
+            backgroundColor: '#111', borderRadius: 12, overflow: 'hidden'
+          }} onClick={e => e.stopPropagation()}>
+            <button onClick={() => setPreviewingVideo(null)} style={{
+              position: 'absolute', top: 8, right: 8, zIndex: 10,
+              background: 'rgba(0,0,0,0.6)', border: 'none', color: 'white',
+              borderRadius: '50%', width: 32, height: 32, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18
+            }}>×</button>
+            {previewingVideo.cloudUrl ? (
+              <video
+                src={previewingVideo.cloudUrl}
+                controls
+                autoPlay
+                style={{ maxWidth: '90vw', maxHeight: '85vh' }}
+              />
+            ) : previewingVideo.clips?.length > 0 ? (
+              <video
+                src={previewingVideo.clips[0].url || previewingVideo.clips[0].localUrl}
+                controls
+                autoPlay
+                style={{ maxWidth: '90vw', maxHeight: '85vh' }}
+              />
+            ) : (
+              <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>
+                No preview available - video needs to be rendered first
+              </div>
+            )}
+            <div style={{ padding: '12px 16px', borderTop: '1px solid #333' }}>
+              <div style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>
+                {previewingVideo.name || previewingVideo.textOverlay || 'Untitled Video'}
+              </div>
+              <div style={{ color: '#888', fontSize: 12, marginTop: 4 }}>
+                {previewingVideo.status} · {previewingVideo.clips?.length || 0} clips
+                {previewingVideo.cloudUrl && ' · Rendered'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onApprove, onPost, onRender, isRendering, renderProgress }) => {
+const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onApprove, onPost, onRender, isRendering, renderProgress, onPreview }) => {
   const [showActions, setShowActions] = useState(false);
 
   // UI-34: Prevent action buttons from triggering selection
@@ -447,7 +499,7 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
         <input type="checkbox" checked={isSelected} onChange={onToggleSelect} style={styles.checkbox} />
       </div>
 
-      <div style={styles.videoThumb}>
+      <div style={styles.videoThumb} onClick={() => !isRendering && onPreview?.(video)}>
         {video.thumbnail ? (
           <img src={video.thumbnail} alt="" style={styles.videoThumbImg} />
         ) : video.cloudUrl ? (
@@ -536,7 +588,31 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
                 🎬 Export
               </button>
             ) : (
-              <button style={styles.actionBtnPost} onClick={(e) => handleActionClick(e, onPost)}>Post</button>
+              <>
+                {video.cloudUrl && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const a = document.createElement('a');
+                      a.href = video.cloudUrl;
+                      a.download = `${video.name || video.textOverlay || 'video'}_${video.id}.mp4`;
+                      a.target = '_blank';
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                    }}
+                    style={{
+                      padding: '4px 8px', fontSize: 11, borderRadius: 4,
+                      border: '1px solid #4ade80', color: '#4ade80',
+                      background: 'transparent', cursor: 'pointer'
+                    }}
+                    title="Download rendered video"
+                  >
+                    Download
+                  </button>
+                )}
+                <button style={styles.actionBtnPost} onClick={(e) => handleActionClick(e, onPost)}>Post</button>
+              </>
             )}
             <button style={styles.actionBtnDel} onClick={(e) => handleActionClick(e, onDelete)}>✕</button>
           </div>

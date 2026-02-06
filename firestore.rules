@@ -54,6 +54,20 @@ service cloud.firestore {
       allow read: if isOperatorOrAbove();
       allow create: if isConductor();
       allow update, delete: if isConductor() || canAccessArtist(artistId);
+
+      // Library subcollections (media items, collections, onboarding)
+      // Nested under: artists/{artistId}/library/{docId}/{subcollection}/{itemId}
+      match /library/{document=**} {
+        allow read: if isOperatorOrAbove();
+        allow write: if isConductor() || canAccessArtist(artistId);
+      }
+    }
+
+    // Content Templates collection (caption/hashtag templates per artist)
+    // - Operators can read/write templates for their assigned artists
+    match /contentTemplates/{artistId} {
+      allow read: if isOperatorOrAbove();
+      allow write: if isConductor() || canAccessArtist(artistId);
     }
 
     // Allowed users collection (access control list)

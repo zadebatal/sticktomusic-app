@@ -74,6 +74,9 @@ const StudioHome = ({
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [libraryRefreshTrigger, setLibraryRefreshTrigger] = useState(0);
 
+  // Upload cancellation
+  const cancelFunctionsRef = useRef([]);
+
   // Audio clip selector
   const [pendingAudio, setPendingAudio] = useState(null);
   const [editingAudio, setEditingAudio] = useState(null);
@@ -169,6 +172,7 @@ const StudioHome = ({
 
     setIsUploading(true);
     setUploadProgress({ current: 0, total: files.length });
+    cancelFunctionsRef.current = [];
 
     const uploadedItems = [];
     const failedFiles = [];
@@ -184,7 +188,11 @@ const StudioHome = ({
         const folder = type === MEDIA_TYPES.VIDEO ? 'videos'
           : type === MEDIA_TYPES.IMAGE ? 'images' : 'audio';
         console.log('[StudioHome] Calling uploadFile to folder:', folder);
-        const { url, path } = await uploadFile(file, folder);
+        const { url, path } = await uploadFile(file, folder, null, {
+          onCancel: (cancelFn) => {
+            cancelFunctionsRef.current.push(cancelFn);
+          }
+        });
         console.log('[StudioHome] Upload successful! URL:', url?.substring(0, 50) + '...');
 
         // Get metadata
@@ -305,12 +313,26 @@ const StudioHome = ({
     handleFileUpload(files, MEDIA_TYPES.IMAGE);
   };
 
+  // Helper function to format time mm:ss
+  const formatTime = (seconds) => {
+    if (!seconds || seconds < 0) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${String(secs).padStart(2, '0')}`;
+  };
+
   // Audio clip handling
   const handleClipSave = async (clipData) => {
     console.log('[StudioHome] handleClipSave called with clipData:', clipData);
 
     if (!pendingAudio) {
       console.error('[StudioHome] No pendingAudio - cannot save');
+      return;
+    }
+
+    if (!artistId) {
+      console.error('[StudioHome] No artistId - cannot save audio clip');
+      alert('Error: No artist selected. Please select an artist first.');
       return;
     }
 
@@ -330,21 +352,31 @@ const StudioHome = ({
     }
 
     setIsUploading(true);
+    cancelFunctionsRef.current = [];
 
     try {
-      const { url, path } = await uploadFile(pendingAudio.file, 'audio');
+      const { url, path } = await uploadFile(pendingAudio.file, 'audio', null, {
+        onCancel: (cancelFn) => {
+          cancelFunctionsRef.current.push(cancelFn);
+        }
+      });
       console.log('[StudioHome] Audio uploaded to Firebase:', url?.substring(0, 50) + '...');
+
+      // Create a descriptive name for the trimmed clip
+      const clipName = `${pendingAudio.name} (${formatTime(clipData.startTime)}-${formatTime(clipData.endTime)})`;
 
       const audioItem = {
         type: MEDIA_TYPES.AUDIO,
-        name: pendingAudio.name,
+        name: clipName,
         url,
         storagePath: path,
         duration: calculatedDuration,
         metadata: {
           startTime: clipData.startTime,
           endTime: clipData.endTime,
-          fullDuration: clipData.fullDuration || clipData.endTime
+          fullDuration: clipData.fullDuration || clipData.endTime,
+          originalName: pendingAudio.name,
+          originalMediaId: null // Will be set if this is based on an existing library item
         }
       };
 
@@ -372,6 +404,21 @@ const StudioHome = ({
   const handleClipCancel = () => {
     if (pendingAudio?.url) URL.revokeObjectURL(pendingAudio.url);
     setPendingAudio(null);
+  };
+
+  const handleCancelUpload = () => {
+    console.log('[StudioHome] Cancelling all active uploads');
+    // Call all accumulated cancel functions
+    cancelFunctionsRef.current.forEach(cancelFn => {
+      try {
+        cancelFn();
+      } catch (error) {
+        console.error('[StudioHome] Error cancelling upload:', error);
+      }
+    });
+    cancelFunctionsRef.current = [];
+    setIsUploading(false);
+    setUploadProgress({ current: 0, total: 0 });
   };
 
   // =====================
@@ -707,7 +754,11 @@ const StudioHome = ({
               artistId={artistId}
               value={selectedCollection}
               onChange={setSelectedCollection}
-              mediaType={studioMode === 'videos' ? MEDIA_TYPES.VIDEO : MEDIA_TYPES.IMAGE}
+              mediaType={
+                studioMode === 'videos' ? MEDIA_TYPES.VIDEO :
+                studioMode === 'audio' ? MEDIA_TYPES.AUDIO :
+                MEDIA_TYPES.IMAGE
+              }
               isMobile={isMobile}
             />
           )}
@@ -760,6 +811,17 @@ const StudioHome = ({
                 <div style={styles.modeName}>Slideshows</div>
                 <div style={styles.modeCount}>{slideshowCount} created</div>
               </div>
+
+              <div
+                style={styles.modeCard}
+                onClick={() => onSetStudioMode('audio')}
+                onMouseEnter={(e) => e.currentTarget.style.borderColor = '#6366f1'}
+                onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'}
+              >
+                <div style={styles.modeIcon}>🎵</div>
+                <div style={styles.modeName}>Audio</div>
+                <div style={styles.modeCount}>{libraryAudio.length} clips</div>
+              </div>
             </div>
           )}
 
@@ -807,7 +869,7 @@ const StudioHome = ({
                   <input
                     ref={audioInputRef}
                     type="file"
-                    accept="audio/*"
+                    accept=".mp3,audio/mpeg"
                     onChange={handleAudioUpload}
                     style={{ display: 'none' }}
                   />
@@ -943,6 +1005,57 @@ const StudioHome = ({
             </div>
           )}
 
+          {/* Audio Mode */}
+          {studioMode === 'audio' && activeTab === 'media' && (
+            <div style={styles.librarySection}>
+              <div style={styles.libraryHeader}>
+                <span style={styles.libraryTitle}>
+                  Audio Clips ({libraryAudio.length})
+                </span>
+                <label style={styles.uploadButton}>
+                  ⬆️ Upload Audio
+                  <input
+                    ref={audioInputRef}
+                    type="file"
+                    accept=".mp3,audio/mpeg"
+                    onChange={handleAudioUpload}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+              </div>
+
+              <div style={styles.mediaGrid}>
+                <LibraryBrowser
+                  db={db}
+                  artistId={artistId}
+                  mode="audio"
+                  onSelectMedia={handleSelectMedia}
+                  selectedMediaIds={selectedMedia.audio ? [selectedMedia.audio.id] : []}
+                  allowMultiSelect={false}
+                  pullFromCollection={selectedCollection}
+                  isMobile={isMobile}
+                  compact
+                  refreshTrigger={libraryRefreshTrigger}
+                />
+              </div>
+
+              {/* Action Bar */}
+              <div style={styles.actionBar}>
+                <div style={styles.actionInfo}>
+                  {selectedMedia.audio && `Audio: ${selectedMedia.audio.name}`}
+                </div>
+                <div style={styles.actionButtons}>
+                  <button
+                    style={{...styles.actionButton, ...styles.secondaryButton}}
+                    onClick={() => onViewContent?.({ type: 'audio' })}
+                  >
+                    View Library
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Lyrics Tab */}
           {studioMode && activeTab === 'lyrics' && (
             <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
@@ -978,6 +1091,25 @@ const StudioHome = ({
               {uploadProgress.current} of {uploadProgress.total}
               {uploadProgress.name && ` - ${uploadProgress.name}`}
             </div>
+            <button
+              onClick={handleCancelUpload}
+              style={{
+                marginTop: '24px',
+                padding: '10px 24px',
+                backgroundColor: '#ef4444',
+                border: 'none',
+                borderRadius: '8px',
+                color: '#ffffff',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
+            >
+              Cancel Upload
+            </button>
           </div>
         </div>
       )}

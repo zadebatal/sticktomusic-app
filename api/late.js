@@ -22,10 +22,14 @@ const LATE_API_BASE = 'https://getlate.dev/api/v1';
 const ALLOWED_ORIGINS = [
   'https://sticktomusic.com',
   'https://www.sticktomusic.com',
-  'https://sticktomusic-app.vercel.app',
-  // Add localhost for development
-  process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : null
-].filter(Boolean);
+  'https://sticktomusic-app.vercel.app'
+];
+
+// Check if origin is localhost (any port) for development
+const isLocalhostOrigin = (origin) => {
+  if (!origin) return false;
+  return origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
+};
 
 // Initialize Firebase Admin (only once)
 let db = null;
@@ -136,9 +140,9 @@ async function verifyAuth(req) {
 }
 
 export default async function handler(req, res) {
-  // CORS - restrict to allowed origins
+  // CORS - restrict to allowed origins (allow any localhost port in dev)
   const origin = req.headers.origin;
-  if (ALLOWED_ORIGINS.includes(origin)) {
+  if (ALLOWED_ORIGINS.includes(origin) || isLocalhostOrigin(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
   res.setHeader('Access-Control-Allow-Credentials', 'true');

@@ -47,7 +47,8 @@ export const SMART_COLLECTION_IDS = {
   FAVORITES: 'smart_favorites',
   HAS_AUDIO: 'smart_has_audio',
   MOST_USED: 'smart_most_used',
-  UNUSED: 'smart_unused'
+  UNUSED: 'smart_unused',
+  AUDIO_ALL: 'smart_audio_all'
 };
 
 // Starter templates for onboarding
@@ -151,6 +152,7 @@ export const createMediaItem = ({
     type, // video | image | audio
     name,
     url, // Firebase Storage URL (permanent)
+    localUrl: url, // Alias for components that expect localUrl
     storagePath, // Path in Firebase Storage
     duration, // For video/audio
     width, // For video/image
@@ -272,6 +274,15 @@ export const createSmartCollections = () => {
       type: COLLECTION_TYPES.SMART,
       icon: '💤',
       smartCriteria: { type: 'unused' },
+      createdAt: now
+    },
+    {
+      id: SMART_COLLECTION_IDS.AUDIO_ALL,
+      name: 'All Audio',
+      description: 'All audio clips in your library',
+      type: COLLECTION_TYPES.SMART,
+      icon: '🎵',
+      smartCriteria: { type: 'audio' },
       createdAt: now
     }
   ];
@@ -798,6 +809,9 @@ const resolveSmartCollection = (library, smartCollectionId) => {
     case SMART_COLLECTION_IDS.UNUSED:
       return library.filter(item => !item.useCount || item.useCount === 0);
 
+    case SMART_COLLECTION_IDS.AUDIO_ALL:
+      return library.filter(item => item.type === MEDIA_TYPES.AUDIO);
+
     default:
       return [];
   }
@@ -1202,6 +1216,18 @@ export const subscribeToLibrary = (db, artistId, callback) => {
     (snapshot) => {
       const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       console.log('[Library] Real-time update:', items.length, 'items');
+
+      // If Firestore returns empty, check localStorage as fallback
+      // This handles the case where Firestore writes failed but localStorage has data
+      if (items.length === 0) {
+        const localItems = getLibrary(artistId);
+        if (localItems.length > 0) {
+          console.log('[Library] Firestore empty, using localStorage fallback:', localItems.length, 'items');
+          callback(localItems);
+          return;
+        }
+      }
+
       callback(items);
     },
     (error) => {

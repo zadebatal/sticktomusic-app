@@ -1219,7 +1219,7 @@ const SlideshowEditor = ({
               <input
                 ref={slideshowAudioInputRef}
                 type="file"
-                accept="audio/*"
+                accept=".mp3,audio/mpeg"
                 onChange={handleSlideshowAudioUpload}
                 style={{ display: 'none' }}
               />

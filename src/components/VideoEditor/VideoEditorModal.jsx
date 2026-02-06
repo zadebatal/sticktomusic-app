@@ -5,6 +5,7 @@ import BeatSelector from './BeatSelector';
 import LyricBank from './LyricBank';
 import { saveApiKey, loadApiKey } from '../../services/storageService';
 import { ErrorPanel, EmptyState as SharedEmptyState, useToast } from '../ui';
+import { incrementUseCount } from '../../services/libraryService';
 import {
   getTrimHash,
   getTrimBoundaries,
@@ -973,6 +974,64 @@ const VideoEditorModal = ({
     setSelectedClips([]);
     toast.success('Split clip at playhead');
   }, [clips, currentTime, getClipAtPlayhead, toast]);
+
+  // Remove/delete clips
+  const handleRemoveClips = useCallback(() => {
+    const indices = getEffectiveClipIndices();
+    if (indices.length === 0) {
+      toast.info('Select clip(s) to remove');
+      return;
+    }
+
+    // Prevent deleting if only 1 clip remains
+    if (clips.length - indices.length < 1) {
+      toast.error('Cannot delete all clips. At least 1 clip is required.');
+      return;
+    }
+
+    setClips(prev => {
+      // Remove clips at specified indices (in reverse order to maintain indices)
+      const newClips = prev.filter((_, index) => !indices.includes(index));
+
+      // Recalculate cumulative start times
+      let cumTime = 0;
+      return newClips.map(clip => {
+        const updated = { ...clip, startTime: cumTime };
+        cumTime += clip.duration || 0.5;
+        return updated;
+      });
+    });
+
+    setSelectedClips([]);
+    toast.success(`Removed ${indices.length} clip${indices.length !== 1 ? 's' : ''}`);
+  }, [clips, getEffectiveClipIndices, toast]);
+
+  // Update clip duration
+  const handleUpdateClipDuration = useCallback((clipIndex, newDuration) => {
+    if (clipIndex < 0 || clipIndex >= clips.length) {
+      return;
+    }
+
+    const minDuration = 0.1;
+    const maxDuration = 30;
+    const duration = Math.max(minDuration, Math.min(maxDuration, newDuration));
+
+    setClips(prev => {
+      const newClips = [...prev];
+      newClips[clipIndex] = {
+        ...newClips[clipIndex],
+        duration: duration
+      };
+
+      // Recalculate cumulative start times for clips after this one
+      let cumTime = 0;
+      return newClips.map(clip => {
+        const updated = { ...clip, startTime: cumTime };
+        cumTime += clip.duration || 0.5;
+        return updated;
+      });
+    });
+  }, [clips]);
 
   // Clip drag reorder handlers
   const handleClipDragStart = useCallback((index) => {
@@ -2016,6 +2075,12 @@ const VideoEditorModal = ({
                             locked: false
                           }));
                           setClips(newClips);
+                          // Increment use count for all added clips
+                          if (category?.artistId) {
+                            category.videos.forEach(v => {
+                              incrementUseCount(category.artistId, v.id);
+                            });
+                          }
                         }
                       }}
                     >
@@ -2029,16 +2094,21 @@ const VideoEditorModal = ({
                           key={video.id}
                           style={styles.availableClip}
                           onClick={() => {
-                            setClips(prev => [...prev, {
+                            const newClip = {
                               id: `clip_${Date.now()}_${i}`,
                               sourceId: video.id,
                               url: video.url,
                               localUrl: video.localUrl, // Include localUrl for CORS fallback
                               thumbnail: video.thumbnail,
-                              startTime: prev.length * 2,
+                              startTime: clips.length * 2,
                               duration: 2,
                               locked: false
-                            }]);
+                            };
+                            setClips(prev => [...prev, newClip]);
+                            // Increment use count for the source media
+                            if (video.id && category?.artistId) {
+                              incrementUseCount(category.artistId, video.id);
+                            }
                           }}
                         >
                           {video.thumbnail ? (
@@ -2141,6 +2211,7 @@ const VideoEditorModal = ({
                     <button style={styles.clipAction} onClick={handleBreak} title="Split clip at playhead position">Break</button>
                     <button style={styles.clipAction} onClick={handleReroll} title="Replace clip(s) with random from bank">Reroll</button>
                     <button style={styles.clipAction} onClick={handleRearrange}>Rearrange</button>
+                    <button style={styles.clipActionDanger} onClick={handleRemoveClips} title="Delete selected clip(s) or clip at playhead">🗑️ Remove</button>
                     <div style={styles.scaleControl}>
                       <span>Scale</span>
                       <input
@@ -2155,6 +2226,31 @@ const VideoEditorModal = ({
                       <span>{timelineScale.toFixed(2)}x</span>
                     </div>
                   </div>
+
+                  {/* Clip Info Panel */}
+                  {selectedClips.length > 0 && (
+                    <div style={styles.clipInfoPanel}>
+                      <div style={styles.clipInfoRow}>
+                        <span style={styles.clipInfoLabel}>Selected Clip(s):</span>
+                        <span>{selectedClips.length} clip{selectedClips.length !== 1 ? 's' : ''}</span>
+                      </div>
+                      {selectedClips.length === 1 && (
+                        <div style={styles.clipInfoRow}>
+                          <span style={styles.clipInfoLabel}>Duration:</span>
+                          <input
+                            type="number"
+                            min="0.1"
+                            max="30"
+                            step="0.1"
+                            value={(clips[selectedClips[0]]?.duration || 0.5).toFixed(1)}
+                            onChange={(e) => handleUpdateClipDuration(selectedClips[0], parseFloat(e.target.value))}
+                            style={styles.clipDurationInput}
+                          />
+                          <span>seconds</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Cut Actions */}
                   <div style={styles.cutActions}>
@@ -3347,6 +3443,42 @@ const styles = {
     color: '#fff',
     cursor: 'pointer',
     fontSize: '12px'
+  },
+  clipActionDanger: {
+    padding: '6px 12px',
+    backgroundColor: '#7f1d1d',
+    border: '1px solid #991b1b',
+    borderRadius: '4px',
+    color: '#fff',
+    cursor: 'pointer',
+    fontSize: '12px'
+  },
+  clipInfoPanel: {
+    padding: '12px',
+    backgroundColor: '#111118',
+    border: '1px solid #2d2d3d',
+    borderRadius: '4px',
+    marginBottom: '12px',
+  },
+  clipInfoRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '8px',
+    fontSize: '12px'
+  },
+  clipInfoLabel: {
+    color: '#9ca3af',
+    minWidth: '80px'
+  },
+  clipDurationInput: {
+    padding: '4px 8px',
+    backgroundColor: '#1f1f2e',
+    border: '1px solid #2d2d3d',
+    borderRadius: '4px',
+    color: '#fff',
+    fontSize: '12px',
+    width: '60px'
   },
   scaleControl: {
     display: 'flex',

@@ -48,7 +48,15 @@ const LibraryBrowser = ({
   const [activeView, setActiveView] = useState('library'); // 'library' | 'collections' | collection ID
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('newest');
-  const [filterType, setFilterType] = useState(mode === 'all' ? null : mode);
+  // Map mode prop ('videos', 'images', 'audio', 'all') to MEDIA_TYPES values ('video', 'image', 'audio')
+  const modeToMediaType = (m) => {
+    if (m === 'all' || !m) return null;
+    if (m === 'videos') return MEDIA_TYPES.VIDEO;   // 'video'
+    if (m === 'images') return MEDIA_TYPES.IMAGE;   // 'image'
+    if (m === 'audio') return MEDIA_TYPES.AUDIO;    // 'audio'
+    return m; // fallback
+  };
+  const [filterType, setFilterType] = useState(modeToMediaType(mode));
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showNewCollectionModal, setShowNewCollectionModal] = useState(false);
@@ -58,6 +66,17 @@ const LibraryBrowser = ({
   const [contextMenu, setContextMenu] = useState(null);
   const [draggedItem, setDraggedItem] = useState(null);
   const [thumbnailCache, setThumbnailCache] = useState({});
+  const [renamingCollectionId, setRenamingCollectionId] = useState(null);
+  const [renameText, setRenameText] = useState('');
+
+  // Drag selection state
+  const [isDragSelecting, setIsDragSelecting] = useState(false);
+  const [dragStart, setDragStart] = useState(null); // {x, y} in page coords
+  const [dragEnd, setDragEnd] = useState(null);
+  const gridRef = useRef(null);
+  const mediaCardRefs = useRef({});
+  // Ref to hold current displayedMedia for use in drag selection effect
+  const displayedMediaRef = useRef([]);
 
   const fileInputRef = useRef(null);
 
@@ -93,28 +112,143 @@ const LibraryBrowser = ({
     setCollections(getCollections(artistId));
   };
 
-  // Filter and search
+  // Filter and search - uses in-memory library state (from Firestore subscription)
+  // instead of reading from localStorage, so data stays in sync across devices
   const getDisplayedMedia = useCallback(() => {
-    let filters = { sortBy };
-
-    if (filterType) {
-      filters.type = filterType;
-    }
+    let results = [...library];
 
     // If viewing a specific collection
     if (activeView !== 'library' && activeView !== 'collections') {
-      return getCollectionMedia(artistId, activeView);
+      const colMedia = getCollectionMedia(artistId, activeView);
+      // If collection returns items from localStorage, merge with Firestore library
+      if (colMedia.length === 0 && library.length > 0) {
+        const collections = getCollections(artistId);
+        const col = collections.find(c => c.id === activeView);
+        if (col?.mediaIds) {
+          results = library.filter(item => col.mediaIds.includes(item.id));
+        } else {
+          results = colMedia;
+        }
+      } else {
+        results = colMedia;
+      }
     }
 
     // If forced to pull from a collection
-    if (pullFromCollection) {
-      return getCollectionMedia(artistId, pullFromCollection);
+    if (pullFromCollection && activeView === 'library') {
+      const colMedia = getCollectionMedia(artistId, pullFromCollection);
+      if (colMedia.length === 0 && library.length > 0) {
+        const collections = getCollections(artistId);
+        const col = collections.find(c => c.id === pullFromCollection);
+        if (col?.mediaIds) {
+          results = library.filter(item => col.mediaIds.includes(item.id));
+        } else {
+          results = colMedia;
+        }
+      } else {
+        results = colMedia;
+      }
     }
 
-    return searchLibrary(artistId, searchQuery, filters);
-  }, [artistId, activeView, searchQuery, sortBy, filterType, pullFromCollection]);
+    // Apply type filter
+    if (filterType) {
+      results = results.filter(item => item.type === filterType);
+    }
+
+    // Apply search query
+    if (searchQuery) {
+      const lowerQuery = searchQuery.toLowerCase();
+      results = results.filter(item =>
+        item.name?.toLowerCase().includes(lowerQuery) ||
+        item.tags?.some(tag => tag.toLowerCase().includes(lowerQuery))
+      );
+    }
+
+    // Apply sort
+    switch (sortBy) {
+      case 'newest':
+        results.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        break;
+      case 'oldest':
+        results.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        break;
+      case 'name':
+        results.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        break;
+      case 'mostUsed':
+        results.sort((a, b) => (b.useCount || 0) - (a.useCount || 0));
+        break;
+      default:
+        break;
+    }
+
+    return results;
+  }, [library, artistId, activeView, searchQuery, sortBy, filterType, pullFromCollection]);
 
   const displayedMedia = getDisplayedMedia();
+
+  // Keep ref in sync for use in drag selection effect
+  displayedMediaRef.current = displayedMedia;
+
+  // Drag selection handlers
+  const handleGridMouseDown = (e) => {
+    // Only start drag selection if clicking directly on grid background, not a card
+    if (e.target !== gridRef.current) return;
+    if (!allowMultiSelect) return;
+
+    setIsDragSelecting(true);
+    setDragStart({ x: e.clientX, y: e.clientY });
+    setDragEnd(null);
+  };
+
+  useEffect(() => {
+    if (!isDragSelecting) return;
+
+    const handleMouseMove = (e) => {
+      setDragEnd({ x: e.clientX, y: e.clientY });
+    };
+
+    const handleMouseUp = () => {
+      if (dragStart && dragEnd) {
+        // Compute selection rectangle
+        const selectionRect = {
+          left: Math.min(dragStart.x, dragEnd.x),
+          top: Math.min(dragStart.y, dragEnd.y),
+          right: Math.max(dragStart.x, dragEnd.x),
+          bottom: Math.max(dragStart.y, dragEnd.y)
+        };
+
+        // Check which media cards intersect the selection
+        const newSelection = [];
+        displayedMediaRef.current.forEach(media => {
+          const el = mediaCardRefs.current[media.id];
+          if (!el) return;
+          const rect = el.getBoundingClientRect();
+          if (
+            rect.right >= selectionRect.left &&
+            rect.left <= selectionRect.right &&
+            rect.bottom >= selectionRect.top &&
+            rect.top <= selectionRect.bottom
+          ) {
+            newSelection.push(media.id);
+          }
+        });
+
+        setSelectedForBulk(newSelection);
+      }
+
+      setIsDragSelecting(false);
+      setDragStart(null);
+      setDragEnd(null);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragSelecting, dragStart, dragEnd]);
 
   // Generate thumbnail for video
   const generateThumbnail = async (videoUrl, mediaId) => {
@@ -172,7 +306,7 @@ const LibraryBrowser = ({
         let type;
         if (file.type.startsWith('video/')) type = MEDIA_TYPES.VIDEO;
         else if (file.type.startsWith('image/')) type = MEDIA_TYPES.IMAGE;
-        else if (file.type.startsWith('audio/')) type = MEDIA_TYPES.AUDIO;
+        else if (file.type === 'audio/mpeg' || file.type === 'audio/mp3') type = MEDIA_TYPES.AUDIO;
         else continue;
 
         console.log('[LibraryBrowser] Uploading file:', file.name, 'type:', type);
@@ -355,8 +489,8 @@ const LibraryBrowser = ({
     switch (mode) {
       case 'videos': return 'video/*';
       case 'images': return 'image/*';
-      case 'audio': return 'audio/*';
-      default: return 'video/*,image/*,audio/*';
+      case 'audio': return '.mp3,audio/mpeg';
+      default: return 'video/*,image/*,.mp3,audio/mpeg';
     }
   };
 
@@ -691,6 +825,26 @@ const LibraryBrowser = ({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Filter collections to only show ones that have items matching current mode
+  const filteredCollections = collections.filter(c => {
+    // Always show smart collections
+    if (c.type === 'smart' || c.id?.startsWith('smart_')) return true;
+    // For user collections, check if they have any matching media
+    if (!filterType || !c.mediaIds?.length) return true;
+    // Check if any media in this collection matches the current type filter
+    const collectionMedia = library.filter(item => c.mediaIds.includes(item.id));
+    return collectionMedia.some(item => item.type === filterType) || collectionMedia.length === 0;
+  });
+
+  // Handle collection rename
+  const handleRenameCollection = (collectionId, newName) => {
+    if (!newName.trim()) return;
+    updateCollection(artistId, collectionId, { name: newName.trim() });
+    setRenamingCollectionId(null);
+    setRenameText('');
+    loadData();
+  };
+
   // Get user collections for context menu
   const userCollections = getUserCollections(artistId);
 
@@ -772,7 +926,7 @@ const LibraryBrowser = ({
             {/* User Collections - Above Smart Collections */}
             <div style={styles.sidebarSection}>
               <div style={styles.sidebarTitle}>Collections</div>
-              {collections
+              {filteredCollections
                 .filter(c => c.type !== COLLECTION_TYPES.SMART)
                 .map(collection => (
                   <div
@@ -781,21 +935,88 @@ const LibraryBrowser = ({
                       ...styles.sidebarItem,
                       ...(activeView === collection.id ? styles.sidebarItemActive : {})
                     }}
-                    onClick={() => setActiveView(collection.id)}
+                    onClick={() => {
+                      if (renamingCollectionId !== collection.id) {
+                        setActiveView(collection.id);
+                      }
+                    }}
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDropOnCollection(e, collection.id)}
+                    onMouseEnter={(e) => {
+                      if (renamingCollectionId !== collection.id) {
+                        e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.1)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (activeView !== collection.id && renamingCollectionId !== collection.id) {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }
+                    }}
                   >
                     <span style={styles.sidebarItemIcon}>📁</span>
-                    <span style={{ flex: 1 }}>{collection.name}</span>
-                    <span
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteCollection(collection.id);
-                      }}
-                      style={{ opacity: 0.5, fontSize: '12px' }}
-                    >
-                      ✕
-                    </span>
+                    {renamingCollectionId === collection.id ? (
+                      <input
+                        type="text"
+                        value={renameText}
+                        onChange={(e) => setRenameText(e.target.value)}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === 'Enter') {
+                            handleRenameCollection(collection.id, renameText);
+                          } else if (e.key === 'Escape') {
+                            setRenamingCollectionId(null);
+                            setRenameText('');
+                          }
+                        }}
+                        onBlur={() => {
+                          if (renameText.trim()) {
+                            handleRenameCollection(collection.id, renameText);
+                          } else {
+                            setRenamingCollectionId(null);
+                            setRenameText('');
+                          }
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          flex: 1,
+                          backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                          border: '1px solid rgba(99, 102, 241, 0.5)',
+                          borderRadius: '4px',
+                          color: '#ffffff',
+                          padding: '4px 8px',
+                          fontSize: '14px',
+                          outline: 'none'
+                        }}
+                        autoFocus
+                      />
+                    ) : (
+                      <span style={{ flex: 1 }}>{collection.name}</span>
+                    )}
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      {renamingCollectionId !== collection.id && (
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRenamingCollectionId(collection.id);
+                            setRenameText(collection.name);
+                          }}
+                          style={{ opacity: 0.5, fontSize: '12px', cursor: 'pointer', padding: '0 2px' }}
+                          title="Rename"
+                        >
+                          ✎
+                        </span>
+                      )}
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCollection(collection.id);
+                        }}
+                        style={{ opacity: 0.5, fontSize: '12px', cursor: 'pointer', padding: '0 2px' }}
+                        title="Delete"
+                      >
+                        ✕
+                      </span>
+                    </div>
                   </div>
                 ))}
 
@@ -813,7 +1034,7 @@ const LibraryBrowser = ({
             {/* Smart Collections */}
             <div style={styles.sidebarSection}>
               <div style={styles.sidebarTitle}>Smart Collections</div>
-              {collections
+              {filteredCollections
                 .filter(c => c.type === COLLECTION_TYPES.SMART)
                 .map(collection => (
                   <div
@@ -862,10 +1083,15 @@ const LibraryBrowser = ({
               )}
             </div>
           ) : (
-            <div style={styles.mediaGrid}>
+            <div
+              ref={gridRef}
+              style={styles.mediaGrid}
+              onMouseDown={handleGridMouseDown}
+            >
               {displayedMedia.map(media => (
                 <div
                   key={media.id}
+                  ref={el => { if (el) mediaCardRefs.current[media.id] = el; }}
                   style={{
                     ...styles.mediaCard,
                     ...(selectedMediaIds.includes(media.id) || selectedForBulk.includes(media.id)
@@ -937,6 +1163,21 @@ const LibraryBrowser = ({
           )}
         </div>
       </div>
+
+      {/* Drag Selection Rectangle */}
+      {isDragSelecting && dragStart && dragEnd && (
+        <div style={{
+          position: 'fixed',
+          left: Math.min(dragStart.x, dragEnd.x),
+          top: Math.min(dragStart.y, dragEnd.y),
+          width: Math.abs(dragEnd.x - dragStart.x),
+          height: Math.abs(dragEnd.y - dragStart.y),
+          backgroundColor: 'rgba(99, 102, 241, 0.15)',
+          border: '1px solid rgba(99, 102, 241, 0.5)',
+          pointerEvents: 'none',
+          zIndex: 9999
+        }} />
+      )}
 
       {/* Upload Progress Overlay */}
       {isUploading && (

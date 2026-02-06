@@ -580,7 +580,7 @@ const VideoEditorV2 = ({
               <input
                 ref={audioInputRef}
                 type="file"
-                accept="audio/*"
+                accept=".mp3,audio/mpeg"
                 onChange={handleAudioUpload}
                 style={{ display: 'none' }}
               />
