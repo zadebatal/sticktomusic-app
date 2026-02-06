@@ -76,6 +76,7 @@ const LibraryBrowser = ({
   const [renamingCollectionId, setRenamingCollectionId] = useState(null);
   const [renameText, setRenameText] = useState('');
   const [bankTab, setBankTab] = useState('images'); // 'images' | 'text'
+  const [selectedBankItems, setSelectedBankItems] = useState({ A: new Set(), B: new Set() });
   const [showTemplateEditor, setShowTemplateEditor] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState(null);
 
@@ -253,12 +254,18 @@ const LibraryBrowser = ({
 
   // Drag selection handlers - works from anywhere in the grid (including on cards)
   // Uses a 8px movement threshold before activating to distinguish clicks from drags
+  // Cards are only natively draggable when already selected, so drag-select works on unselected cards
   const handleGridMouseDown = (e) => {
     if (!allowMultiSelect) return;
     // Don't interfere with buttons, inputs, or context menu items
     if (e.target.closest('button') || e.target.closest('input') || e.target.closest('select')) return;
     // Only respond to left mouse button
     if (e.button !== 0) return;
+    // If mouse is on a card that is already selected AND draggable, let native drag handle it
+    const cardEl = e.target.closest('[data-media-id]');
+    if (cardEl && cardEl.getAttribute('draggable') === 'true') return;
+    // Prevent native drag/text-selection from interfering with our custom drag-select
+    e.preventDefault();
 
     const pos = { x: e.clientX, y: e.clientY };
     setDragStart(pos);
@@ -279,7 +286,7 @@ const LibraryBrowser = ({
       const dy = e.clientY - start.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
-      if (distance > 8) {
+      if (distance > 5) {
         dragThresholdMetRef.current = true;
         e.preventDefault();
       }
@@ -999,6 +1006,32 @@ const LibraryBrowser = ({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Bank-specific handlers
+  const handleToggleBankSelect = (bank, mediaId) => {
+    setSelectedBankItems(prev => {
+      const newSet = new Set(prev[bank]);
+      if (newSet.has(mediaId)) newSet.delete(mediaId);
+      else newSet.add(mediaId);
+      return { ...prev, [bank]: newSet };
+    });
+  };
+
+  const handleSelectAllBank = (bank) => {
+    const items = bank === 'A' ? collectionBanks?.bankA : collectionBanks?.bankB;
+    if (!items) return;
+    setSelectedBankItems(prev => ({
+      ...prev,
+      [bank]: new Set(items.map(m => m.id))
+    }));
+  };
+
+  const handleRemoveFromBank = (bank, mediaIds) => {
+    if (!mediaIds || mediaIds.length === 0) return;
+    removeFromBank(artistId, activeView, mediaIds);
+    setSelectedBankItems(prev => ({ ...prev, [bank]: new Set() }));
+    loadData();
+  };
+
   // Filter collections to only show ones that have items matching current mode
   const filteredCollections = collections.filter(c => {
     // Always show smart collections
@@ -1141,19 +1174,102 @@ const LibraryBrowser = ({
     );
   };
 
+  // Bank-specific media card renderer with selection and remove button
+  const renderBankMediaCard = (media, bank) => {
+    const isSelected = selectedBankItems[bank].has(media.id);
+    return (
+      <div
+        key={media.id}
+        style={{
+          ...styles.mediaCard,
+          position: 'relative',
+          cursor: 'pointer',
+          ...(isSelected ? {
+            border: '2px solid #a78bfa',
+            backgroundColor: 'rgba(167, 139, 250, 0.15)'
+          } : {})
+        }}
+        onClick={() => handleToggleBankSelect(bank, media.id)}
+        onMouseEnter={(e) => {
+          if (!isSelected) {
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!isSelected) {
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+          }
+        }}
+      >
+        {isSelected && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            backgroundColor: 'rgba(167, 139, 250, 0.2)',
+            zIndex: 1, pointerEvents: 'none', borderRadius: '7px'
+          }}>
+            <div style={{
+              position: 'absolute', bottom: '6px', right: '6px',
+              width: '18px', height: '18px',
+              backgroundColor: '#a78bfa', borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '11px', color: '#fff', fontWeight: 'bold'
+            }}>✓</div>
+          </div>
+        )}
+        {media.type === MEDIA_TYPES.IMAGE && (
+          <img src={media.url} alt={media.name} style={styles.mediaThumbnail} />
+        )}
+        {media.type === MEDIA_TYPES.VIDEO && (
+          <video src={media.url} style={styles.mediaThumbnail} muted preload="metadata" />
+        )}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleRemoveFromBank(bank, [media.id]);
+          }}
+          style={{
+            position: 'absolute',
+            top: '6px',
+            right: '6px',
+            width: '20px',
+            height: '20px',
+            borderRadius: '4px',
+            backgroundColor: 'rgba(239, 68, 68, 0.7)',
+            border: 'none',
+            color: '#ffffff',
+            fontSize: '14px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '0',
+            zIndex: 2,
+            transition: 'background-color 0.2s'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.9)'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.7)'}
+          title="Remove from bank"
+        >
+          ×
+        </button>
+      </div>
+    );
+  };
+
   // Shared media card renderer — used by both the main grid and bank columns
   const renderMediaCard = (media, isSelected) => (
     <div
       key={media.id}
       ref={el => { if (el) mediaCardRefs.current[media.id] = el; }}
+      data-media-id={media.id}
       style={{
         ...styles.mediaCard,
         ...(isSelected ? { border: '1px solid rgba(99, 102, 241, 0.5)' } : {})
       }}
       onClick={(e) => handleMediaClick(media, e)}
       onContextMenu={(e) => handleContextMenu(e, media)}
-      draggable={true}
-      onDragStart={(e) => handleDragStart(e, media)}
+      draggable={isSelected}
+      onDragStart={(e) => { if (!isSelected) { e.preventDefault(); return; } handleDragStart(e, media); }}
       onMouseEnter={(e) => {
         if (!isSelected) {
           e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
@@ -1531,9 +1647,52 @@ const LibraryBrowser = ({
                           fontSize: '11px', fontWeight: 700, color: '#fff'
                         }}>A</div>
                         <span style={{ fontSize: '13px', fontWeight: 600, color: '#c4b5fd' }}>Bank A</span>
-                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginLeft: 'auto' }}>
+                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>
                           {collectionBanks.bankA.length}
                         </span>
+                        {collectionBanks.bankA.length > 0 && (
+                          <>
+                            <button
+                              onClick={() => handleSelectAllBank('A')}
+                              style={{
+                                marginLeft: '8px',
+                                padding: '4px 10px',
+                                fontSize: '11px',
+                                backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                                border: 'none',
+                                borderRadius: '4px',
+                                color: '#a5b4fc',
+                                cursor: 'pointer',
+                                transition: 'background-color 0.2s'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.35)'}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.2)'}
+                              title="Select all items in Bank A"
+                            >
+                              Select All
+                            </button>
+                            {selectedBankItems.A.size > 0 && (
+                              <button
+                                onClick={() => handleRemoveFromBank('A', Array.from(selectedBankItems.A))}
+                                style={{
+                                  padding: '4px 10px',
+                                  fontSize: '11px',
+                                  backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  color: '#fca5a5',
+                                  cursor: 'pointer',
+                                  transition: 'background-color 0.2s'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.35)'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.2)'}
+                                title={`Remove selected items (${selectedBankItems.A.size})`}
+                              >
+                                Remove {selectedBankItems.A.size}
+                              </button>
+                            )}
+                          </>
+                        )}
                       </div>
                       <div style={{
                         flex: 1, overflowY: 'auto', padding: '8px',
@@ -1545,7 +1704,7 @@ const LibraryBrowser = ({
                           <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
                             Drag images here
                           </div>
-                        ) : collectionBanks.bankA.map(media => renderMediaCard(media, selectedMediaIds.includes(media.id)))}
+                        ) : collectionBanks.bankA.map(media => renderBankMediaCard(media, 'A'))}
                       </div>
                     </div>
 
@@ -1574,9 +1733,52 @@ const LibraryBrowser = ({
                           fontSize: '11px', fontWeight: 700, color: '#fff'
                         }}>B</div>
                         <span style={{ fontSize: '13px', fontWeight: 600, color: '#86efac' }}>Bank B</span>
-                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginLeft: 'auto' }}>
+                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>
                           {collectionBanks.bankB.length}
                         </span>
+                        {collectionBanks.bankB.length > 0 && (
+                          <>
+                            <button
+                              onClick={() => handleSelectAllBank('B')}
+                              style={{
+                                marginLeft: '8px',
+                                padding: '4px 10px',
+                                fontSize: '11px',
+                                backgroundColor: 'rgba(34, 197, 94, 0.2)',
+                                border: 'none',
+                                borderRadius: '4px',
+                                color: '#86efac',
+                                cursor: 'pointer',
+                                transition: 'background-color 0.2s'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.35)'}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.2)'}
+                              title="Select all items in Bank B"
+                            >
+                              Select All
+                            </button>
+                            {selectedBankItems.B.size > 0 && (
+                              <button
+                                onClick={() => handleRemoveFromBank('B', Array.from(selectedBankItems.B))}
+                                style={{
+                                  padding: '4px 10px',
+                                  fontSize: '11px',
+                                  backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  color: '#fca5a5',
+                                  cursor: 'pointer',
+                                  transition: 'background-color 0.2s'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.35)'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.2)'}
+                                title={`Remove selected items (${selectedBankItems.B.size})`}
+                              >
+                                Remove {selectedBankItems.B.size}
+                              </button>
+                            )}
+                          </>
+                        )}
                       </div>
                       <div style={{
                         flex: 1, overflowY: 'auto', padding: '8px',
@@ -1588,7 +1790,7 @@ const LibraryBrowser = ({
                           <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
                             Drag images here
                           </div>
-                        ) : collectionBanks.bankB.map(media => renderMediaCard(media, selectedMediaIds.includes(media.id)))}
+                        ) : collectionBanks.bankB.map(media => renderBankMediaCard(media, 'B'))}
                       </div>
                     </div>
                   </div>

@@ -38,6 +38,7 @@ const ContentLibrary = ({
   const [lastSelectedIndex, setLastSelectedIndex] = useState(null);
   const [exportingVideo, setExportingVideo] = useState(null);
   const [previewingVideo, setPreviewingVideo] = useState(null);
+  const [previewingSlideshow, setPreviewingSlideshow] = useState(null);
 
   // Rendering state
   const [renderingVideoId, setRenderingVideoId] = useState(null);
@@ -284,6 +285,7 @@ const ContentLibrary = ({
                     slideshow={item}
                     isSelected={selectedVideoIds.has(item.id)}
                     onToggleSelect={() => toggleItemSelection(item.id)}
+                    onPreview={() => setPreviewingSlideshow(item)}
                     onEdit={() => onEditSlideshow?.(item)}
                     onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
                     onPost={() => {
@@ -446,6 +448,84 @@ const ContentLibrary = ({
             clearSelection();
           }}
         />
+      )}
+
+      {/* Slideshow Preview Modal — scrollable slide gallery */}
+      {previewingSlideshow && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 10000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column'
+        }} onClick={() => setPreviewingSlideshow(null)}>
+          <div style={{
+            position: 'relative', maxWidth: '90vw', maxHeight: '85vh',
+            backgroundColor: '#1a1a2e', borderRadius: 16, overflow: 'hidden',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column'
+          }} onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ color: '#fff', fontSize: 16, fontWeight: 600 }}>
+                  {previewingSlideshow.name || 'Untitled Slideshow'}
+                </div>
+                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 2 }}>
+                  {previewingSlideshow.slides?.length || 0} slides · {previewingSlideshow.status || 'draft'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => { setPreviewingSlideshow(null); onEditSlideshow?.(previewingSlideshow); }} style={{
+                  padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(99,102,241,0.5)',
+                  background: 'rgba(99,102,241,0.2)', color: '#a5b4fc', fontSize: 13, cursor: 'pointer', fontWeight: 500
+                }}>Edit</button>
+                <button onClick={() => setPreviewingSlideshow(null)} style={{
+                  background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white',
+                  borderRadius: '50%', width: 32, height: 32, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18
+                }}>×</button>
+              </div>
+            </div>
+            {/* Slides Grid */}
+            <div style={{
+              padding: '16px', overflowY: 'auto', display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px',
+              maxHeight: 'calc(85vh - 80px)'
+            }}>
+              {(previewingSlideshow.slides || []).map((slide, i) => (
+                <div key={slide.id || i} style={{
+                  aspectRatio: '9/16', borderRadius: 10, overflow: 'hidden',
+                  backgroundColor: '#000', position: 'relative',
+                  border: '1px solid rgba(255,255,255,0.1)'
+                }}>
+                  {(slide.backgroundImage || slide.thumbnail) ? (
+                    <img src={slide.backgroundImage || slide.thumbnail} alt={`Slide ${i + 1}`}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563' }}>
+                      Empty
+                    </div>
+                  )}
+                  <div style={{
+                    position: 'absolute', bottom: 0, left: 0, right: 0,
+                    padding: '4px 8px', background: 'rgba(0,0,0,0.6)',
+                    color: '#fff', fontSize: 11, textAlign: 'center'
+                  }}>Slide {i + 1}</div>
+                  {/* Show text overlays */}
+                  {(slide.textOverlays || []).map((overlay, oi) => (
+                    <div key={oi} style={{
+                      position: 'absolute', left: `${overlay.position?.x || 50}%`,
+                      top: `${overlay.position?.y || 50}%`, transform: 'translate(-50%,-50%)',
+                      color: overlay.style?.color || '#fff',
+                      fontSize: `${Math.max(8, (overlay.style?.fontSize || 24) * 0.2)}px`,
+                      fontWeight: overlay.style?.fontWeight || '700',
+                      textAlign: 'center', textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+                      pointerEvents: 'none', maxWidth: '90%', wordBreak: 'break-word'
+                    }}>{overlay.text}</div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Video Preview Modal - Always 9:16 portrait */}
@@ -660,7 +740,7 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
   );
 };
 
-const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onEdit, onDelete, onPost }) => {
+const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdit, onDelete, onPost }) => {
   const [showActions, setShowActions] = useState(false);
 
   const handleActionClick = (e, action) => {
@@ -687,7 +767,7 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onEdit, onDelete
         <input type="checkbox" checked={isSelected} onChange={onToggleSelect} style={styles.checkbox} />
       </div>
 
-      <div style={styles.videoThumb}>
+      <div style={styles.videoThumb} onClick={() => onPreview?.()}>
         {thumbnail ? (
           <img src={thumbnail} alt="" style={styles.videoThumbImg} />
         ) : (

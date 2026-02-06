@@ -24,6 +24,10 @@ import {
   addCreatedSlideshow,
   updateCreatedSlideshow,
   deleteCreatedSlideshow,
+  addCreatedSlideshowAsync,
+  deleteCreatedSlideshowAsync,
+  loadCreatedContentAsync,
+  saveCreatedContentAsync,
   addLyrics as addLyricsToLibrary,
   updateLyrics as updateLyricsInLibrary,
   deleteLyrics as deleteLyricsFromLibrary,
@@ -281,6 +285,7 @@ const VideoStudio = ({
   const [selectedArtist, setSelectedArtist] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [createdContentVersion, setCreatedContentVersion] = useState(0); // Bump to refresh library dashboard
+  const [firestoreContentLoaded, setFirestoreContentLoaded] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null); // Track upload progress
   const [sessionRestored, setSessionRestored] = useState(false);
 
@@ -305,6 +310,46 @@ const VideoStudio = ({
       slideshows: content.slideshows || [],
     };
   }, [currentArtistId, createdContentVersion]);
+
+  // Load created content from Firestore on mount (ensures drafts persist across refreshes)
+  useEffect(() => {
+    if (firestoreContentLoaded || !db || !currentArtistId) return;
+    loadCreatedContentAsync(db, currentArtistId).then(content => {
+      if (content && (content.slideshows?.length > 0 || content.videos?.length > 0)) {
+        // Merge Firestore data with any localStorage data
+        const localContent = getCreatedContent(currentArtistId);
+        const localSlideshowIds = new Set(localContent.slideshows.map(s => s.id));
+        const localVideoIds = new Set(localContent.videos.map(v => v.id));
+        let merged = false;
+
+        // Add any Firestore slideshows not in localStorage
+        content.slideshows.forEach(ss => {
+          if (!localSlideshowIds.has(ss.id)) {
+            localContent.slideshows.push(ss);
+            merged = true;
+          }
+        });
+        content.videos.forEach(v => {
+          if (!localVideoIds.has(v.id)) {
+            localContent.videos.push(v);
+            merged = true;
+          }
+        });
+
+        if (merged) {
+          // Save merged content to localStorage
+          const { saveCreatedContent } = require('../../services/libraryService');
+          saveCreatedContent(currentArtistId, localContent);
+          setCreatedContentVersion(v => v + 1);
+        }
+      }
+      setFirestoreContentLoaded(true);
+    }).catch(err => {
+      console.warn('[VideoStudio] Failed to load created content from Firestore:', err);
+      setFirestoreContentLoaded(true);
+    });
+  // eslint-disable-next-line
+  }, [db, currentArtistId, firestoreContentLoaded]);
 
   // Default categories for fresh installs
   // accountHandle links category to Late.co account for auto-scheduling
@@ -1311,16 +1356,21 @@ const VideoStudio = ({
     setSelectedLibraryMedia(prev => ({ ...prev, images: [] }));
   }, []);
 
-  const handleSaveSlideshow = useCallback((slideshowData) => {
-    // Library mode: save via libraryService
+  const handleSaveSlideshow = useCallback(async (slideshowData) => {
+    // Library mode: save via libraryService (with Firestore sync)
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
-        const savedSlideshow = addCreatedSlideshow(currentArtistId, {
+        const data = {
           ...slideshowData,
           id: slideshowData.id || `slideshow_${Date.now()}`,
-          createdAt: new Date().toISOString(),
-          status: 'draft'
-        });
+          createdAt: slideshowData.createdAt || new Date().toISOString(),
+          status: slideshowData.status || 'draft'
+        };
+        const savedSlideshow = addCreatedSlideshow(currentArtistId, data);
+        // Sync to Firestore for persistence across refreshes/devices
+        if (db) {
+          addCreatedSlideshowAsync(db, currentArtistId, data).catch(console.error);
+        }
         console.log('[VideoStudio] Saved slideshow via library system:', savedSlideshow.id);
         setCreatedContentVersion(v => v + 1);
         setShowSlideshowEditor(false);
@@ -1446,10 +1496,13 @@ const VideoStudio = ({
 
   // Delete a slideshow
   const handleDeleteSlideshow = useCallback((slideshowId) => {
-    // Library mode: delete via libraryService
+    // Library mode: delete via libraryService (with Firestore sync)
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
         deleteCreatedSlideshow(currentArtistId, slideshowId);
+        if (db) {
+          deleteCreatedSlideshowAsync(db, currentArtistId, slideshowId).catch(console.error);
+        }
         setCreatedContentVersion(v => v + 1);
       }
       return;

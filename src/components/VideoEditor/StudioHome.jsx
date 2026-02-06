@@ -26,6 +26,7 @@ import {
   getCreatedContent,
   addCreatedVideo,
   addCreatedSlideshow,
+  saveCreatedContentAsync,
   getLyrics,
   addLyrics,
   updateLyrics,
@@ -690,12 +691,18 @@ const StudioHome = ({
       addCreatedSlideshow(artistId, ss);
     });
 
+    // Sync to Firestore for persistence
+    const content = getCreatedContent(artistId);
+    if (db) {
+      saveCreatedContentAsync(db, artistId, content).catch(console.error);
+    }
+
     // Refresh created content
-    setCreatedContent(getCreatedContent(artistId));
+    setCreatedContent(content);
     setBatchGenerating(false);
     setShowBatchModal(false);
     alert(`Generated ${slideshows.length} slideshow drafts! View them in your library.`);
-  }, [batchCount, batchSlidesPerShow, batchAudio, selectedCollection, collections, library, artistId]);
+  }, [batchCount, batchSlidesPerShow, batchAudio, selectedCollection, collections, library, artistId, db]);
 
 
   // =====================

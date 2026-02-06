@@ -1,7 +1,9 @@
+import lamejs from 'lamejs';
+
 /**
  * Audio Trimmer Utility
  * Extracts a section of audio using the Web Audio API and returns it as a new File.
- * The trimmed audio is encoded as WAV for maximum compatibility.
+ * The trimmed audio is encoded as MP3 for smaller file sizes.
  */
 
 /**
@@ -59,69 +61,94 @@ export async function trimAudioToFile(audioSource, startTime, endTime, outputNam
     }
   }
 
-  onProgress?.('Encoding WAV...');
+  onProgress?.('Encoding MP3...');
 
-  // Encode as WAV
-  const wavBlob = encodeWAV(trimmedBuffer);
+  // Encode as MP3
+  const mp3Blob = encodeMP3(trimmedBuffer);
 
   // Clean up
   await audioContext.close();
 
   // Create a File from the blob
-  const fileName = `${outputName}.wav`;
-  return new File([wavBlob], fileName, { type: 'audio/wav' });
+  const fileName = `${outputName}.mp3`;
+  return new File([mp3Blob], fileName, { type: 'audio/mpeg' });
 }
 
 /**
- * Encode an AudioBuffer as WAV
+ * Encode an AudioBuffer as MP3 using lamejs
  * @param {AudioBuffer} buffer - The audio buffer to encode
- * @returns {Blob} - WAV-encoded blob
+ * @returns {Blob} - MP3-encoded blob
  */
-function encodeWAV(buffer) {
+function encodeMP3(buffer) {
   const numChannels = buffer.numberOfChannels;
   const sampleRate = buffer.sampleRate;
-  const bitsPerSample = 16;
-  const bytesPerSample = bitsPerSample / 8;
-  const blockAlign = numChannels * bytesPerSample;
-  const dataLength = buffer.length * blockAlign;
+  const kbps = 128; // Bitrate: 128kbps provides good quality-to-size ratio
 
-  const arrayBuffer = new ArrayBuffer(44 + dataLength);
-  const view = new DataView(arrayBuffer);
+  // Initialize the encoder
+  const encoder = new lamejs.Mp3Encoder(numChannels, sampleRate, kbps);
 
-  // WAV header
-  writeString(view, 0, 'RIFF');
-  view.setUint32(4, 36 + dataLength, true);
-  writeString(view, 8, 'WAVE');
+  // Prepare channel data
+  const channelData = [];
+  for (let ch = 0; ch < numChannels; ch++) {
+    channelData.push(buffer.getChannelData(ch));
+  }
 
-  // fmt chunk
-  writeString(view, 12, 'fmt ');
-  view.setUint32(16, 16, true); // chunk size
-  view.setUint16(20, 1, true); // PCM format
-  view.setUint16(22, numChannels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * blockAlign, true); // byte rate
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, bitsPerSample, true);
+  // Encode in chunks (process samples in batches for efficiency)
+  const mp3Data = [];
+  const chunkSize = 4096;
 
-  // data chunk
-  writeString(view, 36, 'data');
-  view.setUint32(40, dataLength, true);
+  for (let i = 0; i < buffer.length; i += chunkSize) {
+    const sampleChunkSize = Math.min(chunkSize, buffer.length - i);
 
-  // Write interleaved samples
-  let offset = 44;
-  for (let i = 0; i < buffer.length; i++) {
-    for (let ch = 0; ch < numChannels; ch++) {
-      const sample = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]));
-      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
-      offset += 2;
+    if (numChannels === 1) {
+      // Mono
+      const mono = channelData[0].slice(i, i + sampleChunkSize);
+      const encoded = encoder.encodeBuffer(mono);
+      if (encoded.length > 0) {
+        mp3Data.push(encoded);
+      }
+    } else if (numChannels === 2) {
+      // Stereo
+      const left = channelData[0].slice(i, i + sampleChunkSize);
+      const right = channelData[1].slice(i, i + sampleChunkSize);
+      const encoded = encoder.encodeBuffer(left, right);
+      if (encoded.length > 0) {
+        mp3Data.push(encoded);
+      }
+    } else {
+      // Multi-channel: downmix to stereo
+      const left = new Float32Array(sampleChunkSize);
+      const right = new Float32Array(sampleChunkSize);
+
+      for (let j = 0; j < sampleChunkSize; j++) {
+        let leftSample = 0;
+        let rightSample = 0;
+
+        for (let ch = 0; ch < numChannels; ch++) {
+          const sample = channelData[ch][i + j];
+          if (ch % 2 === 0) {
+            leftSample += sample / (numChannels / 2);
+          } else {
+            rightSample += sample / (numChannels / 2);
+          }
+        }
+
+        left[j] = leftSample;
+        right[j] = rightSample;
+      }
+
+      const encoded = encoder.encodeBuffer(left, right);
+      if (encoded.length > 0) {
+        mp3Data.push(encoded);
+      }
     }
   }
 
-  return new Blob([arrayBuffer], { type: 'audio/wav' });
-}
-
-function writeString(view, offset, string) {
-  for (let i = 0; i < string.length; i++) {
-    view.setUint8(offset + i, string.charCodeAt(i));
+  // Finalize the encoding
+  const finalFrame = encoder.flush();
+  if (finalFrame.length > 0) {
+    mp3Data.push(finalFrame);
   }
+
+  return new Blob(mp3Data, { type: 'audio/mpeg' });
 }

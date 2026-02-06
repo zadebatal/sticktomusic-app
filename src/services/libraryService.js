@@ -739,9 +739,8 @@ export const assignToBank = (artistId, collectionId, mediaIds, bank) => {
   // Ensure media is in this collection first
   collection.mediaIds = [...new Set([...collection.mediaIds, ...idsToAssign])];
 
-  // Add to target bank, remove from other bank
+  // Add to target bank (allow same image in both banks)
   collection[bankKey] = [...new Set([...(collection[bankKey] || []), ...idsToAssign])];
-  collection[otherBankKey] = (collection[otherBankKey] || []).filter(id => !idsToAssign.includes(id));
   collection.updatedAt = new Date().toISOString();
   saveCollections(artistId, collections);
 
@@ -1094,6 +1093,84 @@ export const deleteCreatedSlideshow = (artistId, slideshowId) => {
   content.slideshows = filtered;
   saveCreatedContent(artistId, content);
   return true;
+};
+
+// ============================================================================
+// CREATED CONTENT - FIRESTORE ASYNC OPERATIONS
+// ============================================================================
+
+/**
+ * Save created content to Firestore (async backup)
+ * Stores slideshows and videos in artists/{artistId}/studio/createdContent
+ */
+export const saveCreatedContentAsync = async (db, artistId, content) => {
+  if (!db || !artistId) return;
+  try {
+    const docRef = doc(db, 'artists', artistId, 'studio', 'createdContent');
+    await setDoc(docRef, {
+      ...content,
+      updatedAt: serverTimestamp()
+    });
+    console.log('[Library] Created content saved to Firestore');
+  } catch (error) {
+    console.error('[Library] Firestore save created content failed:', error.message);
+  }
+};
+
+/**
+ * Load created content from Firestore
+ * Falls back to localStorage if Firestore is unavailable
+ */
+export const loadCreatedContentAsync = async (db, artistId) => {
+  if (!db || !artistId) return getCreatedContent(artistId);
+  try {
+    const docRef = doc(db, 'artists', artistId, 'studio', 'createdContent');
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      const content = {
+        videos: data.videos || [],
+        slideshows: data.slideshows || []
+      };
+      // Also update localStorage for offline access
+      saveCreatedContent(artistId, content);
+      return content;
+    }
+  } catch (error) {
+    console.error('[Library] Firestore load created content failed:', error.message);
+  }
+  // Fallback to localStorage
+  return getCreatedContent(artistId);
+};
+
+/**
+ * Add a created slideshow (with Firestore sync)
+ */
+export const addCreatedSlideshowAsync = async (db, artistId, slideshowData) => {
+  const result = addCreatedSlideshow(artistId, slideshowData);
+  const content = getCreatedContent(artistId);
+  await saveCreatedContentAsync(db, artistId, content);
+  return result;
+};
+
+/**
+ * Update a created slideshow (with Firestore sync)
+ */
+export const updateCreatedSlideshowAsync = async (db, artistId, slideshowId, updates) => {
+  const result = updateCreatedSlideshow(artistId, slideshowId, updates);
+  const content = getCreatedContent(artistId);
+  await saveCreatedContentAsync(db, artistId, content);
+  return result;
+};
+
+/**
+ * Delete a created slideshow (with Firestore sync)
+ */
+export const deleteCreatedSlideshowAsync = async (db, artistId, slideshowId) => {
+  const result = deleteCreatedSlideshow(artistId, slideshowId);
+  const content = getCreatedContent(artistId);
+  await saveCreatedContentAsync(db, artistId, content);
+  return result;
 };
 
 // ============================================================================
