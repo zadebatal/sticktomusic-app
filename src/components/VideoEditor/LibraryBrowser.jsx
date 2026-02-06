@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   getLibrary,
+  saveLibrary,
   getCollections,
   getUserCollections,
   getCollectionMedia,
@@ -104,31 +105,33 @@ const LibraryBrowser = ({
   const fileInputRef = useRef(null);
 
   // Load data when artistId changes or refresh is triggered
-  // Use Firestore subscriptions if db is available
+  // Strategy: load from localStorage FIRST for instant UI, then sync from Firestore
   useEffect(() => {
     if (!artistId) return;
 
     console.log('[LibraryBrowser] Loading data for artist:', artistId, 'refreshTrigger:', refreshTrigger, 'db:', !!db);
 
+    // Instant load from localStorage cache (no network wait)
+    const cachedLibrary = getLibrary(artistId);
+    const cachedCollections = getCollections(artistId);
+    if (cachedLibrary.length > 0) setLibrary(cachedLibrary);
+    if (cachedCollections.length > 0) setCollections(cachedCollections);
+
     const unsubscribes = [];
 
     if (db) {
-      // Firestore real-time subscription for library
-      console.log('[LibraryBrowser] Setting up Firestore subscriptions');
+      // Firestore real-time subscription syncs in background
       unsubscribes.push(subscribeToLibrary(db, artistId, (items) => {
-        console.log('[LibraryBrowser] Received', items.length, 'library items from Firestore');
+        console.log('[LibraryBrowser] Firestore sync:', items.length, 'library items');
         setLibrary(items);
+        // Keep localStorage cache fresh for next instant load
+        try { saveLibrary(artistId, items); } catch (e) {}
       }));
 
-      // Firestore real-time subscription for collections
       unsubscribes.push(subscribeToCollections(db, artistId, (cols) => {
-        console.log('[LibraryBrowser] Received', cols.length, 'collections from Firestore');
+        console.log('[LibraryBrowser] Firestore sync:', cols.length, 'collections');
         setCollections(cols);
       }));
-    } else {
-      // Fallback to localStorage
-      setLibrary(getLibrary(artistId));
-      setCollections(getCollections(artistId));
     }
 
     return () => unsubscribes.forEach(unsub => unsub());

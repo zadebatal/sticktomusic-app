@@ -250,30 +250,32 @@ const StudioHome = ({
   }, [collections, studioMode, selectedCollection, autoCollectionSet]);
 
   // Background thumbnail migration for existing images
+  // THUMB_VERSION: bump this to force re-migration (e.g. after changing thumbnail size)
   useEffect(() => {
+    const THUMB_VERSION = 2; // v2 = 150px @ 0.5 quality (was v1 = 300px @ 0.7)
     if (thumbMigrationRef.current || !artistId) return;
     if (library.length === 0) return;
-    const needsMigration = library.some(item =>
-      item.type === 'image' && item.url && !item.thumbnailUrl
-    );
-    if (!needsMigration) return;
+
+    const versionKey = `stm_thumb_v${THUMB_VERSION}_${artistId}`;
+    const alreadyDone = localStorage.getItem(versionKey);
+    if (alreadyDone) return;
+
+    const imageItems = library.filter(item => item.type === 'image' && item.url);
+    if (imageItems.length === 0) return;
     thumbMigrationRef.current = true;
 
-    const count = library.filter(item => item.type === 'image' && item.url && !item.thumbnailUrl).length;
-    toastSuccess(`Generating thumbnails for ${count} images — this runs in the background...`);
+    console.log(`[ThumbnailMigration] v${THUMB_VERSION}: ${imageItems.length} images to process`);
 
     // Run in background after a short delay so it doesn't block initial render
     const timer = setTimeout(async () => {
       try {
         const result = await migrateThumbnails(db, artistId, library, uploadFile, (done, total, generated) => {
-          // Refresh the grid every 10 images so thumbnails appear progressively
           if (done % 10 === 0 || done === total) {
             setLibraryRefreshTrigger(prev => prev + 1);
           }
-          if (done === total) {
-            toastSuccess(`Done! ${generated} thumbnails generated.`);
-          }
         });
+        console.log(`[ThumbnailMigration] v${THUMB_VERSION} complete: ${result.generated} generated, ${result.failed} failed`);
+        localStorage.setItem(versionKey, Date.now().toString());
         if (result.generated > 0) {
           setLibraryRefreshTrigger(prev => prev + 1);
         }
@@ -361,14 +363,14 @@ const StudioHome = ({
 
           // Generate lightweight thumbnail for grid/library views
           try {
-            const maxThumbSize = 300;
+            const maxThumbSize = 150;
             const scale = Math.min(1, maxThumbSize / Math.max(img.naturalWidth, img.naturalHeight));
             const canvas = document.createElement('canvas');
             canvas.width = Math.round(img.naturalWidth * scale);
             canvas.height = Math.round(img.naturalHeight * scale);
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.7));
+            const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.5));
             if (thumbBlob) {
               const thumbFile = new File([thumbBlob], `thumb_${file.name}`, { type: 'image/jpeg' });
               const thumbResult = await uploadFile(thumbFile, 'thumbnails');

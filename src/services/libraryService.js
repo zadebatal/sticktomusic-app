@@ -1951,8 +1951,9 @@ const loadImageForCanvas = (url) => {
 };
 
 /**
- * Generate thumbnails for existing images that don't have one.
- * Runs in the background, processing one image at a time.
+ * Generate thumbnails for images in the library.
+ * Processes all images (re-generates if thumbnail already exists).
+ * Runs in the background, one image at a time.
  * @param {Object|null} db - Firestore instance (optional)
  * @param {string} artistId
  * @param {Array} libraryItems - current library array from state
@@ -1962,7 +1963,7 @@ const loadImageForCanvas = (url) => {
  */
 export const migrateThumbnails = async (db, artistId, libraryItems, uploadFileFn, onProgress) => {
   const images = (libraryItems || []).filter(item =>
-    item.type === MEDIA_TYPES.IMAGE && item.url && !item.thumbnailUrl
+    item.type === MEDIA_TYPES.IMAGE && item.url
   );
 
   if (images.length === 0) return { generated: 0, failed: 0 };
@@ -1979,7 +1980,7 @@ export const migrateThumbnails = async (db, artistId, libraryItems, uploadFileFn
       const { img, cleanup } = await loadImageForCanvas(item.url);
 
       // Canvas resize to 300px max dimension
-      const maxSize = 300;
+      const maxSize = 150;
       const scale = Math.min(1, maxSize / Math.max(img.naturalWidth, img.naturalHeight));
       const canvas = document.createElement('canvas');
       canvas.width = Math.round(img.naturalWidth * scale);
@@ -1989,7 +1990,7 @@ export const migrateThumbnails = async (db, artistId, libraryItems, uploadFileFn
       cleanup();
 
       // Convert to JPEG blob
-      const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.7));
+      const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.5));
       if (!thumbBlob) throw new Error('Canvas toBlob returned null');
 
       // Upload thumbnail to Firebase Storage
