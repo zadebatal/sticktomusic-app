@@ -35,6 +35,7 @@ const ContentLibrary = ({
   const [filter, setFilter] = useState('all');
   const [dateRange, setDateRange] = useState('all');
   const [selectedVideoIds, setSelectedVideoIds] = useState(new Set());
+  const [lastSelectedIndex, setLastSelectedIndex] = useState(null);
   const [exportingVideo, setExportingVideo] = useState(null);
   const [previewingVideo, setPreviewingVideo] = useState(null);
 
@@ -154,6 +155,25 @@ const ContentLibrary = ({
     return true;
   });
 
+  // Card-level click-to-select with shift-click range support
+  const handleCardSelect = useCallback((itemId, index, event) => {
+    if (event.shiftKey && lastSelectedIndex !== null) {
+      // Shift-click: select range
+      const start = Math.min(lastSelectedIndex, index);
+      const end = Math.max(lastSelectedIndex, index);
+      const rangeIds = filteredItems.slice(start, end + 1).map(item => item.id);
+      setSelectedVideoIds(prev => {
+        const newSet = new Set(prev);
+        rangeIds.forEach(id => newSet.add(id));
+        return newSet;
+      });
+    } else {
+      // Single click: toggle
+      toggleItemSelection(itemId);
+      setLastSelectedIndex(index);
+    }
+  }, [lastSelectedIndex, filteredItems, toggleItemSelection]);
+
   // Backwards compat alias
   const filteredVideos = isSlideshow ? [] : filteredItems;
 
@@ -257,35 +277,37 @@ const ContentLibrary = ({
           </div>
         ) : (
           <div style={styles.grid}>
-            {filteredItems.map(item => (
+            {filteredItems.map((item, index) => (
               isSlideshow ? (
-                <SlideshowCard
-                  key={item.id}
-                  slideshow={item}
-                  isSelected={selectedVideoIds.has(item.id)}
-                  onToggleSelect={() => toggleItemSelection(item.id)}
-                  onEdit={() => onEditSlideshow?.(item)}
-                  onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
-                  onPost={() => {
-                    setPostingSlideshow(item);
-                    setShowSlideshowPostingModal(true);
-                  }}
-                />
+                <div key={item.id} onClick={(e) => handleCardSelect(item.id, index, e)} style={{ cursor: 'pointer' }}>
+                  <SlideshowCard
+                    slideshow={item}
+                    isSelected={selectedVideoIds.has(item.id)}
+                    onToggleSelect={() => toggleItemSelection(item.id)}
+                    onEdit={() => onEditSlideshow?.(item)}
+                    onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
+                    onPost={() => {
+                      setPostingSlideshow(item);
+                      setShowSlideshowPostingModal(true);
+                    }}
+                  />
+                </div>
               ) : (
-                <VideoCard
-                  key={item.id}
-                  video={item}
-                  isSelected={selectedVideoIds.has(item.id)}
-                  onToggleSelect={() => toggleItemSelection(item.id)}
-                  onEdit={() => onEditVideo(item)}
-                  onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
-                  onApprove={() => onApproveVideo(item.id)}
-                  onPost={() => setExportingVideo(item)}
-                  onRender={() => handleRenderVideo(item)}
-                  onPreview={() => setPreviewingVideo(item)}
-                  isRendering={renderingVideoId === item.id}
-                  renderProgress={renderingVideoId === item.id ? renderProgress : 0}
-                />
+                <div key={item.id} onClick={(e) => handleCardSelect(item.id, index, e)} style={{ cursor: 'pointer' }}>
+                  <VideoCard
+                    video={item}
+                    isSelected={selectedVideoIds.has(item.id)}
+                    onToggleSelect={() => toggleItemSelection(item.id)}
+                    onEdit={() => onEditVideo(item)}
+                    onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
+                    onApprove={() => onApproveVideo(item.id)}
+                    onPost={() => setExportingVideo(item)}
+                    onRender={() => handleRenderVideo(item)}
+                    onPreview={() => setPreviewingVideo(item)}
+                    isRendering={renderingVideoId === item.id}
+                    renderProgress={renderingVideoId === item.id ? renderProgress : 0}
+                  />
+                </div>
               )
             ))}
           </div>

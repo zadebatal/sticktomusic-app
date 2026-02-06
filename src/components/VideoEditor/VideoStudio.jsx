@@ -1594,23 +1594,28 @@ const VideoStudio = ({
                 )}
 
                 {/* Dashboard (Content Library) */}
-                {(currentView === 'library' || currentView === 'slideshows') && !showEditor && !showSlideshowEditor && (
+                {(currentView === 'library' || currentView === 'slideshows' || showEditor || showSlideshowEditor) && (
                   <>
                     <span style={styles.breadcrumbSep}>/</span>
-                    <span style={styles.breadcrumbCurrent}>Dashboard</span>
+                    <button
+                      style={{
+                        ...styles.breadcrumbLink,
+                        ...(!showEditor && !showSlideshowEditor ? styles.breadcrumbCurrent : {})
+                      }}
+                      onClick={() => {
+                        const targetView = studioMode === 'slideshows' || currentView === 'slideshows' || showSlideshowEditor ? 'slideshows' : 'library';
+                        setCurrentView(targetView);
+                        setShowEditor(false);
+                        setShowSlideshowEditor(false);
+                      }}
+                    >
+                      Dashboard
+                    </button>
                   </>
                 )}
 
                 {/* Editor */}
-                {showEditor && (
-                  <>
-                    <span style={styles.breadcrumbSep}>/</span>
-                    <span style={styles.breadcrumbCurrent}>Editor</span>
-                  </>
-                )}
-
-                {/* Slideshow Editor */}
-                {showSlideshowEditor && (
+                {(showEditor || showSlideshowEditor) && (
                   <>
                     <span style={styles.breadcrumbSep}>/</span>
                     <span style={styles.breadcrumbCurrent}>Editor</span>
@@ -1659,7 +1664,7 @@ const VideoStudio = ({
                   </>
                 )}
 
-                {/* Videos or Slideshows - Library View */}
+                {/* Videos or Slideshows */}
                 {(currentView === 'library' || currentView === 'slideshows' || showEditor || showSlideshowEditor) && (
                   <>
                     <span style={styles.breadcrumbSep}>/</span>
@@ -1669,7 +1674,6 @@ const VideoStudio = ({
                         ...((currentView === 'library' || currentView === 'slideshows') && !showEditor && !showSlideshowEditor ? styles.breadcrumbCurrent : {})
                       }}
                       onClick={() => {
-                        // Navigate to the appropriate library view
                         const targetView = studioMode === 'slideshows' || currentView === 'slideshows' || showSlideshowEditor ? 'slideshows' : 'library';
                         setCurrentView(targetView);
                         setShowEditor(false);
@@ -1681,16 +1685,29 @@ const VideoStudio = ({
                   </>
                 )}
 
-                {/* Editor */}
-                {showEditor && (
+                {/* Dashboard */}
+                {(currentView === 'library' || currentView === 'slideshows' || showEditor || showSlideshowEditor) && (
                   <>
                     <span style={styles.breadcrumbSep}>/</span>
-                    <span style={styles.breadcrumbCurrent}>Editor</span>
+                    <button
+                      style={{
+                        ...styles.breadcrumbLink,
+                        ...((currentView === 'library' || currentView === 'slideshows') && !showEditor && !showSlideshowEditor ? styles.breadcrumbCurrent : {})
+                      }}
+                      onClick={() => {
+                        const targetView = studioMode === 'slideshows' || currentView === 'slideshows' || showSlideshowEditor ? 'slideshows' : 'library';
+                        setCurrentView(targetView);
+                        setShowEditor(false);
+                        setShowSlideshowEditor(false);
+                      }}
+                    >
+                      Dashboard
+                    </button>
                   </>
                 )}
 
-                {/* Slideshow Editor */}
-                {showSlideshowEditor && (
+                {/* Editor */}
+                {(showEditor || showSlideshowEditor) && (
                   <>
                     <span style={styles.breadcrumbSep}>/</span>
                     <span style={styles.breadcrumbCurrent}>Editor</span>
@@ -1898,6 +1915,8 @@ const VideoStudio = ({
       {/* Slideshow Editor Modal */}
       {showSlideshowEditor && (selectedCategory || (USE_LIBRARY_SYSTEM && currentArtistId)) && (
         <SlideshowEditor
+          db={db}
+          artistId={currentArtistId}
           category={selectedCategory || {
             id: 'library-session',
             name: 'Library',

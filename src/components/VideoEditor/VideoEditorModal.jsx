@@ -80,6 +80,7 @@ const VideoEditorModal = ({
   const [showBeatSelector, setShowBeatSelector] = useState(false);
   const [selectedClips, setSelectedClips] = useState([]);
   const [timelineScale, setTimelineScale] = useState(1);
+  const [clipResize, setClipResize] = useState({ active: false, clipIndex: -1, edge: null, startX: 0, startDuration: 0 });
 
   // AI Transcription state
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
@@ -1061,6 +1062,44 @@ const VideoEditorModal = ({
     }
     setClipDrag({ dragging: false, fromIndex: -1, toIndex: -1 });
   }, [clipDrag]);
+
+  // Clip resize handlers (drag edges to change duration)
+  const handleResizeStart = useCallback((e, clipIndex, edge) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const clip = clips[clipIndex];
+    if (!clip || clip.locked) return;
+    setClipResize({ active: true, clipIndex, edge, startX: e.clientX, startDuration: clip.duration || 1 });
+  }, [clips]);
+
+  useEffect(() => {
+    if (!clipResize.active) return;
+
+    const handleResizeMove = (e) => {
+      const deltaX = e.clientX - clipResize.startX;
+      const pixelsPerSecond = 40;
+      const deltaSec = deltaX / pixelsPerSecond;
+      let newDuration;
+      if (clipResize.edge === 'right') {
+        newDuration = clipResize.startDuration + deltaSec;
+      } else {
+        newDuration = clipResize.startDuration - deltaSec;
+      }
+      newDuration = Math.max(0.1, Math.min(30, newDuration));
+      handleUpdateClipDuration(clipResize.clipIndex, newDuration);
+    };
+
+    const handleResizeEnd = () => {
+      setClipResize({ active: false, clipIndex: -1, edge: null, startX: 0, startDuration: 0 });
+    };
+
+    document.addEventListener('mousemove', handleResizeMove);
+    document.addEventListener('mouseup', handleResizeEnd);
+    return () => {
+      document.removeEventListener('mousemove', handleResizeMove);
+      document.removeEventListener('mouseup', handleResizeEnd);
+    };
+  }, [clipResize, handleUpdateClipDuration]);
 
   const handleApplyPreset = useCallback((preset) => {
     setSelectedPreset(preset);
@@ -2173,8 +2212,8 @@ const VideoEditorModal = ({
                         {clips.map((clip, index) => (
                           <div
                             key={clip.id}
-                            draggable={!clip.locked}
-                            onDragStart={() => handleClipDragStart(index)}
+                            draggable={!clip.locked && !clipResize.active}
+                            onDragStart={() => !clipResize.active && handleClipDragStart(index)}
                             onDragOver={(e) => { e.preventDefault(); handleClipDragOver(index); }}
                             onDragEnd={handleClipDragEnd}
                             style={{
@@ -2186,10 +2225,31 @@ const VideoEditorModal = ({
                                 borderLeft: '3px solid #22c55e',
                                 marginLeft: '-3px'
                               } : {}),
-                              cursor: clip.locked ? 'not-allowed' : 'grab'
+                              cursor: clip.locked ? 'not-allowed' : 'grab',
+                              position: 'relative'
                             }}
                             onClick={(e) => handleClipSelect(index, e)}
                           >
+                            {/* Left resize handle */}
+                            {!clip.locked && (
+                              <div
+                                onMouseDown={(e) => handleResizeStart(e, index, 'left')}
+                                style={{
+                                  position: 'absolute',
+                                  left: 0,
+                                  top: 0,
+                                  bottom: 0,
+                                  width: '6px',
+                                  cursor: 'col-resize',
+                                  zIndex: 2,
+                                  background: 'transparent',
+                                  borderLeft: '2px solid transparent',
+                                  transition: 'border-color 0.15s',
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.borderLeftColor = '#a78bfa'}
+                                onMouseLeave={(e) => e.currentTarget.style.borderLeftColor = 'transparent'}
+                              />
+                            )}
                             {clip.thumbnail ? (
                               <img src={clip.thumbnail} alt="" style={styles.clipThumb} draggable={false} />
                             ) : (
@@ -2199,6 +2259,26 @@ const VideoEditorModal = ({
                               {clip.duration?.toFixed(1)}s
                             </span>
                             {clip.locked && <span style={styles.clipLock}>🔒</span>}
+                            {/* Right resize handle */}
+                            {!clip.locked && (
+                              <div
+                                onMouseDown={(e) => handleResizeStart(e, index, 'right')}
+                                style={{
+                                  position: 'absolute',
+                                  right: 0,
+                                  top: 0,
+                                  bottom: 0,
+                                  width: '6px',
+                                  cursor: 'col-resize',
+                                  zIndex: 2,
+                                  background: 'transparent',
+                                  borderRight: '2px solid transparent',
+                                  transition: 'border-color 0.15s',
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.borderRightColor = '#a78bfa'}
+                                onMouseLeave={(e) => e.currentTarget.style.borderRightColor = 'transparent'}
+                              />
+                            )}
                           </div>
                         ))}
                       </div>

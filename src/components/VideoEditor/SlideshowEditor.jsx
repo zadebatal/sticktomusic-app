@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
+import { subscribeToLibrary, getCollectionsAsync, MEDIA_TYPES } from '../../services/libraryService';
 import LyricBank from './LyricBank';
 import AudioClipSelector from './AudioClipSelector';
 import LyricAnalyzer from './LyricAnalyzer';
@@ -17,6 +18,8 @@ import LyricAnalyzer from './LyricAnalyzer';
  */
 
 const SlideshowEditor = ({
+  db = null,
+  artistId = null,
   category,
   existingSlideshow = null,
   batchMode = false,
@@ -35,12 +38,27 @@ const SlideshowEditor = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Keyboard Delete/Backspace to remove current slide
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !editingTextId && slides.length > 1) {
+        e.preventDefault();
+        removeSlide(slides[selectedSlideIndex]?.id);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedSlideIndex, slides, editingTextId, removeSlide]);
+
   // Slideshow state
   const [name, setName] = useState(existingSlideshow?.name || 'Untitled Slideshow');
   const [aspectRatio, setAspectRatio] = useState(existingSlideshow?.aspectRatio || '9:16');
   const [slides, setSlides] = useState(existingSlideshow?.slides || []);
   const [selectedSlideIndex, setSelectedSlideIndex] = useState(0);
   const [activeBank, setActiveBank] = useState('imageA'); // 'imageA' | 'imageB' | 'audio' | 'lyrics'
+  const [libraryImages, setLibraryImages] = useState([]);
+  const [collections, setCollections] = useState([]);
+  const [selectedSource, setSelectedSource] = useState('bankA'); // 'bankA' | 'bankB' | 'all' | collection ID
 
   // Audio state
   const [selectedAudio, setSelectedAudio] = useState(existingSlideshow?.audio || null);
@@ -117,6 +135,36 @@ const SlideshowEditor = ({
   const audioTracks = category?.audio || [];
   const lyrics = category?.lyrics || [];
   const activeContent = activeBank === 'imageA' ? imagesA : activeBank === 'imageB' ? imagesB : activeBank === 'audio' ? audioTracks : [];
+
+  // Load library images and collections when db/artistId available
+  useEffect(() => {
+    if (!db || !artistId) return;
+
+    const unsubscribe = subscribeToLibrary(db, artistId, (items) => {
+      const images = items.filter(item => item.type === MEDIA_TYPES.IMAGE);
+      setLibraryImages(images);
+    });
+
+    // Load collections
+    getCollectionsAsync(db, artistId).then(cols => {
+      setCollections(cols.filter(c => c.type !== 'smart'));
+    }).catch(err => console.warn('[SlideshowEditor] Failed to load collections:', err));
+
+    return () => unsubscribe();
+  }, [db, artistId]);
+
+  // Compute active images based on selected source
+  const activeImages = (() => {
+    if (selectedSource === 'bankA') return imagesA;
+    if (selectedSource === 'bankB') return imagesB;
+    if (selectedSource === 'all') return libraryImages;
+    // Collection ID - filter library images by collection membership
+    const col = collections.find(c => c.id === selectedSource);
+    if (col && col.mediaIds) {
+      return libraryImages.filter(img => col.mediaIds.includes(img.id));
+    }
+    return imagesA; // fallback
+  })();
 
   // Export dimensions based on aspect ratio (used during export only)
   const exportDimensions = aspectRatio === '9:16'
@@ -877,6 +925,35 @@ const SlideshowEditor = ({
               borderBottom: '1px solid rgba(255,255,255,0.1)'
             } : {})
           }}>
+            {/* Source Dropdown */}
+            <div style={{
+              padding: '8px 12px',
+              borderBottom: '1px solid rgba(255,255,255,0.1)'
+            }}>
+              <select
+                value={selectedSource}
+                onChange={(e) => setSelectedSource(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  backgroundColor: '#1a1a2e',
+                  color: '#fff',
+                  fontSize: '13px',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="bankA">Image Bank A</option>
+                <option value="bankB">Image Bank B</option>
+                {(db && artistId) && <option value="all">All Media (Library)</option>}
+                {collections.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+
             <div style={styles.bankTabs}>
               <button
                 style={{
@@ -1028,37 +1105,41 @@ const SlideshowEditor = ({
                     ))}
                   </div>
                 )
-              ) : activeContent.length === 0 ? (
-                <div style={styles.emptyBank}>
-                  <p>No images in {activeBank === 'imageA' ? 'Image A' : 'Image B'}</p>
-                  <p style={styles.emptySubtext}>Upload images in the Aesthetic Home</p>
-                </div>
-              ) : (
-                <div style={styles.clipGrid}>
-                  {activeContent.map(image => (
-                    <div
-                      key={image.id}
-                      style={styles.clipCard}
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData('application/json', JSON.stringify({
-                          ...image,
-                          url: image.url || image.localUrl,
-                          thumbnail: image.url || image.localUrl,
-                          sourceBank: activeBank // Track which bank this came from
-                        }));
-                      }}
-                    >
-                      <img
-                        src={image.url || image.localUrl}
-                        alt={image.name}
-                        style={styles.clipThumbnail}
-                      />
-                      <span style={styles.clipName}>{image.name?.slice(0, 15) || 'Untitled'}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+              ) : (() => {
+                const displayImages = (selectedSource !== 'bankA' && selectedSource !== 'bankB' && (activeBank === 'imageA' || activeBank === 'imageB')) ? activeImages : activeContent;
+                const sourceName = selectedSource === 'bankA' ? 'Image A' : selectedSource === 'bankB' ? 'Image B' : selectedSource === 'all' ? 'Library' : 'Collection';
+                return displayImages.length === 0 ? (
+                  <div style={styles.emptyBank}>
+                    <p>No images in {sourceName}</p>
+                    <p style={styles.emptySubtext}>Upload images in the Aesthetic Home</p>
+                  </div>
+                ) : (
+                  <div style={styles.clipGrid}>
+                    {displayImages.map(image => (
+                      <div
+                        key={image.id}
+                        style={styles.clipCard}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('application/json', JSON.stringify({
+                            ...image,
+                            url: image.url || image.localUrl,
+                            thumbnail: image.url || image.localUrl,
+                            sourceBank: selectedSource === 'bankA' ? 'imageA' : selectedSource === 'bankB' ? 'imageB' : selectedSource
+                          }));
+                        }}
+                      >
+                        <img
+                          src={image.url || image.localUrl}
+                          alt={image.name}
+                          style={styles.clipThumbnail}
+                        />
+                        <span style={styles.clipName}>{image.name?.slice(0, 15) || 'Untitled'}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
           )}
@@ -1254,6 +1335,36 @@ const SlideshowEditor = ({
                   </svg>
                   Add Text
                 </button>
+
+                {/* Delete Slide Button */}
+                {slides.length > 1 && (
+                  <button
+                    onClick={() => removeSlide(slides[selectedSlideIndex]?.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      color: '#f87171',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      fontWeight: '500',
+                      transition: 'all 0.15s'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)'; e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'; }}
+                    title="Delete current slide (Delete key)"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                    Delete Slide
+                  </button>
+                )}
 
                 {/* Add Audio Button with Dropdown */}
                 <div style={{ position: 'relative' }}>
@@ -1510,18 +1621,42 @@ const SlideshowEditor = ({
                         <span>{index + 1}</span>
                       </div>
                     )}
+                    {slides.length > 1 && (
                     <button
-                      style={styles.removeSlideButton}
+                      style={{
+                        ...styles.removeSlideButton,
+                        position: 'absolute',
+                        top: '2px',
+                        right: '2px',
+                        width: '20px',
+                        height: '20px',
+                        borderRadius: '50%',
+                        background: 'rgba(239, 68, 68, 0.8)',
+                        border: 'none',
+                        color: '#fff',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 0,
+                        zIndex: 2,
+                        opacity: 1,
+                        transition: 'background 0.15s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 1)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.8)'}
                       onClick={(e) => {
                         e.stopPropagation();
                         removeSlide(slide.id);
                       }}
+                      title="Remove slide"
                     >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                         <line x1="18" y1="6" x2="6" y2="18"/>
                         <line x1="6" y1="6" x2="18" y2="18"/>
                       </svg>
                     </button>
+                    )}
                   </div>
                 ))}
 
