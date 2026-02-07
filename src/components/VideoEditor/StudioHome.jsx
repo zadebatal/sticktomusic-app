@@ -1118,7 +1118,6 @@ const StudioHome = ({
     },
     body: {
       display: 'flex',
-      flexDirection: 'column',
       flex: 1,
       overflow: 'hidden',
       position: 'relative'
@@ -1746,15 +1745,15 @@ const StudioHome = ({
 
         </div>
 
-        {/* 3-Column Panel — Audio Bank | Lyrics | Captions/Hashtags */}
+        {/* Right Panel — 3 columns: Audio Bank | Lyrics | Captions/Hashtags */}
         {(studioMode === 'videos' || studioMode === 'slideshows') && (
           <div style={{
             display: 'flex',
+            width: '780px',
             flexShrink: 0,
-            borderTop: '1px solid rgba(255,255,255,0.1)',
+            borderLeft: '1px solid rgba(255,255,255,0.1)',
             backgroundColor: '#0d0d14',
-            height: '220px',
-            minHeight: '220px'
+            overflow: 'hidden'
           }}>
 
             {/* ── Audio Bank Column ── */}
@@ -1766,21 +1765,21 @@ const StudioHome = ({
               borderRight: '1px solid rgba(255,255,255,0.08)'
             }}>
               <div style={{
-                padding: '10px 14px',
+                padding: '10px 12px',
                 borderBottom: '1px solid rgba(255,255,255,0.08)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 flexShrink: 0
               }}>
-                <span style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>
                   🎵 Audio Bank
                 </span>
                 <label style={{
                   display: 'flex', alignItems: 'center', gap: '4px',
                   padding: '3px 8px', borderRadius: '6px',
                   backgroundColor: 'rgba(99,102,241,0.2)', border: 'none',
-                  color: '#a5b4fc', fontSize: '11px', fontWeight: 500,
+                  color: '#a5b4fc', fontSize: '10px', fontWeight: 500,
                   cursor: 'pointer'
                 }}>
                   ⬆️ Upload
@@ -1793,18 +1792,18 @@ const StudioHome = ({
                 </label>
               </div>
               <div style={{
-                padding: '4px 14px',
+                padding: '4px 12px',
                 borderBottom: '1px solid rgba(255,255,255,0.05)',
-                fontSize: '11px',
+                fontSize: '10px',
                 color: 'rgba(255,255,255,0.4)',
                 flexShrink: 0
               }}>
                 {selectedCollection
-                  ? `Showing: ${collections.find(c => c.id === selectedCollection)?.name || 'Collection'}`
-                  : 'Showing: All Audio'}
+                  ? `${collections.find(c => c.id === selectedCollection)?.name || 'Collection'}`
+                  : 'All Audio'}
                 {' '}({sidebarAudio.length})
               </div>
-              <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '4px' }}>
                 {sidebarAudio.length === 0 ? (
                   <div style={{ padding: '16px 8px', textAlign: 'center', color: 'rgba(255,255,255,0.25)', fontSize: '11px' }}>
                     {selectedCollection
@@ -1819,9 +1818,9 @@ const StudioHome = ({
                         key={audio.id}
                         onClick={() => handleSelectMedia(audio)}
                         style={{
-                          display: 'flex', alignItems: 'center', gap: '8px',
-                          padding: '6px 8px', borderRadius: '6px', marginBottom: '2px',
-                          cursor: 'pointer', fontSize: '12px',
+                          display: 'flex', alignItems: 'center', gap: '6px',
+                          padding: '5px 6px', borderRadius: '6px', marginBottom: '2px',
+                          cursor: 'pointer', fontSize: '11px',
                           backgroundColor: isSelected ? 'rgba(99,102,241,0.2)' : 'transparent'
                         }}
                         onMouseEnter={(e) => {
@@ -1832,10 +1831,10 @@ const StudioHome = ({
                         }}
                       >
                         <span style={{
-                          width: '28px', height: '28px', borderRadius: '5px',
+                          width: '26px', height: '26px', borderRadius: '5px',
                           background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '12px', flexShrink: 0
+                          fontSize: '11px', flexShrink: 0
                         }}>🎵</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{
@@ -1863,7 +1862,7 @@ const StudioHome = ({
                           }}
                           style={{
                             background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)',
-                            cursor: 'pointer', fontSize: '13px', padding: '0 2px', flexShrink: 0,
+                            cursor: 'pointer', fontSize: '12px', padding: '0 2px', flexShrink: 0,
                             lineHeight: 1
                           }}
                           title="Delete audio"
@@ -1884,21 +1883,21 @@ const StudioHome = ({
               borderRight: '1px solid rgba(255,255,255,0.08)'
             }}>
               <div style={{
-                padding: '10px 14px',
+                padding: '10px 12px',
                 borderBottom: '1px solid rgba(255,255,255,0.08)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 flexShrink: 0
               }}>
-                <span style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>
                   📝 Lyrics
                 </span>
-                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)' }}>
+                <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)' }}>
                   {lyrics.length} saved
                 </span>
               </div>
-              <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px' }}>
                 <LyricBank
                   lyrics={lyrics}
                   onAddLyrics={handleAddLyrics}
@@ -1918,18 +1917,18 @@ const StudioHome = ({
               overflow: 'hidden'
             }}>
               <div style={{
-                padding: '10px 14px',
+                padding: '10px 12px',
                 borderBottom: '1px solid rgba(255,255,255,0.08)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 flexShrink: 0
               }}>
-                <span style={{ fontSize: '13px', fontWeight: 600, color: '#fff' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>
                   #️⃣ Captions / Hashtags
                 </span>
               </div>
-              <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px' }}>
                 {selectedCollection ? (
                   <CollectionBankEditor
                     collection={collections.find(c => c.id === selectedCollection)}
@@ -1938,8 +1937,8 @@ const StudioHome = ({
                     compact
                   />
                 ) : (
-                  <div style={{ padding: '24px 8px', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '12px' }}>
-                    Select a collection to manage its captions and hashtags
+                  <div style={{ padding: '24px 8px', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '11px' }}>
+                    Select a collection to manage captions and hashtags
                   </div>
                 )}
               </div>
