@@ -45,7 +45,8 @@ import {
   addManyToLibraryAsync,
   removeFromLibraryAsync,
   migrateToFirestore,
-  migrateThumbnails
+  migrateThumbnails,
+  migrateVideoThumbnails
 } from '../../services/libraryService';
 import { uploadFile, getMediaDuration } from '../../services/firebaseStorage';
 
@@ -312,6 +313,46 @@ const StudioHome = ({
   // eslint-disable-next-line
   }, [library, artistId]);
 
+  // Background thumbnail migration for existing videos (same pattern as images)
+  const videoThumbMigrationRef = useRef(false);
+  useEffect(() => {
+    const VID_THUMB_VERSION = 1; // v1 = 150px @ 0.5 quality
+    if (videoThumbMigrationRef.current || !artistId) return;
+    if (library.length === 0) return;
+
+    const versionKey = `stm_vidthumb_v${VID_THUMB_VERSION}_${artistId}`;
+    const alreadyDone = localStorage.getItem(versionKey);
+    if (alreadyDone) return;
+
+    const videoItems = library.filter(item => item.type === 'video' && item.url && !item.thumbnailUrl);
+    if (videoItems.length === 0) {
+      localStorage.setItem(versionKey, Date.now().toString());
+      return;
+    }
+    videoThumbMigrationRef.current = true;
+
+    console.log(`[VideoThumbMigration] v${VID_THUMB_VERSION}: ${videoItems.length} videos to process`);
+
+    const timer = setTimeout(async () => {
+      try {
+        const result = await migrateVideoThumbnails(db, artistId, library, uploadFile, (done, total, generated) => {
+          if (done % 5 === 0 || done === total) {
+            setLibraryRefreshTrigger(prev => prev + 1);
+          }
+        });
+        console.log(`[VideoThumbMigration] v${VID_THUMB_VERSION} complete: ${result.generated} generated, ${result.failed} failed`);
+        localStorage.setItem(versionKey, Date.now().toString());
+        if (result.generated > 0) {
+          setLibraryRefreshTrigger(prev => prev + 1);
+        }
+      } catch (err) {
+        console.warn('[StudioHome] Video thumbnail migration error:', err);
+      }
+    }, 4000); // Start after image migration has a head start
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line
+  }, [library, artistId]);
+
   // =====================
   // UPLOAD HANDLERS
   // =====================
@@ -369,16 +410,52 @@ const StudioHome = ({
         }
 
         if (type === MEDIA_TYPES.VIDEO) {
-          // Check for audio in video
-          const video = document.createElement('video');
-          video.src = localUrl;
-          await new Promise(r => { video.onloadedmetadata = r; });
-          width = video.videoWidth;
-          height = video.videoHeight;
+          // Extract video metadata (dimensions)
+          const metaVideo = document.createElement('video');
+          metaVideo.src = localUrl;
+          await new Promise(r => { metaVideo.onloadedmetadata = r; });
+          width = metaVideo.videoWidth;
+          height = metaVideo.videoHeight;
           hasEmbeddedAudio = true; // Assume true, can't reliably detect
         }
 
         let thumbnailUrl = null;
+
+        // Generate thumbnail from video frame (seek to 1s or 25% of duration)
+        if (type === MEDIA_TYPES.VIDEO) {
+          try {
+            const video = document.createElement('video');
+            video.src = localUrl;
+            video.crossOrigin = 'anonymous';
+            video.muted = true;
+            await new Promise((resolve, reject) => {
+              video.onloadeddata = resolve;
+              video.onerror = reject;
+              // Fallback timeout in case onloadeddata never fires
+              setTimeout(resolve, 5000);
+            });
+            const seekTime = Math.min(1, (video.duration || 2) * 0.25);
+            video.currentTime = seekTime;
+            await new Promise(r => { video.onseeked = r; });
+
+            const maxThumbSize = 150;
+            const scale = Math.min(1, maxThumbSize / Math.max(video.videoWidth, video.videoHeight));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(video.videoWidth * scale);
+            canvas.height = Math.round(video.videoHeight * scale);
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.5));
+            if (thumbBlob) {
+              const thumbFile = new File([thumbBlob], `thumb_${file.name}.jpg`, { type: 'image/jpeg' });
+              const thumbResult = await uploadFile(thumbFile, 'thumbnails');
+              thumbnailUrl = thumbResult.url;
+            }
+          } catch (thumbErr) {
+            console.warn('[StudioHome] Video thumbnail generation failed:', thumbErr);
+          }
+        }
+
         if (type === MEDIA_TYPES.IMAGE) {
           const img = new Image();
           img.src = localUrl;
@@ -1657,6 +1734,21 @@ const StudioHome = ({
                       {isSelected && (
                         <span style={{ color: '#6366f1', fontSize: '14px', flexShrink: 0 }}>✓</span>
                       )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isSelected) setSelectedMedia(prev => ({ ...prev, audio: null }));
+                          removeFromLibraryAsync(db, artistId, audio.id).then(() => {
+                            setLibraryRefreshTrigger(t => t + 1);
+                          });
+                        }}
+                        style={{
+                          background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)',
+                          cursor: 'pointer', fontSize: '14px', padding: '0 2px', flexShrink: 0,
+                          lineHeight: 1
+                        }}
+                        title="Delete audio"
+                      >×</button>
                     </div>
                   );
                 })

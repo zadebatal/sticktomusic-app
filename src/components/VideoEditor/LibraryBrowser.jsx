@@ -1295,7 +1295,9 @@ const LibraryBrowser = ({
           <img src={media.thumbnailUrl || media.url} alt={media.name} style={styles.mediaThumbnail} loading="lazy" />
         )}
         {media.type === MEDIA_TYPES.VIDEO && (
-          <video src={media.url} style={styles.mediaThumbnail} muted preload="metadata" />
+          media.thumbnailUrl
+            ? <img src={media.thumbnailUrl} alt={media.name} style={styles.mediaThumbnail} loading="lazy" />
+            : <video src={media.url} style={styles.mediaThumbnail} muted preload="metadata" />
         )}
         <button
           onClick={(e) => {
@@ -1372,7 +1374,9 @@ const LibraryBrowser = ({
         </div>
       )}
       {media.type === MEDIA_TYPES.VIDEO && (
-        <video src={media.url} style={styles.mediaThumbnail} muted preload="metadata" />
+        media.thumbnailUrl
+          ? <img src={media.thumbnailUrl} alt={media.name} style={styles.mediaThumbnail} loading="lazy" />
+          : <video src={media.url} style={styles.mediaThumbnail} muted preload="metadata" />
       )}
       {media.type === MEDIA_TYPES.IMAGE && (
         <img src={media.thumbnailUrl || media.url} alt={media.name} style={styles.mediaThumbnail} loading="lazy" />

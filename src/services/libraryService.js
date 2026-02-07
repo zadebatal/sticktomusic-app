@@ -2033,6 +2033,101 @@ export const migrateThumbnails = async (db, artistId, libraryItems, uploadFileFn
   return { generated, failed };
 };
 
+/**
+ * Background-migrate video thumbnails for existing video items that lack thumbnailUrl.
+ * Seeks to 1s (or 25% of duration) and captures a frame as JPEG.
+ * @param {Object|null} db - Firestore instance (optional)
+ * @param {string} artistId
+ * @param {Array} libraryItems - current library array from state
+ * @param {Function} uploadFileFn - uploadFile from firebaseStorage
+ * @param {Function} onProgress - callback(done, total, generated)
+ * @returns {Promise<{generated: number, failed: number}>}
+ */
+export const migrateVideoThumbnails = async (db, artistId, libraryItems, uploadFileFn, onProgress) => {
+  const videos = (libraryItems || []).filter(item =>
+    item.type === MEDIA_TYPES.VIDEO && item.url && !item.thumbnailUrl
+  );
+
+  if (videos.length === 0) return { generated: 0, failed: 0 };
+
+  console.log(`[VideoThumbMigration] Starting — ${videos.length} videos need thumbnails`);
+
+  let generated = 0;
+  let failed = 0;
+
+  for (let i = 0; i < videos.length; i++) {
+    const item = videos[i];
+    try {
+      // Load video and seek to a representative frame
+      const video = document.createElement('video');
+      video.crossOrigin = 'anonymous';
+      video.muted = true;
+      video.preload = 'auto';
+
+      // Try fetch-as-blob first for CORS safety (same pattern as image migration)
+      let videoUrl = item.url;
+      try {
+        const response = await fetch(item.url, { mode: 'cors' });
+        const blob = await response.blob();
+        videoUrl = URL.createObjectURL(blob);
+      } catch (fetchErr) {
+        // Fallback to direct URL
+      }
+
+      video.src = videoUrl;
+      await new Promise((resolve, reject) => {
+        video.onloadeddata = resolve;
+        video.onerror = reject;
+        setTimeout(resolve, 8000); // 8s timeout
+      });
+
+      // Seek to 1s or 25% of duration
+      const seekTime = Math.min(1, (video.duration || 2) * 0.25);
+      video.currentTime = seekTime;
+      await new Promise((resolve) => {
+        video.onseeked = resolve;
+        setTimeout(resolve, 3000); // 3s seek timeout
+      });
+
+      // Draw frame to canvas
+      const maxSize = 150;
+      const vw = video.videoWidth || 320;
+      const vh = video.videoHeight || 180;
+      const scale = Math.min(1, maxSize / Math.max(vw, vh));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(vw * scale);
+      canvas.height = Math.round(vh * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // Clean up blob URL if we created one
+      if (videoUrl !== item.url) URL.revokeObjectURL(videoUrl);
+
+      // Convert to JPEG
+      const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.5));
+      if (!thumbBlob) throw new Error('Canvas toBlob returned null');
+
+      // Upload
+      const thumbFile = new File([thumbBlob], `thumb_${item.name}.jpg`, { type: 'image/jpeg' });
+      const { url: thumbnailUrl } = await uploadFileFn(thumbFile, 'thumbnails');
+
+      // Update record
+      await updateLibraryItemAsync(db, artistId, item.id, { thumbnailUrl });
+
+      generated++;
+      console.log(`[VideoThumbMigration] ✓ ${i + 1}/${videos.length} — ${item.name}`);
+    } catch (err) {
+      failed++;
+      console.warn(`[VideoThumbMigration] ✗ ${i + 1}/${videos.length} — ${item.name}:`, err.message);
+    }
+
+    if (onProgress) onProgress(i + 1, videos.length, generated);
+  }
+
+  console.log(`[VideoThumbMigration] Complete: ${generated} generated, ${failed} failed`);
+  return { generated, failed };
+};
+
 // ============================================================================
 // EXPORT
 // ============================================================================
@@ -2124,5 +2219,6 @@ export default {
 
   // Migration
   migrateToFirestore,
-  migrateThumbnails
+  migrateThumbnails,
+  migrateVideoThumbnails
 };
