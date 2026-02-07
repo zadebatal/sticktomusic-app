@@ -93,6 +93,10 @@ const StudioHome = ({
   // Upload cancellation
   const cancelFunctionsRef = useRef([]);
 
+  // Drag-and-drop from OS
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
+
   // Thumbnail migration ref (run once per session)
   const thumbMigrationRef = useRef(false);
 
@@ -593,6 +597,50 @@ const StudioHome = ({
     handleFileUpload(files, MEDIA_TYPES.IMAGE);
   };
 
+  // ── Drag-and-drop from OS (Finder / Explorer) ──
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!e.dataTransfer.types.includes('Files')) return;
+    dragCounterRef.current++;
+    if (dragCounterRef.current === 1) setIsDragOver(true);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) setIsDragOver(false);
+  };
+
+  const handleFileDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    dragCounterRef.current = 0;
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+
+    if (studioMode === 'videos') {
+      const videoFiles = files.filter(f => f.type.startsWith('video/'));
+      if (videoFiles.length > 0) handleFileUpload(videoFiles, MEDIA_TYPES.VIDEO);
+    } else if (studioMode === 'slideshows') {
+      const imageFiles = files.filter(f => f.type.startsWith('image/'));
+      if (imageFiles.length > 0) handleFileUpload(imageFiles, MEDIA_TYPES.IMAGE);
+    } else if (studioMode === 'audio') {
+      const audioFiles = files.filter(f => f.type.startsWith('audio/'));
+      if (audioFiles.length > 0) handleFileUpload(audioFiles, MEDIA_TYPES.AUDIO);
+    }
+  };
+
   // Helper function to format time mm:ss
   const formatTime = (seconds) => {
     if (!seconds || seconds < 0) return '0:00';
@@ -1058,7 +1106,31 @@ const StudioHome = ({
     body: {
       display: 'flex',
       flex: 1,
-      overflow: 'hidden'
+      overflow: 'hidden',
+      position: 'relative'
+    },
+    dropOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(99, 102, 241, 0.15)',
+      border: '3px dashed #6366f1',
+      borderRadius: '12px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 100,
+      pointerEvents: 'none'
+    },
+    dropOverlayContent: {
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      gap: '12px',
+      color: '#c7d2fe',
+      textAlign: 'center'
     },
     mainContent: {
       flex: 1,
@@ -1310,7 +1382,25 @@ const StudioHome = ({
       </div>
 
       {/* Body */}
-      <div style={styles.body}>
+      <div
+        style={styles.body}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleFileDrop}
+      >
+        {/* Drag-and-drop overlay */}
+        {isDragOver && studioMode && (
+          <div style={styles.dropOverlay}>
+            <div style={styles.dropOverlayContent}>
+              <div style={{ fontSize: '48px' }}>📁</div>
+              <div style={{ fontSize: '18px', fontWeight: 600 }}>
+                Drop {studioMode === 'videos' ? 'videos' : studioMode === 'slideshows' ? 'images' : 'audio files'} here to upload
+              </div>
+            </div>
+          </div>
+        )}
+
         <div style={styles.mainContent}>
           {/* Mode Selection */}
           {!studioMode && (
