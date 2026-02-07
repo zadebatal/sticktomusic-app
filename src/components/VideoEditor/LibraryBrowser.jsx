@@ -169,6 +169,7 @@ const LibraryBrowser = ({
   allowMultiSelect = false,
   showCollectionPicker = true,
   pullFromCollection = null, // Force pull from specific collection
+  onCollectionChange = null, // Notify parent when sidebar collection changes
   isMobile = false,
   compact = false,
   refreshTrigger = 0 // Increment to force refresh
@@ -1543,7 +1544,7 @@ const LibraryBrowser = ({
                   ...styles.sidebarItem,
                   ...(activeView === 'library' ? styles.sidebarItemActive : {})
                 }}
-                onClick={() => setActiveView('library')}
+                onClick={() => { setActiveView('library'); onCollectionChange?.(null); }}
               >
                 <span style={styles.sidebarItemIcon}>📚</span>
                 <span>All Media</span>
@@ -1571,6 +1572,7 @@ const LibraryBrowser = ({
                     onClick={() => {
                       if (renamingCollectionId !== collection.id) {
                         setActiveView(collection.id);
+                        onCollectionChange?.(collection.id);
                       }
                     }}
                     onDragOver={(e) => {
@@ -1680,7 +1682,7 @@ const LibraryBrowser = ({
                       ...styles.sidebarItem,
                       ...(activeView === collection.id ? styles.sidebarItemActive : {})
                     }}
-                    onClick={() => setActiveView(collection.id)}
+                    onClick={() => { setActiveView(collection.id); onCollectionChange?.(null); }}
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDropOnCollection(e, collection.id)}
                   >

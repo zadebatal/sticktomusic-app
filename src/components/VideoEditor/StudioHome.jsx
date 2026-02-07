@@ -70,7 +70,8 @@ const StudioHome = ({
 }) => {
   // UI State
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [activeTab, setActiveTab] = useState('media'); // 'media' | 'lyrics'
+  const [activeTab, setActiveTab] = useState('media'); // kept for compat
+  const [sidebarSection, setSidebarSection] = useState({ audio: true, lyrics: false, banks: false });
   const [selectedCollection, setSelectedCollection] = useState(null);
   const [autoCollectionSet, setAutoCollectionSet] = useState(false);
 
@@ -1286,7 +1287,7 @@ const StudioHome = ({
       color: 'rgba(255, 255, 255, 0.5)'
     },
     audioSidebar: {
-      width: '280px',
+      width: '300px',
       flexShrink: 0,
       borderLeft: '1px solid rgba(255,255,255,0.1)',
       backgroundColor: '#0d0d14',
@@ -1300,7 +1301,8 @@ const StudioHome = ({
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      flexShrink: 0
+      flexShrink: 0,
+      cursor: 'pointer'
     },
     audioSidebarTitle: {
       fontSize: '14px',
@@ -1374,30 +1376,6 @@ const StudioHome = ({
         </div>
 
         <div style={styles.headerRight}>
-          {studioMode && (
-            <div style={styles.tabs}>
-              <button
-                style={{...styles.tab, ...(activeTab === 'media' ? styles.tabActive : {})}}
-                onClick={() => setActiveTab('media')}
-              >
-                Media
-              </button>
-              <button
-                style={{...styles.tab, ...(activeTab === 'lyrics' ? styles.tabActive : {})}}
-                onClick={() => setActiveTab('lyrics')}
-              >
-                Lyrics
-              </button>
-              {selectedCollection && (
-                <button
-                  style={{...styles.tab, ...(activeTab === 'banks' ? styles.tabActive : {})}}
-                  onClick={() => setActiveTab('banks')}
-                >
-                  Captions/Hashtags
-                </button>
-              )}
-            </div>
-          )}
         </div>
       </div>
 
@@ -1475,7 +1453,7 @@ const StudioHome = ({
           )}
 
           {/* Video Mode */}
-          {studioMode === 'videos' && activeTab === 'media' && (
+          {studioMode === 'videos' && (
             <div style={styles.librarySection}>
               <div style={styles.libraryHeader}>
                 <span style={styles.libraryTitle}>
@@ -1503,6 +1481,7 @@ const StudioHome = ({
                   selectedMediaIds={selectedMedia.videos.map(v => v.id)}
                   allowMultiSelect={true}
                   pullFromCollection={selectedCollection}
+                  onCollectionChange={setSelectedCollection}
                   isMobile={isMobile}
                   compact
                   refreshTrigger={libraryRefreshTrigger}
@@ -1594,7 +1573,7 @@ const StudioHome = ({
           )}
 
           {/* Slideshow Mode */}
-          {studioMode === 'slideshows' && activeTab === 'media' && (
+          {studioMode === 'slideshows' && (
             <div style={styles.librarySection}>
               <div style={styles.libraryHeader}>
                 <span style={styles.libraryTitle}>
@@ -1622,6 +1601,7 @@ const StudioHome = ({
                   selectedMediaIds={selectedMedia.images.map(i => i.id)}
                   allowMultiSelect={true}
                   pullFromCollection={selectedCollection}
+                  onCollectionChange={setSelectedCollection}
                   isMobile={isMobile}
                   compact
                   refreshTrigger={libraryRefreshTrigger}
@@ -1712,7 +1692,7 @@ const StudioHome = ({
           )}
 
           {/* Audio Mode */}
-          {studioMode === 'audio' && activeTab === 'media' && (
+          {studioMode === 'audio' && (
             <div style={styles.librarySection}>
               <div style={styles.libraryHeader}>
                 <span style={styles.libraryTitle}>
@@ -1739,6 +1719,7 @@ const StudioHome = ({
                   selectedMediaIds={selectedMedia.audio ? [selectedMedia.audio.id] : []}
                   allowMultiSelect={false}
                   pullFromCollection={selectedCollection}
+                  onCollectionChange={setSelectedCollection}
                   isMobile={isMobile}
                   compact
                   refreshTrigger={libraryRefreshTrigger}
@@ -1762,136 +1743,182 @@ const StudioHome = ({
             </div>
           )}
 
-          {/* Lyrics Tab */}
-          {studioMode && activeTab === 'lyrics' && (
-            <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
-              <LyricBank
-                lyrics={lyrics}
-                onAddLyrics={handleAddLyrics}
-                onUpdateLyrics={handleUpdateLyrics}
-                onDeleteLyrics={handleDeleteLyrics}
-                onSelectLyrics={(l) => console.log('Selected lyrics:', l)}
-              />
-            </div>
-          )}
-
-          {/* Captions/Hashtags tab — per-collection banks */}
-          {studioMode && activeTab === 'banks' && selectedCollection && (
-            <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
-              <CollectionBankEditor
-                collection={collections.find(c => c.id === selectedCollection)}
-                artistId={artistId}
-                onBankChange={() => {
-                  // Refresh collections to get updated bank data
-                  setCollections(getCollections(artistId));
-                }}
-              />
-            </div>
-          )}
         </div>
 
-        {/* Audio Bank Sidebar — visible in video & slideshow modes */}
-        {(studioMode === 'videos' || studioMode === 'slideshows') && activeTab === 'media' && (
+        {/* Right Sidebar — Audio Bank + Lyrics + Captions/Hashtags */}
+        {(studioMode === 'videos' || studioMode === 'slideshows') && (
           <div style={styles.audioSidebar}>
-            {/* Header */}
-            <div style={styles.audioSidebarHeader}>
-              <span style={styles.audioSidebarTitle}>
-                🎵 Audio Bank
-              </span>
-              <label style={{
-                display: 'flex', alignItems: 'center', gap: '4px',
-                padding: '4px 10px', borderRadius: '6px',
-                backgroundColor: 'rgba(99,102,241,0.2)', border: 'none',
-                color: '#a5b4fc', fontSize: '11px', fontWeight: 500,
-                cursor: 'pointer'
-              }}>
-                ⬆️ Upload
-                <input
-                  type="file"
-                  accept=".mp3,audio/mpeg"
-                  onChange={handleAudioUpload}
-                  style={{ display: 'none' }}
-                />
-              </label>
-            </div>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
 
-            {/* Filter indicator */}
-            <div style={styles.audioSidebarFilter}>
-              {selectedCollection
-                ? `Showing: ${collections.find(c => c.id === selectedCollection)?.name || 'Collection'}`
-                : 'Showing: All Audio'}
-              {' '}({sidebarAudio.length})
-            </div>
-
-            {/* Audio list */}
-            <div style={styles.audioSidebarList}>
-              {sidebarAudio.length === 0 ? (
-                <div style={styles.audioSidebarEmpty}>
-                  {selectedCollection
-                    ? 'No audio in this collection yet. Upload audio to add it here.'
-                    : 'No audio uploaded yet.'}
+              {/* ── Audio Bank Section ── */}
+              <div style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                <div
+                  style={styles.audioSidebarHeader}
+                  onClick={() => setSidebarSection(prev => ({ ...prev, audio: !prev.audio }))}
+                >
+                  <span style={styles.audioSidebarTitle}>
+                    🎵 Audio Bank
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{
+                      display: 'flex', alignItems: 'center', gap: '4px',
+                      padding: '4px 10px', borderRadius: '6px',
+                      backgroundColor: 'rgba(99,102,241,0.2)', border: 'none',
+                      color: '#a5b4fc', fontSize: '11px', fontWeight: 500,
+                      cursor: 'pointer'
+                    }} onClick={(e) => e.stopPropagation()}>
+                      ⬆️ Upload
+                      <input
+                        type="file"
+                        accept=".mp3,audio/mpeg"
+                        onChange={handleAudioUpload}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                    <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px', cursor: 'pointer' }}>
+                      {sidebarSection.audio ? '▼' : '▶'}
+                    </span>
+                  </div>
                 </div>
-              ) : (
-                sidebarAudio.map(audio => {
-                  const isSelected = selectedMedia.audio?.id === audio.id;
-                  return (
-                    <div
-                      key={audio.id}
-                      onClick={() => handleSelectMedia(audio)}
-                      style={{
-                        ...styles.audioSidebarItem,
-                        backgroundColor: isSelected
-                          ? 'rgba(99,102,241,0.2)'
-                          : 'rgba(255,255,255,0.03)'
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isSelected) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)';
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isSelected) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)';
-                      }}
-                    >
-                      <span style={{
-                        width: '32px', height: '32px', borderRadius: '6px',
-                        background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '14px', flexShrink: 0
-                      }}>🎵</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{
-                          fontSize: '12px', fontWeight: 500, color: '#fff',
-                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
-                        }}>
-                          {audio.name}
-                        </div>
-                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)' }}>
-                          {audio.duration
-                            ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}`
-                            : '—'}
-                        </div>
-                      </div>
-                      {isSelected && (
-                        <span style={{ color: '#6366f1', fontSize: '14px', flexShrink: 0 }}>✓</span>
-                      )}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isSelected) setSelectedMedia(prev => ({ ...prev, audio: null }));
-                          removeFromLibraryAsync(db, artistId, audio.id).then(() => {
-                            setLibraryRefreshTrigger(t => t + 1);
-                          });
-                        }}
-                        style={{
-                          background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)',
-                          cursor: 'pointer', fontSize: '14px', padding: '0 2px', flexShrink: 0,
-                          lineHeight: 1
-                        }}
-                        title="Delete audio"
-                      >×</button>
+                {sidebarSection.audio && (
+                  <>
+                    <div style={styles.audioSidebarFilter}>
+                      {selectedCollection
+                        ? `Showing: ${collections.find(c => c.id === selectedCollection)?.name || 'Collection'}`
+                        : 'Showing: All Audio'}
+                      {' '}({sidebarAudio.length})
                     </div>
-                  );
-                })
-              )}
+                    <div style={{ maxHeight: '240px', overflowY: 'auto', padding: '8px' }}>
+                      {sidebarAudio.length === 0 ? (
+                        <div style={styles.audioSidebarEmpty}>
+                          {selectedCollection
+                            ? 'No audio in this collection yet. Upload audio to add it here.'
+                            : 'No audio uploaded yet.'}
+                        </div>
+                      ) : (
+                        sidebarAudio.map(audio => {
+                          const isSelected = selectedMedia.audio?.id === audio.id;
+                          return (
+                            <div
+                              key={audio.id}
+                              onClick={() => handleSelectMedia(audio)}
+                              style={{
+                                ...styles.audioSidebarItem,
+                                backgroundColor: isSelected
+                                  ? 'rgba(99,102,241,0.2)'
+                                  : 'rgba(255,255,255,0.03)'
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!isSelected) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)';
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!isSelected) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)';
+                              }}
+                            >
+                              <span style={{
+                                width: '32px', height: '32px', borderRadius: '6px',
+                                background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '14px', flexShrink: 0
+                              }}>🎵</span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{
+                                  fontSize: '12px', fontWeight: 500, color: '#fff',
+                                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                                }}>
+                                  {audio.name}
+                                </div>
+                                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)' }}>
+                                  {audio.duration
+                                    ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}`
+                                    : '—'}
+                                </div>
+                              </div>
+                              {isSelected && (
+                                <span style={{ color: '#6366f1', fontSize: '14px', flexShrink: 0 }}>✓</span>
+                              )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isSelected) setSelectedMedia(prev => ({ ...prev, audio: null }));
+                                  removeFromLibraryAsync(db, artistId, audio.id).then(() => {
+                                    setLibraryRefreshTrigger(t => t + 1);
+                                  });
+                                }}
+                                style={{
+                                  background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)',
+                                  cursor: 'pointer', fontSize: '14px', padding: '0 2px', flexShrink: 0,
+                                  lineHeight: 1
+                                }}
+                                title="Delete audio"
+                              >×</button>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* ── Lyrics Section ── */}
+              <div style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                <div
+                  style={{ ...styles.audioSidebarHeader, cursor: 'pointer' }}
+                  onClick={() => setSidebarSection(prev => ({ ...prev, lyrics: !prev.lyrics }))}
+                >
+                  <span style={styles.audioSidebarTitle}>
+                    📝 Lyrics
+                  </span>
+                  <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px' }}>
+                    {sidebarSection.lyrics ? '▼' : '▶'}
+                  </span>
+                </div>
+                {sidebarSection.lyrics && (
+                  <div style={{ padding: '8px 12px 12px', maxHeight: '300px', overflowY: 'auto' }}>
+                    <LyricBank
+                      lyrics={lyrics}
+                      onAddLyrics={handleAddLyrics}
+                      onUpdateLyrics={handleUpdateLyrics}
+                      onDeleteLyrics={handleDeleteLyrics}
+                      onSelectLyrics={(l) => console.log('Selected lyrics:', l)}
+                      compact
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* ── Captions / Hashtags Section ── */}
+              <div>
+                <div
+                  style={{ ...styles.audioSidebarHeader, cursor: 'pointer' }}
+                  onClick={() => setSidebarSection(prev => ({ ...prev, banks: !prev.banks }))}
+                >
+                  <span style={styles.audioSidebarTitle}>
+                    #️⃣ Captions / Hashtags
+                  </span>
+                  <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px' }}>
+                    {sidebarSection.banks ? '▼' : '▶'}
+                  </span>
+                </div>
+                {sidebarSection.banks && (
+                  <div style={{ padding: '8px 12px 12px', maxHeight: '400px', overflowY: 'auto' }}>
+                    {selectedCollection ? (
+                      <CollectionBankEditor
+                        collection={collections.find(c => c.id === selectedCollection)}
+                        artistId={artistId}
+                        onBankChange={() => setCollections(getCollections(artistId))}
+                        compact
+                      />
+                    ) : (
+                      <div style={{ padding: '16px 0', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '12px' }}>
+                        Select a collection to manage its captions and hashtags
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
             </div>
           </div>
         )}
