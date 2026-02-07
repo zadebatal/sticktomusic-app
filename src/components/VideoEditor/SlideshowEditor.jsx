@@ -98,7 +98,7 @@ const SlideshowEditor = ({
   }, [activeSlideshowIndex]);
 
   // Other slideshow state
-  const [aspectRatio, setAspectRatio] = useState(existingSlideshow?.aspectRatio || '4:5');
+  const [aspectRatio, setAspectRatio] = useState(existingSlideshow?.aspectRatio || '9:16');
   const [selectedSlideIndex, setSelectedSlideIndex] = useState(0);
   const [activeBank, setActiveBank] = useState('imageA'); // 'imageA' | 'imageB' | 'audio' | 'lyrics'
   const [libraryImages, setLibraryImages] = useState([]);
@@ -1573,32 +1573,20 @@ const SlideshowEditor = ({
                 <button
                   style={{
                   ...styles.aspectButton,
-                  ...(aspectRatio === '4:5' ? styles.aspectButtonActive : {})
-                }}
-                onClick={() => setAspectRatio('4:5')}
-                title="Instagram Carousel"
-              >
-                4:5
-              </button>
-              <button
-                  style={{
-                  ...styles.aspectButton,
-                  ...(aspectRatio === '1:1' ? styles.aspectButtonActive : {})
-                }}
-                onClick={() => setAspectRatio('1:1')}
-                title="Square"
-              >
-                1:1
-              </button>
-              <button
-                  style={{
-                  ...styles.aspectButton,
                   ...(aspectRatio === '9:16' ? styles.aspectButtonActive : {})
                 }}
                 onClick={() => setAspectRatio('9:16')}
-                title="Story / TikTok"
               >
-                9:16
+                TikTok
+              </button>
+              <button
+                  style={{
+                  ...styles.aspectButton,
+                  ...(aspectRatio === '4:5' ? styles.aspectButtonActive : {})
+                }}
+                onClick={() => setAspectRatio('4:5')}
+              >
+                Instagram
               </button>
             </div>
 

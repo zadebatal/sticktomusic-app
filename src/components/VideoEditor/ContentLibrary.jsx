@@ -986,89 +986,90 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
     try {
       // Schedule each slideshow as a carousel post
       let scheduled = 0;
+
+      // Helper: export slides at a given aspect ratio
+      const exportAtRatio = async (slideshow, ratio, label) => {
+        setExportProgress(`Exporting for ${label}...`);
+        const exportData = { ...slideshow, aspectRatio: ratio };
+        return await exportSlideshowAsImages(exportData, (pct) => {
+          setExportProgress(`Exporting for ${label} (${pct}%)`);
+        });
+      };
+
       for (let si = 0; si < slideshows.length; si++) {
         const slideshow = slideshows[si];
+        const scheduledFor = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
+        const fullCaption = `${caption}\n\n${hashtags}`.trim();
         console.log(`[Schedule] Processing slideshow ${si + 1}/${slideshows.length}:`, slideshow.id);
 
-        // Step 1: Ensure we have Firebase-hosted images (not blob URLs)
-        let firebaseImages = slideshow.exportedImages;
-        console.log('[Schedule] Existing exportedImages:', firebaseImages?.length || 0);
-        if (!firebaseImages?.length) {
-          // Auto-export: render slides to canvas → upload to Firebase
-          setExportProgress(`Exporting slideshow ${si + 1}/${slideshows.length}...`);
-          try {
-            firebaseImages = await exportSlideshowAsImages(slideshow, (pct) => {
-              setExportProgress(`Exporting slideshow ${si + 1}/${slideshows.length} (${pct}%)`);
-            });
-            // Save exported images back to the slideshow object so we don't re-export
-            slideshow.exportedImages = firebaseImages;
-            console.log('[Schedule] Export complete, images:', firebaseImages.length);
-          } catch (exportErr) {
-            console.error('[Schedule] Export failed:', exportErr);
-            alert(`Failed to export slideshow ${si + 1}: ${exportErr.message}`);
-            continue;
-          }
+        if (!onSchedulePost) {
+          console.error('[Schedule] onSchedulePost is not defined!');
+          alert('Scheduling not available. Please try again.');
+          break;
         }
 
-        if (!firebaseImages?.length) {
-          console.warn('[Schedule] No images after export, skipping:', slideshow.id);
-          continue;
-        }
-
-        console.log('[Schedule] Firebase image URLs:', firebaseImages.map(i => i.url?.substring(0, 60)));
-
-        setExportProgress(`Scheduling ${si + 1}/${slideshows.length}...`);
-
-        // Step 2: Build platforms array for Late API
-        const platformsPayload = [];
-        const scheduledFor = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
-
+        // Schedule for each selected platform separately (different aspect ratios)
+        // Instagram = 4:5 (1080x1350), TikTok = 9:16 (1080x1920)
+        const platformJobs = [];
         if (platforms.instagram && accountMapping.instagram) {
-          platformsPayload.push({
-            platform: 'instagram',
-            accountId: accountMapping.instagram,
-            customContent: `${caption}\n\n${hashtags}`.trim(),
-            scheduledFor
-          });
+          platformJobs.push({ platform: 'instagram', accountId: accountMapping.instagram, ratio: '4:5', label: 'Instagram' });
         }
         if (platforms.tiktok && accountMapping.tiktok) {
-          platformsPayload.push({
-            platform: 'tiktok',
-            accountId: accountMapping.tiktok,
-            customContent: `${caption}\n\n${hashtags}`.trim(),
-            scheduledFor
-          });
+          platformJobs.push({ platform: 'tiktok', accountId: accountMapping.tiktok, ratio: '9:16', label: 'TikTok' });
         }
 
-        console.log('[Schedule] Platforms payload:', platformsPayload.length, 'entries');
-
-        if (!platformsPayload.length) {
+        if (!platformJobs.length) {
           console.warn('[Schedule] No account IDs for selected platforms on', selectedHandle);
           continue;
         }
 
-        // Step 3: Schedule via Late API with Firebase URLs
-        console.log('[Schedule] Calling onSchedulePost...', !!onSchedulePost);
-        if (onSchedulePost) {
-          const result = await onSchedulePost({
-            type: 'carousel',
-            platforms: platformsPayload,
-            caption: `${caption}\n\n${hashtags}`.trim(),
-            images: firebaseImages,
-            scheduledFor,
-          });
-          console.log('[Schedule] onSchedulePost result:', result);
-          if (result?.success === false) {
-            console.error('[Schedule] Failed:', result.error);
-            alert(`Failed to schedule: ${result.error || 'Unknown error'}`);
-            continue;
+        for (const job of platformJobs) {
+          try {
+            // Export at the correct aspect ratio for this platform
+            let images;
+            const slideshowRatio = slideshow.aspectRatio || '9:16';
+            if (slideshowRatio === job.ratio && slideshow.exportedImages?.length) {
+              // Already exported at correct ratio
+              images = slideshow.exportedImages;
+              console.log(`[Schedule] Using cached export for ${job.label}`);
+            } else {
+              console.log(`[Schedule] Exporting at ${job.ratio} for ${job.label}`);
+              images = await exportAtRatio(slideshow, job.ratio, job.label);
+            }
+
+            if (!images?.length) {
+              console.warn(`[Schedule] No images for ${job.label}, skipping`);
+              continue;
+            }
+
+            console.log(`[Schedule] Sending to Late for ${job.label}:`, images.length, 'images');
+            setExportProgress(`Scheduling for ${job.label}...`);
+
+            const result = await onSchedulePost({
+              type: 'carousel',
+              platforms: [{
+                platform: job.platform,
+                accountId: job.accountId,
+                customContent: fullCaption,
+                scheduledFor
+              }],
+              caption: fullCaption,
+              images: images,
+              scheduledFor,
+            });
+
+            console.log(`[Schedule] ${job.label} result:`, result);
+            if (result?.success === false) {
+              console.error(`[Schedule] ${job.label} failed:`, result.error);
+              alert(`Failed to schedule for ${job.label}: ${result.error || 'Unknown error'}`);
+            } else {
+              scheduled++;
+            }
+          } catch (err) {
+            console.error(`[Schedule] ${job.label} error:`, err);
+            alert(`Error scheduling for ${job.label}: ${err.message}`);
           }
-        } else {
-          console.error('[Schedule] onSchedulePost is not defined!');
-          alert('Scheduling not available. Please try again.');
-          continue;
         }
-        scheduled++;
       }
 
       console.log('[Schedule] Done. Scheduled:', scheduled);
