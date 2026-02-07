@@ -1494,18 +1494,22 @@ const SlideshowEditor = ({
           const bank = useA ? allImgA : allImgB;
           const randomImg = bank.length > 0 ? bank[Math.floor(Math.random() * bank.length)] : null;
 
-          // Copy text overlays from template — keep styling, randomize text content
+          // Copy text overlays from template — keep styling + position, cycle text content
           // Text bank is assigned per SLIDE index: slide 0 → textBank1, slide 1 → textBank2
+          // Cycle through the bank using the generation index `i` so each slideshow
+          // gets the next item in sequence (wrapping around when exhausted)
           const slideTBank = s === 0 ? textBank1 : s === 1 ? textBank2 : [...textBank1, ...textBank2];
           const newTextOverlays = (templateSlide.textOverlays || []).map((overlay, textIdx) => {
-            let randomText = overlay.text;
+            let newText = overlay.text; // Fallback: keep template text
             if (slideTBank.length > 0) {
-              randomText = slideTBank[Math.floor(Math.random() * slideTBank.length)];
+              // Cycle: generation 0 → bank[0], generation 1 → bank[1], etc.
+              newText = slideTBank[i % slideTBank.length];
             }
             return {
               ...overlay,
               id: `text_${timestamp}_${i}_${s}_${textIdx}`,
-              text: randomText
+              text: newText
+              // style, position, etc. are preserved via ...overlay spread
             };
           });
 
