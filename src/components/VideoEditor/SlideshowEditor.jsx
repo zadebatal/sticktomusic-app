@@ -42,22 +42,70 @@ const SlideshowEditor = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Slideshow state
-  const [name, setName] = useState(existingSlideshow?.name || 'Untitled Slideshow');
+  // Multi-timeline state: all slideshows (index 0 = template, rest = generated)
+  const [allSlideshows, setAllSlideshows] = useState([{
+    id: 'template',
+    name: existingSlideshow?.name || 'Untitled Slideshow',
+    slides: existingSlideshow?.slides || [],
+    audio: existingSlideshow?.audio || null,
+    isTemplate: true
+  }]);
+  const [activeSlideshowIndex, setActiveSlideshowIndex] = useState(0);
+  const [generateCount, setGenerateCount] = useState(10);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  // Derived reads from active slideshow (existing code reads these unchanged)
+  const slides = allSlideshows[activeSlideshowIndex]?.slides || [];
+  const name = allSlideshows[activeSlideshowIndex]?.name || 'Untitled Slideshow';
+  const selectedAudio = allSlideshows[activeSlideshowIndex]?.audio || null;
+
+  // Wrapper setters that route through allSlideshows (existing setSlides/setName/setSelectedAudio calls work unchanged)
+  const setSlides = useCallback((updater) => {
+    setAllSlideshows(prev => {
+      const copy = [...prev];
+      const current = copy[activeSlideshowIndex];
+      if (!current) return prev;
+      copy[activeSlideshowIndex] = {
+        ...current,
+        slides: typeof updater === 'function' ? updater(current.slides) : updater
+      };
+      return copy;
+    });
+  }, [activeSlideshowIndex]);
+
+  const setName = useCallback((val) => {
+    setAllSlideshows(prev => {
+      const copy = [...prev];
+      const current = copy[activeSlideshowIndex];
+      if (!current) return prev;
+      copy[activeSlideshowIndex] = {
+        ...current,
+        name: typeof val === 'function' ? val(current.name) : val
+      };
+      return copy;
+    });
+  }, [activeSlideshowIndex]);
+
+  const setSelectedAudio = useCallback((audio) => {
+    setAllSlideshows(prev => {
+      const copy = [...prev];
+      const current = copy[activeSlideshowIndex];
+      if (!current) return prev;
+      copy[activeSlideshowIndex] = { ...current, audio };
+      return copy;
+    });
+  }, [activeSlideshowIndex]);
+
+  // Other slideshow state
   const [aspectRatio, setAspectRatio] = useState(existingSlideshow?.aspectRatio || '9:16');
-  const [slides, setSlides] = useState(existingSlideshow?.slides || []);
   const [selectedSlideIndex, setSelectedSlideIndex] = useState(0);
   const [activeBank, setActiveBank] = useState('imageA'); // 'imageA' | 'imageB' | 'audio' | 'lyrics'
-  const [editorMode, setEditorMode] = useState('single'); // 'single' | 'multi'
   const [libraryImages, setLibraryImages] = useState([]);
   const [collections, setCollections] = useState([]);
   const [selectedSource, setSelectedSource] = useState('bankA'); // 'bankA' | 'bankB' | 'all' | collection ID
 
   // Filmstrip drag-and-drop state
   const [filmstripDropIndex, setFilmstripDropIndex] = useState(null);
-
-  // Audio state
-  const [selectedAudio, setSelectedAudio] = useState(existingSlideshow?.audio || null);
   const [showAudioTrimmer, setShowAudioTrimmer] = useState(false);
   const [audioToTrim, setAudioToTrim] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -90,13 +138,7 @@ const SlideshowEditor = ({
   // Selected default template for new text overlays
   const [selectedDefaultTemplate, setSelectedDefaultTemplate] = useState(null);
 
-  // Batch generate state
-  const [showBatchModal, setShowBatchModal] = useState(false);
-  const [batchCount, setBatchCount] = useState(10);
-  const [batchSlidesPerShow, setBatchSlidesPerShow] = useState(5);
-  const [isBatchGenerating, setIsBatchGenerating] = useState(false);
-  const [batchAudioMode, setBatchAudioMode] = useState('none'); // 'none' | 'single' | 'random'
-  const [batchAudioSelection, setBatchAudioSelection] = useState(null); // specific audio for 'single' mode
+  // (Batch state removed — generation is now inline via allSlideshows)
 
   // Save templates to localStorage when they change
   useEffect(() => {
@@ -1142,49 +1184,104 @@ const SlideshowEditor = ({
     e.target.value = '';
   }, []);
 
-  // Save slideshow
+  // Save active slideshow only (does NOT close editor so user can keep editing other timelines)
   const handleSave = useCallback(() => {
+    const activeSlideshow = allSlideshows[activeSlideshowIndex];
+    if (!activeSlideshow) return;
     const slideshowData = {
-      id: existingSlideshow?.id || `slideshow_${Date.now()}`,
-      name,
+      id: activeSlideshow.isTemplate ? (existingSlideshow?.id || `slideshow_${Date.now()}`) : activeSlideshow.id,
+      name: activeSlideshow.name,
       aspectRatio,
-      slides,
-      audio: selectedAudio,
+      slides: activeSlideshow.slides,
+      audio: activeSlideshow.audio,
       status: 'draft',
       createdAt: existingSlideshow?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
     onSave?.(slideshowData);
-    onClose?.();
-  }, [name, aspectRatio, slides, selectedAudio, existingSlideshow, onSave, onClose]);
+    toastSuccess(`Saved "${activeSlideshow.name}"`);
+  }, [allSlideshows, activeSlideshowIndex, aspectRatio, existingSlideshow, onSave]);
 
-  // Batch generate slideshows
-  const handleBatchGenerate = useCallback(async () => {
-    setIsBatchGenerating(true);
+  // Save all slideshows and close
+  const handleSaveAllAndClose = useCallback(() => {
+    for (const ss of allSlideshows) {
+      const slideshowData = {
+        id: ss.isTemplate ? (existingSlideshow?.id || `slideshow_${Date.now()}`) : ss.id,
+        name: ss.name,
+        aspectRatio,
+        slides: ss.slides,
+        audio: ss.audio,
+        status: 'draft',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      onSave?.(slideshowData);
+    }
+    onClose?.();
+  }, [allSlideshows, aspectRatio, existingSlideshow, onSave, onClose]);
+
+  // Switch active slideshow (timeline)
+  const switchToSlideshow = useCallback((index) => {
+    if (index === activeSlideshowIndex) return;
+    // Stop audio playback
+    if (audioRef.current) {
+      audioRef.current.pause();
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    }
+    setIsPlaying(false);
+    setCurrentTime(0);
+    // Reset editor state
+    setSelectedSlideIndex(0);
+    setEditingTextId(null);
+    setShowTextEditorPanel(false);
+    // Reset undo/redo for new timeline
+    historyRef.current = [];
+    historyIndexRef.current = -1;
+    setCanUndo(false);
+    setCanRedo(false);
+    // Switch
+    setActiveSlideshowIndex(index);
+  }, [activeSlideshowIndex]);
+
+  // Delete a generated slideshow (cannot delete template at index 0)
+  const handleDeleteSlideshow = useCallback((index) => {
+    if (index === 0) return; // Cannot delete template
+    setAllSlideshows(prev => prev.filter((_, i) => i !== index));
+    // Adjust active index if needed
+    if (activeSlideshowIndex === index) {
+      setActiveSlideshowIndex(Math.max(0, index - 1));
+      setSelectedSlideIndex(0);
+    } else if (activeSlideshowIndex > index) {
+      setActiveSlideshowIndex(prev => prev - 1);
+    }
+  }, [activeSlideshowIndex]);
+
+  // Generate more slideshows from template
+  const handleGenerateMore = useCallback(() => {
+    const templateSS = allSlideshows[0];
+    if (!templateSS || templateSS.slides.length === 0) {
+      toastError('Add at least one slide to the template before generating.');
+      return;
+    }
+
+    setIsGenerating(true);
 
     try {
-      // Get images from all available sources
-      // For Image A: use category imagesA or collection bankA
-      // For Image B: use category imagesB or collection bankB
+      // Gather image banks
       const imgA = category?.imagesA || [];
       const imgB = category?.imagesB || [];
-
-      // Also check collection banks
       let collBankA = [];
       let collBankB = [];
       if (collections.length > 0) {
         for (const col of collections) {
           if (col.bankA?.length > 0) {
-            const bankAMedia = libraryImages.filter(img => col.bankA.includes(img.id));
-            collBankA = [...collBankA, ...bankAMedia];
+            collBankA = [...collBankA, ...libraryImages.filter(img => col.bankA.includes(img.id))];
           }
           if (col.bankB?.length > 0) {
-            const bankBMedia = libraryImages.filter(img => col.bankB.includes(img.id));
-            collBankB = [...collBankB, ...bankBMedia];
+            collBankB = [...collBankB, ...libraryImages.filter(img => col.bankB.includes(img.id))];
           }
         }
       }
-
       const allImgA = [...imgA, ...collBankA];
       const allImgB = [...imgB, ...collBankB];
 
@@ -1193,110 +1290,68 @@ const SlideshowEditor = ({
         return;
       }
 
-      // Get text banks from collections
-      let textBank1 = [];
-      let textBank2 = [];
-      for (const col of collections) {
-        if (col.textBank1?.length > 0) textBank1 = [...textBank1, ...col.textBank1];
-        if (col.textBank2?.length > 0) textBank2 = [...textBank2, ...col.textBank2];
-      }
+      // Gather text banks
+      const { textBank1, textBank2 } = getTextBanks();
 
-      // Get the selected template for text styling
-      const template = selectedDefaultTemplate || null;
+      // Current count of generated slideshows (for naming)
+      const existingGenCount = allSlideshows.filter(ss => !ss.isTemplate).length;
+      const timestamp = Date.now();
 
-      // Generate batch slideshows
       const generated = [];
-      for (let i = 0; i < batchCount; i++) {
-        const slidesList = [];
-        for (let s = 0; s < batchSlidesPerShow; s++) {
-          // Alternate between bank A and B images
+      for (let i = 0; i < generateCount; i++) {
+        const newSlides = [];
+
+        // Mirror template structure — same number of slides
+        for (let s = 0; s < templateSS.slides.length; s++) {
+          const templateSlide = templateSS.slides[s];
+
+          // Pick random image from alternating banks
           const useA = s % 2 === 0;
           const bank = useA ? allImgA : allImgB;
-          const imgIndex = Math.floor(Math.random() * bank.length);
-          const img = bank.length > 0 ? bank[imgIndex] : null;
+          const randomImg = bank.length > 0 ? bank[Math.floor(Math.random() * bank.length)] : null;
 
-          const slide = {
-            id: `slide_${Date.now()}_${i}_${s}`,
-            backgroundImage: img?.url || img?.src || null,
-            textOverlays: []
-          };
-
-          // Add text from text banks if available
-          if (textBank1.length > 0 || textBank2.length > 0) {
-            if (textBank1.length > 0) {
-              const textIdx = Math.floor(Math.random() * textBank1.length);
-              slide.textOverlays.push({
-                id: `text_${Date.now()}_${i}_${s}_1`,
-                text: textBank1[textIdx],
-                position: template?.text1Style?.position || { x: 50, y: 30, width: 80, height: 20 },
-                style: {
-                  fontFamily: template?.text1Style?.fontFamily || 'Inter, sans-serif',
-                  fontSize: template?.text1Style?.fontSize || 48,
-                  fontWeight: template?.text1Style?.fontWeight || '700',
-                  color: template?.text1Style?.color || '#ffffff',
-                  textAlign: template?.text1Style?.textAlign || 'center',
-                  outline: template?.text1Style?.outline ?? true,
-                  outlineColor: template?.text1Style?.outlineColor || 'rgba(0,0,0,0.5)'
-                }
-              });
+          // Copy text overlays from template — keep styling, randomize text content
+          const newTextOverlays = (templateSlide.textOverlays || []).map((overlay, textIdx) => {
+            const tBank = textIdx === 0 ? textBank1 : textIdx === 1 ? textBank2 : [...textBank1, ...textBank2];
+            let randomText = overlay.text;
+            if (tBank.length > 0) {
+              randomText = tBank[Math.floor(Math.random() * tBank.length)];
             }
-            if (textBank2.length > 0) {
-              const textIdx = Math.floor(Math.random() * textBank2.length);
-              slide.textOverlays.push({
-                id: `text_${Date.now()}_${i}_${s}_2`,
-                text: textBank2[textIdx],
-                position: template?.text2Style?.position || { x: 50, y: 70, width: 80, height: 20 },
-                style: {
-                  fontFamily: template?.text2Style?.fontFamily || 'Inter, sans-serif',
-                  fontSize: template?.text2Style?.fontSize || 36,
-                  fontWeight: template?.text2Style?.fontWeight || '400',
-                  color: template?.text2Style?.color || '#ffffff',
-                  textAlign: template?.text2Style?.textAlign || 'center',
-                  outline: template?.text2Style?.outline ?? true,
-                  outlineColor: template?.text2Style?.outlineColor || 'rgba(0,0,0,0.5)'
-                }
-              });
-            }
-          }
+            return {
+              ...overlay,
+              id: `text_${timestamp}_${i}_${s}_${textIdx}`,
+              text: randomText
+            };
+          });
 
-          slidesList.push(slide);
+          newSlides.push({
+            id: `slide_${timestamp}_${i}_${s}`,
+            index: s,
+            backgroundImage: randomImg?.url || randomImg?.localUrl || null,
+            thumbnail: randomImg?.url || randomImg?.localUrl || null,
+            sourceBank: useA ? 'imageA' : 'imageB',
+            sourceImageId: randomImg?.id || null,
+            textOverlays: newTextOverlays,
+            duration: templateSlide.duration || 3,
+            imageTransform: { scale: 1, offsetX: 0, offsetY: 0 }
+          });
         }
 
-        // Determine audio for this slideshow based on batch audio mode
-        let slideshowAudio = null;
-        if (batchAudioMode === 'single' && batchAudioSelection) {
-          slideshowAudio = batchAudioSelection;
-        } else if (batchAudioMode === 'random' && audioTracks.length > 0) {
-          slideshowAudio = audioTracks[Math.floor(Math.random() * audioTracks.length)];
-        }
-
-        const slideshow = {
-          id: `slideshow_${Date.now()}_${i}`,
-          name: `Batch ${i + 1}`,
-          aspectRatio,
-          slides: slidesList,
-          audio: slideshowAudio,
-          status: 'draft',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-
-        generated.push(slideshow);
+        generated.push({
+          id: `slideshow_${timestamp}_gen_${i}`,
+          name: `Generated ${existingGenCount + i + 1}`,
+          slides: newSlides,
+          audio: templateSS.audio, // Inherit template audio
+          isTemplate: false
+        });
       }
 
-      // Save each generated slideshow
-      for (const ss of generated) {
-        onSave?.(ss);
-        // Small delay to avoid ID collisions
-        await new Promise(r => setTimeout(r, 10));
-      }
-
-      setShowBatchModal(false);
+      setAllSlideshows(prev => [...prev, ...generated]);
       toastSuccess(`Generated ${generated.length} slideshows!`);
     } finally {
-      setIsBatchGenerating(false);
+      setIsGenerating(false);
     }
-  }, [batchCount, batchSlidesPerShow, category, collections, libraryImages, selectedDefaultTemplate, aspectRatio, batchAudioMode, batchAudioSelection, audioTracks, onSave]);
+  }, [allSlideshows, generateCount, category, collections, libraryImages, getTextBanks]);
 
   // Export slideshow as carousel images
   const handleExport = useCallback(async () => {
@@ -1509,51 +1564,24 @@ const SlideshowEditor = ({
             ...styles.headerRight,
             ...(isMobile ? { order: 2, gap: '8px' } : {})
           }}>
-            {/* Single / Multi mode toggle */}
             {!isMobile && (
-              <div style={{
-                display: 'flex',
-                backgroundColor: 'rgba(255,255,255,0.05)',
-                borderRadius: '8px',
-                border: '1px solid rgba(255,255,255,0.1)',
-                overflow: 'hidden'
-              }}>
-                <button
-                  onClick={() => setEditorMode('single')}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: editorMode === 'single' ? '#6366f1' : 'transparent',
-                    border: 'none',
-                    color: editorMode === 'single' ? '#fff' : '#9ca3af',
-                    fontSize: '13px',
-                    fontWeight: '500',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  Single
+              <>
+                <button style={styles.saveButton} onClick={handleSave}>
+                  Save Draft
                 </button>
-                <button
-                  onClick={() => setEditorMode('multi')}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: editorMode === 'multi' ? '#6366f1' : 'transparent',
-                    border: 'none',
-                    color: editorMode === 'multi' ? '#fff' : '#9ca3af',
-                    fontSize: '13px',
-                    fontWeight: '500',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  Multi
-                </button>
-              </div>
-            )}
-            {!isMobile && (
-              <button style={styles.saveButton} onClick={handleSave}>
-                Save Draft
-              </button>
+                {allSlideshows.length > 1 && (
+                  <button
+                    style={{
+                      ...styles.saveButton,
+                      background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                      color: '#fff'
+                    }}
+                    onClick={handleSaveAllAndClose}
+                  >
+                    Save All ({allSlideshows.length})
+                  </button>
+                )}
+              </>
             )}
             <button
               style={{
@@ -1990,7 +2018,7 @@ const SlideshowEditor = ({
           </div>
           )}
 
-          {/* Right Panel - Canvas & Filmstrip (Single) or Batch Config (Multi) */}
+          {/* Right Panel - Canvas, Filmstrip & Timeline Switcher */}
           {(!isMobile || mobilePanelTab === 'preview') && (
           <div style={{
             ...styles.rightPanel,
@@ -2000,371 +2028,6 @@ const SlideshowEditor = ({
             } : {})
           }}>
 
-            {/* ─── MULTI MODE: Batch Config + Live Template Preview ─── */}
-            {editorMode === 'multi' ? (
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto', padding: '24px', gap: '20px' }}>
-                {/* Live Template Preview Card */}
-                <div style={{
-                  backgroundColor: '#1a1a2e',
-                  borderRadius: '12px',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  overflow: 'hidden'
-                }}>
-                  <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)', fontSize: '13px', fontWeight: '600', color: '#d1d5db' }}>
-                    Live Preview
-                  </div>
-                  {/* Preview canvas simulating a slide */}
-                  <div style={{
-                    position: 'relative',
-                    width: '100%',
-                    paddingBottom: aspectRatio === '9:16' ? '177.78%' : '133.33%',
-                    maxHeight: '360px',
-                    overflow: 'hidden',
-                    backgroundColor: '#0f0f1a'
-                  }}>
-                    {(() => {
-                      // Get a sample image from banks for the preview
-                      const sampleImg = activeImages?.[0] || libraryImages?.[0];
-                      const template = selectedDefaultTemplate;
-                      return (
-                        <div style={{ position: 'absolute', inset: 0 }}>
-                          {sampleImg && (
-                            <img
-                              src={sampleImg.thumbnailUrl || sampleImg.url || sampleImg.localUrl}
-                              alt="Preview"
-                              style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }}
-                            />
-                          )}
-                          {!sampleImg && (
-                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563', fontSize: '14px' }}>
-                              No images in banks
-                            </div>
-                          )}
-                          {/* Text overlay preview using template styles */}
-                          {(() => {
-                            const textBanks = collections.reduce((acc, col) => {
-                              if (col.textBank1?.length > 0) acc.text1.push(...col.textBank1);
-                              if (col.textBank2?.length > 0) acc.text2.push(...col.textBank2);
-                              return acc;
-                            }, { text1: [], text2: [] });
-                            return (
-                              <>
-                                {textBanks.text1.length > 0 && (
-                                  <div style={{
-                                    position: 'absolute',
-                                    top: template?.text1Style?.position?.y ? `${template.text1Style.position.y}%` : '25%',
-                                    left: '50%',
-                                    transform: 'translateX(-50%)',
-                                    fontFamily: template?.text1Style?.fontFamily || template?.style?.fontFamily || "'Inter', sans-serif",
-                                    fontSize: `${Math.min(template?.text1Style?.fontSize || template?.style?.fontSize || 48, 32)}px`,
-                                    fontWeight: template?.text1Style?.fontWeight || template?.style?.fontWeight || '700',
-                                    color: template?.text1Style?.color || template?.style?.color || '#ffffff',
-                                    textAlign: 'center',
-                                    textShadow: '0 2px 8px rgba(0,0,0,0.7)',
-                                    maxWidth: '80%',
-                                    padding: '4px 8px'
-                                  }}>
-                                    {textBanks.text1[0]?.substring(0, 40) || 'Sample Text 1'}
-                                  </div>
-                                )}
-                                {textBanks.text2.length > 0 && (
-                                  <div style={{
-                                    position: 'absolute',
-                                    top: template?.text2Style?.position?.y ? `${template.text2Style.position.y}%` : '70%',
-                                    left: '50%',
-                                    transform: 'translateX(-50%)',
-                                    fontFamily: template?.text2Style?.fontFamily || template?.style?.fontFamily || "'Inter', sans-serif",
-                                    fontSize: `${Math.min(template?.text2Style?.fontSize || template?.style?.fontSize || 36, 24)}px`,
-                                    fontWeight: template?.text2Style?.fontWeight || template?.style?.fontWeight || '400',
-                                    color: template?.text2Style?.color || template?.style?.color || '#ffffff',
-                                    textAlign: 'center',
-                                    textShadow: '0 2px 8px rgba(0,0,0,0.7)',
-                                    maxWidth: '80%',
-                                    padding: '4px 8px'
-                                  }}>
-                                    {textBanks.text2[0]?.substring(0, 40) || 'Sample Text 2'}
-                                  </div>
-                                )}
-                                {textBanks.text1.length === 0 && textBanks.text2.length === 0 && (
-                                  <div style={{
-                                    position: 'absolute', bottom: '12%', left: '50%', transform: 'translateX(-50%)',
-                                    color: 'rgba(255,255,255,0.3)', fontSize: '13px', textAlign: 'center'
-                                  }}>
-                                    Add text to collection banks to see preview
-                                  </div>
-                                )}
-                              </>
-                            );
-                          })()}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </div>
-
-                {/* Template Selector */}
-                <div style={{
-                  backgroundColor: 'rgba(255,255,255,0.03)',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  padding: '16px'
-                }}>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#d1d5db', marginBottom: '8px' }}>
-                    Text Style Template
-                  </label>
-                  <select
-                    value={selectedDefaultTemplate?.id || ''}
-                    onChange={(e) => {
-                      const template = textTemplates.find(t => t.id === e.target.value);
-                      setSelectedDefaultTemplate(template || null);
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      backgroundColor: '#1a1a2e',
-                      border: '1px solid rgba(255,255,255,0.15)',
-                      borderRadius: '6px',
-                      color: '#fff',
-                      fontSize: '13px',
-                      outline: 'none',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <option value="">Default Style</option>
-                    {textTemplates.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Bank Status */}
-                <div style={{
-                  backgroundColor: 'rgba(99, 102, 241, 0.08)',
-                  border: '1px solid rgba(99, 102, 241, 0.2)',
-                  borderRadius: '10px',
-                  padding: '14px 16px',
-                  fontSize: '12px',
-                  color: '#a5b4fc',
-                  lineHeight: '1.8'
-                }}>
-                  <div style={{ fontWeight: '600', color: '#c7d2fe', marginBottom: '4px' }}>Bank Status</div>
-                  <div>Bank A: {(category?.imagesA || []).length + (collections.reduce((sum, col) => sum + (col.bankA?.length || 0), 0))} images</div>
-                  <div>Bank B: {(category?.imagesB || []).length + (collections.reduce((sum, col) => sum + (col.bankB?.length || 0), 0))} images</div>
-                  <div>Text 1: {collections.reduce((sum, col) => sum + (col.textBank1?.length || 0), 0)} items</div>
-                  <div>Text 2: {collections.reduce((sum, col) => sum + (col.textBank2?.length || 0), 0)} items</div>
-                  <div>Audio: {audioTracks.length} tracks</div>
-                </div>
-
-                {/* Audio Selection */}
-                <div style={{
-                  backgroundColor: 'rgba(99, 102, 241, 0.08)',
-                  border: '1px solid rgba(99, 102, 241, 0.2)',
-                  borderRadius: '10px',
-                  padding: '14px 16px'
-                }}>
-                  <div style={{ fontWeight: '600', color: '#c7d2fe', marginBottom: '8px', fontSize: '12px' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ verticalAlign: 'middle', marginRight: '6px' }}>
-                      <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
-                    </svg>
-                    Audio
-                  </div>
-
-                  {/* Audio Mode Toggle */}
-                  <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
-                    {[
-                      { value: 'none', label: 'No Audio' },
-                      { value: 'single', label: 'Same Song' },
-                      { value: 'random', label: 'Random' }
-                    ].map(mode => (
-                      <button
-                        key={mode.value}
-                        onClick={() => {
-                          setBatchAudioMode(mode.value);
-                          if (mode.value === 'single' && !batchAudioSelection && audioTracks.length > 0) {
-                            setBatchAudioSelection(audioTracks[0]);
-                          }
-                        }}
-                        disabled={mode.value !== 'none' && audioTracks.length === 0}
-                        style={{
-                          flex: 1,
-                          padding: '6px 0',
-                          backgroundColor: batchAudioMode === mode.value ? '#6366f1' : 'rgba(255,255,255,0.06)',
-                          border: '1px solid ' + (batchAudioMode === mode.value ? '#6366f1' : 'rgba(255,255,255,0.12)'),
-                          borderRadius: '6px',
-                          color: batchAudioMode === mode.value ? '#fff' : (mode.value !== 'none' && audioTracks.length === 0) ? '#4b5563' : '#9ca3af',
-                          fontSize: '11px',
-                          fontWeight: '500',
-                          cursor: (mode.value !== 'none' && audioTracks.length === 0) ? 'not-allowed' : 'pointer'
-                        }}
-                      >
-                        {mode.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Single song picker */}
-                  {batchAudioMode === 'single' && audioTracks.length > 0 && (
-                    <div style={{ maxHeight: '120px', overflowY: 'auto' }}>
-                      {audioTracks.map(audio => (
-                        <div
-                          key={audio.id}
-                          onClick={() => setBatchAudioSelection(audio)}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            padding: '6px 8px',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            backgroundColor: batchAudioSelection?.id === audio.id ? 'rgba(99,102,241,0.2)' : 'transparent',
-                            border: batchAudioSelection?.id === audio.id ? '1px solid rgba(99,102,241,0.4)' : '1px solid transparent',
-                            marginBottom: '2px',
-                            transition: 'all 0.15s'
-                          }}
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={batchAudioSelection?.id === audio.id ? '#a5b4fc' : '#6b7280'} strokeWidth="2">
-                            <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
-                          </svg>
-                          <span style={{
-                            fontSize: '11px',
-                            color: batchAudioSelection?.id === audio.id ? '#e0e7ff' : '#9ca3af',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            flex: 1
-                          }}>
-                            {audio.name || audio.fileName || 'Audio Track'}
-                          </span>
-                          {batchAudioSelection?.id === audio.id && (
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="3">
-                              <polyline points="20 6 9 17 4 12"/>
-                            </svg>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Random mode info */}
-                  {batchAudioMode === 'random' && audioTracks.length > 0 && (
-                    <div style={{ fontSize: '11px', color: '#9ca3af', fontStyle: 'italic' }}>
-                      Each slideshow gets a random track from {audioTracks.length} available
-                    </div>
-                  )}
-
-                  {/* No audio available warning */}
-                  {audioTracks.length === 0 && (
-                    <div style={{ fontSize: '11px', color: '#6b7280', fontStyle: 'italic' }}>
-                      No audio in bank — add audio tracks in the Audio tab first
-                    </div>
-                  )}
-                </div>
-
-                {/* Batch Settings */}
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#d1d5db', marginBottom: '6px' }}>
-                      Slideshows
-                    </label>
-                    <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                      {[5, 10, 25, 50].map(count => (
-                        <button
-                          key={count}
-                          onClick={() => setBatchCount(count)}
-                          style={{
-                            flex: 1,
-                            padding: '7px 0',
-                            backgroundColor: batchCount === count ? '#6366f1' : 'rgba(255,255,255,0.06)',
-                            border: '1px solid ' + (batchCount === count ? '#6366f1' : 'rgba(255,255,255,0.12)'),
-                            borderRadius: '6px',
-                            color: batchCount === count ? '#fff' : '#9ca3af',
-                            fontSize: '12px',
-                            fontWeight: '500',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          {count}
-                        </button>
-                      ))}
-                    </div>
-                    <input
-                      type="number"
-                      min="1"
-                      max="50"
-                      value={batchCount}
-                      onChange={(e) => setBatchCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 10)))}
-                      style={{
-                        width: '100%',
-                        padding: '7px 10px',
-                        backgroundColor: 'rgba(255,255,255,0.05)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        borderRadius: '6px',
-                        color: '#fff',
-                        fontSize: '13px',
-                        outline: 'none'
-                      }}
-                    />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#d1d5db', marginBottom: '6px' }}>
-                      Slides Each
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="30"
-                      value={batchSlidesPerShow}
-                      onChange={(e) => setBatchSlidesPerShow(Math.max(1, Math.min(30, parseInt(e.target.value) || 5)))}
-                      style={{
-                        width: '100%',
-                        padding: '7px 10px',
-                        backgroundColor: 'rgba(255,255,255,0.05)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        borderRadius: '6px',
-                        color: '#fff',
-                        fontSize: '13px',
-                        outline: 'none',
-                        marginTop: '32px'
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Generate Button */}
-                <button
-                  onClick={handleBatchGenerate}
-                  disabled={isBatchGenerating}
-                  style={{
-                    width: '100%',
-                    padding: '14px 20px',
-                    backgroundColor: isBatchGenerating ? 'rgba(99,102,241,0.5)' : '#6366f1',
-                    border: 'none',
-                    borderRadius: '10px',
-                    color: '#fff',
-                    fontSize: '15px',
-                    fontWeight: '600',
-                    cursor: isBatchGenerating ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.2s',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  {isBatchGenerating ? (
-                    <><span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>&#10227;</span> Generating...</>
-                  ) : (
-                    <>Generate {batchCount} Slideshows</>
-                  )}
-                </button>
-
-                <div style={{ fontSize: '11px', color: '#6b7280', textAlign: 'center' }}>
-                  {batchCount} slideshows &times; {batchSlidesPerShow} slides = {batchCount * batchSlidesPerShow} total slides
-                </div>
-              </div>
-            ) : (
-            /* ─── SINGLE MODE: Canvas + Filmstrip ─── */
-            <>
             {/* Canvas Preview */}
             <div
               style={{
@@ -2982,8 +2645,142 @@ const SlideshowEditor = ({
                 {slides.length} / 10 slides
               </div>
             </div>
-            </>
-            )}
+
+            {/* ─── Timeline Switcher ─── */}
+            <div style={{
+              borderTop: '1px solid rgba(255,255,255,0.08)',
+              padding: '12px 16px',
+              backgroundColor: 'rgba(0,0,0,0.15)'
+            }}>
+              {/* Scrollable row of timeline tabs */}
+              <div style={{
+                display: 'flex',
+                gap: '8px',
+                overflowX: 'auto',
+                paddingBottom: '8px',
+                scrollbarWidth: 'thin',
+                scrollbarColor: 'rgba(255,255,255,0.15) transparent'
+              }}>
+                {allSlideshows.map((show, idx) => (
+                  <div
+                    key={show.id}
+                    onClick={() => switchToSlideshow(idx)}
+                    style={{
+                      flexShrink: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      backgroundColor: idx === activeSlideshowIndex ? '#6366f1' : 'rgba(255,255,255,0.06)',
+                      border: '1px solid ' + (idx === activeSlideshowIndex ? '#818cf8' : 'rgba(255,255,255,0.08)'),
+                      color: idx === activeSlideshowIndex ? '#fff' : '#9ca3af',
+                      fontSize: '12px',
+                      fontWeight: idx === activeSlideshowIndex ? '600' : '400',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {show.isTemplate ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="3" y1="9" x2="21" y2="9"/>
+                        <line x1="9" y1="21" x2="9" y2="9"/>
+                      </svg>
+                    ) : (
+                      <span style={{ fontSize: '10px', opacity: 0.6 }}>#{idx}</span>
+                    )}
+                    <span>{show.isTemplate ? 'Template' : show.name || `Slideshow ${idx}`}</span>
+                    {!show.isTemplate && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteSlideshow(idx);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: idx === activeSlideshowIndex ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)',
+                          cursor: 'pointer',
+                          padding: '0 0 0 4px',
+                          fontSize: '14px',
+                          lineHeight: 1,
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
+                        title="Delete this slideshow"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Generate controls row */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                marginTop: '8px'
+              }}>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={generateCount}
+                  onChange={(e) => setGenerateCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+                  style={{
+                    width: '60px',
+                    padding: '6px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    backgroundColor: 'rgba(255,255,255,0.06)',
+                    color: '#fff',
+                    fontSize: '13px',
+                    textAlign: 'center',
+                    outline: 'none'
+                  }}
+                />
+                <button
+                  onClick={handleGenerateMore}
+                  disabled={isGenerating}
+                  style={{
+                    flex: 1,
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: isGenerating ? 'rgba(99,102,241,0.4)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: isGenerating ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {isGenerating ? (
+                    <><span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span> Generating...</>
+                  ) : (
+                    <>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 5v14M5 12h14"/>
+                      </svg>
+                      Generate {generateCount} More
+                    </>
+                  )}
+                </button>
+                {allSlideshows.length > 1 && (
+                  <span style={{ fontSize: '11px', color: '#6b7280', whiteSpace: 'nowrap' }}>
+                    {allSlideshows.length} total
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
           )}
 
@@ -3345,231 +3142,6 @@ const SlideshowEditor = ({
           />
         )}
 
-        {/* Batch Generate Modal — REMOVED: now inline in Multi mode */}
-        {false && showBatchModal && (
-          <div style={styles.overlay}>
-            <div style={{
-              ...styles.modal,
-              maxWidth: '500px',
-              width: '90vw'
-            }}>
-              <div style={styles.header}>
-                <div style={styles.headerLeft}>
-                  <h2 style={{ margin: '0', color: '#fff', fontSize: '18px', fontWeight: '600' }}>
-                    Batch Generate Slideshows
-                  </h2>
-                </div>
-                <button
-                  style={{
-                    ...styles.closeButton,
-                    backgroundColor: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: '#9ca3af'
-                  }}
-                  onClick={() => setShowBatchModal(false)}
-                >
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="18" y1="6" x2="6" y2="18"/>
-                    <line x1="6" y1="6" x2="18" y2="18"/>
-                  </svg>
-                </button>
-              </div>
-
-              <div style={{
-                flex: 1,
-                overflowY: 'auto',
-                padding: '24px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '24px'
-              }}>
-                {/* Summary Section */}
-                <div style={{
-                  backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                  border: '1px solid rgba(99, 102, 241, 0.3)',
-                  borderRadius: '12px',
-                  padding: '16px',
-                  color: '#c7d2fe'
-                }}>
-                  <div style={{ fontSize: '13px', lineHeight: '1.6' }}>
-                    <div>
-                      <strong>Bank Status:</strong>
-                    </div>
-                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#a5b4fc' }}>
-                      Images A: {(category?.imagesA || []).length + (collections.reduce((sum, col) => sum + (col.bankA?.length || 0), 0))} images
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#a5b4fc' }}>
-                      Images B: {(category?.imagesB || []).length + (collections.reduce((sum, col) => sum + (col.bankB?.length || 0), 0))} images
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#a5b4fc' }}>
-                      Text Bank 1: {collections.reduce((sum, col) => sum + (col.textBank1?.length || 0), 0)} items
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#a5b4fc' }}>
-                      Text Bank 2: {collections.reduce((sum, col) => sum + (col.textBank2?.length || 0), 0)} items
-                    </div>
-                    {selectedDefaultTemplate && (
-                      <div style={{ marginTop: '8px', fontSize: '12px', color: '#c084fc' }}>
-                        Template: <strong>{selectedDefaultTemplate.name}</strong>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Number of Slideshows */}
-                <div>
-                  <label style={{
-                    display: 'block',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#d1d5db',
-                    marginBottom: '8px'
-                  }}>
-                    Number of Slideshows
-                  </label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    {[10, 25, 50].map(count => (
-                      <button
-                        key={count}
-                        onClick={() => setBatchCount(count)}
-                        style={{
-                          flex: 1,
-                          padding: '10px 12px',
-                          backgroundColor: batchCount === count ? '#6366f1' : 'rgba(255,255,255,0.1)',
-                          border: '1px solid ' + (batchCount === count ? '#6366f1' : 'rgba(255,255,255,0.2)'),
-                          borderRadius: '8px',
-                          color: batchCount === count ? '#fff' : '#9ca3af',
-                          fontSize: '13px',
-                          fontWeight: '500',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}
-                      >
-                        {count}
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    type="number"
-                    min="1"
-                    max="500"
-                    value={batchCount}
-                    onChange={(e) => setBatchCount(Math.max(1, parseInt(e.target.value) || 10))}
-                    style={{
-                      width: '100%',
-                      marginTop: '8px',
-                      padding: '8px 12px',
-                      backgroundColor: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: '6px',
-                      color: '#fff',
-                      fontSize: '13px',
-                      outline: 'none'
-                    }}
-                  />
-                </div>
-
-                {/* Slides Per Slideshow */}
-                <div>
-                  <label style={{
-                    display: 'block',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#d1d5db',
-                    marginBottom: '8px'
-                  }}>
-                    Slides Per Slideshow
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="30"
-                    value={batchSlidesPerShow}
-                    onChange={(e) => setBatchSlidesPerShow(Math.max(1, parseInt(e.target.value) || 5))}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      backgroundColor: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: '6px',
-                      color: '#fff',
-                      fontSize: '13px',
-                      outline: 'none'
-                    }}
-                  />
-                </div>
-
-                {/* Warning Message */}
-                <div style={{
-                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                  borderRadius: '8px',
-                  padding: '12px',
-                  fontSize: '13px',
-                  color: '#fca5a5'
-                }}>
-                  ⚠️ Will generate <strong>{batchCount}</strong> slideshows with <strong>{batchSlidesPerShow}</strong> slides each. This may take a few seconds.
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div style={{
-                display: 'flex',
-                gap: '12px',
-                padding: '16px 24px',
-                borderTop: '1px solid rgba(255,255,255,0.1)',
-                backgroundColor: '#1a1a2e'
-              }}>
-                <button
-                  onClick={() => setShowBatchModal(false)}
-                  style={{
-                    flex: 1,
-                    padding: '10px 16px',
-                    backgroundColor: 'rgba(255,255,255,0.1)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    borderRadius: '8px',
-                    color: '#d1d5db',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    cursor: 'pointer'
-                  }}
-                  disabled={isBatchGenerating}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleBatchGenerate}
-                  disabled={isBatchGenerating || ((category?.imagesA || []).length === 0 && (category?.imagesB || []).length === 0)}
-                  style={{
-                    flex: 1,
-                    padding: '10px 16px',
-                    backgroundColor: isBatchGenerating ? '#6366f1' : '#6366f1',
-                    border: '1px solid #6366f1',
-                    borderRadius: '8px',
-                    color: '#fff',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    cursor: isBatchGenerating ? 'not-allowed' : 'pointer',
-                    opacity: isBatchGenerating ? 0.7 : 1
-                  }}
-                >
-                  {isBatchGenerating ? (
-                    <>
-                      <span style={{
-                        display: 'inline-block',
-                        animation: 'spin 1s linear infinite',
-                        marginRight: '6px'
-                      }}>⟳</span>
-                      Generating...
-                    </>
-                  ) : (
-                    '⚡ Generate'
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
