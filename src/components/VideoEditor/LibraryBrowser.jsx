@@ -261,6 +261,9 @@ const LibraryBrowser = ({
 
         const withThumbs = merged.filter(i => i.thumbnailUrl).length;
         console.log('[LibraryBrowser] Firestore sync:', merged.length, 'items,', withThumbs, 'have thumbnails');
+        // Debug: log a sample thumbnail URL to verify they're valid
+        const sampleThumb = merged.find(i => i.thumbnailUrl && i.type === 'video');
+        if (sampleThumb) console.log('[LibraryBrowser] Sample video thumbnail URL:', sampleThumb.thumbnailUrl);
 
         setLibrary(merged);
         try { saveLibrary(artistId, merged); } catch (e) {}
@@ -1328,9 +1331,19 @@ const LibraryBrowser = ({
           <img src={media.thumbnailUrl || media.url} alt={media.name} style={styles.mediaThumbnail} loading="lazy" decoding="async" />
         )}
         {media.type === MEDIA_TYPES.VIDEO && (
-          media.thumbnailUrl
-            ? <img src={media.thumbnailUrl} alt={media.name} style={styles.mediaThumbnail} loading="lazy" decoding="async" />
-            : <div style={styles.videoPlaceholder}>🎬</div>
+          <>
+            <div style={styles.videoPlaceholder}>🎬</div>
+            {media.thumbnailUrl && (
+              <img
+                src={media.thumbnailUrl}
+                alt={media.name}
+                style={styles.mediaThumbnail}
+                loading="lazy"
+                decoding="async"
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+            )}
+          </>
         )}
         <button
           onClick={(e) => {
@@ -1407,9 +1420,19 @@ const LibraryBrowser = ({
         </div>
       )}
       {media.type === MEDIA_TYPES.VIDEO && (
-        media.thumbnailUrl
-          ? <img src={media.thumbnailUrl} alt={media.name} style={styles.mediaThumbnail} loading="lazy" decoding="async" />
-          : <div style={styles.videoPlaceholder}>🎬</div>
+        <>
+          <div style={styles.videoPlaceholder}>🎬</div>
+          {media.thumbnailUrl && (
+            <img
+              src={media.thumbnailUrl}
+              alt={media.name}
+              style={styles.mediaThumbnail}
+              loading="lazy"
+              decoding="async"
+              onError={(e) => { e.target.style.display = 'none'; }}
+            />
+          )}
+        </>
       )}
       {media.type === MEDIA_TYPES.IMAGE && (
         <img src={media.thumbnailUrl || media.url} alt={media.name} style={styles.mediaThumbnail} loading="lazy" decoding="async" />
