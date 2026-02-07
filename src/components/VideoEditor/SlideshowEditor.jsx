@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
-import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, MEDIA_TYPES } from '../../services/libraryService';
+import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, MEDIA_TYPES, addToTextBank } from '../../services/libraryService';
 import { useToast } from '../ui';
 import LyricBank from './LyricBank';
 import AudioClipSelector from './AudioClipSelector';
@@ -104,6 +104,23 @@ const SlideshowEditor = ({
   const [libraryImages, setLibraryImages] = useState([]);
   const [collections, setCollections] = useState([]);
   const [selectedSource, setSelectedSource] = useState('bankA'); // 'bankA' | 'bankB' | 'all' | collection ID
+
+  // Text bank input state
+  const [newTextA, setNewTextA] = useState('');
+  const [newTextB, setNewTextB] = useState('');
+
+  // Add text to a text bank and update local collections state
+  const handleAddToTextBank = useCallback((bankNum, text) => {
+    if (!text.trim() || !artistId || collections.length === 0) return;
+    const targetCol = collections[0]; // Add to first collection
+    addToTextBank(artistId, targetCol.id, bankNum, text.trim());
+    // Update local state so UI refreshes immediately
+    setCollections(prev => prev.map(col =>
+      col.id === targetCol.id
+        ? { ...col, [`textBank${bankNum}`]: [...(col[`textBank${bankNum}`] || []), text.trim()] }
+        : col
+    ));
+  }, [artistId, collections]);
 
   // Filmstrip drag-and-drop state
   const [filmstripDropIndex, setFilmstripDropIndex] = useState(null);
@@ -1811,6 +1828,38 @@ const SlideshowEditor = ({
                       <span>Text Bank A</span>
                       <span style={{ fontSize: '10px', color: '#6b7280', fontWeight: '400' }}>Slide 1</span>
                     </div>
+                    {/* Add text input */}
+                    <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
+                      <input
+                        type="text"
+                        value={newTextA}
+                        onChange={(e) => setNewTextA(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && newTextA.trim()) {
+                            handleAddToTextBank(1, newTextA);
+                            setNewTextA('');
+                          }
+                        }}
+                        placeholder="Add new text..."
+                        style={{
+                          flex: 1, padding: '6px 8px', borderRadius: '6px',
+                          border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)',
+                          color: '#fff', fontSize: '12px', outline: 'none'
+                        }}
+                      />
+                      <button
+                        onClick={() => { if (newTextA.trim()) { handleAddToTextBank(1, newTextA); setNewTextA(''); } }}
+                        disabled={!newTextA.trim()}
+                        style={{
+                          padding: '6px 10px', borderRadius: '6px', border: 'none',
+                          backgroundColor: newTextA.trim() ? 'rgba(236, 72, 153, 0.3)' : 'rgba(255,255,255,0.05)',
+                          color: newTextA.trim() ? '#f9a8d4' : '#4b5563', fontSize: '12px',
+                          cursor: newTextA.trim() ? 'pointer' : 'default'
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
                     {(() => {
                       const { textBank1 } = getTextBanks();
                       return textBank1.length > 0 ? (
@@ -1854,7 +1903,7 @@ const SlideshowEditor = ({
                         </div>
                       ) : (
                         <div style={{ fontSize: '11px', color: '#6b7280', padding: '8px', textAlign: 'center' }}>
-                          No text in Bank A. Add text in collection settings.
+                          No text yet. Add some above.
                         </div>
                       );
                     })()}
@@ -1868,6 +1917,38 @@ const SlideshowEditor = ({
                     <div style={{ fontSize: '12px', fontWeight: '600', color: '#a5b4fc', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span>Text Bank B</span>
                       <span style={{ fontSize: '10px', color: '#6b7280', fontWeight: '400' }}>Slide 2</span>
+                    </div>
+                    {/* Add text input */}
+                    <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
+                      <input
+                        type="text"
+                        value={newTextB}
+                        onChange={(e) => setNewTextB(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && newTextB.trim()) {
+                            handleAddToTextBank(2, newTextB);
+                            setNewTextB('');
+                          }
+                        }}
+                        placeholder="Add new text..."
+                        style={{
+                          flex: 1, padding: '6px 8px', borderRadius: '6px',
+                          border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)',
+                          color: '#fff', fontSize: '12px', outline: 'none'
+                        }}
+                      />
+                      <button
+                        onClick={() => { if (newTextB.trim()) { handleAddToTextBank(2, newTextB); setNewTextB(''); } }}
+                        disabled={!newTextB.trim()}
+                        style={{
+                          padding: '6px 10px', borderRadius: '6px', border: 'none',
+                          backgroundColor: newTextB.trim() ? 'rgba(99, 102, 241, 0.3)' : 'rgba(255,255,255,0.05)',
+                          color: newTextB.trim() ? '#a5b4fc' : '#4b5563', fontSize: '12px',
+                          cursor: newTextB.trim() ? 'pointer' : 'default'
+                        }}
+                      >
+                        +
+                      </button>
                     </div>
                     {(() => {
                       const { textBank2 } = getTextBanks();
@@ -1912,7 +1993,7 @@ const SlideshowEditor = ({
                         </div>
                       ) : (
                         <div style={{ fontSize: '11px', color: '#6b7280', padding: '8px', textAlign: 'center' }}>
-                          No text in Bank B. Add text in collection settings.
+                          No text yet. Add some above.
                         </div>
                       );
                     })()}
