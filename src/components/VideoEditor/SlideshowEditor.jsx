@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
-import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, MEDIA_TYPES, addToTextBank } from '../../services/libraryService';
+import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, MEDIA_TYPES, addToTextBank, assignToBank, saveCollectionToFirestore } from '../../services/libraryService';
 import { useToast } from '../ui';
 import LyricBank from './LyricBank';
 import AudioClipSelector from './AudioClipSelector';
@@ -183,6 +183,46 @@ const SlideshowEditor = ({
     }
     e.target.value = '';
   }, [onImportToBank]);
+
+  // Drop-to-bank state
+  const [dragOverBankCol, setDragOverBankCol] = useState(null); // 'A' | 'B' | null
+
+  const handleDropOnBankColumn = useCallback((e, bank) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverBankCol(null);
+
+    // Try parsing drag data — supports both text/plain (LibraryBrowser) and application/json (SlideshowEditor)
+    let mediaIds = [];
+    try {
+      const jsonData = e.dataTransfer.getData('application/json');
+      if (jsonData) {
+        const parsed = JSON.parse(jsonData);
+        if (parsed?.id) mediaIds = [parsed.id];
+      }
+    } catch (err) {}
+    if (mediaIds.length === 0) {
+      try {
+        const textData = e.dataTransfer.getData('text/plain');
+        const parsed = JSON.parse(textData);
+        if (Array.isArray(parsed)) mediaIds = parsed;
+        else if (parsed?.id) mediaIds = [parsed.id];
+      } catch (err) {}
+    }
+
+    if (mediaIds.length > 0 && artistId && collections.length > 0) {
+      const targetCol = collections[0];
+      assignToBank(artistId, targetCol.id, mediaIds, bank);
+      // Refresh collections state
+      const freshCols = getCollections(artistId);
+      setCollections(freshCols);
+      if (db) {
+        const col = freshCols.find(c => c.id === targetCol.id);
+        if (col) saveCollectionToFirestore(db, artistId, col).catch(() => {});
+      }
+      toastSuccess(`Added ${mediaIds.length} image${mediaIds.length > 1 ? 's' : ''} to Bank ${bank}`);
+    }
+  }, [artistId, collections, db, toastSuccess]);
 
   // Undo/Redo history
   const historyRef = useRef([]);
@@ -1782,8 +1822,18 @@ const SlideshowEditor = ({
 
             {/* 3-Column Layout: Image A | Image B | Text Banks */}
             <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-              {/* Column 1: Image A */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+              {/* Column 1: Image A — drop zone */}
+              <div
+                style={{
+                  flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden',
+                  border: dragOverBankCol === 'A' ? '2px dashed rgba(20, 184, 166, 0.6)' : undefined,
+                  backgroundColor: dragOverBankCol === 'A' ? 'rgba(20, 184, 166, 0.05)' : undefined,
+                  transition: 'all 0.15s ease'
+                }}
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBankCol('A'); }}
+                onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverBankCol(null); }}
+                onDrop={(e) => handleDropOnBankColumn(e, 'A')}
+              >
                 <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: '#5eead4', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(20,184,166,0.08)', textAlign: 'center' }}>
                   Image A
                 </div>
@@ -1836,8 +1886,18 @@ const SlideshowEditor = ({
                 </div>
               </div>
 
-              {/* Column 2: Image B */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+              {/* Column 2: Image B — drop zone */}
+              <div
+                style={{
+                  flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden',
+                  border: dragOverBankCol === 'B' ? '2px dashed rgba(245, 158, 11, 0.6)' : undefined,
+                  backgroundColor: dragOverBankCol === 'B' ? 'rgba(245, 158, 11, 0.05)' : undefined,
+                  transition: 'all 0.15s ease'
+                }}
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBankCol('B'); }}
+                onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverBankCol(null); }}
+                onDrop={(e) => handleDropOnBankColumn(e, 'B')}
+              >
                 <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: '#fbbf24', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(245,158,11,0.08)', textAlign: 'center' }}>
                   Image B
                 </div>

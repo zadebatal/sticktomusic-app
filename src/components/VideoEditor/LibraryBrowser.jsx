@@ -1450,8 +1450,8 @@ const LibraryBrowser = ({
       }}
       onClick={(e) => handleMediaClick(media, e)}
       onContextMenu={(e) => handleContextMenu(e, media)}
-      draggable={isSelected}
-      onDragStart={(e) => { if (!isSelected) { e.preventDefault(); return; } handleDragStart(e, media); }}
+      draggable
+      onDragStart={(e) => handleDragStart(e, media)}
       onMouseEnter={(e) => {
         if (!isSelected) {
           e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';

@@ -1180,11 +1180,11 @@ const StudioHome = ({
     const allAudio = library.filter(m => m.type === MEDIA_TYPES.AUDIO);
     if (!selectedCollection) return allAudio;
     const col = collections.find(c => c.id === selectedCollection);
-    if (!col?.mediaIds?.length) return allAudio;
-    const filtered = allAudio.filter(a =>
-      col.mediaIds.includes(a.id) || (a.collectionIds || []).includes(selectedCollection)
+    if (!col) return allAudio;
+    // Only show audio that belongs to this collection — don't fall back to all
+    return allAudio.filter(a =>
+      (col.mediaIds || []).includes(a.id) || (a.collectionIds || []).includes(selectedCollection)
     );
-    return filtered;
   }, [library, collections, selectedCollection]);
 
   // Lyrics filtered by selected collection for the sidebar bank
