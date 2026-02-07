@@ -29,6 +29,7 @@ const SlideshowEditor = ({
   onClose,
   onSchedulePost,
   onAddLyrics,
+  onImportToBank,
   lateAccountIds = {}
 }) => {
   // Mobile responsive detection
@@ -152,6 +153,19 @@ const SlideshowEditor = ({
 
   // Audio upload ref for slideshow
   const slideshowAudioInputRef = useRef(null);
+
+  // Image import refs for banks
+  const importImageARef = useRef(null);
+  const importImageBRef = useRef(null);
+
+  // Handle importing images to bank from within editor
+  const handleImportImages = useCallback((e, bank) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0 && onImportToBank) {
+      onImportToBank(files, bank);
+    }
+    e.target.value = '';
+  }, [onImportToBank]);
 
   // Undo/Redo history
   const historyRef = useRef([]);
@@ -701,9 +715,12 @@ const SlideshowEditor = ({
 
   // Audio playback controls - just add audio directly, user can trim later
   const handleSelectAudio = useCallback((audio) => {
-    // Auto-open the audio editor/trimmer when audio is selected
-    setAudioToTrim(audio);
-    setShowAudioTrimmer(true);
+    // Set the audio directly on the timeline
+    setSelectedAudio({
+      ...audio,
+      startTime: audio.startTime || 0,
+      endTime: audio.endTime || null
+    });
   }, []);
 
   const handleAudioTrimSave = useCallback(({ startTime, endTime, duration, trimmedFile, trimmedName }) => {
@@ -1314,11 +1331,12 @@ const SlideshowEditor = ({
           const randomImg = bank.length > 0 ? bank[Math.floor(Math.random() * bank.length)] : null;
 
           // Copy text overlays from template — keep styling, randomize text content
+          // Text bank is assigned per SLIDE index: slide 0 → textBank1, slide 1 → textBank2
+          const slideTBank = s === 0 ? textBank1 : s === 1 ? textBank2 : [...textBank1, ...textBank2];
           const newTextOverlays = (templateSlide.textOverlays || []).map((overlay, textIdx) => {
-            const tBank = textIdx === 0 ? textBank1 : textIdx === 1 ? textBank2 : [...textBank1, ...textBank2];
             let randomText = overlay.text;
-            if (tBank.length > 0) {
-              randomText = tBank[Math.floor(Math.random() * tBank.length)];
+            if (slideTBank.length > 0) {
+              randomText = slideTBank[Math.floor(Math.random() * slideTBank.length)];
             }
             return {
               ...overlay,
@@ -1770,10 +1788,137 @@ const SlideshowEditor = ({
               >
                 Lyrics
               </button>
+              <button
+                style={{
+                  ...styles.bankTab,
+                  border: '1px solid ' + (activeBank === 'textBank' ? 'rgba(236, 72, 153, 0.6)' : 'rgba(236, 72, 153, 0.15)'),
+                  color: activeBank === 'textBank' ? '#f9a8d4' : '#9ca3af',
+                  backgroundColor: activeBank === 'textBank' ? 'rgba(236, 72, 153, 0.15)' : 'transparent'
+                }}
+                onClick={() => setActiveBank('textBank')}
+              >
+                Text
+              </button>
             </div>
 
             <div style={styles.bankContent}>
-              {activeBank === 'lyrics' ? (
+              {activeBank === 'textBank' ? (
+                /* Text Bank Panel - Bank A (Slide 1) and Bank B (Slide 2) */
+                <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {/* Text Bank A - for Slide 1 */}
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#f9a8d4', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>Text Bank A</span>
+                      <span style={{ fontSize: '10px', color: '#6b7280', fontWeight: '400' }}>Slide 1</span>
+                    </div>
+                    {(() => {
+                      const { textBank1 } = getTextBanks();
+                      return textBank1.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {textBank1.map((text, i) => (
+                            <div
+                              key={i}
+                              onClick={() => {
+                                if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
+                                  const newOverlay = {
+                                    id: `text_${Date.now()}_${i}`,
+                                    text: text,
+                                    style: getDefaultTextStyle(),
+                                    position: { x: 50, y: 50, width: 80, height: 20 }
+                                  };
+                                  setSlides(prev => prev.map((slide, idx) =>
+                                    idx === selectedSlideIndex
+                                      ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] }
+                                      : slide
+                                  ));
+                                  setEditingTextId(newOverlay.id);
+                                }
+                              }}
+                              style={{
+                                padding: '8px 10px',
+                                backgroundColor: 'rgba(255,255,255,0.04)',
+                                border: '1px solid rgba(255,255,255,0.08)',
+                                borderRadius: '6px',
+                                color: '#d1d5db',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s',
+                                lineHeight: '1.4',
+                                wordBreak: 'break-word'
+                              }}
+                              title="Click to add as text overlay"
+                            >
+                              {text}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '11px', color: '#6b7280', padding: '8px', textAlign: 'center' }}>
+                          No text in Bank A. Add text in collection settings.
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Divider */}
+                  <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.08)' }} />
+
+                  {/* Text Bank B - for Slide 2 */}
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#a5b4fc', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>Text Bank B</span>
+                      <span style={{ fontSize: '10px', color: '#6b7280', fontWeight: '400' }}>Slide 2</span>
+                    </div>
+                    {(() => {
+                      const { textBank2 } = getTextBanks();
+                      return textBank2.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {textBank2.map((text, i) => (
+                            <div
+                              key={i}
+                              onClick={() => {
+                                if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
+                                  const newOverlay = {
+                                    id: `text_${Date.now()}_${i}`,
+                                    text: text,
+                                    style: getDefaultTextStyle(),
+                                    position: { x: 50, y: 50, width: 80, height: 20 }
+                                  };
+                                  setSlides(prev => prev.map((slide, idx) =>
+                                    idx === selectedSlideIndex
+                                      ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] }
+                                      : slide
+                                  ));
+                                  setEditingTextId(newOverlay.id);
+                                }
+                              }}
+                              style={{
+                                padding: '8px 10px',
+                                backgroundColor: 'rgba(255,255,255,0.04)',
+                                border: '1px solid rgba(255,255,255,0.08)',
+                                borderRadius: '6px',
+                                color: '#d1d5db',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s',
+                                lineHeight: '1.4',
+                                wordBreak: 'break-word'
+                              }}
+                              title="Click to add as text overlay"
+                            >
+                              {text}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '11px', color: '#6b7280', padding: '8px', textAlign: 'center' }}>
+                          No text in Bank B. Add text in collection settings.
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              ) : activeBank === 'lyrics' ? (
                 /* Lyric Bank Panel */
                 <LyricBank
                   lyrics={lyrics}
@@ -1903,6 +2048,22 @@ const SlideshowEditor = ({
                   <div style={styles.emptyBank}>
                     <p>No images in {sourceName}</p>
                     <p style={styles.emptySubtext}>Upload images in the Aesthetic Home</p>
+                    {onImportToBank && (activeBank === 'imageA' || activeBank === 'imageB') && (
+                      <button
+                        style={{
+                          marginTop: '8px', padding: '8px 16px', borderRadius: '8px',
+                          border: '1px solid rgba(99,102,241,0.4)', backgroundColor: 'rgba(99,102,241,0.15)',
+                          color: '#a5b4fc', fontSize: '12px', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', gap: '6px'
+                        }}
+                        onClick={() => (activeBank === 'imageA' ? importImageARef : importImageBRef).current?.click()}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M12 5v14M5 12h14"/>
+                        </svg>
+                        Import Images
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -2014,6 +2175,23 @@ const SlideshowEditor = ({
                       );
                     })}
                   </div>
+                  {/* Import button at bottom of image grid */}
+                  {onImportToBank && (activeBank === 'imageA' || activeBank === 'imageB') && (
+                    <button
+                      style={{
+                        marginTop: '8px', padding: '6px 12px', borderRadius: '6px',
+                        border: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(255,255,255,0.04)',
+                        color: '#9ca3af', fontSize: '11px', cursor: 'pointer', width: '100%',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                      }}
+                      onClick={() => (activeBank === 'imageA' ? importImageARef : importImageBRef).current?.click()}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 5v14M5 12h14"/>
+                      </svg>
+                      Import More Images
+                    </button>
+                  )}
                   </>
                 );
               })()}
@@ -2213,6 +2391,24 @@ const SlideshowEditor = ({
                   </div>
                 </div>
               )}
+
+              {/* Hidden file inputs for importing to banks */}
+              <input
+                ref={importImageARef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(e) => handleImportImages(e, 'A')}
+                style={{ display: 'none' }}
+              />
+              <input
+                ref={importImageBRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(e) => handleImportImages(e, 'B')}
+                style={{ display: 'none' }}
+              />
 
               {/* Hidden audio input for slideshow */}
               <input
@@ -3818,14 +4014,14 @@ const styles = {
     minHeight: 0
   },
   canvasContainer: {
-    flex: '1 1 0',
+    flex: '1 1 auto',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     gap: '12px',
-    minHeight: 0,
-    overflow: 'hidden'
+    minHeight: '200px',
+    overflow: 'auto'
   },
   canvas: {
     backgroundColor: '#000',
@@ -3886,16 +4082,16 @@ const styles = {
   },
   audioPickerDropdown: {
     position: 'absolute',
-    top: '100%',
+    bottom: '100%',
     left: '50%',
     transform: 'translateX(-50%)',
-    marginTop: '8px',
+    marginBottom: '8px',
     width: '220px',
     backgroundColor: '#1f1f2e',
     border: '1px solid rgba(255, 255, 255, 0.1)',
     borderRadius: '12px',
     boxShadow: '0 10px 40px rgba(0, 0, 0, 0.5)',
-    zIndex: 100,
+    zIndex: 1000,
     overflow: 'hidden'
   },
   audioPickerHeader: {
