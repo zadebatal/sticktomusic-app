@@ -34,6 +34,8 @@ import {
   deleteLyrics,
   getOnboardingStatus,
   incrementUseCount,
+  addToCollection,
+  saveCollectionToFirestore,
   MEDIA_TYPES,
   STARTER_TEMPLATES,
   // Firestore async functions
@@ -443,6 +445,23 @@ const StudioHome = ({
         // Use async Firestore function if db is available
         const added = await addManyToLibraryAsync(db, artistId, uploadedItems);
         console.log('[StudioHome] Successfully added to library:', added.length, 'items');
+
+        // Also add items to the selected collection if one is active
+        if (selectedCollection && added.length > 0) {
+          const addedIds = added.map(item => item.id);
+          addToCollection(artistId, selectedCollection, addedIds);
+          // Sync updated collection to Firestore
+          if (db) {
+            const cols = getCollections(artistId);
+            const col = cols.find(c => c.id === selectedCollection && c.type !== 'smart');
+            if (col) {
+              saveCollectionToFirestore(db, artistId, col).catch(err =>
+                console.warn('[StudioHome] Failed to sync collection after upload:', err)
+              );
+            }
+          }
+        }
+
         // Note: If using Firestore subscription, library will auto-update via onSnapshot
         if (!db) loadData(); // Only reload from localStorage if no Firestore
         // Trigger LibraryBrowser refresh

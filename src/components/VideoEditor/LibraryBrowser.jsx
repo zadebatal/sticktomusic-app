@@ -301,33 +301,33 @@ const LibraryBrowser = ({
     // If viewing a specific collection
     if (activeView !== 'library' && activeView !== 'collections') {
       const colMedia = getCollectionMedia(artistId, activeView);
-      // If collection returns items from localStorage, merge with Firestore library
-      if (colMedia.length === 0 && library.length > 0) {
-        const collections = getCollections(artistId);
-        const col = collections.find(c => c.id === activeView);
-        if (col?.mediaIds) {
-          results = library.filter(item => col.mediaIds.includes(item.id));
-        } else {
-          results = colMedia;
-        }
-      } else {
+      if (colMedia.length > 0) {
         results = colMedia;
+      } else if (library.length > 0) {
+        // Collection returned no items from localStorage - try in-memory library
+        const cols = collections.length > 0 ? collections : getCollections(artistId);
+        const col = cols.find(c => c.id === activeView);
+        if (col?.mediaIds?.length > 0) {
+          results = library.filter(item => col.mediaIds.includes(item.id));
+        }
+        // If collection has no mediaIds, keep results as full library
       }
     }
 
     // If forced to pull from a collection
     if (pullFromCollection && activeView === 'library') {
       const colMedia = getCollectionMedia(artistId, pullFromCollection);
-      if (colMedia.length === 0 && library.length > 0) {
-        const collections = getCollections(artistId);
-        const col = collections.find(c => c.id === pullFromCollection);
-        if (col?.mediaIds) {
-          results = library.filter(item => col.mediaIds.includes(item.id));
-        } else {
-          results = colMedia;
-        }
-      } else {
+      if (colMedia.length > 0) {
         results = colMedia;
+      } else if (library.length > 0) {
+        // Collection returned no items - try to filter in-memory library by collection's mediaIds
+        const cols = collections.length > 0 ? collections : getCollections(artistId);
+        const col = cols.find(c => c.id === pullFromCollection);
+        if (col?.mediaIds?.length > 0) {
+          results = library.filter(item => col.mediaIds.includes(item.id));
+        }
+        // If collection has no mediaIds or is empty, keep results as full library
+        // (results was set to [...library] at line above — don't filter to empty)
       }
     }
 
@@ -364,7 +364,7 @@ const LibraryBrowser = ({
     }
 
     return results;
-  }, [library, artistId, activeView, searchQuery, sortBy, filterType, pullFromCollection]);
+  }, [library, collections, artistId, activeView, searchQuery, sortBy, filterType, pullFromCollection]);
 
   const displayedMedia = getDisplayedMedia();
 
