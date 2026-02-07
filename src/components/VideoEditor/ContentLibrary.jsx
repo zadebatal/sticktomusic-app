@@ -456,11 +456,12 @@ const ContentLibrary = ({
         }} onClick={() => setPreviewingSlideshow(null)}>
           <div style={{
             position: 'relative', maxWidth: '90vw', maxHeight: '85vh',
+            width: 'fit-content', minWidth: '320px',
             backgroundColor: '#1a1a2e', borderRadius: 16, overflow: 'hidden',
             boxShadow: '0 25px 60px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column'
           }} onClick={e => e.stopPropagation()}>
             {/* Header */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
               <div>
                 <div style={{ color: '#fff', fontSize: 16, fontWeight: 600 }}>
                   {previewingSlideshow.name || 'Untitled Slideshow'}
@@ -469,7 +470,7 @@ const ContentLibrary = ({
                   {previewingSlideshow.slides?.length || 0} slides · {previewingSlideshow.status || 'draft'}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                 <button onClick={() => { setPreviewingSlideshow(null); onEditSlideshow?.(previewingSlideshow); }} style={{
                   padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(99,102,241,0.5)',
                   background: 'rgba(99,102,241,0.2)', color: '#a5b4fc', fontSize: 13, cursor: 'pointer', fontWeight: 500
@@ -481,14 +482,15 @@ const ContentLibrary = ({
                 }}>×</button>
               </div>
             </div>
-            {/* Slides Grid */}
+            {/* Slides */}
             <div style={{
-              padding: '16px', overflowY: 'auto', display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px',
+              padding: '16px', overflowY: 'auto', display: 'flex',
+              flexWrap: 'wrap', gap: '12px', justifyContent: 'center',
               maxHeight: 'calc(85vh - 80px)'
             }}>
               {(previewingSlideshow.slides || []).map((slide, i) => (
                 <div key={slide.id || i} style={{
+                  width: '180px', flexShrink: 0,
                   aspectRatio: '9/16', borderRadius: 10, overflow: 'hidden',
                   backgroundColor: '#000', position: 'relative',
                   border: '1px solid rgba(255,255,255,0.1)'
