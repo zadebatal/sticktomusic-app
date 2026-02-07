@@ -1179,6 +1179,19 @@ const LibraryBrowser = ({
       height: '100%',
       background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
       fontSize: '32px'
+    },
+    videoPlaceholder: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: 'linear-gradient(135deg, #1a1a2e 0%, #0f172a 100%)',
+      fontSize: '28px',
+      pointerEvents: 'none'
     }
   };
 
@@ -1306,12 +1319,12 @@ const LibraryBrowser = ({
           </div>
         )}
         {media.type === MEDIA_TYPES.IMAGE && (
-          <img src={media.thumbnailUrl || media.url} alt={media.name} style={styles.mediaThumbnail} loading="lazy" />
+          <img src={media.thumbnailUrl || media.url} alt={media.name} style={styles.mediaThumbnail} loading="lazy" decoding="async" />
         )}
         {media.type === MEDIA_TYPES.VIDEO && (
           media.thumbnailUrl
-            ? <img src={media.thumbnailUrl} alt={media.name} style={styles.mediaThumbnail} loading="lazy" />
-            : <video src={media.url} style={styles.mediaThumbnail} muted preload="metadata" />
+            ? <img src={media.thumbnailUrl} alt={media.name} style={styles.mediaThumbnail} loading="lazy" decoding="async" />
+            : <div style={styles.videoPlaceholder}>🎬</div>
         )}
         <button
           onClick={(e) => {
@@ -1389,11 +1402,11 @@ const LibraryBrowser = ({
       )}
       {media.type === MEDIA_TYPES.VIDEO && (
         media.thumbnailUrl
-          ? <img src={media.thumbnailUrl} alt={media.name} style={styles.mediaThumbnail} loading="lazy" />
-          : <video src={media.url} style={styles.mediaThumbnail} muted preload="metadata" />
+          ? <img src={media.thumbnailUrl} alt={media.name} style={styles.mediaThumbnail} loading="lazy" decoding="async" />
+          : <div style={styles.videoPlaceholder}>🎬</div>
       )}
       {media.type === MEDIA_TYPES.IMAGE && (
-        <img src={media.thumbnailUrl || media.url} alt={media.name} style={styles.mediaThumbnail} loading="lazy" />
+        <img src={media.thumbnailUrl || media.url} alt={media.name} style={styles.mediaThumbnail} loading="lazy" decoding="async" />
       )}
       {media.type === MEDIA_TYPES.AUDIO && (
         <div style={styles.audioPlaceholder}>🎵</div>
