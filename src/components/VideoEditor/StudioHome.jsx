@@ -74,7 +74,7 @@ const StudioHome = ({
   const [activeTab, setActiveTab] = useState('media'); // kept for compat
   const [sidebarSection, setSidebarSection] = useState({ audio: true, lyrics: false, banks: false });
   const [selectedCollection, setSelectedCollection] = useState(null);
-  const [autoCollectionSet, setAutoCollectionSet] = useState(false);
+  // autoCollectionSet removed — we always default to All Media now
 
   // Library State
   const [library, setLibrary] = useState([]);
@@ -275,25 +275,8 @@ const StudioHome = ({
     setCreatedContent(getCreatedContent(artistId));
   }, [artistId]);
 
-  // Auto-select first collection with banks when in slideshow mode and none is selected
-  useEffect(() => {
-    if (autoCollectionSet || selectedCollection) return;
-    if (!studioMode || studioMode !== 'slideshows') return;
-    if (collections.length === 0) return;
-
-    // Find a collection with bankA or bankB populated
-    const colWithBanks = collections.find(c =>
-      (c.bankA?.length > 0 || c.bankB?.length > 0) && c.type !== 'smart'
-    );
-    if (colWithBanks) {
-      setSelectedCollection(colWithBanks.id);
-    } else if (collections.filter(c => c.type !== 'smart').length > 0) {
-      // Just select the first non-smart collection
-      setSelectedCollection(collections.filter(c => c.type !== 'smart')[0].id);
-    }
-    setAutoCollectionSet(true);
-  // eslint-disable-next-line
-  }, [collections, studioMode, selectedCollection, autoCollectionSet]);
+  // No longer auto-select a collection — default to All Media on load.
+  // Users can pick a collection from the CollectionPicker dropdown.
 
   // Background thumbnail migration for existing images
   // THUMB_VERSION: bump this to force re-migration (e.g. after changing thumbnail size)
