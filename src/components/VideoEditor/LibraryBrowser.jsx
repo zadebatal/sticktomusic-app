@@ -983,7 +983,9 @@ const LibraryBrowser = ({
       gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? '100px' : '140px'}, 1fr))`,
       gap: compact ? '8px' : '12px',
       userSelect: 'none',
-      WebkitUserSelect: 'none'
+      WebkitUserSelect: 'none',
+      minHeight: '100%',
+      alignContent: 'start'
     },
     mediaCard: {
       position: 'relative',
