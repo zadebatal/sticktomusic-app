@@ -1223,7 +1223,7 @@ const LibraryBrowser = ({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Format date added — shows relative for recent, short date for older
+  // Format date added — shows relative for recent, short date for older (used on cards)
   const formatDateAdded = (isoDate) => {
     if (!isoDate) return null;
     const date = new Date(isoDate);
@@ -1238,11 +1238,47 @@ const LibraryBrowser = ({
     if (diffHrs < 24) return `${diffHrs}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
     if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
-    // Show short month + day for older items
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const yr = date.getFullYear();
     const short = `${months[date.getMonth()]} ${date.getDate()}`;
     return yr === now.getFullYear() ? short : `${short}, ${yr}`;
+  };
+
+  // Group media items by date period for section headers
+  const groupMediaByDate = (items) => {
+    const groups = [];
+    let currentKey = null;
+    let currentGroup = null;
+    const now = new Date();
+    const todayStr = now.toDateString();
+    const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toDateString();
+
+    const getGroupLabel = (isoDate) => {
+      if (!isoDate) return 'Unknown';
+      const d = new Date(isoDate);
+      if (isNaN(d.getTime())) return 'Unknown';
+      const ds = d.toDateString();
+      if (ds === todayStr) return 'Today';
+      if (ds === yesterdayStr) return 'Yesterday';
+      const diffDays = Math.floor((now - d) / 86400000);
+      if (diffDays < 7) return 'This Week';
+      if (diffDays < 30) return 'This Month';
+      const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      const yr = d.getFullYear();
+      return yr === now.getFullYear() ? months[d.getMonth()] : `${months[d.getMonth()]} ${yr}`;
+    };
+
+    items.forEach(item => {
+      const label = getGroupLabel(item.createdAt);
+      if (label !== currentKey) {
+        currentKey = label;
+        currentGroup = { label, items: [] };
+        groups.push(currentGroup);
+      }
+      currentGroup.items.push(item);
+    });
+    return groups;
   };
 
   // Bank-specific handlers
@@ -2055,15 +2091,36 @@ const LibraryBrowser = ({
               )}
             </div>
           ) : (
-            <div
-              ref={gridRef}
-              style={styles.mediaGrid}
-              onMouseDown={handleGridMouseDown}
-            >
-              {displayedMedia.map(media => {
-                const isSelected = selectedMediaIds.includes(media.id);
-                return renderMediaCard(media, isSelected);
-              })}
+            <div ref={gridRef} onMouseDown={handleGridMouseDown}>
+              {groupMediaByDate(displayedMedia).map((group, gi) => (
+                <div key={group.label + gi}>
+                  <div style={{
+                    padding: gi === 0 ? '0 4px 6px' : '14px 4px 6px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: 'rgba(255, 255, 255, 0.35)',
+                    letterSpacing: '0.3px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <span>{group.label}</span>
+                    <span style={{
+                      flex: 1, height: '1px',
+                      background: 'linear-gradient(to right, rgba(255,255,255,0.08), transparent)'
+                    }} />
+                    <span style={{ fontSize: '10px', fontWeight: 400, color: 'rgba(255,255,255,0.2)' }}>
+                      {group.items.length}
+                    </span>
+                  </div>
+                  <div style={styles.mediaGrid}>
+                    {group.items.map(media => {
+                      const isSelected = selectedMediaIds.includes(media.id);
+                      return renderMediaCard(media, isSelected);
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
