@@ -253,16 +253,18 @@ const SlideshowEditor = ({
     setCanRedo(false);
   }, []);
 
-  // Track slides changes and push to history
+  // Track slides changes and push to history (skip during active drags)
   useEffect(() => {
     if (isUndoRedoRef.current) {
       isUndoRedoRef.current = false;
       return;
     }
+    // Don't flood history during drag operations — snapshot pushed on release
+    if (draggingTextId || isDraggingImage || isResizingImage) return;
     if (slides.length > 0) {
       pushHistory(slides);
     }
-  }, [slides, pushHistory]);
+  }, [slides, pushHistory, draggingTextId, isDraggingImage, isResizingImage]);
 
   const handleUndo = useCallback(() => {
     if (historyIndexRef.current <= 0) return;
@@ -1200,12 +1202,12 @@ const SlideshowEditor = ({
   const handleTextClick = useCallback((e, overlayId) => {
     e.stopPropagation();
     setEditingTextId(overlayId);
-    setShowTextEditorPanel(true);
   }, []);
 
-  // Handle click on slide image to open text editor panel
+  // Handle click on slide image — deselect text if clicking canvas background
   const handleSlideClick = useCallback(() => {
-    setShowTextEditorPanel(true);
+    // Clicking the canvas background deselects text
+    setEditingTextId(null);
   }, []);
 
   // Text overlay drag handlers — move text freely on the canvas
@@ -1305,7 +1307,7 @@ const SlideshowEditor = ({
           : slide
       ));
       setEditingTextId(newOverlay.id);
-      setShowTextEditorPanel(true);
+      // Text editor is now inline — editingTextId activates it
 
       // Store transcribed lyrics and show save prompt
       setTranscribedLyrics(result.text);
@@ -2682,7 +2684,7 @@ const SlideshowEditor = ({
                 })()}
 
                 {/* Add Text Button */}
-                <button style={styles.addTextButton} onClick={() => { addTextOverlay(); setShowTextEditorPanel(true); }}>
+                <button style={styles.addTextButton} onClick={() => { addTextOverlay(); }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M12 5v14M5 12h14"/>
                   </svg>
@@ -2855,7 +2857,7 @@ const SlideshowEditor = ({
                                         : slide
                                     ));
                                     setEditingTextId(newOverlay.id);
-                                    setShowTextEditorPanel(true);
+                                    // Text editor is now inline — editingTextId activates it
                                   }
                                   setShowLyricBankPicker(false);
                                 }}
@@ -2911,45 +2913,185 @@ const SlideshowEditor = ({
               </div>
             </div>
 
-            {/* Flowstage-style Text Editor Side Panel */}
-            {showTextEditorPanel && currentSlide && (
-              <TextEditorPanel
-                slide={currentSlide}
-                editingTextId={editingTextId}
-                lyrics={lyrics}
-                templates={textTemplates}
-                textBank1={getTextBanks().textBank1}
-                textBank2={getTextBanks().textBank2}
-                onSelectText={(text) => {
-                  // Add selected lyrics as text overlay using template style if set
-                  const newOverlay = {
-                    id: `text_${Date.now()}`,
-                    text: text,
-                    style: getDefaultTextStyle(),
-                    position: { x: 50, y: 50, width: 80, height: 20 }
-                  };
-                  setSlides(prev => prev.map((slide, i) =>
-                    i === selectedSlideIndex
-                      ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] }
-                      : slide
-                  ));
-                  setEditingTextId(newOverlay.id);
-                }}
-                onAddTextOverlay={() => {
-                  addTextOverlay();
-                }}
-                onSelectOverlay={(overlayId) => setEditingTextId(overlayId)}
-                onUpdateOverlay={(overlayId, updates) => updateTextOverlay(overlayId, updates)}
-                onRemoveOverlay={(overlayId) => removeTextOverlay(overlayId)}
-                onRerollText={(overlayId, bankSource) => handleTextReroll(overlayId, bankSource)}
-                onAddLyrics={onAddLyrics}
-                onSaveTemplate={handleSaveTemplate}
-                onClose={() => {
-                  setShowTextEditorPanel(false);
-                  setEditingTextId(null);
-                }}
-              />
-            )}
+            {/* ─── Inline Text Editor Bar ─── */}
+            {editingTextId && currentSlide && (() => {
+              const selOverlay = currentSlide.textOverlays?.find(o => o.id === editingTextId);
+              if (!selOverlay) return null;
+              return (
+                <div style={{
+                  borderTop: '1px solid rgba(99,102,241,0.25)',
+                  backgroundColor: 'rgba(30,30,50,0.95)',
+                  padding: '10px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  {/* Row 1: Text input + close */}
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      value={selOverlay.text}
+                      onChange={(e) => updateTextOverlay(selOverlay.id, { text: e.target.value })}
+                      placeholder="Enter text..."
+                      style={{
+                        flex: 1, padding: '7px 10px', borderRadius: '6px',
+                        border: '1px solid rgba(99,102,241,0.3)', backgroundColor: 'rgba(255,255,255,0.06)',
+                        color: '#fff', fontSize: '13px', outline: 'none'
+                      }}
+                    />
+                    <button
+                      onClick={() => { removeTextOverlay(selOverlay.id); setEditingTextId(null); }}
+                      style={{
+                        padding: '6px', borderRadius: '5px', border: '1px solid rgba(239,68,68,0.3)',
+                        backgroundColor: 'rgba(239,68,68,0.1)', color: '#f87171', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center'
+                      }}
+                      title="Delete text block"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/>
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => setEditingTextId(null)}
+                      style={{
+                        padding: '6px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.15)',
+                        backgroundColor: 'transparent', color: '#9ca3af', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center'
+                      }}
+                      title="Done editing"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Row 2: Font, Size, Color, Align, Position */}
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {/* Font */}
+                    <select
+                      value={selOverlay.style.fontFamily}
+                      onChange={(e) => updateTextOverlay(selOverlay.id, {
+                        style: { ...selOverlay.style, fontFamily: e.target.value }
+                      })}
+                      style={{
+                        padding: '5px 6px', borderRadius: '5px',
+                        border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)',
+                        color: '#d1d5db', fontSize: '11px', outline: 'none', maxWidth: '100px'
+                      }}
+                    >
+                      {AVAILABLE_FONTS.map(f => (
+                        <option key={f.name} value={f.value}>{f.name}</option>
+                      ))}
+                    </select>
+
+                    {/* Size controls */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '2px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.12)', overflow: 'hidden' }}>
+                      <button onClick={() => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, fontSize: Math.max(12, selOverlay.style.fontSize - 4) } })}
+                        style={{ padding: '4px 8px', border: 'none', backgroundColor: 'rgba(255,255,255,0.06)', color: '#d1d5db', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>A-</button>
+                      <span style={{ padding: '4px 6px', backgroundColor: 'rgba(255,255,255,0.03)', color: '#9ca3af', fontSize: '11px', minWidth: '32px', textAlign: 'center' }}>{selOverlay.style.fontSize}</span>
+                      <button onClick={() => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, fontSize: Math.min(120, selOverlay.style.fontSize + 4) } })}
+                        style={{ padding: '4px 8px', border: 'none', backgroundColor: 'rgba(255,255,255,0.06)', color: '#d1d5db', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>A+</button>
+                    </div>
+
+                    {/* Color */}
+                    <input
+                      type="color"
+                      value={selOverlay.style.color}
+                      onChange={(e) => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, color: e.target.value } })}
+                      style={{ width: '28px', height: '28px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '5px', cursor: 'pointer', backgroundColor: 'transparent', padding: '1px' }}
+                    />
+
+                    {/* Divider */}
+                    <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
+
+                    {/* Text Align */}
+                    {['left', 'center', 'right'].map(align => (
+                      <button
+                        key={align}
+                        onClick={() => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textAlign: align } })}
+                        style={{
+                          padding: '5px', borderRadius: '4px', border: 'none', cursor: 'pointer',
+                          backgroundColor: selOverlay.style.textAlign === align ? 'rgba(99,102,241,0.3)' : 'transparent',
+                          color: selOverlay.style.textAlign === align ? '#a5b4fc' : '#6b7280'
+                        }}
+                        title={`Align ${align}`}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          {align === 'left' && <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></>}
+                          {align === 'center' && <><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></>}
+                          {align === 'right' && <><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></>}
+                        </svg>
+                      </button>
+                    ))}
+
+                    {/* Divider */}
+                    <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
+
+                    {/* Auto-Align Position buttons */}
+                    <button
+                      onClick={() => updateTextOverlay(selOverlay.id, { position: { ...selOverlay.position, x: 50 } })}
+                      style={{
+                        padding: '4px 8px', borderRadius: '5px', border: '1px solid rgba(99,102,241,0.25)',
+                        backgroundColor: Math.abs(selOverlay.position.x - 50) < 1 ? 'rgba(99,102,241,0.2)' : 'transparent',
+                        color: Math.abs(selOverlay.position.x - 50) < 1 ? '#a5b4fc' : '#6b7280',
+                        cursor: 'pointer', fontSize: '10px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '3px'
+                      }}
+                      title="Center horizontally"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="12" y1="2" x2="12" y2="22"/><polyline points="8 6 12 2 16 6"/><polyline points="8 18 12 22 16 18"/>
+                      </svg>
+                      H
+                    </button>
+                    <button
+                      onClick={() => updateTextOverlay(selOverlay.id, { position: { ...selOverlay.position, y: 50 } })}
+                      style={{
+                        padding: '4px 8px', borderRadius: '5px', border: '1px solid rgba(99,102,241,0.25)',
+                        backgroundColor: Math.abs(selOverlay.position.y - 50) < 1 ? 'rgba(99,102,241,0.2)' : 'transparent',
+                        color: Math.abs(selOverlay.position.y - 50) < 1 ? '#a5b4fc' : '#6b7280',
+                        cursor: 'pointer', fontSize: '10px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '3px'
+                      }}
+                      title="Center vertically"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="2" y1="12" x2="22" y2="12"/><polyline points="6 8 2 12 6 16"/><polyline points="18 8 22 12 18 16"/>
+                      </svg>
+                      V
+                    </button>
+
+                    {/* Bold toggle */}
+                    <button
+                      onClick={() => updateTextOverlay(selOverlay.id, {
+                        style: { ...selOverlay.style, fontWeight: selOverlay.style.fontWeight === '700' ? '400' : '700' }
+                      })}
+                      style={{
+                        padding: '5px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
+                        backgroundColor: selOverlay.style.fontWeight === '700' ? 'rgba(99,102,241,0.3)' : 'transparent',
+                        color: selOverlay.style.fontWeight === '700' ? '#a5b4fc' : '#6b7280',
+                        fontWeight: '700', fontSize: '13px'
+                      }}
+                      title="Bold"
+                    >B</button>
+
+                    {/* Outline toggle */}
+                    <button
+                      onClick={() => updateTextOverlay(selOverlay.id, {
+                        style: { ...selOverlay.style, outline: !selOverlay.style.outline }
+                      })}
+                      style={{
+                        padding: '4px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
+                        backgroundColor: selOverlay.style.outline ? 'rgba(99,102,241,0.3)' : 'transparent',
+                        color: selOverlay.style.outline ? '#a5b4fc' : '#6b7280',
+                        fontSize: '11px', fontWeight: '600'
+                      }}
+                      title="Text shadow/outline"
+                    >Sh</button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Slide Filmstrip — drop zone for bank images */}
             <div style={styles.filmstrip}>
