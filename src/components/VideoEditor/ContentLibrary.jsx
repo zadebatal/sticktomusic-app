@@ -783,49 +783,34 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
             <span style={{ color: '#4b5563', fontSize: '10px' }}>{idx + 1}</span>
           </div>
         )}
-        {/* Text overlays rendered on the image — shown as readable pills */}
-        {visibleOverlays.length > 0 && (
-          <div style={{
+        {/* Text overlays rendered exactly as in editor */}
+        {visibleOverlays.map((overlay, oi) => (
+          <div key={oi} style={{
             position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: '2px',
-            padding: '4px 2px',
+            left: `${overlay.position?.x || 50}%`,
+            top: `${overlay.position?.y || 50}%`,
+            transform: 'translate(-50%, -50%)',
+            color: overlay.style?.color || '#fff',
+            fontSize: `${Math.max(8, (overlay.style?.fontSize || 36) * 0.22)}px`,
+            fontWeight: overlay.style?.fontWeight || '600',
+            fontFamily: overlay.style?.fontFamily || 'Inter, sans-serif',
+            textAlign: overlay.style?.textAlign || 'center',
+            textShadow: overlay.style?.outline
+              ? `0 0 3px ${overlay.style?.outlineColor || 'rgba(0,0,0,0.5)'}`
+              : '0 1px 3px rgba(0,0,0,0.9)',
             pointerEvents: 'none',
+            maxWidth: '90%',
+            overflow: 'hidden',
+            display: '-webkit-box',
+            WebkitLineClamp: 3,
+            WebkitBoxOrient: 'vertical',
+            wordBreak: 'break-word',
+            lineHeight: '1.2',
+            padding: '1px 2px',
           }}>
-            {visibleOverlays.slice(0, 3).map((overlay, oi) => (
-              <div key={oi} style={{
-                backgroundColor: 'rgba(0,0,0,0.6)',
-                borderRadius: '3px',
-                padding: '2px 4px',
-                maxWidth: '95%',
-              }}>
-                <div style={{
-                  color: overlay.style?.color || '#fff',
-                  fontSize: '10px',
-                  fontWeight: '700',
-                  fontFamily: overlay.style?.fontFamily || 'Inter, sans-serif',
-                  textAlign: 'center',
-                  lineHeight: '1.2',
-                  textShadow: '0 1px 2px rgba(0,0,0,0.8)',
-                  overflow: 'hidden',
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  wordBreak: 'break-word',
-                }}>
-                  {overlay.text}
-                </div>
-              </div>
-            ))}
+            {overlay.text}
           </div>
-        )}
+        ))}
       </div>
     );
   };
