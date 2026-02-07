@@ -1241,61 +1241,6 @@ const StudioHome = ({
                 />
               </div>
 
-              <div style={styles.libraryHeader}>
-                <span style={styles.libraryTitle}>
-                  Audio ({libraryAudio.length})
-                </span>
-                <label style={styles.uploadButton}>
-                  ⬆️ Upload Audio
-                  <input
-                    ref={audioInputRef}
-                    type="file"
-                    accept=".mp3,audio/mpeg"
-                    onChange={handleAudioUpload}
-                    style={{ display: 'none' }}
-                  />
-                </label>
-              </div>
-
-              {/* Audio list */}
-              <div style={{ padding: '8px 24px', maxHeight: '150px', overflowY: 'auto' }}>
-                {libraryAudio.length === 0 ? (
-                  <div style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: '16px' }}>
-                    No audio uploaded yet
-                  </div>
-                ) : (
-                  libraryAudio.map(audio => (
-                    <div
-                      key={audio.id}
-                      onClick={() => handleSelectMedia(audio)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        padding: '12px',
-                        backgroundColor: selectedMedia.audio?.id === audio.id
-                          ? 'rgba(99, 102, 241, 0.2)'
-                          : 'rgba(255,255,255,0.05)',
-                        borderRadius: '8px',
-                        marginBottom: '8px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <span style={{ fontSize: '20px' }}>🎵</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '14px', fontWeight: '500' }}>{audio.name}</div>
-                        <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)' }}>
-                          {audio.duration ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}` : ''}
-                        </div>
-                      </div>
-                      {selectedMedia.audio?.id === audio.id && (
-                        <span style={{ color: '#6366f1' }}>✓</span>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-
               {/* Action Bar */}
               <div style={styles.actionBar}>
                 <div style={styles.actionInfo}>
@@ -1349,7 +1294,6 @@ const StudioHome = ({
                   >
                     Delete All
                   </button>
-                  {selectedMedia.audio && ` • Audio: ${selectedMedia.audio.name}`}
                 </div>
                 <div style={styles.actionButtons}>
                   {draftVideos.length > 0 && (
