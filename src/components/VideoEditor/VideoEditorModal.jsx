@@ -5,7 +5,10 @@ import BeatSelector from './BeatSelector';
 import LyricBank from './LyricBank';
 import { saveApiKey, loadApiKey } from '../../services/storageService';
 import { ErrorPanel, EmptyState as SharedEmptyState, useToast } from '../ui';
-import { incrementUseCount } from '../../services/libraryService';
+import {
+  incrementUseCount, getLibrary, getCollections, getLyrics,
+  subscribeToLibrary, subscribeToCollections, addToTextBank, MEDIA_TYPES
+} from '../../services/libraryService';
 import {
   getTrimHash,
   getTrimBoundaries,
@@ -29,7 +32,9 @@ const VideoEditorModal = ({
   onUpdateLyrics,
   onDeleteLyrics,
   onShowBatchPipeline,
-  onClose
+  onClose,
+  artistId = null,
+  db = null
 }) => {
   // Mobile responsive detection
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
@@ -65,6 +70,66 @@ const VideoEditorModal = ({
       }
     }
   }, []); // Run once on mount — intentionally empty deps
+
+  // ── Left sidebar state (Videos/Audio/Lyrics/Text tabs) ──
+  const [activeBank, setActiveBank] = useState('videos');
+  const [selectedCollection, setSelectedCollection] = useState('all');
+  const [sidebarCollections, setSidebarCollections] = useState([]);
+  const [libraryVideos, setLibraryVideos] = useState([]);
+  const [libraryAudio, setLibraryAudio] = useState([]);
+  const [newTextA, setNewTextA] = useState('');
+  const [newTextB, setNewTextB] = useState('');
+
+  // Load library + collections for sidebar (same pattern as SlideshowEditor)
+  useEffect(() => {
+    if (!artistId) return;
+    const cached = getLibrary(artistId);
+    setLibraryVideos(cached.filter(i => i.type === MEDIA_TYPES.VIDEO));
+    setLibraryAudio(cached.filter(i => i.type === MEDIA_TYPES.AUDIO));
+    const cols = getCollections(artistId);
+    setSidebarCollections(cols.filter(c => c.type !== 'smart'));
+
+    if (!db) return;
+    const unsubs = [];
+    unsubs.push(subscribeToLibrary(db, artistId, (items) => {
+      setLibraryVideos(items.filter(i => i.type === MEDIA_TYPES.VIDEO));
+      setLibraryAudio(items.filter(i => i.type === MEDIA_TYPES.AUDIO));
+    }));
+    unsubs.push(subscribeToCollections(db, artistId, (cols) => {
+      setSidebarCollections(cols.filter(c => c.type !== 'smart'));
+    }));
+    return () => unsubs.forEach(u => u());
+  }, [db, artistId]);
+
+  // Computed: visible videos based on selected collection
+  const visibleVideos = useMemo(() => {
+    if (selectedCollection === 'category') return category?.videos || [];
+    if (selectedCollection === 'all') return libraryVideos;
+    const col = sidebarCollections.find(c => c.id === selectedCollection);
+    if (!col?.mediaIds?.length) return [];
+    return libraryVideos.filter(v => col.mediaIds.includes(v.id));
+  }, [selectedCollection, libraryVideos, sidebarCollections, category?.videos]);
+
+  // Text banks from collections (shared with SlideshowEditor)
+  const getTextBanks = useCallback(() => {
+    let textBank1 = [], textBank2 = [];
+    sidebarCollections.forEach(col => {
+      if (col.textBank1?.length) textBank1 = [...textBank1, ...col.textBank1];
+      if (col.textBank2?.length) textBank2 = [...textBank2, ...col.textBank2];
+    });
+    return { textBank1, textBank2 };
+  }, [sidebarCollections]);
+
+  const handleAddToTextBank = useCallback((bankNum, text) => {
+    if (!text.trim() || !artistId || sidebarCollections.length === 0) return;
+    const targetCol = sidebarCollections[0];
+    addToTextBank(artistId, targetCol.id, bankNum, text.trim());
+    setSidebarCollections(prev => prev.map(col =>
+      col.id === targetCol.id
+        ? { ...col, [`textBank${bankNum}`]: [...(col[`textBank${bankNum}`] || []), text.trim()] }
+        : col
+    ));
+  }, [artistId, sidebarCollections]);
 
   // Text state
   const [lyrics, setLyrics] = useState(existingVideo?.lyrics || '');
@@ -1467,6 +1532,257 @@ const VideoEditorModal = ({
           ...styles.body,
           ...(isMobile ? { flexDirection: 'column', overflow: 'auto' } : {})
         }}>
+          {/* ── LEFT SIDEBAR: Videos / Audio / Lyrics / Text ── */}
+          {!isMobile && (
+            <div style={styles.leftPanel}>
+              {/* Collection dropdown */}
+              <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                <select
+                  value={selectedCollection}
+                  onChange={(e) => setSelectedCollection(e.target.value)}
+                  style={styles.sourceDropdown}
+                >
+                  <option value="category">Selected Clips</option>
+                  <option value="all">All Videos (Library)</option>
+                  {sidebarCollections.map(col => (
+                    <option key={col.id} value={col.id}>{col.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Tab bar */}
+              <div style={styles.bankTabs}>
+                <button
+                  style={activeBank === 'videos' ? styles.bankTabActiveTeal : styles.bankTab}
+                  onClick={() => setActiveBank('videos')}
+                >Videos</button>
+                <button
+                  style={activeBank === 'audio' ? styles.bankTabActiveGreen : styles.bankTab}
+                  onClick={() => setActiveBank('audio')}
+                >Audio</button>
+                <button
+                  style={activeBank === 'lyrics' ? styles.bankTabActivePurple : styles.bankTab}
+                  onClick={() => setActiveBank('lyrics')}
+                >Lyrics</button>
+                <button
+                  style={activeBank === 'textBank' ? styles.bankTabActivePink : styles.bankTab}
+                  onClick={() => setActiveBank('textBank')}
+                >Text</button>
+              </div>
+
+              {/* Tab content */}
+              <div style={styles.bankContent}>
+                {/* ── Videos tab ── */}
+                {activeBank === 'videos' && (
+                  <div>
+                    {visibleVideos.length === 0 ? (
+                      <div style={{ padding: '24px', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '13px' }}>
+                        No videos in this collection
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>{visibleVideos.length} clips</span>
+                          <button
+                            style={{ fontSize: '11px', color: '#14b8a6', background: 'none', border: 'none', cursor: 'pointer' }}
+                            onClick={() => {
+                              const newClips = visibleVideos.map((v, i) => ({
+                                id: `clip_${Date.now()}_${i}`,
+                                sourceId: v.id,
+                                url: v.url || v.localUrl,
+                                localUrl: v.localUrl || v.url,
+                                thumbnail: v.thumbnailUrl || v.thumbnail,
+                                startTime: i * 2,
+                                duration: 2,
+                                locked: false
+                              }));
+                              setClips(newClips);
+                            }}
+                          >Add All</button>
+                        </div>
+                        <div style={styles.sidebarClipGrid}>
+                          {visibleVideos.map((video, i) => (
+                            <div
+                              key={video.id || i}
+                              style={styles.sidebarClip}
+                              onClick={() => {
+                                const newClip = {
+                                  id: `clip_${Date.now()}_${i}`,
+                                  sourceId: video.id,
+                                  url: video.url || video.localUrl,
+                                  localUrl: video.localUrl || video.url,
+                                  thumbnail: video.thumbnailUrl || video.thumbnail,
+                                  startTime: clips.length * 2,
+                                  duration: 2,
+                                  locked: false
+                                };
+                                setClips(prev => [...prev, newClip]);
+                                if (video.id && category?.artistId) incrementUseCount(category.artistId, video.id);
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(20,184,166,0.5)'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'transparent'; }}
+                            >
+                              <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#0a0a0f' }}>
+                                {(video.thumbnailUrl || video.thumbnail) ? (
+                                  <img src={video.thumbnailUrl || video.thumbnail} alt={video.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>🎬</div>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '4px' }}>
+                                {(video.name || video.metadata?.originalName || 'Clip').substring(0, 20)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Audio tab ── */}
+                {activeBank === 'audio' && (
+                  <div>
+                    {/* Current audio indicator */}
+                    {selectedAudio && (
+                      <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', marginBottom: '12px' }}>
+                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>Now playing</div>
+                        <div style={{ fontSize: '13px', color: '#86efac', fontWeight: 500 }}>
+                          {selectedAudio.isSourceAudio ? 'Source Video Audio' : selectedAudio.name}
+                        </div>
+                      </div>
+                    )}
+                    {/* Source video audio option */}
+                    {clips?.length > 0 && clips[0]?.url && (
+                      <button
+                        onClick={() => handleAudioSelect({
+                          id: '__source_video__',
+                          name: 'Source Video Audio',
+                          url: clips[0].url || clips[0].localUrl,
+                          localUrl: clips[0].localUrl || clips[0].url,
+                          isSourceAudio: true
+                        })}
+                        style={{
+                          width: '100%', padding: '10px 12px', borderRadius: '8px',
+                          border: selectedAudio?.isSourceAudio ? '1px solid #22c55e' : '1px solid rgba(255,255,255,0.1)',
+                          background: selectedAudio?.isSourceAudio ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.04)',
+                          color: selectedAudio?.isSourceAudio ? '#86efac' : '#fff',
+                          cursor: 'pointer', textAlign: 'left', fontSize: '12px', marginBottom: '8px', display: 'block'
+                        }}
+                      >
+                        🎤 Source Video Audio
+                      </button>
+                    )}
+                    {/* Audio tracks from library */}
+                    {libraryAudio.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {libraryAudio.map((audio) => (
+                          <button
+                            key={audio.id}
+                            onClick={() => handleAudioSelect(audio)}
+                            style={{
+                              width: '100%', padding: '10px 12px', borderRadius: '8px',
+                              border: selectedAudio?.id === audio.id ? '1px solid #22c55e' : '1px solid rgba(255,255,255,0.08)',
+                              background: selectedAudio?.id === audio.id ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.04)',
+                              color: '#fff', cursor: 'pointer', textAlign: 'left', fontSize: '12px', display: 'block'
+                            }}
+                          >
+                            <div style={{ fontWeight: 500 }}>{audio.name || 'Audio Track'}</div>
+                            {audio.duration && (
+                              <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', marginTop: '2px' }}>
+                                {Math.floor(audio.duration / 60)}:{String(Math.floor(audio.duration % 60)).padStart(2, '0')}
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {libraryAudio.length === 0 && !clips?.length && (
+                      <div style={{ padding: '24px', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '13px' }}>
+                        No audio tracks available
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Lyrics tab ── */}
+                {activeBank === 'lyrics' && (
+                  <LyricBank
+                    lyrics={artistId ? getLyrics(artistId) : (category?.lyrics || [])}
+                    onAddLyrics={onAddLyrics}
+                    onUpdateLyrics={onUpdateLyrics}
+                    onDeleteLyrics={onDeleteLyrics}
+                    onSelectText={(text) => {
+                      if (text.words?.length > 0) {
+                        setWords(text.words);
+                        setLyrics(text.words.map(w => w.text).join(' '));
+                      } else if (text.content) {
+                        setLyrics(text.content);
+                      }
+                    }}
+                    compact={true}
+                    showAddForm={true}
+                  />
+                )}
+
+                {/* ── Text tab ── */}
+                {activeBank === 'textBank' && (() => {
+                  const { textBank1, textBank2 } = getTextBanks();
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      {/* Text Bank A */}
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#14b8a6', marginBottom: '8px' }}>Text Bank A</div>
+                        <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                          <input
+                            value={newTextA}
+                            onChange={(e) => setNewTextA(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToTextBank(1, newTextA); setNewTextA(''); } }}
+                            placeholder="Add text..."
+                            style={styles.textBankInput}
+                          />
+                          <button
+                            onClick={() => { if (newTextA.trim()) { handleAddToTextBank(1, newTextA); setNewTextA(''); } }}
+                            style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', backgroundColor: '#14b8a6', color: '#fff', cursor: 'pointer', fontSize: '12px', flexShrink: 0 }}
+                          >+</button>
+                        </div>
+                        {textBank1.map((text, idx) => (
+                          <div key={idx} style={styles.textBankItem}>
+                            <span style={{ flex: 1, fontSize: '12px' }}>{text}</span>
+                          </div>
+                        ))}
+                        {textBank1.length === 0 && <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>No text added yet</div>}
+                      </div>
+                      {/* Text Bank B */}
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#f59e0b', marginBottom: '8px' }}>Text Bank B</div>
+                        <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                          <input
+                            value={newTextB}
+                            onChange={(e) => setNewTextB(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToTextBank(2, newTextB); setNewTextB(''); } }}
+                            placeholder="Add text..."
+                            style={styles.textBankInput}
+                          />
+                          <button
+                            onClick={() => { if (newTextB.trim()) { handleAddToTextBank(2, newTextB); setNewTextB(''); } }}
+                            style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', backgroundColor: '#f59e0b', color: '#fff', cursor: 'pointer', fontSize: '12px', flexShrink: 0 }}
+                          >+</button>
+                        </div>
+                        {textBank2.map((text, idx) => (
+                          <div key={idx} style={styles.textBankItem}>
+                            <span style={{ flex: 1, fontSize: '12px' }}>{text}</span>
+                          </div>
+                        ))}
+                        {textBank2.length === 0 && <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>No text added yet</div>}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
           {/* Preview Section - Collapsible on mobile */}
           <div style={{
             ...styles.previewSection,
@@ -1765,134 +2081,8 @@ const VideoEditorModal = ({
               WebkitOverflowScrolling: 'touch'
             } : {})
           }}>
-            {/* Audio Selector — Redesigned module */}
-            {!selectedAudio && (
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-                  <div style={{
-                    width: '36px', height: '36px', borderRadius: '10px',
-                    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                  }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
-                      <path d="M9 18V5l12-2v13"/>
-                      <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#fff' }}>Select Audio</h3>
-                    <p style={{ margin: 0, fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>Choose a track for your video</p>
-                  </div>
-                </div>
+            {/* Audio selection moved to left sidebar */}
 
-                {/* Use Source Video Audio option */}
-                {clips?.length > 0 && clips[0]?.url && (
-                  <button
-                    onClick={() => handleAudioSelect({
-                      id: '__source_video__',
-                      name: 'Source Video Audio',
-                      url: clips[0].url || clips[0].localUrl,
-                      localUrl: clips[0].localUrl || clips[0].url,
-                      isSourceAudio: true
-                    })}
-                    style={{
-                      width: '100%', padding: '14px 16px', borderRadius: '12px',
-                      border: '1px solid rgba(34, 197, 94, 0.3)',
-                      background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0.15))',
-                      color: '#86efac', cursor: 'pointer', textAlign: 'left',
-                      display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px',
-                      transition: 'all 0.15s ease', fontSize: '13px'
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.5)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.3)'; e.currentTarget.style.transform = 'none'; }}
-                  >
-                    <div style={{
-                      width: '40px', height: '40px', borderRadius: '10px',
-                      backgroundColor: 'rgba(34, 197, 94, 0.15)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                    }}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
-                        <path d="M15.6 11.6C15.6 13.6 13.6 14.6 12 14.6C10.4 14.6 8.4 13.6 8.4 11.6V6C8.4 4 10 2.4 12 2.4C14 2.4 15.6 4 15.6 6V11.6Z"/>
-                        <path d="M19 11.6C19 15.5 15.9 18.6 12 18.6C8.1 18.6 5 15.5 5 11.6"/>
-                        <path d="M12 18.6V22"/>
-                      </svg>
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 600, color: '#86efac' }}>Use Source Video Audio</div>
-                      <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>Keep the original audio from your video clip</div>
-                    </div>
-                  </button>
-                )}
-
-                {/* Divider */}
-                {clips?.length > 0 && clips[0]?.url && category?.audio?.length > 0 && (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: '12px', margin: '4px 0 12px',
-                    color: 'rgba(255,255,255,0.25)', fontSize: '11px'
-                  }}>
-                    <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
-                    <span>or choose a track</span>
-                    <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
-                  </div>
-                )}
-
-                {/* Audio tracks list */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {category?.audio?.map((audio, idx) => (
-                    <button
-                      key={audio.id}
-                      style={{
-                        width: '100%', padding: '12px 14px', borderRadius: '10px',
-                        border: '1px solid rgba(255, 255, 255, 0.08)',
-                        backgroundColor: 'rgba(255, 255, 255, 0.04)',
-                        color: '#fff', cursor: 'pointer', textAlign: 'left',
-                        display: 'flex', alignItems: 'center', gap: '12px',
-                        transition: 'all 0.15s ease', fontSize: '13px'
-                      }}
-                      onClick={() => handleAudioSelect(audio)}
-                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.1)'; e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.3)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.04)'; e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)'; e.currentTarget.style.transform = 'none'; }}
-                    >
-                      <div style={{
-                        width: '40px', height: '40px', borderRadius: '10px',
-                        background: `linear-gradient(135deg, hsl(${(idx * 47) % 360}, 60%, 25%), hsl(${(idx * 47 + 30) % 360}, 60%, 35%))`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                      }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round">
-                          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-                          <path d="M15.54 8.46a5 5 0 010 7.07"/>
-                          <path d="M19.07 4.93a10 10 0 010 14.14"/>
-                        </svg>
-                      </div>
-                      <div style={{ flex: 1, overflow: 'hidden' }}>
-                        <div style={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{audio.name}</div>
-                        {audio.duration && (
-                          <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', marginTop: '2px' }}>
-                            {Math.floor(audio.duration / 60)}:{String(Math.floor(audio.duration % 60)).padStart(2, '0')}
-                          </div>
-                        )}
-                      </div>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2">
-                        <polyline points="9 18 15 12 9 6"/>
-                      </svg>
-                    </button>
-                  ))}
-                </div>
-
-                {(!category?.audio || category.audio.length === 0) && !(clips?.length > 0 && clips[0]?.url) && (
-                  <div style={{
-                    padding: '24px', textAlign: 'center', color: 'rgba(255,255,255,0.3)',
-                    fontSize: '13px', borderRadius: '12px',
-                    border: '1px dashed rgba(255,255,255,0.1)'
-                  }}>
-                    No audio tracks available for this category
-                  </div>
-                )}
-              </div>
-            )}
-
-            {selectedAudio && (
-              <>
                 {/* Tabs - scrollable on mobile */}
                 <div style={{
                   ...styles.tabs,
@@ -2252,76 +2442,7 @@ const VideoEditorModal = ({
                   </div>
                 )}
 
-                {/* Available Clips from Category */}
-                <div style={styles.availableClipsSection}>
-                  <div style={styles.clipsSectionHeader}>
-                    <h4 style={styles.sectionTitle}>Available Clips ({category?.videos?.length || 0})</h4>
-                    <button
-                      style={styles.addAllButton}
-                      onClick={() => {
-                        if (category?.videos?.length) {
-                          const newClips = category.videos.map((v, i) => ({
-                            id: `clip_${Date.now()}_${i}`,
-                            sourceId: v.id,
-                            url: v.url,
-                            localUrl: v.localUrl, // Include localUrl for CORS fallback
-                            thumbnail: v.thumbnail,
-                            startTime: i * 2,
-                            duration: 2,
-                            locked: false
-                          }));
-                          setClips(newClips);
-                          // Increment use count for all added clips
-                          if (category?.artistId) {
-                            category.videos.forEach(v => {
-                              incrementUseCount(category.artistId, v.id);
-                            });
-                          }
-                        }
-                      }}
-                    >
-                      Add All
-                    </button>
-                  </div>
-                  <div style={styles.availableClipsGrid}>
-                    {category?.videos?.length > 0 ? (
-                      category.videos.map((video, i) => (
-                        <div
-                          key={video.id}
-                          style={styles.availableClip}
-                          onClick={() => {
-                            const newClip = {
-                              id: `clip_${Date.now()}_${i}`,
-                              sourceId: video.id,
-                              url: video.url,
-                              localUrl: video.localUrl, // Include localUrl for CORS fallback
-                              thumbnail: video.thumbnail,
-                              startTime: clips.length * 2,
-                              duration: 2,
-                              locked: false
-                            };
-                            setClips(prev => [...prev, newClip]);
-                            // Increment use count for the source media
-                            if (video.id && category?.artistId) {
-                              incrementUseCount(category.artistId, video.id);
-                            }
-                          }}
-                        >
-                          {video.thumbnail ? (
-                            <img src={video.thumbnail} alt="" style={styles.availableClipThumb} draggable={false} loading="lazy" />
-                          ) : (
-                            <video src={video.url} style={styles.availableClipThumb} muted preload="metadata" />
-                          )}
-                          <span style={styles.availableClipName}>{video.name?.slice(0, 15) || `Clip ${i+1}`}</span>
-                        </div>
-                      ))
-                    ) : (
-                      <p style={styles.noAvailableClips}>No clips in this category</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Clips Timeline */}
+                {/* Clips Timeline — Available Clips moved to left sidebar */}
                 <div style={styles.clipsSection}>
                   <div style={styles.clipsSectionHeader}>
                     <h4 style={styles.sectionTitle}>Timeline ({clips.length} clips)</h4>
@@ -2538,8 +2659,6 @@ const VideoEditorModal = ({
                     </div>
                   </div>
                 </div>
-              </>
-            )}
           </div>
         </div>
 
@@ -3158,6 +3277,128 @@ const styles = {
     display: 'flex',
     flex: 1,
     overflow: 'hidden'
+  },
+  // ── Left sidebar styles (matching SlideshowEditor) ──
+  leftPanel: {
+    width: '300px',
+    backgroundColor: '#16162a',
+    borderRight: '1px solid rgba(255,255,255,0.1)',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden'
+  },
+  sourceDropdown: {
+    width: '100%',
+    padding: '8px 12px',
+    backgroundColor: '#0f0f1a',
+    border: '1px solid rgba(255,255,255,0.15)',
+    borderRadius: '8px',
+    color: '#fff',
+    fontSize: '13px',
+    outline: 'none',
+    cursor: 'pointer'
+  },
+  bankTabs: {
+    display: 'flex',
+    borderBottom: '1px solid rgba(255,255,255,0.1)'
+  },
+  bankTab: {
+    flex: 1,
+    padding: '12px 4px',
+    border: 'none',
+    borderBottom: '2px solid transparent',
+    backgroundColor: 'transparent',
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: '12px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    textAlign: 'center',
+    transition: 'all 0.15s ease'
+  },
+  bankTabActiveTeal: {
+    flex: 1,
+    padding: '12px 4px',
+    border: 'none',
+    borderBottom: '2px solid #14b8a6',
+    backgroundColor: 'rgba(20,184,166,0.1)',
+    color: '#5eead4',
+    fontSize: '12px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    textAlign: 'center'
+  },
+  bankTabActiveGreen: {
+    flex: 1,
+    padding: '12px 4px',
+    border: 'none',
+    borderBottom: '2px solid #22c55e',
+    backgroundColor: 'rgba(34,197,94,0.1)',
+    color: '#86efac',
+    fontSize: '12px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    textAlign: 'center'
+  },
+  bankTabActivePurple: {
+    flex: 1,
+    padding: '12px 4px',
+    border: 'none',
+    borderBottom: '2px solid #a78bfa',
+    backgroundColor: 'rgba(167,139,250,0.1)',
+    color: '#c4b5fd',
+    fontSize: '12px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    textAlign: 'center'
+  },
+  bankTabActivePink: {
+    flex: 1,
+    padding: '12px 4px',
+    border: 'none',
+    borderBottom: '2px solid #ec4899',
+    backgroundColor: 'rgba(236,72,153,0.1)',
+    color: '#f9a8d4',
+    fontSize: '12px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    textAlign: 'center'
+  },
+  bankContent: {
+    flex: 1,
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    padding: '12px'
+  },
+  sidebarClipGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '8px'
+  },
+  sidebarClip: {
+    cursor: 'pointer',
+    padding: '4px',
+    borderRadius: '6px',
+    border: '2px solid transparent',
+    transition: 'border-color 0.15s ease'
+  },
+  textBankInput: {
+    flex: 1,
+    padding: '6px 10px',
+    borderRadius: '6px',
+    border: '1px solid rgba(255,255,255,0.15)',
+    backgroundColor: '#0f0f1a',
+    color: '#fff',
+    fontSize: '12px',
+    outline: 'none'
+  },
+  textBankItem: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '6px 8px',
+    borderRadius: '6px',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    marginBottom: '4px',
+    color: 'rgba(255,255,255,0.7)'
   },
   previewSection: {
     width: '320px',

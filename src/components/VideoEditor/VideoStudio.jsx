@@ -2033,6 +2033,8 @@ const VideoStudio = ({
               setShowBatchPipeline(true);
             }}
             onClose={handleCloseEditor}
+            artistId={currentArtistId}
+            db={db}
           />
         </EditorErrorBoundary>
       )}
