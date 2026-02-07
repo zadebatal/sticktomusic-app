@@ -227,7 +227,7 @@ const SlideshowEditor = ({
     setSlides(prevState);
     setCanUndo(historyIndexRef.current > 0);
     setCanRedo(true);
-  }, []);
+  }, [setSlides]);
 
   const handleRedo = useCallback(() => {
     if (historyIndexRef.current >= historyRef.current.length - 1) return;
@@ -237,7 +237,7 @@ const SlideshowEditor = ({
     setSlides(nextState);
     setCanUndo(true);
     setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
-  }, []);
+  }, [setSlides]);
 
   // Keyboard shortcut: Cmd+Z / Ctrl+Z for undo, Cmd+Shift+Z / Ctrl+Shift+Z for redo
   useEffect(() => {
@@ -732,12 +732,9 @@ const SlideshowEditor = ({
 
   // Audio playback controls - just add audio directly, user can trim later
   const handleSelectAudio = useCallback((audio) => {
-    // Set the audio directly on the timeline
-    setSelectedAudio({
-      ...audio,
-      startTime: audio.startTime || 0,
-      endTime: audio.endTime || null
-    });
+    // Open the audio editor/trimmer for the selected track
+    setAudioToTrim(audio);
+    setShowAudioTrimmer(true);
   }, []);
 
   const handleAudioTrimSave = useCallback(({ startTime, endTime, duration, trimmedFile, trimmedName }) => {
@@ -2631,11 +2628,8 @@ const SlideshowEditor = ({
                               key={audio.id}
                               style={styles.audioPickerItem}
                               onClick={() => {
-                                setSelectedAudio({
-                                  ...audio,
-                                  startTime: audio.startTime || 0,
-                                  endTime: audio.endTime || null
-                                });
+                                setAudioToTrim(audio);
+                                setShowAudioTrimmer(true);
                                 setShowAudioPicker(false);
                               }}
                             >
@@ -4095,21 +4089,20 @@ const styles = {
     minHeight: 0
   },
   canvasContainer: {
-    flex: '1 1 auto',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     gap: '12px',
-    minHeight: '200px',
-    overflow: 'auto'
+    flexShrink: 0
   },
   canvas: {
     backgroundColor: '#000',
     borderRadius: '12px',
     overflow: 'hidden',
     position: 'relative',
-    boxShadow: '0 4px 24px rgba(0,0,0,0.5)'
+    boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
+    flexShrink: 0
   },
   canvasBackground: {
     width: '100%',
