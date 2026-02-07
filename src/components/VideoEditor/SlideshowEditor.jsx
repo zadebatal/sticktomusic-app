@@ -1842,7 +1842,7 @@ const SlideshowEditor = ({
                     const bankAImages = (() => {
                       const col = collections.find(c => c.id === (typeof selectedSource === 'string' && selectedSource.includes(':') ? selectedSource.split(':')[0] : selectedSource));
                       if (col?.bankA?.length > 0) {
-                        return library.filter(item => col.bankA.includes(item.id));
+                        return libraryImages.filter(item => col.bankA.includes(item.id));
                       }
                       return imagesA;
                     })();
@@ -1906,7 +1906,7 @@ const SlideshowEditor = ({
                     const bankBImages = (() => {
                       const col = collections.find(c => c.id === (typeof selectedSource === 'string' && selectedSource.includes(':') ? selectedSource.split(':')[0] : selectedSource));
                       if (col?.bankB?.length > 0) {
-                        return library.filter(item => col.bankB.includes(item.id));
+                        return libraryImages.filter(item => col.bankB.includes(item.id));
                       }
                       return imagesB;
                     })();
