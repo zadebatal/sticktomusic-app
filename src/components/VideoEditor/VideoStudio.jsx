@@ -484,7 +484,7 @@ const VideoStudio = ({
 
   // Library system state (new system)
   const [libraryMedia, setLibraryMedia] = useState({ videos: [], audio: [], images: [] });
-  const [selectedLibraryMedia, setSelectedLibraryMedia] = useState({ videos: [], audio: null, images: [] });
+  const [selectedLibraryMedia, setSelectedLibraryMedia] = useState({ videos: [], audio: null, images: [], lyrics: [] });
   const [pullFromCollection, setPullFromCollection] = useState(null);
 
   // On mount: try loading categories from Firestore (may have newer data than localStorage)
@@ -678,7 +678,7 @@ const VideoStudio = ({
     setShowEditor(false);
     setEditingVideo(null);
     // Clear library selection so stale clips don't appear next time
-    setSelectedLibraryMedia({ videos: [], audio: null, images: [] });
+    setSelectedLibraryMedia({ videos: [], audio: null, images: [], lyrics: [] });
     setPullFromCollection(null);
   }, []);
 
@@ -696,7 +696,7 @@ const VideoStudio = ({
         setCreatedContentVersion(v => v + 1);
         setShowEditor(false);
         setEditingVideo(null);
-        setSelectedLibraryMedia({ videos: [], audio: null, images: [] });
+        setSelectedLibraryMedia({ videos: [], audio: null, images: [], lyrics: [] });
         setPullFromCollection(null);
         setCurrentView('library');
         setStudioMode('videos');
@@ -1880,7 +1880,8 @@ const VideoStudio = ({
                 setSelectedLibraryMedia({
                   videos: options.libraryVideos || [],
                   audio: options.libraryAudio || null,
-                  images: []
+                  images: [],
+                  lyrics: options.libraryLyrics || []
                 });
                 setPullFromCollection(options.pullFromCollection);
               }
@@ -2017,7 +2018,7 @@ const VideoStudio = ({
                 localUrl: selectedLibraryMedia.audio.localUrl || selectedLibraryMedia.audio.url,
                 savedLyrics: []
               }] : [],
-              lyrics: [],
+              lyrics: selectedLibraryMedia.lyrics || [],
               createdVideos: [],
               defaultPreset: null,
               captionTemplate: '',

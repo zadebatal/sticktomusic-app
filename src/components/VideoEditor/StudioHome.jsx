@@ -736,6 +736,25 @@ const StudioHome = ({
       // Use async Firestore function if db is available
       const added = await addToLibraryAsync(db, artistId, audioItem);
       console.log('[StudioHome] Audio saved to library:', added);
+
+      // Add to collection if one is selected
+      if (selectedCollection && added) {
+        const addedId = added.id || added[0]?.id;
+        if (addedId) {
+          addToCollection(artistId, selectedCollection, [addedId]);
+          // Sync updated collection to Firestore
+          if (db) {
+            const cols = getCollections(artistId);
+            const col = cols.find(c => c.id === selectedCollection && c.type !== 'smart');
+            if (col) {
+              saveCollectionToFirestore(db, artistId, col).catch(err =>
+                console.warn('[StudioHome] Failed to sync collection after audio upload:', err)
+              );
+            }
+          }
+        }
+      }
+
       if (!db) loadData(); // Only reload from localStorage if no Firestore
       setLibraryRefreshTrigger(prev => prev + 1);
 
@@ -895,9 +914,13 @@ const StudioHome = ({
   // =====================
 
   const handleAddLyrics = (lyricsData) => {
-    const newLyrics = addLyrics(artistId, lyricsData);
+    // Auto-tag new lyrics with current collection if one is selected
+    const dataWithCollection = selectedCollection
+      ? { ...lyricsData, collectionIds: [...(lyricsData.collectionIds || []), selectedCollection] }
+      : lyricsData;
+    const newLyrics = addLyrics(artistId, dataWithCollection);
     loadData();
-    if (externalAddLyrics) externalAddLyrics(lyricsData);
+    if (externalAddLyrics) externalAddLyrics(dataWithCollection);
     return newLyrics;
   };
 
@@ -918,32 +941,79 @@ const StudioHome = ({
   // =====================
 
   const handleLaunchVideoEditor = (existingVideo = null) => {
-    // Mark selected videos as used
-    selectedMedia.videos.forEach(v => incrementUseCount(artistId, v.id));
-    if (selectedMedia.audio) incrementUseCount(artistId, selectedMedia.audio.id);
+    // When a collection is selected, auto-populate with ALL collection clips
+    let videosForEditor = selectedMedia.videos;
+    let audioForEditor = selectedMedia.audio;
+    let lyricsForEditor = [];
 
-    // Pass selected media to editor
+    if (selectedCollection) {
+      const col = collections.find(c => c.id === selectedCollection);
+      if (col) {
+        // Get all media in this collection
+        const colMedia = getCollectionMedia(artistId, selectedCollection);
+        const colVideos = colMedia.filter(m => m.type === MEDIA_TYPES.VIDEO);
+        const colAudioItems = colMedia.filter(m => m.type === MEDIA_TYPES.AUDIO);
+
+        // Use all collection videos if user hasn't manually selected any
+        if (videosForEditor.length === 0 && colVideos.length > 0) {
+          videosForEditor = colVideos;
+        }
+
+        // Use first collection audio if user hasn't manually selected one
+        if (!audioForEditor && colAudioItems.length > 0) {
+          audioForEditor = colAudioItems[0];
+        }
+
+        // Get lyrics associated with this collection
+        lyricsForEditor = lyrics.filter(l =>
+          (l.collectionIds || []).includes(selectedCollection)
+        );
+      }
+    }
+
+    // Mark media as used
+    videosForEditor.forEach(v => incrementUseCount(artistId, v.id));
+    if (audioForEditor) incrementUseCount(artistId, audioForEditor.id);
+
+    // Pass media to editor
     if (onMakeVideo) {
       onMakeVideo({
         existingVideo,
-        libraryVideos: selectedMedia.videos,
-        libraryAudio: selectedMedia.audio,
+        libraryVideos: videosForEditor,
+        libraryAudio: audioForEditor,
+        libraryLyrics: lyricsForEditor,
         pullFromCollection: selectedCollection
       });
     }
   };
 
   const handleLaunchSlideshowEditor = (existingSlideshow = null) => {
-    // Mark selected images as used
-    selectedMedia.images.forEach(i => incrementUseCount(artistId, i.id));
+    let imagesForEditor = selectedMedia.images;
+    let audioForEditor = selectedMedia.audio;
+
+    if (selectedCollection) {
+      const colMedia = getCollectionMedia(artistId, selectedCollection);
+      const colImages = colMedia.filter(m => m.type === MEDIA_TYPES.IMAGE);
+      const colAudioItems = colMedia.filter(m => m.type === MEDIA_TYPES.AUDIO);
+
+      // Use all collection images if user hasn't manually selected any
+      if (imagesForEditor.length === 0 && colImages.length > 0) {
+        imagesForEditor = colImages;
+      }
+      if (!audioForEditor && colAudioItems.length > 0) {
+        audioForEditor = colAudioItems[0];
+      }
+    }
+
+    // Mark images as used
+    imagesForEditor.forEach(i => incrementUseCount(artistId, i.id));
 
     if (onMakeSlideshow) {
       onMakeSlideshow({
         existingSlideshow,
-        libraryImages: selectedMedia.images,
-        libraryAudio: selectedMedia.audio,
+        libraryImages: imagesForEditor,
+        libraryAudio: audioForEditor,
         pullFromCollection: selectedCollection,
-        // Pass collection bank info so editor can auto-start from banks
         collectionId: selectedCollection || null
       });
     }
@@ -1116,6 +1186,37 @@ const StudioHome = ({
     );
     return filtered;
   }, [library, collections, selectedCollection]);
+
+  // Lyrics filtered by selected collection for the sidebar bank
+  const sidebarLyrics = useMemo(() => {
+    if (!selectedCollection) return lyrics;
+    return lyrics.filter(l =>
+      (l.collectionIds || []).includes(selectedCollection)
+    );
+  }, [lyrics, selectedCollection]);
+
+  // State for "import from other collection" dropdowns
+  const [showAudioImport, setShowAudioImport] = useState(false);
+  const [showLyricsImport, setShowLyricsImport] = useState(false);
+
+  // Audio items NOT in current collection (for import dropdown)
+  const importableAudio = useMemo(() => {
+    if (!selectedCollection) return [];
+    const allAudio = library.filter(m => m.type === MEDIA_TYPES.AUDIO);
+    const col = collections.find(c => c.id === selectedCollection);
+    if (!col) return allAudio;
+    return allAudio.filter(a =>
+      !col.mediaIds?.includes(a.id) && !(a.collectionIds || []).includes(selectedCollection)
+    );
+  }, [library, collections, selectedCollection]);
+
+  // Lyrics NOT in current collection (for import dropdown)
+  const importableLyrics = useMemo(() => {
+    if (!selectedCollection) return [];
+    return lyrics.filter(l =>
+      !(l.collectionIds || []).includes(selectedCollection)
+    );
+  }, [lyrics, selectedCollection]);
 
   // =====================
   // STYLES
@@ -1496,17 +1597,60 @@ const StudioHome = ({
                 <div style={styles.modeCount}>{libraryAudio.length} clips</div>
               </div>
 
-              {/* Drafts entry point on dashboard */}
+              {/* Drafts entry point on dashboard — with video/slideshow toggle */}
               {totalDrafts > 0 && (
                 <div
-                  style={styles.modeCard}
-                  onClick={() => onViewContent?.({ type: draftSlideshows.length > 0 ? 'slideshows' : 'videos' })}
+                  style={{ ...styles.modeCard, cursor: 'default' }}
                   onMouseEnter={(e) => e.currentTarget.style.borderColor = '#6366f1'}
                   onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'}
                 >
                   <div style={styles.modeIcon}>📝</div>
                   <div style={styles.modeName}>Drafts</div>
                   <div style={styles.modeCount}>{totalDrafts} draft{totalDrafts !== 1 ? 's' : ''}</div>
+                  <div style={{ display: 'flex', gap: '6px', marginTop: '8px', width: '100%' }}>
+                    {draftVideos.length > 0 && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onViewContent?.({ type: 'videos' }); }}
+                        style={{
+                          flex: 1,
+                          padding: '6px 8px',
+                          fontSize: '11px',
+                          fontWeight: 500,
+                          backgroundColor: 'rgba(99, 102, 241, 0.15)',
+                          border: '1px solid rgba(99, 102, 241, 0.3)',
+                          borderRadius: '6px',
+                          color: '#a5b4fc',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.3)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.15)'; }}
+                      >
+                        🎬 Videos ({draftVideos.length})
+                      </button>
+                    )}
+                    {draftSlideshows.length > 0 && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onViewContent?.({ type: 'slideshows' }); }}
+                        style={{
+                          flex: 1,
+                          padding: '6px 8px',
+                          fontSize: '11px',
+                          fontWeight: 500,
+                          backgroundColor: 'rgba(236, 72, 153, 0.15)',
+                          border: '1px solid rgba(236, 72, 153, 0.3)',
+                          borderRadius: '6px',
+                          color: '#f9a8d4',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(236, 72, 153, 0.3)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(236, 72, 153, 0.15)'; }}
+                      >
+                        🖼️ Slideshows ({draftSlideshows.length})
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -1857,18 +2001,77 @@ const StudioHome = ({
                 borderBottom: '1px solid rgba(255,255,255,0.05)',
                 fontSize: '10px',
                 color: 'rgba(255,255,255,0.4)',
-                flexShrink: 0
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                position: 'relative'
               }}>
-                {selectedCollection
-                  ? `${collections.find(c => c.id === selectedCollection)?.name || 'Collection'}`
-                  : 'All Audio'}
-                {' '}({sidebarAudio.length})
+                <span>
+                  {selectedCollection
+                    ? `${collections.find(c => c.id === selectedCollection)?.name || 'Collection'}`
+                    : 'All Audio'}
+                  {' '}({sidebarAudio.length})
+                </span>
+                {selectedCollection && importableAudio.length > 0 && (
+                  <button
+                    onClick={() => setShowAudioImport(!showAudioImport)}
+                    style={{
+                      background: 'none', border: 'none', color: '#6366f1',
+                      cursor: 'pointer', fontSize: '10px', padding: '1px 4px'
+                    }}
+                    title="Import from another collection"
+                  >
+                    + Import
+                  </button>
+                )}
+                {showAudioImport && selectedCollection && (
+                  <div style={{
+                    position: 'absolute', top: '100%', right: 0, zIndex: 50,
+                    backgroundColor: '#1a1a2e', border: '1px solid rgba(255,255,255,0.15)',
+                    borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                    maxHeight: '200px', overflowY: 'auto', minWidth: '180px', padding: '4px'
+                  }}>
+                    <div style={{ padding: '4px 8px', fontSize: '9px', color: 'rgba(255,255,255,0.35)', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: '4px' }}>
+                      Add audio from library:
+                    </div>
+                    {importableAudio.map(a => (
+                      <div
+                        key={a.id}
+                        onClick={() => {
+                          addToCollection(artistId, selectedCollection, [a.id]);
+                          if (db) {
+                            const col = collections.find(c => c.id === selectedCollection && c.type !== 'smart');
+                            if (col) saveCollectionToFirestore(db, artistId, col).catch(() => {});
+                          }
+                          setLibraryRefreshTrigger(t => t + 1);
+                          setShowAudioImport(false);
+                        }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '6px',
+                          padding: '5px 8px', borderRadius: '4px', cursor: 'pointer',
+                          fontSize: '10px', color: 'rgba(255,255,255,0.7)'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        <span>🎵</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                      </div>
+                    ))}
+                    {importableAudio.length === 0 && (
+                      <div style={{ padding: '8px', fontSize: '10px', color: 'rgba(255,255,255,0.25)', textAlign: 'center' }}>
+                        All audio already in this collection
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div style={{ flex: 1, overflowY: 'auto', padding: '4px' }}>
                 {sidebarAudio.length === 0 ? (
                   <div style={{ padding: '16px 8px', textAlign: 'center', color: 'rgba(255,255,255,0.25)', fontSize: '11px' }}>
                     {selectedCollection
-                      ? 'No audio in this collection.'
+                      ? 'No audio in this collection. Click "+ Import" above to add from library.'
                       : 'No audio uploaded yet.'}
                   </div>
                 ) : (
@@ -2134,13 +2337,64 @@ const StudioHome = ({
                   <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>
                     📝 Lyrics
                   </span>
-                  <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)' }}>
-                    {lyrics.length} saved
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)' }}>
+                      {sidebarLyrics.length} saved
+                    </span>
+                    {importableLyrics.length > 0 && (
+                      <div style={{ position: 'relative' }}>
+                        <button
+                          onClick={() => setShowLyricsImport(!showLyricsImport)}
+                          style={{
+                            background: 'none', border: 'none', color: '#6366f1',
+                            cursor: 'pointer', fontSize: '10px', padding: '1px 4px'
+                          }}
+                          title="Import lyrics from another collection"
+                        >
+                          + Import
+                        </button>
+                        {showLyricsImport && (
+                          <div style={{
+                            position: 'absolute', top: '100%', right: 0, zIndex: 50,
+                            backgroundColor: '#1a1a2e', border: '1px solid rgba(255,255,255,0.15)',
+                            borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                            maxHeight: '200px', overflowY: 'auto', minWidth: '200px', padding: '4px'
+                          }}>
+                            <div style={{ padding: '4px 8px', fontSize: '9px', color: 'rgba(255,255,255,0.35)', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: '4px' }}>
+                              Add lyrics to this collection:
+                            </div>
+                            {importableLyrics.map(l => (
+                              <div
+                                key={l.id}
+                                onClick={() => {
+                                  // Add collection ID to the lyric item
+                                  const updatedCollectionIds = [...(l.collectionIds || []), selectedCollection];
+                                  handleUpdateLyrics(l.id, { ...l, collectionIds: updatedCollectionIds });
+                                  setShowLyricsImport(false);
+                                }}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: '6px',
+                                  padding: '5px 8px', borderRadius: '4px', cursor: 'pointer',
+                                  fontSize: '10px', color: 'rgba(255,255,255,0.7)'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                              >
+                                <span>📝</span>
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {l.title || 'Untitled'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px' }}>
                   <LyricBank
-                    lyrics={lyrics}
+                    lyrics={sidebarLyrics}
                     onAddLyrics={handleAddLyrics}
                     onUpdateLyrics={handleUpdateLyrics}
                     onDeleteLyrics={handleDeleteLyrics}

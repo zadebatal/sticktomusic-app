@@ -235,36 +235,11 @@ const CollectionPicker = ({
             </div>
           </div>
 
-          <div style={styles.sectionDivider} />
-
-          {/* Smart Collections */}
-          <div style={styles.section}>
-            <div style={styles.sectionTitle}>Smart</div>
-            {smartCollections.map(collection => (
-              <div
-                key={collection.id}
-                style={{
-                  ...styles.item,
-                  ...(value === collection.id ? styles.itemSelected : {})
-                }}
-                onClick={() => handleSelect(collection.id)}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = value === collection.id ? 'rgba(99, 102, 241, 0.15)' : 'transparent'}
-              >
-                <span style={styles.itemIcon}>{collection.icon}</span>
-                <span style={styles.itemName}>{collection.name}</span>
-                {showMediaCount && (
-                  <span style={styles.itemCount}>{mediaCount[collection.id] || 0}</span>
-                )}
-              </div>
-            ))}
-          </div>
-
           {userCollections.length > 0 && (
             <>
               <div style={styles.sectionDivider} />
 
-              {/* User Collections */}
+              {/* User Collections — shown first */}
               <div style={styles.section}>
                 <div style={styles.sectionTitle}>Collections</div>
                 {userCollections.map(collection => (
@@ -288,6 +263,31 @@ const CollectionPicker = ({
               </div>
             </>
           )}
+
+          <div style={styles.sectionDivider} />
+
+          {/* Smart Collections — shown after user collections */}
+          <div style={styles.section}>
+            <div style={styles.sectionTitle}>Smart</div>
+            {smartCollections.map(collection => (
+              <div
+                key={collection.id}
+                style={{
+                  ...styles.item,
+                  ...(value === collection.id ? styles.itemSelected : {})
+                }}
+                onClick={() => handleSelect(collection.id)}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = value === collection.id ? 'rgba(99, 102, 241, 0.15)' : 'transparent'}
+              >
+                <span style={styles.itemIcon}>{collection.icon}</span>
+                <span style={styles.itemName}>{collection.name}</span>
+                {showMediaCount && (
+                  <span style={styles.itemCount}>{mediaCount[collection.id] || 0}</span>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

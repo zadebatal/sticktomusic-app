@@ -3173,7 +3173,14 @@ const StickToMusic = () => {
             {['artists', 'pages', 'content', 'campaigns'].map(tab => (
               <button
                 key={tab}
-                onClick={() => { setOperatorTab(tab); setMobileMenuOpen(false); }}
+                onClick={() => {
+                  setOperatorTab(tab);
+                  setMobileMenuOpen(false);
+                  // Auto-sync Pages & Content data when their tabs are clicked
+                  if ((tab === 'pages' || tab === 'content') && !loadingLatePages) {
+                    loadLatePages();
+                  }
+                }}
                 className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition whitespace-nowrap ${
                   operatorTab === tab ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
                 }`}

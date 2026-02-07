@@ -1780,269 +1780,233 @@ const SlideshowEditor = ({
               </select>
             </div>
 
-            <div style={styles.bankTabs}>
-              <button
-                style={{
-                  ...styles.bankTab,
-                  ...styles.bankTabTeal,
-                  ...(activeBank === 'imageA' ? styles.bankTabActiveTeal : {})
-                }}
-                onClick={() => { setActiveBank('imageA'); setSelectedSource('bankA'); }}
-              >
-                Image A
-              </button>
-              <button
-                style={{
-                  ...styles.bankTab,
-                  ...styles.bankTabAmber,
-                  ...(activeBank === 'imageB' ? styles.bankTabActiveAmber : {})
-                }}
-                onClick={() => { setActiveBank('imageB'); setSelectedSource('bankB'); }}
-              >
-                Image B
-              </button>
-              <button
-                style={{
-                  ...styles.bankTab,
-                  ...styles.bankTabGreen,
-                  ...(activeBank === 'audio' ? styles.bankTabActiveGreen : {})
-                }}
-                onClick={() => setActiveBank('audio')}
-              >
-                🎵 Audio
-              </button>
-              <button
-                style={{
-                  ...styles.bankTab,
-                  ...styles.bankTabPurple,
-                  ...(activeBank === 'lyrics' ? styles.bankTabActivePurple : {})
-                }}
-                onClick={() => setActiveBank('lyrics')}
-              >
-                Lyrics
-              </button>
-              <button
-                style={{
-                  ...styles.bankTab,
-                  border: '1px solid ' + (activeBank === 'textBank' ? 'rgba(236, 72, 153, 0.6)' : 'rgba(236, 72, 153, 0.15)'),
-                  color: activeBank === 'textBank' ? '#f9a8d4' : '#9ca3af',
-                  backgroundColor: activeBank === 'textBank' ? 'rgba(236, 72, 153, 0.15)' : 'transparent'
-                }}
-                onClick={() => setActiveBank('textBank')}
-              >
-                Text
-              </button>
-            </div>
+            {/* 3-Column Layout: Image A | Image B | Text Banks */}
+            <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+              {/* Column 1: Image A */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+                <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: '#5eead4', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(20,184,166,0.08)', textAlign: 'center' }}>
+                  Image A
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
+                  {(() => {
+                    const bankAImages = (() => {
+                      const col = collections.find(c => c.id === (typeof selectedSource === 'string' && selectedSource.includes(':') ? selectedSource.split(':')[0] : selectedSource));
+                      if (col?.bankA?.length > 0) {
+                        return library.filter(item => col.bankA.includes(item.id));
+                      }
+                      return imagesA;
+                    })();
+                    return bankAImages.length === 0 ? (
+                      <div style={{ fontSize: '11px', color: '#6b7280', padding: '16px 8px', textAlign: 'center' }}>
+                        No images in Bank A
+                        {onImportToBank && (
+                          <button
+                            style={{ marginTop: '8px', padding: '6px 12px', borderRadius: '6px', border: '1px solid rgba(99,102,241,0.3)', backgroundColor: 'rgba(99,102,241,0.1)', color: '#a5b4fc', fontSize: '11px', cursor: 'pointer', display: 'block', width: '100%' }}
+                            onClick={() => importImageARef.current?.click()}
+                          >
+                            + Import
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px' }}>
+                        {bankAImages.map(image => {
+                          const isSel = selectedBankImages.has(image.id);
+                          return (
+                            <div key={image.id} style={{ ...styles.clipCard, border: isSel ? '1px solid rgba(20,184,166,0.5)' : '1px solid transparent', position: 'relative' }}
+                              draggable
+                              onClick={(e) => {
+                                if (e.metaKey || e.ctrlKey) {
+                                  setSelectedBankImages(prev => { const next = new Set(prev); if (next.has(image.id)) next.delete(image.id); else next.add(image.id); return next; });
+                                } else {
+                                  setSelectedBankImages(prev => prev.size === 1 && prev.has(image.id) ? new Set() : new Set([image.id]));
+                                }
+                                setActiveBank('imageA');
+                              }}
+                              onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ ...image, url: image.url || image.localUrl, thumbnail: image.url || image.localUrl, sourceBank: 'imageA' })); }}
+                            >
+                              {isSel && <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(20,184,166,0.2)', zIndex: 1, pointerEvents: 'none', borderRadius: '6px' }}><div style={{ position: 'absolute', bottom: 3, right: 3, width: '14px', height: '14px', backgroundColor: '#14b8a6', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', color: '#fff', fontWeight: 'bold' }}>✓</div></div>}
+                              <img src={image.thumbnailUrl || image.url || image.localUrl} alt={image.name} style={styles.clipThumbnail} loading="lazy" />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
 
-            <div style={styles.bankContent}>
-              {activeBank === 'textBank' ? (
-                /* Text Bank Panel - Bank A (Slide 1) and Bank B (Slide 2) */
-                <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {/* Text Bank A - for Slide 1 */}
-                  <div>
-                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#f9a8d4', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span>Text Bank A</span>
-                      <span style={{ fontSize: '10px', color: '#6b7280', fontWeight: '400' }}>Slide 1</span>
+              {/* Column 2: Image B */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+                <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: '#fbbf24', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(245,158,11,0.08)', textAlign: 'center' }}>
+                  Image B
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
+                  {(() => {
+                    const bankBImages = (() => {
+                      const col = collections.find(c => c.id === (typeof selectedSource === 'string' && selectedSource.includes(':') ? selectedSource.split(':')[0] : selectedSource));
+                      if (col?.bankB?.length > 0) {
+                        return library.filter(item => col.bankB.includes(item.id));
+                      }
+                      return imagesB;
+                    })();
+                    return bankBImages.length === 0 ? (
+                      <div style={{ fontSize: '11px', color: '#6b7280', padding: '16px 8px', textAlign: 'center' }}>
+                        No images in Bank B
+                        {onImportToBank && (
+                          <button
+                            style={{ marginTop: '8px', padding: '6px 12px', borderRadius: '6px', border: '1px solid rgba(245,158,11,0.3)', backgroundColor: 'rgba(245,158,11,0.1)', color: '#fbbf24', fontSize: '11px', cursor: 'pointer', display: 'block', width: '100%' }}
+                            onClick={() => importImageBRef.current?.click()}
+                          >
+                            + Import
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px' }}>
+                        {bankBImages.map(image => {
+                          const isSel = selectedBankImages.has(image.id);
+                          return (
+                            <div key={image.id} style={{ ...styles.clipCard, border: isSel ? '1px solid rgba(245,158,11,0.5)' : '1px solid transparent', position: 'relative' }}
+                              draggable
+                              onClick={(e) => {
+                                if (e.metaKey || e.ctrlKey) {
+                                  setSelectedBankImages(prev => { const next = new Set(prev); if (next.has(image.id)) next.delete(image.id); else next.add(image.id); return next; });
+                                } else {
+                                  setSelectedBankImages(prev => prev.size === 1 && prev.has(image.id) ? new Set() : new Set([image.id]));
+                                }
+                                setActiveBank('imageB');
+                              }}
+                              onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ ...image, url: image.url || image.localUrl, thumbnail: image.url || image.localUrl, sourceBank: 'imageB' })); }}
+                            >
+                              {isSel && <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(245,158,11,0.2)', zIndex: 1, pointerEvents: 'none', borderRadius: '6px' }}><div style={{ position: 'absolute', bottom: 3, right: 3, width: '14px', height: '14px', backgroundColor: '#f59e0b', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', color: '#fff', fontWeight: 'bold' }}>✓</div></div>}
+                              <img src={image.thumbnailUrl || image.url || image.localUrl} alt={image.name} style={styles.clipThumbnail} loading="lazy" />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Column 3: Text Banks + Audio */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: '#f9a8d4', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(236,72,153,0.08)', textAlign: 'center' }}>
+                  Text Banks
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+                  {/* Text Bank A */}
+                  <div style={{ marginBottom: '12px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '600', color: '#f9a8d4', marginBottom: '6px' }}>
+                      Text A <span style={{ fontSize: '10px', color: '#6b7280', fontWeight: '400' }}>Slide 1</span>
                     </div>
-                    {/* Add text input */}
-                    <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
-                      <input
-                        type="text"
-                        value={newTextA}
-                        onChange={(e) => setNewTextA(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && newTextA.trim()) {
-                            handleAddToTextBank(1, newTextA);
-                            setNewTextA('');
-                          }
-                        }}
-                        placeholder="Add new text..."
-                        style={{
-                          flex: 1, padding: '6px 8px', borderRadius: '6px',
-                          border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)',
-                          color: '#fff', fontSize: '12px', outline: 'none'
-                        }}
-                      />
-                      <button
-                        onClick={() => { if (newTextA.trim()) { handleAddToTextBank(1, newTextA); setNewTextA(''); } }}
-                        disabled={!newTextA.trim()}
-                        style={{
-                          padding: '6px 10px', borderRadius: '6px', border: 'none',
-                          backgroundColor: newTextA.trim() ? 'rgba(236, 72, 153, 0.3)' : 'rgba(255,255,255,0.05)',
-                          color: newTextA.trim() ? '#f9a8d4' : '#4b5563', fontSize: '12px',
-                          cursor: newTextA.trim() ? 'pointer' : 'default'
-                        }}
-                      >
-                        +
-                      </button>
+                    <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
+                      <input type="text" value={newTextA} onChange={(e) => setNewTextA(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToTextBank(1, newTextA); setNewTextA(''); } }}
+                        placeholder="Add text..." style={{ flex: 1, padding: '5px 7px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '11px', outline: 'none' }} />
+                      <button onClick={() => { if (newTextA.trim()) { handleAddToTextBank(1, newTextA); setNewTextA(''); } }} disabled={!newTextA.trim()}
+                        style={{ padding: '5px 8px', borderRadius: '5px', border: 'none', backgroundColor: newTextA.trim() ? 'rgba(236,72,153,0.3)' : 'rgba(255,255,255,0.05)', color: newTextA.trim() ? '#f9a8d4' : '#4b5563', fontSize: '11px', cursor: newTextA.trim() ? 'pointer' : 'default' }}>+</button>
                     </div>
                     {(() => {
                       const { textBank1 } = getTextBanks();
                       return textBank1.length > 0 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                           {textBank1.map((text, i) => (
-                            <div
-                              key={i}
-                              onClick={() => {
-                                if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
-                                  const newOverlay = {
-                                    id: `text_${Date.now()}_${i}`,
-                                    text: text,
-                                    style: getDefaultTextStyle(),
-                                    position: { x: 50, y: 50, width: 80, height: 20 }
-                                  };
-                                  setSlides(prev => prev.map((slide, idx) =>
-                                    idx === selectedSlideIndex
-                                      ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] }
-                                      : slide
-                                  ));
-                                  setEditingTextId(newOverlay.id);
-                                }
-                              }}
-                              style={{
-                                padding: '8px 10px',
-                                backgroundColor: 'rgba(255,255,255,0.04)',
-                                border: '1px solid rgba(255,255,255,0.08)',
-                                borderRadius: '6px',
-                                color: '#d1d5db',
-                                fontSize: '12px',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s',
-                                lineHeight: '1.4',
-                                wordBreak: 'break-word'
-                              }}
-                              title="Click to add as text overlay"
-                            >
-                              {text}
-                            </div>
+                            <div key={i} onClick={() => {
+                              if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
+                                const newOverlay = { id: `text_${Date.now()}_${i}`, text, style: getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
+                                setSlides(prev => prev.map((slide, idx) => idx === selectedSlideIndex ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] } : slide));
+                                setEditingTextId(newOverlay.id);
+                              }
+                            }} style={{ padding: '6px 8px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px', color: '#d1d5db', fontSize: '11px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word' }} title="Click to add as overlay">{text}</div>
                           ))}
                         </div>
-                      ) : (
-                        <div style={{ fontSize: '11px', color: '#6b7280', padding: '8px', textAlign: 'center' }}>
-                          No text yet. Add some above.
-                        </div>
-                      );
+                      ) : <div style={{ fontSize: '10px', color: '#6b7280', padding: '6px', textAlign: 'center' }}>No text yet</div>;
                     })()}
                   </div>
 
-                  {/* Divider */}
-                  <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.08)' }} />
+                  <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: '12px' }} />
 
-                  {/* Text Bank B - for Slide 2 */}
-                  <div>
-                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#a5b4fc', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span>Text Bank B</span>
-                      <span style={{ fontSize: '10px', color: '#6b7280', fontWeight: '400' }}>Slide 2</span>
+                  {/* Text Bank B */}
+                  <div style={{ marginBottom: '12px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '600', color: '#a5b4fc', marginBottom: '6px' }}>
+                      Text B <span style={{ fontSize: '10px', color: '#6b7280', fontWeight: '400' }}>Slide 2</span>
                     </div>
-                    {/* Add text input */}
-                    <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
-                      <input
-                        type="text"
-                        value={newTextB}
-                        onChange={(e) => setNewTextB(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && newTextB.trim()) {
-                            handleAddToTextBank(2, newTextB);
-                            setNewTextB('');
-                          }
-                        }}
-                        placeholder="Add new text..."
-                        style={{
-                          flex: 1, padding: '6px 8px', borderRadius: '6px',
-                          border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)',
-                          color: '#fff', fontSize: '12px', outline: 'none'
-                        }}
-                      />
-                      <button
-                        onClick={() => { if (newTextB.trim()) { handleAddToTextBank(2, newTextB); setNewTextB(''); } }}
-                        disabled={!newTextB.trim()}
-                        style={{
-                          padding: '6px 10px', borderRadius: '6px', border: 'none',
-                          backgroundColor: newTextB.trim() ? 'rgba(99, 102, 241, 0.3)' : 'rgba(255,255,255,0.05)',
-                          color: newTextB.trim() ? '#a5b4fc' : '#4b5563', fontSize: '12px',
-                          cursor: newTextB.trim() ? 'pointer' : 'default'
-                        }}
-                      >
-                        +
-                      </button>
+                    <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
+                      <input type="text" value={newTextB} onChange={(e) => setNewTextB(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToTextBank(2, newTextB); setNewTextB(''); } }}
+                        placeholder="Add text..." style={{ flex: 1, padding: '5px 7px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '11px', outline: 'none' }} />
+                      <button onClick={() => { if (newTextB.trim()) { handleAddToTextBank(2, newTextB); setNewTextB(''); } }} disabled={!newTextB.trim()}
+                        style={{ padding: '5px 8px', borderRadius: '5px', border: 'none', backgroundColor: newTextB.trim() ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.05)', color: newTextB.trim() ? '#a5b4fc' : '#4b5563', fontSize: '11px', cursor: newTextB.trim() ? 'pointer' : 'default' }}>+</button>
                     </div>
                     {(() => {
                       const { textBank2 } = getTextBanks();
                       return textBank2.length > 0 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                           {textBank2.map((text, i) => (
-                            <div
-                              key={i}
-                              onClick={() => {
-                                if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
-                                  const newOverlay = {
-                                    id: `text_${Date.now()}_${i}`,
-                                    text: text,
-                                    style: getDefaultTextStyle(),
-                                    position: { x: 50, y: 50, width: 80, height: 20 }
-                                  };
-                                  setSlides(prev => prev.map((slide, idx) =>
-                                    idx === selectedSlideIndex
-                                      ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] }
-                                      : slide
-                                  ));
-                                  setEditingTextId(newOverlay.id);
-                                }
-                              }}
-                              style={{
-                                padding: '8px 10px',
-                                backgroundColor: 'rgba(255,255,255,0.04)',
-                                border: '1px solid rgba(255,255,255,0.08)',
-                                borderRadius: '6px',
-                                color: '#d1d5db',
-                                fontSize: '12px',
-                                cursor: 'pointer',
-                                transition: 'all 0.15s',
-                                lineHeight: '1.4',
-                                wordBreak: 'break-word'
-                              }}
-                              title="Click to add as text overlay"
-                            >
-                              {text}
-                            </div>
+                            <div key={i} onClick={() => {
+                              if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
+                                const newOverlay = { id: `text_${Date.now()}_${i}`, text, style: getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
+                                setSlides(prev => prev.map((slide, idx) => idx === selectedSlideIndex ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] } : slide));
+                                setEditingTextId(newOverlay.id);
+                              }
+                            }} style={{ padding: '6px 8px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px', color: '#d1d5db', fontSize: '11px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word' }} title="Click to add as overlay">{text}</div>
                           ))}
                         </div>
-                      ) : (
-                        <div style={{ fontSize: '11px', color: '#6b7280', padding: '8px', textAlign: 'center' }}>
-                          No text yet. Add some above.
-                        </div>
-                      );
+                      ) : <div style={{ fontSize: '10px', color: '#6b7280', padding: '6px', textAlign: 'center' }}>No text yet</div>;
                     })()}
                   </div>
+
+                  <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: '12px' }} />
+
+                  {/* Audio section */}
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: '600', color: '#4ade80', marginBottom: '6px' }}>
+                      🎵 Audio
+                    </div>
+                    {(!selectedAudio && audioTracks.length === 0) ? (
+                      <button style={{ ...styles.uploadAudioBtn, width: '100%', fontSize: '11px', padding: '6px 10px' }} onClick={() => slideshowAudioInputRef.current?.click()}>
+                        + Add Audio
+                      </button>
+                    ) : (
+                      <div>
+                        {selectedAudio && (
+                          <div style={{ padding: '6px 8px', backgroundColor: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '6px', marginBottom: '4px' }}>
+                            <div style={{ fontSize: '11px', color: '#4ade80', fontWeight: '500' }}>{selectedAudio.name}</div>
+                            <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '2px' }}>{formatTime(selectedAudio.trimmedDuration || selectedAudio.duration || 0)}</div>
+                            <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
+                              <button style={{ fontSize: '10px', padding: '3px 6px', borderRadius: '4px', border: '1px solid rgba(74,222,128,0.3)', backgroundColor: 'transparent', color: '#4ade80', cursor: 'pointer' }} onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}>Trim</button>
+                              <button style={{ fontSize: '10px', padding: '3px 6px', borderRadius: '4px', border: '1px solid rgba(239,68,68,0.3)', backgroundColor: 'transparent', color: '#ef4444', cursor: 'pointer' }} onClick={handleRemoveAudio}>Remove</button>
+                            </div>
+                          </div>
+                        )}
+                        {audioTracks.filter(a => a.id !== selectedAudio?.id).map(audio => (
+                          <div key={audio.id} style={{ padding: '5px 8px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px', cursor: 'pointer', marginBottom: '3px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => handleSelectAudio(audio)}>
+                            <span style={{ fontSize: '11px', color: '#d1d5db', flex: 1 }}>{audio.name}</span>
+                            <span style={{ fontSize: '10px', color: '#6b7280' }}>{formatTime(audio.duration || 0)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              ) : activeBank === 'lyrics' ? (
-                /* Lyric Bank Panel */
-                <LyricBank
-                  lyrics={lyrics}
-                  onSelectText={(text) => {
-                    // Add selected lyrics as text overlay to current slide
-                    const newOverlay = {
-                      id: `text_${Date.now()}`,
-                      text: text,
-                      style: getDefaultTextStyle(),
-                      position: {
-                        x: 50,
-                        y: 50,
-                        width: 80,
-                        height: 20
-                      }
-                    };
-                    setSlides(prev => prev.map((slide, i) =>
-                      i === selectedSlideIndex
-                        ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] }
-                        : slide
-                    ));
-                    setEditingTextId(newOverlay.id);
-                  }}
-                  showAddForm={false}
-                  compact={false}
-                />
-              ) : activeBank === 'audio' ? (
+              </div>
+            </div>
+
+            {/* Selection action bar */}
+            {selectedBankImages.size > 0 && (
+              <div style={{ display: 'flex', gap: '8px', padding: '6px 10px', borderTop: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(99,102,241,0.05)' }}>
+                <button onClick={addSelectedImagesToSlides} style={{ flex: 1, padding: '6px 12px', backgroundColor: '#7c3aed', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                  Add {selectedBankImages.size} to Slides
+                </button>
+                <button onClick={() => setSelectedBankImages(new Set())} style={{ padding: '6px 8px', backgroundColor: 'transparent', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '6px', fontSize: '11px', cursor: 'pointer' }}>Clear</button>
+              </div>
+            )}
+
+            {/* Old bank content - now only for fallback image display (kept hidden) */}
+            <div style={{ ...styles.bankContent, display: 'none' }}>
+              {activeBank === 'audio' ? (
                 /* Audio Bank Panel */
                 (!selectedAudio && audioTracks.length === 0) ? (
                   <div style={styles.emptyBank}>
@@ -4046,7 +4010,7 @@ const styles = {
     overflow: 'hidden'
   },
   leftPanel: {
-    width: '300px',
+    width: '660px',
     borderRight: '1px solid rgba(255,255,255,0.1)',
     display: 'flex',
     flexDirection: 'column',
