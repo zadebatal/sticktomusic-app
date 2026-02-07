@@ -860,7 +860,7 @@ const SlideshowEditor = ({
   useEffect(() => { slidesRef.current = slides; }, [slides]);
 
   const handlePlayPause = useCallback(() => {
-    if (!audioRef.current || !selectedAudio) return;
+    if (!audioRef.current || !selectedAudioRef.current) return;
 
     if (isPlaying) {
       audioRef.current.pause();
@@ -869,7 +869,8 @@ const SlideshowEditor = ({
       }
       setIsPlaying(false);
     } else {
-      const startBoundary = selectedAudio.startTime || 0;
+      const audio = selectedAudioRef.current;
+      const startBoundary = audio.startTime || 0;
       if (audioRef.current.currentTime < startBoundary || !isFinite(audioRef.current.currentTime)) {
         audioRef.current.currentTime = startBoundary;
       }
@@ -878,19 +879,22 @@ const SlideshowEditor = ({
         setIsPlaying(true);
 
         // Animation loop for time updates + slide auto-advance
+        // Uses selectedAudioRef to always read the latest audio data without stale closures
         const updateTime = () => {
           if (!audioRef.current) return;
-          const startBound = selectedAudio.startTime || 0;
+          const currentAudio = selectedAudioRef.current;
+          if (!currentAudio) return;
+          const startBound = currentAudio.startTime || 0;
           const rawDur = audioRef.current.duration;
-          const endBound = (selectedAudio.endTime && selectedAudio.endTime > 0)
-            ? selectedAudio.endTime
+          const endBound = (currentAudio.endTime && currentAudio.endTime > 0)
+            ? currentAudio.endTime
             : (isFinite(rawDur) ? rawDur : 300);
           const actualTime = audioRef.current.currentTime;
           const elapsed = actualTime - startBound;
 
           setCurrentTime(Math.max(0, elapsed));
 
-          // Auto-advance slides based on cumulative duration (use ref to avoid stale closure)
+          // Auto-advance slides based on cumulative duration
           const currentSlides = slidesRef.current;
           if (currentSlides.length > 1) {
             let cumulative = 0;
@@ -919,7 +923,7 @@ const SlideshowEditor = ({
         setIsPlaying(false);
       });
     }
-  }, [isPlaying, selectedAudio]);
+  }, [isPlaying]);
 
   const handleRemoveAudio = useCallback(() => {
     if (audioRef.current) {
@@ -934,18 +938,25 @@ const SlideshowEditor = ({
   }, []);
 
   // Load audio when selected — use a stable key to avoid reloading on unrelated re-renders
+  // selectedAudio is derived from allSlideshows and gets a new reference on every slide edit,
+  // so we track the actual audio identity via a key and only reload when it truly changes.
   const loadedAudioKeyRef = useRef(null);
+  const selectedAudioRef = useRef(selectedAudio);
+  selectedAudioRef.current = selectedAudio; // Always keep ref current for closures
+
+  const selectedAudioId = selectedAudio?.id || null;
+  const selectedAudioUrl = selectedAudio?.url || selectedAudio?.localUrl || null;
+  const selectedAudioStart = selectedAudio?.startTime || 0;
+  const selectedAudioEnd = selectedAudio?.endTime || null;
+
   useEffect(() => {
-    if (!selectedAudio || !audioRef.current) {
+    if (!selectedAudioUrl || !audioRef.current) {
       loadedAudioKeyRef.current = null;
       return;
     }
 
-    const audioUrl = selectedAudio.url || selectedAudio.localUrl;
-    if (!audioUrl) return;
-
-    // Build a stable key from the audio identity — only reload when audio actually changes
-    const audioKey = `${selectedAudio.id || ''}|${audioUrl}|${selectedAudio.startTime || 0}|${selectedAudio.endTime || ''}`;
+    // Build a stable key — only reload when audio actually changes
+    const audioKey = `${selectedAudioId}|${selectedAudioUrl}|${selectedAudioStart}|${selectedAudioEnd || ''}`;
     if (loadedAudioKeyRef.current === audioKey) return; // Same audio, skip reload
     loadedAudioKeyRef.current = audioKey;
 
@@ -957,38 +968,32 @@ const SlideshowEditor = ({
     setIsPlaying(false);
     setCurrentTime(0);
 
-    audioRef.current.src = audioUrl;
+    audioRef.current.src = selectedAudioUrl;
     audioRef.current.load();
 
     const handleMetadata = () => {
       if (!audioRef.current) return;
-      const start = selectedAudio.startTime || 0;
+      const start = selectedAudioStart;
       const rawDuration = audioRef.current.duration;
-      // Guard against NaN/Infinity
-      const end = (selectedAudio.endTime && selectedAudio.endTime > 0)
-        ? selectedAudio.endTime
+      const end = (selectedAudioEnd && selectedAudioEnd > 0)
+        ? selectedAudioEnd
         : (isFinite(rawDuration) ? rawDuration : 0);
       setAudioDuration(Math.max(0, end - start));
       audioRef.current.currentTime = start;
     };
 
     audioRef.current.onloadedmetadata = handleMetadata;
-    // Also listen for canplaythrough as a fallback for duration
     audioRef.current.oncanplaythrough = () => {
       if (audioDuration === 0) handleMetadata();
     };
 
     audioRef.current.onended = () => {
-      const start = selectedAudio.startTime || 0;
+      const start = selectedAudioStart;
       if (audioRef.current) audioRef.current.currentTime = start;
     };
 
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [selectedAudio]);
+    // NO cleanup that cancels animation — that's managed by handlePlayPause/handleRemoveAudio
+  }, [selectedAudioId, selectedAudioUrl, selectedAudioStart, selectedAudioEnd]);
 
   // Format time for display
   const formatTime = (seconds) => {
