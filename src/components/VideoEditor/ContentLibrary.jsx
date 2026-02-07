@@ -1065,6 +1065,8 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
           }
         } else {
           console.error('[Schedule] onSchedulePost is not defined!');
+          alert('Scheduling not available. Please try again.');
+          continue;
         }
         scheduled++;
       }

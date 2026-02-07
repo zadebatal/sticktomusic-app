@@ -1983,6 +1983,7 @@ const VideoStudio = ({
             onMakeSlideshow={handleMakeSlideshow}
             onEditSlideshow={(slideshow) => handleMakeSlideshow(slideshow)}
             onDeleteSlideshow={handleDeleteSlideshow}
+            onSchedulePost={onSchedulePost}
             onShowBatchPipeline={() => {
               handleMakeSlideshow({ batch: true });
             }}
