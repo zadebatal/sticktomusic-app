@@ -973,7 +973,21 @@ const resolveSmartCollection = (library, smartCollectionId) => {
 export const getCreatedContent = (artistId) => {
   try {
     const data = localStorage.getItem(getCreatedContentKey(artistId));
-    return data ? JSON.parse(data) : { videos: [], slideshows: [] };
+    const content = data ? JSON.parse(data) : { videos: [], slideshows: [] };
+    // Deduplicate slideshows by ID (keep the latest version)
+    if (content.slideshows?.length > 0) {
+      const seen = new Map();
+      content.slideshows.forEach(s => {
+        if (!seen.has(s.id) || (s.updatedAt && s.updatedAt > (seen.get(s.id).updatedAt || ''))) {
+          seen.set(s.id, s);
+        }
+      });
+      if (seen.size < content.slideshows.length) {
+        content.slideshows = Array.from(seen.values());
+        localStorage.setItem(getCreatedContentKey(artistId), JSON.stringify(content));
+      }
+    }
+    return content;
   } catch (error) {
     console.error('Error loading created content:', error);
     return { videos: [], slideshows: [] };
