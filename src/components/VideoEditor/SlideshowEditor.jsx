@@ -95,6 +95,8 @@ const SlideshowEditor = ({
   const [batchCount, setBatchCount] = useState(10);
   const [batchSlidesPerShow, setBatchSlidesPerShow] = useState(5);
   const [isBatchGenerating, setIsBatchGenerating] = useState(false);
+  const [batchAudioMode, setBatchAudioMode] = useState('none'); // 'none' | 'single' | 'random'
+  const [batchAudioSelection, setBatchAudioSelection] = useState(null); // specific audio for 'single' mode
 
   // Save templates to localStorage when they change
   useEffect(() => {
@@ -1195,13 +1197,16 @@ const SlideshowEditor = ({
               slide.textOverlays.push({
                 id: `text_${Date.now()}_${i}_${s}_1`,
                 text: textBank1[textIdx],
-                position: template?.text1Style?.position || { x: 50, y: 30 },
-                fontFamily: template?.text1Style?.fontFamily || 'Inter, sans-serif',
-                fontSize: template?.text1Style?.fontSize || 48,
-                fontWeight: template?.text1Style?.fontWeight || '700',
-                color: template?.text1Style?.color || '#ffffff',
-                outline: template?.text1Style?.outline ?? true,
-                outlineColor: template?.text1Style?.outlineColor || 'rgba(0,0,0,0.5)'
+                position: template?.text1Style?.position || { x: 50, y: 30, width: 80, height: 20 },
+                style: {
+                  fontFamily: template?.text1Style?.fontFamily || 'Inter, sans-serif',
+                  fontSize: template?.text1Style?.fontSize || 48,
+                  fontWeight: template?.text1Style?.fontWeight || '700',
+                  color: template?.text1Style?.color || '#ffffff',
+                  textAlign: template?.text1Style?.textAlign || 'center',
+                  outline: template?.text1Style?.outline ?? true,
+                  outlineColor: template?.text1Style?.outlineColor || 'rgba(0,0,0,0.5)'
+                }
               });
             }
             if (textBank2.length > 0) {
@@ -1209,13 +1214,16 @@ const SlideshowEditor = ({
               slide.textOverlays.push({
                 id: `text_${Date.now()}_${i}_${s}_2`,
                 text: textBank2[textIdx],
-                position: template?.text2Style?.position || { x: 50, y: 70 },
-                fontFamily: template?.text2Style?.fontFamily || 'Inter, sans-serif',
-                fontSize: template?.text2Style?.fontSize || 36,
-                fontWeight: template?.text2Style?.fontWeight || '400',
-                color: template?.text2Style?.color || '#ffffff',
-                outline: template?.text2Style?.outline ?? true,
-                outlineColor: template?.text2Style?.outlineColor || 'rgba(0,0,0,0.5)'
+                position: template?.text2Style?.position || { x: 50, y: 70, width: 80, height: 20 },
+                style: {
+                  fontFamily: template?.text2Style?.fontFamily || 'Inter, sans-serif',
+                  fontSize: template?.text2Style?.fontSize || 36,
+                  fontWeight: template?.text2Style?.fontWeight || '400',
+                  color: template?.text2Style?.color || '#ffffff',
+                  textAlign: template?.text2Style?.textAlign || 'center',
+                  outline: template?.text2Style?.outline ?? true,
+                  outlineColor: template?.text2Style?.outlineColor || 'rgba(0,0,0,0.5)'
+                }
               });
             }
           }
@@ -1223,12 +1231,20 @@ const SlideshowEditor = ({
           slidesList.push(slide);
         }
 
+        // Determine audio for this slideshow based on batch audio mode
+        let slideshowAudio = null;
+        if (batchAudioMode === 'single' && batchAudioSelection) {
+          slideshowAudio = batchAudioSelection;
+        } else if (batchAudioMode === 'random' && audioTracks.length > 0) {
+          slideshowAudio = audioTracks[Math.floor(Math.random() * audioTracks.length)];
+        }
+
         const slideshow = {
           id: `slideshow_${Date.now()}_${i}`,
           name: `Batch ${i + 1}`,
           aspectRatio,
           slides: slidesList,
-          audio: selectedAudio,
+          audio: slideshowAudio,
           status: 'draft',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
@@ -1249,7 +1265,7 @@ const SlideshowEditor = ({
     } finally {
       setIsBatchGenerating(false);
     }
-  }, [batchCount, batchSlidesPerShow, category, collections, libraryImages, selectedDefaultTemplate, aspectRatio, selectedAudio, onSave]);
+  }, [batchCount, batchSlidesPerShow, category, collections, libraryImages, selectedDefaultTemplate, aspectRatio, batchAudioMode, batchAudioSelection, audioTracks, onSave]);
 
   // Export slideshow as carousel images
   const handleExport = useCallback(async () => {
@@ -2105,6 +2121,112 @@ const SlideshowEditor = ({
                   <div>Bank B: {(category?.imagesB || []).length + (collections.reduce((sum, col) => sum + (col.bankB?.length || 0), 0))} images</div>
                   <div>Text 1: {collections.reduce((sum, col) => sum + (col.textBank1?.length || 0), 0)} items</div>
                   <div>Text 2: {collections.reduce((sum, col) => sum + (col.textBank2?.length || 0), 0)} items</div>
+                  <div>Audio: {audioTracks.length} tracks</div>
+                </div>
+
+                {/* Audio Selection */}
+                <div style={{
+                  backgroundColor: 'rgba(99, 102, 241, 0.08)',
+                  border: '1px solid rgba(99, 102, 241, 0.2)',
+                  borderRadius: '10px',
+                  padding: '14px 16px'
+                }}>
+                  <div style={{ fontWeight: '600', color: '#c7d2fe', marginBottom: '8px', fontSize: '12px' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ verticalAlign: 'middle', marginRight: '6px' }}>
+                      <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+                    </svg>
+                    Audio
+                  </div>
+
+                  {/* Audio Mode Toggle */}
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                    {[
+                      { value: 'none', label: 'No Audio' },
+                      { value: 'single', label: 'Same Song' },
+                      { value: 'random', label: 'Random' }
+                    ].map(mode => (
+                      <button
+                        key={mode.value}
+                        onClick={() => {
+                          setBatchAudioMode(mode.value);
+                          if (mode.value === 'single' && !batchAudioSelection && audioTracks.length > 0) {
+                            setBatchAudioSelection(audioTracks[0]);
+                          }
+                        }}
+                        disabled={mode.value !== 'none' && audioTracks.length === 0}
+                        style={{
+                          flex: 1,
+                          padding: '6px 0',
+                          backgroundColor: batchAudioMode === mode.value ? '#6366f1' : 'rgba(255,255,255,0.06)',
+                          border: '1px solid ' + (batchAudioMode === mode.value ? '#6366f1' : 'rgba(255,255,255,0.12)'),
+                          borderRadius: '6px',
+                          color: batchAudioMode === mode.value ? '#fff' : (mode.value !== 'none' && audioTracks.length === 0) ? '#4b5563' : '#9ca3af',
+                          fontSize: '11px',
+                          fontWeight: '500',
+                          cursor: (mode.value !== 'none' && audioTracks.length === 0) ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Single song picker */}
+                  {batchAudioMode === 'single' && audioTracks.length > 0 && (
+                    <div style={{ maxHeight: '120px', overflowY: 'auto' }}>
+                      {audioTracks.map(audio => (
+                        <div
+                          key={audio.id}
+                          onClick={() => setBatchAudioSelection(audio)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '6px 8px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            backgroundColor: batchAudioSelection?.id === audio.id ? 'rgba(99,102,241,0.2)' : 'transparent',
+                            border: batchAudioSelection?.id === audio.id ? '1px solid rgba(99,102,241,0.4)' : '1px solid transparent',
+                            marginBottom: '2px',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={batchAudioSelection?.id === audio.id ? '#a5b4fc' : '#6b7280'} strokeWidth="2">
+                            <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+                          </svg>
+                          <span style={{
+                            fontSize: '11px',
+                            color: batchAudioSelection?.id === audio.id ? '#e0e7ff' : '#9ca3af',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            flex: 1
+                          }}>
+                            {audio.name || audio.fileName || 'Audio Track'}
+                          </span>
+                          {batchAudioSelection?.id === audio.id && (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="3">
+                              <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Random mode info */}
+                  {batchAudioMode === 'random' && audioTracks.length > 0 && (
+                    <div style={{ fontSize: '11px', color: '#9ca3af', fontStyle: 'italic' }}>
+                      Each slideshow gets a random track from {audioTracks.length} available
+                    </div>
+                  )}
+
+                  {/* No audio available warning */}
+                  {audioTracks.length === 0 && (
+                    <div style={{ fontSize: '11px', color: '#6b7280', fontStyle: 'italic' }}>
+                      No audio in bank — add audio tracks in the Audio tab first
+                    </div>
+                  )}
                 </div>
 
                 {/* Batch Settings */}
