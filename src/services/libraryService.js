@@ -1054,7 +1054,13 @@ export const deleteCreatedVideo = (artistId, videoId) => {
 export const addCreatedSlideshow = (artistId, slideshowData) => {
   const content = getCreatedContent(artistId);
   const newSlideshow = slideshowData.id ? slideshowData : createCreatedSlideshow(slideshowData);
-  content.slideshows.push(newSlideshow);
+  // Upsert: update if same ID exists, otherwise add new
+  const existingIndex = content.slideshows.findIndex(s => s.id === newSlideshow.id);
+  if (existingIndex >= 0) {
+    content.slideshows[existingIndex] = { ...content.slideshows[existingIndex], ...newSlideshow, updatedAt: new Date().toISOString() };
+  } else {
+    content.slideshows.push(newSlideshow);
+  }
   saveCreatedContent(artistId, content);
   return newSlideshow;
 };

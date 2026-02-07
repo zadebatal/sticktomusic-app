@@ -744,14 +744,75 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
     action();
   };
 
-  // Get thumbnail from first slide - prefer Firebase URL over blob URL
-  const thumbnail = slideshow.slides?.[0]?.imageA?.url ||
-                    slideshow.slides?.[0]?.imageA?.localUrl ||
-                    slideshow.slides?.[0]?.thumbnail ||
-                    slideshow.slides?.[0]?.backgroundImage;
+  const slides = slideshow.slides || [];
+  const slideCount = slides.length;
 
   // Check if slideshow has been exported (has carousel images)
   const isExported = slideshow.exportedImages?.length > 0 || slideshow.status === 'rendered';
+
+  // Get thumbnail for a slide
+  const getSlideThumb = (slide) =>
+    slide?.imageA?.url || slide?.imageA?.localUrl || slide?.thumbnail || slide?.backgroundImage;
+
+  // Get primary text overlay for a slide (first overlay with non-empty text)
+  const getSlideText = (slide) => {
+    if (!slide?.textOverlays?.length) return null;
+    const overlay = slide.textOverlays.find(o => o.text && o.text !== 'Click to edit' && o.text !== 'New Text');
+    return overlay || null;
+  };
+
+  // Render a mini slide thumbnail with text overlay
+  const renderMiniSlide = (slide, idx) => {
+    const thumb = getSlideThumb(slide);
+    const textOverlay = getSlideText(slide);
+    return (
+      <div key={idx} style={{
+        position: 'relative',
+        width: '100%',
+        aspectRatio: '9/16',
+        backgroundColor: '#0a0a0f',
+        borderRadius: idx === 0 ? '10px 0 0 0' : idx === slideCount - 1 ? '0 10px 0 0' : '0',
+        overflow: 'hidden',
+        flexShrink: 0,
+      }}>
+        {thumb ? (
+          <img src={thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (
+          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #1a1a2e, #16213e)' }}>
+            <span style={{ color: '#4b5563', fontSize: '10px' }}>{idx + 1}</span>
+          </div>
+        )}
+        {/* Text overlay preview */}
+        {textOverlay && (
+          <div style={{
+            position: 'absolute',
+            bottom: '4px',
+            left: '2px',
+            right: '2px',
+            padding: '2px 3px',
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            borderRadius: '2px',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              color: textOverlay.style?.color || '#fff',
+              fontSize: '7px',
+              fontWeight: textOverlay.style?.fontWeight || '600',
+              fontFamily: textOverlay.style?.fontFamily || 'Inter, sans-serif',
+              textAlign: 'center',
+              lineHeight: '1.2',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              textShadow: textOverlay.style?.outline ? '0 0 2px rgba(0,0,0,0.8)' : 'none',
+            }}>
+              {textOverlay.text}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div
@@ -764,8 +825,34 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
       </div>
 
       <div style={styles.videoThumb} onClick={() => onPreview?.()}>
-        {thumbnail ? (
-          <img src={thumbnail} alt="" style={styles.videoThumbImg} />
+        {slideCount > 0 ? (
+          <div style={{
+            display: 'flex',
+            width: '100%',
+            height: '100%',
+            gap: '1px',
+            backgroundColor: '#0a0a0f',
+          }}>
+            {/* Show up to 4 slides as filmstrip, with overflow indicator */}
+            {slides.slice(0, 4).map((slide, idx) => (
+              <div key={idx} style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                {renderMiniSlide(slide, idx)}
+              </div>
+            ))}
+            {slideCount > 4 && (
+              <div style={{
+                flex: 1,
+                minWidth: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
+                borderRadius: '0 10px 0 0',
+              }}>
+                <span style={{ color: '#9ca3af', fontSize: '11px', fontWeight: '600' }}>+{slideCount - 4}</span>
+              </div>
+            )}
+          </div>
         ) : (
           <div style={styles.videoThumbPlaceholder}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
@@ -776,22 +863,31 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
           </div>
         )}
 
-        {/* Slide count badge */}
+        {/* Carousel badge - bottom left */}
         <div style={{
           position: 'absolute',
           bottom: '8px',
-          right: '8px',
-          background: 'rgba(0,0,0,0.7)',
+          left: '8px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+          background: 'rgba(124, 58, 237, 0.85)',
           color: '#fff',
-          padding: '2px 6px',
+          padding: '3px 8px',
           borderRadius: '4px',
           fontSize: '10px',
-          fontWeight: '500'
+          fontWeight: '600',
+          backdropFilter: 'blur(4px)',
         }}>
-          {slideshow.slides?.length || 0} slides
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <rect x="2" y="6" width="6" height="12" rx="1"/>
+            <rect x="9" y="6" width="6" height="12" rx="1"/>
+            <rect x="16" y="6" width="6" height="12" rx="1"/>
+          </svg>
+          {slideCount} slides
         </div>
 
-        {/* Status badge - exported or needs export */}
+        {/* Status badge - exported or draft */}
         {isExported ? (
           <div style={{
             position: 'absolute',
@@ -818,7 +914,7 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
             fontSize: '10px',
             fontWeight: '600'
           }}>
-            ⚡ Draft
+            Draft
           </div>
         )}
 
@@ -831,8 +927,21 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
         )}
       </div>
 
-      {/* Status */}
+      {/* Name + Status */}
       <div style={styles.statusBadgeContainer}>
+        {slideshow.name && (
+          <div style={{
+            padding: '4px 12px 0',
+            fontSize: '11px',
+            fontWeight: '500',
+            color: '#d1d5db',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
+            {slideshow.name}
+          </div>
+        )}
         <StatusPill status={slideshow.status || VIDEO_STATUS.DRAFT} />
       </div>
     </div>
