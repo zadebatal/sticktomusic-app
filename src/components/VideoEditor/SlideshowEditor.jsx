@@ -933,12 +933,21 @@ const SlideshowEditor = ({
     setCurrentTime(0);
   }, []);
 
-  // Load audio when selected
+  // Load audio when selected — use a stable key to avoid reloading on unrelated re-renders
+  const loadedAudioKeyRef = useRef(null);
   useEffect(() => {
-    if (!selectedAudio || !audioRef.current) return;
+    if (!selectedAudio || !audioRef.current) {
+      loadedAudioKeyRef.current = null;
+      return;
+    }
 
     const audioUrl = selectedAudio.url || selectedAudio.localUrl;
     if (!audioUrl) return;
+
+    // Build a stable key from the audio identity — only reload when audio actually changes
+    const audioKey = `${selectedAudio.id || ''}|${audioUrl}|${selectedAudio.startTime || 0}|${selectedAudio.endTime || ''}`;
+    if (loadedAudioKeyRef.current === audioKey) return; // Same audio, skip reload
+    loadedAudioKeyRef.current = audioKey;
 
     // Stop any current playback
     audioRef.current.pause();
@@ -2559,7 +2568,7 @@ const SlideshowEditor = ({
               </div>
 
               {/* Hidden audio element */}
-              <audio ref={audioRef} style={{ display: 'none' }} crossOrigin="anonymous" />
+              <audio ref={audioRef} style={{ display: 'none' }} />
 
               {/* Audio Player Controls */}
               {selectedAudio && (
