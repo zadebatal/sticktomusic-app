@@ -102,6 +102,7 @@ const SlideshowEditor = ({
   const [selectedSlideIndex, setSelectedSlideIndex] = useState(0);
   const [activeBank, setActiveBank] = useState('imageA'); // 'imageA' | 'imageB' | 'audio' | 'lyrics'
   const [libraryImages, setLibraryImages] = useState([]);
+  const [libraryAudio, setLibraryAudio] = useState([]);
   const [collections, setCollections] = useState([]);
   const [selectedSource, setSelectedSource] = useState('bankA'); // 'bankA' | 'bankB' | 'all' | collection ID
 
@@ -326,8 +327,34 @@ const SlideshowEditor = ({
   // Get content from category's banks (separate from video banks)
   const imagesA = category?.imagesA || [];
   const imagesB = category?.imagesB || [];
-  const audioTracks = category?.audio || [];
   const lyrics = category?.lyrics || [];
+
+  // Audio tracks: pull from library audio filtered by active collection, fallback to category.audio
+  const audioTracks = (() => {
+    // Try to get collection-based audio from library system
+    if (libraryAudio.length > 0) {
+      // Extract collection ID from selectedSource (format: "collectionId:bankA")
+      let colId = null;
+      if (selectedSource && selectedSource.includes(':bank')) {
+        colId = selectedSource.split(':')[0];
+      } else if (selectedSource && selectedSource !== 'bankA' && selectedSource !== 'bankB' && selectedSource !== 'all') {
+        colId = selectedSource;
+      }
+      if (colId) {
+        const col = collections.find(c => c.id === colId);
+        if (col) {
+          return libraryAudio.filter(a =>
+            (col.mediaIds || []).includes(a.id) || (a.collectionIds || []).includes(colId)
+          );
+        }
+      }
+      // No specific collection — return all library audio
+      return libraryAudio;
+    }
+    // Fallback to category-based audio (legacy)
+    return category?.audio || [];
+  })();
+
   const activeContent = activeBank === 'imageA' ? imagesA : activeBank === 'imageB' ? imagesB : activeBank === 'audio' ? audioTracks : [];
 
   // Load library images and collections when db/artistId available
@@ -339,6 +366,7 @@ const SlideshowEditor = ({
     const cachedLibrary = getLibrary(artistId);
     if (cachedLibrary.length > 0) {
       setLibraryImages(cachedLibrary.filter(item => item.type === MEDIA_TYPES.IMAGE));
+      setLibraryAudio(cachedLibrary.filter(item => item.type === MEDIA_TYPES.AUDIO));
     }
     // Load collections from localStorage immediately (includes bank data)
     const cachedCols = getCollections(artistId);
@@ -366,7 +394,9 @@ const SlideshowEditor = ({
         return item;
       });
       const images = merged.filter(item => item.type === MEDIA_TYPES.IMAGE);
+      const audio = merged.filter(item => item.type === MEDIA_TYPES.AUDIO);
       setLibraryImages(images);
+      setLibraryAudio(audio);
     }));
 
     // Subscribe to collections in real-time — merges localStorage banks
