@@ -130,8 +130,11 @@ const SlideshowEditor = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
+  const [audioReady, setAudioReady] = useState(false);
+  const [audioError, setAudioError] = useState(null);
   const audioRef = useRef(null);
   const animationRef = useRef(null);
+  const isPlayingRef = useRef(false);
 
   // Text editor state
   const [editingTextId, setEditingTextId] = useState(null);
@@ -821,7 +824,6 @@ const SlideshowEditor = ({
 
   const handleAudioTrimSave = useCallback(({ startTime, endTime, duration, trimmedFile, trimmedName }) => {
     if (!audioToTrim) return;
-
     if (trimmedFile) {
       // Audio was actually trimmed to a new file — use it directly (starts at 0)
       const localUrl = URL.createObjectURL(trimmedFile);
@@ -869,10 +871,19 @@ const SlideshowEditor = ({
       }
       setIsPlaying(false);
     } else {
+      // Don't try to play if audio hasn't loaded
+      if (!audioReady) return;
+
       const audio = selectedAudioRef.current;
       const startBoundary = audio.startTime || 0;
       if (audioRef.current.currentTime < startBoundary || !isFinite(audioRef.current.currentTime)) {
         audioRef.current.currentTime = startBoundary;
+      }
+
+      // Cancel any existing animation frame before starting new loop
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
       }
 
       audioRef.current.play().then(() => {
@@ -882,6 +893,9 @@ const SlideshowEditor = ({
         // Uses selectedAudioRef to always read the latest audio data without stale closures
         const updateTime = () => {
           if (!audioRef.current) return;
+          // If audio was paused externally (e.g. by 'ended' event before our onEnded fires), check
+          if (audioRef.current.paused && !isPlayingRef.current) return;
+
           const currentAudio = selectedAudioRef.current;
           if (!currentAudio) return;
           const startBound = currentAudio.startTime || 0;
@@ -910,9 +924,13 @@ const SlideshowEditor = ({
             }
           }
 
-          // Loop back if past end boundary
-          if (isFinite(endBound) && actualTime >= endBound) {
+          // Loop back if past end boundary — reset and ensure still playing
+          if (isFinite(endBound) && actualTime >= endBound - 0.05) {
             audioRef.current.currentTime = startBound;
+            // Ensure audio is still playing after seek (browser may have paused it)
+            if (audioRef.current.paused && isPlayingRef.current) {
+              audioRef.current.play().catch(() => {});
+            }
           }
 
           animationRef.current = requestAnimationFrame(updateTime);
@@ -923,11 +941,12 @@ const SlideshowEditor = ({
         setIsPlaying(false);
       });
     }
-  }, [isPlaying]);
+  }, [isPlaying, audioReady]);
 
   const handleRemoveAudio = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.pause();
+      audioRef.current.src = '';
     }
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
@@ -935,6 +954,10 @@ const SlideshowEditor = ({
     setSelectedAudio(null);
     setIsPlaying(false);
     setCurrentTime(0);
+    setAudioDuration(0);
+    setAudioReady(false);
+    setAudioError(null);
+    loadedAudioKeyRef.current = null;
   }, []);
 
   // Load audio when selected — use a stable key to avoid reloading on unrelated re-renders
@@ -943,6 +966,7 @@ const SlideshowEditor = ({
   const loadedAudioKeyRef = useRef(null);
   const selectedAudioRef = useRef(selectedAudio);
   selectedAudioRef.current = selectedAudio; // Always keep ref current for closures
+  isPlayingRef.current = isPlaying; // Always keep playing ref current for closures
 
   const selectedAudioId = selectedAudio?.id || null;
   const selectedAudioUrl = selectedAudio?.url || selectedAudio?.localUrl || null;
@@ -950,8 +974,10 @@ const SlideshowEditor = ({
   const selectedAudioEnd = selectedAudio?.endTime || null;
 
   useEffect(() => {
-    if (!selectedAudioUrl || !audioRef.current) {
+    const el = audioRef.current;
+    if (!selectedAudioUrl || !el) {
       loadedAudioKeyRef.current = null;
+      setAudioReady(false);
       return;
     }
 
@@ -961,17 +987,21 @@ const SlideshowEditor = ({
     loadedAudioKeyRef.current = audioKey;
 
     // Stop any current playback
-    audioRef.current.pause();
+    el.pause();
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
     }
     setIsPlaying(false);
     setCurrentTime(0);
+    setAudioReady(false);
+    setAudioError(null);
 
-    audioRef.current.src = selectedAudioUrl;
-    audioRef.current.load();
+    // Set source and start loading
+    el.src = selectedAudioUrl;
+    el.preload = 'auto';
+    el.load();
 
-    const handleMetadata = () => {
+    const onLoadedMetadata = () => {
       if (!audioRef.current) return;
       const start = selectedAudioStart;
       const rawDuration = audioRef.current.duration;
@@ -982,17 +1012,39 @@ const SlideshowEditor = ({
       audioRef.current.currentTime = start;
     };
 
-    audioRef.current.onloadedmetadata = handleMetadata;
-    audioRef.current.oncanplaythrough = () => {
-      if (audioDuration === 0) handleMetadata();
+    const onCanPlayThrough = () => {
+      setAudioReady(true);
+      setAudioError(null);
     };
 
-    audioRef.current.onended = () => {
-      const start = selectedAudioStart;
-      if (audioRef.current) audioRef.current.currentTime = start;
+    const onError = () => {
+      const errMsg = el.error?.message || 'Failed to load audio';
+      console.error('[SlideshowEditor] Audio load error:', el.error, errMsg);
+      setAudioError(errMsg);
+      setAudioReady(false);
     };
 
-    // NO cleanup that cancels animation — that's managed by handlePlayPause/handleRemoveAudio
+    const onEnded = () => {
+      // When audio reaches its natural end, browser pauses it.
+      // If we're supposed to be looping, restart playback from startBound.
+      if (isPlayingRef.current && audioRef.current) {
+        audioRef.current.currentTime = selectedAudioStart;
+        audioRef.current.play().catch(() => {});
+      }
+    };
+
+    el.addEventListener('loadedmetadata', onLoadedMetadata);
+    el.addEventListener('canplaythrough', onCanPlayThrough);
+    el.addEventListener('error', onError);
+    el.addEventListener('ended', onEnded);
+
+    return () => {
+      // Clean up event listeners only (don't cancel animation — that's managed by handlePlayPause)
+      el.removeEventListener('loadedmetadata', onLoadedMetadata);
+      el.removeEventListener('canplaythrough', onCanPlayThrough);
+      el.removeEventListener('error', onError);
+      el.removeEventListener('ended', onEnded);
+    };
   }, [selectedAudioId, selectedAudioUrl, selectedAudioStart, selectedAudioEnd]);
 
   // Format time for display
@@ -1414,6 +1466,9 @@ const SlideshowEditor = ({
     }
     setIsPlaying(false);
     setCurrentTime(0);
+    setAudioReady(false);
+    setAudioError(null);
+    loadedAudioKeyRef.current = null; // Force reload for new slideshow's audio
     // Reset editor state
     setSelectedSlideIndex(0);
     setEditingTextId(null);
@@ -2577,16 +2632,29 @@ const SlideshowEditor = ({
               </div>
 
               {/* Hidden audio element */}
-              <audio ref={audioRef} style={{ display: 'none' }} />
+              <audio ref={audioRef} preload="auto" style={{ display: 'none' }} />
 
               {/* Audio Player Controls */}
               {selectedAudio && (
                 <div style={styles.audioPlayerBar}>
                   <button
-                    style={styles.playPauseBtn}
+                    style={{
+                      ...styles.playPauseBtn,
+                      ...(!audioReady && !audioError ? { opacity: 0.5 } : {}),
+                      ...(audioError ? { backgroundColor: '#ef4444' } : {})
+                    }}
                     onClick={handlePlayPause}
+                    disabled={!audioReady || !!audioError}
                   >
-                    {isPlaying ? (
+                    {!audioReady && !audioError ? (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 1s linear infinite' }}>
+                        <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/>
+                      </svg>
+                    ) : audioError ? (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                      </svg>
+                    ) : isPlaying ? (
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                         <rect x="6" y="4" width="4" height="16" rx="1"/>
                         <rect x="14" y="4" width="4" height="16" rx="1"/>
@@ -2598,9 +2666,14 @@ const SlideshowEditor = ({
                     )}
                   </button>
                   <div style={styles.audioPlayerInfo}>
-                    <span style={styles.audioPlayerName}>{selectedAudio.name}</span>
+                    <span style={styles.audioPlayerName}>
+                      {audioError ? 'Audio failed to load' : selectedAudio.name}
+                    </span>
                     <span style={styles.audioPlayerTime}>
-                      {formatTime(currentTime)} / {formatTime(audioDuration)}
+                      {!audioReady && !audioError
+                        ? 'Loading...'
+                        : `${formatTime(currentTime)} / ${formatTime(audioDuration)}`
+                      }
                     </span>
                   </div>
                   <div style={styles.audioProgressBar}>
