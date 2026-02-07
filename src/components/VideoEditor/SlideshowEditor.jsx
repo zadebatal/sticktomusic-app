@@ -1291,12 +1291,12 @@ const SlideshowEditor = ({
   }, [activeSlideshowIndex]);
 
   // Generate more slideshows from template
-  const handleGenerateMore = useCallback(() => {
+  const [showAudioPrompt, setShowAudioPrompt] = useState(false);
+
+  // Core generation logic (called after any prompts are resolved)
+  const executeGeneration = useCallback(() => {
     const templateSS = allSlideshows[0];
-    if (!templateSS || templateSS.slides.length === 0) {
-      toastError('Add at least one slide to the template before generating.');
-      return;
-    }
+    if (!templateSS || templateSS.slides.length === 0) return;
 
     setIsGenerating(true);
 
@@ -1387,6 +1387,21 @@ const SlideshowEditor = ({
       setIsGenerating(false);
     }
   }, [allSlideshows, generateCount, category, collections, libraryImages, getTextBanks]);
+
+  // Public generate handler — checks for audio prompt on first generation
+  const handleGenerateMore = useCallback(() => {
+    const templateSS = allSlideshows[0];
+    if (!templateSS || templateSS.slides.length === 0) {
+      toastError('Add at least one slide to the template before generating.');
+      return;
+    }
+    // First-time generation: prompt to add audio if none set
+    if (allSlideshows.length === 1 && !templateSS.audio) {
+      setShowAudioPrompt(true);
+      return;
+    }
+    executeGeneration();
+  }, [allSlideshows, executeGeneration]);
 
   // Export slideshow as carousel images
   const handleExport = useCallback(async () => {
@@ -3415,6 +3430,68 @@ const SlideshowEditor = ({
               setAudioToTrim(null);
             }}
           />
+        )}
+
+        {/* Audio Prompt — first generation without audio */}
+        {showAudioPrompt && (
+          <div style={{
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)',
+            backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', zIndex: 10002
+          }}>
+            <div style={{
+              backgroundColor: '#1a1a2e', borderRadius: '16px', padding: '28px',
+              maxWidth: '380px', width: '90%', textAlign: 'center',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1)'
+            }}>
+              <div style={{
+                width: '48px', height: '48px', borderRadius: '12px',
+                background: 'linear-gradient(135deg, rgba(251,146,60,0.2), rgba(251,146,60,0.1))',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto 16px'
+              }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fb923c" strokeWidth="2">
+                  <path d="M9 18V5l12-2v13"/>
+                  <circle cx="6" cy="18" r="3"/>
+                  <circle cx="18" cy="16" r="3"/>
+                </svg>
+              </div>
+              <h3 style={{ margin: '0 0 8px', color: '#fff', fontSize: '16px', fontWeight: '600' }}>
+                Add audio first?
+              </h3>
+              <p style={{ margin: '0 0 20px', color: '#9ca3af', fontSize: '13px', lineHeight: '1.5' }}>
+                Your template doesn't have audio yet. All generated slideshows will inherit the template's audio.
+              </p>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={() => {
+                    setShowAudioPrompt(false);
+                    executeGeneration();
+                  }}
+                  style={{
+                    flex: 1, padding: '10px', borderRadius: '8px',
+                    border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'transparent',
+                    color: '#9ca3af', fontSize: '13px', cursor: 'pointer'
+                  }}
+                >
+                  Skip, Generate Anyway
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAudioPrompt(false);
+                    setShowAudioPicker(true);
+                  }}
+                  style={{
+                    flex: 1, padding: '10px', borderRadius: '8px', border: 'none',
+                    background: 'linear-gradient(135deg, #fb923c, #f97316)',
+                    color: '#fff', fontSize: '13px', fontWeight: '600', cursor: 'pointer'
+                  }}
+                >
+                  Add Audio
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
       </div>
