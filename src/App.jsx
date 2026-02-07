@@ -642,14 +642,17 @@ const StickToMusic = () => {
 
   // Load Late pages (connected accounts) for all artists with Late configured
   const loadLatePages = async () => {
-    if (!firestoreArtists.length || loadingLatePages) return;
+    // Only load pages for artists this user can see
+    const visibleArtists = getVisibleArtists();
+    const artistsToLoad = firestoreArtists.filter(a => visibleArtists.some(v => v.id === a.id));
+    if (!artistsToLoad.length || loadingLatePages) return;
 
     setLoadingLatePages(true);
     const allPages = [];
     const unconfigured = [];
 
     try {
-      for (const artist of firestoreArtists) {
+      for (const artist of artistsToLoad) {
         try {
           // Check if this artist has Late configured
           const status = await getArtistLateKeyStatus(artist.id);
@@ -688,7 +691,7 @@ const StickToMusic = () => {
 
       setLatePages(allPages);
       setUnconfiguredLateArtists(unconfigured);
-      console.log('📱 Loaded', allPages.length, 'Late pages from', firestoreArtists.length, 'artists,', unconfigured.length, 'unconfigured');
+      console.log('📱 Loaded', allPages.length, 'Late pages from', artistsToLoad.length, 'artists,', unconfigured.length, 'unconfigured');
     } catch (error) {
       console.error('Error loading Late pages:', error);
     } finally {
@@ -3230,8 +3233,8 @@ const StickToMusic = () => {
 
           {/* Pages Tab */}
           {operatorTab === 'pages' && (() => {
-            // Use Firestore artists if available, fallback to static list
-            const artistsList = firestoreArtists.length > 0 ? firestoreArtists : operatorArtists;
+            // Use filtered visible artists (respects user assignment)
+            const artistsList = getVisibleArtists();
 
             // Filter pages from Late API
             const filteredPages = latePages.filter(p =>
@@ -3243,8 +3246,8 @@ const StickToMusic = () => {
               selectedArtist === 'all' || a.name === selectedArtist
             );
 
-            // Auto-load pages on first visit
-            if (latePages.length === 0 && !loadingLatePages && firestoreArtists.length > 0) {
+            // Auto-load pages on first visit (only if user has visible artists)
+            if (latePages.length === 0 && !loadingLatePages && artistsList.length > 0 && unconfiguredLateArtists.length === 0) {
               loadLatePages();
             }
 
