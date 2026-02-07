@@ -40,6 +40,125 @@ import {
 import { uploadFile } from '../../services/firebaseStorage';
 import { useToast } from '../ui';
 
+// Extracted outside LibraryBrowser so React doesn't recreate on parent re-render
+const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate }) => {
+  const [newText, setNewText] = useState('');
+  const [editingIndex, setEditingIndex] = useState(null);
+  const [editText, setEditText] = useState('');
+
+  return (
+    <div style={{
+      flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)',
+      minHeight: 0
+    }}>
+      <div style={{
+        padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{
+            width: '18px', height: '18px', borderRadius: '4px',
+            backgroundColor: color, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '10px', fontWeight: 700, color: '#000'
+          }}>{bankNum}</span>
+          <span style={{ fontSize: '13px', fontWeight: 600, color }}>{label}</span>
+          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>{texts.length}</span>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+        {texts.length === 0 ? (
+          <div style={{ padding: '12px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
+            No text lines yet. Add some below.
+          </div>
+        ) : texts.map((text, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px',
+            borderRadius: '6px', marginBottom: '4px',
+            backgroundColor: 'rgba(255,255,255,0.03)',
+            fontSize: '12px', color: 'rgba(255,255,255,0.8)'
+          }}>
+            {editingIndex === i ? (
+              <input
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const updated = [...texts];
+                    updated[i] = editText;
+                    onUpdate(updated);
+                    setEditingIndex(null);
+                  }
+                  if (e.key === 'Escape') setEditingIndex(null);
+                }}
+                onBlur={() => {
+                  const updated = [...texts];
+                  updated[i] = editText;
+                  onUpdate(updated);
+                  setEditingIndex(null);
+                }}
+                autoFocus
+                style={{
+                  flex: 1, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(99,102,241,0.4)',
+                  borderRadius: '4px', padding: '2px 6px', color: '#fff', fontSize: '12px'
+                }}
+              />
+            ) : (
+              <span
+                style={{ flex: 1, cursor: 'pointer' }}
+                onClick={() => { setEditingIndex(i); setEditText(text); }}
+                title="Click to edit"
+              >
+                {text}
+              </span>
+            )}
+            <button
+              onClick={() => onRemove(i)}
+              style={{
+                background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)',
+                cursor: 'pointer', fontSize: '14px', padding: '0 4px', flexShrink: 0
+              }}
+              title="Remove"
+            >×</button>
+          </div>
+        ))}
+      </div>
+      {/* Add new text input */}
+      <div style={{
+        padding: '8px', borderTop: '1px solid rgba(255,255,255,0.06)',
+        display: 'flex', gap: '6px', flexShrink: 0
+      }}>
+        <input
+          value={newText}
+          onChange={(e) => setNewText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && newText.trim()) {
+              onAdd(newText.trim());
+              setNewText('');
+            }
+          }}
+          placeholder={`Add ${label.toLowerCase()} line...`}
+          style={{
+            flex: 1, padding: '6px 10px', borderRadius: '6px',
+            border: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(0,0,0,0.2)',
+            color: '#fff', fontSize: '12px'
+          }}
+        />
+        <button
+          onClick={() => { if (newText.trim()) { onAdd(newText.trim()); setNewText(''); } }}
+          disabled={!newText.trim()}
+          style={{
+            padding: '6px 12px', borderRadius: '6px', border: 'none',
+            backgroundColor: newText.trim() ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.05)',
+            color: newText.trim() ? '#a5b4fc' : 'rgba(255,255,255,0.2)',
+            fontSize: '12px', cursor: newText.trim() ? 'pointer' : 'default'
+          }}
+        >+</button>
+      </div>
+    </div>
+  );
+};
+
 const LibraryBrowser = ({
   db = null, // Firestore instance for cross-device sync
   artistId,
@@ -1119,123 +1238,7 @@ const LibraryBrowser = ({
   const userCollections = getUserCollections(artistId);
 
   // TextBankPanel component
-  const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate }) => {
-    const [newText, setNewText] = React.useState('');
-    const [editingIndex, setEditingIndex] = React.useState(null);
-    const [editText, setEditText] = React.useState('');
-
-    return (
-      <div style={{
-        flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)',
-        minHeight: 0
-      }}>
-        <div style={{
-          padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{
-              width: '18px', height: '18px', borderRadius: '4px',
-              backgroundColor: color, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '10px', fontWeight: 700, color: '#000'
-            }}>{bankNum}</span>
-            <span style={{ fontSize: '13px', fontWeight: 600, color }}>{label}</span>
-            <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>{texts.length}</span>
-          </div>
-        </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
-          {texts.length === 0 ? (
-            <div style={{ padding: '12px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
-              No text lines yet. Add some below.
-            </div>
-          ) : texts.map((text, i) => (
-            <div key={i} style={{
-              display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px',
-              borderRadius: '6px', marginBottom: '4px',
-              backgroundColor: 'rgba(255,255,255,0.03)',
-              fontSize: '12px', color: 'rgba(255,255,255,0.8)'
-            }}>
-              {editingIndex === i ? (
-                <input
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      const updated = [...texts];
-                      updated[i] = editText;
-                      onUpdate(updated);
-                      setEditingIndex(null);
-                    }
-                    if (e.key === 'Escape') setEditingIndex(null);
-                  }}
-                  onBlur={() => {
-                    const updated = [...texts];
-                    updated[i] = editText;
-                    onUpdate(updated);
-                    setEditingIndex(null);
-                  }}
-                  autoFocus
-                  style={{
-                    flex: 1, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(99,102,241,0.4)',
-                    borderRadius: '4px', padding: '2px 6px', color: '#fff', fontSize: '12px'
-                  }}
-                />
-              ) : (
-                <span
-                  style={{ flex: 1, cursor: 'pointer' }}
-                  onClick={() => { setEditingIndex(i); setEditText(text); }}
-                  title="Click to edit"
-                >
-                  {text}
-                </span>
-              )}
-              <button
-                onClick={() => onRemove(i)}
-                style={{
-                  background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)',
-                  cursor: 'pointer', fontSize: '14px', padding: '0 4px', flexShrink: 0
-                }}
-                title="Remove"
-              >×</button>
-            </div>
-          ))}
-        </div>
-        {/* Add new text input */}
-        <div style={{
-          padding: '8px', borderTop: '1px solid rgba(255,255,255,0.06)',
-          display: 'flex', gap: '6px', flexShrink: 0
-        }}>
-          <input
-            value={newText}
-            onChange={(e) => setNewText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && newText.trim()) {
-                onAdd(newText.trim());
-                setNewText('');
-              }
-            }}
-            placeholder={`Add ${label.toLowerCase()} line...`}
-            style={{
-              flex: 1, padding: '6px 10px', borderRadius: '6px',
-              border: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(0,0,0,0.2)',
-              color: '#fff', fontSize: '12px'
-            }}
-          />
-          <button
-            onClick={() => { if (newText.trim()) { onAdd(newText.trim()); setNewText(''); } }}
-            disabled={!newText.trim()}
-            style={{
-              padding: '6px 12px', borderRadius: '6px', border: 'none',
-              backgroundColor: newText.trim() ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.05)',
-              color: newText.trim() ? '#a5b4fc' : 'rgba(255,255,255,0.2)',
-              fontSize: '12px', cursor: newText.trim() ? 'pointer' : 'default'
-            }}
-          >+</button>
-        </div>
-      </div>
-    );
-  };
+  // TextBankPanel is now defined outside LibraryBrowser to preserve input state
 
   // Bank-specific media card renderer with selection and remove button
   const bankCardSize = compact ? 64 : 80;
@@ -2219,8 +2222,11 @@ const LibraryBrowser = ({
         }} onClick={() => setShowTemplateEditor(false)}>
           <div style={{
             backgroundColor: '#1a1a2e', borderRadius: '16px', padding: '24px',
-            width: '400px', maxHeight: '80vh', overflowY: 'auto'
+            width: '720px', maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto',
+            display: 'flex', gap: '20px'
           }} onClick={e => e.stopPropagation()}>
+            {/* Left: Controls */}
+            <div style={{ flex: 1, minWidth: 0 }}>
             <h3 style={{ margin: '0 0 16px', fontSize: '16px', color: '#fff' }}>Text Style Template</h3>
 
             {[1, 2].map(num => {
@@ -2336,6 +2342,65 @@ const LibraryBrowser = ({
                 }}
                 style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: '#6366f1', color: '#fff', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
               >Save Template</button>
+            </div>
+            </div>
+
+            {/* Right: Live Preview */}
+            <div style={{ width: '200px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', textAlign: 'center' }}>Preview</div>
+              <div style={{
+                aspectRatio: '9/16', borderRadius: '12px', overflow: 'hidden',
+                backgroundColor: '#111', position: 'relative',
+                border: '1px solid rgba(255,255,255,0.1)'
+              }}>
+                {/* Text 1 preview */}
+                {(() => {
+                  const s = editingTemplate.text1Style;
+                  const col = collections.find(c => c.id === activeView);
+                  const sampleText = col?.textBank1?.[0] || 'Text Bank 1';
+                  return (
+                    <div style={{
+                      position: 'absolute',
+                      left: '50%', top: `${s.position.y}%`,
+                      transform: 'translate(-50%, -50%)',
+                      fontFamily: s.fontFamily,
+                      fontSize: `${Math.max(8, s.fontSize * 0.22)}px`,
+                      fontWeight: s.fontWeight,
+                      color: s.color,
+                      textAlign: 'center',
+                      width: '85%',
+                      wordBreak: 'break-word',
+                      textShadow: s.outline ? `0 0 3px ${s.outlineColor || '#000'}, 0 0 6px ${s.outlineColor || '#000'}` : 'none',
+                      lineHeight: 1.2
+                    }}>{sampleText}</div>
+                  );
+                })()}
+                {/* Text 2 preview */}
+                {(() => {
+                  const s = editingTemplate.text2Style;
+                  const col = collections.find(c => c.id === activeView);
+                  const sampleText = col?.textBank2?.[0] || 'Text Bank 2';
+                  return (
+                    <div style={{
+                      position: 'absolute',
+                      left: '50%', top: `${s.position.y}%`,
+                      transform: 'translate(-50%, -50%)',
+                      fontFamily: s.fontFamily,
+                      fontSize: `${Math.max(8, s.fontSize * 0.22)}px`,
+                      fontWeight: s.fontWeight,
+                      color: s.color,
+                      textAlign: 'center',
+                      width: '85%',
+                      wordBreak: 'break-word',
+                      textShadow: s.outline ? `0 0 3px ${s.outlineColor || '#000'}, 0 0 6px ${s.outlineColor || '#000'}` : 'none',
+                      lineHeight: 1.2
+                    }}>{sampleText}</div>
+                  );
+                })()}
+              </div>
+              <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', textAlign: 'center' }}>
+                Shows first text from each bank
+              </div>
             </div>
           </div>
         </div>
