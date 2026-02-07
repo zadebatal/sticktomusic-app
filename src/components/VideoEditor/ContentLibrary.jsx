@@ -352,15 +352,12 @@ const ContentLibrary = ({
               </>
             ) : (
               <>
-                {/* Check if any selected slideshows are exported */}
-                {selectedItems.some(s => s.exportedImages?.length > 0) && (
-                  <button style={styles.batchBtnPost} onClick={() => setShowSlideshowPostingModal(true)}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-                    </svg>
-                    Schedule {selectedItems.filter(s => s.exportedImages?.length > 0).length} Carousel{selectedItems.filter(s => s.exportedImages?.length > 0).length > 1 ? 's' : ''}
-                  </button>
-                )}
+                <button style={styles.batchBtnPost} onClick={() => setShowSlideshowPostingModal(true)}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                  </svg>
+                  Schedule {selectedItems.length} Carousel{selectedItems.length > 1 ? 's' : ''}
+                </button>
               </>
             )}
           </div>
@@ -828,11 +825,7 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
         {showActions && (
           <div style={styles.videoActions}>
             <button style={styles.actionBtn} onClick={(e) => handleActionClick(e, onEdit)}>Edit</button>
-            {isExported ? (
-              <button style={styles.actionBtnPost} onClick={(e) => handleActionClick(e, onPost)}>Post</button>
-            ) : (
-              <button style={{...styles.actionBtnPost, background: '#f59e0b'}} onClick={(e) => handleActionClick(e, onEdit)}>Export</button>
-            )}
+            <button style={styles.actionBtnPost} onClick={(e) => handleActionClick(e, onPost)}>Post</button>
             <button style={styles.actionBtnDel} onClick={(e) => handleActionClick(e, onDelete)}>✕</button>
           </div>
         )}
