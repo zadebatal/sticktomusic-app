@@ -5,6 +5,7 @@ import { StatusPill, ConfirmDialog, EmptyState as SharedEmptyState } from '../ui
 import { VIDEO_STATUS } from '../../utils/status';
 import { renderVideo } from '../../services/videoExportService';
 import { uploadFile } from '../../services/firebaseStorage';
+import { exportSlideshowAsImages } from '../../services/slideshowExportService';
 
 /**
  * ContentLibrary - Shows all videos or slideshows created within a category
@@ -959,6 +960,7 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
   const [caption, setCaption] = useState('');
   const [hashtags, setHashtags] = useState('#carousel #slideshow #fyp');
   const [isScheduling, setIsScheduling] = useState(false);
+  const [exportProgress, setExportProgress] = useState('');
 
   const availableHandles = Object.keys(lateAccountIds);
 
@@ -979,14 +981,35 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
     try {
       // Schedule each slideshow as a carousel post
       let scheduled = 0;
-      for (const slideshow of slideshows) {
-        const images = getCarouselImages(slideshow);
-        if (!images.length) {
-          console.warn('Slideshow has no images, skipping:', slideshow.id);
+      for (let si = 0; si < slideshows.length; si++) {
+        const slideshow = slideshows[si];
+
+        // Step 1: Ensure we have Firebase-hosted images (not blob URLs)
+        let firebaseImages = slideshow.exportedImages;
+        if (!firebaseImages?.length) {
+          // Auto-export: render slides to canvas → upload to Firebase
+          setExportProgress(`Exporting slideshow ${si + 1}/${slideshows.length}...`);
+          try {
+            firebaseImages = await exportSlideshowAsImages(slideshow, (pct) => {
+              setExportProgress(`Exporting slideshow ${si + 1}/${slideshows.length} (${pct}%)`);
+            });
+            // Save exported images back to the slideshow object so we don't re-export
+            slideshow.exportedImages = firebaseImages;
+          } catch (exportErr) {
+            console.error('[SlideshowPostingModal] Export failed:', exportErr);
+            alert(`Failed to export slideshow ${si + 1}: ${exportErr.message}`);
+            continue;
+          }
+        }
+
+        if (!firebaseImages?.length) {
+          console.warn('No images after export, skipping:', slideshow.id);
           continue;
         }
 
-        // Build platforms array for Late API
+        setExportProgress(`Scheduling ${si + 1}/${slideshows.length}...`);
+
+        // Step 2: Build platforms array for Late API
         const platformsPayload = [];
         const scheduledFor = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
 
@@ -1012,21 +1035,30 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
           continue;
         }
 
-        // Schedule the post via onSchedulePost
+        // Step 3: Schedule via Late API with Firebase URLs
         if (onSchedulePost) {
-          await onSchedulePost({
+          const result = await onSchedulePost({
             type: 'carousel',
             platforms: platformsPayload,
             caption: `${caption}\n\n${hashtags}`.trim(),
-            images: images,
+            images: firebaseImages,
             scheduledFor,
           });
+          if (result?.success === false) {
+            alert(`Failed to schedule: ${result.error || 'Unknown error'}`);
+            continue;
+          }
         }
         scheduled++;
       }
 
-      alert(`Scheduled ${scheduled} carousel post${scheduled > 1 ? 's' : ''}!`);
-      onClose();
+      setExportProgress('');
+      if (scheduled > 0) {
+        alert(`Scheduled ${scheduled} carousel post${scheduled > 1 ? 's' : ''}!`);
+        onClose();
+      } else {
+        alert('No carousels were scheduled. Check that your account has the correct platform IDs configured.');
+      }
     } catch (err) {
       console.error('[SlideshowPostingModal] Schedule failed:', err);
       alert(`Failed to schedule: ${err.message}`);
@@ -1035,20 +1067,9 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
     }
   };
 
-  // Get carousel images: prefer exportedImages, fall back to slide thumbnails
-  const getCarouselImages = (slideshow) => {
-    if (slideshow.exportedImages?.length > 0) return slideshow.exportedImages;
-    // Use slide background images as the carousel images
-    return (slideshow.slides || [])
-      .map(slide => {
-        const url = slide?.imageA?.url || slide?.imageA?.localUrl || slide?.thumbnail || slide?.backgroundImage;
-        return url ? { url, type: 'image' } : null;
-      })
-      .filter(Boolean);
-  };
-
-  // Total images across all slideshows
-  const totalImages = slideshows.reduce((sum, s) => sum + getCarouselImages(s).length, 0);
+  // Total slides across all slideshows (will be exported to Firebase before posting)
+  const totalSlides = slideshows.reduce((sum, s) => sum + (s.slides?.length || 0), 0);
+  const allExported = slideshows.every(s => s.exportedImages?.length > 0);
 
   return (
     <div style={slideshowPostingStyles.overlay}>
@@ -1075,8 +1096,11 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
         <div style={slideshowPostingStyles.preview}>
           <div style={slideshowPostingStyles.previewImages}>
             {slideshows.slice(0, 3).map((slideshow, i) => {
-              const imgs = getCarouselImages(slideshow);
-              const previewUrl = imgs[0]?.url;
+              const previewUrl = slideshow.exportedImages?.[0]?.url
+                || slideshow.slides?.[0]?.imageA?.url
+                || slideshow.slides?.[0]?.imageA?.localUrl
+                || slideshow.slides?.[0]?.thumbnail
+                || slideshow.slides?.[0]?.backgroundImage;
               return previewUrl ? (
                 <img
                   key={i}
@@ -1091,7 +1115,8 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
             )}
           </div>
           <span style={slideshowPostingStyles.previewText}>
-            {slideshows.length} carousel{slideshows.length > 1 ? 's' : ''} • {totalImages} images
+            {slideshows.length} carousel{slideshows.length > 1 ? 's' : ''} • {totalSlides} slide{totalSlides !== 1 ? 's' : ''}
+            {!allExported && ' (will auto-export)'}
           </span>
         </div>
 
@@ -1189,7 +1214,7 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
             onClick={handleSchedule}
             disabled={isScheduling || !selectedHandle}
           >
-            {isScheduling ? 'Scheduling...' : `Schedule ${slideshows.length} Carousel${slideshows.length > 1 ? 's' : ''}`}
+            {isScheduling ? (exportProgress || 'Scheduling...') : `Schedule ${slideshows.length} Carousel${slideshows.length > 1 ? 's' : ''}`}
           </button>
         </div>
       </div>
