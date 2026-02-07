@@ -2075,8 +2075,12 @@ const StudioHome = ({
                         key={a.id}
                         onClick={() => {
                           addToCollection(artistId, selectedCollection, [a.id]);
+                          // Refresh React state from localStorage so sidebarAudio re-computes
+                          loadData();
                           if (db) {
-                            const col = collections.find(c => c.id === selectedCollection && c.type !== 'smart');
+                            // Read fresh collection from localStorage (not stale React state)
+                            const freshCols = getCollections(artistId);
+                            const col = freshCols.find(c => c.id === selectedCollection && c.type !== 'smart');
                             if (col) saveCollectionToFirestore(db, artistId, col).catch(() => {});
                           }
                           setLibraryRefreshTrigger(t => t + 1);
