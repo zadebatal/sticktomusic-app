@@ -128,6 +128,7 @@ const StudioHome = ({
   const [pendingAudio, setPendingAudio] = useState(null);
   const [editingAudio, setEditingAudio] = useState(null); // { id, name } - for inline editing audio bank items
   const [trimmingAudio, setTrimmingAudio] = useState(null); // library audio item being re-trimmed
+  const [audioDropdownId, setAudioDropdownId] = useState(null); // which audio item has collection dropdown open
 
   // Selected media for editor
   const [selectedMedia, setSelectedMedia] = useState({
@@ -1952,15 +1953,21 @@ const StudioHome = ({
                     }
 
                     // Normal display
+                    const dropdownOpen = audioDropdownId === audio.id;
                     return (
                       <div
                         key={audio.id}
-                        onClick={() => handleSelectMedia(audio)}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.effectAllowed = 'copy';
+                          e.dataTransfer.setData('text/plain', JSON.stringify([audio.id]));
+                        }}
+                        onClick={() => { if (!dropdownOpen) handleSelectMedia(audio); }}
                         style={{
-                          display: 'flex', alignItems: 'center', gap: '6px',
-                          padding: '5px 6px', borderRadius: '6px', marginBottom: '2px',
-                          cursor: 'pointer', fontSize: '11px',
-                          backgroundColor: isSelected ? 'rgba(99,102,241,0.2)' : 'transparent'
+                          display: 'flex', flexDirection: 'column',
+                          borderRadius: '6px', marginBottom: '2px',
+                          backgroundColor: isSelected ? 'rgba(99,102,241,0.2)' : 'transparent',
+                          position: 'relative'
                         }}
                         onMouseEnter={(e) => {
                           if (!isSelected) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)';
@@ -1969,67 +1976,137 @@ const StudioHome = ({
                           if (!isSelected) e.currentTarget.style.backgroundColor = isSelected ? 'rgba(99,102,241,0.2)' : 'transparent';
                         }}
                       >
-                        <span style={{
-                          width: '26px', height: '26px', borderRadius: '5px',
-                          background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '11px', flexShrink: 0
-                        }}>🎵</span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{
-                            fontSize: '11px', fontWeight: 500, color: '#fff',
-                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
-                          }}>
-                            {audio.name}
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: '6px',
+                          padding: '5px 6px', cursor: 'grab', fontSize: '11px'
+                        }}>
+                          <span style={{
+                            width: '26px', height: '26px', borderRadius: '5px',
+                            background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '11px', flexShrink: 0
+                          }}>🎵</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{
+                              fontSize: '11px', fontWeight: 500, color: '#fff',
+                              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                            }}>
+                              {audio.name}
+                            </div>
+                            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)' }}>
+                              {audio.duration
+                                ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}`
+                                : '—'}
+                            </div>
                           </div>
-                          <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)' }}>
-                            {audio.duration
-                              ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}`
-                              : '—'}
-                          </div>
+                          {isSelected && (
+                            <span style={{ color: '#6366f1', fontSize: '12px', flexShrink: 0 }}>✓</span>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAudioDropdownId(dropdownOpen ? null : audio.id);
+                            }}
+                            style={{
+                              background: 'none', border: 'none',
+                              color: dropdownOpen ? '#a5b4fc' : 'rgba(255,255,255,0.25)',
+                              cursor: 'pointer', fontSize: '11px', padding: '0 2px', flexShrink: 0,
+                              lineHeight: 1
+                            }}
+                            title="Add to collection"
+                          >📂</button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingAudio({ id: audio.id, name: audio.name });
+                            }}
+                            style={{
+                              background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)',
+                              cursor: 'pointer', fontSize: '12px', padding: '0 2px', flexShrink: 0,
+                              lineHeight: 1
+                            }}
+                            title="Edit audio"
+                          >✏️</button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTrimmingAudio(audio);
+                            }}
+                            style={{
+                              background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)',
+                              cursor: 'pointer', fontSize: '12px', padding: '0 2px', flexShrink: 0,
+                              lineHeight: 1
+                            }}
+                            title="Trim audio"
+                          >✂️</button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (isSelected) setSelectedMedia(prev => ({ ...prev, audio: null }));
+                              removeFromLibraryAsync(db, artistId, audio.id).then(() => {
+                                setLibraryRefreshTrigger(t => t + 1);
+                              });
+                            }}
+                            style={{
+                              background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)',
+                              cursor: 'pointer', fontSize: '12px', padding: '0 2px', flexShrink: 0,
+                              lineHeight: 1
+                            }}
+                            title="Delete audio"
+                          >×</button>
                         </div>
-                        {isSelected && (
-                          <span style={{ color: '#6366f1', fontSize: '12px', flexShrink: 0 }}>✓</span>
+
+                        {/* Collection dropdown */}
+                        {dropdownOpen && (
+                          <div style={{
+                            padding: '4px 6px 6px',
+                            borderTop: '1px solid rgba(255,255,255,0.06)',
+                            backgroundColor: 'rgba(0,0,0,0.2)',
+                            borderRadius: '0 0 6px 6px'
+                          }}>
+                            <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)', marginBottom: '3px', padding: '0 2px' }}>
+                              Add to collection:
+                            </div>
+                            {collections.length === 0 ? (
+                              <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.2)', padding: '4px 2px' }}>
+                                No collections yet
+                              </div>
+                            ) : (
+                              collections.map(col => {
+                                const inCol = audio.collectionIds?.includes(col.id);
+                                return (
+                                  <div
+                                    key={col.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (!inCol) {
+                                        addToCollection(artistId, col.id, audio.id);
+                                        saveCollectionToFirestore(db, artistId, col).catch(() => {});
+                                        setLibraryRefreshTrigger(t => t + 1);
+                                      }
+                                      setAudioDropdownId(null);
+                                    }}
+                                    style={{
+                                      display: 'flex', alignItems: 'center', gap: '5px',
+                                      padding: '3px 6px', borderRadius: '4px',
+                                      cursor: inCol ? 'default' : 'pointer',
+                                      fontSize: '10px',
+                                      color: inCol ? '#6366f1' : 'rgba(255,255,255,0.6)',
+                                      backgroundColor: inCol ? 'rgba(99,102,241,0.1)' : 'transparent'
+                                    }}
+                                    onMouseEnter={(e) => { if (!inCol) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)'; }}
+                                    onMouseLeave={(e) => { if (!inCol) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                  >
+                                    <span style={{ fontSize: '10px' }}>{inCol ? '✓' : '📁'}</span>
+                                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      {col.name}
+                                    </span>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
                         )}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingAudio({ id: audio.id, name: audio.name });
-                          }}
-                          style={{
-                            background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)',
-                            cursor: 'pointer', fontSize: '12px', padding: '0 2px', flexShrink: 0,
-                            lineHeight: 1
-                          }}
-                          title="Edit audio"
-                        >✏️</button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setTrimmingAudio(audio);
-                          }}
-                          style={{
-                            background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)',
-                            cursor: 'pointer', fontSize: '12px', padding: '0 2px', flexShrink: 0,
-                            lineHeight: 1
-                          }}
-                          title="Trim audio"
-                        >✂️</button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (isSelected) setSelectedMedia(prev => ({ ...prev, audio: null }));
-                            removeFromLibraryAsync(db, artistId, audio.id).then(() => {
-                              setLibraryRefreshTrigger(t => t + 1);
-                            });
-                          }}
-                          style={{
-                            background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)',
-                            cursor: 'pointer', fontSize: '12px', padding: '0 2px', flexShrink: 0,
-                            lineHeight: 1
-                          }}
-                          title="Delete audio"
-                        >×</button>
                       </div>
                     );
                   })
