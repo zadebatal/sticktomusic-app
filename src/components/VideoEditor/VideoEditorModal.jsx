@@ -49,6 +49,23 @@ const VideoEditorModal = ({
   const [isMuted, setIsMuted] = useState(false);
   const [duration, setDuration] = useState(existingVideo?.duration || 30);
 
+  // Auto-select source video audio when clips exist — skip the audio picker screen
+  useEffect(() => {
+    if (!selectedAudio && category?.videos?.length > 0) {
+      const firstVideo = category.videos[0];
+      const videoUrl = firstVideo.url || firstVideo.localUrl || firstVideo.src;
+      if (videoUrl) {
+        setSelectedAudio({
+          id: '__source_video__',
+          name: 'Source Video Audio',
+          url: videoUrl,
+          localUrl: firstVideo.localUrl || videoUrl,
+          isSourceAudio: true
+        });
+      }
+    }
+  }, []); // Run once on mount — intentionally empty deps
+
   // Text state
   const [lyrics, setLyrics] = useState(existingVideo?.lyrics || '');
   const [words, setWords] = useState(existingVideo?.words || []);
