@@ -300,19 +300,21 @@ const LibraryBrowser = ({
   const getDisplayedMedia = useCallback(() => {
     let results = [...library];
 
-    // If viewing a specific collection
+    // If viewing a specific collection (user clicked a collection in the sidebar)
     if (activeView !== 'library' && activeView !== 'collections') {
       const colMedia = getCollectionMedia(artistId, activeView);
       if (colMedia.length > 0) {
         results = colMedia;
-      } else if (library.length > 0) {
+      } else {
         // Collection returned no items from localStorage - try in-memory library
         const cols = collections.length > 0 ? collections : getCollections(artistId);
         const col = cols.find(c => c.id === activeView);
         if (col?.mediaIds?.length > 0) {
           results = library.filter(item => col.mediaIds.includes(item.id));
+        } else {
+          // Collection has no items — show empty so user can drag items in
+          results = [];
         }
-        // If collection has no mediaIds, keep results as full library
       }
     }
 
