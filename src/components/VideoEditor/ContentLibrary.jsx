@@ -758,14 +758,14 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
   // Get primary text overlay for a slide (first overlay with non-empty text)
   const getSlideText = (slide) => {
     if (!slide?.textOverlays?.length) return null;
-    const overlay = slide.textOverlays.find(o => o.text && o.text !== 'Click to edit' && o.text !== 'New Text');
+    const overlay = slide.textOverlays.find(o => o.text);
     return overlay || null;
   };
 
   // Render a mini slide thumbnail with text overlay
   const renderMiniSlide = (slide, idx) => {
     const thumb = getSlideThumb(slide);
-    const visibleOverlays = (slide?.textOverlays || []).filter(o => o.text && o.text !== 'Click to edit' && o.text !== 'New Text');
+    const visibleOverlays = (slide?.textOverlays || []).filter(o => o.text);
     return (
       <div key={idx} style={{
         position: 'relative',
