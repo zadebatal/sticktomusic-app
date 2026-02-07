@@ -97,6 +97,17 @@ const StudioHome = ({
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCounterRef = useRef(0);
 
+  // Prevent browser from opening dropped files in new tabs (must be document-level)
+  useEffect(() => {
+    const preventFileOpen = (e) => { e.preventDefault(); };
+    document.addEventListener('dragover', preventFileOpen);
+    document.addEventListener('drop', preventFileOpen);
+    return () => {
+      document.removeEventListener('dragover', preventFileOpen);
+      document.removeEventListener('drop', preventFileOpen);
+    };
+  }, []);
+
   // Thumbnail migration ref (run once per session)
   const thumbMigrationRef = useRef(false);
 
