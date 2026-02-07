@@ -697,6 +697,10 @@ const SlideshowEditor = ({
     }
   }, [audioToTrim, db, artistId]);
 
+  // Use a ref for slides to avoid stale closures in the animation loop
+  const slidesRef = useRef(slides);
+  useEffect(() => { slidesRef.current = slides; }, [slides]);
+
   const handlePlayPause = useCallback(() => {
     if (!audioRef.current || !selectedAudio) return;
 
@@ -708,48 +712,56 @@ const SlideshowEditor = ({
       setIsPlaying(false);
     } else {
       const startBoundary = selectedAudio.startTime || 0;
-      if (audioRef.current.currentTime < startBoundary) {
+      if (audioRef.current.currentTime < startBoundary || !isFinite(audioRef.current.currentTime)) {
         audioRef.current.currentTime = startBoundary;
       }
-      audioRef.current.play().catch(console.error);
-      setIsPlaying(true);
 
-      // Animation loop for time updates + slide auto-advance
-      const updateTime = () => {
-        if (audioRef.current) {
+      audioRef.current.play().then(() => {
+        setIsPlaying(true);
+
+        // Animation loop for time updates + slide auto-advance
+        const updateTime = () => {
+          if (!audioRef.current) return;
           const startBound = selectedAudio.startTime || 0;
-          const endBound = selectedAudio.endTime || audioRef.current.duration;
+          const rawDur = audioRef.current.duration;
+          const endBound = (selectedAudio.endTime && selectedAudio.endTime > 0)
+            ? selectedAudio.endTime
+            : (isFinite(rawDur) ? rawDur : 300);
           const actualTime = audioRef.current.currentTime;
           const elapsed = actualTime - startBound;
 
-          setCurrentTime(elapsed);
+          setCurrentTime(Math.max(0, elapsed));
 
-          // Auto-advance slides based on cumulative duration
-          if (slides.length > 1) {
+          // Auto-advance slides based on cumulative duration (use ref to avoid stale closure)
+          const currentSlides = slidesRef.current;
+          if (currentSlides.length > 1) {
             let cumulative = 0;
-            for (let i = 0; i < slides.length; i++) {
-              cumulative += slides[i].duration || 3;
+            for (let i = 0; i < currentSlides.length; i++) {
+              cumulative += currentSlides[i].duration || 3;
               if (elapsed < cumulative) {
                 setSelectedSlideIndex(i);
                 break;
               }
-              // If past all slides, loop to first
-              if (i === slides.length - 1) {
+              if (i === currentSlides.length - 1) {
                 setSelectedSlideIndex(0);
               }
             }
           }
 
           // Loop back if past end boundary
-          if (actualTime >= endBound) {
+          if (isFinite(endBound) && actualTime >= endBound) {
             audioRef.current.currentTime = startBound;
           }
-        }
+
+          animationRef.current = requestAnimationFrame(updateTime);
+        };
         animationRef.current = requestAnimationFrame(updateTime);
-      };
-      animationRef.current = requestAnimationFrame(updateTime);
+      }).catch(err => {
+        console.error('Audio playback failed:', err);
+        setIsPlaying(false);
+      });
     }
-  }, [isPlaying, selectedAudio, slides]);
+  }, [isPlaying, selectedAudio]);
 
   const handleRemoveAudio = useCallback(() => {
     if (audioRef.current) {
@@ -770,19 +782,38 @@ const SlideshowEditor = ({
     const audioUrl = selectedAudio.url || selectedAudio.localUrl;
     if (!audioUrl) return;
 
+    // Stop any current playback
+    audioRef.current.pause();
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+    setIsPlaying(false);
+    setCurrentTime(0);
+
     audioRef.current.src = audioUrl;
     audioRef.current.load();
 
-    audioRef.current.onloadedmetadata = () => {
+    const handleMetadata = () => {
+      if (!audioRef.current) return;
       const start = selectedAudio.startTime || 0;
-      const end = selectedAudio.endTime || audioRef.current.duration;
-      setAudioDuration(end - start);
+      const rawDuration = audioRef.current.duration;
+      // Guard against NaN/Infinity
+      const end = (selectedAudio.endTime && selectedAudio.endTime > 0)
+        ? selectedAudio.endTime
+        : (isFinite(rawDuration) ? rawDuration : 0);
+      setAudioDuration(Math.max(0, end - start));
       audioRef.current.currentTime = start;
+    };
+
+    audioRef.current.onloadedmetadata = handleMetadata;
+    // Also listen for canplaythrough as a fallback for duration
+    audioRef.current.oncanplaythrough = () => {
+      if (audioDuration === 0) handleMetadata();
     };
 
     audioRef.current.onended = () => {
       const start = selectedAudio.startTime || 0;
-      audioRef.current.currentTime = start;
+      if (audioRef.current) audioRef.current.currentTime = start;
     };
 
     return () => {
@@ -2480,7 +2511,7 @@ const SlideshowEditor = ({
               </div>
 
               {/* Hidden audio element */}
-              <audio ref={audioRef} style={{ display: 'none' }} />
+              <audio ref={audioRef} style={{ display: 'none' }} crossOrigin="anonymous" />
 
               {/* Audio Player Controls */}
               {selectedAudio && (

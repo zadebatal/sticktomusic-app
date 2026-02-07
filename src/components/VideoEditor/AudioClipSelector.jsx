@@ -35,7 +35,7 @@ const AudioClipSelector = ({
   const [isLoading, setIsLoading] = useState(true);
   const [duration, setDuration] = useState(0);
   const [inPoint, setInPoint] = useState(initialStart);
-  const [outPoint, setOutPoint] = useState(initialEnd || 30);
+  const [outPoint, setOutPoint] = useState(initialEnd || 9999);
   const [playheadTime, setPlayheadTime] = useState(initialStart);
   const [isPlaying, setIsPlaying] = useState(false);
   const [waveformData, setWaveformData] = useState([]);
@@ -69,7 +69,7 @@ const AudioClipSelector = ({
     audio.addEventListener('loadedmetadata', () => {
       const dur = audio.duration;
       setDuration(dur);
-      const newOut = initialEnd || Math.min(30, dur);
+      const newOut = initialEnd || dur;
       setOutPoint(newOut);
       setIsLoading(false);
     });
@@ -256,10 +256,16 @@ const AudioClipSelector = ({
     return 'none';
   }, [inPoint, outPoint, duration]);
 
+  // Track if mouse actually moved during a mousedown (to distinguish click from drag)
+  const didDragRef = useRef(false);
+  const mouseDownTimeRef = useRef(null);
+
   // Mouse handlers
   const handleMouseDown = useCallback((e) => {
     const target = getClickTarget(e.clientX);
     const time = getTimeFromX(e.clientX);
+    didDragRef.current = false;
+    mouseDownTimeRef.current = time;
 
     if (target === 'in' || target === 'out') {
       setDragging(target);
@@ -271,7 +277,7 @@ const AudioClipSelector = ({
       setDragStartOut(outPoint);
       e.preventDefault();
     } else {
-      // Click outside - move scrub playhead
+      // Click outside region - move scrub playhead
       setPlayheadTime(time);
       if (audioRef.current) {
         audioRef.current.currentTime = time;
@@ -283,6 +289,7 @@ const AudioClipSelector = ({
     if (!dragging) return;
 
     const handleMouseMove = (e) => {
+      didDragRef.current = true;
       const time = getTimeFromX(e.clientX);
 
       if (dragging === 'in') {
@@ -315,6 +322,14 @@ const AudioClipSelector = ({
     };
 
     const handleMouseUp = () => {
+      // If user clicked inside the region without dragging, seek the playhead there
+      if (dragging === 'region' && !didDragRef.current && mouseDownTimeRef.current != null) {
+        const time = mouseDownTimeRef.current;
+        setPlayheadTime(time);
+        if (audioRef.current) {
+          audioRef.current.currentTime = time;
+        }
+      }
       setDragging(null);
     };
 
@@ -376,8 +391,11 @@ const AudioClipSelector = ({
       }
       setIsPlaying(false);
     } else {
-      audio.currentTime = inPoint;
-      setPlayheadTime(inPoint);
+      // Start from current playhead if within the selected region, otherwise from IN
+      const currentPos = audio.currentTime;
+      const startFrom = (currentPos >= inPoint && currentPos < outPoint) ? currentPos : inPoint;
+      audio.currentTime = startFrom;
+      setPlayheadTime(startFrom);
 
       audio.play().then(() => {
         setIsPlaying(true);
@@ -389,6 +407,8 @@ const AudioClipSelector = ({
 
           if (time >= outPoint) {
             audioRef.current.pause();
+            audioRef.current.currentTime = inPoint;
+            setPlayheadTime(inPoint);
             setIsPlaying(false);
             return;
           }
