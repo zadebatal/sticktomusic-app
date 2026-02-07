@@ -44,6 +44,7 @@ import {
   addToLibraryAsync,
   addManyToLibraryAsync,
   removeFromLibraryAsync,
+  updateLibraryItemAsync,
   migrateToFirestore,
   migrateThumbnails,
   migrateVideoThumbnails
@@ -125,7 +126,7 @@ const StudioHome = ({
 
   // Audio clip selector
   const [pendingAudio, setPendingAudio] = useState(null);
-  const [editingAudio, setEditingAudio] = useState(null);
+  const [editingAudio, setEditingAudio] = useState(null); // { id, name } - for inline editing audio bank items
 
   // Selected media for editor
   const [selectedMedia, setSelectedMedia] = useState({
@@ -1814,6 +1815,85 @@ const StudioHome = ({
                 ) : (
                   sidebarAudio.map(audio => {
                     const isSelected = selectedMedia.audio?.id === audio.id;
+                    const isEditing = editingAudio?.id === audio.id;
+
+                    if (isEditing) {
+                      // Inline edit form
+                      return (
+                        <div
+                          key={audio.id}
+                          style={{
+                            padding: '8px 6px', borderRadius: '6px', marginBottom: '2px',
+                            backgroundColor: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)',
+                            display: 'flex', flexDirection: 'column', gap: '6px'
+                          }}
+                        >
+                          <input
+                            autoFocus
+                            type="text"
+                            value={editingAudio.name}
+                            onChange={(e) => setEditingAudio(prev => ({ ...prev, name: e.target.value }))}
+                            style={{
+                              width: '100%', padding: '6px 8px', borderRadius: '4px',
+                              backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                              color: '#fff', fontSize: '10px', fontFamily: 'inherit'
+                            }}
+                            placeholder="Audio name"
+                          />
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await updateLibraryItemAsync(db, artistId, audio.id, { name: editingAudio.name });
+                                  setLibraryRefreshTrigger(t => t + 1);
+                                  setEditingAudio(null);
+                                } catch (err) {
+                                  console.error('Failed to update audio:', err);
+                                }
+                              }}
+                              style={{
+                                flex: 1, padding: '4px 8px', borderRadius: '4px',
+                                backgroundColor: '#6366f1', border: 'none', color: '#fff',
+                                fontSize: '9px', fontWeight: 500, cursor: 'pointer', lineHeight: 1
+                              }}
+                            >
+                              Replace
+                            </button>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await addToLibraryAsync(db, artistId, { ...audio, id: undefined, name: editingAudio.name });
+                                  setLibraryRefreshTrigger(t => t + 1);
+                                  setEditingAudio(null);
+                                } catch (err) {
+                                  console.error('Failed to save as new:', err);
+                                }
+                              }}
+                              style={{
+                                flex: 1, padding: '4px 8px', borderRadius: '4px',
+                                backgroundColor: 'rgba(167,139,250,0.4)', border: '1px solid rgba(167,139,250,0.5)',
+                                color: '#a78bfa', fontSize: '9px', fontWeight: 500, cursor: 'pointer', lineHeight: 1
+                              }}
+                            >
+                              Save as New
+                            </button>
+                            <button
+                              onClick={() => setEditingAudio(null)}
+                              style={{
+                                flex: 0.6, padding: '4px 8px', borderRadius: '4px',
+                                backgroundColor: 'transparent', border: '1px solid rgba(255,255,255,0.1)',
+                                color: 'rgba(255,255,255,0.5)', fontSize: '9px', fontWeight: 500,
+                                cursor: 'pointer', lineHeight: 1
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // Normal display
                     return (
                       <div
                         key={audio.id}
@@ -1853,6 +1933,18 @@ const StudioHome = ({
                         {isSelected && (
                           <span style={{ color: '#6366f1', fontSize: '12px', flexShrink: 0 }}>✓</span>
                         )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingAudio({ id: audio.id, name: audio.name });
+                          }}
+                          style={{
+                            background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)',
+                            cursor: 'pointer', fontSize: '12px', padding: '0 2px', flexShrink: 0,
+                            lineHeight: 1
+                          }}
+                          title="Edit audio"
+                        >✏️</button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

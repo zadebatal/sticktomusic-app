@@ -142,13 +142,37 @@ const LyricBank = ({
               >
                 Cancel
               </button>
-              <button
-                style={compactStyles.editorSave}
-                onClick={() => { editingId ? handleSaveEdit() : handleAdd(); }}
-                disabled={editingId ? !editContent.trim() : !newContent.trim()}
-              >
-                {editingId ? 'Save' : 'Add'}
-              </button>
+              {editingId ? (
+                <>
+                  <button
+                    style={compactStyles.editorReplace}
+                    onClick={handleSaveEdit}
+                    disabled={!editContent.trim()}
+                  >
+                    Replace
+                  </button>
+                  <button
+                    style={compactStyles.editorSaveNew}
+                    onClick={() => {
+                      onAddLyrics?.({ title: editTitle.trim() || 'Untitled', content: editContent.trim() });
+                      setEditingId(null);
+                      setEditTitle('');
+                      setEditContent('');
+                    }}
+                    disabled={!editContent.trim()}
+                  >
+                    Save as New
+                  </button>
+                </>
+              ) : (
+                <button
+                  style={compactStyles.editorSave}
+                  onClick={handleAdd}
+                  disabled={!newContent.trim()}
+                >
+                  Add
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -817,6 +841,26 @@ const compactStyles = {
     border: 'none',
     borderRadius: '5px',
     color: '#fff',
+    fontSize: '11px',
+    fontWeight: 600,
+    cursor: 'pointer'
+  },
+  editorReplace: {
+    padding: '5px 10px',
+    backgroundColor: '#6366f1',
+    border: 'none',
+    borderRadius: '5px',
+    color: '#fff',
+    fontSize: '11px',
+    fontWeight: 600,
+    cursor: 'pointer'
+  },
+  editorSaveNew: {
+    padding: '5px 10px',
+    backgroundColor: 'rgba(124,58,237,0.25)',
+    border: 'none',
+    borderRadius: '5px',
+    color: '#a78bfa',
     fontSize: '11px',
     fontWeight: 600,
     cursor: 'pointer'
