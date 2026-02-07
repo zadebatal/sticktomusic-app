@@ -466,6 +466,8 @@ const StickToMusic = () => {
   // Add Artist modal
   const [showAddArtistModal, setShowAddArtistModal] = useState(false);
   const [addArtistForm, setAddArtistForm] = useState({ name: '', tier: 'Scale', cdTier: 'CD Lite', assignedOperatorId: '', error: null, isLoading: false });
+  const [deleteArtistConfirm, setDeleteArtistConfirm] = useState({ show: false, artist: null, isDeleting: false });
+  const [reassignArtist, setReassignArtist] = useState({ show: false, artist: null });
 
   // Firestore data - allowed users loaded from database
   const [allowedUsers, setAllowedUsers] = useState([]);
@@ -759,6 +761,78 @@ const StickToMusic = () => {
       console.error('Failed to create artist:', error);
       setAddArtistForm(prev => ({ ...prev, error: error.message || 'Failed to create artist', isLoading: false }));
     }
+  };
+
+  // Handle deleting an artist (Firestore + cleanup)
+  const handleDeleteArtist = async () => {
+    const artist = deleteArtistConfirm.artist;
+    if (!artist) return;
+    setDeleteArtistConfirm(prev => ({ ...prev, isDeleting: true }));
+    try {
+      await deleteArtist(db, artist.id);
+      // If we just deleted the currently selected artist, switch to another
+      if (currentArtistId === artist.id) {
+        const remaining = firestoreArtists.filter(a => a.id !== artist.id);
+        if (remaining.length > 0) {
+          setCurrentArtistId(remaining[0].id);
+          setLastArtistId(remaining[0].id);
+        } else {
+          setCurrentArtistId(null);
+          setLastArtistId(null);
+        }
+      }
+      // Also remove from any operator's assignedArtistIds
+      for (const u of allowedUsers) {
+        if (u.assignedArtistIds?.includes(artist.id)) {
+          const operatorRef = doc(db, 'allowedUsers', u.email.toLowerCase());
+          await updateDoc(operatorRef, {
+            assignedArtistIds: u.assignedArtistIds.filter(id => id !== artist.id)
+          });
+        }
+      }
+      console.log('Deleted artist:', artist.id, artist.name);
+    } catch (error) {
+      console.error('Failed to delete artist:', error);
+      alert('Failed to delete artist: ' + error.message);
+    }
+    setDeleteArtistConfirm({ show: false, artist: null, isDeleting: false });
+  };
+
+  // Handle reassigning an artist to a different operator
+  const handleReassignArtist = async (artistId, newOwnerId) => {
+    try {
+      await updateArtist(db, artistId, { ownerOperatorId: newOwnerId || null });
+      // Update assignedArtistIds for old and new operators
+      const artist = firestoreArtists.find(a => a.id === artistId);
+      // Remove from old operator's assignedArtistIds
+      if (artist?.ownerOperatorId) {
+        const oldOwner = allowedUsers.find(u => u.id === artist.ownerOperatorId);
+        if (oldOwner?.email && oldOwner.assignedArtistIds?.includes(artistId)) {
+          const oldRef = doc(db, 'allowedUsers', oldOwner.email.toLowerCase());
+          await updateDoc(oldRef, {
+            assignedArtistIds: oldOwner.assignedArtistIds.filter(id => id !== artistId)
+          });
+        }
+      }
+      // Add to new operator's assignedArtistIds
+      if (newOwnerId) {
+        const newOwner = allowedUsers.find(u => u.id === newOwnerId);
+        if (newOwner?.email) {
+          const newRef = doc(db, 'allowedUsers', newOwner.email.toLowerCase());
+          const currentAssigned = newOwner.assignedArtistIds || [];
+          if (!currentAssigned.includes(artistId)) {
+            await updateDoc(newRef, {
+              assignedArtistIds: [...currentAssigned, artistId]
+            });
+          }
+        }
+      }
+      console.log('Reassigned artist:', artistId, '→ owner:', newOwnerId);
+    } catch (error) {
+      console.error('Failed to reassign artist:', error);
+      alert('Failed to reassign: ' + error.message);
+    }
+    setReassignArtist({ show: false, artist: null });
   };
 
   // Set the app-level user state based on currentAuthUser and allowedUsers
@@ -3192,11 +3266,14 @@ const StickToMusic = () => {
               return labelA.localeCompare(labelB);
             });
 
+            // Get list of operators for reassign dropdown
+            const operatorUsers = allowedUsers.filter(u => u.role === 'operator' || CONDUCTOR_EMAILS.includes(u.email?.toLowerCase()));
+
             // Render an artist card
             const renderArtistCard = (artist) => (
               <div
                 key={artist.id}
-                className={`bg-zinc-900 border rounded-xl p-4 sm:p-6 transition cursor-pointer hover:border-zinc-600 ${
+                className={`group bg-zinc-900 border rounded-xl p-4 sm:p-6 transition cursor-pointer hover:border-zinc-600 ${
                   currentArtistId === artist.id ? 'border-violet-500' : 'border-zinc-800'
                 }`}
                 onClick={() => handleArtistChange(artist.id)}
@@ -3239,6 +3316,29 @@ const StickToMusic = () => {
                     <span className={`px-2 sm:px-3 py-1 rounded-full text-xs shrink-0 ${getStatusColor(artist.status)}`}>
                       {artist.status}
                     </span>
+                    {/* Action buttons — visible on hover (conductor only) */}
+                    {isConductor(user) && (
+                      <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setReassignArtist({ show: true, artist }); }}
+                          className="p-1.5 rounded-lg hover:bg-zinc-700 text-zinc-400 hover:text-white transition"
+                          title="Reassign to operator"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M16 3h5v5"/><path d="M21 3l-7 7"/><path d="M8 21H3v-5"/><path d="M3 21l7-7"/>
+                          </svg>
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeleteArtistConfirm({ show: true, artist, isDeleting: false }); }}
+                          className="p-1.5 rounded-lg hover:bg-red-900/50 text-zinc-400 hover:text-red-400 transition"
+                          title="Delete artist"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                          </svg>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -6097,6 +6197,87 @@ const StickToMusic = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* DELETE ARTIST CONFIRMATION MODAL */}
+        {deleteArtistConfirm.show && deleteArtistConfirm.artist && (
+          <div className="fixed inset-0 bg-black/80 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={() => setDeleteArtistConfirm({ show: false, artist: null, isDeleting: false })}>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md" onClick={e => e.stopPropagation()}>
+              <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+                <h2 className="text-xl font-bold text-red-400">Delete Artist</h2>
+                <button onClick={() => setDeleteArtistConfirm({ show: false, artist: null, isDeleting: false })} className="text-zinc-500 hover:text-white">✕</button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-zinc-300">Are you sure you want to delete <strong>{deleteArtistConfirm.artist.name}</strong>?</p>
+                <p className="text-sm text-zinc-500">This will permanently remove this artist for all users. Any content, pages, and data associated with this artist will be lost.</p>
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => setDeleteArtistConfirm({ show: false, artist: null, isDeleting: false })}
+                    className="flex-1 py-3 bg-zinc-800 text-white rounded-xl font-medium hover:bg-zinc-700 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeleteArtist}
+                    disabled={deleteArtistConfirm.isDeleting}
+                    className="flex-1 py-3 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition disabled:opacity-50"
+                  >
+                    {deleteArtistConfirm.isDeleting ? 'Deleting...' : 'Delete Forever'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* REASSIGN ARTIST MODAL */}
+        {reassignArtist.show && reassignArtist.artist && (
+          <div className="fixed inset-0 bg-black/80 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={() => setReassignArtist({ show: false, artist: null })}>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md" onClick={e => e.stopPropagation()}>
+              <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+                <h2 className="text-xl font-bold">Reassign Artist</h2>
+                <button onClick={() => setReassignArtist({ show: false, artist: null })} className="text-zinc-500 hover:text-white">✕</button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-zinc-300">Move <strong>{reassignArtist.artist.name}</strong> to a different operator:</p>
+                <div className="space-y-2">
+                  {/* Unassigned option */}
+                  <button
+                    onClick={() => handleReassignArtist(reassignArtist.artist.id, null)}
+                    className={`w-full text-left px-4 py-3 rounded-xl border transition hover:border-zinc-600 ${
+                      !reassignArtist.artist.ownerOperatorId ? 'border-violet-500 bg-violet-500/10' : 'border-zinc-800 bg-zinc-800/50'
+                    }`}
+                  >
+                    <span className="text-sm font-medium">Unassigned</span>
+                    <span className="text-xs text-zinc-500 ml-2">No operator</span>
+                  </button>
+                  {/* Conductor + Operators */}
+                  {allowedUsers
+                    .filter(u => u.role === 'operator' || CONDUCTOR_EMAILS.includes(u.email?.toLowerCase()))
+                    .map(op => {
+                      const isCond = CONDUCTOR_EMAILS.includes(op.email?.toLowerCase());
+                      const isCurrentOwner = reassignArtist.artist.ownerOperatorId === op.id;
+                      return (
+                        <button
+                          key={op.id}
+                          onClick={() => handleReassignArtist(reassignArtist.artist.id, op.id)}
+                          className={`w-full text-left px-4 py-3 rounded-xl border transition hover:border-zinc-600 ${
+                            isCurrentOwner ? 'border-violet-500 bg-violet-500/10' : 'border-zinc-800 bg-zinc-800/50'
+                          }`}
+                        >
+                          <span className="text-sm font-medium">{op.name || op.email}</span>
+                          <span className={`text-xs ml-2 ${isCond ? 'text-amber-400' : 'text-zinc-500'}`}>
+                            {isCond ? 'Conductor' : 'Operator'}
+                          </span>
+                          {isCurrentOwner && <span className="text-xs text-violet-400 ml-2">(current)</span>}
+                        </button>
+                      );
+                    })
+                  }
+                </div>
+              </div>
             </div>
           </div>
         )}
