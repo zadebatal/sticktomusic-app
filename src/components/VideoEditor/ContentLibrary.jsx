@@ -783,34 +783,37 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
             <span style={{ color: '#4b5563', fontSize: '10px' }}>{idx + 1}</span>
           </div>
         )}
-        {/* Text overlay preview */}
-        {textOverlay && (
-          <div style={{
+        {/* Text overlays rendered on the image */}
+        {slide?.textOverlays?.filter(o => o.text && o.text !== 'Click to edit' && o.text !== 'New Text').map((overlay, oi) => (
+          <div key={oi} style={{
             position: 'absolute',
-            bottom: '4px',
+            top: `${Math.max(5, Math.min(90, (overlay.position?.y || 50) - 10))}%`,
             left: '2px',
             right: '2px',
-            padding: '2px 3px',
-            backgroundColor: 'rgba(0,0,0,0.6)',
-            borderRadius: '2px',
-            overflow: 'hidden',
+            display: 'flex',
+            justifyContent: overlay.style?.textAlign === 'left' ? 'flex-start' : overlay.style?.textAlign === 'right' ? 'flex-end' : 'center',
+            pointerEvents: 'none',
           }}>
             <div style={{
-              color: textOverlay.style?.color || '#fff',
-              fontSize: '7px',
-              fontWeight: textOverlay.style?.fontWeight || '600',
-              fontFamily: textOverlay.style?.fontFamily || 'Inter, sans-serif',
-              textAlign: 'center',
-              lineHeight: '1.2',
+              color: overlay.style?.color || '#fff',
+              fontSize: '9px',
+              fontWeight: overlay.style?.fontWeight || '600',
+              fontFamily: overlay.style?.fontFamily || 'Inter, sans-serif',
+              textAlign: overlay.style?.textAlign || 'center',
+              lineHeight: '1.1',
+              textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.6)',
+              WebkitTextStroke: overlay.style?.outline ? '0.3px rgba(0,0,0,0.5)' : 'none',
               overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              textShadow: textOverlay.style?.outline ? '0 0 2px rgba(0,0,0,0.8)' : 'none',
+              display: '-webkit-box',
+              WebkitLineClamp: 3,
+              WebkitBoxOrient: 'vertical',
+              wordBreak: 'break-word',
+              padding: '0 1px',
             }}>
-              {textOverlay.text}
+              {overlay.text}
             </div>
           </div>
-        )}
+        ))}
       </div>
     );
   };
