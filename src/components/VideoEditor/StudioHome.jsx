@@ -10,7 +10,7 @@
  * - Audio-optional workflow
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 // OnboardingModal removed - auto-setup happens in VideoStudio
 import LibraryBrowser from './LibraryBrowser';
 import CollectionPicker from './CollectionPicker';
@@ -893,6 +893,18 @@ const StudioHome = ({
   const libraryAudio = library.filter(m => m.type === MEDIA_TYPES.AUDIO);
   const libraryImages = library.filter(m => m.type === MEDIA_TYPES.IMAGE);
 
+  // Audio filtered by selected collection for the sidebar bank
+  const sidebarAudio = useMemo(() => {
+    const allAudio = library.filter(m => m.type === MEDIA_TYPES.AUDIO);
+    if (!selectedCollection) return allAudio;
+    const col = collections.find(c => c.id === selectedCollection);
+    if (!col?.mediaIds?.length) return allAudio;
+    const filtered = allAudio.filter(a =>
+      col.mediaIds.includes(a.id) || (a.collectionIds || []).includes(selectedCollection)
+    );
+    return filtered;
+  }, [library, collections, selectedCollection]);
+
   // =====================
   // STYLES
   // =====================
@@ -1096,6 +1108,60 @@ const StudioHome = ({
     uploadProgress: {
       fontSize: '14px',
       color: 'rgba(255, 255, 255, 0.5)'
+    },
+    audioSidebar: {
+      width: '280px',
+      flexShrink: 0,
+      borderLeft: '1px solid rgba(255,255,255,0.1)',
+      backgroundColor: '#0d0d14',
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden'
+    },
+    audioSidebarHeader: {
+      padding: '14px 16px',
+      borderBottom: '1px solid rgba(255,255,255,0.08)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      flexShrink: 0
+    },
+    audioSidebarTitle: {
+      fontSize: '14px',
+      fontWeight: '600',
+      color: '#fff',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px'
+    },
+    audioSidebarFilter: {
+      padding: '8px 16px',
+      borderBottom: '1px solid rgba(255,255,255,0.05)',
+      fontSize: '11px',
+      color: 'rgba(255,255,255,0.4)',
+      flexShrink: 0
+    },
+    audioSidebarList: {
+      flex: 1,
+      overflowY: 'auto',
+      padding: '8px'
+    },
+    audioSidebarItem: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      padding: '10px 12px',
+      borderRadius: '8px',
+      marginBottom: '4px',
+      cursor: 'pointer',
+      fontSize: '13px',
+      transition: 'background 0.15s'
+    },
+    audioSidebarEmpty: {
+      padding: '24px 16px',
+      textAlign: 'center',
+      color: 'rgba(255,255,255,0.25)',
+      fontSize: '12px'
     }
   };
 
@@ -1507,6 +1573,97 @@ const StudioHome = ({
             </div>
           )}
         </div>
+
+        {/* Audio Bank Sidebar — visible in video & slideshow modes */}
+        {(studioMode === 'videos' || studioMode === 'slideshows') && activeTab === 'media' && (
+          <div style={styles.audioSidebar}>
+            {/* Header */}
+            <div style={styles.audioSidebarHeader}>
+              <span style={styles.audioSidebarTitle}>
+                🎵 Audio Bank
+              </span>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '4px 10px', borderRadius: '6px',
+                backgroundColor: 'rgba(99,102,241,0.2)', border: 'none',
+                color: '#a5b4fc', fontSize: '11px', fontWeight: 500,
+                cursor: 'pointer'
+              }}>
+                ⬆️ Upload
+                <input
+                  type="file"
+                  accept=".mp3,audio/mpeg"
+                  onChange={handleAudioUpload}
+                  style={{ display: 'none' }}
+                />
+              </label>
+            </div>
+
+            {/* Filter indicator */}
+            <div style={styles.audioSidebarFilter}>
+              {selectedCollection
+                ? `Showing: ${collections.find(c => c.id === selectedCollection)?.name || 'Collection'}`
+                : 'Showing: All Audio'}
+              {' '}({sidebarAudio.length})
+            </div>
+
+            {/* Audio list */}
+            <div style={styles.audioSidebarList}>
+              {sidebarAudio.length === 0 ? (
+                <div style={styles.audioSidebarEmpty}>
+                  {selectedCollection
+                    ? 'No audio in this collection yet. Upload audio to add it here.'
+                    : 'No audio uploaded yet.'}
+                </div>
+              ) : (
+                sidebarAudio.map(audio => {
+                  const isSelected = selectedMedia.audio?.id === audio.id;
+                  return (
+                    <div
+                      key={audio.id}
+                      onClick={() => handleSelectMedia(audio)}
+                      style={{
+                        ...styles.audioSidebarItem,
+                        backgroundColor: isSelected
+                          ? 'rgba(99,102,241,0.2)'
+                          : 'rgba(255,255,255,0.03)'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isSelected) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)';
+                      }}
+                    >
+                      <span style={{
+                        width: '32px', height: '32px', borderRadius: '6px',
+                        background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '14px', flexShrink: 0
+                      }}>🎵</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontSize: '12px', fontWeight: 500, color: '#fff',
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                        }}>
+                          {audio.name}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)' }}>
+                          {audio.duration
+                            ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}`
+                            : '—'}
+                        </div>
+                      </div>
+                      {isSelected && (
+                        <span style={{ color: '#6366f1', fontSize: '14px', flexShrink: 0 }}>✓</span>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Batch Generate Modal */}
