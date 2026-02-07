@@ -3159,6 +3159,91 @@ const StickToMusic = () => {
               );
             }
 
+            // Group artists by their operator/owner
+            const grouped = {};
+            displayArtists.forEach(artist => {
+              const ownerId = artist.ownerOperatorId || '_unassigned';
+              if (!grouped[ownerId]) grouped[ownerId] = [];
+              grouped[ownerId].push(artist);
+            });
+
+            // Build section labels: find operator name from allowedUsers, or "Conductor" for conductor-owned
+            const getOwnerLabel = (ownerId) => {
+              if (ownerId === '_unassigned') return 'Unassigned';
+              // Check if this owner is a conductor
+              const ownerUser = allowedUsers.find(u => u.id === ownerId);
+              if (ownerUser && CONDUCTOR_EMAILS.includes(ownerUser.email?.toLowerCase())) {
+                return `Conductor — ${ownerUser.name || ownerUser.email}`;
+              }
+              if (ownerUser) {
+                return `Operator — ${ownerUser.name || ownerUser.email}`;
+              }
+              return 'Operator';
+            };
+
+            // Sort sections: Conductor first, then operators alphabetically, unassigned last
+            const sectionOrder = Object.keys(grouped).sort((a, b) => {
+              if (a === '_unassigned') return 1;
+              if (b === '_unassigned') return -1;
+              const labelA = getOwnerLabel(a);
+              const labelB = getOwnerLabel(b);
+              if (labelA.startsWith('Conductor')) return -1;
+              if (labelB.startsWith('Conductor')) return 1;
+              return labelA.localeCompare(labelB);
+            });
+
+            // Render an artist card
+            const renderArtistCard = (artist) => (
+              <div
+                key={artist.id}
+                className={`bg-zinc-900 border rounded-xl p-4 sm:p-6 transition cursor-pointer hover:border-zinc-600 ${
+                  currentArtistId === artist.id ? 'border-violet-500' : 'border-zinc-800'
+                }`}
+                onClick={() => handleArtistChange(artist.id)}
+              >
+                <div className="flex flex-col md:flex-row justify-between gap-4">
+                  <div className="flex items-center gap-3 sm:gap-4">
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-base sm:text-lg font-bold shrink-0 ${
+                      currentArtistId === artist.id ? 'bg-violet-600 text-white' : 'bg-zinc-800'
+                    }`}>
+                      {artist.name[0]}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-base sm:text-lg font-semibold">{artist.name}</h3>
+                        {currentArtistId === artist.id && (
+                          <span className="px-2 py-0.5 bg-violet-500/20 text-violet-400 text-xs rounded-full">Active</span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-x-2 gap-y-1 text-xs sm:text-sm text-zinc-500">
+                        <span>{artist.tier}</span>
+                        {artist.cdTier && <><span className="hidden sm:inline">•</span><span>{artist.cdTier}</span></>}
+                        <span>•</span>
+                        <span>Since {artist.activeSince}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 sm:gap-6 overflow-x-auto pb-1 -mb-1">
+                    <div className="text-center shrink-0">
+                      <p className="text-xl sm:text-2xl font-bold">{artist.totalPages || 0}</p>
+                      <p className="text-xs text-zinc-500">Pages</p>
+                    </div>
+                    <div className="text-center shrink-0">
+                      <p className="text-xl sm:text-2xl font-bold">{formatNumber(artist.metrics?.views || 0)}</p>
+                      <p className="text-xs text-zinc-500">Views</p>
+                    </div>
+                    <div className="text-center shrink-0">
+                      <p className="text-xl sm:text-2xl font-bold">{artist.metrics?.rate || 0}%</p>
+                      <p className="text-xs text-zinc-500">Eng. Rate</p>
+                    </div>
+                    <span className={`px-2 sm:px-3 py-1 rounded-full text-xs shrink-0 ${getStatusColor(artist.status)}`}>
+                      {artist.status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+
             return (
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
@@ -3185,56 +3270,24 @@ const StickToMusic = () => {
                     actionLabel="Add Artist"
                     onAction={() => setShowAddArtistModal(true)}
                   />
-                ) : displayArtists.map((artist) => (
-                  <div
-                    key={artist.id}
-                    className={`bg-zinc-900 border rounded-xl p-4 sm:p-6 transition cursor-pointer hover:border-zinc-600 ${
-                      currentArtistId === artist.id ? 'border-violet-500' : 'border-zinc-800'
-                    }`}
-                    onClick={() => handleArtistChange(artist.id)}
-                  >
-                    <div className="flex flex-col md:flex-row justify-between gap-4">
-                      <div className="flex items-center gap-3 sm:gap-4">
-                        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-base sm:text-lg font-bold shrink-0 ${
-                          currentArtistId === artist.id ? 'bg-violet-600 text-white' : 'bg-zinc-800'
-                        }`}>
-                          {artist.name[0]}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="text-base sm:text-lg font-semibold">{artist.name}</h3>
-                            {currentArtistId === artist.id && (
-                              <span className="px-2 py-0.5 bg-violet-500/20 text-violet-400 text-xs rounded-full">Active</span>
-                            )}
-                          </div>
-                          <div className="flex flex-wrap gap-x-2 gap-y-1 text-xs sm:text-sm text-zinc-500">
-                            <span>{artist.tier}</span>
-                            {artist.cdTier && <><span className="hidden sm:inline">•</span><span>{artist.cdTier}</span></>}
-                            <span>•</span>
-                            <span>Since {artist.activeSince}</span>
-                          </div>
-                        </div>
+                ) : sectionOrder.length <= 1 ? (
+                  // Single group — no need for section headers
+                  grouped[sectionOrder[0]]?.map(renderArtistCard)
+                ) : (
+                  // Multiple groups — show section headers
+                  sectionOrder.map(ownerId => (
+                    <div key={ownerId} className="space-y-3">
+                      <div className="flex items-center gap-3 pt-2">
+                        <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                          {getOwnerLabel(ownerId)}
+                        </h2>
+                        <span className="text-xs text-zinc-600">({grouped[ownerId].length})</span>
+                        <div className="flex-1 border-t border-zinc-800" />
                       </div>
-                      <div className="flex items-center gap-4 sm:gap-6 overflow-x-auto pb-1 -mb-1">
-                        <div className="text-center shrink-0">
-                          <p className="text-xl sm:text-2xl font-bold">{artist.totalPages || 0}</p>
-                          <p className="text-xs text-zinc-500">Pages</p>
-                        </div>
-                        <div className="text-center shrink-0">
-                          <p className="text-xl sm:text-2xl font-bold">{formatNumber(artist.metrics?.views || 0)}</p>
-                          <p className="text-xs text-zinc-500">Views</p>
-                        </div>
-                        <div className="text-center shrink-0">
-                          <p className="text-xl sm:text-2xl font-bold">{artist.metrics?.rate || 0}%</p>
-                          <p className="text-xs text-zinc-500">Eng. Rate</p>
-                        </div>
-                        <span className={`px-2 sm:px-3 py-1 rounded-full text-xs shrink-0 ${getStatusColor(artist.status)}`}>
-                          {artist.status}
-                        </span>
-                      </div>
+                      {grouped[ownerId].map(renderArtistCard)}
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             );
           })()}
