@@ -765,7 +765,7 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
   // Render a mini slide thumbnail with text overlay
   const renderMiniSlide = (slide, idx) => {
     const thumb = getSlideThumb(slide);
-    const textOverlay = getSlideText(slide);
+    const visibleOverlays = (slide?.textOverlays || []).filter(o => o.text && o.text !== 'Click to edit' && o.text !== 'New Text');
     return (
       <div key={idx} style={{
         position: 'relative',
@@ -783,37 +783,49 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
             <span style={{ color: '#4b5563', fontSize: '10px' }}>{idx + 1}</span>
           </div>
         )}
-        {/* Text overlays rendered on the image */}
-        {slide?.textOverlays?.filter(o => o.text && o.text !== 'Click to edit' && o.text !== 'New Text').map((overlay, oi) => (
-          <div key={oi} style={{
+        {/* Text overlays rendered on the image — shown as readable pills */}
+        {visibleOverlays.length > 0 && (
+          <div style={{
             position: 'absolute',
-            top: `${Math.max(5, Math.min(90, (overlay.position?.y || 50) - 10))}%`,
-            left: '2px',
-            right: '2px',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
             display: 'flex',
-            justifyContent: overlay.style?.textAlign === 'left' ? 'flex-start' : overlay.style?.textAlign === 'right' ? 'flex-end' : 'center',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: '2px',
+            padding: '4px 2px',
             pointerEvents: 'none',
           }}>
-            <div style={{
-              color: overlay.style?.color || '#fff',
-              fontSize: '9px',
-              fontWeight: overlay.style?.fontWeight || '600',
-              fontFamily: overlay.style?.fontFamily || 'Inter, sans-serif',
-              textAlign: overlay.style?.textAlign || 'center',
-              lineHeight: '1.1',
-              textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.6)',
-              WebkitTextStroke: overlay.style?.outline ? '0.3px rgba(0,0,0,0.5)' : 'none',
-              overflow: 'hidden',
-              display: '-webkit-box',
-              WebkitLineClamp: 3,
-              WebkitBoxOrient: 'vertical',
-              wordBreak: 'break-word',
-              padding: '0 1px',
-            }}>
-              {overlay.text}
-            </div>
+            {visibleOverlays.slice(0, 3).map((overlay, oi) => (
+              <div key={oi} style={{
+                backgroundColor: 'rgba(0,0,0,0.6)',
+                borderRadius: '3px',
+                padding: '2px 4px',
+                maxWidth: '95%',
+              }}>
+                <div style={{
+                  color: overlay.style?.color || '#fff',
+                  fontSize: '10px',
+                  fontWeight: '700',
+                  fontFamily: overlay.style?.fontFamily || 'Inter, sans-serif',
+                  textAlign: 'center',
+                  lineHeight: '1.2',
+                  textShadow: '0 1px 2px rgba(0,0,0,0.8)',
+                  overflow: 'hidden',
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  wordBreak: 'break-word',
+                }}>
+                  {overlay.text}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </div>
     );
   };
