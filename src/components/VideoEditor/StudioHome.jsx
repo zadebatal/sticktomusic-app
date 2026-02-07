@@ -1537,6 +1537,41 @@ const StudioHome = ({
         </div>
 
         <div style={styles.headerRight}>
+          {/* View Drafts button — shown when in video or slideshow mode and drafts exist */}
+          {(studioMode === 'videos' && draftVideos.length > 0) && (
+            <button
+              onClick={() => onViewContent?.({ type: 'videos' })}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '7px 14px', borderRadius: '8px',
+                backgroundColor: 'rgba(99, 102, 241, 0.15)',
+                border: '1px solid rgba(99, 102, 241, 0.3)',
+                color: '#a5b4fc', fontSize: '13px', fontWeight: 500,
+                cursor: 'pointer', transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.25)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.15)'; }}
+            >
+              📝 Drafts ({draftVideos.length})
+            </button>
+          )}
+          {(studioMode === 'slideshows' && draftSlideshows.length > 0) && (
+            <button
+              onClick={() => onViewContent?.({ type: 'slideshows' })}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '7px 14px', borderRadius: '8px',
+                backgroundColor: 'rgba(236, 72, 153, 0.15)',
+                border: '1px solid rgba(236, 72, 153, 0.3)',
+                color: '#f9a8d4', fontSize: '13px', fontWeight: 500,
+                cursor: 'pointer', transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(236, 72, 153, 0.25)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(236, 72, 153, 0.15)'; }}
+            >
+              📝 Drafts ({draftSlideshows.length})
+            </button>
+          )}
         </div>
       </div>
 
