@@ -1745,15 +1745,16 @@ const StudioHome = ({
 
         </div>
 
-        {/* Right Panel — 3 columns: Audio Bank | Lyrics | Captions/Hashtags */}
+        {/* Right Panel — Audio Bank always, Lyrics + Captions only when collection selected */}
         {(studioMode === 'videos' || studioMode === 'slideshows') && (
           <div style={{
             display: 'flex',
-            width: '780px',
+            width: selectedCollection ? '780px' : '260px',
             flexShrink: 0,
             borderLeft: '1px solid rgba(255,255,255,0.1)',
             backgroundColor: '#0d0d14',
-            overflow: 'hidden'
+            overflow: 'hidden',
+            transition: 'width 0.2s ease'
           }}>
 
             {/* ── Audio Bank Column ── */}
@@ -1762,7 +1763,7 @@ const StudioHome = ({
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
-              borderRight: '1px solid rgba(255,255,255,0.08)'
+              borderRight: selectedCollection ? '1px solid rgba(255,255,255,0.08)' : 'none'
             }}>
               <div style={{
                 padding: '10px 12px',
@@ -1874,75 +1875,73 @@ const StudioHome = ({
               </div>
             </div>
 
-            {/* ── Lyrics Column ── */}
-            <div style={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              borderRight: '1px solid rgba(255,255,255,0.08)'
-            }}>
+            {/* ── Lyrics Column (only when collection selected) ── */}
+            {selectedCollection && (
               <div style={{
-                padding: '10px 12px',
-                borderBottom: '1px solid rgba(255,255,255,0.08)',
+                flex: 1,
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexShrink: 0
+                flexDirection: 'column',
+                overflow: 'hidden',
+                borderRight: '1px solid rgba(255,255,255,0.08)'
               }}>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>
-                  📝 Lyrics
-                </span>
-                <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)' }}>
-                  {lyrics.length} saved
-                </span>
+                <div style={{
+                  padding: '10px 12px',
+                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexShrink: 0
+                }}>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>
+                    📝 Lyrics
+                  </span>
+                  <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)' }}>
+                    {lyrics.length} saved
+                  </span>
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px' }}>
+                  <LyricBank
+                    lyrics={lyrics}
+                    onAddLyrics={handleAddLyrics}
+                    onUpdateLyrics={handleUpdateLyrics}
+                    onDeleteLyrics={handleDeleteLyrics}
+                    onSelectLyrics={(l) => console.log('Selected lyrics:', l)}
+                    compact
+                  />
+                </div>
               </div>
-              <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px' }}>
-                <LyricBank
-                  lyrics={lyrics}
-                  onAddLyrics={handleAddLyrics}
-                  onUpdateLyrics={handleUpdateLyrics}
-                  onDeleteLyrics={handleDeleteLyrics}
-                  onSelectLyrics={(l) => console.log('Selected lyrics:', l)}
-                  compact
-                />
-              </div>
-            </div>
+            )}
 
-            {/* ── Captions / Hashtags Column ── */}
-            <div style={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden'
-            }}>
+            {/* ── Captions / Hashtags Column (only when collection selected) ── */}
+            {selectedCollection && (
               <div style={{
-                padding: '10px 12px',
-                borderBottom: '1px solid rgba(255,255,255,0.08)',
+                flex: 1,
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexShrink: 0
+                flexDirection: 'column',
+                overflow: 'hidden'
               }}>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>
-                  #️⃣ Captions / Hashtags
-                </span>
-              </div>
-              <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px' }}>
-                {selectedCollection ? (
+                <div style={{
+                  padding: '10px 12px',
+                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexShrink: 0
+                }}>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>
+                    #️⃣ Captions / Hashtags
+                  </span>
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px' }}>
                   <CollectionBankEditor
                     collection={collections.find(c => c.id === selectedCollection)}
                     artistId={artistId}
                     onBankChange={() => setCollections(getCollections(artistId))}
                     compact
                   />
-                ) : (
-                  <div style={{ padding: '24px 8px', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '11px' }}>
-                    Select a collection to manage captions and hashtags
-                  </div>
-                )}
+                </div>
               </div>
-            </div>
+            )}
 
           </div>
         )}
