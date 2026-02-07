@@ -237,7 +237,7 @@ const SaveToLibraryButton = ({
                   style={styles.select}
                 >
                   <option value="">No collection</option>
-                  {collections.map(col => (
+                  {collections.filter(c => c.type !== 'smart').map(col => (
                     <option key={col.id} value={col.id}>
                       {col.name}
                     </option>

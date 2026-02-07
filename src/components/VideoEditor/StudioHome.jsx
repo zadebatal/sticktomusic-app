@@ -2270,12 +2270,12 @@ const StudioHome = ({
                             <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)', marginBottom: '3px', padding: '0 2px' }}>
                               Add to collection:
                             </div>
-                            {collections.length === 0 ? (
+                            {collections.filter(c => c.type !== 'smart').length === 0 ? (
                               <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.2)', padding: '4px 2px' }}>
                                 No collections yet
                               </div>
                             ) : (
-                              collections.map(col => {
+                              collections.filter(c => c.type !== 'smart').map(col => {
                                 const inCol = audio.collectionIds?.includes(col.id);
                                 return (
                                   <div
