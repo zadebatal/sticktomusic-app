@@ -571,8 +571,7 @@ const LibraryBrowser = ({
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const progress = ((i + 1) / files.length) * 100;
-        setUploadProgress(progress);
+        const basePercent = (i / files.length) * 100;
 
         // Determine media type
         let type;
@@ -583,8 +582,11 @@ const LibraryBrowser = ({
 
         console.log('[LibraryBrowser] Uploading file:', file.name, 'type:', type);
 
-        // Upload to Firebase
-        const result = await uploadFile(file, type + 's');
+        // Upload to Firebase with progress tracking
+        const result = await uploadFile(file, type + 's', (filePercent) => {
+          const overall = Math.round(basePercent + (filePercent / files.length));
+          setUploadProgress(Math.min(overall, 99));
+        });
         console.log('[LibraryBrowser] Firebase upload result:', result);
 
         // Get duration for video/audio
@@ -654,8 +656,11 @@ const LibraryBrowser = ({
       console.error('[LibraryBrowser] Upload failed:', error);
       alert('Upload failed: ' + error.message);
     } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
+      setUploadProgress(100);
+      setTimeout(() => {
+        setIsUploading(false);
+        setUploadProgress(0);
+      }, 400);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -1087,16 +1092,17 @@ const LibraryBrowser = ({
       zIndex: 100
     },
     progressBar: {
-      width: '200px',
-      height: '4px',
+      width: '240px',
+      height: '6px',
       backgroundColor: 'rgba(255, 255, 255, 0.1)',
-      borderRadius: '2px',
+      borderRadius: '3px',
       overflow: 'hidden'
     },
     progressFill: {
       height: '100%',
-      backgroundColor: '#6366f1',
-      transition: 'width 0.3s'
+      background: 'linear-gradient(90deg, #6366f1, #818cf8)',
+      borderRadius: '3px',
+      transition: 'width 0.3s ease'
     },
     contextMenu: {
       position: 'fixed',
@@ -2011,10 +2017,13 @@ const LibraryBrowser = ({
       {/* Upload Progress Overlay */}
       {isUploading && (
         <div style={styles.uploadOverlay}>
-          <div style={{ fontSize: '24px' }}>⬆️</div>
-          <div>Uploading...</div>
+          <div style={{ fontSize: '24px', marginBottom: '8px' }}>⬆️</div>
+          <div style={{ fontSize: '14px', color: '#fff', marginBottom: '12px' }}>Uploading...</div>
           <div style={styles.progressBar}>
             <div style={{ ...styles.progressFill, width: `${uploadProgress}%` }} />
+          </div>
+          <div style={{ fontSize: '18px', fontWeight: '600', color: '#fff', marginTop: '8px' }}>
+            {Math.round(uploadProgress)}%
           </div>
         </div>
       )}

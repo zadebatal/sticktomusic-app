@@ -81,7 +81,7 @@ const StudioHome = ({
 
   // Upload State
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0, percent: 0 });
   const [libraryRefreshTrigger, setLibraryRefreshTrigger] = useState(0);
 
   // Toast for non-blocking feedback (H-02: replaces alert())
@@ -369,7 +369,7 @@ const StudioHome = ({
     }
 
     setIsUploading(true);
-    setUploadProgress({ current: 0, total: files.length });
+    setUploadProgress({ current: 0, total: files.length, percent: 0 });
     cancelFunctionsRef.current = [];
 
     const uploadedItems = [];
@@ -377,16 +377,20 @@ const StudioHome = ({
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      setUploadProgress({ current: i + 1, total: files.length, name: file.name });
+      const basePercent = (i / files.length) * 100;
+      setUploadProgress({ current: i + 1, total: files.length, name: file.name, percent: Math.round(basePercent) });
 
       try {
         console.log('[StudioHome] Uploading file:', file.name, 'size:', file.size, 'type:', file.type);
 
-        // Upload to Firebase
+        // Upload to Firebase with progress tracking
         const folder = type === MEDIA_TYPES.VIDEO ? 'videos'
           : type === MEDIA_TYPES.IMAGE ? 'images' : 'audio';
         console.log('[StudioHome] Calling uploadFile to folder:', folder);
-        const { url, path } = await uploadFile(file, folder, null, {
+        const { url, path } = await uploadFile(file, folder, (filePercent) => {
+          const overall = Math.round(basePercent + (filePercent / files.length));
+          setUploadProgress(prev => ({ ...prev, percent: Math.min(overall, 99) }));
+        }, {
           onCancel: (cancelFn) => {
             cancelFunctionsRef.current.push(cancelFn);
           }
@@ -560,8 +564,11 @@ const StudioHome = ({
       console.log('[StudioHome] Upload complete!', uploadedItems.length, 'files added to library');
     }
 
-    setIsUploading(false);
-    setUploadProgress({ current: 0, total: 0 });
+    setUploadProgress(prev => ({ ...prev, percent: 100 }));
+    setTimeout(() => {
+      setIsUploading(false);
+      setUploadProgress({ current: 0, total: 0, percent: 0 });
+    }, 400);
   };
 
   const handleVideoUpload = (e) => {
@@ -625,10 +632,13 @@ const StudioHome = ({
     }
 
     setIsUploading(true);
+    setUploadProgress({ current: 1, total: 1, name: pendingAudio.name, percent: 0 });
     cancelFunctionsRef.current = [];
 
     try {
-      const { url, path } = await uploadFile(pendingAudio.file, 'audio', null, {
+      const { url, path } = await uploadFile(pendingAudio.file, 'audio', (pct) => {
+        setUploadProgress(prev => ({ ...prev, percent: Math.min(Math.round(pct), 99) }));
+      }, {
         onCancel: (cancelFn) => {
           cancelFunctionsRef.current.push(cancelFn);
         }
@@ -671,7 +681,11 @@ const StudioHome = ({
     }
 
     setPendingAudio(null);
-    setIsUploading(false);
+    setUploadProgress(prev => ({ ...prev, percent: 100 }));
+    setTimeout(() => {
+      setIsUploading(false);
+      setUploadProgress({ current: 0, total: 0, percent: 0 });
+    }, 400);
   };
 
   const handleClipCancel = () => {
@@ -1169,9 +1183,10 @@ const StudioHome = ({
     uploadModal: {
       backgroundColor: '#1a1a1a',
       borderRadius: '16px',
-      padding: '32px',
+      padding: '32px 40px',
       textAlign: 'center',
-      minWidth: '280px'
+      minWidth: '360px',
+      maxWidth: '420px'
     },
     uploadIcon: {
       fontSize: '48px',
@@ -1854,29 +1869,51 @@ const StudioHome = ({
         <div style={styles.uploadOverlay}>
           <div style={styles.uploadModal}>
             <div style={styles.uploadIcon}>⬆️</div>
-            <div style={styles.uploadText}>Uploading...</div>
+            <div style={styles.uploadText}>
+              Uploading{uploadProgress.total > 1 ? ` ${uploadProgress.current} of ${uploadProgress.total}` : ''}...
+            </div>
+            {/* Progress Bar */}
+            <div style={{
+              width: '100%', height: '8px', backgroundColor: 'rgba(255,255,255,0.1)',
+              borderRadius: '4px', overflow: 'hidden', margin: '16px 0 8px'
+            }}>
+              <div style={{
+                height: '100%',
+                width: `${uploadProgress.percent || 0}%`,
+                background: 'linear-gradient(90deg, #6366f1, #818cf8)',
+                borderRadius: '4px',
+                transition: 'width 0.3s ease'
+              }} />
+            </div>
+            {/* Percentage + file name */}
+            <div style={{ fontSize: '20px', fontWeight: '600', color: '#ffffff', marginBottom: '4px' }}>
+              {Math.round(uploadProgress.percent || 0)}%
+            </div>
             <div style={styles.uploadProgress}>
-              {uploadProgress.current} of {uploadProgress.total}
-              {uploadProgress.name && ` - ${uploadProgress.name}`}
+              {uploadProgress.name && (
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: '340px' }}>
+                  {uploadProgress.name}
+                </span>
+              )}
             </div>
             <button
               onClick={handleCancelUpload}
               style={{
-                marginTop: '24px',
-                padding: '10px 24px',
-                backgroundColor: '#ef4444',
-                border: 'none',
+                marginTop: '20px',
+                padding: '8px 20px',
+                backgroundColor: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.2)',
                 borderRadius: '8px',
-                color: '#ffffff',
-                fontSize: '14px',
+                color: 'rgba(255,255,255,0.6)',
+                fontSize: '13px',
                 fontWeight: '500',
                 cursor: 'pointer',
-                transition: 'background-color 0.2s'
+                transition: 'all 0.2s'
               }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#ef4444'; e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#fff'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; }}
             >
-              Cancel Upload
+              Cancel
             </button>
           </div>
         </div>
