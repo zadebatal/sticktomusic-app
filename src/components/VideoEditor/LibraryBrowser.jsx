@@ -1223,6 +1223,28 @@ const LibraryBrowser = ({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Format date added — shows relative for recent, short date for older
+  const formatDateAdded = (isoDate) => {
+    if (!isoDate) return null;
+    const date = new Date(isoDate);
+    if (isNaN(date.getTime())) return null;
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHrs = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHrs < 24) return `${diffHrs}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+    // Show short month + day for older items
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const yr = date.getFullYear();
+    const short = `${months[date.getMonth()]} ${date.getDate()}`;
+    return yr === now.getFullYear() ? short : `${short}, ${yr}`;
+  };
+
   // Bank-specific handlers
   const handleToggleBankSelect = (bank, mediaId) => {
     setSelectedBankItems(prev => {
@@ -1442,6 +1464,29 @@ const LibraryBrowser = ({
         <div style={styles.audioPlaceholder}>🎵</div>
       )}
       <div style={styles.mediaTypeIcon}>{getTypeIcon(media.type)}</div>
+      {/* Date added badge */}
+      {formatDateAdded(media.createdAt) && (
+        <div style={{
+          position: 'absolute',
+          top: '6px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
+          borderRadius: '10px',
+          padding: '2px 7px',
+          fontSize: '9px',
+          fontWeight: 500,
+          color: 'rgba(255, 255, 255, 0.6)',
+          whiteSpace: 'nowrap',
+          pointerEvents: 'none',
+          zIndex: 2,
+          letterSpacing: '0.2px'
+        }}>
+          {formatDateAdded(media.createdAt)}
+        </div>
+      )}
       <button
         style={{
           ...styles.favoriteButton,
