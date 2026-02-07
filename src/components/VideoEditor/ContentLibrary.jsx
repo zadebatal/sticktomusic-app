@@ -433,7 +433,7 @@ const ContentLibrary = ({
       {/* Slideshow Posting Modal */}
       {showSlideshowPostingModal && (
         <SlideshowPostingModal
-          slideshows={postingSlideshow ? [postingSlideshow] : selectedItems.filter(s => s.exportedImages?.length > 0)}
+          slideshows={postingSlideshow ? [postingSlideshow] : selectedItems}
           lateAccountIds={lateAccountIds}
           onSchedulePost={onSchedulePost}
           onClose={() => {
@@ -978,38 +978,54 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
 
     try {
       // Schedule each slideshow as a carousel post
+      let scheduled = 0;
       for (const slideshow of slideshows) {
-        if (!slideshow.exportedImages?.length) continue;
-
-        // Get the appropriate account ID based on platform
-        const platformAccountId = platforms.tiktok
-          ? accountMapping.tiktok
-          : accountMapping.instagram;
-
-        if (!platformAccountId) {
-          console.warn(`No account ID for selected platform on ${selectedHandle}`);
+        const images = getCarouselImages(slideshow);
+        if (!images.length) {
+          console.warn('Slideshow has no images, skipping:', slideshow.id);
           continue;
         }
 
-        // Create scheduled date
-        const scheduledTime = new Date(`${scheduleDate}T${scheduleTime}`);
+        // Build platforms array for Late API
+        const platformsPayload = [];
+        const scheduledFor = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
+
+        if (platforms.instagram && accountMapping.instagram) {
+          platformsPayload.push({
+            platform: 'instagram',
+            accountId: accountMapping.instagram,
+            customContent: `${caption}\n\n${hashtags}`.trim(),
+            scheduledFor
+          });
+        }
+        if (platforms.tiktok && accountMapping.tiktok) {
+          platformsPayload.push({
+            platform: 'tiktok',
+            accountId: accountMapping.tiktok,
+            customContent: `${caption}\n\n${hashtags}`.trim(),
+            scheduledFor
+          });
+        }
+
+        if (!platformsPayload.length) {
+          console.warn(`No account IDs for selected platforms on ${selectedHandle}`);
+          continue;
+        }
 
         // Schedule the post via onSchedulePost
         if (onSchedulePost) {
           await onSchedulePost({
             type: 'carousel',
-            slideshow: slideshow,
-            images: slideshow.exportedImages,
-            handle: selectedHandle,
-            accountId: platformAccountId,
-            platforms,
-            scheduledTime: scheduledTime.toISOString(),
-            caption: `${caption}\n\n${hashtags}`.trim()
+            platforms: platformsPayload,
+            caption: `${caption}\n\n${hashtags}`.trim(),
+            images: images,
+            scheduledFor,
           });
         }
+        scheduled++;
       }
 
-      alert(`Scheduled ${slideshows.length} carousel post${slideshows.length > 1 ? 's' : ''}!`);
+      alert(`Scheduled ${scheduled} carousel post${scheduled > 1 ? 's' : ''}!`);
       onClose();
     } catch (err) {
       console.error('[SlideshowPostingModal] Schedule failed:', err);
@@ -1019,8 +1035,20 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
     }
   };
 
+  // Get carousel images: prefer exportedImages, fall back to slide thumbnails
+  const getCarouselImages = (slideshow) => {
+    if (slideshow.exportedImages?.length > 0) return slideshow.exportedImages;
+    // Use slide background images as the carousel images
+    return (slideshow.slides || [])
+      .map(slide => {
+        const url = slide?.imageA?.url || slide?.imageA?.localUrl || slide?.thumbnail || slide?.backgroundImage;
+        return url ? { url, type: 'image' } : null;
+      })
+      .filter(Boolean);
+  };
+
   // Total images across all slideshows
-  const totalImages = slideshows.reduce((sum, s) => sum + (s.exportedImages?.length || 0), 0);
+  const totalImages = slideshows.reduce((sum, s) => sum + getCarouselImages(s).length, 0);
 
   return (
     <div style={slideshowPostingStyles.overlay}>
@@ -1046,14 +1074,18 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
         {/* Preview */}
         <div style={slideshowPostingStyles.preview}>
           <div style={slideshowPostingStyles.previewImages}>
-            {slideshows.slice(0, 3).map((slideshow, i) => (
-              <img
-                key={i}
-                src={slideshow.exportedImages?.[0]?.url || slideshow.slides?.[0]?.thumbnail}
-                alt={`Slideshow ${i + 1}`}
-                style={slideshowPostingStyles.previewImg}
-              />
-            ))}
+            {slideshows.slice(0, 3).map((slideshow, i) => {
+              const imgs = getCarouselImages(slideshow);
+              const previewUrl = imgs[0]?.url;
+              return previewUrl ? (
+                <img
+                  key={i}
+                  src={previewUrl}
+                  alt={`Slideshow ${i + 1}`}
+                  style={slideshowPostingStyles.previewImg}
+                />
+              ) : null;
+            })}
             {slideshows.length > 3 && (
               <div style={slideshowPostingStyles.previewMore}>+{slideshows.length - 3}</div>
             )}
@@ -1157,7 +1189,7 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
             onClick={handleSchedule}
             disabled={isScheduling || !selectedHandle}
           >
-            {isScheduling ? 'Scheduling...' : `Schedule ${slideshows.length} Post${slideshows.length > 1 ? 's' : ''}`}
+            {isScheduling ? 'Scheduling...' : `Schedule ${slideshows.length} Carousel${slideshows.length > 1 ? 's' : ''}`}
           </button>
         </div>
       </div>

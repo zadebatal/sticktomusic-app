@@ -229,25 +229,33 @@ const lateApi = {
     }
   },
 
-  async schedulePost({ platforms, caption, videoUrl, scheduledFor, artistId = null }) {
+  async schedulePost({ platforms, caption, videoUrl, scheduledFor, artistId = null, type = 'video', images = null }) {
     try {
       const token = await getFirebaseToken();
       // Validate required fields
       if (!platforms || !Array.isArray(platforms) || platforms.length === 0) {
         throw new Error('No platforms selected for posting. Please select TikTok or Instagram.');
       }
-      if (!videoUrl) {
+      if (type !== 'carousel' && !videoUrl) {
         throw new Error('No video URL provided');
+      }
+      if (type === 'carousel' && (!images || images.length === 0)) {
+        throw new Error('No carousel images provided');
       }
       if (!scheduledFor) {
         throw new Error('No schedule time provided');
       }
 
+      // Build media items based on post type
+      const mediaItems = type === 'carousel'
+        ? images.map(img => ({ type: 'image', url: img.url }))
+        : [{ type: 'video', url: videoUrl }];
+
       // Format matches Late's expected structure - both platforms in one call
       const payload = {
         action: 'posts',
         content: caption || '',
-        mediaItems: [{ type: 'video', url: videoUrl }],
+        mediaItems,
         platforms: platforms.map(p => ({
           platform: p.platform,
           accountId: p.accountId,
