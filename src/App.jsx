@@ -3170,7 +3170,7 @@ const StickToMusic = () => {
             className="flex gap-1 sm:gap-2 mb-4 sm:mb-8 border-b border-zinc-800 pb-3 sm:pb-4 overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0"
             style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
-            {['artists', 'pages', 'content', 'banks', 'campaigns'].map(tab => (
+            {['artists', 'pages', 'content', 'campaigns'].map(tab => (
               <button
                 key={tab}
                 onClick={() => { setOperatorTab(tab); setMobileMenuOpen(false); }}
@@ -3178,7 +3178,7 @@ const StickToMusic = () => {
                   operatorTab === tab ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
                 }`}
               >
-                {tab === 'banks' ? 'Banks' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
             {/* Studio - opens modal */}
@@ -5373,8 +5373,8 @@ const StickToMusic = () => {
             </div>
           )}
 
-          {/* Content Banks Tab */}
-          {operatorTab === 'banks' && (
+          {/* Content Banks Tab — REMOVED: Banks are now per-collection in Studio "Captions/Hashtags" tab */}
+          {false && operatorTab === 'banks' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div>

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import ExportAndPostModal from './ExportAndPostModal';
-import PostingModule from './PostingModule';
+import ScheduleQueue from './ScheduleQueue';
 import { StatusPill, ConfirmDialog, EmptyState as SharedEmptyState } from '../ui';
 import { VIDEO_STATUS } from '../../utils/status';
 import { renderVideo } from '../../services/videoExportService';
@@ -30,7 +30,8 @@ const ContentLibrary = ({
   onShowBatchPipeline, // Open the main batch create workflow
   // Posting module props
   accounts = [],
-  lateAccountIds = {}
+  lateAccountIds = {},
+  artistId = null
 }) => {
   const isSlideshow = contentType === 'slideshows';
   const [filter, setFilter] = useState('all');
@@ -98,12 +99,11 @@ const ContentLibrary = ({
   // UI-30: Confirm dialog for delete (supports single and bulk delete)
   const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, videoId: null, isBulk: false });
 
-  // Posting Module state
-  const [showPostingModule, setShowPostingModule] = useState(false);
+  // Schedule Queue state (replaces PostingModule + SlideshowPostingModal)
+  const [showScheduleQueue, setShowScheduleQueue] = useState(false);
 
-  // Slideshow posting state
+  // Legacy: postingSlideshow kept for single-slideshow post button
   const [postingSlideshow, setPostingSlideshow] = useState(null);
-  const [showSlideshowPostingModal, setShowSlideshowPostingModal] = useState(false);
 
   // Get content array based on type
   const items = isSlideshow
@@ -291,7 +291,7 @@ const ContentLibrary = ({
                     onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
                     onPost={() => {
                       setPostingSlideshow(item);
-                      setShowSlideshowPostingModal(true);
+                      setShowScheduleQueue(true);
                     }}
                   />
                 </div>
@@ -335,32 +335,21 @@ const ContentLibrary = ({
               </svg>
               Delete {selectedItems.length}
             </button>
-            {!isSlideshow ? (
-              <>
-                <button style={styles.batchBtnExport} onClick={() => setExportingVideo(selectedItems[0])}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-                  </svg>
-                  Export
-                </button>
-                <button style={styles.batchBtnPost} onClick={() => setShowPostingModule(true)}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-                  </svg>
-                  Schedule {selectedItems.length} Post{selectedItems.length > 1 ? 's' : ''}
-                </button>
-              </>
-            ) : (
-              <>
-                <button style={styles.batchBtnPost} onClick={() => setShowSlideshowPostingModal(true)}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-                  </svg>
-                  Schedule {selectedItems.length} Carousel{selectedItems.length > 1 ? 's' : ''}
-                </button>
-              </>
+            {!isSlideshow && (
+              <button style={styles.batchBtnExport} onClick={() => setExportingVideo(selectedItems[0])}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                Export
+              </button>
             )}
+            <button style={styles.batchBtnPost} onClick={() => setShowScheduleQueue(true)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              Schedule {selectedItems.length} {isSlideshow ? 'Carousel' : 'Post'}{selectedItems.length > 1 ? 's' : ''}
+            </button>
           </div>
         </div>
       )}
@@ -415,33 +404,22 @@ const ContentLibrary = ({
         onCancel={() => setDeleteConfirm({ isOpen: false, videoId: null, isBulk: false })}
       />
 
-      {/* Posting Module */}
-      {showPostingModule && (
-        <PostingModule
+      {/* Schedule Queue — unified scheduling for videos and slideshows */}
+      {showScheduleQueue && (
+        <ScheduleQueue
+          contentItems={postingSlideshow ? [postingSlideshow] : selectedItems}
+          contentType={isSlideshow ? 'slideshows' : 'videos'}
+          artistId={artistId}
           category={category}
-          videos={selectedVideos.length > 0 ? selectedVideos : videos}
-          accounts={accounts}
-          lateAccountIds={lateAccountIds}
           onSchedulePost={onSchedulePost}
           onRenderVideo={handleRenderVideo}
           onClose={() => {
-            setShowPostingModule(false);
-            clearSelection();
-          }}
-        />
-      )}
-
-      {/* Slideshow Posting Modal */}
-      {showSlideshowPostingModal && (
-        <SlideshowPostingModal
-          slideshows={postingSlideshow ? [postingSlideshow] : selectedItems}
-          lateAccountIds={lateAccountIds}
-          onSchedulePost={onSchedulePost}
-          onClose={() => {
-            setShowSlideshowPostingModal(false);
+            setShowScheduleQueue(false);
             setPostingSlideshow(null);
             clearSelection();
           }}
+          accounts={accounts}
+          lateAccountIds={lateAccountIds}
         />
       )}
 

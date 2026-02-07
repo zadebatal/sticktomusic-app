@@ -1972,6 +1972,7 @@ const VideoStudio = ({
             onShowBatchPipeline={() => setShowBatchPipeline(true)}
             accounts={accounts}
             lateAccountIds={lateAccountIds}
+            artistId={currentArtistId}
           />
         )}
 
@@ -1989,6 +1990,7 @@ const VideoStudio = ({
             }}
             accounts={accounts}
             lateAccountIds={lateAccountIds}
+            artistId={currentArtistId}
           />
         )}
 

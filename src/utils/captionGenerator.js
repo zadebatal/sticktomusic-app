@@ -196,6 +196,51 @@ export function generateBatchPostContent(bankName, count, options = {}) {
 }
 
 /**
+ * Generate post content from a collection's caption/hashtag bank objects directly
+ * Works with per-collection banks instead of hardcoded CONTENT_BANKS categories
+ * @param {{ always: string[], pool: string[] }} captionBank
+ * @param {{ always: string[], pool: string[] }} hashtagBank
+ * @param {Object} options
+ * @param {string} options.platform - 'tiktok' or 'instagram'
+ * @param {number} options.hashtagCount - How many hashtags from pool (default 4)
+ * @returns {Object} - { caption, hashtags, hashtagString, fullText }
+ */
+export function generateFromCollectionBanks(captionBank, hashtagBank, options = {}) {
+  const { platform = 'tiktok', hashtagCount = 4 } = options;
+
+  // Generate caption
+  const captionAlways = captionBank?.always || [];
+  const captionPool = captionBank?.pool || [];
+  const captionParts = [...captionAlways];
+  if (captionPool.length > 0) {
+    const randomIdx = Math.floor(Math.random() * captionPool.length);
+    captionParts.push(captionPool[randomIdx]);
+  }
+  const caption = captionParts.join(' ').trim();
+
+  // Generate hashtags
+  const hashtagAlways = hashtagBank?.always || [];
+  const hashtagPool = hashtagBank?.pool || [];
+  const maxTotal = platform === 'instagram' ? 10 : platform === 'youtube' ? 15 : 5;
+
+  const hashtags = [...hashtagAlways];
+  const shuffledPool = shuffleArray(hashtagPool);
+  const toAdd = Math.min(hashtagCount, maxTotal - hashtags.length, shuffledPool.length);
+  for (let i = 0; i < toAdd; i++) {
+    hashtags.push(shuffledPool[i]);
+  }
+
+  const hashtagString = hashtags.join(' ');
+
+  return {
+    caption,
+    hashtags,
+    hashtagString,
+    fullText: `${caption}\n\n${hashtagString}`.trim()
+  };
+}
+
+/**
  * Validate that a bank name is valid
  * @param {string} bankName
  * @returns {boolean}
@@ -227,6 +272,7 @@ export default {
   generateCaption,
   generatePostContent,
   generateBatchPostContent,
+  generateFromCollectionBanks,
   isValidBankName,
   assertValidBank
 };

@@ -219,6 +219,10 @@ export const createCollection = ({
     // For smart collections - query criteria
     smartCriteria: null,
 
+    // Per-collection caption and hashtag banks for scheduling
+    captionBank: { always: [], pool: [] },
+    hashtagBank: { always: [], pool: [] },
+
     // Timestamps
     createdAt: now,
     updatedAt: now
@@ -862,6 +866,58 @@ export const getCollectionBanks = (artistId, collectionId) => {
     bankB: allMedia.filter(item => bankBIds.includes(item.id)),
     unassigned: allMedia.filter(item => !bankAIds.includes(item.id) && !bankBIds.includes(item.id))
   };
+};
+
+// ============================================================================
+// COLLECTION CAPTION & HASHTAG BANKS
+// ============================================================================
+
+/**
+ * Get a collection's caption bank (with fallback for older collections)
+ * @param {Object} collection
+ * @returns {{ always: string[], pool: string[] }}
+ */
+export const getCollectionCaptionBank = (collection) => {
+  return collection?.captionBank || { always: [], pool: [] };
+};
+
+/**
+ * Get a collection's hashtag bank (with fallback for older collections)
+ * @param {Object} collection
+ * @returns {{ always: string[], pool: string[] }}
+ */
+export const getCollectionHashtagBank = (collection) => {
+  return collection?.hashtagBank || { always: [], pool: [] };
+};
+
+/**
+ * Update a collection's caption bank
+ * @param {string} artistId
+ * @param {string} collectionId
+ * @param {{ always: string[], pool: string[] }} captionBank
+ */
+export const updateCollectionCaptionBank = (artistId, collectionId, captionBank) => {
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection) return;
+  collection.captionBank = captionBank;
+  collection.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
+};
+
+/**
+ * Update a collection's hashtag bank
+ * @param {string} artistId
+ * @param {string} collectionId
+ * @param {{ always: string[], pool: string[] }} hashtagBank
+ */
+export const updateCollectionHashtagBank = (artistId, collectionId, hashtagBank) => {
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection) return;
+  collection.hashtagBank = hashtagBank;
+  collection.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
 };
 
 /**
@@ -2200,6 +2256,10 @@ export default {
   removeFromTextBank,
   updateTextBank,
   saveTextTemplates,
+  getCollectionCaptionBank,
+  getCollectionHashtagBank,
+  updateCollectionCaptionBank,
+  updateCollectionHashtagBank,
 
   // Collections (Firestore async)
   getCollectionsAsync,

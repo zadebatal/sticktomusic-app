@@ -49,6 +49,7 @@ import {
   migrateVideoThumbnails
 } from '../../services/libraryService';
 import { uploadFile, getMediaDuration } from '../../services/firebaseStorage';
+import CollectionBankEditor from './CollectionBankEditor';
 
 const StudioHome = ({
   db = null, // Firestore instance for cross-device sync
@@ -1387,6 +1388,14 @@ const StudioHome = ({
               >
                 Lyrics
               </button>
+              {selectedCollection && (
+                <button
+                  style={{...styles.tab, ...(activeTab === 'banks' ? styles.tabActive : {})}}
+                  onClick={() => setActiveTab('banks')}
+                >
+                  Captions/Hashtags
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -1762,6 +1771,20 @@ const StudioHome = ({
                 onUpdateLyrics={handleUpdateLyrics}
                 onDeleteLyrics={handleDeleteLyrics}
                 onSelectLyrics={(l) => console.log('Selected lyrics:', l)}
+              />
+            </div>
+          )}
+
+          {/* Captions/Hashtags tab — per-collection banks */}
+          {studioMode && activeTab === 'banks' && selectedCollection && (
+            <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
+              <CollectionBankEditor
+                collection={collections.find(c => c.id === selectedCollection)}
+                artistId={artistId}
+                onBankChange={() => {
+                  // Refresh collections to get updated bank data
+                  setCollections(getCollections(artistId));
+                }}
               />
             </div>
           )}
