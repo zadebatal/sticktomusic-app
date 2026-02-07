@@ -616,6 +616,42 @@ const SlideshowEditor = ({
     );
   }, [currentSlide, getRerollBank, setSlideBackground]);
 
+  // Gather all text bank items from collections for text reroll
+  const getTextBanks = useCallback(() => {
+    let textBank1 = [];
+    let textBank2 = [];
+    for (const col of collections) {
+      if (col.textBank1?.length > 0) textBank1 = [...textBank1, ...col.textBank1];
+      if (col.textBank2?.length > 0) textBank2 = [...textBank2, ...col.textBank2];
+    }
+    return { textBank1, textBank2 };
+  }, [collections]);
+
+  // Re-roll text: Replace text overlays with random text from banks
+  const handleTextReroll = useCallback((overlayId = null) => {
+    const { textBank1, textBank2 } = getTextBanks();
+    if (textBank1.length === 0 && textBank2.length === 0) return;
+
+    setSlides(prev => prev.map((slide, i) => {
+      if (i !== selectedSlideIndex) return slide;
+      const updatedOverlays = slide.textOverlays.map((overlay, idx) => {
+        // If a specific overlay ID is given, only reroll that one
+        if (overlayId && overlay.id !== overlayId) return overlay;
+
+        // First text overlay uses textBank1, second uses textBank2
+        const bank = idx === 0 ? textBank1 : idx === 1 ? textBank2 : [...textBank1, ...textBank2];
+        if (bank.length === 0) return overlay;
+
+        // Pick random text different from current if possible
+        const others = bank.filter(t => t !== overlay.text);
+        const pool = others.length > 0 ? others : bank;
+        const randomText = pool[Math.floor(Math.random() * pool.length)];
+        return { ...overlay, text: randomText };
+      });
+      return { ...slide, textOverlays: updatedOverlays };
+    }));
+  }, [selectedSlideIndex, getTextBanks]);
+
   // Audio playback controls - just add audio directly, user can trim later
   const handleSelectAudio = useCallback((audio) => {
     // Auto-open the audio editor/trimmer when audio is selected
@@ -2412,6 +2448,24 @@ const SlideshowEditor = ({
                   </button>
                 )}
 
+                {/* Re-roll Text Button (only show when slide has text overlays) */}
+                {currentSlide?.textOverlays?.length > 0 && (() => {
+                  const { textBank1, textBank2 } = getTextBanks();
+                  const hasTextBanks = textBank1.length > 0 || textBank2.length > 0;
+                  return hasTextBanks ? (
+                    <button
+                      style={styles.rerollButton}
+                      onClick={() => handleTextReroll()}
+                      title="Replace text with random text from banks"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M4 7V4h16v3M9 20h6M12 4v16"/>
+                      </svg>
+                      Reroll Text
+                    </button>
+                  ) : null;
+                })()}
+
                 {/* Add Text Button */}
                 <button style={styles.addTextButton} onClick={() => { addTextOverlay(); setShowTextEditorPanel(true); }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2652,6 +2706,8 @@ const SlideshowEditor = ({
                 editingTextId={editingTextId}
                 lyrics={lyrics}
                 templates={textTemplates}
+                textBank1={getTextBanks().textBank1}
+                textBank2={getTextBanks().textBank2}
                 onSelectText={(text) => {
                   // Add selected lyrics as text overlay using template style if set
                   const newOverlay = {
@@ -2673,6 +2729,7 @@ const SlideshowEditor = ({
                 onSelectOverlay={(overlayId) => setEditingTextId(overlayId)}
                 onUpdateOverlay={(overlayId, updates) => updateTextOverlay(overlayId, updates)}
                 onRemoveOverlay={(overlayId) => removeTextOverlay(overlayId)}
+                onRerollText={(overlayId) => handleTextReroll(overlayId)}
                 onAddLyrics={onAddLyrics}
                 onSaveTemplate={handleSaveTemplate}
                 onClose={() => {
@@ -2791,6 +2848,8 @@ const SlideshowEditor = ({
                 editingTextId={editingTextId}
                 lyrics={lyrics}
                 templates={textTemplates}
+                textBank1={getTextBanks().textBank1}
+                textBank2={getTextBanks().textBank2}
                 onSelectText={(text) => {
                   const newOverlay = {
                     id: `text_${Date.now()}`,
@@ -2860,6 +2919,7 @@ const SlideshowEditor = ({
                   ));
                   setEditingTextId(null);
                 }}
+                onRerollText={(overlayId) => handleTextReroll(overlayId)}
                 onAddLyrics={onAddLyrics}
                 onSaveTemplate={handleSaveTemplate}
                 onClose={() => setMobilePanelTab('preview')}
@@ -3385,11 +3445,14 @@ const TextEditorPanel = ({
   editingTextId,
   lyrics = [],
   templates = [],
+  textBank1 = [],
+  textBank2 = [],
   onSelectText,
   onAddTextOverlay,
   onSelectOverlay,
   onUpdateOverlay,
   onRemoveOverlay,
+  onRerollText,
   onAddLyrics,
   onSaveTemplate,
   onClose,
@@ -3439,7 +3502,10 @@ const TextEditorPanel = ({
             </button>
           </div>
         ) : (
-          textOverlays.map(overlay => (
+          textOverlays.map((overlay, idx) => {
+            const bank = idx === 0 ? textBank1 : idx === 1 ? textBank2 : [...textBank1, ...textBank2];
+            const canReroll = bank.length > 0;
+            return (
             <div
               key={overlay.id}
               style={{
@@ -3451,16 +3517,32 @@ const TextEditorPanel = ({
               <div style={textPanelStyles.textPreview}>
                 {overlay.text.slice(0, 50)}{overlay.text.length > 50 ? '...' : ''}
               </div>
-              <button
-                style={textPanelStyles.deleteBlockBtn}
-                onClick={(e) => { e.stopPropagation(); onRemoveOverlay(overlay.id); }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/>
-                </svg>
-              </button>
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0 }}>
+                {canReroll && (
+                  <button
+                    style={textPanelStyles.deleteBlockBtn}
+                    onClick={(e) => { e.stopPropagation(); onRerollText(overlay.id); }}
+                    title={`Reroll from Text Bank ${idx === 0 ? '1' : idx === 1 ? '2' : ''} (${bank.length} items)`}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+                      <path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/>
+                      <path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/>
+                    </svg>
+                  </button>
+                )}
+                <button
+                  style={textPanelStyles.deleteBlockBtn}
+                  onClick={(e) => { e.stopPropagation(); onRemoveOverlay(overlay.id); }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/>
+                  </svg>
+                </button>
+              </div>
             </div>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -3476,6 +3558,35 @@ const TextEditorPanel = ({
             placeholder="Enter text..."
             rows={4}
           />
+
+          {/* Reroll from Text Bank */}
+          {(() => {
+            const overlayIdx = textOverlays.findIndex(o => o.id === selectedOverlay.id);
+            const bank = overlayIdx === 0 ? textBank1 : overlayIdx === 1 ? textBank2 : [...textBank1, ...textBank2];
+            const bankLabel = overlayIdx === 0 ? 'Text Bank 1' : overlayIdx === 1 ? 'Text Bank 2' : 'Text Banks';
+            return bank.length > 0 ? (
+              <button
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '6px 10px', border: '1px solid rgba(139, 92, 246, 0.3)',
+                  borderRadius: '6px', backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                  color: '#c4b5fd', cursor: 'pointer', fontSize: '12px',
+                  width: '100%', marginBottom: '8px', transition: 'all 0.15s'
+                }}
+                onClick={() => onRerollText(selectedOverlay.id)}
+                title={`Pick random text from ${bankLabel} (${bank.length} items)`}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(139, 92, 246, 0.2)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(139, 92, 246, 0.1)'}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+                  <path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/>
+                  <path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/>
+                </svg>
+                Reroll from {bankLabel} ({bank.length})
+              </button>
+            ) : null;
+          })()}
 
           {/* Font Size */}
           <div style={textPanelStyles.control}>
