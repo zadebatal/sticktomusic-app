@@ -220,6 +220,8 @@ const LibraryBrowser = ({
   // Track drag coordinates in refs for reliable mouseup access
   const dragStartRef = useRef(null);
   const dragEndRef = useRef(null);
+  // Suppress click after drag-select completes (prevents click from undoing multi-select)
+  const justDragSelectedRef = useRef(false);
 
   const fileInputRef = useRef(null);
 
@@ -467,6 +469,11 @@ const LibraryBrowser = ({
       const end = dragEndRef.current;
 
       if (dragThresholdMetRef.current && start && end) {
+        // Suppress the click event that will fire after mouseup to prevent
+        // handleMediaClick from undoing the multi-select with exclusive mode
+        justDragSelectedRef.current = true;
+        setTimeout(() => { justDragSelectedRef.current = false; }, 50);
+
         const selectionRect = {
           left: Math.min(start.x, end.x),
           top: Math.min(start.y, end.y),
@@ -658,6 +665,8 @@ const LibraryBrowser = ({
   // Cmd/Ctrl+click = toggle item in/out of selection
   // Shift+click = range select from last clicked
   const handleMediaClick = (media, e) => {
+    // Skip click if a drag-select just completed (prevents undoing multi-select)
+    if (justDragSelectedRef.current) return;
     const clickedIndex = displayedMedia.findIndex(m => m.id === media.id);
     const isMetaKey = e?.metaKey || e?.ctrlKey;
 
