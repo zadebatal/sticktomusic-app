@@ -98,7 +98,7 @@ const SlideshowEditor = ({
   }, [activeSlideshowIndex]);
 
   // Other slideshow state
-  const [aspectRatio, setAspectRatio] = useState(existingSlideshow?.aspectRatio || '9:16');
+  const [aspectRatio, setAspectRatio] = useState(existingSlideshow?.aspectRatio || '4:5');
   const [selectedSlideIndex, setSelectedSlideIndex] = useState(0);
   const [activeBank, setActiveBank] = useState('imageA'); // 'imageA' | 'imageB' | 'audio' | 'lyrics'
   const [libraryImages, setLibraryImages] = useState([]);
@@ -381,14 +381,18 @@ const SlideshowEditor = ({
     return imagesA;
   })();
 
-  // Export dimensions based on aspect ratio (used during export only)
-  const exportDimensions = aspectRatio === '9:16'
-    ? { width: 1080, height: 1920 }
-    : { width: 1080, height: 1440 };
+  // Export dimensions based on aspect ratio
+  const ASPECT_DIMENSIONS = {
+    '4:5': { width: 1080, height: 1350 },  // Instagram carousel (standard)
+    '1:1': { width: 1080, height: 1080 },  // Square
+    '9:16': { width: 1080, height: 1920 }, // Story/TikTok
+    '4:3': { width: 1080, height: 1440 },  // Legacy
+  };
+  const exportDimensions = ASPECT_DIMENSIONS[aspectRatio] || ASPECT_DIMENSIONS['4:5'];
 
-  // Preview dimensions - always 9:16 canvas; 4:3 is a crop overlay, not a shape change
+  // Preview dimensions - scale from actual aspect ratio
   const previewScale = 0.25;
-  const baseDimensions = { width: 1080, height: 1920 }; // Always 9:16
+  const baseDimensions = exportDimensions;
   const previewDimensions = {
     width: baseDimensions.width * previewScale,
     height: baseDimensions.height * previewScale
@@ -1569,20 +1573,32 @@ const SlideshowEditor = ({
                 <button
                   style={{
                   ...styles.aspectButton,
+                  ...(aspectRatio === '4:5' ? styles.aspectButtonActive : {})
+                }}
+                onClick={() => setAspectRatio('4:5')}
+                title="Instagram Carousel"
+              >
+                4:5
+              </button>
+              <button
+                  style={{
+                  ...styles.aspectButton,
+                  ...(aspectRatio === '1:1' ? styles.aspectButtonActive : {})
+                }}
+                onClick={() => setAspectRatio('1:1')}
+                title="Square"
+              >
+                1:1
+              </button>
+              <button
+                  style={{
+                  ...styles.aspectButton,
                   ...(aspectRatio === '9:16' ? styles.aspectButtonActive : {})
                 }}
                 onClick={() => setAspectRatio('9:16')}
+                title="Story / TikTok"
               >
                 9:16
-              </button>
-              <button
-                style={{
-                  ...styles.aspectButton,
-                  ...(aspectRatio === '4:3' ? styles.aspectButtonActive : {})
-                }}
-                onClick={() => setAspectRatio('4:3')}
-              >
-                4:3
               </button>
             </div>
 

@@ -9,8 +9,10 @@ import { uploadFile } from './firebaseStorage';
 
 // Canvas dimensions based on aspect ratio
 const DIMENSIONS = {
-  '9:16': { width: 1080, height: 1920 },
-  '4:3': { width: 1080, height: 1440 }
+  '4:5': { width: 1080, height: 1350 },  // Instagram carousel (standard)
+  '1:1': { width: 1080, height: 1080 },  // Square
+  '9:16': { width: 1080, height: 1920 }, // Story/TikTok
+  '4:3': { width: 1080, height: 1440 }   // Legacy
 };
 
 /**
