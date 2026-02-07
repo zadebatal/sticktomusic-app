@@ -160,48 +160,38 @@ const renderSlideToCanvas = async (slide, dimensions) => {
 export const exportSlideshowAsImages = async (slideshow, onProgress = () => {}) => {
   const { slides, aspectRatio = '9:16', name } = slideshow;
   const dimensions = DIMENSIONS[aspectRatio] || DIMENSIONS['9:16'];
-
-  const exportedImages = [];
   const totalSlides = slides.length;
+  const safeName = name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
 
+  // Phase 1: Render all slides to blobs (canvas work, ~fast)
+  onProgress(10);
+  const blobs = [];
   for (let i = 0; i < totalSlides; i++) {
-    const slide = slides[i];
-
-    // Update progress (rendering phase: 0-50%)
-    onProgress(Math.round((i / totalSlides) * 50));
-
     try {
-      // Render slide to blob
-      const blob = await renderSlideToCanvas(slide, dimensions);
-
-      // Create filename
-      const safeName = name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-      const filename = `${safeName}_slide_${i + 1}.jpg`;
-
-      // Update progress (uploading phase: 50-100%)
-      onProgress(Math.round(50 + ((i / totalSlides) * 50)));
-
-      // Upload to Firebase
-      const { url, path } = await uploadFile(
-        new File([blob], filename, { type: 'image/jpeg' }),
-        'slideshows'
-      );
-
-      exportedImages.push({
-        url,
-        path,
-        slideIndex: i,
-        filename
-      });
-
-      console.log(`[Export] Slide ${i + 1}/${totalSlides} exported:`, filename);
+      blobs.push(await renderSlideToCanvas(slides[i], dimensions));
     } catch (err) {
-      console.error(`[Export] Failed to export slide ${i + 1}:`, err);
-      throw new Error(`Failed to export slide ${i + 1}: ${err.message}`);
+      throw new Error(`Failed to render slide ${i + 1}: ${err.message}`);
     }
   }
+  onProgress(30);
 
+  // Phase 2: Upload all blobs to Firebase in parallel (~slow, now parallel)
+  const uploadPromises = blobs.map((blob, i) => {
+    const filename = `${safeName}_slide_${i + 1}.jpg`;
+    return uploadFile(
+      new File([blob], filename, { type: 'image/jpeg' }),
+      'slideshows'
+    ).then(({ url, path }) => {
+      console.log(`[Export] Slide ${i + 1}/${totalSlides} exported:`, filename);
+      return { url, path, slideIndex: i, filename };
+    });
+  });
+
+  const exportedImages = await Promise.all(uploadPromises);
   onProgress(100);
+
+  // Sort by slide index to maintain order
+  exportedImages.sort((a, b) => a.slideIndex - b.slideIndex);
   return exportedImages;
 };
 

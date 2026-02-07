@@ -1023,28 +1023,34 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
           continue;
         }
 
-        for (const job of platformJobs) {
+        // Export all needed ratios in parallel
+        setExportProgress('Exporting slides...');
+        const slideshowRatio = slideshow.aspectRatio || '9:16';
+        const neededRatios = [...new Set(platformJobs.map(j => j.ratio))];
+        const imagesByRatio = {};
+
+        const exportPromises = neededRatios.map(async (ratio) => {
+          if (slideshowRatio === ratio && slideshow.exportedImages?.length) {
+            console.log(`[Schedule] Using cached export for ${ratio}`);
+            imagesByRatio[ratio] = slideshow.exportedImages;
+          } else {
+            const label = platformJobs.find(j => j.ratio === ratio)?.label || ratio;
+            console.log(`[Schedule] Exporting at ${ratio} for ${label}`);
+            imagesByRatio[ratio] = await exportAtRatio(slideshow, ratio, label);
+          }
+        });
+        await Promise.all(exportPromises);
+
+        // Send all Late API calls in parallel
+        setExportProgress('Scheduling...');
+        const schedulePromises = platformJobs.map(async (job) => {
+          const images = imagesByRatio[job.ratio];
+          if (!images?.length) {
+            console.warn(`[Schedule] No images for ${job.label}, skipping`);
+            return null;
+          }
+          console.log(`[Schedule] Sending to Late for ${job.label}:`, images.length, 'images');
           try {
-            // Export at the correct aspect ratio for this platform
-            let images;
-            const slideshowRatio = slideshow.aspectRatio || '9:16';
-            if (slideshowRatio === job.ratio && slideshow.exportedImages?.length) {
-              // Already exported at correct ratio
-              images = slideshow.exportedImages;
-              console.log(`[Schedule] Using cached export for ${job.label}`);
-            } else {
-              console.log(`[Schedule] Exporting at ${job.ratio} for ${job.label}`);
-              images = await exportAtRatio(slideshow, job.ratio, job.label);
-            }
-
-            if (!images?.length) {
-              console.warn(`[Schedule] No images for ${job.label}, skipping`);
-              continue;
-            }
-
-            console.log(`[Schedule] Sending to Late for ${job.label}:`, images.length, 'images');
-            setExportProgress(`Scheduling for ${job.label}...`);
-
             const result = await onSchedulePost({
               type: 'carousel',
               platforms: [{
@@ -1054,22 +1060,24 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
                 scheduledFor
               }],
               caption: fullCaption,
-              images: images,
+              images,
               scheduledFor,
             });
-
             console.log(`[Schedule] ${job.label} result:`, result);
             if (result?.success === false) {
-              console.error(`[Schedule] ${job.label} failed:`, result.error);
               alert(`Failed to schedule for ${job.label}: ${result.error || 'Unknown error'}`);
-            } else {
-              scheduled++;
+              return null;
             }
+            return result;
           } catch (err) {
             console.error(`[Schedule] ${job.label} error:`, err);
             alert(`Error scheduling for ${job.label}: ${err.message}`);
+            return null;
           }
-        }
+        });
+
+        const results = await Promise.all(schedulePromises);
+        scheduled += results.filter(Boolean).length;
       }
 
       console.log('[Schedule] Done. Scheduled:', scheduled);
