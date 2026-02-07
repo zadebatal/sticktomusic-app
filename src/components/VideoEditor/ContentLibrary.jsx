@@ -977,15 +977,22 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
     }
 
     setIsScheduling(true);
+    console.log('[Schedule] Starting carousel scheduling...');
+    console.log('[Schedule] Selected handle:', selectedHandle);
+    console.log('[Schedule] Account mapping:', accountMapping);
+    console.log('[Schedule] Platforms:', platforms);
+    console.log('[Schedule] Slideshows to schedule:', slideshows.length);
 
     try {
       // Schedule each slideshow as a carousel post
       let scheduled = 0;
       for (let si = 0; si < slideshows.length; si++) {
         const slideshow = slideshows[si];
+        console.log(`[Schedule] Processing slideshow ${si + 1}/${slideshows.length}:`, slideshow.id);
 
         // Step 1: Ensure we have Firebase-hosted images (not blob URLs)
         let firebaseImages = slideshow.exportedImages;
+        console.log('[Schedule] Existing exportedImages:', firebaseImages?.length || 0);
         if (!firebaseImages?.length) {
           // Auto-export: render slides to canvas → upload to Firebase
           setExportProgress(`Exporting slideshow ${si + 1}/${slideshows.length}...`);
@@ -995,17 +1002,20 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
             });
             // Save exported images back to the slideshow object so we don't re-export
             slideshow.exportedImages = firebaseImages;
+            console.log('[Schedule] Export complete, images:', firebaseImages.length);
           } catch (exportErr) {
-            console.error('[SlideshowPostingModal] Export failed:', exportErr);
+            console.error('[Schedule] Export failed:', exportErr);
             alert(`Failed to export slideshow ${si + 1}: ${exportErr.message}`);
             continue;
           }
         }
 
         if (!firebaseImages?.length) {
-          console.warn('No images after export, skipping:', slideshow.id);
+          console.warn('[Schedule] No images after export, skipping:', slideshow.id);
           continue;
         }
+
+        console.log('[Schedule] Firebase image URLs:', firebaseImages.map(i => i.url?.substring(0, 60)));
 
         setExportProgress(`Scheduling ${si + 1}/${slideshows.length}...`);
 
@@ -1030,12 +1040,15 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
           });
         }
 
+        console.log('[Schedule] Platforms payload:', platformsPayload.length, 'entries');
+
         if (!platformsPayload.length) {
-          console.warn(`No account IDs for selected platforms on ${selectedHandle}`);
+          console.warn('[Schedule] No account IDs for selected platforms on', selectedHandle);
           continue;
         }
 
         // Step 3: Schedule via Late API with Firebase URLs
+        console.log('[Schedule] Calling onSchedulePost...', !!onSchedulePost);
         if (onSchedulePost) {
           const result = await onSchedulePost({
             type: 'carousel',
@@ -1044,14 +1057,19 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
             images: firebaseImages,
             scheduledFor,
           });
+          console.log('[Schedule] onSchedulePost result:', result);
           if (result?.success === false) {
+            console.error('[Schedule] Failed:', result.error);
             alert(`Failed to schedule: ${result.error || 'Unknown error'}`);
             continue;
           }
+        } else {
+          console.error('[Schedule] onSchedulePost is not defined!');
         }
         scheduled++;
       }
 
+      console.log('[Schedule] Done. Scheduled:', scheduled);
       setExportProgress('');
       if (scheduled > 0) {
         alert(`Scheduled ${scheduled} carousel post${scheduled > 1 ? 's' : ''}!`);
