@@ -1171,62 +1171,17 @@ const StudioHome = ({
                 <div style={styles.modeCount}>{libraryAudio.length} clips</div>
               </div>
 
-              {/* Drafts entry point on dashboard — two clickable sections */}
+              {/* Drafts entry point on dashboard */}
               {totalDrafts > 0 && (
                 <div
-                  style={{
-                    ...styles.modeCard,
-                    borderColor: 'rgba(251, 191, 36, 0.25)',
-                    cursor: 'default',
-                    padding: '24px 20px'
-                  }}
+                  style={styles.modeCard}
+                  onClick={() => onViewContent?.({ type: draftSlideshows.length > 0 ? 'slideshows' : 'videos' })}
+                  onMouseEnter={(e) => e.currentTarget.style.borderColor = '#6366f1'}
+                  onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'}
                 >
-                  <div style={{ fontSize: '36px', marginBottom: '12px' }}>📝</div>
+                  <div style={styles.modeIcon}>📝</div>
                   <div style={styles.modeName}>Drafts</div>
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px', width: '100%' }}>
-                    {draftVideos.length > 0 && (
-                      <button
-                        onClick={() => onViewContent?.({ type: 'videos' })}
-                        style={{
-                          flex: 1,
-                          padding: '8px 12px',
-                          borderRadius: '8px',
-                          border: '1px solid rgba(99, 102, 241, 0.3)',
-                          background: 'rgba(99, 102, 241, 0.1)',
-                          color: '#c4b5fd',
-                          fontSize: '12px',
-                          fontWeight: '500',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.25)'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)'}
-                      >
-                        🎬 {draftVideos.length} Video{draftVideos.length !== 1 ? 's' : ''}
-                      </button>
-                    )}
-                    {draftSlideshows.length > 0 && (
-                      <button
-                        onClick={() => onViewContent?.({ type: 'slideshows' })}
-                        style={{
-                          flex: 1,
-                          padding: '8px 12px',
-                          borderRadius: '8px',
-                          border: '1px solid rgba(34, 197, 94, 0.3)',
-                          background: 'rgba(34, 197, 94, 0.1)',
-                          color: '#86efac',
-                          fontSize: '12px',
-                          fontWeight: '500',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(34, 197, 94, 0.25)'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(34, 197, 94, 0.1)'}
-                      >
-                        🖼 {draftSlideshows.length} Slideshow{draftSlideshows.length !== 1 ? 's' : ''}
-                      </button>
-                    )}
-                  </div>
+                  <div style={styles.modeCount}>{totalDrafts} draft{totalDrafts !== 1 ? 's' : ''}</div>
                 </div>
               )}
             </div>
