@@ -117,28 +117,106 @@ const LyricBank = ({
   if (compact) {
     return (
       <div style={compactStyles.container}>
-        <div style={compactStyles.header}>
-          <span style={compactStyles.title}>📝 Lyrics</span>
-          <span style={compactStyles.count}>{lyrics.length}</span>
-        </div>
 
-        {lyrics.length === 0 ? (
-          <div style={compactStyles.empty}>No lyrics saved</div>
-        ) : (
-          <div style={compactStyles.list}>
-            {lyrics.map(lyric => (
-              <div
-                key={lyric.id}
-                style={compactStyles.item}
-                onClick={() => setExpandedLyricsId(expandedLyricsId === lyric.id ? null : lyric.id)}
+        {/* Add / Edit Form (compact) */}
+        {(isAdding || editingId) && (
+          <div style={compactStyles.editorOverlay}>
+            <input
+              type="text"
+              value={editingId ? editTitle : newTitle}
+              onChange={(e) => editingId ? setEditTitle(e.target.value) : setNewTitle(e.target.value)}
+              placeholder="Title..."
+              autoFocus
+              style={compactStyles.editorTitle}
+            />
+            <textarea
+              value={editingId ? editContent : newContent}
+              onChange={(e) => editingId ? setEditContent(e.target.value) : setNewContent(e.target.value)}
+              placeholder="Paste or type lyrics here..."
+              style={compactStyles.editorBody}
+            />
+            <div style={compactStyles.editorActions}>
+              <button
+                style={compactStyles.editorCancel}
+                onClick={() => { setIsAdding(false); cancelEdit(); }}
               >
-                <span style={compactStyles.itemTitle}>{lyric.title}</span>
-                <span style={compactStyles.itemPreview}>
-                  {lyric.content.split('\n')[0]?.slice(0, 30)}...
-                </span>
-              </div>
-            ))}
+                Cancel
+              </button>
+              <button
+                style={compactStyles.editorSave}
+                onClick={() => { editingId ? handleSaveEdit() : handleAdd(); }}
+                disabled={editingId ? !editContent.trim() : !newContent.trim()}
+              >
+                {editingId ? 'Save' : 'Add'}
+              </button>
+            </div>
           </div>
+        )}
+
+        {/* Normal list view */}
+        {!isAdding && !editingId && (
+          <>
+            <div style={compactStyles.header}>
+              <span style={compactStyles.count}>{lyrics.length} saved</span>
+              <button
+                style={compactStyles.addBtn}
+                onClick={() => setIsAdding(true)}
+              >
+                + Add
+              </button>
+            </div>
+
+            {lyrics.length === 0 ? (
+              <div style={compactStyles.empty}>No lyrics saved yet</div>
+            ) : (
+              <div style={compactStyles.list}>
+                {lyrics.map(lyric => {
+                  const isExpanded = expandedLyricsId === lyric.id;
+                  return (
+                    <div key={lyric.id} style={compactStyles.item}>
+                      <div
+                        style={compactStyles.itemHeader}
+                        onClick={() => setExpandedLyricsId(isExpanded ? null : lyric.id)}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span style={compactStyles.itemTitle}>{lyric.title}</span>
+                          {!isExpanded && (
+                            <span style={compactStyles.itemPreview}>
+                              {lyric.content.split('\n')[0]?.slice(0, 40)}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
+                          <button
+                            style={compactStyles.itemBtn}
+                            onClick={(e) => { e.stopPropagation(); startEdit(lyric); }}
+                            title="Edit"
+                          >✏️</button>
+                          <button
+                            style={compactStyles.itemBtn}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm('Delete these lyrics?')) onDeleteLyrics?.(lyric.id);
+                            }}
+                            title="Delete"
+                          >🗑️</button>
+                        </div>
+                      </div>
+                      {isExpanded && (
+                        <div style={compactStyles.expandedBody}>
+                          {lyric.content.split('\n').map((line, i) => (
+                            <div key={i} style={compactStyles.lyricLine}>
+                              {line || '\u00A0'}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </div>
     );
@@ -601,7 +679,7 @@ const styles = {
 // Compact styles for sidebar
 const compactStyles = {
   container: {
-    padding: '12px'
+    padding: '0'
   },
   header: {
     display: 'flex',
@@ -609,45 +687,139 @@ const compactStyles = {
     justifyContent: 'space-between',
     marginBottom: '8px'
   },
-  title: {
-    fontSize: '12px',
-    fontWeight: '600',
-    color: '#9ca3af'
-  },
   count: {
-    fontSize: '11px',
-    color: '#6b7280',
-    backgroundColor: '#1f1f2e',
-    padding: '2px 6px',
-    borderRadius: '4px'
+    fontSize: '10px',
+    color: 'rgba(255,255,255,0.35)'
+  },
+  addBtn: {
+    padding: '3px 8px',
+    backgroundColor: 'rgba(124,58,237,0.25)',
+    border: 'none',
+    borderRadius: '4px',
+    color: '#a78bfa',
+    fontSize: '10px',
+    fontWeight: 600,
+    cursor: 'pointer'
   },
   empty: {
     fontSize: '11px',
-    color: '#4b5563',
+    color: 'rgba(255,255,255,0.25)',
     textAlign: 'center',
-    padding: '8px'
+    padding: '12px 4px'
   },
   list: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px'
+    gap: '3px'
   },
   item: {
-    padding: '8px',
-    backgroundColor: '#0a0a0f',
+    backgroundColor: 'rgba(255,255,255,0.03)',
     borderRadius: '6px',
+    overflow: 'hidden'
+  },
+  itemHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '6px 8px',
     cursor: 'pointer'
   },
   itemTitle: {
     display: 'block',
-    fontSize: '12px',
-    fontWeight: '500',
+    fontSize: '11px',
+    fontWeight: 500,
     color: '#fff',
-    marginBottom: '2px'
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
   },
   itemPreview: {
+    display: 'block',
     fontSize: '10px',
-    color: '#6b7280'
+    color: 'rgba(255,255,255,0.3)',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis'
+  },
+  itemBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: '10px',
+    padding: '2px 4px',
+    borderRadius: '3px',
+    lineHeight: 1
+  },
+  expandedBody: {
+    padding: '4px 8px 8px',
+    maxHeight: '150px',
+    overflowY: 'auto',
+    borderTop: '1px solid rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(0,0,0,0.2)'
+  },
+  lyricLine: {
+    fontSize: '10px',
+    color: 'rgba(255,255,255,0.5)',
+    lineHeight: '1.6',
+    padding: '0 4px',
+    fontFamily: 'monospace'
+  },
+  // Editor overlay (add / edit)
+  editorOverlay: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px'
+  },
+  editorTitle: {
+    width: '100%',
+    padding: '7px 10px',
+    backgroundColor: '#1a1a2e',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '6px',
+    color: '#fff',
+    fontSize: '12px',
+    fontWeight: 500,
+    outline: 'none',
+    boxSizing: 'border-box'
+  },
+  editorBody: {
+    width: '100%',
+    padding: '8px 10px',
+    backgroundColor: '#1a1a2e',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '6px',
+    color: '#fff',
+    fontSize: '11px',
+    fontFamily: 'monospace',
+    lineHeight: '1.6',
+    resize: 'vertical',
+    outline: 'none',
+    minHeight: '120px',
+    boxSizing: 'border-box'
+  },
+  editorActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '6px'
+  },
+  editorCancel: {
+    padding: '5px 10px',
+    backgroundColor: 'transparent',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '5px',
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: '11px',
+    cursor: 'pointer'
+  },
+  editorSave: {
+    padding: '5px 10px',
+    backgroundColor: '#7c3aed',
+    border: 'none',
+    borderRadius: '5px',
+    color: '#fff',
+    fontSize: '11px',
+    fontWeight: 600,
+    cursor: 'pointer'
   }
 };
 
