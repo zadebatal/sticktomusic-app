@@ -561,13 +561,21 @@ const StickToMusic = () => {
       setArtistsLoaded(true);
 
       // If no artist selected yet, select the first one or use remembered one
+      // Filter to only assigned artists for non-conductors
       if (!currentArtistId && artists.length > 0) {
-        const lastId = getLastArtistId();
-        const artistToSelect = lastId && artists.find(a => a.id === lastId)
-          ? lastId
-          : artists[0].id;
-        setCurrentArtistId(artistToSelect);
-        setLastArtistId(artistToSelect);
+        const userRole = allowedUsers.find(u => u.email?.toLowerCase() === currentAuthUser?.email?.toLowerCase());
+        const isUserConductor = userRole?.role === 'conductor';
+        const assignedIds = userRole?.assignedArtistIds || [];
+        const visibleArtists = isUserConductor ? artists : artists.filter(a => assignedIds.includes(a.id));
+
+        if (visibleArtists.length > 0) {
+          const lastId = getLastArtistId();
+          const artistToSelect = lastId && visibleArtists.find(a => a.id === lastId)
+            ? lastId
+            : visibleArtists[0].id;
+          setCurrentArtistId(artistToSelect);
+          setLastArtistId(artistToSelect);
+        }
       }
     });
 
@@ -897,6 +905,18 @@ const StickToMusic = () => {
   // Helper to check if user is a conductor (super-admin)
   const isConductor = (userObj) => {
     return userObj?.role === 'conductor';
+  };
+
+  // Helper to get visible artists — filters by assigned artists for non-conductors
+  const getVisibleArtists = () => {
+    const allArtists = firestoreArtists.length > 0
+      ? firestoreArtists.map(a => ({ id: a.id, name: a.name }))
+      : operatorArtists.map(a => ({ id: String(a.id), name: a.name }));
+
+    if (isConductor(user)) return allArtists;
+
+    const assignedIds = user?.assignedArtistIds || [];
+    return allArtists.filter(a => assignedIds.includes(a.id));
   };
 
   // Helper to get artist info from Firestore
@@ -5417,10 +5437,7 @@ const StickToMusic = () => {
           {operatorTab === 'analytics' && (
             <AnalyticsDashboard
               artistId={currentArtistId}
-              artists={firestoreArtists.length > 0
-                ? firestoreArtists.map(a => ({ id: a.id, name: a.name }))
-                : operatorArtists.map(a => ({ id: String(a.id), name: a.name }))
-              }
+              artists={getVisibleArtists()}
               onArtistChange={handleArtistChange}
               onSyncLate={async () => {
                 const result = await lateApi.fetchScheduledPosts(1, currentArtistId);
@@ -5925,10 +5942,7 @@ const StickToMusic = () => {
           <VideoStudio
             db={db}
             onClose={() => setShowVideoEditor(false)}
-            artists={firestoreArtists.length > 0
-              ? firestoreArtists.map(a => ({ id: a.id, name: a.name }))
-              : operatorArtists.map(a => ({ id: String(a.id), name: a.name }))
-            }
+            artists={getVisibleArtists()}
             artistId={currentArtistId}
             onArtistChange={handleArtistChange}
             lateAccountIds={LATE_ACCOUNT_IDS}
