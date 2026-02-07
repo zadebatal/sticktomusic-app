@@ -1474,7 +1474,7 @@ const SlideshowEditor = ({
 
     const accountMapping = lateAccountIds[selectedHandle];
     if (!accountMapping) {
-      toastError(`No Late.co account mapping found for ${selectedHandle}`);
+      toastError(`No account mapping found for ${selectedHandle}`);
       return;
     }
 

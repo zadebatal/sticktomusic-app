@@ -338,7 +338,7 @@ const AnalyticsDashboard = ({
               </>
             ) : (
               <>
-                🔄 Refresh from Late
+                🔄 Refresh
               </>
             )}
           </button>

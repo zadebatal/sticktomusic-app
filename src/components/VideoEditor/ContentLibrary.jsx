@@ -972,7 +972,7 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
 
     const accountMapping = lateAccountIds[selectedHandle];
     if (!accountMapping) {
-      alert(`No Late.co account mapping found for ${selectedHandle}`);
+      alert(`No account mapping found for ${selectedHandle}`);
       return;
     }
 

@@ -1243,7 +1243,7 @@ const StickToMusic = () => {
     },
     {
       title: 'You\'re all set! 🚀',
-      description: 'Start by clicking "Sync from Late" in the Content tab to load your scheduled posts.',
+      description: 'Start by clicking "Sync" in the Content tab to load your scheduled posts.',
       target: null
     }
   ];
@@ -1412,7 +1412,7 @@ const StickToMusic = () => {
 
     showConfirmDialog({
       title: `Delete ${selectedPosts.size} post${selectedPosts.size > 1 ? 's' : ''}?`,
-      message: 'This will permanently remove the selected posts from Late. This action cannot be undone.',
+      message: 'This will permanently remove the selected posts. This action cannot be undone.',
       confirmLabel: `Delete ${selectedPosts.size}`,
       confirmVariant: 'destructive',
       onConfirm: () => executeBulkDelete()
@@ -1444,7 +1444,7 @@ const StickToMusic = () => {
         `Deleted ${successCount} post(s)`,
         () => {
           // Undo is complex for bulk - just show message
-          showToast('Please sync from Late to restore', 'info');
+          showToast('Please sync to restore', 'info');
         }
       );
     }
@@ -1759,7 +1759,7 @@ const StickToMusic = () => {
   // Fetch Late accounts on demand
   const fetchLateAccounts = async () => {
     setSyncing(true);
-    setSyncStatus('Fetching Late accounts...');
+    setSyncStatus('Fetching accounts...');
     const result = await lateApi.fetchAccounts(currentArtistId);
     setSyncing(false);
     if (result.success) {
@@ -3436,7 +3436,7 @@ const StickToMusic = () => {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                     )}
-                    Refresh from Late
+                    Refresh
                   </button>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-4 mb-6">
@@ -3495,7 +3495,7 @@ const StickToMusic = () => {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
-                      <p className="text-zinc-500">Loading pages from Late...</p>
+                      <p className="text-zinc-500">Loading pages...</p>
                     </div>
                   ) : filteredPages.length === 0 && unconfiguredLateArtists.length === 0 ? (
                     <SharedEmptyState
@@ -3503,7 +3503,7 @@ const StickToMusic = () => {
                       title="No pages found"
                       description={selectedArtist !== 'all' || selectedPlatform !== 'all'
                         ? "No pages match your current filters. Try adjusting your selection."
-                        : "No social pages connected via Late. Connect Late for each artist to see their pages here."}
+                        : "No social pages connected. Connect each artist to see their pages here."}
                       actionLabel={selectedArtist !== 'all' || selectedPlatform !== 'all' ? "Clear Filters" : "Refresh"}
                       onAction={selectedArtist !== 'all' || selectedPlatform !== 'all' ? () => { setSelectedArtist('all'); setSelectedPlatform('all'); } : loadLatePages}
                     />
@@ -3885,7 +3885,7 @@ const StickToMusic = () => {
 
             const handleScheduleSubmit = async () => {
               setSyncing(true);
-              setSyncStatus('Scheduling posts to Late...');
+              setSyncStatus('Scheduling posts...');
 
               let successCount = 0;
               let failCount = 0;
@@ -3993,7 +3993,7 @@ const StickToMusic = () => {
                 alert(`Scheduled ${successCount} ${postWord(successCount)}, ${failCount} failed.\n\nErrors:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? `\n...and ${errors.length - 5} more` : ''}`);
               } else {
                 setSyncStatus(`✓ ${successCount} ${postWord(successCount)} scheduled!`);
-                alert(`${successCount} ${postWord(successCount)} scheduled to Late!\n\n${batchForm.category} category:\n• ${artistCount} artist music ${postWord(artistCount)} (${Math.round(artistCount/generatedSchedule.length*100)}%)\n• ${adjacentCount} adjacent artist ${postWord(adjacentCount)} (${Math.round(adjacentCount/generatedSchedule.length*100)}%)`);
+                alert(`${successCount} ${postWord(successCount)} scheduled!\n\n${batchForm.category} category:\n• ${artistCount} artist music ${postWord(artistCount)} (${Math.round(artistCount/generatedSchedule.length*100)}%)\n• ${adjacentCount} adjacent artist ${postWord(adjacentCount)} (${Math.round(adjacentCount/generatedSchedule.length*100)}%)`);
               }
 
               setTimeout(() => setSyncStatus(null), 5000);
@@ -4012,7 +4012,7 @@ const StickToMusic = () => {
 
             const handleSync = async () => {
               setSyncing(true);
-              setSyncStatus('Syncing with Late...');
+              setSyncStatus('Syncing...');
               const result = await lateApi.fetchScheduledPosts(1, currentArtistId);
               setSyncing(false);
               if (result.success) {
@@ -4029,8 +4029,8 @@ const StickToMusic = () => {
                 setLatePosts(posts);
                 setLastSynced(new Date());
                 const postWord = posts.length === 1 ? 'post' : 'posts';
-                setSyncStatus(`✓ Synced ${posts.length} ${postWord} from Late`);
-                showToast(`Synced ${posts.length} ${postWord} from Late`, 'success');
+                setSyncStatus(`✓ Synced ${posts.length} ${postWord}`);
+                showToast(`Synced ${posts.length} ${postWord}`, 'success');
               } else {
                 setSyncStatus(`Error: ${result.error}`);
                 showToast(`Sync failed: ${result.error}`, 'error');
@@ -4081,7 +4081,7 @@ const StickToMusic = () => {
                           disabled={syncing}
                           className="px-4 py-2 bg-zinc-800 text-white rounded-lg text-sm font-medium hover:bg-zinc-700 transition disabled:opacity-50"
                         >
-                          {syncing ? 'Syncing...' : '🔄 Sync from Late'}
+                          {syncing ? 'Syncing...' : '🔄 Sync'}
                         </button>
                         <button
                           onClick={() => setShowScheduleModal(true)}
@@ -4417,7 +4417,7 @@ const StickToMusic = () => {
                                 onClick={handleScheduleSubmit}
                                 className="px-6 py-2 bg-white text-black rounded-lg font-medium hover:bg-zinc-200 transition"
                               >
-                                Schedule {generatedSchedule.length * 2} {generatedSchedule.length * 2 === 1 ? 'Post' : 'Posts'} to Late
+                                Schedule {generatedSchedule.length * 2} {generatedSchedule.length * 2 === 1 ? 'Post' : 'Posts'}
                               </button>
                             </div>
                           </div>
@@ -4486,7 +4486,7 @@ const StickToMusic = () => {
                           Syncing...
                         </>
                       ) : (
-                        <>↻ Sync from Late</>
+                        <>↻ Sync</>
                       )}
                     </button>
                     <button
@@ -4584,7 +4584,7 @@ const StickToMusic = () => {
                       </button>
                     </div>
                     {latePosts.length === 0 && (
-                      <span className="text-xs text-zinc-500 ml-2">Click "Sync from Late" to load posts</span>
+                      <span className="text-xs text-zinc-500 ml-2">Click "Sync" to load posts</span>
                     )}
                   </div>
                   {contentView === 'month' && (
@@ -4703,7 +4703,7 @@ const StickToMusic = () => {
                         <p className="text-2xl font-bold text-green-400">{filteredStatsData.filter(p => p.status === 'posted' || p.status === 'published').length}</p>
                       </div>
                       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                        <p className="text-zinc-500 text-xs mb-1">Late Status</p>
+                        <p className="text-zinc-500 text-xs mb-1">Schedule Status</p>
                         <p className="text-sm font-medium text-green-400">● Connected</p>
                         {lastSynced && (
                           <p className="text-xs text-zinc-500 mt-1">
@@ -4779,8 +4779,8 @@ const StickToMusic = () => {
                         <SharedEmptyState
                           icon="📅"
                           title="No posts scheduled"
-                          description={postSearch || postPlatformFilter !== 'all' ? 'No posts match your filters. Try adjusting your search.' : 'Sync your posts from Late to see your scheduled content timeline.'}
-                          actionLabel={!postSearch && postPlatformFilter === 'all' ? 'Sync from Late' : undefined}
+                          description={postSearch || postPlatformFilter !== 'all' ? 'No posts match your filters. Try adjusting your search.' : 'Sync your posts to see your scheduled content timeline.'}
+                          actionLabel={!postSearch && postPlatformFilter === 'all' ? 'Sync' : undefined}
                           onAction={!postSearch && postPlatformFilter === 'all' ? handleSync : undefined}
                         />
                       ) : (
@@ -5102,8 +5102,8 @@ const StickToMusic = () => {
                                 <SharedEmptyState
                                   icon="📋"
                                   title="No posts found"
-                                  description={postSearch || postPlatformFilter !== 'all' ? 'No posts match your current filters. Try adjusting your search.' : 'Sync your posts from Late to see your scheduled content.'}
-                                  actionLabel={!postSearch && postPlatformFilter === 'all' ? 'Sync from Late' : undefined}
+                                  description={postSearch || postPlatformFilter !== 'all' ? 'No posts match your current filters. Try adjusting your search.' : 'Sync your posts to see your scheduled content.'}
+                                  actionLabel={!postSearch && postPlatformFilter === 'all' ? 'Sync' : undefined}
                                   onAction={!postSearch && postPlatformFilter === 'all' ? handleSync : undefined}
                                 />
                               </td>
@@ -7708,7 +7708,7 @@ const StickToMusic = () => {
                 </svg>
               </div>
               <h2 id="delete-modal-title" className="text-xl font-bold text-center mb-2">Delete Post?</h2>
-              <p className="text-zinc-400 text-center text-sm mb-2">This will remove the post from Late's schedule.</p>
+              <p className="text-zinc-400 text-center text-sm mb-2">This will remove the post from the schedule.</p>
               {deleteConfirmModal.caption && (
                 <p className="text-zinc-500 text-center text-xs mb-4 truncate">
                   "{deleteConfirmModal.caption}..."
