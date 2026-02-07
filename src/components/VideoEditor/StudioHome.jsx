@@ -127,6 +127,7 @@ const StudioHome = ({
   // Audio clip selector
   const [pendingAudio, setPendingAudio] = useState(null);
   const [editingAudio, setEditingAudio] = useState(null); // { id, name } - for inline editing audio bank items
+  const [trimmingAudio, setTrimmingAudio] = useState(null); // library audio item being re-trimmed
 
   // Selected media for editor
   const [selectedMedia, setSelectedMedia] = useState({
@@ -753,6 +754,63 @@ const StudioHome = ({
   const handleClipCancel = () => {
     if (pendingAudio?.url) URL.revokeObjectURL(pendingAudio.url);
     setPendingAudio(null);
+  };
+
+  // Re-trim existing audio from library → save trimmed version as new item
+  const handleRetrimSave = async (clipData) => {
+    if (!trimmingAudio || !artistId) return;
+
+    const fileToUpload = clipData.trimmedFile;
+    if (!fileToUpload) {
+      // Fallback: no actual trim happened (user used full range)
+      setTrimmingAudio(null);
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress({ current: 1, total: 1, name: clipData.trimmedName || 'Trimmed audio', percent: 0 });
+    cancelFunctionsRef.current = [];
+
+    try {
+      const { url, path } = await uploadFile(fileToUpload, 'audio', (pct) => {
+        setUploadProgress(prev => ({ ...prev, percent: Math.min(Math.round(pct), 99) }));
+      }, {
+        onCancel: (cancelFn) => {
+          cancelFunctionsRef.current.push(cancelFn);
+        }
+      });
+
+      const audioItem = {
+        type: MEDIA_TYPES.AUDIO,
+        name: clipData.trimmedName || `${trimmingAudio.name} (trimmed)`,
+        url,
+        storagePath: path,
+        duration: clipData.duration || (clipData.endTime - clipData.startTime),
+        metadata: {
+          startTime: 0,
+          endTime: clipData.duration,
+          originalName: trimmingAudio.name,
+          originalMediaId: trimmingAudio.id
+        }
+      };
+
+      if (selectedCollection) {
+        audioItem.collectionIds = [selectedCollection];
+      }
+
+      await addToLibraryAsync(db, artistId, audioItem);
+      setLibraryRefreshTrigger(prev => prev + 1);
+    } catch (error) {
+      console.error('[StudioHome] Retrim upload failed:', error);
+      toastError('Audio trim failed: ' + error.message);
+    }
+
+    setTrimmingAudio(null);
+    setUploadProgress(prev => ({ ...prev, percent: 100 }));
+    setTimeout(() => {
+      setIsUploading(false);
+      setUploadProgress({ current: 0, total: 0, percent: 0 });
+    }, 400);
   };
 
   const handleCancelUpload = () => {
@@ -1948,6 +2006,18 @@ const StudioHome = ({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            setTrimmingAudio(audio);
+                          }}
+                          style={{
+                            background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)',
+                            cursor: 'pointer', fontSize: '12px', padding: '0 2px', flexShrink: 0,
+                            lineHeight: 1
+                          }}
+                          title="Trim audio"
+                        >✂️</button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
                             if (isSelected) setSelectedMedia(prev => ({ ...prev, audio: null }));
                             removeFromLibraryAsync(db, artistId, audio.id).then(() => {
                               setLibraryRefreshTrigger(t => t + 1);
@@ -2120,13 +2190,23 @@ const StudioHome = ({
         </div>
       )}
 
-      {/* Audio Clip Selector Modal */}
+      {/* Audio Clip Selector Modal — new upload */}
       {pendingAudio && (
         <AudioClipSelector
           audioUrl={pendingAudio.url}
           audioName={pendingAudio.name}
           onSave={handleClipSave}
           onCancel={handleClipCancel}
+        />
+      )}
+
+      {/* Audio Clip Selector Modal — re-trim existing audio */}
+      {trimmingAudio && (
+        <AudioClipSelector
+          audioUrl={trimmingAudio.url || trimmingAudio.localUrl}
+          audioName={trimmingAudio.name}
+          onSave={handleRetrimSave}
+          onCancel={() => setTrimmingAudio(null)}
         />
       )}
 
