@@ -996,11 +996,7 @@ const SlideshowEditor = ({
     setAudioReady(false);
     setAudioError(null);
 
-    // Set source and start loading
-    el.src = selectedAudioUrl;
-    el.preload = 'auto';
-    el.load();
-
+    // Define event handlers
     const onLoadedMetadata = () => {
       if (!audioRef.current) return;
       const start = selectedAudioStart;
@@ -1008,18 +1004,29 @@ const SlideshowEditor = ({
       const end = (selectedAudioEnd && selectedAudioEnd > 0)
         ? selectedAudioEnd
         : (isFinite(rawDuration) ? rawDuration : 0);
+      console.log('[Audio] loadedmetadata:', { rawDuration, start, end, computedDuration: Math.max(0, end - start) });
       setAudioDuration(Math.max(0, end - start));
       audioRef.current.currentTime = start;
     };
 
     const onCanPlayThrough = () => {
+      console.log('[Audio] canplaythrough fired');
       setAudioReady(true);
       setAudioError(null);
     };
 
+    const onCanPlay = () => {
+      // Fallback: some browsers fire canplay but not canplaythrough
+      console.log('[Audio] canplay fired, readyState:', el.readyState);
+      if (el.readyState >= 3) { // HAVE_FUTURE_DATA or better
+        setAudioReady(true);
+        setAudioError(null);
+      }
+    };
+
     const onError = () => {
       const errMsg = el.error?.message || 'Failed to load audio';
-      console.error('[SlideshowEditor] Audio load error:', el.error, errMsg);
+      console.error('[Audio] load error:', el.error, errMsg);
       setAudioError(errMsg);
       setAudioReady(false);
     };
@@ -1033,15 +1040,35 @@ const SlideshowEditor = ({
       }
     };
 
+    // CRITICAL: Add event listeners BEFORE setting src and calling load().
+    // If the browser has this audio cached, events can fire nearly instantly.
     el.addEventListener('loadedmetadata', onLoadedMetadata);
     el.addEventListener('canplaythrough', onCanPlayThrough);
+    el.addEventListener('canplay', onCanPlay);
     el.addEventListener('error', onError);
     el.addEventListener('ended', onEnded);
 
+    // Now set source and start loading
+    console.log('[Audio] Setting src:', selectedAudioUrl?.substring(0, 100));
+    el.src = selectedAudioUrl;
+    el.preload = 'auto';
+    el.load();
+
+    // Safety fallback: if readyState is already sufficient (e.g. cached audio),
+    // events may have fired before React committed this effect. Check immediately.
+    setTimeout(() => {
+      if (el.readyState >= 2 && el.duration > 0) {
+        console.log('[Audio] Fallback: already loaded, readyState:', el.readyState);
+        onLoadedMetadata();
+        setAudioReady(true);
+        setAudioError(null);
+      }
+    }, 100);
+
     return () => {
-      // Clean up event listeners only (don't cancel animation — that's managed by handlePlayPause)
       el.removeEventListener('loadedmetadata', onLoadedMetadata);
       el.removeEventListener('canplaythrough', onCanPlayThrough);
+      el.removeEventListener('canplay', onCanPlay);
       el.removeEventListener('error', onError);
       el.removeEventListener('ended', onEnded);
     };
