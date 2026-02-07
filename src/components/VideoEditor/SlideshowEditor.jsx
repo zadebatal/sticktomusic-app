@@ -138,6 +138,10 @@ const SlideshowEditor = ({
   const [textEditorPosition, setTextEditorPosition] = useState({ x: 0, y: 0 });
   const [showTextEditorPanel, setShowTextEditorPanel] = useState(false); // Flowstage-style side panel
 
+  // Text overlay drag state
+  const [draggingTextId, setDraggingTextId] = useState(null);
+  const dragStartRef = useRef(null); // { mouseX, mouseY, startPosX, startPosY }
+
   // AI Transcription state
   const [showLyricAnalyzer, setShowLyricAnalyzer] = useState(false);
 
@@ -1204,6 +1208,60 @@ const SlideshowEditor = ({
     setShowTextEditorPanel(true);
   }, []);
 
+  // Text overlay drag handlers — move text freely on the canvas
+  const handleTextMouseDown = useCallback((e, overlayId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const overlay = currentSlide?.textOverlays?.find(o => o.id === overlayId);
+    if (!overlay) return;
+    setDraggingTextId(overlayId);
+    setEditingTextId(overlayId);
+    dragStartRef.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      startPosX: overlay.position.x,
+      startPosY: overlay.position.y
+    };
+  }, [currentSlide]);
+
+  useEffect(() => {
+    if (!draggingTextId) return;
+
+    const handleMouseMove = (e) => {
+      if (!dragStartRef.current || !previewRef.current) return;
+      const rect = previewRef.current.getBoundingClientRect();
+      const dx = e.clientX - dragStartRef.current.mouseX;
+      const dy = e.clientY - dragStartRef.current.mouseY;
+      // Convert pixel delta to percentage of canvas
+      const newX = Math.max(5, Math.min(95, dragStartRef.current.startPosX + (dx / rect.width) * 100));
+      const newY = Math.max(5, Math.min(95, dragStartRef.current.startPosY + (dy / rect.height) * 100));
+
+      setSlides(prev => prev.map((slide, idx) => {
+        if (idx !== selectedSlideIndex) return slide;
+        return {
+          ...slide,
+          textOverlays: slide.textOverlays.map(o =>
+            o.id === draggingTextId
+              ? { ...o, position: { ...o.position, x: newX, y: newY } }
+              : o
+          )
+        };
+      }));
+    };
+
+    const handleMouseUp = () => {
+      setDraggingTextId(null);
+      dragStartRef.current = null;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggingTextId, selectedSlideIndex]);
+
   // State for showing "save to bank" option after transcription
   const [transcribedLyrics, setTranscribedLyrics] = useState(null);
   const [showSaveToBankPrompt, setShowSaveToBankPrompt] = useState(false);
@@ -1688,28 +1746,11 @@ const SlideshowEditor = ({
             ...styles.headerRight,
             ...(isMobile ? { order: 2, gap: '8px' } : {})
           }}>
-            {!isMobile && (
-              <>
-                <button style={styles.saveButton} onClick={handleSave}>
-                  Save Draft
-                </button>
-                {allSlideshows.length > 1 && (
-                  <button
-                    style={{
-                      ...styles.saveButton,
-                      background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                      color: '#fff'
-                    }}
-                    onClick={handleSaveAllAndClose}
-                  >
-                    Save All ({allSlideshows.length})
-                  </button>
-                )}
-              </>
-            )}
             <button
               style={{
                 ...styles.exportButton,
+                backgroundColor: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.2)',
                 ...(isMobile ? { padding: '10px 16px', fontSize: '13px' } : {})
               }}
               onClick={handleExport}
@@ -1731,6 +1772,25 @@ const SlideshowEditor = ({
                 </>
               )}
             </button>
+            {!isMobile && (
+              <>
+                {allSlideshows.length > 1 && (
+                  <button
+                    style={{
+                      ...styles.saveButton,
+                      background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                      color: '#fff'
+                    }}
+                    onClick={handleSaveAllAndClose}
+                  >
+                    Save All ({allSlideshows.length})
+                  </button>
+                )}
+                <button style={{ ...styles.saveButton, backgroundColor: '#059669', border: 'none', color: '#fff' }} onClick={handleSave}>
+                  Save Draft
+                </button>
+              </>
+            )}
             <button style={{
               ...styles.closeButton,
               ...(isMobile ? { padding: '10px' } : {})
@@ -2048,38 +2108,8 @@ const SlideshowEditor = ({
                     })()}
                   </div>
 
-                  <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: '12px' }} />
 
-                  {/* Audio section */}
-                  <div>
-                    <div style={{ fontSize: '11px', fontWeight: '600', color: '#4ade80', marginBottom: '6px' }}>
-                      🎵 Audio
-                    </div>
-                    {(!selectedAudio && audioTracks.length === 0) ? (
-                      <button style={{ ...styles.uploadAudioBtn, width: '100%', fontSize: '11px', padding: '6px 10px' }} onClick={() => slideshowAudioInputRef.current?.click()}>
-                        + Add Audio
-                      </button>
-                    ) : (
-                      <div>
-                        {selectedAudio && (
-                          <div style={{ padding: '6px 8px', backgroundColor: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '6px', marginBottom: '4px' }}>
-                            <div style={{ fontSize: '11px', color: '#4ade80', fontWeight: '500' }}>{selectedAudio.name}</div>
-                            <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '2px' }}>{formatTime(selectedAudio.trimmedDuration || selectedAudio.duration || 0)}</div>
-                            <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
-                              <button style={{ fontSize: '10px', padding: '3px 6px', borderRadius: '4px', border: '1px solid rgba(74,222,128,0.3)', backgroundColor: 'transparent', color: '#4ade80', cursor: 'pointer' }} onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}>Trim</button>
-                              <button style={{ fontSize: '10px', padding: '3px 6px', borderRadius: '4px', border: '1px solid rgba(239,68,68,0.3)', backgroundColor: 'transparent', color: '#ef4444', cursor: 'pointer' }} onClick={handleRemoveAudio}>Remove</button>
-                            </div>
-                          </div>
-                        )}
-                        {audioTracks.filter(a => a.id !== selectedAudio?.id).map(audio => (
-                          <div key={audio.id} style={{ padding: '5px 8px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px', cursor: 'pointer', marginBottom: '3px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => handleSelectAudio(audio)}>
-                            <span style={{ fontSize: '11px', color: '#d1d5db', flex: 1 }}>{audio.name}</span>
-                            <span style={{ fontSize: '10px', color: '#6b7280' }}>{formatTime(audio.duration || 0)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+
                 </div>
               </div>
             </div>
@@ -2477,32 +2507,51 @@ const SlideshowEditor = ({
                   </>
                 )}
 
-                {/* Text Overlays */}
-                {(currentSlide?.textOverlays || []).map(overlay => (
-                  <div
-                    key={overlay.id}
-                    style={{
-                      ...styles.textOverlay,
-                      left: `${overlay.position.x}%`,
-                      top: `${overlay.position.y}%`,
-                      transform: 'translate(-50%, -50%)',
-                      fontSize: `${overlay.style.fontSize * previewScale}px`,
-                      fontFamily: overlay.style.fontFamily,
-                      fontWeight: overlay.style.fontWeight,
-                      color: overlay.style.color,
-                      textAlign: overlay.style.textAlign,
-                      textShadow: overlay.style.outline
-                        ? `0 0 ${4 * previewScale}px ${overlay.style.outlineColor}`
-                        : 'none',
-                      cursor: 'pointer',
-                      border: editingTextId === overlay.id ? '1px dashed #6366f1' : 'none',
-                      padding: '4px 8px'
-                    }}
-                    onClick={(e) => handleTextClick(e, overlay.id)}
-                  >
-                    {overlay.text}
-                  </div>
-                ))}
+                {/* Text Overlays — draggable */}
+                {(currentSlide?.textOverlays || []).map(overlay => {
+                  const isSelected = editingTextId === overlay.id;
+                  const isDragging = draggingTextId === overlay.id;
+                  return (
+                    <div
+                      key={overlay.id}
+                      style={{
+                        ...styles.textOverlay,
+                        left: `${overlay.position.x}%`,
+                        top: `${overlay.position.y}%`,
+                        transform: 'translate(-50%, -50%)',
+                        fontSize: `${overlay.style.fontSize * previewScale}px`,
+                        fontFamily: overlay.style.fontFamily,
+                        fontWeight: overlay.style.fontWeight,
+                        color: overlay.style.color,
+                        textAlign: overlay.style.textAlign,
+                        textShadow: overlay.style.outline
+                          ? `0 0 ${4 * previewScale}px ${overlay.style.outlineColor}`
+                          : 'none',
+                        cursor: isDragging ? 'grabbing' : 'grab',
+                        border: isSelected ? '1px dashed rgba(99,102,241,0.8)' : '1px dashed transparent',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        transition: isDragging ? 'none' : 'border-color 0.15s',
+                        backgroundColor: isSelected ? 'rgba(99,102,241,0.1)' : 'transparent'
+                      }}
+                      onMouseDown={(e) => handleTextMouseDown(e, overlay.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleTextClick(e, overlay.id);
+                      }}
+                    >
+                      {overlay.text}
+                      {isSelected && (
+                        <div style={{
+                          position: 'absolute', top: '-14px', left: '50%', transform: 'translateX(-50%)',
+                          fontSize: '8px', color: 'rgba(163,180,252,0.9)', whiteSpace: 'nowrap',
+                          backgroundColor: 'rgba(30,30,40,0.85)', padding: '1px 5px', borderRadius: '3px',
+                          pointerEvents: 'none'
+                        }}>drag to move</div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Hidden audio element */}
@@ -2988,8 +3037,42 @@ const SlideshowEditor = ({
                 </button>
               </div>
 
-              <div style={styles.slideCount}>
-                {slides.length} / 10 slides
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+                <div style={styles.slideCount}>
+                  {slides.length} / 10 slides
+                </div>
+                <button
+                  onClick={handleGenerateMore}
+                  disabled={isGenerating}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 16px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: isGenerating ? 'rgba(99,102,241,0.4)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: isGenerating ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s',
+                    boxShadow: '0 2px 8px rgba(99,102,241,0.3)'
+                  }}
+                  title={`Generate ${generateCount} more slideshows from this template`}
+                >
+                  {isGenerating ? (
+                    <><span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span> Generating...</>
+                  ) : (
+                    <>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M12 5v14M5 12h14"/>
+                      </svg>
+                      Generate {generateCount}
+                      {allSlideshows.length > 1 && <span style={{ fontSize: '11px', opacity: 0.7 }}>({allSlideshows.length} total)</span>}
+                    </>
+                  )}
+                </button>
               </div>
             </div>
 
