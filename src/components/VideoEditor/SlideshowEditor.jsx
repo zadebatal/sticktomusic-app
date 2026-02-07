@@ -229,6 +229,10 @@ const SlideshowEditor = ({
     }
   }, [artistId, collections, db, toastSuccess]);
 
+  // Image drag/resize state (declared early — needed by history tracking)
+  const [isDraggingImage, setIsDraggingImage] = useState(false);
+  const [isResizingImage, setIsResizingImage] = useState(false);
+
   // Undo/Redo history
   const historyRef = useRef([]);
   const historyIndexRef = useRef(-1);
@@ -302,9 +306,7 @@ const SlideshowEditor = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleUndo, handleRedo]);
 
-  // Image drag/resize state
-  const [isDraggingImage, setIsDraggingImage] = useState(false);
-  const [isResizingImage, setIsResizingImage] = useState(false);
+  // Image drag/resize continued state
   const [imgDragStart, setImgDragStart] = useState({ x: 0, y: 0 });
   const [imgTransformStart, setImgTransformStart] = useState({ scale: 1, offsetX: 0, offsetY: 0 });
 
