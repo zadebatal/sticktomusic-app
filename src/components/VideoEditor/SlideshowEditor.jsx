@@ -672,7 +672,7 @@ const SlideshowEditor = ({
   }, [collections]);
 
   // Re-roll text: Replace text overlays with random text from banks
-  const handleTextReroll = useCallback((overlayId = null) => {
+  const handleTextReroll = useCallback((overlayId = null, bankSource = null) => {
     const { textBank1, textBank2 } = getTextBanks();
     if (textBank1.length === 0 && textBank2.length === 0) return;
 
@@ -682,8 +682,11 @@ const SlideshowEditor = ({
         // If a specific overlay ID is given, only reroll that one
         if (overlayId && overlay.id !== overlayId) return overlay;
 
-        // First text overlay uses textBank1, second uses textBank2
-        const bank = idx === 0 ? textBank1 : idx === 1 ? textBank2 : [...textBank1, ...textBank2];
+        // Use specified bank source, or auto-assign based on overlay index
+        let bank;
+        if (bankSource === 1) bank = textBank1;
+        else if (bankSource === 2) bank = textBank2;
+        else bank = idx === 0 ? textBank1 : idx === 1 ? textBank2 : [...textBank1, ...textBank2];
         if (bank.length === 0) return overlay;
 
         // Pick random text different from current if possible
@@ -2545,7 +2548,7 @@ const SlideshowEditor = ({
                 onSelectOverlay={(overlayId) => setEditingTextId(overlayId)}
                 onUpdateOverlay={(overlayId, updates) => updateTextOverlay(overlayId, updates)}
                 onRemoveOverlay={(overlayId) => removeTextOverlay(overlayId)}
-                onRerollText={(overlayId) => handleTextReroll(overlayId)}
+                onRerollText={(overlayId, bankSource) => handleTextReroll(overlayId, bankSource)}
                 onAddLyrics={onAddLyrics}
                 onSaveTemplate={handleSaveTemplate}
                 onClose={() => {
@@ -2870,7 +2873,7 @@ const SlideshowEditor = ({
                   ));
                   setEditingTextId(null);
                 }}
-                onRerollText={(overlayId) => handleTextReroll(overlayId)}
+                onRerollText={(overlayId, bankSource) => handleTextReroll(overlayId, bankSource)}
                 onAddLyrics={onAddLyrics}
                 onSaveTemplate={handleSaveTemplate}
                 onClose={() => setMobilePanelTab('preview')}
@@ -3285,34 +3288,55 @@ const TextEditorPanel = ({
             rows={4}
           />
 
-          {/* Reroll from Text Bank */}
-          {(() => {
-            const overlayIdx = textOverlays.findIndex(o => o.id === selectedOverlay.id);
-            const bank = overlayIdx === 0 ? textBank1 : overlayIdx === 1 ? textBank2 : [...textBank1, ...textBank2];
-            const bankLabel = overlayIdx === 0 ? 'Text Bank 1' : overlayIdx === 1 ? 'Text Bank 2' : 'Text Banks';
-            return bank.length > 0 ? (
-              <button
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '6px',
-                  padding: '6px 10px', border: '1px solid rgba(139, 92, 246, 0.3)',
-                  borderRadius: '6px', backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                  color: '#c4b5fd', cursor: 'pointer', fontSize: '12px',
-                  width: '100%', marginBottom: '8px', transition: 'all 0.15s'
-                }}
-                onClick={() => onRerollText(selectedOverlay.id)}
-                title={`Pick random text from ${bankLabel} (${bank.length} items)`}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(139, 92, 246, 0.2)'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(139, 92, 246, 0.1)'}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
-                  <path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/>
-                  <path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/>
-                </svg>
-                Reroll from {bankLabel} ({bank.length})
-              </button>
-            ) : null;
-          })()}
+          {/* Reroll from Text Banks */}
+          {(textBank1.length > 0 || textBank2.length > 0) && (
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+              {textBank1.length > 0 && (
+                <button
+                  style={{
+                    flex: 1, display: 'flex', alignItems: 'center', gap: '5px',
+                    padding: '6px 8px', border: '1px solid rgba(139, 92, 246, 0.3)',
+                    borderRadius: '6px', backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                    color: '#c4b5fd', cursor: 'pointer', fontSize: '11px',
+                    transition: 'all 0.15s'
+                  }}
+                  onClick={() => onRerollText(selectedOverlay.id, 1)}
+                  title={`Pick random text from Text Bank 1 (${textBank1.length} items)`}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(139, 92, 246, 0.2)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(139, 92, 246, 0.1)'}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+                    <path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/>
+                    <path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/>
+                  </svg>
+                  Bank 1 ({textBank1.length})
+                </button>
+              )}
+              {textBank2.length > 0 && (
+                <button
+                  style={{
+                    flex: 1, display: 'flex', alignItems: 'center', gap: '5px',
+                    padding: '6px 8px', border: '1px solid rgba(99, 102, 241, 0.3)',
+                    borderRadius: '6px', backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                    color: '#a5b4fc', cursor: 'pointer', fontSize: '11px',
+                    transition: 'all 0.15s'
+                  }}
+                  onClick={() => onRerollText(selectedOverlay.id, 2)}
+                  title={`Pick random text from Text Bank 2 (${textBank2.length} items)`}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.2)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.1)'}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+                    <path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/>
+                    <path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/>
+                  </svg>
+                  Bank 2 ({textBank2.length})
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Font Size */}
           <div style={textPanelStyles.control}>
