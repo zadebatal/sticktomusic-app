@@ -2650,7 +2650,8 @@ const SlideshowEditor = ({
             <div style={{
               borderTop: '1px solid rgba(255,255,255,0.08)',
               padding: '12px 16px',
-              backgroundColor: 'rgba(0,0,0,0.15)'
+              backgroundColor: 'rgba(0,0,0,0.15)',
+              flexShrink: 0
             }}>
               {/* Scrollable row of timeline tabs */}
               <div style={{
@@ -3788,15 +3789,19 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     padding: '24px',
-    gap: '16px'
+    gap: '16px',
+    overflow: 'auto',
+    minHeight: 0
   },
   canvasContainer: {
-    flex: 1,
+    flex: '1 1 0',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '12px'
+    gap: '12px',
+    minHeight: 0,
+    overflow: 'hidden'
   },
   canvas: {
     backgroundColor: '#000',
@@ -4038,7 +4043,8 @@ const styles = {
     flexDirection: 'column',
     gap: '8px',
     borderTop: '1px solid rgba(255,255,255,0.1)',
-    paddingTop: '16px'
+    paddingTop: '16px',
+    flexShrink: 0
   },
   filmstripScroll: {
     display: 'flex',
