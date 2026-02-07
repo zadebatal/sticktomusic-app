@@ -5941,7 +5941,7 @@ const StickToMusic = () => {
         {showVideoEditor && (
           <VideoStudio
             db={db}
-            onClose={() => setShowVideoEditor(false)}
+            onClose={() => { setShowVideoEditor(false); setOperatorTab('artists'); }}
             artists={getVisibleArtists()}
             artistId={currentArtistId}
             onArtistChange={handleArtistChange}
