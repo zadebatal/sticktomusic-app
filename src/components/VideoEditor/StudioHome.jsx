@@ -2440,8 +2440,8 @@ const StudioHome = ({
               </div>
             )}
 
-            {/* ── Captions / Hashtags Column (only when collection selected) ── */}
-            {selectedCollection && (
+            {/* ── Captions / Hashtags Column (only for video mode with collection selected) ── */}
+            {selectedCollection && studioMode === 'videos' && (
               <div style={{
                 flex: 1,
                 display: 'flex',
