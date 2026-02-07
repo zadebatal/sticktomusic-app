@@ -1818,17 +1818,6 @@ const StudioHome = ({
                 <span style={styles.libraryTitle}>
                   Images ({libraryImages.length})
                 </span>
-                <label style={styles.uploadButton}>
-                  ⬆️ Upload Images
-                  <input
-                    ref={imageInputRef}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleImageUpload}
-                    style={{ display: 'none' }}
-                  />
-                </label>
               </div>
 
               <div style={styles.mediaGrid}>
