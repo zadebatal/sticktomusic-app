@@ -997,13 +997,20 @@ const StudioHome = ({
     let lyricsForEditor = [];
 
     if (selectedCollection) {
+      const col = collections.find(c => c.id === selectedCollection);
       const colMedia = getCollectionMedia(artistId, selectedCollection);
       const colImages = colMedia.filter(m => m.type === MEDIA_TYPES.IMAGE);
       const colAudioItems = colMedia.filter(m => m.type === MEDIA_TYPES.AUDIO);
 
-      // Use all collection images if user hasn't manually selected any
-      if (imagesForEditor.length === 0 && colImages.length > 0) {
-        imagesForEditor = colImages;
+      // Use bank images (not all collection images) for slideshow initialization
+      // Pick one from Bank A (Slide 1) and one from Bank B (Slide 2)
+      if (imagesForEditor.length === 0 && col) {
+        const bankAIds = col.bankA || [];
+        const bankBIds = col.bankB || [];
+        const bankAImg = colImages.find(img => bankAIds.includes(img.id));
+        const bankBImg = colImages.find(img => bankBIds.includes(img.id));
+        const bankImages = [bankAImg, bankBImg].filter(Boolean);
+        imagesForEditor = bankImages.length > 0 ? bankImages : colImages.slice(0, 2);
       }
       if (!audioForEditor && colAudioItems.length > 0) {
         audioForEditor = colAudioItems[0];
