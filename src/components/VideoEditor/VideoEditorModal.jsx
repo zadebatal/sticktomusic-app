@@ -1618,10 +1618,12 @@ const VideoEditorModal = ({
                           >Add All</button>
                         </div>
                         <div style={styles.sidebarClipGrid}>
-                          {visibleVideos.map((video, i) => (
+                          {visibleVideos.map((video, i) => {
+                            const isInTimeline = clips.some(clip => clip.sourceId === video.id);
+                            return (
                             <div
                               key={video.id || i}
-                              style={styles.sidebarClip}
+                              style={{ ...styles.sidebarClip, position: 'relative', border: isInTimeline ? '1px solid rgba(34,197,94,0.4)' : undefined }}
                               onClick={() => {
                                 const newClip = {
                                   id: `clip_${Date.now()}_${i}`,
@@ -1636,9 +1638,20 @@ const VideoEditorModal = ({
                                 setClips(prev => [...prev, newClip]);
                                 if (video.id && category?.artistId) incrementUseCount(category.artistId, video.id);
                               }}
-                              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(20,184,166,0.5)'; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'transparent'; }}
+                              onMouseEnter={(e) => { e.currentTarget.style.borderColor = isInTimeline ? 'rgba(34,197,94,0.6)' : 'rgba(20,184,166,0.5)'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.borderColor = isInTimeline ? 'rgba(34,197,94,0.4)' : 'transparent'; }}
                             >
+                              {/* In-timeline indicator */}
+                              {isInTimeline && (
+                                <div style={{
+                                  position: 'absolute', top: 3, right: 3, zIndex: 2,
+                                  width: '18px', height: '18px', borderRadius: '50%',
+                                  backgroundColor: '#22c55e', display: 'flex',
+                                  alignItems: 'center', justifyContent: 'center',
+                                  fontSize: '11px', color: '#fff', fontWeight: 'bold',
+                                  boxShadow: '0 1px 4px rgba(0,0,0,0.4)'
+                                }}>✓</div>
+                              )}
                               <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#0a0a0f' }}>
                                 {(video.thumbnailUrl || video.thumbnail) ? (
                                   <img src={video.thumbnailUrl || video.thumbnail} alt={video.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -1650,7 +1663,8 @@ const VideoEditorModal = ({
                                 {(video.name || video.metadata?.originalName || 'Clip').substring(0, 20)}
                               </div>
                             </div>
-                          ))}
+                          );
+                          })}
                         </div>
                       </>
                     )}

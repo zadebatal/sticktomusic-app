@@ -2389,12 +2389,13 @@ const SlideshowEditor = ({
                   <div style={styles.clipGrid}>
                     {displayImages.map(image => {
                       const isSel = selectedBankImages.has(image.id);
+                      const isInSlides = slides.some(s => s.sourceImageId === image.id);
                       return (
                       <div
                         key={image.id}
                         style={{
                           ...styles.clipCard,
-                          border: isSel ? '1px solid rgba(99, 102, 241, 0.5)' : '1px solid transparent',
+                          border: isSel ? '1px solid rgba(99, 102, 241, 0.5)' : isInSlides ? '1px solid rgba(34,197,94,0.3)' : '1px solid transparent',
                           position: 'relative'
                         }}
                         draggable
@@ -2435,6 +2436,17 @@ const SlideshowEditor = ({
                           if (!isSel) e.currentTarget.style.backgroundColor = '';
                         }}
                       >
+                        {/* In-slides indicator — green checkmark top-right */}
+                        {isInSlides && (
+                          <div style={{
+                            position: 'absolute', top: 3, right: 3, zIndex: 2,
+                            width: '16px', height: '16px', borderRadius: '50%',
+                            backgroundColor: '#22c55e', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center',
+                            fontSize: '9px', color: '#fff', fontWeight: 'bold',
+                            boxShadow: '0 1px 4px rgba(0,0,0,0.4)', pointerEvents: 'none'
+                          }}>✓</div>
+                        )}
                         {/* Selection overlay — subtle tint + checkmark */}
                         {isSel && (
                           <div style={{
