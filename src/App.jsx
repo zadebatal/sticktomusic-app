@@ -1579,53 +1579,24 @@ const StickToMusic = () => {
     e.preventDefault();
     setIsLoggingIn(true);
     try {
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        loginForm.email,
-        loginForm.password
-      );
-      const email = userCredential.user.email;
-
-      // Check whitelist - but if Firestore hasn't loaded yet, try to load it first
-      // This handles the case where a new user's page hasn't loaded allowedUsers yet
-      if (!firestoreLoaded) {
-        log('⏳ Firestore not loaded yet, waiting...');
-        // Wait up to 3 seconds for Firestore to load
-        let waited = 0;
-        while (!firestoreLoaded && waited < 3000) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-          waited += 100;
-        }
-      }
-
-      // Check whitelist
-      if (!isEmailAllowed(email)) {
+      await signInWithEmailAndPassword(auth, loginForm.email, loginForm.password);
+      // Now authenticated — read allowedUsers directly from Firestore
+      const snapshot = await getDocs(collection(db, 'allowedUsers'));
+      const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      const userEmail = loginForm.email.toLowerCase();
+      const isCond = CONDUCTOR_EMAILS.includes(userEmail);
+      const allowed = isCond || users.some(u => u.email?.toLowerCase() === userEmail && u.status === 'active');
+      if (!allowed) {
         await signOut(auth);
         setLoginForm(prev => ({ ...prev, error: 'Access denied. Please contact us to get access.' }));
         setIsLoggingIn(false);
         return;
       }
-
-      const role = getUserRole(email);
-      const artistInfo = getArtistInfo(email);
-
-      setUser({
-        email: email,
-        role: role,
-        name: userCredential.user.displayName || artistInfo?.name || email.split('@')[0],
-        photoURL: userCredential.user.photoURL || null,
-        artistId: artistInfo?.artistId || null
-      });
+      // User is allowed — reactive effects will set full user state
       setShowLoginModal(false);
       setLoginForm({ email: '', password: '', error: null });
       showToast(`Welcome back!`, 'success');
-
-      // Redirect based on role
-      if (role === 'artist') {
-        setCurrentPage('operator');
-      } else {
-        setCurrentPage('operator');
-      }
+      setCurrentPage('operator');
     } catch (error) {
       let errorMessage = 'Invalid email or password';
       if (error.code === 'auth/user-not-found') {
@@ -1648,52 +1619,21 @@ const StickToMusic = () => {
       const result = await signInWithPopup(auth, googleProvider);
       const email = result.user.email;
 
-      // Check whitelist - but if Firestore hasn't loaded yet, wait for it
-      if (!firestoreLoaded) {
-        log('⏳ Firestore not loaded yet, waiting...');
-        let waited = 0;
-        while (!firestoreLoaded && waited < 3000) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-          waited += 100;
-        }
-      }
-
-      // Check whitelist
-      if (!isEmailAllowed(email)) {
+      // Now authenticated — read allowedUsers directly from Firestore
+      const snapshot = await getDocs(collection(db, 'allowedUsers'));
+      const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      const userEmail = email.toLowerCase();
+      const isCond = CONDUCTOR_EMAILS.includes(userEmail);
+      const allowed = isCond || users.some(u => u.email?.toLowerCase() === userEmail && u.status === 'active');
+      if (!allowed) {
         await signOut(auth);
-        setLoginForm(prev => ({ ...prev, error: 'Access denied. Please contact us to get access.' }));
-        setShowLoginModal(true);
-        setShowSignupModal(false);
+        setAuthError('Access denied. Please contact us to get access.');
         setIsLoggingIn(false);
         return;
       }
-
-      const role = getUserRole(email);
-      const artistInfo = getArtistInfo(email);
-
-      // Debug: Log Google user data
-      log('🔍 Google user data:', {
-        displayName: result.user.displayName,
-        photoURL: result.user.photoURL,
-        email: result.user.email
-      });
-
-      setUser({
-        email: email,
-        role: role,
-        name: result.user.displayName || email.split('@')[0],
-        photoURL: result.user.photoURL || null,
-        artistId: artistInfo?.artistId || null
-      });
-      setShowLoginModal(false);
-      setShowSignupModal(false);
+      // User is allowed — reactive effects will set full user state
+      setCurrentPage('operator');
       showToast(`Welcome, ${result.user.displayName || 'there'}!`, 'success');
-
-      if (role === 'artist') {
-        setCurrentPage('operator');
-      } else {
-        setCurrentPage('operator');
-      }
     } catch (error) {
       console.error('Google sign-in error:', error);
       let errorMessage = 'Google sign-in failed';
@@ -1776,30 +1716,22 @@ const StickToMusic = () => {
     setIsLoggingIn(true);
     setAuthError(null);
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const userEmail = userCredential.user.email;
-      if (!firestoreLoaded) {
-        let waited = 0;
-        while (!firestoreLoaded && waited < 3000) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-          waited += 100;
-        }
-      }
-      if (!isEmailAllowed(userEmail)) {
+      await signInWithEmailAndPassword(auth, email, password);
+      // Now authenticated — read allowedUsers directly from Firestore
+      // (can't rely on reactive state due to async timing of React effects)
+      const snapshot = await getDocs(collection(db, 'allowedUsers'));
+      const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      const userEmail = email.toLowerCase();
+      const isCond = CONDUCTOR_EMAILS.includes(userEmail);
+      const allowed = isCond || users.some(u => u.email?.toLowerCase() === userEmail && u.status === 'active');
+      if (!allowed) {
         await signOut(auth);
         setAuthError('Access denied. Please contact us to get access.');
         setIsLoggingIn(false);
         return;
       }
-      const role = getUserRole(userEmail);
-      const artistInfo = getArtistInfo(userEmail);
-      setUser({
-        email: userEmail,
-        role: role,
-        name: userCredential.user.displayName || artistInfo?.name || userEmail.split('@')[0],
-        photoURL: userCredential.user.photoURL || null,
-        artistId: artistInfo?.artistId || null
-      });
+      // User is allowed — the onAuthStateChanged + allowedUsers subscription
+      // will handle setting the full user state reactively. Just navigate.
       setCurrentPage('operator');
       showToast('Welcome back!', 'success');
     } catch (error) {
