@@ -3315,38 +3315,92 @@ const SlideshowEditor = ({
                 <div style={styles.slideCount}>
                   {slides.length} / 10 slides
                 </div>
-                <button
-                  onClick={handleGenerateMore}
-                  disabled={isGenerating}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '7px 16px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: isGenerating ? 'rgba(99,102,241,0.4)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                    color: '#fff',
-                    fontSize: '13px',
-                    fontWeight: '600',
-                    cursor: isGenerating ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.2s',
-                    boxShadow: '0 2px 8px rgba(99,102,241,0.3)'
-                  }}
-                  title={`Generate ${generateCount} more slideshows from this template`}
-                >
-                  {isGenerating ? (
-                    <><span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span> Generating...</>
-                  ) : (
-                    <>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M12 5v14M5 12h14"/>
-                      </svg>
-                      Generate {generateCount}
-                      {allSlideshows.length > 1 && <span style={{ fontSize: '11px', opacity: 0.7 }}>({allSlideshows.length} total)</span>}
-                    </>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {/* Template quick-switch */}
+                  <button
+                    onClick={() => switchToSlideshow(0)}
+                    style={{
+                      padding: '5px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid ' + (activeSlideshowIndex === 0 ? '#818cf8' : 'rgba(255,255,255,0.1)'),
+                      backgroundColor: activeSlideshowIndex === 0 ? '#6366f1' : 'rgba(255,255,255,0.06)',
+                      color: activeSlideshowIndex === 0 ? '#fff' : '#9ca3af',
+                      fontSize: '11px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      transition: 'all 0.15s'
+                    }}
+                    title="Switch to template"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                      <line x1="3" y1="9" x2="21" y2="9"/>
+                      <line x1="9" y1="21" x2="9" y2="9"/>
+                    </svg>
+                    Template
+                  </button>
+                  {/* Count selector */}
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={generateCount}
+                    onChange={(e) => setGenerateCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+                    style={{
+                      width: '44px',
+                      padding: '5px 4px',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      backgroundColor: 'rgba(255,255,255,0.06)',
+                      color: '#fff',
+                      fontSize: '12px',
+                      textAlign: 'center',
+                      outline: 'none'
+                    }}
+                    title="Number of slideshows to generate"
+                  />
+                  {/* Generate button */}
+                  <button
+                    onClick={handleGenerateMore}
+                    disabled={isGenerating}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '5px 12px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: isGenerating ? 'rgba(99,102,241,0.4)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                      color: '#fff',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      cursor: isGenerating ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s',
+                      boxShadow: '0 2px 8px rgba(99,102,241,0.3)',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title={`Generate ${generateCount} more slideshows from this template`}
+                  >
+                    {isGenerating ? (
+                      <><span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span> Generating...</>
+                    ) : (
+                      <>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M12 5v14M5 12h14"/>
+                        </svg>
+                        Generate
+                      </>
+                    )}
+                  </button>
+                  {allSlideshows.length > 1 && (
+                    <span style={{ fontSize: '10px', color: '#6b7280', whiteSpace: 'nowrap' }}>
+                      {allSlideshows.length} total
+                    </span>
                   )}
-                </button>
+                </div>
               </div>
             </div>
 
@@ -3423,68 +3477,6 @@ const SlideshowEditor = ({
                 ))}
               </div>
 
-              {/* Generate controls row */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                marginTop: '8px'
-              }}>
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={generateCount}
-                  onChange={(e) => setGenerateCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
-                  style={{
-                    width: '60px',
-                    padding: '6px 8px',
-                    borderRadius: '6px',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    backgroundColor: 'rgba(255,255,255,0.06)',
-                    color: '#fff',
-                    fontSize: '13px',
-                    textAlign: 'center',
-                    outline: 'none'
-                  }}
-                />
-                <button
-                  onClick={handleGenerateMore}
-                  disabled={isGenerating}
-                  style={{
-                    flex: 1,
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: isGenerating ? 'rgba(99,102,241,0.4)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                    color: '#fff',
-                    fontSize: '13px',
-                    fontWeight: '600',
-                    cursor: isGenerating ? 'not-allowed' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  {isGenerating ? (
-                    <><span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span> Generating...</>
-                  ) : (
-                    <>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M12 5v14M5 12h14"/>
-                      </svg>
-                      Generate {generateCount} More
-                    </>
-                  )}
-                </button>
-                {allSlideshows.length > 1 && (
-                  <span style={{ fontSize: '11px', color: '#6b7280', whiteSpace: 'nowrap' }}>
-                    {allSlideshows.length} total
-                  </span>
-                )}
-              </div>
             </div>
           </div>
           )}
