@@ -2073,7 +2073,7 @@ const StudioHome = ({
         {(studioMode === 'videos' || studioMode === 'slideshows') && (
           <div style={{
             display: 'flex',
-            width: selectedCollection ? '780px' : '260px',
+            width: selectedCollection ? '440px' : '200px',
             flexShrink: 0,
             borderLeft: '1px solid rgba(255,255,255,0.1)',
             backgroundColor: '#0d0d14',
@@ -2090,24 +2090,24 @@ const StudioHome = ({
               borderRight: selectedCollection ? '1px solid rgba(255,255,255,0.08)' : 'none'
             }}>
               <div style={{
-                padding: '10px 12px',
+                padding: '6px 8px',
                 borderBottom: '1px solid rgba(255,255,255,0.08)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 flexShrink: 0
               }}>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#fff' }}>
                   🎵 Audio Bank
                 </span>
                 <label style={{
-                  display: 'flex', alignItems: 'center', gap: '4px',
-                  padding: '3px 8px', borderRadius: '6px',
+                  display: 'flex', alignItems: 'center', gap: '3px',
+                  padding: '2px 6px', borderRadius: '4px',
                   backgroundColor: 'rgba(99,102,241,0.2)', border: 'none',
-                  color: '#a5b4fc', fontSize: '10px', fontWeight: 500,
+                  color: '#a5b4fc', fontSize: '9px', fontWeight: 500,
                   cursor: 'pointer'
                 }}>
-                  ⬆️ Upload
+                  ⬆ Upload
                   <input
                     type="file"
                     accept=".mp3,audio/mpeg"
@@ -2117,9 +2117,9 @@ const StudioHome = ({
                 </label>
               </div>
               <div style={{
-                padding: '4px 12px',
+                padding: '3px 8px',
                 borderBottom: '1px solid rgba(255,255,255,0.05)',
-                fontSize: '10px',
+                fontSize: '9px',
                 color: 'rgba(255,255,255,0.4)',
                 flexShrink: 0,
                 display: 'flex',
@@ -2304,23 +2304,23 @@ const StudioHome = ({
                         }}
                       >
                         <div style={{
-                          display: 'flex', alignItems: 'center', gap: '6px',
-                          padding: '5px 6px', cursor: 'grab', fontSize: '11px'
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          padding: '3px 4px', cursor: 'grab', fontSize: '10px'
                         }}>
                           <span style={{
-                            width: '26px', height: '26px', borderRadius: '5px',
+                            width: '20px', height: '20px', borderRadius: '4px',
                             background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '11px', flexShrink: 0
+                            fontSize: '9px', flexShrink: 0
                           }}>🎵</span>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{
-                              fontSize: '11px', fontWeight: 500, color: '#fff',
+                              fontSize: '10px', fontWeight: 500, color: '#fff',
                               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
                             }}>
                               {audio.name}
                             </div>
-                            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)' }}>
+                            <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)' }}>
                               {audio.duration
                                 ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}`
                                 : '—'}
@@ -2337,7 +2337,7 @@ const StudioHome = ({
                             style={{
                               background: 'none', border: 'none',
                               color: dropdownOpen ? '#a5b4fc' : 'rgba(255,255,255,0.25)',
-                              cursor: 'pointer', fontSize: '11px', padding: '0 2px', flexShrink: 0,
+                              cursor: 'pointer', fontSize: '9px', padding: '0 1px', flexShrink: 0,
                               lineHeight: 1
                             }}
                             title="Add to collection"
@@ -2349,7 +2349,7 @@ const StudioHome = ({
                             }}
                             style={{
                               background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)',
-                              cursor: 'pointer', fontSize: '12px', padding: '0 2px', flexShrink: 0,
+                              cursor: 'pointer', fontSize: '9px', padding: '0 1px', flexShrink: 0,
                               lineHeight: 1
                             }}
                             title="Edit audio"
@@ -2361,7 +2361,7 @@ const StudioHome = ({
                             }}
                             style={{
                               background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)',
-                              cursor: 'pointer', fontSize: '12px', padding: '0 2px', flexShrink: 0,
+                              cursor: 'pointer', fontSize: '9px', padding: '0 1px', flexShrink: 0,
                               lineHeight: 1
                             }}
                             title="Trim audio"
@@ -2376,7 +2376,7 @@ const StudioHome = ({
                             }}
                             style={{
                               background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)',
-                              cursor: 'pointer', fontSize: '12px', padding: '0 2px', flexShrink: 0,
+                              cursor: 'pointer', fontSize: '9px', padding: '0 1px', flexShrink: 0,
                               lineHeight: 1
                             }}
                             title="Delete audio"
@@ -2451,18 +2451,18 @@ const StudioHome = ({
                 borderRight: '1px solid rgba(255,255,255,0.08)'
               }}>
                 <div style={{
-                  padding: '10px 12px',
+                  padding: '6px 8px',
                   borderBottom: '1px solid rgba(255,255,255,0.08)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   flexShrink: 0
                 }}>
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#fff' }}>
                     📝 Lyrics
                   </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.35)' }}>
                       {sidebarLyrics.length} saved
                     </span>
                     {importableLyrics.length > 0 && (
@@ -2538,18 +2538,18 @@ const StudioHome = ({
                 overflow: 'hidden'
               }}>
                 <div style={{
-                  padding: '10px 12px',
+                  padding: '6px 8px',
                   borderBottom: '1px solid rgba(255,255,255,0.08)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   flexShrink: 0
                 }}>
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>
-                    #️⃣ Captions / Hashtags
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#fff' }}>
+                    #️⃣ Captions
                   </span>
                 </div>
-                <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px' }}>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '4px 6px' }}>
                   <CollectionBankEditor
                     collection={collections.find(c => c.id === selectedCollection)}
                     artistId={artistId}
