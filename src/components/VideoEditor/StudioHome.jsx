@@ -1711,6 +1711,8 @@ const StudioHome = ({
                   allowMultiSelect={true}
                   pullFromCollection={selectedCollection}
                   onCollectionChange={setSelectedCollection}
+                  liveCollections={collections}
+                  onCollectionsUpdated={loadData}
                   isMobile={isMobile}
                   compact
                   refreshTrigger={libraryRefreshTrigger}
@@ -1820,6 +1822,8 @@ const StudioHome = ({
                   allowMultiSelect={true}
                   pullFromCollection={selectedCollection}
                   onCollectionChange={setSelectedCollection}
+                  liveCollections={collections}
+                  onCollectionsUpdated={loadData}
                   isMobile={isMobile}
                   compact
                   refreshTrigger={libraryRefreshTrigger}
@@ -1938,6 +1942,8 @@ const StudioHome = ({
                   allowMultiSelect={false}
                   pullFromCollection={selectedCollection}
                   onCollectionChange={setSelectedCollection}
+                  liveCollections={collections}
+                  onCollectionsUpdated={loadData}
                   isMobile={isMobile}
                   compact
                   refreshTrigger={libraryRefreshTrigger}

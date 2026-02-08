@@ -170,6 +170,8 @@ const LibraryBrowser = ({
   showCollectionPicker = true,
   pullFromCollection = null, // Force pull from specific collection
   onCollectionChange = null, // Notify parent when sidebar collection changes
+  liveCollections = null, // Shared collections from parent for consistent ordering
+  onCollectionsUpdated = null, // Notify parent when collections are mutated (create/delete/rename)
   isMobile = false,
   compact = false,
   refreshTrigger = 0 // Increment to force refresh
@@ -235,6 +237,13 @@ const LibraryBrowser = ({
     }
   }, [pullFromCollection]);
 
+  // Sync collections from parent (liveCollections) for consistent ordering with CollectionPicker
+  useEffect(() => {
+    if (liveCollections && liveCollections.length > 0) {
+      setCollections(liveCollections);
+    }
+  }, [liveCollections]);
+
   // Load data when artistId changes or refresh is triggered
   // Strategy: load from localStorage FIRST for instant UI, then merge Firestore in background
   useEffect(() => {
@@ -296,6 +305,8 @@ const LibraryBrowser = ({
       setLibrary(getLibrary(artistId));
     }
     setCollections(getCollections(artistId));
+    // Notify parent so CollectionPicker stays in sync
+    onCollectionsUpdated?.();
   };
 
   // After any collection mutation, sync the updated collection to Firestore
