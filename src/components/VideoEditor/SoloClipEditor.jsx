@@ -309,6 +309,18 @@ const SoloClipEditor = ({
     toastSuccess(`Saved clip "${clipData.name}" to library`);
   }, [selectedAudio, artistId, toastSuccess]);
 
+  // ── Text overlay CRUD ──
+  const getDefaultTextStyle = useCallback(() => ({
+    fontSize: 48,
+    fontFamily: 'Inter, sans-serif',
+    fontWeight: '600',
+    color: '#ffffff',
+    outline: true,
+    outlineColor: '#000000',
+    textAlign: 'center',
+    textCase: 'default'
+  }), []);
+
   // ── AI Transcription handler ──
   const handleTranscriptionComplete = useCallback((result) => {
     if (!result?.words?.length) {
@@ -348,18 +360,6 @@ const SoloClipEditor = ({
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
   }, []);
-
-  // ── Text overlay CRUD ──
-  const getDefaultTextStyle = useCallback(() => ({
-    fontSize: 48,
-    fontFamily: 'Inter, sans-serif',
-    fontWeight: '600',
-    color: '#ffffff',
-    outline: true,
-    outlineColor: '#000000',
-    textAlign: 'center',
-    textCase: 'default'
-  }), []);
 
   const addTextOverlay = useCallback((prefillText, overrideStart, overrideEnd) => {
     const start = overrideStart !== undefined ? overrideStart : currentTime;
