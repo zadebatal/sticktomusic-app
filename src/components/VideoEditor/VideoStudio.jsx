@@ -30,9 +30,9 @@ import {
   deleteCreatedSlideshowAsync,
   loadCreatedContentAsync,
   saveCreatedContentAsync,
-  addLyrics as addLyricsToLibrary,
-  updateLyrics as updateLyricsInLibrary,
-  deleteLyrics as deleteLyricsFromLibrary,
+  addLyricsAsync,
+  updateLyricsAsync,
+  deleteLyricsAsync,
   MEDIA_TYPES,
   STARTER_TEMPLATES
 } from '../../services/libraryService';
@@ -204,6 +204,61 @@ const saveSessionState = (state) => {
   }
 };
 
+/**
+ * DraftsView — Tabbed view that swaps between video drafts and slideshow drafts
+ */
+const DraftsView = (props) => {
+  const [draftsTab, setDraftsTab] = useState('videos');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+      {/* Tab toggle */}
+      <div style={{
+        display: 'flex', gap: '0', padding: '0 16px', backgroundColor: 'rgba(255,255,255,0.03)',
+        borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0
+      }}>
+        {['videos', 'slideshows'].map(tab => (
+          <button
+            key={tab}
+            onClick={() => setDraftsTab(tab)}
+            style={{
+              padding: '10px 20px', border: 'none', cursor: 'pointer',
+              backgroundColor: draftsTab === tab ? 'rgba(99,102,241,0.15)' : 'transparent',
+              color: draftsTab === tab ? '#a5b4fc' : '#6b7280',
+              fontSize: '13px', fontWeight: '600',
+              borderBottom: draftsTab === tab ? '2px solid #6366f1' : '2px solid transparent',
+              transition: 'all 0.15s'
+            }}
+          >
+            {tab === 'videos' ? 'Video Drafts' : 'Slideshow Drafts'}
+          </button>
+        ))}
+      </div>
+      {/* Content */}
+      <div style={{ flex: 1, overflow: 'auto' }}>
+        <ContentLibrary
+          category={props.category}
+          contentType={draftsTab}
+          onBack={props.onBack}
+          onMakeVideo={props.onMakeVideo}
+          onEditVideo={props.onEditVideo}
+          onDeleteVideo={props.onDeleteVideo}
+          onApproveVideo={props.onApproveVideo}
+          onUpdateVideo={props.onUpdateVideo}
+          onMakeSlideshow={props.onMakeSlideshow}
+          onEditSlideshow={props.onEditSlideshow}
+          onDeleteSlideshow={props.onDeleteSlideshow}
+          onSchedulePost={props.onSchedulePost}
+          onViewScheduling={props.onViewScheduling}
+          onShowBatchPipeline={props.onShowBatchPipeline}
+          accounts={props.accounts}
+          lateAccountIds={props.lateAccountIds}
+          artistId={props.artistId}
+        />
+      </div>
+    </div>
+  );
+};
+
 const VideoStudio = ({
   db = null, // Firestore instance for cross-device sync
   onClose,
@@ -257,6 +312,7 @@ const VideoStudio = ({
     const path = location.pathname;
     if (path.includes('/studio/library')) return 'library';
     if (path.includes('/studio/slideshows')) return 'slideshows';
+    if (path.includes('/studio/drafts')) return 'drafts';
     if (path.includes('/studio/scheduling')) return 'scheduling';
     return 'home';
   };
@@ -274,6 +330,7 @@ const VideoStudio = ({
     let targetPath = '/operator/studio';
     if (view === 'library') targetPath = '/operator/studio/library';
     else if (view === 'slideshows') targetPath = '/operator/studio/slideshows';
+    else if (view === 'drafts') targetPath = '/operator/studio/drafts';
     else if (view === 'scheduling') targetPath = '/operator/studio/scheduling';
     if (location.pathname !== targetPath) {
       navigate(targetPath, { replace: false });
@@ -285,6 +342,8 @@ const VideoStudio = ({
     const path = location.pathname;
     if (path.includes('/studio/scheduling') && currentView !== 'scheduling') {
       setCurrentViewState('scheduling');
+    } else if (path.includes('/studio/drafts') && currentView !== 'drafts') {
+      setCurrentViewState('drafts');
     } else if (path.includes('/studio/library') && currentView !== 'library') {
       setCurrentViewState('library');
     } else if (path.includes('/studio/slideshows') && currentView !== 'slideshows') {
@@ -1549,11 +1608,11 @@ const VideoStudio = ({
   // ============================================
 
   // Add lyrics to the bank
-  const handleAddLyrics = useCallback((lyricsData) => {
-    // Library mode: save via libraryService
+  const handleAddLyrics = useCallback(async (lyricsData) => {
+    // Library mode: save via libraryService (Firestore + localStorage)
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
-        return addLyricsToLibrary(currentArtistId, {
+        return addLyricsAsync(db, currentArtistId, {
           title: lyricsData.title || 'Untitled Lyrics',
           content: lyricsData.content || '',
           words: lyricsData.words || null
@@ -1583,14 +1642,14 @@ const VideoStudio = ({
     } : prev);
 
     return newLyrics;
-  }, [selectedCategory, currentArtistId]);
+  }, [selectedCategory, currentArtistId, db]);
 
   // Update lyrics
-  const handleUpdateLyrics = useCallback((lyricsId, updates) => {
+  const handleUpdateLyrics = useCallback(async (lyricsId, updates) => {
     // Library mode
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
-        updateLyricsInLibrary(currentArtistId, lyricsId, updates);
+        await updateLyricsAsync(db, currentArtistId, lyricsId, updates);
       }
       return;
     }
@@ -1613,14 +1672,14 @@ const VideoStudio = ({
         l.id === lyricsId ? { ...l, ...updates, updatedAt: new Date().toISOString() } : l
       )
     } : prev);
-  }, [selectedCategory, currentArtistId]);
+  }, [selectedCategory, currentArtistId, db]);
 
   // Delete lyrics from bank
-  const handleDeleteLyrics = useCallback((lyricsId) => {
+  const handleDeleteLyrics = useCallback(async (lyricsId) => {
     // Library mode
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
-        deleteLyricsFromLibrary(currentArtistId, lyricsId);
+        await deleteLyricsAsync(db, currentArtistId, lyricsId);
       }
       return;
     }
@@ -1636,7 +1695,7 @@ const VideoStudio = ({
       ...prev,
       lyrics: (prev.lyrics || []).filter(l => l.id !== lyricsId)
     } : prev);
-  }, [selectedCategory, currentArtistId]);
+  }, [selectedCategory, currentArtistId, db]);
 
   const categoryPresets = presets.filter(p =>
     p.categoryId === selectedCategory?.id || p.categoryId === null || !p.categoryId
@@ -1798,24 +1857,24 @@ const VideoStudio = ({
               </>
             )}
 
-            {/* LIBRARY-BASED MODE: Full breadcrumb with all destinations (Wave 4) */}
+            {/* LIBRARY-BASED MODE: Linear breadcrumb trail (Wave 4 v2) */}
+            {/* Dashboard > Studio > Videos > Slideshows > Drafts > Schedule */}
             {USE_LIBRARY_SYSTEM && !selectedCategory && (
               <>
-                {/* Dashboard - always visible, exits studio */}
+                {/* 1. Dashboard */}
                 <button
                   style={styles.breadcrumbLink}
                   onClick={() => navigateWithDraftCheck(onClose)}
                 >
                   Dashboard
                 </button>
-
                 <span style={styles.breadcrumbSep}>/</span>
 
-                {/* Studio Home - always visible */}
+                {/* 2. Studio */}
                 <button
                   style={{
                     ...styles.breadcrumbLink,
-                    ...(!studioMode && currentView === 'home' && !showEditor && !showSlideshowEditor ? styles.breadcrumbCurrent : {})
+                    ...(currentView === 'home' && !showEditor && !showSlideshowEditor ? styles.breadcrumbCurrent : {})
                   }}
                   onClick={() => navigateWithDraftCheck(() => {
                     setCurrentView('home');
@@ -1826,47 +1885,63 @@ const VideoStudio = ({
                 >
                   Studio
                 </button>
+                <span style={styles.breadcrumbSep}>/</span>
 
-                {/* Quick nav: always-visible destination links */}
-                <span style={styles.breadcrumbSep}>|</span>
+                {/* 3. Videos (Video Studio) */}
                 <button
                   style={{
-                    ...styles.breadcrumbQuickLink,
-                    ...(currentView === 'library' && !showEditor ? styles.breadcrumbQuickLinkActive : {})
+                    ...styles.breadcrumbLink,
+                    ...((currentView === 'library' && !showEditor) || (showEditor && studioMode !== 'slideshows') ? styles.breadcrumbCurrent : {})
                   }}
                   onClick={() => navigateWithDraftCheck(() => {
                     setCurrentView('library');
                     setStudioMode('videos');
                     setShowEditor(false);
                     setShowSlideshowEditor(false);
-                    if (!selectedCategory && artistCategories.length > 0) {
-                      setSelectedCategory(artistCategories[0]);
-                    }
                   })}
                 >
                   Videos
                 </button>
+                <span style={styles.breadcrumbSep}>/</span>
+
+                {/* 4. Slideshows (Slideshow Studio) */}
                 <button
                   style={{
-                    ...styles.breadcrumbQuickLink,
-                    ...(currentView === 'slideshows' && !showSlideshowEditor ? styles.breadcrumbQuickLinkActive : {})
+                    ...styles.breadcrumbLink,
+                    ...((currentView === 'slideshows' && !showSlideshowEditor) || showSlideshowEditor ? styles.breadcrumbCurrent : {})
                   }}
                   onClick={() => navigateWithDraftCheck(() => {
                     setCurrentView('slideshows');
                     setStudioMode('slideshows');
                     setShowEditor(false);
                     setShowSlideshowEditor(false);
-                    if (!selectedCategory && artistCategories.length > 0) {
-                      setSelectedCategory(artistCategories[0]);
-                    }
                   })}
                 >
                   Slideshows
                 </button>
+                <span style={styles.breadcrumbSep}>/</span>
+
+                {/* 5. Drafts (swap between video drafts and slideshow drafts) */}
                 <button
                   style={{
-                    ...styles.breadcrumbQuickLink,
-                    ...(currentView === 'scheduling' ? styles.breadcrumbQuickLinkActive : {})
+                    ...styles.breadcrumbLink,
+                    ...(currentView === 'drafts' ? styles.breadcrumbCurrent : {})
+                  }}
+                  onClick={() => navigateWithDraftCheck(() => {
+                    setCurrentView('drafts');
+                    setShowEditor(false);
+                    setShowSlideshowEditor(false);
+                  })}
+                >
+                  Drafts
+                </button>
+                <span style={styles.breadcrumbSep}>/</span>
+
+                {/* 6. Schedule */}
+                <button
+                  style={{
+                    ...styles.breadcrumbLink,
+                    ...(currentView === 'scheduling' ? styles.breadcrumbCurrent : {})
                   }}
                   onClick={() => navigateWithDraftCheck(() => {
                     setCurrentView('scheduling');
@@ -1877,11 +1952,13 @@ const VideoStudio = ({
                   Schedule
                 </button>
 
-                {/* Current context trail */}
+                {/* Editor context (when inside an editor) */}
                 {(showEditor || showSlideshowEditor) && (
                   <>
                     <span style={styles.breadcrumbSep}>/</span>
-                    <span style={styles.breadcrumbCurrent}>Editor</span>
+                    <span style={styles.breadcrumbCurrent}>
+                      {showSlideshowEditor ? 'Slideshow Editor' : 'Video Editor'}
+                    </span>
                   </>
                 )}
               </>
@@ -2045,6 +2122,7 @@ const VideoStudio = ({
             onApproveVideo={handleApproveVideo}
             onUpdateVideo={handleUpdateVideo}
             onSchedulePost={onSchedulePost}
+            onViewScheduling={() => setCurrentView('scheduling')}
             onShowBatchPipeline={() => setShowBatchPipeline(true)}
             accounts={accounts}
             lateAccountIds={lateAccountIds}
@@ -2061,9 +2139,32 @@ const VideoStudio = ({
             onEditSlideshow={(slideshow) => handleMakeSlideshow(slideshow)}
             onDeleteSlideshow={handleDeleteSlideshow}
             onSchedulePost={onSchedulePost}
+            onViewScheduling={() => setCurrentView('scheduling')}
             onShowBatchPipeline={() => {
               handleMakeSlideshow({ batch: true });
             }}
+            accounts={accounts}
+            lateAccountIds={lateAccountIds}
+            artistId={currentArtistId}
+          />
+        )}
+
+        {/* Drafts View — swap between video and slideshow drafts */}
+        {currentView === 'drafts' && (selectedCategory || (USE_LIBRARY_SYSTEM && libraryCategory)) && (
+          <DraftsView
+            category={selectedCategory || libraryCategory}
+            onBack={() => setCurrentView('home')}
+            onMakeVideo={handleMakeVideo}
+            onEditVideo={handleMakeVideo}
+            onDeleteVideo={handleDeleteVideo}
+            onApproveVideo={handleApproveVideo}
+            onUpdateVideo={handleUpdateVideo}
+            onMakeSlideshow={handleMakeSlideshow}
+            onEditSlideshow={(slideshow) => handleMakeSlideshow(slideshow)}
+            onDeleteSlideshow={handleDeleteSlideshow}
+            onSchedulePost={onSchedulePost}
+            onViewScheduling={() => setCurrentView('scheduling')}
+            onShowBatchPipeline={() => setShowBatchPipeline(true)}
             accounts={accounts}
             lateAccountIds={lateAccountIds}
             artistId={currentArtistId}

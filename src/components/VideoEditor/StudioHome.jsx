@@ -32,6 +32,10 @@ import {
   addLyrics,
   updateLyrics,
   deleteLyrics,
+  subscribeToLyrics,
+  addLyricsAsync,
+  updateLyricsAsync,
+  deleteLyricsAsync,
   getOnboardingStatus,
   incrementUseCount,
   addToCollection,
@@ -211,10 +215,18 @@ const StudioHome = ({
 
     // Load non-library data from localStorage as initial state
     setCollections(getCollections(artistId));
-    setLyrics(getLyrics(artistId));
+    setLyrics(getLyrics(artistId)); // immediate local fallback
     setCreatedContent(getCreatedContent(artistId));
 
     const unsubscribes = [];
+
+    // Subscribe to Firestore lyrics real-time sync (auto-migrates localStorage → Firestore)
+    if (db) {
+      const unsubLyrics = subscribeToLyrics(db, artistId, (firestoreLyrics) => {
+        setLyrics(firestoreLyrics);
+      });
+      unsubscribes.push(unsubLyrics);
+    }
 
     // For library + collections, use Firestore real-time subscription if db is available
     if (db) {
@@ -903,26 +915,28 @@ const StudioHome = ({
   // LYRICS HANDLERS
   // =====================
 
-  const handleAddLyrics = (lyricsData) => {
+  const handleAddLyrics = async (lyricsData) => {
     // Auto-tag new lyrics with current collection if one is selected
     const dataWithCollection = selectedCollection
       ? { ...lyricsData, collectionIds: [...(lyricsData.collectionIds || []), selectedCollection] }
       : lyricsData;
-    const newLyrics = addLyrics(artistId, dataWithCollection);
-    loadData();
+    // Dual-write: localStorage (immediate) + Firestore (async)
+    const newLyrics = await addLyricsAsync(db, artistId, dataWithCollection);
+    // No need to loadData() — Firestore subscription will push the update
+    if (!db) loadData(); // fallback for no-Firestore case
     if (externalAddLyrics) externalAddLyrics(dataWithCollection);
     return newLyrics;
   };
 
-  const handleUpdateLyrics = (lyricsId, updates) => {
-    updateLyrics(artistId, lyricsId, updates);
-    loadData();
+  const handleUpdateLyrics = async (lyricsId, updates) => {
+    await updateLyricsAsync(db, artistId, lyricsId, updates);
+    if (!db) loadData();
     if (externalUpdateLyrics) externalUpdateLyrics(lyricsId, updates);
   };
 
-  const handleDeleteLyrics = (lyricsId) => {
-    deleteLyrics(artistId, lyricsId);
-    loadData();
+  const handleDeleteLyrics = async (lyricsId) => {
+    await deleteLyricsAsync(db, artistId, lyricsId);
+    if (!db) loadData();
     if (externalDeleteLyrics) externalDeleteLyrics(lyricsId);
   };
 

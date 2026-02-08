@@ -1412,6 +1412,175 @@ export const deleteLyrics = (artistId, lyricsId) => {
 };
 
 // ============================================================================
+// LYRICS — FIRESTORE REAL-TIME SYNC
+// ============================================================================
+
+/**
+ * Subscribe to lyrics in real-time via Firestore onSnapshot.
+ * Falls back to localStorage if Firestore is empty or errors.
+ *
+ * @param {Object} db - Firestore instance
+ * @param {string} artistId
+ * @param {Function} callback - (lyrics[]) => void
+ * @returns {Function} Unsubscribe function
+ */
+export const subscribeToLyrics = (db, artistId, callback) => {
+  if (!db || !artistId) {
+    log('[Lyrics] No db/artistId — falling back to localStorage');
+    callback(getLyrics(artistId));
+    return () => {};
+  }
+
+  const lyricsRef = collection(db, 'artists', artistId, 'library', 'data', 'lyrics');
+  const q = query(lyricsRef, orderBy('createdAt', 'desc'));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      log('[Lyrics] Real-time update:', items.length, 'items');
+
+      // If Firestore empty, check localStorage fallback
+      if (items.length === 0) {
+        const local = getLyrics(artistId);
+        if (local.length > 0) {
+          log('[Lyrics] Firestore empty, using localStorage fallback:', local.length, 'items');
+          // Migrate local lyrics to Firestore
+          migrateLyricsToFirestore(db, artistId, local);
+          callback(local);
+          return;
+        }
+      }
+
+      // Sync Firestore data back to localStorage as cache
+      saveLyrics(artistId, items);
+      callback(items);
+    },
+    (error) => {
+      console.error('[Lyrics] Subscription error:', error);
+      callback(getLyrics(artistId));
+    }
+  );
+};
+
+/**
+ * Add lyrics entry (Firestore + localStorage)
+ * @param {Object} db - Firestore instance
+ * @param {string} artistId
+ * @param {Object} lyricsData
+ * @returns {Promise<Object>} Created lyrics entry
+ */
+export const addLyricsAsync = async (db, artistId, lyricsData) => {
+  const newEntry = lyricsData.id ? lyricsData : createLyricsEntry(lyricsData);
+
+  // Save to localStorage immediately
+  const local = addLyrics(artistId, newEntry);
+
+  // Then persist to Firestore
+  if (db && artistId) {
+    try {
+      const docRef = doc(db, 'artists', artistId, 'library', 'data', 'lyrics', newEntry.id);
+      await setDoc(docRef, {
+        ...newEntry,
+        updatedAt: serverTimestamp()
+      });
+      log('[Lyrics] Saved to Firestore:', newEntry.id);
+    } catch (error) {
+      console.error('[Lyrics] Firestore write failed:', error.message);
+    }
+  }
+
+  return newEntry;
+};
+
+/**
+ * Update lyrics entry (Firestore + localStorage)
+ * @param {Object} db - Firestore instance
+ * @param {string} artistId
+ * @param {string} lyricsId
+ * @param {Object} updates
+ * @returns {Promise<Object|null>} Updated lyrics entry
+ */
+export const updateLyricsAsync = async (db, artistId, lyricsId, updates) => {
+  // Update localStorage immediately
+  const updated = updateLyrics(artistId, lyricsId, updates);
+
+  // Then update Firestore
+  if (db && artistId && updated) {
+    try {
+      const docRef = doc(db, 'artists', artistId, 'library', 'data', 'lyrics', lyricsId);
+      await updateDoc(docRef, {
+        ...updates,
+        updatedAt: serverTimestamp()
+      });
+      log('[Lyrics] Updated in Firestore:', lyricsId);
+    } catch (error) {
+      console.error('[Lyrics] Firestore update failed:', error.message);
+      // If doc doesn't exist yet, create it
+      if (error.code === 'not-found' && updated) {
+        try {
+          const docRef = doc(db, 'artists', artistId, 'library', 'data', 'lyrics', lyricsId);
+          await setDoc(docRef, { ...updated, updatedAt: serverTimestamp() });
+          log('[Lyrics] Created missing doc in Firestore:', lyricsId);
+        } catch (e2) {
+          console.error('[Lyrics] Firestore fallback create failed:', e2.message);
+        }
+      }
+    }
+  }
+
+  return updated;
+};
+
+/**
+ * Delete lyrics entry (Firestore + localStorage)
+ * @param {Object} db - Firestore instance
+ * @param {string} artistId
+ * @param {string} lyricsId
+ * @returns {Promise<boolean>} Success
+ */
+export const deleteLyricsAsync = async (db, artistId, lyricsId) => {
+  // Delete from localStorage immediately
+  const success = deleteLyrics(artistId, lyricsId);
+
+  // Then delete from Firestore
+  if (db && artistId) {
+    try {
+      const docRef = doc(db, 'artists', artistId, 'library', 'data', 'lyrics', lyricsId);
+      await deleteDoc(docRef);
+      log('[Lyrics] Deleted from Firestore:', lyricsId);
+    } catch (error) {
+      console.error('[Lyrics] Firestore delete failed:', error.message);
+    }
+  }
+
+  return success;
+};
+
+/**
+ * Migrate localStorage lyrics to Firestore (one-time, idempotent)
+ * Called automatically when subscribeToLyrics finds Firestore empty but localStorage has data.
+ * @param {Object} db
+ * @param {string} artistId
+ * @param {Object[]} lyrics
+ */
+const migrateLyricsToFirestore = async (db, artistId, lyrics) => {
+  if (!db || !artistId || !lyrics.length) return;
+
+  try {
+    const batch = writeBatch(db);
+    lyrics.forEach(lyric => {
+      const docRef = doc(db, 'artists', artistId, 'library', 'data', 'lyrics', lyric.id);
+      batch.set(docRef, { ...lyric, updatedAt: serverTimestamp() });
+    });
+    await batch.commit();
+    log('[Lyrics] Migrated', lyrics.length, 'entries from localStorage to Firestore');
+  } catch (error) {
+    console.error('[Lyrics] Migration failed:', error.message);
+  }
+};
+
+// ============================================================================
 // ONBOARDING OPERATIONS
 // ============================================================================
 

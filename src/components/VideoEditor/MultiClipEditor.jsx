@@ -133,6 +133,8 @@ const MultiClipEditor = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [activeClipIndex, setActiveClipIndex] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const [playheadDragging, setPlayheadDragging] = useState(false);
   const videoRef = useRef(null);
   const animationRef = useRef(null);
 
@@ -250,12 +252,30 @@ const MultiClipEditor = ({
     }
   }, [activeClipIndex, clips]);
 
+  // Effective timeline duration = max(totalClipsDuration, audioDuration) so audio can extend past video
+  const timelineDuration = Math.max(totalDuration || 0, audioDuration || 0) || totalDuration || 1;
+
   const playbackLoop = useCallback(() => {
+    // If audio is longer than all clips and all clips ended, track audio time
+    if (audioRef.current && audioRef.current.src && !audioRef.current.paused && audioRef.current.duration > 0) {
+      const allClipsEnded = videoRef.current ? videoRef.current.ended : true;
+      const isLastClip = activeClipIndex >= clips.length - 1;
+      if (allClipsEnded && isLastClip && audioRef.current.currentTime > (totalDuration || 0)) {
+        setCurrentTime(audioRef.current.currentTime);
+        animationRef.current = requestAnimationFrame(playbackLoop);
+        return;
+      }
+    }
     if (videoRef.current) {
-      setCurrentTime(videoRef.current.currentTime);
+      // For multi-clip, currentTime is accumulated global time
+      let accBefore = 0;
+      for (let i = 0; i < activeClipIndex; i++) {
+        accBefore += getClipDuration(clips[i]?.id || clips[i]?.sourceId);
+      }
+      setCurrentTime(accBefore + videoRef.current.currentTime);
     }
     animationRef.current = requestAnimationFrame(playbackLoop);
-  }, []);
+  }, [activeClipIndex, clips, totalDuration]);
 
   const handlePlayPause = useCallback(() => {
     if (!videoRef.current) return;
@@ -330,8 +350,12 @@ const MultiClipEditor = ({
       const url = audio.localUrl || audio.url;
       audioRef.current.src = url;
       audioRef.current.load();
+      audioRef.current.onloadedmetadata = () => {
+        setAudioDuration(audioRef.current.duration || 0);
+      };
     } else if (audioRef.current && !audio) {
       audioRef.current.src = '';
+      setAudioDuration(0);
     }
     // When library audio is selected, mute source video audio so they don't overlap
     if (videoRef.current) {
@@ -523,9 +547,29 @@ const MultiClipEditor = ({
     setEditingTextValue(overlay.text);
   }, [textOverlays]);
 
+  // Compute clip cut points (boundaries between clips) for magnetic snap
+  const clipCutPoints = useMemo(() => {
+    const cuts = [0]; // timeline start
+    let acc = 0;
+    for (const c of clips) {
+      acc += getClipDuration(c.id || c.sourceId);
+      cuts.push(acc);
+    }
+    return cuts;
+  }, [clips, clipDurationsState]);
+
+  // Magnetic snap: snap a time value to nearest clip cut point within threshold
+  const SNAP_THRESHOLD = 0.3; // seconds
+  const snapToClipCut = useCallback((time) => {
+    for (const cutPoint of clipCutPoints) {
+      if (Math.abs(time - cutPoint) <= SNAP_THRESHOLD) return cutPoint;
+    }
+    return time;
+  }, [clipCutPoints]);
+
   useEffect(() => {
     if (!timelineDrag || !timelineRef.current) return;
-    const dur = totalDuration || 1;
+    const dur = timelineDuration || 1;
     const handleMouseMove = (e) => {
       const rect = timelineRef.current.getBoundingClientRect();
       const deltaX = e.clientX - timelineDrag.startX;
@@ -538,12 +582,22 @@ const MultiClipEditor = ({
         let newEnd = newStart + length;
         if (newEnd > dur) { newEnd = dur; newStart = dur - length; }
         if (newStart < 0) newStart = 0;
+        // Magnetic snap: snap start edge to nearest clip cut
+        const snappedStart = snapToClipCut(newStart);
+        if (snappedStart !== newStart) { newStart = snappedStart; newEnd = newStart + length; }
+        // Also try snapping end edge
+        const snappedEnd = snapToClipCut(newEnd);
+        if (snappedEnd !== newEnd) { newEnd = snappedEnd; newStart = newEnd - length; }
+        newStart = Math.max(0, newStart);
+        newEnd = Math.min(dur, newEnd);
         updateTextOverlay(timelineDrag.overlayId, { startTime: newStart, endTime: newEnd });
       } else if (timelineDrag.type === 'left') {
-        const newStart = Math.max(0, Math.min(timelineDrag.origEnd - minDur, timelineDrag.origStart + deltaSec));
+        let newStart = Math.max(0, Math.min(timelineDrag.origEnd - minDur, timelineDrag.origStart + deltaSec));
+        newStart = snapToClipCut(newStart); // Magnetic snap
         updateTextOverlay(timelineDrag.overlayId, { startTime: newStart });
       } else if (timelineDrag.type === 'right') {
-        const newEnd = Math.min(dur, Math.max(timelineDrag.origStart + minDur, timelineDrag.origEnd + deltaSec));
+        let newEnd = Math.min(dur, Math.max(timelineDrag.origStart + minDur, timelineDrag.origEnd + deltaSec));
+        newEnd = snapToClipCut(newEnd); // Magnetic snap
         updateTextOverlay(timelineDrag.overlayId, { endTime: newEnd });
       }
     };
@@ -554,7 +608,7 @@ const MultiClipEditor = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [timelineDrag, totalDuration, updateTextOverlay]);
+  }, [timelineDrag, timelineDuration, updateTextOverlay, snapToClipCut]);
 
   // ── Switch between videos ──
   const switchToVideo = useCallback((index) => {
@@ -1100,8 +1154,12 @@ const MultiClipEditor = ({
                   onEnded={() => {
                     if (activeClipIndex < clips.length - 1) {
                       setActiveClipIndex(prev => prev + 1);
-                      setCurrentTime(0);
+                      if (videoRef.current) videoRef.current.currentTime = 0;
                     } else {
+                      // Last clip ended — check if audio is still playing (longer than total clips)
+                      if (audioRef.current && audioRef.current.src && !audioRef.current.paused && audioRef.current.duration > totalDuration) {
+                        return; // Audio continues — playbackLoop will switch to audio time
+                      }
                       setIsPlaying(false);
                       if (animationRef.current) cancelAnimationFrame(animationRef.current);
                     }
@@ -1641,18 +1699,19 @@ const MultiClipEditor = ({
             ref={timelineRef}
             style={styles.timelineTrackArea}
             onClick={(e) => {
+              if (playheadDragging) return;
               if (e.target === e.currentTarget || e.target.dataset.timelineClickable) {
                 const rect = e.currentTarget.getBoundingClientRect();
                 const clickX = e.clientX - rect.left;
-                const time = (clickX / rect.width) * (totalDuration || 1);
-                handleSeek(Math.max(0, Math.min(totalDuration || 0, time)));
+                const time = (clickX / rect.width) * (timelineDuration || 1);
+                handleSeek(Math.max(0, Math.min(timelineDuration || 0, time)));
               }
             }}
           >
             {/* Time Ruler */}
             <div style={styles.timelineRuler}>
-              {totalDuration > 0 && Array.from({ length: Math.ceil(totalDuration) + 1 }, (_, i) => (
-                <div key={i} style={{ position: 'absolute', left: `${(i / totalDuration) * 100}%`, top: 0, height: '100%' }}>
+              {timelineDuration > 0 && Array.from({ length: Math.ceil(timelineDuration) + 1 }, (_, i) => (
+                <div key={i} style={{ position: 'absolute', left: `${(i / timelineDuration) * 100}%`, top: 0, height: '100%' }}>
                   <div style={{ width: '1px', height: i % 5 === 0 ? '10px' : '6px', backgroundColor: 'rgba(255,255,255,0.15)' }} />
                   {i % 2 === 0 && <span style={{ fontSize: '9px', color: '#6b7280', position: 'absolute', top: '10px', transform: 'translateX(-50%)' }}>{i}s</span>}
                 </div>
@@ -1662,8 +1721,8 @@ const MultiClipEditor = ({
             {/* Text Overlay Track */}
             <div style={styles.textTrack} data-timeline-clickable="true">
               {textOverlays.map((overlay) => {
-                const startPct = totalDuration > 0 ? ((overlay.startTime || 0) / totalDuration) * 100 : 0;
-                const widthPct = totalDuration > 0 ? (((overlay.endTime || 0) - (overlay.startTime || 0)) / totalDuration) * 100 : 10;
+                const startPct = timelineDuration > 0 ? ((overlay.startTime || 0) / timelineDuration) * 100 : 0;
+                const widthPct = timelineDuration > 0 ? (((overlay.endTime || 0) - (overlay.startTime || 0)) / timelineDuration) * 100 : 10;
                 const isSelected = editingTextId === overlay.id;
                 return (
                   <div
@@ -1706,6 +1765,23 @@ const MultiClipEditor = ({
               })}
             </div>
 
+            {/* Clip Cut Lines — visual snap guides at clip boundaries */}
+            {clipCutPoints.slice(1, -1).map((cutTime, i) => (
+              <div
+                key={`cut-${i}`}
+                style={{
+                  position: 'absolute',
+                  left: `${(cutTime / timelineDuration) * 100}%`,
+                  top: 0,
+                  bottom: 0,
+                  width: '1px',
+                  backgroundColor: 'rgba(234,179,8,0.4)',
+                  zIndex: 15,
+                  pointerEvents: 'none'
+                }}
+              />
+            ))}
+
             {/* Clip Track — multi-clip: segments for each clip */}
             <div style={styles.clipTrack}>
               {clips.map((clipItem, idx) => {
@@ -1715,8 +1791,8 @@ const MultiClipEditor = ({
                 for (let j = 0; j < idx; j++) {
                   accBefore += getClipDuration(clips[j].id || clips[j].sourceId);
                 }
-                const leftPct = totalDuration > 0 ? (accBefore / totalDuration) * 100 : 0;
-                const widthPct = totalDuration > 0 ? (clipDur / totalDuration) * 100 : 100;
+                const leftPct = timelineDuration > 0 ? (accBefore / timelineDuration) * 100 : 0;
+                const widthPct = timelineDuration > 0 ? (clipDur / timelineDuration) * 100 : 100;
                 return (
                   <div
                     key={idx}
@@ -1750,29 +1826,57 @@ const MultiClipEditor = ({
               })}
             </div>
 
-            {/* Playhead */}
-            {totalDuration > 0 && (
-              <div style={{
-                position: 'absolute',
-                left: `${(currentTime / totalDuration) * 100}%`,
-                top: 0,
-                bottom: 0,
-                width: '2px',
-                backgroundColor: '#ef4444',
-                zIndex: 20,
-                pointerEvents: 'none',
-                transition: isPlaying ? 'none' : 'left 0.1s ease-out'
-              }}>
+            {/* Playhead — draggable */}
+            {timelineDuration > 0 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: `${(currentTime / timelineDuration) * 100}%`,
+                  top: 0,
+                  bottom: 0,
+                  width: '2px',
+                  backgroundColor: '#ef4444',
+                  zIndex: 20,
+                  pointerEvents: 'auto',
+                  cursor: 'ew-resize',
+                  transition: (isPlaying && !playheadDragging) ? 'none' : playheadDragging ? 'none' : 'left 0.1s ease-out'
+                }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setPlayheadDragging(true);
+                  const wasPlaying = isPlaying;
+                  if (isPlaying) { videoRef.current?.pause(); audioRef.current?.pause(); cancelAnimationFrame(animationRef.current); setIsPlaying(false); }
+                  const handleDragMove = (moveE) => {
+                    const rect = timelineRef.current?.getBoundingClientRect();
+                    if (!rect) return;
+                    const pct = Math.max(0, Math.min(1, (moveE.clientX - rect.left) / rect.width));
+                    const t = pct * timelineDuration;
+                    handleSeek(t);
+                  };
+                  const handleDragEnd = () => {
+                    setPlayheadDragging(false);
+                    window.removeEventListener('mousemove', handleDragMove);
+                    window.removeEventListener('mouseup', handleDragEnd);
+                    if (wasPlaying) { videoRef.current?.play(); if (audioRef.current?.src) audioRef.current.play().catch(() => {}); animationRef.current = requestAnimationFrame(playbackLoop); setIsPlaying(true); }
+                  };
+                  window.addEventListener('mousemove', handleDragMove);
+                  window.addEventListener('mouseup', handleDragEnd);
+                }}
+              >
+                {/* Wider grab area */}
+                <div style={{ position: 'absolute', left: '-6px', right: '-6px', top: 0, bottom: 0, cursor: 'ew-resize' }} />
                 <div style={{
                   position: 'absolute',
                   top: '-2px',
                   left: '50%',
                   transform: 'translateX(-50%)',
-                  width: '8px',
-                  height: '8px',
+                  width: '10px',
+                  height: '10px',
                   backgroundColor: '#ef4444',
                   borderRadius: '2px',
-                  clipPath: 'polygon(0 0, 100% 0, 50% 100%)'
+                  clipPath: 'polygon(0 0, 100% 0, 50% 100%)',
+                  cursor: 'ew-resize'
                 }} />
               </div>
             )}

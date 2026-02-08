@@ -112,6 +112,8 @@ const SoloClipEditor = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [clipDuration, setClipDuration] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const [playheadDragging, setPlayheadDragging] = useState(false);
   const videoRef = useRef(null);
   const animationRef = useRef(null);
 
@@ -221,12 +223,24 @@ const SoloClipEditor = ({
     }
   }, []);
 
+  // Effective timeline duration = max(clip, audio) so audio can extend past video
+  const timelineDuration = Math.max(clipDuration || 0, audioDuration || 0) || clipDuration || 1;
+
   const playbackLoop = useCallback(() => {
+    // If audio is longer than video and video ended, track audio time instead
+    if (audioRef.current && audioRef.current.src && !audioRef.current.paused && audioRef.current.duration > 0) {
+      const videoEnded = videoRef.current ? videoRef.current.ended : true;
+      if (videoEnded && audioRef.current.currentTime > (clipDuration || 0)) {
+        setCurrentTime(audioRef.current.currentTime);
+        animationRef.current = requestAnimationFrame(playbackLoop);
+        return;
+      }
+    }
     if (videoRef.current) {
       setCurrentTime(videoRef.current.currentTime);
     }
     animationRef.current = requestAnimationFrame(playbackLoop);
-  }, []);
+  }, [clipDuration]);
 
   const handlePlayPause = useCallback(() => {
     if (!videoRef.current) return;
@@ -259,8 +273,13 @@ const SoloClipEditor = ({
       const url = audio.localUrl || audio.url;
       audioRef.current.src = url;
       audioRef.current.load();
+      // Track audio duration once loaded
+      audioRef.current.onloadedmetadata = () => {
+        setAudioDuration(audioRef.current.duration || 0);
+      };
     } else if (audioRef.current && !audio) {
       audioRef.current.src = '';
+      setAudioDuration(0);
     }
     // When library audio is selected, mute source video audio so they don't overlap
     if (videoRef.current) {
@@ -881,7 +900,15 @@ const SoloClipEditor = ({
                   ref={videoRef}
                   src={getClipUrl(clip)}
                   onLoadedMetadata={handleVideoLoaded}
-                  onEnded={() => { setIsPlaying(false); if (animationRef.current) cancelAnimationFrame(animationRef.current); }}
+                  onEnded={() => {
+                    // If audio is still playing (longer than video), keep the playback loop going
+                    if (audioRef.current && audioRef.current.src && !audioRef.current.paused && audioRef.current.duration > clipDuration) {
+                      // Video ended but audio continues — playbackLoop will switch to audio time
+                      return;
+                    }
+                    setIsPlaying(false);
+                    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+                  }}
                   loop={false}
                   playsInline
                   style={{
@@ -1395,18 +1422,19 @@ const SoloClipEditor = ({
             ref={timelineRef}
             style={styles.timelineTrackArea}
             onClick={(e) => {
+              if (playheadDragging) return;
               if (e.target === e.currentTarget || e.target.dataset.timelineClickable) {
                 const rect = e.currentTarget.getBoundingClientRect();
                 const clickX = e.clientX - rect.left;
-                const time = (clickX / rect.width) * (clipDuration || 1);
-                handleSeek(Math.max(0, Math.min(clipDuration || 0, time)));
+                const time = (clickX / rect.width) * (timelineDuration || 1);
+                handleSeek(Math.max(0, Math.min(timelineDuration || 0, time)));
               }
             }}
           >
             {/* Time Ruler */}
             <div style={styles.timelineRuler}>
-              {clipDuration > 0 && Array.from({ length: Math.ceil(clipDuration) + 1 }, (_, i) => (
-                <div key={i} style={{ position: 'absolute', left: `${(i / clipDuration) * 100}%`, top: 0, height: '100%' }}>
+              {timelineDuration > 0 && Array.from({ length: Math.ceil(timelineDuration) + 1 }, (_, i) => (
+                <div key={i} style={{ position: 'absolute', left: `${(i / timelineDuration) * 100}%`, top: 0, height: '100%' }}>
                   <div style={{ width: '1px', height: i % 5 === 0 ? '10px' : '6px', backgroundColor: 'rgba(255,255,255,0.15)' }} />
                   {i % 2 === 0 && <span style={{ fontSize: '9px', color: '#6b7280', position: 'absolute', top: '10px', transform: 'translateX(-50%)' }}>{i}s</span>}
                 </div>
@@ -1416,8 +1444,8 @@ const SoloClipEditor = ({
             {/* Text Overlay Track */}
             <div style={styles.textTrack} data-timeline-clickable="true">
               {textOverlays.map((overlay) => {
-                const startPct = clipDuration > 0 ? (overlay.startTime / clipDuration) * 100 : 0;
-                const widthPct = clipDuration > 0 ? ((overlay.endTime - overlay.startTime) / clipDuration) * 100 : 10;
+                const startPct = timelineDuration > 0 ? (overlay.startTime / timelineDuration) * 100 : 0;
+                const widthPct = timelineDuration > 0 ? ((overlay.endTime - overlay.startTime) / timelineDuration) * 100 : 10;
                 const isSelected = editingTextId === overlay.id;
                 return (
                   <div
@@ -1480,29 +1508,57 @@ const SoloClipEditor = ({
               </div>
             </div>
 
-            {/* Playhead */}
-            {clipDuration > 0 && (
-              <div style={{
-                position: 'absolute',
-                left: `${(currentTime / clipDuration) * 100}%`,
-                top: 0,
-                bottom: 0,
-                width: '2px',
-                backgroundColor: '#ef4444',
-                zIndex: 20,
-                pointerEvents: 'none',
-                transition: isPlaying ? 'none' : 'left 0.1s ease-out'
-              }}>
+            {/* Playhead — draggable */}
+            {timelineDuration > 0 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: `${(currentTime / timelineDuration) * 100}%`,
+                  top: 0,
+                  bottom: 0,
+                  width: '2px',
+                  backgroundColor: '#ef4444',
+                  zIndex: 20,
+                  pointerEvents: 'auto',
+                  cursor: 'ew-resize',
+                  transition: (isPlaying && !playheadDragging) ? 'none' : playheadDragging ? 'none' : 'left 0.1s ease-out'
+                }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setPlayheadDragging(true);
+                  const wasPlaying = isPlaying;
+                  if (isPlaying) { videoRef.current?.pause(); audioRef.current?.pause(); cancelAnimationFrame(animationRef.current); setIsPlaying(false); }
+                  const handleDragMove = (moveE) => {
+                    const rect = timelineRef.current?.getBoundingClientRect();
+                    if (!rect) return;
+                    const pct = Math.max(0, Math.min(1, (moveE.clientX - rect.left) / rect.width));
+                    const t = pct * timelineDuration;
+                    handleSeek(t);
+                  };
+                  const handleDragEnd = () => {
+                    setPlayheadDragging(false);
+                    window.removeEventListener('mousemove', handleDragMove);
+                    window.removeEventListener('mouseup', handleDragEnd);
+                    if (wasPlaying) { videoRef.current?.play(); if (audioRef.current?.src) audioRef.current.play().catch(() => {}); animationRef.current = requestAnimationFrame(playbackLoop); setIsPlaying(true); }
+                  };
+                  window.addEventListener('mousemove', handleDragMove);
+                  window.addEventListener('mouseup', handleDragEnd);
+                }}
+              >
+                {/* Wider grab area */}
+                <div style={{ position: 'absolute', left: '-6px', right: '-6px', top: 0, bottom: 0, cursor: 'ew-resize' }} />
                 <div style={{
                   position: 'absolute',
                   top: '-2px',
                   left: '50%',
                   transform: 'translateX(-50%)',
-                  width: '8px',
-                  height: '8px',
+                  width: '10px',
+                  height: '10px',
                   backgroundColor: '#ef4444',
                   borderRadius: '2px',
-                  clipPath: 'polygon(0 0, 100% 0, 50% 100%)'
+                  clipPath: 'polygon(0 0, 100% 0, 50% 100%)',
+                  cursor: 'ew-resize'
                 }} />
               </div>
             )}
