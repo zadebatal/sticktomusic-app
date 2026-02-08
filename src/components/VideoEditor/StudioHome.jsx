@@ -1481,7 +1481,7 @@ const StudioHome = ({
     },
     audioSidebarHeader: {
       padding: '14px 16px',
-      borderBottom: '1px solid rgba(255,255,255,0.08)',
+      borderBottom: `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}`,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -2077,10 +2077,10 @@ const StudioHome = ({
         {(studioMode === 'videos' || studioMode === 'slideshows') && (
           <div style={{
             display: 'flex',
-            width: selectedCollection ? '440px' : '200px',
+            width: selectedCollection ? '680px' : '240px',
             flexShrink: 0,
-            borderLeft: '1px solid rgba(255,255,255,0.1)',
-            backgroundColor: '#0d0d14',
+            borderLeft: `1px solid ${theme?.border?.default || 'rgba(255,255,255,0.1)'}`,
+            backgroundColor: theme?.bg?.surface || '#0d0d14',
             overflow: 'hidden',
             transition: 'width 0.2s ease'
           }}>
@@ -2091,11 +2091,11 @@ const StudioHome = ({
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
-              borderRight: selectedCollection ? '1px solid rgba(255,255,255,0.08)' : 'none'
+              borderRight: selectedCollection ? `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}` : 'none'
             }}>
               <div style={{
                 padding: '6px 8px',
-                borderBottom: '1px solid rgba(255,255,255,0.08)',
+                borderBottom: `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -2457,11 +2457,11 @@ const StudioHome = ({
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden',
-                borderRight: '1px solid rgba(255,255,255,0.08)'
+                borderRight: `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}`
               }}>
                 <div style={{
                   padding: '6px 8px',
-                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  borderBottom: `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -2548,7 +2548,7 @@ const StudioHome = ({
               }}>
                 <div style={{
                   padding: '6px 8px',
-                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  borderBottom: `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -2575,11 +2575,11 @@ const StudioHome = ({
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
-              borderLeft: '1px solid rgba(255,255,255,0.08)'
+              borderLeft: `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}`
             }}>
               <div style={{
                 padding: '6px 8px',
-                borderBottom: '1px solid rgba(255,255,255,0.08)',
+                borderBottom: `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -2616,7 +2616,7 @@ const StudioHome = ({
                 }}>
                   <div style={{
                     padding: '10px 12px',
-                    borderBottom: '1px solid rgba(255,255,255,0.08)',
+                    borderBottom: `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}`,
                     flexShrink: 0
                   }}>
                     <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>

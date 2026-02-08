@@ -586,8 +586,12 @@ const StickToMusic = () => {
 
     log('📥 Loading artists from Firestore...');
 
-    // First ensure Boon exists and migrate any legacy data (only once)
-    if (!boonInitializedRef.current) {
+    // Determine if current user is a conductor (super-admin)
+    const isCond = CONDUCTOR_EMAILS.includes(currentAuthUser?.email?.toLowerCase());
+
+    // Only ensure Boon exists for conductor users — Boon is the conductor's default artist.
+    // Non-conductors must only see their assigned artists, never Boon.
+    if (!boonInitializedRef.current && isCond) {
       boonInitializedRef.current = true;
       ensureBoonArtistExists(db).then((boonArtist) => {
         if (boonArtist && !currentArtistId) {
@@ -609,20 +613,35 @@ const StickToMusic = () => {
       // Always validate artist selection against the current user's permissions.
       // This prevents cross-user data leakage if localStorage retains a stale artist ID.
       if (artists.length > 0) {
+        // Check BOTH allowedUsers collection AND CONDUCTOR_EMAILS for conductor status
         const userRole = allowedUsers.find(u => u.email?.toLowerCase() === currentAuthUser?.email?.toLowerCase());
-        const isUserConductor = userRole?.role === 'conductor';
+        const isUserConductor = userRole?.role === 'conductor' || CONDUCTOR_EMAILS.includes(currentAuthUser?.email?.toLowerCase());
         const assignedIds = userRole?.assignedArtistIds || [];
         const visibleArtists = isUserConductor ? artists : artists.filter(a => assignedIds.includes(a.id));
 
+        log('🔐 Artist isolation check:', {
+          email: currentAuthUser?.email,
+          isUserConductor,
+          assignedIds,
+          visibleCount: visibleArtists.length,
+          currentArtistId
+        });
+
         // If current artist is already valid for this user, keep it; otherwise re-select
         const currentIsValid = currentArtistId && visibleArtists.find(a => a.id === currentArtistId);
-        if (!currentIsValid && visibleArtists.length > 0) {
-          const lastId = getLastArtistId();
-          const artistToSelect = lastId && visibleArtists.find(a => a.id === lastId)
-            ? lastId
-            : visibleArtists[0].id;
-          setCurrentArtistId(artistToSelect);
-          setLastArtistId(artistToSelect);
+        if (!currentIsValid) {
+          if (visibleArtists.length > 0) {
+            const lastId = getLastArtistId();
+            const artistToSelect = lastId && visibleArtists.find(a => a.id === lastId)
+              ? lastId
+              : visibleArtists[0].id;
+            setCurrentArtistId(artistToSelect);
+            setLastArtistId(artistToSelect);
+          } else if (!isUserConductor) {
+            // Non-conductor with no assigned artists — clear selection to prevent seeing another user's data
+            log('⚠️ Non-conductor has no assigned artists, clearing selection');
+            setCurrentArtistId(null);
+          }
         }
       }
     });
@@ -3226,7 +3245,7 @@ const StickToMusic = () => {
               lateAccountIds={LATE_ACCOUNT_IDS}
               loadingLatePages={loadingLatePages}
               onLoadLatePages={loadLatePages}
-              onConfigureLate={() => setShowLateConfigModal && setShowLateConfigModal(true)}
+              onConfigureLate={() => { setOperatorTab('settings'); showToast('Configure Late API connection in Settings', 'info'); }}
             />
           )}
 

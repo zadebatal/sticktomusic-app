@@ -819,6 +819,7 @@ const PostRow = ({
   onDragStart, onDragOver, onDrop, onDragEnd,
   previewTime
 }) => {
+  const { theme } = useTheme();
   const [caption, setCaption] = useState(post.caption || '');
   const [schedDate, setSchedDate] = useState('');
   const [schedTime, setSchedTime] = useState('');
@@ -856,12 +857,12 @@ const PostRow = ({
   }[post.status] || '#71717a';
 
   const statusBg = {
-    [POST_STATUS.DRAFT]: theme.border.default,
+    [POST_STATUS.DRAFT]: theme?.border?.default || '#27272a',
     [POST_STATUS.SCHEDULED]: '#312e81',
     [POST_STATUS.POSTING]: '#78350f',
     [POST_STATUS.POSTED]: '#064e3b',
     [POST_STATUS.FAILED]: '#7f1d1d'
-  }[post.status] || theme.border.default;
+  }[post.status] || (theme?.border?.default || '#27272a');
 
   const previewImage = post.thumbnail || post.editorState?.thumbnail || post.editorState?.slides?.[0]?.backgroundImage || null;
 
