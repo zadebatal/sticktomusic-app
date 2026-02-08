@@ -30,6 +30,7 @@ const SchedulingPage = ({
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
+  const s = getS(theme);
 
   // ── Core State ──
   const [posts, setPosts] = useState([]);
@@ -1402,7 +1403,7 @@ const CalendarView = ({ posts, expandedPostId, onSelectPost, calendarDate, onCha
 // Styles
 // ═══════════════════════════════════════════════════
 
-const s = {
+const getS = (theme) => ({
   page: { display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: theme.bg.page, color: theme.text.primary, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
   loadingState: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' },
   spinner: { width: '32px', height: '32px', border: `3px solid ${theme.border.default}`, borderTop: `3px solid ${theme.accent.primary}`, borderRadius: '50%', animation: 'spin 1s linear infinite' },
@@ -1515,6 +1516,6 @@ const s = {
   calDayHeader: { padding: '8px 6px', backgroundColor: theme.bg.surface, color: theme.text.muted, fontSize: '11px', fontWeight: '600', textAlign: 'center', textTransform: 'uppercase' },
   calCell: { backgroundColor: theme.bg.surface, padding: '6px', minHeight: '90px', display: 'flex', flexDirection: 'column', border: `1px solid ${theme.border.default}` },
   calCellDate: { fontSize: '11px', fontWeight: '600', color: theme.text.secondary, marginBottom: '3px' }
-};
+});
 
 export default SchedulingPage;
