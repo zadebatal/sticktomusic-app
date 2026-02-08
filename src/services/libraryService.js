@@ -407,7 +407,8 @@ export const createLyricsEntry = ({
   words = [],
   audioId = null,
   audioStartTime = null,
-  audioEndTime = null
+  audioEndTime = null,
+  collectionIds = []
 }) => {
   const now = new Date().toISOString();
   return {
@@ -415,6 +416,7 @@ export const createLyricsEntry = ({
     title,
     content, // Raw lyrics text
     words, // Timed words array (LOCAL TIME)
+    collectionIds, // Which collections this lyric belongs to
 
     // Associated audio (optional)
     audioId,
