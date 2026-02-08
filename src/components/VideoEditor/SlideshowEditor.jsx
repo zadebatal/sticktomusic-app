@@ -2086,7 +2086,7 @@ const SlideshowEditor = ({
                 onDrop={(e) => handleDropOnBankColumn(e, 'A')}
               >
                 <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: '#5eead4', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(20,184,166,0.08)', textAlign: 'center' }}>
-                  Image A
+                  Slide 1 Photos
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
                   {(() => {
@@ -2099,7 +2099,7 @@ const SlideshowEditor = ({
                     })();
                     return bankAImages.length === 0 ? (
                       <div style={{ fontSize: '11px', color: '#6b7280', padding: '16px 8px', textAlign: 'center' }}>
-                        No images in Bank A
+                        No images in Slide 1
                         {onImportToBank && (
                           <button
                             style={{ marginTop: '8px', padding: '6px 12px', borderRadius: '6px', border: '1px solid rgba(99,102,241,0.3)', backgroundColor: 'rgba(99,102,241,0.1)', color: '#a5b4fc', fontSize: '11px', cursor: 'pointer', display: 'block', width: '100%' }}
@@ -2150,7 +2150,7 @@ const SlideshowEditor = ({
                 onDrop={(e) => handleDropOnBankColumn(e, 'B')}
               >
                 <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: '#fbbf24', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(245,158,11,0.08)', textAlign: 'center' }}>
-                  Image B
+                  Slide 2 Photos
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
                   {(() => {
@@ -2163,7 +2163,7 @@ const SlideshowEditor = ({
                     })();
                     return bankBImages.length === 0 ? (
                       <div style={{ fontSize: '11px', color: '#6b7280', padding: '16px 8px', textAlign: 'center' }}>
-                        No images in Bank B
+                        No images in Slide 2
                         {onImportToBank && (
                           <button
                             style={{ marginTop: '8px', padding: '6px 12px', borderRadius: '6px', border: '1px solid rgba(245,158,11,0.3)', backgroundColor: 'rgba(245,158,11,0.1)', color: '#fbbf24', fontSize: '11px', cursor: 'pointer', display: 'block', width: '100%' }}
@@ -2210,7 +2210,7 @@ const SlideshowEditor = ({
                   {/* Text Bank A */}
                   <div style={{ marginBottom: '12px' }}>
                     <div style={{ fontSize: '11px', fontWeight: '600', color: '#f9a8d4', marginBottom: '6px' }}>
-                      Text A <span style={{ fontSize: '10px', color: '#6b7280', fontWeight: '400' }}>Slide 1</span>
+                      Slide 1 Text
                     </div>
                     <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
                       <input type="text" value={newTextA} onChange={(e) => setNewTextA(e.target.value)}
@@ -2242,7 +2242,7 @@ const SlideshowEditor = ({
                   {/* Text Bank B */}
                   <div style={{ marginBottom: '12px' }}>
                     <div style={{ fontSize: '11px', fontWeight: '600', color: '#a5b4fc', marginBottom: '6px' }}>
-                      Text B <span style={{ fontSize: '10px', color: '#6b7280', fontWeight: '400' }}>Slide 2</span>
+                      Slide 2 Text
                     </div>
                     <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
                       <input type="text" value={newTextB} onChange={(e) => setNewTextB(e.target.value)}
@@ -3429,12 +3429,12 @@ const SlideshowEditor = ({
                     backgroundColor: 'rgba(255,255,255,0.04)',
                     borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)',
                     padding: '1px'
-                  }} title="Keep template text on generated slides (otherwise pulls from text banks)">
+                  }} title="Keep exact text from template: None = use text banks, Slide 1/2 = keep that slide's text, Both = keep all text">
                     {[
-                      { value: 'none', label: 'Banks' },
-                      { value: 'slideA', label: 'A' },
-                      { value: 'slideB', label: 'B' },
-                      { value: 'both', label: 'A+B' }
+                      { value: 'none', label: 'None' },
+                      { value: 'slideA', label: 'Slide 1' },
+                      { value: 'slideB', label: 'Slide 2' },
+                      { value: 'both', label: 'Both' }
                     ].map(opt => (
                       <button
                         key={opt.value}
