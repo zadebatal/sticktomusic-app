@@ -39,6 +39,7 @@ const SlideshowEditor = ({
   schedulerEditMode = false
 }) => {
   const { theme } = useTheme();
+  const styles = getStyles(theme);
 
   // Mobile responsive detection
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
@@ -4320,8 +4321,8 @@ const TextEditorPanel = ({
   );
 };
 
-// Styles
-const styles = {
+// Styles — function so it can access theme from the calling component
+const getStyles = (theme) => ({
   overlay: {
     position: 'fixed',
     inset: 0,
@@ -5251,7 +5252,7 @@ const styles = {
     backgroundColor: '#22c55e',
     transition: 'width 0.1s linear'
   }
-};
+});
 
 // Flowstage-style Text Editor Panel Styles
 const textPanelStyles = {

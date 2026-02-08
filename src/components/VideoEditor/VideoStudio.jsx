@@ -275,6 +275,7 @@ const VideoStudio = ({
   // BUG-034: Toast notifications instead of alert()
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
+  const styles = getStyles(theme);
 
   // Mobile responsive detection
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
@@ -2407,7 +2408,7 @@ const VideoStudio = ({
   );
 };
 
-const styles = {
+const getStyles = (theme) => ({
   container: {
     position: 'fixed',
     inset: 0,
@@ -2601,6 +2602,6 @@ const styles = {
     color: theme.accent.primary,
     margin: '16px 0 0 0'
   }
-};
+});
 
 export default VideoStudio;
