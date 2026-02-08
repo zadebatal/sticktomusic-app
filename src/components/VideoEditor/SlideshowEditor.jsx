@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
-import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, MEDIA_TYPES, addToTextBank, assignToBank, saveCollectionToFirestore } from '../../services/libraryService';
+import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, getLyrics, MEDIA_TYPES, addToTextBank, assignToBank, saveCollectionToFirestore } from '../../services/libraryService';
 import { useToast } from '../ui';
 import LyricBank from './LyricBank';
 import AudioClipSelector from './AudioClipSelector';
@@ -338,7 +338,23 @@ const SlideshowEditor = ({
   // Get content from category's banks (separate from video banks)
   const imagesA = category?.imagesA || [];
   const imagesB = category?.imagesB || [];
-  const lyrics = category?.lyrics || [];
+  // Lyrics: merge category lyrics with library lyrics (for StudioHome/library mode)
+  const [libraryLyrics, setLibraryLyrics] = useState([]);
+  const refreshLibraryLyrics = useCallback(() => {
+    if (artistId) setLibraryLyrics(getLyrics(artistId));
+  }, [artistId]);
+  useEffect(() => { refreshLibraryLyrics(); }, [refreshLibraryLyrics]);
+  const lyrics = (() => {
+    const catLyrics = category?.lyrics || [];
+    if (catLyrics.length > 0) return catLyrics;
+    return libraryLyrics;
+  })();
+  // Wrapper: add lyrics then refresh local state so picker updates immediately
+  const handleAddLyricsAndRefresh = useCallback((data) => {
+    onAddLyrics?.(data);
+    // Refresh after a tick so localStorage write completes first
+    setTimeout(refreshLibraryLyrics, 50);
+  }, [onAddLyrics, refreshLibraryLyrics]);
 
   // Audio tracks: pull from library audio filtered by active collection, fallback to category.audio
   const audioTracks = (() => {
@@ -1407,7 +1423,7 @@ const SlideshowEditor = ({
       setTranscribedLyrics(result.text);
       if (onAddLyrics) {
         const title = selectedAudio?.name || 'Transcribed Lyrics';
-        onAddLyrics({
+        handleAddLyricsAndRefresh({
           id: `lyric_${Date.now()}`,
           title: title.replace(/\.[^/.]+$/, ''),
           content: result.text,
@@ -3015,7 +3031,7 @@ const SlideshowEditor = ({
                             e.stopPropagation();
                             const text = prompt('Enter lyrics to add to bank:');
                             if (text?.trim()) {
-                              onAddLyrics({
+                              handleAddLyricsAndRefresh({
                                 title: text.split('\n')[0].slice(0, 30) || 'New Lyrics',
                                 content: text.trim()
                               });
@@ -3564,7 +3580,7 @@ const SlideshowEditor = ({
                   setEditingTextId(null);
                 }}
                 onRerollText={(overlayId, bankSource) => handleTextReroll(overlayId, bankSource)}
-                onAddLyrics={onAddLyrics}
+                onAddLyrics={handleAddLyricsAndRefresh}
                 onSaveTemplate={handleSaveTemplate}
                 onClose={() => setMobilePanelTab('preview')}
                 isMobile={true}
@@ -4153,7 +4169,7 @@ const TextEditorPanel = ({
             <button
               style={textPanelStyles.saveToLyricBankBtn}
               onClick={() => {
-                onAddLyrics({
+                handleAddLyricsAndRefresh({
                   id: `lyric_${Date.now()}`,
                   title: selectedOverlay.text.split('\n')[0].slice(0, 30) || 'Saved Lyrics',
                   content: selectedOverlay.text.trim(),
