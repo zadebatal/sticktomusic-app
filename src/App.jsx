@@ -468,6 +468,7 @@ const StickToMusic = () => {
   const [addArtistForm, setAddArtistForm] = useState({ name: '', tier: 'Scale', cdTier: 'CD Lite', assignedOperatorId: '', error: null, isLoading: false });
   const [deleteArtistConfirm, setDeleteArtistConfirm] = useState({ show: false, artist: null, isDeleting: false });
   const [reassignArtist, setReassignArtist] = useState({ show: false, artist: null });
+  const [editArtistModal, setEditArtistModal] = useState({ show: false, artist: null, tier: '', cdTier: '', activeSince: '', isSaving: false });
 
   // Firestore data - allowed users loaded from database
   const [allowedUsers, setAllowedUsers] = useState([]);
@@ -833,6 +834,24 @@ const StickToMusic = () => {
       alert('Failed to reassign: ' + error.message);
     }
     setReassignArtist({ show: false, artist: null });
+  };
+
+  // Handle saving edits to artist tier, cdTier, activeSince
+  const handleSaveArtistEdit = async () => {
+    if (!editArtistModal.artist) return;
+    setEditArtistModal(prev => ({ ...prev, isSaving: true }));
+    try {
+      await updateArtist(db, editArtistModal.artist.id, {
+        tier: editArtistModal.tier,
+        cdTier: editArtistModal.cdTier,
+        activeSince: editArtistModal.activeSince
+      });
+      console.log('Updated artist details:', editArtistModal.artist.id);
+    } catch (error) {
+      console.error('Failed to update artist:', error);
+      alert('Failed to save: ' + error.message);
+    }
+    setEditArtistModal({ show: false, artist: null, tier: '', cdTier: '', activeSince: '', isSaving: false });
   };
 
   // Set the app-level user state based on currentAuthUser and allowedUsers
@@ -3326,6 +3345,15 @@ const StickToMusic = () => {
                     {/* Action buttons — visible on hover (conductor only) */}
                     {isConductor(user) && (
                       <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setEditArtistModal({ show: true, artist, tier: artist.tier || 'Scale', cdTier: artist.cdTier || 'CD Lite', activeSince: artist.activeSince || '', isSaving: false }); }}
+                          className="p-1.5 rounded-lg hover:bg-zinc-700 text-zinc-400 hover:text-white transition"
+                          title="Edit artist details"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                          </svg>
+                        </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); setReassignArtist({ show: true, artist }); }}
                           className="p-1.5 rounded-lg hover:bg-zinc-700 text-zinc-400 hover:text-white transition"
@@ -6283,6 +6311,71 @@ const StickToMusic = () => {
                       );
                     })
                   }
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* EDIT ARTIST MODAL */}
+        {editArtistModal.show && editArtistModal.artist && (
+          <div className="fixed inset-0 bg-black/80 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={() => setEditArtistModal({ show: false, artist: null, tier: '', cdTier: '', activeSince: '', isSaving: false })}>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md" onClick={e => e.stopPropagation()}>
+              <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+                <h2 className="text-xl font-bold">Edit Artist</h2>
+                <button onClick={() => setEditArtistModal({ show: false, artist: null, tier: '', cdTier: '', activeSince: '', isSaving: false })} className="text-zinc-500 hover:text-white">✕</button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-zinc-400 text-sm">Editing <strong className="text-white">{editArtistModal.artist.name}</strong></p>
+
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-1.5">Tier</label>
+                  <select
+                    value={editArtistModal.tier}
+                    onChange={(e) => setEditArtistModal(prev => ({ ...prev, tier: e.target.value }))}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500"
+                  >
+                    <option value="Scale">Scale</option>
+                    <option value="Growth">Growth</option>
+                    <option value="Starter">Starter</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-1.5">CD Tier</label>
+                  <select
+                    value={editArtistModal.cdTier}
+                    onChange={(e) => setEditArtistModal(prev => ({ ...prev, cdTier: e.target.value }))}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500"
+                  >
+                    <option value="CD Lite">CD Lite</option>
+                    <option value="CD Pro">CD Pro</option>
+                    <option value="CD Elite">CD Elite</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-1.5">Active Since</label>
+                  <input
+                    type="text"
+                    value={editArtistModal.activeSince}
+                    onChange={(e) => setEditArtistModal(prev => ({ ...prev, activeSince: e.target.value }))}
+                    placeholder="e.g. Nov 2024"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500"
+                  />
+                  <p className="text-xs text-zinc-600 mt-1">Format: Mon YYYY (e.g. Nov 2024, Feb 2026)</p>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => setEditArtistModal({ show: false, artist: null, tier: '', cdTier: '', activeSince: '', isSaving: false })}
+                    className="flex-1 px-4 py-2.5 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition text-sm"
+                  >Cancel</button>
+                  <button
+                    onClick={handleSaveArtistEdit}
+                    disabled={editArtistModal.isSaving}
+                    className="flex-1 px-4 py-2.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white transition text-sm font-medium disabled:opacity-50"
+                  >{editArtistModal.isSaving ? 'Saving...' : 'Save'}</button>
                 </div>
               </div>
             </div>
