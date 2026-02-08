@@ -104,9 +104,6 @@ const SoloClipEditor = ({
   const [selectedAudio, setSelectedAudio] = useState(existingVideo?.audio || null);
   const audioRef = useRef(null);
 
-  // Derive library audio from libraryMedia
-  const libraryAudio = libraryMedia.filter(i => i.type === MEDIA_TYPES.AUDIO);
-
   // ── Playback state ──
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -128,6 +125,9 @@ const SoloClipEditor = ({
   // ── Library state ──
   const [collections, setCollections] = useState([]);
   const [libraryMedia, setLibraryMedia] = useState([]);
+
+  // Derive library audio from libraryMedia
+  const libraryAudio = libraryMedia.filter(i => i.type === MEDIA_TYPES.AUDIO);
 
   // ── Text bank input state ──
   const [newTextA, setNewTextA] = useState('');

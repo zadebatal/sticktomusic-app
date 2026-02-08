@@ -105,9 +105,6 @@ const MultiClipEditor = ({
   const [selectedAudio, setSelectedAudio] = useState(existingVideo?.audio || null);
   const audioRef = useRef(null);
 
-  // Derive library audio from libraryMedia
-  const libraryAudio = libraryMedia.filter(i => i.type === MEDIA_TYPES.AUDIO);
-
   // ── Clip durations tracking ──
   const clipDurationsRef = useRef({});
   const [clipDurationsState, setClipDurationsState] = useState({});
@@ -149,6 +146,9 @@ const MultiClipEditor = ({
   // ── Library state ──
   const [collections, setCollections] = useState([]);
   const [libraryMedia, setLibraryMedia] = useState([]);
+
+  // Derive library audio from libraryMedia
+  const libraryAudio = libraryMedia.filter(i => i.type === MEDIA_TYPES.AUDIO);
 
   // ── Text bank input state ──
   const [newTextA, setNewTextA] = useState('');
