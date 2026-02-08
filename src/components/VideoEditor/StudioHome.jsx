@@ -74,6 +74,7 @@ const StudioHome = ({
   const [activeTab, setActiveTab] = useState('media'); // kept for compat
   const [sidebarSection, setSidebarSection] = useState({ audio: true, lyrics: false, banks: false });
   const [selectedCollection, setSelectedCollection] = useState(null);
+  const [selectedBanks, setSelectedBanks] = useState({ bankA: true, bankB: true }); // Which banks feed into editor
   // autoCollectionSet removed — we always default to All Media now
 
   // Library State
@@ -1004,7 +1005,8 @@ const StudioHome = ({
         libraryAudio: audioForEditor,
         libraryLyrics: lyricsForEditor,
         pullFromCollection: selectedCollection,
-        collectionId: selectedCollection || null
+        collectionId: selectedCollection || null,
+        selectedBanks: selectedCollection ? selectedBanks : null
       });
     }
   };
@@ -1829,6 +1831,53 @@ const StudioHome = ({
                   refreshTrigger={libraryRefreshTrigger}
                 />
               </div>
+
+              {/* Bank Selection — shown when a collection is selected */}
+              {selectedCollection && (() => {
+                const col = collections.find(c => c.id === selectedCollection);
+                if (!col) return null;
+                const bankACount = (col.bankA || []).length;
+                const bankBCount = (col.bankB || []).length;
+                if (bankACount === 0 && bankBCount === 0) return null;
+                return (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '16px',
+                    padding: '8px 12px', margin: '0 0 4px 0',
+                    backgroundColor: 'rgba(255,255,255,0.03)',
+                    borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)'
+                  }}>
+                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Pull from:
+                    </span>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px', color: bankACount > 0 ? '#fff' : 'rgba(255,255,255,0.3)' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedBanks.bankA}
+                        onChange={(e) => setSelectedBanks(prev => ({ ...prev, bankA: e.target.checked }))}
+                        disabled={bankACount === 0}
+                        style={{ accentColor: '#14b8a6', width: '16px', height: '16px', cursor: 'pointer' }}
+                      />
+                      <span style={{ color: '#14b8a6', fontWeight: 600 }}>Bank A</span>
+                      <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', backgroundColor: 'rgba(255,255,255,0.05)', padding: '1px 6px', borderRadius: '4px' }}>
+                        {bankACount}
+                      </span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px', color: bankBCount > 0 ? '#fff' : 'rgba(255,255,255,0.3)' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedBanks.bankB}
+                        onChange={(e) => setSelectedBanks(prev => ({ ...prev, bankB: e.target.checked }))}
+                        disabled={bankBCount === 0}
+                        style={{ accentColor: '#f59e0b', width: '16px', height: '16px', cursor: 'pointer' }}
+                      />
+                      <span style={{ color: '#f59e0b', fontWeight: 600 }}>Bank B</span>
+                      <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', backgroundColor: 'rgba(255,255,255,0.05)', padding: '1px 6px', borderRadius: '4px' }}>
+                        {bankBCount}
+                      </span>
+                    </label>
+                  </div>
+                );
+              })()}
 
               {/* Action Bar */}
               <div style={styles.actionBar}>

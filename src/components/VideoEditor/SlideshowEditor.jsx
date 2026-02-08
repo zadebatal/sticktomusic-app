@@ -26,6 +26,7 @@ const SlideshowEditor = ({
   initialImages = [],
   initialAudio = null,
   initialLyrics = [],
+  initialSelectedBanks = null, // { bankA: true, bankB: false } — which banks to pull from on creation
   batchMode = false,
   onSave,
   onClose,
@@ -622,7 +623,7 @@ const SlideshowEditor = ({
   }, [batchMode, imagesA.length, imagesB.length]);
 
   // Auto-start from collection banks: once collections load, if slides are empty/blank
-  // and any collection has bankA + bankB populated, auto-create 2 slides
+  // and any collection has banks populated, auto-create starter slides from selected banks
   useEffect(() => {
     if (autoStartAttempted) return;
     if (!collections || collections.length === 0) return;
@@ -632,50 +633,51 @@ const SlideshowEditor = ({
     const isDefaultEmpty = slides.length <= 1 && !slides[0]?.backgroundImage;
     if (!isDefaultEmpty) return;
 
-    // Find any collection with both bankA and bankB populated
+    // Determine which banks to pull from (default: both)
+    const useBankA = initialSelectedBanks ? initialSelectedBanks.bankA : true;
+    const useBankB = initialSelectedBanks ? initialSelectedBanks.bankB : true;
+    if (!useBankA && !useBankB) { setAutoStartAttempted(true); return; }
+
+    // Find collection with populated banks
     for (const col of collections) {
-      const bankAIds = col.bankA || [];
-      const bankBIds = col.bankB || [];
-      if (bankAIds.length > 0 && bankBIds.length > 0) {
-        // Resolve bank images from library
-        const bankAImages = libraryImages.filter(img => bankAIds.includes(img.id));
-        const bankBImages = libraryImages.filter(img => bankBIds.includes(img.id));
-        if (bankAImages.length > 0 && bankBImages.length > 0) {
-          const imgA = bankAImages[Math.floor(Math.random() * bankAImages.length)];
-          const imgB = bankBImages[Math.floor(Math.random() * bankBImages.length)];
-          setSlides([
-            {
-              id: `slide_${Date.now()}_0`,
-              index: 0,
-              backgroundImage: imgA.url || imgA.localUrl,
-              thumbnail: imgA.url || imgA.localUrl,
-              sourceBank: 'imageA',
-              sourceImageId: imgA.id,
-              textOverlays: [],
-              duration: 3,
-              imageTransform: { scale: 1, offsetX: 0, offsetY: 0 }
-            },
-            {
-              id: `slide_${Date.now()}_1`,
-              index: 1,
-              backgroundImage: imgB.url || imgB.localUrl,
-              thumbnail: imgB.url || imgB.localUrl,
-              sourceBank: 'imageB',
-              sourceImageId: imgB.id,
-              textOverlays: [],
-              duration: 3,
-              imageTransform: { scale: 1, offsetX: 0, offsetY: 0 }
-            }
-          ]);
-          // Set source to this collection's Bank A by default
-          setSelectedSource(`${col.id}:bankA`);
-          setAutoStartAttempted(true);
-          return;
-        }
+      const bankAIds = useBankA ? (col.bankA || []) : [];
+      const bankBIds = useBankB ? (col.bankB || []) : [];
+      if (bankAIds.length === 0 && bankBIds.length === 0) continue;
+
+      const bankAImages = bankAIds.length > 0 ? libraryImages.filter(img => bankAIds.includes(img.id)) : [];
+      const bankBImages = bankBIds.length > 0 ? libraryImages.filter(img => bankBIds.includes(img.id)) : [];
+      if (bankAImages.length === 0 && bankBImages.length === 0) continue;
+
+      const newSlides = [];
+      if (bankAImages.length > 0) {
+        const imgA = bankAImages[Math.floor(Math.random() * bankAImages.length)];
+        newSlides.push({
+          id: `slide_${Date.now()}_0`, index: 0,
+          backgroundImage: imgA.url || imgA.localUrl, thumbnail: imgA.url || imgA.localUrl,
+          sourceBank: 'imageA', sourceImageId: imgA.id,
+          textOverlays: [], duration: 3, imageTransform: { scale: 1, offsetX: 0, offsetY: 0 }
+        });
+      }
+      if (bankBImages.length > 0) {
+        const imgB = bankBImages[Math.floor(Math.random() * bankBImages.length)];
+        newSlides.push({
+          id: `slide_${Date.now()}_1`, index: newSlides.length,
+          backgroundImage: imgB.url || imgB.localUrl, thumbnail: imgB.url || imgB.localUrl,
+          sourceBank: 'imageB', sourceImageId: imgB.id,
+          textOverlays: [], duration: 3, imageTransform: { scale: 1, offsetX: 0, offsetY: 0 }
+        });
+      }
+      if (newSlides.length > 0) {
+        setSlides(newSlides);
+        // Set source to the first available bank of this collection
+        const defaultBank = bankAImages.length > 0 ? 'bankA' : 'bankB';
+        setSelectedSource(`${col.id}:${defaultBank}`);
+        setAutoStartAttempted(true);
+        return;
       }
     }
     setAutoStartAttempted(true);
-  }, [collections, libraryImages, slides, initialImages, batchMode, autoStartAttempted]);
+  }, [collections, libraryImages, slides, initialImages, batchMode, autoStartAttempted, initialSelectedBanks]);
 
   // Add a new slide
   const addSlide = useCallback(() => {

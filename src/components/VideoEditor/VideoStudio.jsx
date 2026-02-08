@@ -1893,7 +1893,8 @@ const VideoStudio = ({
                   ...prev,
                   images: options.libraryImages || prev.images,
                   audio: options.libraryAudio || prev.audio,
-                  lyrics: options.libraryLyrics || prev.lyrics
+                  lyrics: options.libraryLyrics || prev.lyrics,
+                  selectedBanks: options.selectedBanks || prev.selectedBanks || null
                 }));
               }
               if (options?.collectionId) {
@@ -2061,6 +2062,7 @@ const VideoStudio = ({
           initialImages={selectedLibraryMedia?.images || []}
           initialAudio={selectedLibraryMedia?.audio || null}
           initialLyrics={selectedLibraryMedia?.lyrics || []}
+          initialSelectedBanks={selectedLibraryMedia?.selectedBanks || null}
           batchMode={slideshowBatchMode}
           onSave={handleSaveSlideshow}
           onClose={handleCloseSlideshowEditor}
