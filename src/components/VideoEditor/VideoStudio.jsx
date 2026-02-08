@@ -300,38 +300,6 @@ const VideoStudio = ({
   const [uploadProgress, setUploadProgress] = useState(null); // Track upload progress
   const [sessionRestored, setSessionRestored] = useState(false);
 
-  // Wave 4: Save draft prompt dialog state
-  const [draftDialog, setDraftDialog] = useState({ isOpen: false, pendingAction: null });
-
-  /**
-   * navigateWithDraftCheck — wraps navigation to prompt "Save draft?" when
-   * leaving an editor with potentially unsaved work (Wave 4).
-   * @param {Function} action — The navigation callback to execute
-   */
-  const navigateWithDraftCheck = useCallback((action) => {
-    const inEditor = showEditor || showSlideshowEditor;
-    if (!inEditor) {
-      // Not in editor — navigate directly
-      action();
-      return;
-    }
-    // In editor — show draft prompt
-    setDraftDialog({
-      isOpen: true,
-      pendingAction: action
-    });
-  }, [showEditor, showSlideshowEditor]);
-
-  const handleDraftDialogDiscard = useCallback(() => {
-    const action = draftDialog.pendingAction;
-    setDraftDialog({ isOpen: false, pendingAction: null });
-    if (action) action();
-  }, [draftDialog.pendingAction]);
-
-  const handleDraftDialogCancel = useCallback(() => {
-    setDraftDialog({ isOpen: false, pendingAction: null });
-  }, []);
-
   // Derive accounts array from lateAccountIds for PostingModule
   const accounts = useMemo(() => {
     return Object.entries(lateAccountIds).map(([handle, ids]) => ({
@@ -519,6 +487,36 @@ const VideoStudio = ({
   // Slideshow editor state
   const [showSlideshowEditor, setShowSlideshowEditor] = useState(false);
   const [editingSlideshow, setEditingSlideshow] = useState(null);
+
+  // Wave 4: Save draft prompt dialog state
+  const [draftDialog, setDraftDialog] = useState({ isOpen: false, pendingAction: null });
+
+  /**
+   * navigateWithDraftCheck — wraps navigation to prompt "Save draft?" when
+   * leaving an editor with potentially unsaved work (Wave 4).
+   * @param {Function} action — The navigation callback to execute
+   */
+  const navigateWithDraftCheck = useCallback((action) => {
+    const inEditor = showEditor || showSlideshowEditor;
+    if (!inEditor) {
+      action();
+      return;
+    }
+    setDraftDialog({
+      isOpen: true,
+      pendingAction: action
+    });
+  }, [showEditor, showSlideshowEditor]);
+
+  const handleDraftDialogDiscard = useCallback(() => {
+    const action = draftDialog.pendingAction;
+    setDraftDialog({ isOpen: false, pendingAction: null });
+    if (action) action();
+  }, [draftDialog.pendingAction]);
+
+  const handleDraftDialogCancel = useCallback(() => {
+    setDraftDialog({ isOpen: false, pendingAction: null });
+  }, []);
 
   // Studio mode (lifted from AestheticHome for breadcrumb visibility)
   // null = mode selection, 'videos' = video mode, 'slideshows' = slideshow mode
