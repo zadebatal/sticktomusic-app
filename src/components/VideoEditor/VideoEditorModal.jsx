@@ -5,6 +5,7 @@ import BeatSelector from './BeatSelector';
 import LyricBank from './LyricBank';
 import TemplatePicker from './TemplatePicker';
 import SoloClipEditor from './SoloClipEditor';
+import MultiClipEditor from './MultiClipEditor';
 import { saveApiKey, loadApiKey } from '../../services/storageService';
 import { ErrorPanel, EmptyState as SharedEmptyState, useToast } from '../ui';
 import {
@@ -1517,6 +1518,24 @@ const VideoEditorModal = ({
   if (editorMode === 'solo-clip') {
     return (
       <SoloClipEditor
+        category={category}
+        existingVideo={existingVideo}
+        onSave={onSave}
+        onClose={onClose}
+        artistId={artistId}
+        db={db}
+        onSaveLyrics={onSaveLyrics}
+        onAddLyrics={onAddLyrics}
+        onUpdateLyrics={onUpdateLyrics}
+        onDeleteLyrics={onDeleteLyrics}
+      />
+    );
+  }
+
+  // ── Multi-Clip mode ──
+  if (editorMode === 'multi-clip') {
+    return (
+      <MultiClipEditor
         category={category}
         existingVideo={existingVideo}
         onSave={onSave}

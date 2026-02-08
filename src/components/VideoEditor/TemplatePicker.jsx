@@ -20,6 +20,13 @@ const TEMPLATES = [
     description: 'One clip per video — design once, generate many',
     features: ['Full-duration clip', 'Draggable text overlays', 'Batch generate from text banks'],
     icon: 'solo-clip'
+  },
+  {
+    id: 'multi-clip',
+    name: 'Multi-Clip',
+    description: 'Multiple clips on a timeline — full duration, batch generate',
+    features: ['Multi-clip timeline', 'Per-clip or full-video text scoping', 'Randomized generation'],
+    icon: 'multi-clip'
   }
 ];
 
@@ -57,9 +64,23 @@ const SoloClipIcon = () => (
   </svg>
 );
 
+const MultiClipIcon = () => (
+  <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    {/* Stacked clip frames */}
+    <rect x="6" y="6" width="26" height="32" rx="3" />
+    <rect x="16" y="10" width="26" height="32" rx="3" />
+    {/* Play triangle */}
+    <polygon points="24,22 34,28 24,34" fill="currentColor" stroke="none" opacity="0.3" />
+    {/* Text overlay bar */}
+    <rect x="20" y="36" width="18" height="4" rx="1.5" fill="currentColor" opacity="0.15" stroke="none" />
+    <line x1="22" y1="38" x2="36" y2="38" strokeWidth="1.5" opacity="0.6" />
+  </svg>
+);
+
 const ICON_MAP = {
   'montage': MontageIcon,
-  'solo-clip': SoloClipIcon
+  'solo-clip': SoloClipIcon,
+  'multi-clip': MultiClipIcon
 };
 
 const TemplatePicker = ({ onSelect, onClose, clipCount = 0 }) => {
@@ -153,7 +174,7 @@ const styles = {
     borderRadius: '16px',
     border: '1px solid rgba(255, 255, 255, 0.08)',
     padding: '32px',
-    maxWidth: '720px',
+    maxWidth: '960px',
     width: '100%',
     maxHeight: '90vh',
     overflow: 'auto'

@@ -6,19 +6,25 @@ import {
 import { useToast } from '../ui';
 
 /**
- * SoloClipEditor v2 — "Solo Clip" video editor mode
+ * MultiClipEditor v1 — "Multi-Clip" video editor mode
  *
  * 3-column layout:
- *   Left (260px):  Clip grid + generation controls
+ *   Left (260px):  Clip grid + timeline with reordering
  *   Center:        Video preview + playback
- *   Right (320px): Text overlays (with inline style) + Video text banks (always visible)
+ *   Right (320px): Text overlays (with scope) + Video text banks
  *
  * Mirrors SlideshowEditor's template/generation architecture:
  *   allVideos[0] = template
  *   allVideos[1..N] = generated
  *   Tab bar at bottom to switch between them
+ *
+ * Key features:
+ *   - Each video has a clips[] array (ordered timeline)
+ *   - activeClipIndex tracks which clip is playing
+ *   - Text overlays have scope: 'full' or clipIndex
+ *   - Generation randomizes both clip order and text from banks
  */
-const SoloClipEditor = ({
+const MultiClipEditor = ({
   category,
   existingVideo = null,
   onSave,
@@ -34,30 +40,22 @@ const SoloClipEditor = ({
 
   // ── Multi-video state (mirrors SlideshowEditor allSlideshows) ──
   const [allVideos, setAllVideos] = useState(() => {
-    if (existingVideo && existingVideo.editorMode === 'solo-clip') {
-      // Re-editing an existing solo clip draft
-      const existingClip = existingVideo.clips?.[0]
-        ? (category?.videos || []).find(v => v.id === existingVideo.clips[0].sourceId) || {
-            id: existingVideo.clips[0].sourceId,
-            url: existingVideo.clips[0].url,
-            localUrl: existingVideo.clips[0].localUrl,
-            thumbnailUrl: existingVideo.clips[0].thumbnail,
-            thumbnail: existingVideo.clips[0].thumbnail
-          }
-        : category?.videos?.[0] || null;
+    if (existingVideo && existingVideo.editorMode === 'multi-clip') {
+      // Re-editing an existing multi-clip draft
       return [{
         id: 'template',
         name: 'Template',
-        clip: existingClip,
+        clips: existingVideo.clips || [],
         textOverlays: existingVideo.textOverlays || [],
         isTemplate: true
       }];
     }
+    // Start with first clip in timeline
     const firstClip = category?.videos?.[0] || null;
     return [{
       id: 'template',
       name: 'Template',
-      clip: firstClip,
+      clips: firstClip ? [firstClip] : [],
       textOverlays: [],
       isTemplate: true
     }];
@@ -71,10 +69,23 @@ const SoloClipEditor = ({
 
   // Derived reads from active video
   const activeVideo = allVideos[activeVideoIndex];
-  const clip = activeVideo?.clip;
+  const clips = activeVideo?.clips || [];
   const textOverlays = activeVideo?.textOverlays || [];
 
   // Wrapper setters (route through allVideos)
+  const setClips = useCallback((updater) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const current = copy[activeVideoIndex];
+      if (!current) return prev;
+      copy[activeVideoIndex] = {
+        ...current,
+        clips: typeof updater === 'function' ? updater(current.clips || []) : updater
+      };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
   const setTextOverlays = useCallback((updater) => {
     setAllVideos(prev => {
       const copy = [...prev];
@@ -90,16 +101,6 @@ const SoloClipEditor = ({
     });
   }, [activeVideoIndex]);
 
-  const setClip = useCallback((newClip) => {
-    setAllVideos(prev => {
-      const copy = [...prev];
-      const current = copy[activeVideoIndex];
-      if (!current) return prev;
-      copy[activeVideoIndex] = { ...current, clip: newClip };
-      return copy;
-    });
-  }, [activeVideoIndex]);
-
   // ── Audio state ──
   const [selectedAudio, setSelectedAudio] = useState(existingVideo?.audio || null);
   const audioRef = useRef(null);
@@ -107,11 +108,31 @@ const SoloClipEditor = ({
   // Derive library audio from libraryMedia
   const libraryAudio = libraryMedia.filter(i => i.type === MEDIA_TYPES.AUDIO);
 
+  // ── Clip durations tracking ──
+  const clipDurationsRef = useRef({});
+  const [clipDurationsState, setClipDurationsState] = useState({});
+
+  const getClipDuration = (clipId) => {
+    return clipDurationsRef.current[clipId] || 5;
+  };
+
+  const setClipDuration = (clipId, duration) => {
+    clipDurationsRef.current[clipId] = duration;
+    setClipDurationsState(prev => ({ ...prev, [clipId]: duration }));
+  };
+
+  // Calculate total duration across all clips
+  const calculateTotalDuration = useCallback(() => {
+    return clips.reduce((sum, clip) => sum + getClipDuration(clip.id || clip.sourceId), 0);
+  }, [clips]);
+
+  const totalDuration = calculateTotalDuration();
+
   // ── Playback state ──
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [clipDuration, setClipDuration] = useState(0);
+  const [activeClipIndex, setActiveClipIndex] = useState(0);
   const videoRef = useRef(null);
   const animationRef = useRef(null);
 
@@ -165,7 +186,7 @@ const SoloClipEditor = ({
     return () => unsubs.forEach(u => u());
   }, [db, artistId]);
 
-  // ── Video Text Banks (uses videoTextBank1/videoTextBank2, NOT textBank1/textBank2) ──
+  // ── Video Text Banks ──
   const getVideoTextBanks = useCallback(() => {
     let videoTextBank1 = [], videoTextBank2 = [];
     for (const col of collections) {
@@ -198,11 +219,19 @@ const SoloClipEditor = ({
   }, [artistId, collections]);
 
   // ── Video playback ──
-  const handleVideoLoaded = useCallback(() => {
-    if (videoRef.current) {
-      setClipDuration(videoRef.current.duration);
+  const getCurrentClip = useCallback(() => {
+    if (activeClipIndex >= 0 && activeClipIndex < clips.length) {
+      return clips[activeClipIndex];
     }
-  }, []);
+    return null;
+  }, [clips, activeClipIndex]);
+
+  const handleVideoLoaded = useCallback(() => {
+    if (videoRef.current && activeClipIndex < clips.length) {
+      const clipId = clips[activeClipIndex].id || clips[activeClipIndex].sourceId;
+      setClipDuration(clipId, videoRef.current.duration);
+    }
+  }, [activeClipIndex, clips]);
 
   const playbackLoop = useCallback(() => {
     if (videoRef.current) {
@@ -225,15 +254,57 @@ const SoloClipEditor = ({
     setIsPlaying(!isPlaying);
   }, [isPlaying, playbackLoop]);
 
+  // Handle clip progression
+  useEffect(() => {
+    if (!videoRef.current || clips.length === 0) return;
+
+    const currentClip = clips[activeClipIndex];
+    const currentClipId = currentClip.id || currentClip.sourceId;
+    const currentClipDuration = getClipDuration(currentClipId);
+
+    if (videoRef.current.currentTime >= currentClipDuration) {
+      // Current clip ended
+      if (activeClipIndex < clips.length - 1) {
+        // Advance to next clip
+        setActiveClipIndex(prev => prev + 1);
+        setCurrentTime(0);
+        videoRef.current.currentTime = 0;
+      } else {
+        // Last clip ended
+        setIsPlaying(false);
+        if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      }
+    }
+  }, [currentTime, activeClipIndex, clips]);
+
   const handleSeek = useCallback((time) => {
+    if (clips.length === 0) return;
+
+    let accumulatedTime = 0;
+    let targetClipIndex = 0;
+    let timeInClip = time;
+
+    for (let i = 0; i < clips.length; i++) {
+      const clipId = clips[i].id || clips[i].sourceId;
+      const clipDur = getClipDuration(clipId);
+      if (accumulatedTime + clipDur >= time) {
+        targetClipIndex = i;
+        timeInClip = time - accumulatedTime;
+        break;
+      }
+      accumulatedTime += clipDur;
+    }
+
+    setActiveClipIndex(targetClipIndex);
+    setCurrentTime(time);
+
     if (videoRef.current) {
-      videoRef.current.currentTime = time;
-      setCurrentTime(time);
+      videoRef.current.currentTime = timeInClip;
     }
     if (audioRef.current) {
       audioRef.current.currentTime = time;
     }
-  }, []);
+  }, [clips]);
 
   // ── Audio selection ──
   const handleAudioSelect = useCallback((audio) => {
@@ -279,7 +350,8 @@ const SoloClipEditor = ({
       id: `text_${Date.now()}`,
       text: prefillText || 'Click to edit',
       style: getDefaultTextStyle(),
-      position: { x: 50, y: 50, width: 80, height: 20 }
+      position: { x: 50, y: 50, width: 80, height: 20 },
+      scope: 'full'
     };
     setTextOverlays(prev => [...prev, newOverlay]);
     setEditingTextId(newOverlay.id);
@@ -347,6 +419,7 @@ const SoloClipEditor = ({
     if (audioRef.current) audioRef.current.pause();
     setIsPlaying(false);
     setCurrentTime(0);
+    setActiveClipIndex(0);
     setEditingTextId(null);
     setEditingTextValue('');
     setActiveVideoIndex(index);
@@ -363,11 +436,51 @@ const SoloClipEditor = ({
     }
   }, [activeVideoIndex]);
 
+  // ── Clip timeline management ──
+  const addClipToTimeline = useCallback((clip) => {
+    setClips(prev => [...prev, clip]);
+  }, [setClips]);
+
+  const removeClipFromTimeline = useCallback((clipIndex) => {
+    setClips(prev => prev.filter((_, i) => i !== clipIndex));
+    if (activeClipIndex >= clipIndex && activeClipIndex > 0) {
+      setActiveClipIndex(prev => Math.max(0, prev - 1));
+    }
+  }, [setClips, activeClipIndex]);
+
+  const moveClipUp = useCallback((clipIndex) => {
+    if (clipIndex <= 0) return;
+    setClips(prev => {
+      const copy = [...prev];
+      [copy[clipIndex - 1], copy[clipIndex]] = [copy[clipIndex], copy[clipIndex - 1]];
+      return copy;
+    });
+    if (activeClipIndex === clipIndex) {
+      setActiveClipIndex(clipIndex - 1);
+    } else if (activeClipIndex === clipIndex - 1) {
+      setActiveClipIndex(clipIndex);
+    }
+  }, [setClips, activeClipIndex]);
+
+  const moveClipDown = useCallback((clipIndex) => {
+    if (clipIndex >= clips.length - 1) return;
+    setClips(prev => {
+      const copy = [...prev];
+      [copy[clipIndex], copy[clipIndex + 1]] = [copy[clipIndex + 1], copy[clipIndex]];
+      return copy;
+    });
+    if (activeClipIndex === clipIndex) {
+      setActiveClipIndex(clipIndex + 1);
+    } else if (activeClipIndex === clipIndex + 1) {
+      setActiveClipIndex(clipIndex);
+    }
+  }, [setClips, activeClipIndex, clips]);
+
   // ── Generation (uses video text banks) ──
   const executeGeneration = useCallback(() => {
     const template = allVideos[0];
-    if (!template?.clip) {
-      toastError('No clip loaded. Add a clip first.');
+    if (!template?.clips || template.clips.length === 0) {
+      toastError('No clips in timeline. Add clips first.');
       return;
     }
     if (template.textOverlays.length === 0) {
@@ -375,9 +488,9 @@ const SoloClipEditor = ({
       return;
     }
 
-    const availableClips = (category?.videos || []).filter(v => v.id !== template.clip.id);
+    const availableClips = (category?.videos || []).filter(v => !template.clips.some(tc => tc.id === v.id));
     if (availableClips.length === 0) {
-      toastError('Need more than one clip to generate.');
+      toastError('Need more clips available to generate.');
       return;
     }
 
@@ -389,30 +502,34 @@ const SoloClipEditor = ({
       const existingGenCount = allVideos.filter(v => !v.isTemplate).length;
       const timestamp = Date.now();
       const generated = [];
-      // Shuffle clips randomly
-      const shuffled = [...availableClips].sort(() => Math.random() - 0.5);
-      const clipsToUse = shuffled.slice(0, generateCount);
+      const templatesClipsCount = template.clips.length;
 
-      for (let i = 0; i < clipsToUse.length; i++) {
-        const clipItem = clipsToUse[i];
+      for (let i = 0; i < generateCount; i++) {
+        // Shuffle available clips and pick a random subset
+        const shuffled = [...availableClips].sort(() => Math.random() - 0.5);
+        const clipsToUse = shuffled.slice(0, templatesClipsCount);
+
+        // Also shuffle the selected clips randomly
+        const finalClips = [...clipsToUse].sort(() => Math.random() - 0.5);
 
         const newOverlays = template.textOverlays.map((overlay, idx) => {
           let newText = overlay.text;
           const bank = idx === 0 ? videoTextBank1 : idx === 1 ? videoTextBank2 : combinedBank;
           if (bank.length > 0) {
-            newText = bank[i % bank.length];
+            newText = bank[(existingGenCount + i) % bank.length];
           }
           return {
             ...overlay,
             id: `text_${timestamp}_${i}_${idx}`,
-            text: newText
+            text: newText,
+            scope: overlay.scope // preserve scope
           };
         });
 
         generated.push({
           id: `video_${timestamp}_${i}`,
           name: `Generated ${existingGenCount + i + 1}`,
-          clip: clipItem,
+          clips: finalClips,
           textOverlays: newOverlays,
           isTemplate: false
         });
@@ -428,64 +545,72 @@ const SoloClipEditor = ({
   // ── Save Draft (active video only) ──
   const handleSaveDraft = useCallback(() => {
     const video = allVideos[activeVideoIndex];
-    if (!video?.clip) {
-      toastError('No clip to save.');
+    if (!video?.clips || video.clips.length === 0) {
+      toastError('No clips to save.');
       return;
     }
-    const clipUrl = video.clip.url || video.clip.localUrl || video.clip.src;
+    const timestamp = Date.now();
     const videoData = {
-      id: video.id === 'template' ? (existingVideo?.id || `solovideo_${Date.now()}`) : video.id,
-      editorMode: 'solo-clip',
-      name: video.name || 'Solo Clip',
-      clips: [{
-        id: `clip_${Date.now()}_0`,
-        sourceId: video.clip.id,
-        url: clipUrl,
-        localUrl: video.clip.localUrl || clipUrl,
-        thumbnail: video.clip.thumbnailUrl || video.clip.thumbnail,
-        startTime: 0,
-        duration: clipDuration || 5,
-        locked: true
-      }],
+      id: video.id === 'template' ? (existingVideo?.id || `multivideo_${timestamp}`) : video.id,
+      editorMode: 'multi-clip',
+      name: video.name || 'Multi-Clip',
+      clips: video.clips.map((clip, i) => {
+        const clipUrl = clip.url || clip.localUrl || clip.src;
+        const clipId = clip.id || clip.sourceId;
+        return {
+          id: `clip_${timestamp}_${i}`,
+          sourceId: clip.id || clipId,
+          url: clipUrl,
+          localUrl: clip.localUrl || clipUrl,
+          thumbnail: clip.thumbnailUrl || clip.thumbnail,
+          startTime: 0,
+          duration: getClipDuration(clipId),
+          locked: true
+        };
+      }),
       textOverlays: video.textOverlays,
       audio: selectedAudio,
       cropMode: aspectRatio,
-      duration: clipDuration || 5,
-      thumbnail: video.clip.thumbnailUrl || video.clip.thumbnail,
+      duration: totalDuration,
+      thumbnail: video.clips[0]?.thumbnailUrl || video.clips[0]?.thumbnail,
       isTemplate: video.isTemplate,
       status: 'draft',
       createdAt: existingVideo?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
     onSave(videoData);
-    toastSuccess(`Saved "${video.name || 'Solo Clip'}"`);
-  }, [allVideos, activeVideoIndex, clipDuration, aspectRatio, selectedAudio, existingVideo, onSave, toastSuccess, toastError]);
+    toastSuccess(`Saved "${video.name || 'Multi-Clip'}"`);
+  }, [allVideos, activeVideoIndex, totalDuration, aspectRatio, selectedAudio, existingVideo, onSave, toastSuccess, toastError]);
 
   // ── Save All & Close ──
   const handleSaveAllAndClose = useCallback(() => {
     let savedCount = 0;
+    const timestamp = Date.now();
     allVideos.forEach((video) => {
-      if (!video.clip) return;
-      const clipUrl = video.clip.url || video.clip.localUrl || video.clip.src;
+      if (!video.clips || video.clips.length === 0) return;
       const videoData = {
-        id: video.id === 'template' ? (existingVideo?.id || `solovideo_${Date.now()}_${savedCount}`) : video.id,
-        editorMode: 'solo-clip',
-        name: video.name || 'Solo Clip',
-        clips: [{
-          id: `clip_${Date.now()}_${savedCount}`,
-          sourceId: video.clip.id,
-          url: clipUrl,
-          localUrl: video.clip.localUrl || clipUrl,
-          thumbnail: video.clip.thumbnailUrl || video.clip.thumbnail,
-          startTime: 0,
-          duration: clipDuration || 5,
-          locked: true
-        }],
+        id: video.id === 'template' ? (existingVideo?.id || `multivideo_${timestamp}_${savedCount}`) : video.id,
+        editorMode: 'multi-clip',
+        name: video.name || 'Multi-Clip',
+        clips: video.clips.map((clip, i) => {
+          const clipUrl = clip.url || clip.localUrl || clip.src;
+          const clipId = clip.id || clip.sourceId;
+          return {
+            id: `clip_${timestamp}_${savedCount}_${i}`,
+            sourceId: clip.id || clipId,
+            url: clipUrl,
+            localUrl: clip.localUrl || clipUrl,
+            thumbnail: clip.thumbnailUrl || clip.thumbnail,
+            startTime: 0,
+            duration: getClipDuration(clipId),
+            locked: true
+          };
+        }),
         textOverlays: video.textOverlays,
         audio: selectedAudio,
         cropMode: aspectRatio,
-        duration: clipDuration || 5,
-        thumbnail: video.clip.thumbnailUrl || video.clip.thumbnail,
+        duration: totalDuration,
+        thumbnail: video.clips[0]?.thumbnailUrl || video.clips[0]?.thumbnail,
         isTemplate: video.isTemplate,
         status: 'draft',
         createdAt: existingVideo?.createdAt || new Date().toISOString(),
@@ -496,58 +621,62 @@ const SoloClipEditor = ({
     });
     toastSuccess(`Saved ${savedCount} video${savedCount !== 1 ? 's' : ''}!`);
     onClose();
-  }, [allVideos, clipDuration, aspectRatio, selectedAudio, existingVideo, onSave, onClose, toastSuccess]);
+  }, [allVideos, totalDuration, aspectRatio, selectedAudio, existingVideo, onSave, onClose, toastSuccess]);
 
   // ── Export ──
   const handleExport = useCallback(() => {
     const video = allVideos[activeVideoIndex];
-    if (!video?.clip || video.textOverlays.length === 0) {
-      toastError('Need a clip and at least one text overlay to export.');
+    if (!video?.clips || video.clips.length === 0 || video.textOverlays.length === 0) {
+      toastError('Need clips and at least one text overlay to export.');
       return;
     }
     setIsExporting(true);
     try {
-      const clipUrl = video.clip.url || video.clip.localUrl || video.clip.src;
+      const timestamp = Date.now();
       const videoData = {
-        id: video.id === 'template' ? (existingVideo?.id || `solovideo_${Date.now()}`) : video.id,
-        editorMode: 'solo-clip',
-        name: video.name || 'Solo Clip',
-        clips: [{
-          id: `clip_${Date.now()}_0`,
-          sourceId: video.clip.id,
-          url: clipUrl,
-          localUrl: video.clip.localUrl || clipUrl,
-          thumbnail: video.clip.thumbnailUrl || video.clip.thumbnail,
-          startTime: 0,
-          duration: clipDuration || 5,
-          locked: true
-        }],
+        id: video.id === 'template' ? (existingVideo?.id || `multivideo_${timestamp}`) : video.id,
+        editorMode: 'multi-clip',
+        name: video.name || 'Multi-Clip',
+        clips: video.clips.map((clip, i) => {
+          const clipUrl = clip.url || clip.localUrl || clip.src;
+          const clipId = clip.id || clip.sourceId;
+          return {
+            id: `clip_${timestamp}_${i}`,
+            sourceId: clip.id || clipId,
+            url: clipUrl,
+            localUrl: clip.localUrl || clipUrl,
+            thumbnail: clip.thumbnailUrl || clip.thumbnail,
+            startTime: 0,
+            duration: getClipDuration(clipId),
+            locked: true
+          };
+        }),
         textOverlays: video.textOverlays,
         audio: selectedAudio,
         cropMode: aspectRatio,
-        duration: clipDuration || 5,
-        thumbnail: video.clip.thumbnailUrl || video.clip.thumbnail,
+        duration: totalDuration,
+        thumbnail: video.clips[0]?.thumbnailUrl || video.clips[0]?.thumbnail,
         isTemplate: video.isTemplate,
         status: 'rendered',
         createdAt: existingVideo?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
       onSave(videoData);
-      toastSuccess(`Exported "${video.name || 'Solo Clip'}"`);
+      toastSuccess(`Exported "${video.name || 'Multi-Clip'}"`);
     } finally {
       setIsExporting(false);
     }
-  }, [allVideos, activeVideoIndex, clipDuration, aspectRatio, selectedAudio, existingVideo, onSave, toastSuccess, toastError]);
+  }, [allVideos, activeVideoIndex, totalDuration, aspectRatio, selectedAudio, existingVideo, onSave, toastSuccess, toastError]);
 
   // ── Close with confirmation ──
   const handleCloseRequest = useCallback(() => {
-    const hasWork = textOverlays.length > 0 || allVideos.length > 1;
+    const hasWork = textOverlays.length > 0 || allVideos.length > 1 || (clips.length > 0);
     if (hasWork) {
       setShowCloseConfirm(true);
     } else {
       onClose();
     }
-  }, [textOverlays, allVideos, onClose]);
+  }, [textOverlays, allVideos, clips, onClose]);
 
   // ── Keyboard shortcuts ──
   useEffect(() => {
@@ -594,6 +723,16 @@ const SoloClipEditor = ({
   // Video text banks for right panel
   const { videoTextBank1, videoTextBank2 } = getVideoTextBanks();
 
+  // Get current clip for video display
+  const currentClip = getCurrentClip();
+
+  // Check if text overlay should be visible in current clip
+  const isOverlayVisible = (overlay) => {
+    if (overlay.scope === 'full') return true;
+    if (typeof overlay.scope === 'number') return overlay.scope === activeClipIndex;
+    return true;
+  };
+
   // ── RENDER ──
   return (
     <div style={styles.overlay} onClick={(e) => e.target === e.currentTarget && handleCloseRequest()}>
@@ -608,7 +747,7 @@ const SoloClipEditor = ({
               </svg>
             </button>
             <div>
-              <h2 style={styles.headerTitle}>Solo Clip Editor</h2>
+              <h2 style={styles.headerTitle}>Multi-Clip Editor</h2>
               <span style={styles.headerSubtitle}>
                 {allVideos.length === 1 ? 'Design your template' : `${allVideos.length} videos (1 template + ${allVideos.length - 1} generated)`}
               </span>
@@ -632,10 +771,10 @@ const SoloClipEditor = ({
             {/* Export */}
             <button
               onClick={handleExport}
-              disabled={!clip || textOverlays.length === 0 || isExporting}
+              disabled={!currentClip || textOverlays.length === 0 || isExporting}
               style={{
                 ...styles.exportButton,
-                ...(!clip || textOverlays.length === 0 || isExporting ? { opacity: 0.4, cursor: 'not-allowed' } : {})
+                ...(!currentClip || textOverlays.length === 0 || isExporting ? { opacity: 0.4, cursor: 'not-allowed' } : {})
               }}
             >
               {isExporting ? 'Exporting...' : 'Export'}
@@ -663,48 +802,117 @@ const SoloClipEditor = ({
         {/* ── Main Content — 3 Columns ── */}
         <div style={styles.mainContent}>
 
-          {/* ── LEFT PANEL: Clips + Generation ── */}
+          {/* ── LEFT PANEL: Clips Grid + Timeline ── */}
           <div style={styles.leftPanel}>
-            <div style={{ padding: '12px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>Clips</div>
-              <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
-                Click to set as template clip
+            <div style={{ padding: '12px', flex: 1, overflow: 'auto' }}>
+              {/* Available Clips Grid */}
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>Available Clips</div>
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
+                  Click to add to timeline
+                </div>
+                <div style={styles.clipGrid}>
+                  {(category?.videos || []).map((v) => {
+                    return (
+                      <div
+                        key={v.id}
+                        onClick={() => addClipToTimeline(v)}
+                        style={styles.clipThumb}
+                        title="Click to add to timeline"
+                      >
+                        {v.thumbnailUrl || v.thumbnail ? (
+                          <img src={v.thumbnailUrl || v.thumbnail} alt="" style={styles.clipThumbImg} />
+                        ) : (
+                          <div style={styles.clipThumbPlaceholder}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                              <rect x="2" y="4" width="20" height="16" rx="2" />
+                              <path d="M10 9l5 3-5 3V9z" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-              <div style={styles.clipGrid}>
-                {(category?.videos || []).map((v) => {
-                  const isActive = clip?.id === v.id;
-                  return (
-                    <div
-                      key={v.id}
-                      onClick={() => setClip(v)}
-                      style={{
-                        ...styles.clipThumb,
-                        ...(isActive ? styles.clipThumbActive : {})
-                      }}
-                    >
-                      {v.thumbnailUrl || v.thumbnail ? (
-                        <img src={v.thumbnailUrl || v.thumbnail} alt="" style={styles.clipThumbImg} />
-                      ) : (
-                        <div style={styles.clipThumbPlaceholder}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                            <rect x="2" y="4" width="20" height="16" rx="2" />
-                            <path d="M10 9l5 3-5 3V9z" />
-                          </svg>
+
+              {/* Timeline */}
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>
+                  Timeline ({clips.length} clip{clips.length !== 1 ? 's' : ''})
+                </div>
+                {clips.length === 0 ? (
+                  <div style={{ fontSize: '11px', color: '#6b7280', padding: '12px', textAlign: 'center', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}>
+                    No clips added. Click available clips to add them.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {clips.map((clip, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          ...styles.timelineItem,
+                          ...(activeClipIndex === idx ? styles.timelineItemActive : {})
+                        }}
+                        onClick={() => setActiveClipIndex(idx)}
+                      >
+                        <div style={{ fontSize: '10px', color: '#9ca3af', fontWeight: 500, minWidth: '20px' }}>
+                          {idx + 1}.
                         </div>
-                      )}
-                      {isActive && (
-                        <div style={styles.clipThumbBadge}>Template</div>
-                      )}
-                    </div>
-                  );
-                })}
+                        {clip.thumbnailUrl || clip.thumbnail ? (
+                          <img src={clip.thumbnailUrl || clip.thumbnail} alt="" style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover' }} />
+                        ) : (
+                          <div style={{ width: '32px', height: '32px', borderRadius: '4px', backgroundColor: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <rect x="2" y="4" width="20" height="16" rx="2" />
+                              <path d="M10 9l5 3-5 3V9z" />
+                            </svg>
+                          </div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '11px', color: '#d1d5db', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {clip.name || 'Clip'}
+                          </div>
+                          <div style={{ fontSize: '9px', color: '#6b7280' }}>
+                            {formatTime(getClipDuration(clip.id || clip.sourceId))}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); moveClipUp(idx); }}
+                            disabled={idx === 0}
+                            style={{ ...styles.timelineButton, ...(idx === 0 ? { opacity: 0.3, cursor: 'not-allowed' } : {}) }}
+                            title="Move up"
+                          >
+                            ▲
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); moveClipDown(idx); }}
+                            disabled={idx >= clips.length - 1}
+                            style={{ ...styles.timelineButton, ...(idx >= clips.length - 1 ? { opacity: 0.3, cursor: 'not-allowed' } : {}) }}
+                            title="Move down"
+                          >
+                            ▼
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); removeClipFromTimeline(idx); }}
+                            style={styles.timelineRemoveButton}
+                            title="Remove"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Generation controls */}
               <div style={styles.generateSection}>
                 <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '6px' }}>Generate Videos</div>
                 <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
-                  {(category?.videos || []).length - 1} other clip{(category?.videos || []).length - 1 !== 1 ? 's' : ''} available
+                  Randomize clips and text from banks
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <span style={{ fontSize: '12px', color: '#d1d5db' }}>Count:</span>
@@ -718,10 +926,10 @@ const SoloClipEditor = ({
                   />
                   <button
                     onClick={executeGeneration}
-                    disabled={isGenerating || textOverlays.length === 0}
+                    disabled={isGenerating || textOverlays.length === 0 || clips.length === 0}
                     style={{
                       ...styles.generateButton,
-                      ...(isGenerating || textOverlays.length === 0 ? { opacity: 0.5, cursor: 'not-allowed' } : {})
+                      ...(isGenerating || textOverlays.length === 0 || clips.length === 0 ? { opacity: 0.5, cursor: 'not-allowed' } : {})
                     }}
                   >
                     {isGenerating ? 'Generating...' : 'Generate'}
@@ -742,12 +950,20 @@ const SoloClipEditor = ({
               }}
               onClick={() => setEditingTextId(null)}
             >
-              {clip ? (
+              {currentClip ? (
                 <video
                   ref={videoRef}
-                  src={getClipUrl(clip)}
+                  src={getClipUrl(currentClip)}
                   onLoadedMetadata={handleVideoLoaded}
-                  onEnded={() => { setIsPlaying(false); if (animationRef.current) cancelAnimationFrame(animationRef.current); }}
+                  onEnded={() => {
+                    if (activeClipIndex < clips.length - 1) {
+                      setActiveClipIndex(prev => prev + 1);
+                      setCurrentTime(0);
+                    } else {
+                      setIsPlaying(false);
+                      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+                    }
+                  }}
                   loop={false}
                   playsInline
                   style={{
@@ -764,12 +980,14 @@ const SoloClipEditor = ({
                     <rect x="2" y="4" width="20" height="16" rx="2" />
                     <path d="M10 9l5 3-5 3V9z" />
                   </svg>
-                  <p style={{ color: '#6b7280', marginTop: 8, fontSize: 12 }}>No clip selected</p>
+                  <p style={{ color: '#6b7280', marginTop: 8, fontSize: 12 }}>No clips in timeline</p>
                 </div>
               )}
 
               {/* Text Overlays on video */}
               {textOverlays.map((overlay) => {
+                if (!isOverlayVisible(overlay)) return null;
+
                 const style = overlay.style || {};
                 const pos = overlay.position || { x: 50, y: 50 };
                 const displayText = style.textCase === 'upper' ? overlay.text.toUpperCase()
@@ -835,14 +1053,14 @@ const SoloClipEditor = ({
                 onClick={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
                   const percent = (e.clientX - rect.left) / rect.width;
-                  handleSeek(percent * clipDuration);
+                  handleSeek(percent * totalDuration);
                 }}
               >
-                <div style={{ ...styles.progressFill, width: `${clipDuration > 0 ? (currentTime / clipDuration) * 100 : 0}%` }} />
+                <div style={{ ...styles.progressFill, width: `${totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0}%` }} />
               </div>
 
               <span style={styles.timeDisplay}>
-                {formatTime(currentTime)} / {formatTime(clipDuration)}
+                {formatTime(currentTime)} / {formatTime(totalDuration)}
               </span>
 
               <button onClick={() => setIsMuted(!isMuted)} style={styles.muteButton}>
@@ -1014,13 +1232,37 @@ const SoloClipEditor = ({
                             ))}
                           </div>
                         </div>
+
+                        {/* Scope */}
+                        <div style={styles.controlRow}>
+                          <span style={styles.controlLabel}>Scope</span>
+                          <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
+                            <button
+                              style={{
+                                ...styles.toggleButton,
+                                ...(overlay.scope === 'full' ? styles.toggleButtonActive : {})
+                              }}
+                              onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { scope: 'full' }); }}
+                            >Full Video</button>
+                            {clips.map((_, i) => (
+                              <button
+                                key={i}
+                                style={{
+                                  ...styles.toggleButton,
+                                  ...(overlay.scope === i ? styles.toggleButtonActive : {})
+                                }}
+                                onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { scope: i }); }}
+                              >Clip {i + 1}</button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
                 );
               })}
 
-              <button onClick={addTextOverlay} style={styles.addTextButton}>
+              <button onClick={() => addTextOverlay()} style={styles.addTextButton}>
                 + Add Text Overlay
               </button>
 
@@ -1052,10 +1294,10 @@ const SoloClipEditor = ({
                 )}
 
                 {/* Source Video Audio button */}
-                {clip && (
+                {currentClip && (
                   <button
                     onClick={() => {
-                      const clipUrl = clip.localUrl || clip.url || clip.src;
+                      const clipUrl = currentClip.localUrl || currentClip.url || currentClip.src;
                       handleAudioSelect({ id: 'source_video', name: 'Source Video Audio', url: clipUrl, localUrl: clipUrl, isSourceVideo: true });
                     }}
                     style={{
@@ -1098,7 +1340,7 @@ const SoloClipEditor = ({
                 )}
 
                 {/* Empty state */}
-                {!clip && libraryAudio.length === 0 && (
+                {!currentClip && libraryAudio.length === 0 && (
                   <div style={{ fontSize: '11px', color: '#4b5563', padding: '8px 0', textAlign: 'center' }}>
                     No audio available. Add audio to your library to use here.
                   </div>
@@ -1367,7 +1609,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     flexShrink: 0,
-    overflow: 'auto'
+    overflow: 'hidden'
   },
   clipGrid: {
     display: 'grid',
@@ -1385,9 +1627,6 @@ const styles = {
     transition: 'border-color 0.15s',
     backgroundColor: '#111118'
   },
-  clipThumbActive: {
-    borderColor: '#6366f1'
-  },
   clipThumbImg: {
     width: '100%',
     height: '100%',
@@ -1401,24 +1640,46 @@ const styles = {
     justifyContent: 'center',
     color: '#4b5563'
   },
-  clipThumbBadge: {
-    position: 'absolute',
-    bottom: '2px',
-    left: '2px',
-    right: '2px',
-    padding: '2px 0',
-    backgroundColor: 'rgba(99,102,241,0.85)',
-    color: '#fff',
-    fontSize: '8px',
-    fontWeight: '600',
-    textAlign: 'center',
-    borderRadius: '0 0 4px 4px'
+  timelineItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '8px 8px',
+    borderRadius: '6px',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    border: '1px solid rgba(255,255,255,0.06)',
+    cursor: 'pointer',
+    transition: 'all 0.15s'
+  },
+  timelineItemActive: {
+    backgroundColor: 'rgba(99,102,241,0.1)',
+    borderColor: 'rgba(99,102,241,0.3)'
+  },
+  timelineButton: {
+    background: 'none',
+    border: 'none',
+    color: '#6b7280',
+    fontSize: '11px',
+    cursor: 'pointer',
+    padding: '0 2px',
+    lineHeight: 1,
+    transition: 'color 0.15s'
+  },
+  timelineRemoveButton: {
+    background: 'none',
+    border: 'none',
+    color: '#6b7280',
+    fontSize: '14px',
+    cursor: 'pointer',
+    padding: '0 2px',
+    lineHeight: 1
   },
   generateSection: {
     padding: '12px',
     backgroundColor: 'rgba(99,102,241,0.08)',
     borderRadius: '8px',
-    border: '1px solid rgba(99,102,241,0.15)'
+    border: '1px solid rgba(99,102,241,0.15)',
+    marginTop: '12px'
   },
   generateInput: {
     width: '50px',
@@ -1840,4 +2101,4 @@ const styles = {
   }
 };
 
-export default SoloClipEditor;
+export default MultiClipEditor;
