@@ -594,15 +594,17 @@ const StickToMusic = () => {
       setFirestoreArtists(artists);
       setArtistsLoaded(true);
 
-      // If no artist selected yet, select the first one or use remembered one
-      // Filter to only assigned artists for non-conductors
-      if (!currentArtistId && artists.length > 0) {
+      // Always validate artist selection against the current user's permissions.
+      // This prevents cross-user data leakage if localStorage retains a stale artist ID.
+      if (artists.length > 0) {
         const userRole = allowedUsers.find(u => u.email?.toLowerCase() === currentAuthUser?.email?.toLowerCase());
         const isUserConductor = userRole?.role === 'conductor';
         const assignedIds = userRole?.assignedArtistIds || [];
         const visibleArtists = isUserConductor ? artists : artists.filter(a => assignedIds.includes(a.id));
 
-        if (visibleArtists.length > 0) {
+        // If current artist is already valid for this user, keep it; otherwise re-select
+        const currentIsValid = currentArtistId && visibleArtists.find(a => a.id === currentArtistId);
+        if (!currentIsValid && visibleArtists.length > 0) {
           const lastId = getLastArtistId();
           const artistToSelect = lastId && visibleArtists.find(a => a.id === lastId)
             ? lastId
@@ -1748,6 +1750,7 @@ const StickToMusic = () => {
     try {
       await signOut(auth);
       setUser(null);
+      setCurrentArtistId(null);   // Clear artist selection so next user gets their own
       setCurrentPage('home');
       showToast('Logged out successfully', 'success');
     } catch (error) {
