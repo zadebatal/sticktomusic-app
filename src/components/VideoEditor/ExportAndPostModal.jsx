@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { renderVideo, exportAsPreview } from '../../services/videoExportService';
 import { uploadVideo } from '../../services/firebaseStorage';
 import { EXPORT_STAGE } from '../../utils/status';
+import { useFocusTrap } from '../ui';
 
 /**
  * ExportAndPostModal - Modal for exporting and posting videos
@@ -14,6 +15,9 @@ const ExportAndPostModal = ({
   onClose,
   onSchedulePost // Function to call Late API: (videoUrl, caption) => Promise
 }) => {
+  // BUG-030: Focus trap for modal accessibility
+  const trapRef = useFocusTrap(true);
+
   const [stage, setStage] = useState(EXPORT_STAGE.OPTIONS);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState(null);
@@ -129,7 +133,7 @@ const ExportAndPostModal = ({
 
   return (
     <div style={styles.overlay}>
-      <div style={styles.modal}>
+      <div ref={trapRef} style={styles.modal} role="dialog" aria-modal="true">
         {/* Header */}
         <div style={styles.header}>
           <h2 style={styles.title}>

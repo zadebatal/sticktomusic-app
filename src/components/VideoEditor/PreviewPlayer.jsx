@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import log from '../../utils/logger';
 
 /**
  * PreviewPlayer - Plays a video "recipe" without rendering
@@ -126,7 +127,7 @@ const PreviewPlayer = ({
 
   // Start playback
   const startPlayback = useCallback(() => {
-    console.log('[PreviewPlayer] Starting playback');
+    log('[PreviewPlayer] Starting playback');
     isPlayingRef.current = true;
     setIsPlaying(true);
 
@@ -153,7 +154,7 @@ const PreviewPlayer = ({
 
   // Stop playback
   const stopPlayback = useCallback(() => {
-    console.log('[PreviewPlayer] Stopping playback');
+    log('[PreviewPlayer] Stopping playback');
     isPlayingRef.current = false;
     setIsPlaying(false);
 

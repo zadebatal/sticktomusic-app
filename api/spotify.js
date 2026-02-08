@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = [
   'https://sticktomusic-app.vercel.app'
 ];
 
-// Also allow Vercel preview deployments
+// Also allow Vercel preview deployments (strict match)
 const isVercelPreview = (origin) => {
   if (!origin) return false;
   return /^https:\/\/[a-z0-9-]*sticktomusic[a-z0-9-]*\.vercel\.app$/i.test(origin);

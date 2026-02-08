@@ -6,6 +6,67 @@ import React, { useEffect, useCallback, useState, useRef, createContext, useCont
  */
 
 // ============================================
+// FOCUS TRAP HOOK (BUG-030)
+// ============================================
+
+/**
+ * useFocusTrap - Traps Tab/Shift+Tab focus within a container ref.
+ * Attach the returned ref to the modal's root element.
+ *
+ * Usage:
+ *   const trapRef = useFocusTrap(isOpen);
+ *   return <div ref={trapRef}>...modal content...</div>;
+ */
+export const useFocusTrap = (active = true) => {
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (!active || !containerRef.current) return;
+
+    const container = containerRef.current;
+    const FOCUSABLE = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+
+    // Auto-focus first focusable element (or the container itself)
+    const firstFocusable = container.querySelector(FOCUSABLE);
+    if (firstFocusable) {
+      firstFocusable.focus();
+    } else {
+      container.setAttribute('tabindex', '-1');
+      container.focus();
+    }
+
+    const handleKeyDown = (e) => {
+      if (e.key !== 'Tab') return;
+
+      const focusableEls = Array.from(container.querySelectorAll(FOCUSABLE));
+      if (focusableEls.length === 0) return;
+
+      const first = focusableEls[0];
+      const last = focusableEls[focusableEls.length - 1];
+
+      if (e.shiftKey) {
+        // Shift+Tab: if on first, wrap to last
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        // Tab: if on last, wrap to first
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    container.addEventListener('keydown', handleKeyDown);
+    return () => container.removeEventListener('keydown', handleKeyDown);
+  }, [active]);
+
+  return containerRef;
+};
+
+// ============================================
 // TOAST SYSTEM
 // ============================================
 const ToastContext = createContext(null);
@@ -222,6 +283,9 @@ export const ConfirmDialog = ({
   onCancel,
   isLoading = false
 }) => {
+  // BUG-030: Focus trap for modal accessibility
+  const trapRef = useFocusTrap(isOpen);
+
   // Handle ESC key
   useEffect(() => {
     const handleEsc = (e) => {
@@ -256,7 +320,7 @@ export const ConfirmDialog = ({
       className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4"
       onClick={(e) => e.target === e.currentTarget && onCancel?.()}
     >
-      <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
+      <div ref={trapRef} className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-full max-w-md shadow-2xl" role="dialog" aria-modal="true" aria-label={title}>
         <h3 className="text-lg font-semibold text-white mb-2">{title}</h3>
         <p className="text-sm text-zinc-400 mb-6">{message}</p>
         <div className="flex gap-3 justify-end">

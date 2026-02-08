@@ -25,6 +25,7 @@ import {
   onSnapshot,
   serverTimestamp
 } from 'firebase/firestore';
+import log from '../utils/logger';
 
 // ============================================================================
 // CONSTANTS
@@ -476,7 +477,7 @@ export const saveLibrary = (artistId, library) => {
           }
         }
         keysToClean.forEach(k => localStorage.removeItem(k));
-        console.log('[Library] Cleaned', keysToClean.length, 'temp keys, retrying save...');
+        log('[Library] Cleaned', keysToClean.length, 'temp keys, retrying save...');
         // Retry save after cleanup
         const cleanedLibrary = library.map(item => ({
           ...item, thumbnail: null,
@@ -1265,7 +1266,7 @@ export const saveCreatedContentAsync = async (db, artistId, content) => {
       ...content,
       updatedAt: serverTimestamp()
     });
-    console.log('[Library] Created content saved to Firestore');
+    log('[Library] Created content saved to Firestore');
   } catch (error) {
     console.error('[Library] Firestore save created content failed:', error.message);
   }
@@ -1557,7 +1558,7 @@ export const getLibraryAsync = async (db, artistId) => {
       const snapshot = await getDocs(mediaRef);
       if (!snapshot.empty) {
         const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        console.log('[Library] Loaded from Firestore:', items.length, 'items');
+        log('[Library] Loaded from Firestore:', items.length, 'items');
         return items;
       }
     } catch (error) {
@@ -1589,14 +1590,14 @@ export const subscribeToLibrary = (db, artistId, callback) => {
     mediaRef,
     (snapshot) => {
       const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      console.log('[Library] Real-time update:', items.length, 'items');
+      log('[Library] Real-time update:', items.length, 'items');
 
       // If Firestore returns empty, check localStorage as fallback
       // This handles the case where Firestore writes failed but localStorage has data
       if (items.length === 0) {
         const localItems = getLibrary(artistId);
         if (localItems.length > 0) {
-          console.log('[Library] Firestore empty, using localStorage fallback:', localItems.length, 'items');
+          log('[Library] Firestore empty, using localStorage fallback:', localItems.length, 'items');
           callback(localItems);
           return;
         }
@@ -1639,7 +1640,7 @@ export const addToLibraryAsync = async (db, artistId, mediaItem) => {
         ...newItem,
         updatedAt: serverTimestamp()
       });
-      console.log('[Library] Saved to Firestore:', newItem.id);
+      log('[Library] Saved to Firestore:', newItem.id);
       localResult.syncedToCloud = true;
     } catch (error) {
       console.error('[Library] Firestore write failed:', error.message);
@@ -1677,7 +1678,7 @@ export const addManyToLibraryAsync = async (db, artistId, mediaItems) => {
       });
 
       await batch.commit();
-      console.log('[Library] Batch saved to Firestore:', newItems.length, 'items');
+      log('[Library] Batch saved to Firestore:', newItems.length, 'items');
       localResult.syncedToCloud = true;
     } catch (error) {
       console.error('[Library] Firestore batch write failed:', error.message);
@@ -1708,7 +1709,7 @@ export const updateLibraryItemAsync = async (db, artistId, mediaId, updates) => 
         ...updates,
         updatedAt: serverTimestamp()
       });
-      console.log('[Library] Updated in Firestore:', mediaId);
+      log('[Library] Updated in Firestore:', mediaId);
     } catch (error) {
       console.error('[Library] Firestore update failed:', error.message);
     }
@@ -1733,7 +1734,7 @@ export const removeFromLibraryAsync = async (db, artistId, mediaId) => {
     try {
       const docRef = doc(db, 'artists', artistId, 'library', 'data', 'mediaItems', mediaId);
       await deleteDoc(docRef);
-      console.log('[Library] Removed from Firestore:', mediaId);
+      log('[Library] Removed from Firestore:', mediaId);
     } catch (error) {
       console.error('[Library] Firestore delete failed:', error.message);
     }
@@ -1776,7 +1777,7 @@ export const getCollectionsAsync = async (db, artistId) => {
         });
         // Always include smart collections (computed client-side)
         const smartCollections = createSmartCollections();
-        console.log('[Library] Collections from Firestore:', mergedCollections.length, '(with localStorage bank merge)');
+        log('[Library] Collections from Firestore:', mergedCollections.length, '(with localStorage bank merge)');
         return [...smartCollections, ...mergedCollections];
       }
     } catch (error) {
@@ -1915,7 +1916,7 @@ export const createNewCollectionAsync = async (db, artistId, collectionData) => 
         ...localResult,
         updatedAt: serverTimestamp()
       });
-      console.log('[Library] Collection saved to Firestore:', localResult.id);
+      log('[Library] Collection saved to Firestore:', localResult.id);
     } catch (error) {
       console.error('[Library] Firestore collection write failed:', error.message);
     }
@@ -1936,7 +1937,7 @@ export const getOnboardingStatusAsync = async (db, artistId) => {
       const docRef = doc(db, 'artists', artistId, 'library', 'onboarding');
       const snapshot = await getDoc(docRef);
       if (snapshot.exists()) {
-        console.log('[Library] Onboarding status from Firestore');
+        log('[Library] Onboarding status from Firestore');
         return snapshot.data();
       }
     } catch (error) {
@@ -1965,7 +1966,7 @@ export const completeOnboardingAsync = async (db, artistId, templateId) => {
         templateId,
         completedAt: serverTimestamp()
       });
-      console.log('[Library] Onboarding saved to Firestore');
+      log('[Library] Onboarding saved to Firestore');
 
       // Also save the template collections to Firestore
       const template = STARTER_TEMPLATES[Object.keys(STARTER_TEMPLATES).find(
@@ -1984,7 +1985,7 @@ export const completeOnboardingAsync = async (db, artistId, templateId) => {
           batch.set(colRef, newCollection);
         });
         await batch.commit();
-        console.log('[Library] Template collections saved to Firestore');
+        log('[Library] Template collections saved to Firestore');
       }
     } catch (error) {
       console.error('[Library] Firestore onboarding write failed:', error.message);
@@ -2026,7 +2027,7 @@ export const migrateToFirestore = async (db, artistId) => {
       });
       await batch.commit();
       result.migrated.mediaItems = library.length;
-      console.log('[Migration] Migrated media items:', library.length);
+      log('[Migration] Migrated media items:', library.length);
     }
 
     // Migrate collections
@@ -2039,7 +2040,7 @@ export const migrateToFirestore = async (db, artistId) => {
       });
       await batch.commit();
       result.migrated.collections = collections.length;
-      console.log('[Migration] Migrated collections:', collections.length);
+      log('[Migration] Migrated collections:', collections.length);
     }
 
     // Migrate onboarding status
@@ -2048,7 +2049,7 @@ export const migrateToFirestore = async (db, artistId) => {
       const docRef = doc(db, 'artists', artistId, 'library', 'onboarding');
       await setDoc(docRef, onboarding);
       result.migrated.onboarding = true;
-      console.log('[Migration] Migrated onboarding status');
+      log('[Migration] Migrated onboarding status');
     }
 
     // Migrate created content
@@ -2065,7 +2066,7 @@ export const migrateToFirestore = async (db, artistId) => {
       });
       await batch.commit();
       result.migrated.createdContent = createdContent.videos.length + createdContent.slideshows.length;
-      console.log('[Migration] Migrated created content:', result.migrated.createdContent);
+      log('[Migration] Migrated created content:', result.migrated.createdContent);
     }
 
     // Migrate lyrics
@@ -2078,10 +2079,10 @@ export const migrateToFirestore = async (db, artistId) => {
       });
       await batch.commit();
       result.migrated.lyrics = lyrics.length;
-      console.log('[Migration] Migrated lyrics:', lyrics.length);
+      log('[Migration] Migrated lyrics:', lyrics.length);
     }
 
-    console.log('[Migration] Complete for artist:', artistId, result.migrated);
+    log('[Migration] Complete for artist:', artistId, result.migrated);
 
   } catch (error) {
     console.error('[Migration] Failed:', error);
@@ -2147,7 +2148,7 @@ export const migrateThumbnails = async (db, artistId, libraryItems, uploadFileFn
 
   if (images.length === 0) return { generated: 0, failed: 0 };
 
-  console.log(`[ThumbnailMigration] Starting — ${images.length} images need thumbnails`);
+  log(`[ThumbnailMigration] Starting — ${images.length} images need thumbnails`);
 
   let generated = 0;
   let failed = 0;
@@ -2180,7 +2181,7 @@ export const migrateThumbnails = async (db, artistId, libraryItems, uploadFileFn
       await updateLibraryItemAsync(db, artistId, item.id, { thumbnailUrl });
 
       generated++;
-      console.log(`[ThumbnailMigration] ✓ ${i + 1}/${images.length} — ${item.name}`);
+      log(`[ThumbnailMigration] ✓ ${i + 1}/${images.length} — ${item.name}`);
     } catch (err) {
       failed++;
       console.warn(`[ThumbnailMigration] ✗ ${i + 1}/${images.length} — ${item.name}:`, err.message);
@@ -2189,7 +2190,7 @@ export const migrateThumbnails = async (db, artistId, libraryItems, uploadFileFn
     if (onProgress) onProgress(i + 1, images.length, generated);
   }
 
-  console.log(`[ThumbnailMigration] Complete: ${generated} generated, ${failed} failed`);
+  log(`[ThumbnailMigration] Complete: ${generated} generated, ${failed} failed`);
   return { generated, failed };
 };
 
@@ -2210,7 +2211,7 @@ export const migrateVideoThumbnails = async (db, artistId, libraryItems, uploadF
 
   if (videos.length === 0) return { generated: 0, failed: 0 };
 
-  console.log(`[VideoThumbMigration] Starting — ${videos.length} videos need thumbnails`);
+  log(`[VideoThumbMigration] Starting — ${videos.length} videos need thumbnails`);
 
   let generated = 0;
   let failed = 0;
@@ -2275,7 +2276,7 @@ export const migrateVideoThumbnails = async (db, artistId, libraryItems, uploadF
       await updateLibraryItemAsync(db, artistId, item.id, { thumbnailUrl });
 
       generated++;
-      console.log(`[VideoThumbMigration] ✓ ${i + 1}/${videos.length} — ${item.name}`);
+      log(`[VideoThumbMigration] ✓ ${i + 1}/${videos.length} — ${item.name}`);
     } catch (err) {
       failed++;
       console.warn(`[VideoThumbMigration] ✗ ${i + 1}/${videos.length} — ${item.name}:`, err.message);
@@ -2284,7 +2285,7 @@ export const migrateVideoThumbnails = async (db, artistId, libraryItems, uploadF
     if (onProgress) onProgress(i + 1, videos.length, generated);
   }
 
-  console.log(`[VideoThumbMigration] Complete: ${generated} generated, ${failed} failed`);
+  log(`[VideoThumbMigration] Complete: ${generated} generated, ${failed} failed`);
   return { generated, failed };
 };
 

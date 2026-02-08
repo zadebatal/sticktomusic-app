@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { parseLyrics, parseLyricsIntoLines } from './AutoRemixEngine';
 import { DisplayModeSelector } from './TemplateSelector';
+import { useToast } from '../ui';
 
 /**
  * Lyric Editor - Import, sync, and manage lyrics with tap-to-sync
@@ -22,6 +23,9 @@ const LyricEditor = ({
   audioDuration = 0,
   audioUrl = null
 }) => {
+  // BUG-034: Toast notifications instead of alert()
+  const { error: toastError } = useToast();
+
   const [mode, setMode] = useState('edit'); // edit, tapSync, manual
   const [tapSyncIndex, setTapSyncIndex] = useState(0);
   const [tapSyncWords, setTapSyncWords] = useState([]);
@@ -43,7 +47,7 @@ const LyricEditor = ({
   // Start tap-to-sync mode
   const startTapSync = () => {
     if (!lyrics.trim()) {
-      alert('Please enter lyrics first');
+      toastError('Please enter lyrics first');
       return;
     }
 
@@ -268,7 +272,7 @@ const LyricEditor = ({
   // Auto-sync to beats
   const autoSyncToBeats = () => {
     if (!lyrics.trim() || beats.length === 0) {
-      alert('Need lyrics and beats to auto-sync');
+      toastError('Need lyrics and beats to auto-sync');
       return;
     }
 

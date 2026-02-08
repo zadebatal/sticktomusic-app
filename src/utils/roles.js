@@ -1,3 +1,4 @@
+import log from '../utils/logger';
 /**
  * roles.js - Role/Permission Utilities
  *
@@ -144,7 +145,7 @@ export function filterForRole(items, user) {
  */
 export function logRoleCheck(user, action, allowed) {
   if (process.env.NODE_ENV === 'development') {
-    console.log(`[ROLE CHECK] ${action}: ${allowed ? 'ALLOWED' : 'DENIED'}`, {
+    log(`[ROLE CHECK] ${action}: ${allowed ? 'ALLOWED' : 'DENIED'}`, {
       email: user?.email,
       role: user?.role,
     });

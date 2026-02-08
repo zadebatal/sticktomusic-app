@@ -21,6 +21,7 @@ import {
   orderBy,
   onSnapshot
 } from 'firebase/firestore';
+import log from '../utils/logger';
 
 // Storage keys
 const LAST_ARTIST_KEY = 'stm_last_artist_id';
@@ -291,11 +292,11 @@ export const migrateExistingData = (boonArtistId) => {
   // BUG-028: Guard against duplicate migration — check flag first
   const migrationKey = `stm_migration_complete_${boonArtistId}`;
   if (localStorage.getItem(migrationKey)) {
-    console.log('[Migration] Already migrated for artist:', boonArtistId);
+    log('[Migration] Already migrated for artist:', boonArtistId);
     return;
   }
 
-  console.log('[Migration] Starting migration for Boon artist:', boonArtistId);
+  log('[Migration] Starting migration for Boon artist:', boonArtistId);
 
   // Migrate categories
   const legacyCategories = localStorage.getItem(LEGACY_CATEGORIES_KEY);
@@ -303,7 +304,7 @@ export const migrateExistingData = (boonArtistId) => {
     // Only migrate if target doesn't already exist (idempotent)
     if (!localStorage.getItem(`${CATEGORIES_PREFIX}${boonArtistId}`)) {
       localStorage.setItem(`${CATEGORIES_PREFIX}${boonArtistId}`, legacyCategories);
-      console.log('[Migration] Categories migrated successfully');
+      log('[Migration] Categories migrated successfully');
     }
   }
 
@@ -312,7 +313,7 @@ export const migrateExistingData = (boonArtistId) => {
   if (legacyAnalytics) {
     if (!localStorage.getItem(`${ANALYTICS_PREFIX}${boonArtistId}`)) {
       localStorage.setItem(`${ANALYTICS_PREFIX}${boonArtistId}`, legacyAnalytics);
-      console.log('[Migration] Analytics migrated successfully');
+      log('[Migration] Analytics migrated successfully');
     }
   }
 
@@ -324,7 +325,7 @@ export const migrateExistingData = (boonArtistId) => {
   if (legacyCategories) localStorage.removeItem(LEGACY_CATEGORIES_KEY);
   if (legacyAnalytics) localStorage.removeItem(LEGACY_ANALYTICS_KEY);
 
-  console.log('[Migration] Migration complete!');
+  log('[Migration] Migration complete!');
 };
 
 /**
@@ -339,7 +340,7 @@ export const ensureBoonArtistExists = async (db) => {
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
-      console.log('[Migration] Creating Boon artist in Firestore...');
+      log('[Migration] Creating Boon artist in Firestore...');
 
       // Create Boon with existing data
       const boonData = {
@@ -357,7 +358,7 @@ export const ensureBoonArtistExists = async (db) => {
       };
 
       const docRef = await addDoc(artistsRef, boonData);
-      console.log('[Migration] Boon artist created with ID:', docRef.id);
+      log('[Migration] Boon artist created with ID:', docRef.id);
 
       // Migrate existing data to Boon's namespace
       migrateExistingData(docRef.id);

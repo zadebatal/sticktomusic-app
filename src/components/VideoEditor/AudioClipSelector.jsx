@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { trimAudioToFile } from '../../utils/audioTrimmer';
+import log from '../../utils/logger';
 
 /**
  * AudioClipSelector - Professional dual-playhead audio region selector
@@ -495,7 +496,7 @@ const AudioClipSelector = ({
         (msg) => setTrimProgress(msg)
       );
 
-      console.log('[AudioClipSelector] Trimmed audio:', {
+      log('[AudioClipSelector] Trimmed audio:', {
         name: trimmedFile.name,
         size: `${(trimmedFile.size / 1024).toFixed(0)}KB`,
         duration: `${selectedDuration.toFixed(1)}s`
@@ -814,7 +815,7 @@ const AudioClipSelector = ({
               onClick={() => {
                 // Check if audio was trimmed (not using full track)
                 const isTrimmed = inPoint > 0.1 || (duration > 0 && Math.abs(outPoint - duration) > 0.1);
-                console.log('[AudioClipSelector] Use This Clip clicked:', {
+                log('[AudioClipSelector] Use This Clip clicked:', {
                   inPoint,
                   outPoint,
                   selectedDuration,
@@ -829,7 +830,7 @@ const AudioClipSelector = ({
                   setShowSaveTrimmedPrompt(true);
                 } else {
                   // Not trimmed, just use directly
-                  console.log('[AudioClipSelector] Calling onSave with full audio');
+                  log('[AudioClipSelector] Calling onSave with full audio');
                   onSave({ startTime: 0, endTime: duration, duration: duration });
                 }
               }}

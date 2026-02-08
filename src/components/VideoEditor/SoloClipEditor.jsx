@@ -636,7 +636,7 @@ const SoloClipEditor = ({
       } catch (err) {
         console.error(`[SoloClipEditor] Failed to save video ${savedCount}:`, err);
         toastError(`Failed to save "${video.name || 'Solo Clip'}". Please try again.`);
-        return;
+        return; // Stop on failure so user doesn't lose context
       }
       savedCount++;
     }

@@ -17,8 +17,10 @@ import {
   generateAutoRemix,
   parseLyrics
 } from './AutoRemixEngine';
+import { useToast } from '../ui';
+import log from '../../utils/logger';
 
-console.log('🎬🎬🎬 VideoEditorV2.jsx MODULE LOADED! 🎬🎬🎬');
+log('🎬🎬🎬 VideoEditorV2.jsx MODULE LOADED! 🎬🎬🎬');
 
 /**
  * VideoEditor V2 - Full-featured video editor with auto-remix capabilities
@@ -49,6 +51,9 @@ const VideoEditorV2 = ({
     { id: 'boon', name: 'Boon' }
   ]
 }) => {
+  // BUG-034: Toast notifications instead of alert()
+  const { error: toastError } = useToast();
+
   // ============ DEPRECATION WARNING ============
   useEffect(() => {
     console.warn(
@@ -297,12 +302,12 @@ const VideoEditorV2 = ({
   // Generate content
   const handleGenerate = useCallback(() => {
     if (!selectedBank?.clips?.length) {
-      alert('Please select a content bank with clips first');
+      toastError('Please select a content bank with clips first');
       return;
     }
 
     if (beats.length === 0) {
-      alert('Please upload audio and wait for beat analysis');
+      toastError('Please upload audio and wait for beat analysis');
       return;
     }
 
@@ -435,7 +440,7 @@ const VideoEditorV2 = ({
     } catch (error) {
       console.error('Save error:', error);
       if (!silent) {
-        alert('Failed to save project');
+        toastError('Failed to save project');
       }
     }
   }, [projectName, clips, words, lyrics, textStyle, displayMode, selectedTemplate, selectedArtist, selectedBank, duration, bpm, onSave]);
@@ -459,7 +464,7 @@ const VideoEditorV2 = ({
       await onExport?.(project);
     } catch (error) {
       console.error('Export error:', error);
-      alert('Failed to export video');
+      toastError('Failed to export video');
     }
   }, [projectName, clips, words, lyrics, textStyle, displayMode, videoFile, audioFile, duration, bpm, onExport]);
 

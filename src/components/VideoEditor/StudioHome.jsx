@@ -51,6 +51,7 @@ import {
 } from '../../services/libraryService';
 import { uploadFile, getMediaDuration } from '../../services/firebaseStorage';
 import CollectionBankEditor from './CollectionBankEditor';
+import log from '../../utils/logger';
 
 const StudioHome = ({
   db = null, // Firestore instance for cross-device sync
@@ -212,7 +213,7 @@ const StudioHome = ({
 
     // For library + collections, use Firestore real-time subscription if db is available
     if (db) {
-      console.log('[StudioHome] Setting up Firestore subscriptions for library + collections');
+      log('[StudioHome] Setting up Firestore subscriptions for library + collections');
 
       // Try to migrate localStorage data to Firestore (one-time)
       const migrationKey = `stm_migrated_${artistId}`;
@@ -220,7 +221,7 @@ const StudioHome = ({
         migrateToFirestore(db, artistId).then(result => {
           if (result.success) {
             localStorage.setItem(migrationKey, 'true');
-            console.log('[StudioHome] Migration complete:', result.migrated);
+            log('[StudioHome] Migration complete:', result.migrated);
           }
         });
       }
@@ -246,12 +247,12 @@ const StudioHome = ({
 
       // Subscribe to real-time collection updates
       unsubscribes.push(subscribeToCollections(db, artistId, (cols) => {
-        console.log('[StudioHome] Firestore collections sync:', cols.length, 'collections');
+        log('[StudioHome] Firestore collections sync:', cols.length, 'collections');
         setCollections(cols);
       }));
     } else {
       // Fallback to localStorage
-      console.log('[StudioHome] Using localStorage (no db available)');
+      log('[StudioHome] Using localStorage (no db available)');
       setLibrary(getLibrary(artistId));
     }
 
@@ -260,9 +261,9 @@ const StudioHome = ({
 
   // Diagnostic logging on mount
   useEffect(() => {
-    console.log('[StudioHome] Component mounted');
-    console.log('[StudioHome] artistId:', artistId);
-    console.log('[StudioHome] db available:', !!db);
+    log('[StudioHome] Component mounted');
+    log('[StudioHome] artistId:', artistId);
+    log('[StudioHome] db available:', !!db);
 
     if (!artistId) {
       console.warn('[StudioHome] WARNING: No artistId provided - uploads will fail!');
@@ -294,7 +295,7 @@ const StudioHome = ({
     if (imageItems.length === 0) return;
     thumbMigrationRef.current = true;
 
-    console.log(`[ThumbnailMigration] v${THUMB_VERSION}: ${imageItems.length} images to process`);
+    log(`[ThumbnailMigration] v${THUMB_VERSION}: ${imageItems.length} images to process`);
 
     // Run in background after a short delay so it doesn't block initial render
     const timer = setTimeout(async () => {
@@ -304,7 +305,7 @@ const StudioHome = ({
             setLibraryRefreshTrigger(prev => prev + 1);
           }
         });
-        console.log(`[ThumbnailMigration] v${THUMB_VERSION} complete: ${result.generated} generated, ${result.failed} failed`);
+        log(`[ThumbnailMigration] v${THUMB_VERSION} complete: ${result.generated} generated, ${result.failed} failed`);
         localStorage.setItem(versionKey, Date.now().toString());
         if (result.generated > 0) {
           setLibraryRefreshTrigger(prev => prev + 1);
@@ -335,7 +336,7 @@ const StudioHome = ({
     }
     videoThumbMigrationRef.current = true;
 
-    console.log(`[VideoThumbMigration] v${VID_THUMB_VERSION}: ${videoItems.length} videos to process`);
+    log(`[VideoThumbMigration] v${VID_THUMB_VERSION}: ${videoItems.length} videos to process`);
 
     const timer = setTimeout(async () => {
       try {
@@ -344,7 +345,7 @@ const StudioHome = ({
             setLibraryRefreshTrigger(prev => prev + 1);
           }
         });
-        console.log(`[VideoThumbMigration] v${VID_THUMB_VERSION} complete: ${result.generated} generated, ${result.failed} failed`);
+        log(`[VideoThumbMigration] v${VID_THUMB_VERSION} complete: ${result.generated} generated, ${result.failed} failed`);
         localStorage.setItem(versionKey, Date.now().toString());
         if (result.generated > 0) {
           setLibraryRefreshTrigger(prev => prev + 1);
@@ -364,7 +365,7 @@ const StudioHome = ({
   const handleFileUpload = async (files, type) => {
     if (!files.length) return;
 
-    console.log('[StudioHome] Starting upload for', files.length, 'files, artistId:', artistId, 'type:', type);
+    log('[StudioHome] Starting upload for', files.length, 'files, artistId:', artistId, 'type:', type);
 
     if (!artistId) {
       console.error('[StudioHome] No artistId - cannot save to library');
@@ -385,12 +386,12 @@ const StudioHome = ({
       setUploadProgress({ current: i + 1, total: files.length, name: file.name, percent: Math.round(basePercent) });
 
       try {
-        console.log('[StudioHome] Uploading file:', file.name, 'size:', file.size, 'type:', file.type);
+        log('[StudioHome] Uploading file:', file.name, 'size:', file.size, 'type:', file.type);
 
         // Upload to Firebase with progress tracking
         const folder = type === MEDIA_TYPES.VIDEO ? 'videos'
           : type === MEDIA_TYPES.IMAGE ? 'images' : 'audio';
-        console.log('[StudioHome] Calling uploadFile to folder:', folder);
+        log('[StudioHome] Calling uploadFile to folder:', folder);
         const { url, path } = await uploadFile(file, folder, (filePercent) => {
           const overall = Math.round(basePercent + (filePercent / files.length));
           setUploadProgress(prev => ({ ...prev, percent: Math.min(overall, 99) }));
@@ -399,7 +400,7 @@ const StudioHome = ({
             cancelFunctionsRef.current.push(cancelFn);
           }
         });
-        console.log('[StudioHome] Upload successful! URL:', url?.substring(0, 50) + '...');
+        log('[StudioHome] Upload successful! URL:', url?.substring(0, 50) + '...');
 
         // Get metadata
         let duration = null;
@@ -525,11 +526,11 @@ const StudioHome = ({
     }
 
     if (uploadedItems.length > 0) {
-      console.log('[StudioHome] Adding', uploadedItems.length, 'items to library for artist:', artistId);
+      log('[StudioHome] Adding', uploadedItems.length, 'items to library for artist:', artistId);
       try {
         // Use async Firestore function if db is available
         const added = await addManyToLibraryAsync(db, artistId, uploadedItems);
-        console.log('[StudioHome] Successfully added to library:', added.length, 'items');
+        log('[StudioHome] Successfully added to library:', added.length, 'items');
 
         // Also add items to the selected collection if one is active
         if (selectedCollection && added.length > 0) {
@@ -565,7 +566,7 @@ const StudioHome = ({
       console.error('[StudioHome] No items were successfully uploaded');
       toastError('No files were uploaded. Check if Firebase is configured correctly.');
     } else {
-      console.log('[StudioHome] Upload complete!', uploadedItems.length, 'files added to library');
+      log('[StudioHome] Upload complete!', uploadedItems.length, 'files added to library');
     }
 
     setUploadProgress(prev => ({ ...prev, percent: 100 }));
@@ -651,7 +652,7 @@ const StudioHome = ({
 
   // Audio clip handling
   const handleClipSave = async (clipData) => {
-    console.log('[StudioHome] handleClipSave called with clipData:', clipData);
+    log('[StudioHome] handleClipSave called with clipData:', clipData);
 
     if (!pendingAudio) {
       console.error('[StudioHome] No pendingAudio - cannot save');
@@ -666,7 +667,7 @@ const StudioHome = ({
 
     // Calculate duration from start/end if not provided directly
     const calculatedDuration = clipData.duration || (clipData.endTime - clipData.startTime);
-    console.log('[StudioHome] Audio duration:', {
+    log('[StudioHome] Audio duration:', {
       provided: clipData.duration,
       calculated: calculatedDuration,
       startTime: clipData.startTime,
@@ -691,7 +692,7 @@ const StudioHome = ({
           cancelFunctionsRef.current.push(cancelFn);
         }
       });
-      console.log('[StudioHome] Audio uploaded to Firebase:', url?.substring(0, 50) + '...');
+      log('[StudioHome] Audio uploaded to Firebase:', url?.substring(0, 50) + '...');
 
       // Create a descriptive name for the trimmed clip
       const clipName = `${pendingAudio.name} (${formatTime(clipData.startTime)}-${formatTime(clipData.endTime)})`;
@@ -711,7 +712,7 @@ const StudioHome = ({
         }
       };
 
-      console.log('[StudioHome] Saving audio item with duration:', audioItem.duration);
+      log('[StudioHome] Saving audio item with duration:', audioItem.duration);
 
       if (selectedCollection) {
         audioItem.collectionIds = [selectedCollection];
@@ -719,7 +720,7 @@ const StudioHome = ({
 
       // Use async Firestore function if db is available
       const added = await addToLibraryAsync(db, artistId, audioItem);
-      console.log('[StudioHome] Audio saved to library:', added);
+      log('[StudioHome] Audio saved to library:', added);
 
       // Add to collection if one is selected
       if (selectedCollection && added) {
@@ -818,7 +819,7 @@ const StudioHome = ({
   };
 
   const handleCancelUpload = () => {
-    console.log('[StudioHome] Cancelling all active uploads');
+    log('[StudioHome] Cancelling all active uploads');
     // Call all accumulated cancel functions
     cancelFunctionsRef.current.forEach(cancelFn => {
       try {
@@ -2471,7 +2472,7 @@ const StudioHome = ({
                     onAddLyrics={handleAddLyrics}
                     onUpdateLyrics={handleUpdateLyrics}
                     onDeleteLyrics={handleDeleteLyrics}
-                    onSelectLyrics={(l) => console.log('Selected lyrics:', l)}
+                    onSelectLyrics={(l) => log('Selected lyrics:', l)}
                     compact
                   />
                 </div>

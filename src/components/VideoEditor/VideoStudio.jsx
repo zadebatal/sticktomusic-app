@@ -37,6 +37,8 @@ import {
 } from '../../services/libraryService';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { VIDEO_STATUS } from '../../utils/status';
+import { useToast } from '../ui';
+import log from '../../utils/logger';
 
 // Firestore sync helpers for categories - ensures cross-device access
 const FIRESTORE_CATEGORY_DOC = 'studioData';
@@ -178,7 +180,7 @@ const loadSessionState = () => {
     const saved = localStorage.getItem(SESSION_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      console.log('[Session] Loaded:', parsed);
+      log('[Session] Loaded:', parsed);
       return parsed;
     }
   } catch (e) {
@@ -195,7 +197,7 @@ const saveSessionState = (state) => {
       savedAt: Date.now()
     };
     localStorage.setItem(SESSION_KEY, JSON.stringify(toSave));
-    console.log('[Session] Saved:', toSave);
+    log('[Session] Saved:', toSave);
   } catch (e) {
     console.warn('Failed to save session state:', e);
   }
@@ -210,6 +212,9 @@ const VideoStudio = ({
   onSchedulePost,
   onArtistChange = null // Callback when artist selection changes
 }) => {
+  // BUG-034: Toast notifications instead of alert()
+  const { success: toastSuccess, error: toastError } = useToast();
+
   // Mobile responsive detection
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
 
@@ -228,7 +233,7 @@ const VideoStudio = ({
   const handleArtistIdChange = (newArtistId) => {
     if (newArtistId === currentArtistId) return; // No change
 
-    console.log('[VideoStudio] Artist switching from', currentArtistId, 'to', newArtistId);
+    log('[VideoStudio] Artist switching from', currentArtistId, 'to', newArtistId);
     setCurrentArtistId(newArtistId);
     setLastArtistId(newArtistId);
 
@@ -319,7 +324,7 @@ const VideoStudio = ({
       // loadCreatedContentAsync already saves Firestore data to localStorage
       // Just bump version to trigger useMemo recompute so UI shows the loaded data
       if (content && (content.slideshows?.length > 0 || content.videos?.length > 0)) {
-        console.log('[VideoStudio] Loaded created content from Firestore:', content.slideshows?.length, 'slideshows,', content.videos?.length, 'videos');
+        log('[VideoStudio] Loaded created content from Firestore:', content.slideshows?.length, 'slideshows,', content.videos?.length, 'videos');
       }
       setCreatedContentVersion(v => v + 1);
       setFirestoreContentLoaded(true);
@@ -492,7 +497,7 @@ const VideoStudio = ({
     if (db && initialArtistId) {
       loadCategoriesFromFirestore(db, initialArtistId).then(firestoreCats => {
         if (firestoreCats && firestoreCats.length > 0) {
-          console.log('[VideoStudio] Initial load: found', firestoreCats.length, 'categories in Firestore');
+          log('[VideoStudio] Initial load: found', firestoreCats.length, 'categories in Firestore');
           setCategories(firestoreCats);
           // Sync to localStorage
           saveArtistCategories(initialArtistId, firestoreCats);
@@ -509,7 +514,7 @@ const VideoStudio = ({
       if (!status.completed) {
         // Auto-complete with Music Artist template
         completeOnboarding(currentArtistId, STARTER_TEMPLATES.MUSIC_ARTIST.id);
-        console.log('[Studio] Auto-completed onboarding with Music Artist template');
+        log('[Studio] Auto-completed onboarding with Music Artist template');
       }
     }
   }, [currentArtistId]);
@@ -559,7 +564,7 @@ const VideoStudio = ({
   useEffect(() => {
     // Only reload if artist actually changed (compare against ref, not prop)
     if (currentArtistId && currentArtistId !== prevArtistIdRef.current) {
-      console.log('[VideoStudio] Artist changed from', prevArtistIdRef.current, 'to', currentArtistId);
+      log('[VideoStudio] Artist changed from', prevArtistIdRef.current, 'to', currentArtistId);
 
       // Load categories: try Firestore first (cross-device), then localStorage
       const loadCats = async () => {
@@ -569,7 +574,7 @@ const VideoStudio = ({
         if (db) {
           const firestoreCategories = await loadCategoriesFromFirestore(db, currentArtistId);
           if (firestoreCategories && firestoreCategories.length > 0) {
-            console.log('[VideoStudio] Loaded', firestoreCategories.length, 'categories from Firestore for', currentArtistId);
+            log('[VideoStudio] Loaded', firestoreCategories.length, 'categories from Firestore for', currentArtistId);
             setCategories(firestoreCategories);
             // Also update localStorage for faster next load
             saveArtistCategories(currentArtistId, firestoreCategories);
@@ -581,10 +586,10 @@ const VideoStudio = ({
           // Fall back to localStorage
           const artistCategories = loadArtistCategories(currentArtistId);
           if (artistCategories.length > 0) {
-            console.log('[VideoStudio] Loaded', artistCategories.length, 'categories from localStorage for', currentArtistId);
+            log('[VideoStudio] Loaded', artistCategories.length, 'categories from localStorage for', currentArtistId);
             setCategories(artistCategories);
           } else {
-            console.log('[VideoStudio] No categories found, using defaults for', currentArtistId);
+            log('[VideoStudio] No categories found, using defaults for', currentArtistId);
             setCategories(defaultCategories);
           }
         }
@@ -625,7 +630,7 @@ const VideoStudio = ({
       // Find the saved category
       const category = categories.find(c => c.id === saved.categoryId);
       if (category) {
-        console.log('[Session] Restoring:', saved.currentView, category.name, 'editor:', saved.showEditor, 'mode:', saved.studioMode);
+        log('[Session] Restoring:', saved.currentView, category.name, 'editor:', saved.showEditor, 'mode:', saved.studioMode);
         setSelectedCategory(category);
         setCurrentView(saved.currentView || 'home');
         if (saved.studioMode) {
@@ -696,7 +701,7 @@ const VideoStudio = ({
           createdAt: new Date().toISOString(),
           status: VIDEO_STATUS.DRAFT
         });
-        console.log('[VideoStudio] Saved video via library system:', savedVideo.id);
+        log('[VideoStudio] Saved video via library system:', savedVideo.id);
         setCreatedContentVersion(v => v + 1);
         setShowEditor(false);
         setEditingVideo(null);
@@ -758,7 +763,7 @@ const VideoStudio = ({
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      console.log(`Starting upload ${i + 1}/${files.length}: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+      log(`Starting upload ${i + 1}/${files.length}: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
 
       try {
         setUploadProgress({ type: 'video', current: i + 1, total: files.length, name: file.name, progress: 0 });
@@ -768,7 +773,7 @@ const VideoStudio = ({
           setUploadProgress(prev => ({ ...prev, progress }));
         });
 
-        console.log(`Upload complete for ${file.name}, getting metadata...`);
+        log(`Upload complete for ${file.name}, getting metadata...`);
 
         // Get duration and thumbnail from local blob (more reliable than Firebase URL due to CORS)
         let duration = 0;
@@ -802,7 +807,7 @@ const VideoStudio = ({
           createdAt: new Date().toISOString()
         });
 
-        console.log('✓ Video uploaded successfully:', file.name);
+        log('✓ Video uploaded successfully:', file.name);
 
         // Small delay between uploads to avoid rate limiting
         if (i < files.length - 1) {
@@ -816,12 +821,12 @@ const VideoStudio = ({
     }
 
     // Log summary
-    console.log(`Upload summary: ${uploadedVideos.length} succeeded, ${failedUploads.length} failed`);
+    log(`Upload summary: ${uploadedVideos.length} succeeded, ${failedUploads.length} failed`);
     if (failedUploads.length > 0) {
       console.warn('Failed uploads:', failedUploads);
     }
 
-    console.log('Upload complete. Videos to add:', uploadedVideos.length);
+    log('Upload complete. Videos to add:', uploadedVideos.length);
 
     if (uploadedVideos.length > 0) {
       setCategories(prev => {
@@ -830,14 +835,14 @@ const VideoStudio = ({
             ? { ...cat, videos: [...cat.videos, ...uploadedVideos] }
             : cat
         );
-        console.log('Categories updated, total videos in category:', updated.find(c => c.id === selectedCategory.id)?.videos.length);
+        log('Categories updated, total videos in category:', updated.find(c => c.id === selectedCategory.id)?.videos.length);
         return updated;
       });
 
       setSelectedCategory(prev => {
         if (!prev) return prev;
         const updated = { ...prev, videos: [...prev.videos, ...uploadedVideos] };
-        console.log('Selected category updated, videos:', updated.videos.length);
+        log('Selected category updated, videos:', updated.videos.length);
         return updated;
       });
     } else {
@@ -895,7 +900,7 @@ const VideoStudio = ({
           audioData.startTime = trimData.startTime;
           audioData.endTime = trimData.endTime;
           audioData.isTrimmed = true;
-          console.log(`Audio uploaded with trim: ${trimData.startTime.toFixed(1)}s - ${trimData.endTime.toFixed(1)}s`);
+          log(`Audio uploaded with trim: ${trimData.startTime.toFixed(1)}s - ${trimData.endTime.toFixed(1)}s`);
         }
 
         uploadedAudio.push(audioData);
@@ -969,7 +974,7 @@ const VideoStudio = ({
   const handleSaveLyricsToAudio = useCallback((audioId, lyricsData) => {
     if (!selectedCategory) {
       // Library mode: log but don't crash — lyrics-to-audio is a category feature
-      console.log('[VideoStudio] Skipping lyrics-to-audio save (library mode)');
+      log('[VideoStudio] Skipping lyrics-to-audio save (library mode)');
       return;
     }
 
@@ -998,7 +1003,7 @@ const VideoStudio = ({
     setCategories(prev => prev.map(updateCategory));
     setSelectedCategory(prev => prev ? updateCategory(prev) : prev);
 
-    console.log('[Lyrics] Saved lyrics to audio:', audioId, lyricsEntry);
+    log('[Lyrics] Saved lyrics to audio:', audioId, lyricsEntry);
   }, [selectedCategory]);
 
   const handleDeleteVideo = useCallback(async (videoId) => {
@@ -1049,7 +1054,7 @@ const VideoStudio = ({
     // Delete from Firebase Storage if there's a storage path
     if (video?.storagePath) {
       const result = await deleteFile(video.storagePath);
-      console.log('Deleted video from storage:', result);
+      log('Deleted video from storage:', result);
     }
 
     setCategories(prev => prev.map(cat =>
@@ -1074,7 +1079,7 @@ const VideoStudio = ({
     // Delete from Firebase Storage if there's a storage path
     if (audio?.storagePath) {
       const result = await deleteFile(audio.storagePath);
-      console.log('Deleted audio from storage:', result);
+      log('Deleted audio from storage:', result);
     }
 
     setCategories(prev => prev.map(cat =>
@@ -1250,7 +1255,7 @@ const VideoStudio = ({
       // Batch mode - create 10 separate slideshows instantly (like video batch)
       if (!selectedCategory) {
         // Library mode: batch slideshows not supported
-        alert('Batch slideshows require a category. Please select one or use manual creation.');
+        toastError('Batch slideshows require a category. Please select one or use manual creation.');
         return;
       }
 
@@ -1258,7 +1263,7 @@ const VideoStudio = ({
       const imagesB = selectedCategory.imagesB || [];
 
       if (imagesA.length === 0 || imagesB.length === 0) {
-        alert('Please add images to both Image A and Image B banks first');
+        toastError('Please add images to both Image A and Image B banks first');
         return;
       }
 
@@ -1319,7 +1324,7 @@ const VideoStudio = ({
 
         // Navigate to slideshow library view to see created slideshows
         // We signal AestheticHome to show the library via a special option
-        alert(`Created ${batchSlideshows.length} slideshows!`);
+        toastSuccess(`Created ${batchSlideshows.length} slideshows!`);
         // Return a signal to open the library (handled by AestheticHome)
         return { openLibrary: true, count: batchSlideshows.length };
       }
@@ -1354,7 +1359,7 @@ const VideoStudio = ({
         if (db) {
           addCreatedSlideshowAsync(db, currentArtistId, data).catch(console.error);
         }
-        console.log('[VideoStudio] Saved slideshow via library system:', savedSlideshow.id);
+        log('[VideoStudio] Saved slideshow via library system:', savedSlideshow.id);
         setCreatedContentVersion(v => v + 1);
         setShowSlideshowEditor(false);
         setEditingSlideshow(null);

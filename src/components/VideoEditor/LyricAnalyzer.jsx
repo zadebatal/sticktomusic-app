@@ -57,7 +57,8 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
     if (storedKey) {
       setApiKey(storedKey);
     } else {
-      // Try fetching shared team key
+      // BUG-011: Use 'team' sentinel to route through server proxy
+      // instead of fetching the actual API key to the browser
       (async () => {
         try {
           const { getAuth } = await import('firebase/auth');
@@ -68,19 +69,19 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
             const baseUrl = window.location.hostname === 'localhost'
               ? `http://localhost:${window.location.port}`
               : '';
-            const response = await fetch(`${baseUrl}/api/whisper?action=getKey`, {
+            const response = await fetch(`${baseUrl}/api/whisper?action=status`, {
               headers: { 'Authorization': `Bearer ${token}` }
             });
             if (response.ok) {
               const data = await response.json();
-              if (data.configured && data.key) {
-                setApiKey(data.key);
+              if (data.configured) {
+                setApiKey('team'); // Proxy will add the real key server-side
                 return;
               }
             }
           }
         } catch (err) {
-          console.warn('Could not fetch shared OpenAI key:', err.message);
+          console.warn('Could not check shared OpenAI key status:', err.message);
         }
         setShowApiKeyInput(true);
       })();

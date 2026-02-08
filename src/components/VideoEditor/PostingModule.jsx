@@ -5,6 +5,8 @@ import {
   generatePostContent,
   isValidBankName
 } from '../../utils/captionGenerator';
+import { useToast, useFocusTrap } from '../ui';
+import log from '../../utils/logger';
 
 /**
  * PostingModule - Batch schedule posts from a category
@@ -27,6 +29,11 @@ const PostingModule = ({
   onRenderVideo,
   onClose
 }) => {
+  // BUG-034: Toast notifications instead of alert()
+  const { success: toastSuccess } = useToast();
+  // BUG-030: Focus trap for modal accessibility
+  const trapRef = useFocusTrap(true);
+
   // Bank selection — ensure it matches a valid CONTENT_BANKS key
   const [selectedBank, setSelectedBank] = useState(() => {
     const bankNames = getBankNames();
@@ -101,7 +108,7 @@ const PostingModule = ({
       };
     });
 
-    console.log('[PostingModule] Initialized', newPosts.length, 'posts with bank:', selectedBank,
+    log('[PostingModule] Initialized', newPosts.length, 'posts with bank:', selectedBank,
       'sample caption:', newPosts[0]?.caption, 'sample hashtags:', newPosts[0]?.hashtagString);
     setPosts(newPosts);
   }, [videos, selectedBank, platforms.instagram, isVideoRendered]);
@@ -309,14 +316,14 @@ const PostingModule = ({
       setError(`${scheduled} scheduled, ${failed} failed: ${errors.slice(0, 3).join('; ')}`);
     } else {
       // Success - could close or show success message
-      alert(`Successfully scheduled ${scheduled} posts!`);
+      toastSuccess(`Successfully scheduled ${scheduled} posts!`);
       onClose?.();
     }
   }, [posts, selectedHandle, scheduleDate, scheduleTime, intervalMinutes, platforms, lateAccountIds, onSchedulePost, onClose]);
 
   return (
     <div style={styles.overlay}>
-      <div style={styles.modal}>
+      <div ref={trapRef} style={styles.modal} role="dialog" aria-modal="true">
         {/* Header */}
         <div style={styles.header}>
           <div>

@@ -6,6 +6,7 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { getFirestore } from 'firebase/firestore';
+import log from '../utils/logger';
 
 // Firebase configuration - loaded from environment variables
 // IMPORTANT: Never hardcode credentials. Set these in Vercel environment variables.
@@ -87,7 +88,7 @@ export async function uploadFile(file, folder = 'uploads', onProgress = null, op
     // Expose cancel capability to caller
     if (options.onCancel) {
       options.onCancel(() => {
-        console.log('Cancelling upload for:', file.name);
+        log('Cancelling upload for:', file.name);
         uploadTask.cancel();
       });
     }

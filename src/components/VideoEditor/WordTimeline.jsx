@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import log from '../../utils/logger';
 
 /**
  * WordTimeline - Flowstage-inspired word timing editor
@@ -98,7 +99,7 @@ const WordTimeline = ({
         const arrayBuffer = await response.arrayBuffer();
         scrubBufferRef.current = await scrubContextRef.current.decodeAudioData(arrayBuffer);
         setAudioBufferReady(true);
-        console.log('[Scrub] Audio buffer ready for scrubbing and waveform');
+        log('[Scrub] Audio buffer ready for scrubbing and waveform');
       } catch (err) {
         console.warn('[Scrub] Could not init scrub audio:', err.message);
         setAudioBufferReady(false);
@@ -179,7 +180,7 @@ const WordTimeline = ({
     }
 
     setWaveformData(peaks);
-    console.log('[Waveform] Generated', peaks.length, 'peaks');
+    log('[Waveform] Generated', peaks.length, 'peaks');
   }, [audioBufferReady, duration, audioRef]);
 
   // Draw waveform on canvas when zoom changes or waveform data updates

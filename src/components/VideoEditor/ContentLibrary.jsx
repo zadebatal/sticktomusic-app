@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import ExportAndPostModal from './ExportAndPostModal';
 import ScheduleQueue from './ScheduleQueue';
-import { StatusPill, ConfirmDialog, EmptyState as SharedEmptyState } from '../ui';
+import { StatusPill, ConfirmDialog, EmptyState as SharedEmptyState, useToast } from '../ui';
 import { VIDEO_STATUS } from '../../utils/status';
 import { renderVideo } from '../../services/videoExportService';
 import { uploadFile } from '../../services/firebaseStorage';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
+import log from '../../utils/logger';
 
 /**
  * ContentLibrary - Shows all videos or slideshows created within a category
@@ -33,6 +34,9 @@ const ContentLibrary = ({
   lateAccountIds = {},
   artistId = null
 }) => {
+  // BUG-034: Toast notifications instead of alert()
+  const { success: toastSuccess, error: toastError } = useToast();
+
   const isSlideshow = contentType === 'slideshows';
   const [filter, setFilter] = useState('all');
   const [dateRange, setDateRange] = useState('all');
@@ -55,14 +59,14 @@ const ContentLibrary = ({
     setRenderProgress(0);
 
     try {
-      console.log('[ContentLibrary] Rendering video:', video.id);
+      log('[ContentLibrary] Rendering video:', video.id);
 
       // Render the video
       const blob = await renderVideo(video, (progress) => {
         setRenderProgress(progress);
       });
 
-      console.log('[ContentLibrary] Video rendered, size:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
+      log('[ContentLibrary] Video rendered, size:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
 
       // Upload to Firebase - use correct extension based on blob type
       setRenderProgress(95);
@@ -73,7 +77,7 @@ const ContentLibrary = ({
         'videos'
       );
 
-      console.log('[ContentLibrary] Video uploaded:', cloudUrl);
+      log('[ContentLibrary] Video uploaded:', cloudUrl);
 
       // Update the video with the cloudUrl
       if (onUpdateVideo) {
@@ -944,22 +948,22 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
 
   const handleSchedule = async () => {
     if (!selectedHandle) {
-      alert('Please select an account');
+      toastError('Please select an account');
       return;
     }
 
     const accountMapping = lateAccountIds[selectedHandle];
     if (!accountMapping) {
-      alert(`No account mapping found for ${selectedHandle}`);
+      toastError(`No account mapping found for ${selectedHandle}`);
       return;
     }
 
     setIsScheduling(true);
-    console.log('[Schedule] Starting carousel scheduling...');
-    console.log('[Schedule] Selected handle:', selectedHandle);
-    console.log('[Schedule] Account mapping:', accountMapping);
-    console.log('[Schedule] Platforms:', platforms);
-    console.log('[Schedule] Slideshows to schedule:', slideshows.length);
+    log('[Schedule] Starting carousel scheduling...');
+    log('[Schedule] Selected handle:', selectedHandle);
+    log('[Schedule] Account mapping:', accountMapping);
+    log('[Schedule] Platforms:', platforms);
+    log('[Schedule] Slideshows to schedule:', slideshows.length);
 
     try {
       // Schedule each slideshow as a carousel post
@@ -978,11 +982,11 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
         const slideshow = slideshows[si];
         const scheduledFor = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
         const fullCaption = `${caption}\n\n${hashtags}`.trim();
-        console.log(`[Schedule] Processing slideshow ${si + 1}/${slideshows.length}:`, slideshow.id);
+        log(`[Schedule] Processing slideshow ${si + 1}/${slideshows.length}:`, slideshow.id);
 
         if (!onSchedulePost) {
           console.error('[Schedule] onSchedulePost is not defined!');
-          alert('Scheduling not available. Please try again.');
+          toastError('Scheduling not available. Please try again.');
           break;
         }
 
@@ -1009,11 +1013,11 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
 
         const exportPromises = neededRatios.map(async (ratio) => {
           if (slideshowRatio === ratio && slideshow.exportedImages?.length) {
-            console.log(`[Schedule] Using cached export for ${ratio}`);
+            log(`[Schedule] Using cached export for ${ratio}`);
             imagesByRatio[ratio] = slideshow.exportedImages;
           } else {
             const label = platformJobs.find(j => j.ratio === ratio)?.label || ratio;
-            console.log(`[Schedule] Exporting at ${ratio} for ${label}`);
+            log(`[Schedule] Exporting at ${ratio} for ${label}`);
             imagesByRatio[ratio] = await exportAtRatio(slideshow, ratio, label);
           }
         });
@@ -1027,7 +1031,7 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
             console.warn(`[Schedule] No images for ${job.label}, skipping`);
             return null;
           }
-          console.log(`[Schedule] Sending to Late for ${job.label}:`, images.length, 'images');
+          log(`[Schedule] Sending to Late for ${job.label}:`, images.length, 'images');
           try {
             const result = await onSchedulePost({
               type: 'carousel',
@@ -1041,15 +1045,15 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
               images,
               scheduledFor,
             });
-            console.log(`[Schedule] ${job.label} result:`, result);
+            log(`[Schedule] ${job.label} result:`, result);
             if (result?.success === false) {
-              alert(`Failed to schedule for ${job.label}: ${result.error || 'Unknown error'}`);
+              toastError(`Failed to schedule for ${job.label}: ${result.error || 'Unknown error'}`);
               return null;
             }
             return result;
           } catch (err) {
             console.error(`[Schedule] ${job.label} error:`, err);
-            alert(`Error scheduling for ${job.label}: ${err.message}`);
+            toastError(`Error scheduling for ${job.label}: ${err.message}`);
             return null;
           }
         });
@@ -1058,17 +1062,17 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
         scheduled += results.filter(Boolean).length;
       }
 
-      console.log('[Schedule] Done. Scheduled:', scheduled);
+      log('[Schedule] Done. Scheduled:', scheduled);
       setExportProgress('');
       if (scheduled > 0) {
-        alert(`Scheduled ${scheduled} carousel post${scheduled > 1 ? 's' : ''}!`);
+        toastSuccess(`Scheduled ${scheduled} carousel post${scheduled > 1 ? 's' : ''}!`);
         onClose();
       } else {
-        alert('No carousels were scheduled. Check that your account has the correct platform IDs configured.');
+        toastError('No carousels were scheduled. Check that your account has the correct platform IDs configured.');
       }
     } catch (err) {
       console.error('[SlideshowPostingModal] Schedule failed:', err);
-      alert(`Failed to schedule: ${err.message}`);
+      toastError(`Failed to schedule: ${err.message}`);
     } finally {
       setIsScheduling(false);
     }

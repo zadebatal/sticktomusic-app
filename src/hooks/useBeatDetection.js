@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { guess } from 'web-audio-beat-detector';
 import { normalizeBeatsToTrimRange } from '../utils/timelineNormalization';
+import log from '../utils/logger';
 
 /**
  * Custom hook for beat detection in audio files.
@@ -40,11 +41,11 @@ export const useBeatDetection = () => {
 
       if (audioSource instanceof File || audioSource instanceof Blob) {
         // Direct file/blob - most reliable, no CORS issues
-        console.log('Beat detection: Analyzing from file/blob');
+        log('Beat detection: Analyzing from file/blob');
         arrayBuffer = await audioSource.arrayBuffer();
       } else if (typeof audioSource === 'string') {
         // It's a URL - try to fetch the audio data
-        console.log('Beat detection: Fetching from URL:', audioSource.substring(0, 50) + '...');
+        log('Beat detection: Fetching from URL:', audioSource.substring(0, 50) + '...');
 
         try {
           const response = await fetch(audioSource, { mode: 'cors' });
@@ -87,17 +88,17 @@ export const useBeatDetection = () => {
       }
 
       // Decode audio data
-      console.log('Beat detection: Decoding audio data...');
+      log('Beat detection: Decoding audio data...');
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
       const duration = audioBuffer.duration;
 
       // Use web-audio-beat-detector for professional BPM detection
-      console.log('Beat detection: Running BPM analysis...');
+      log('Beat detection: Running BPM analysis...');
 
       try {
         const result = await guess(audioBuffer);
 
-        console.log('Beat detection result:', result);
+        log('Beat detection result:', result);
 
         const detectedBpm = Math.round(result.bpm || result.tempo);
         const offset = result.offset || 0;
@@ -111,7 +112,7 @@ export const useBeatDetection = () => {
         // Close audio context
         await audioContext.close();
 
-        console.log(`Beat detection complete: ${detectedBpm} BPM, ${beatTimestamps.length} beats`);
+        log(`Beat detection complete: ${detectedBpm} BPM, ${beatTimestamps.length} beats`);
 
         return { bpm: detectedBpm, beats: beatTimestamps, offset };
 

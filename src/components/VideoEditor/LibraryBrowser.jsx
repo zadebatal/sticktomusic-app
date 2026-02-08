@@ -42,6 +42,7 @@ import {
 } from '../../services/libraryService';
 import { uploadFile } from '../../services/firebaseStorage';
 import { useToast } from '../ui';
+import log from '../../utils/logger';
 
 // Extracted outside LibraryBrowser so React doesn't recreate on parent re-render
 const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate }) => {
@@ -179,7 +180,7 @@ const LibraryBrowser = ({
   compact = false,
   refreshTrigger = 0 // Increment to force refresh
 }) => {
-  const { success: toastSuccess } = useToast();
+  const { success: toastSuccess, error: toastError } = useToast();
 
   // State
   const [library, setLibrary] = useState([]);
@@ -252,7 +253,7 @@ const LibraryBrowser = ({
   useEffect(() => {
     if (!artistId) return;
 
-    console.log('[LibraryBrowser] Loading data for artist:', artistId, 'refreshTrigger:', refreshTrigger, 'db:', !!db);
+    log('[LibraryBrowser] Loading data for artist:', artistId, 'refreshTrigger:', refreshTrigger, 'db:', !!db);
 
     // Instant load from localStorage cache (no network wait)
     const cachedLibrary = getLibrary(artistId);
@@ -282,17 +283,17 @@ const LibraryBrowser = ({
         });
 
         const withThumbs = merged.filter(i => i.thumbnailUrl).length;
-        console.log('[LibraryBrowser] Firestore sync:', merged.length, 'items,', withThumbs, 'have thumbnails');
+        log('[LibraryBrowser] Firestore sync:', merged.length, 'items,', withThumbs, 'have thumbnails');
         // Debug: log a sample thumbnail URL to verify they're valid
         const sampleThumb = merged.find(i => i.thumbnailUrl && i.type === 'video');
-        if (sampleThumb) console.log('[LibraryBrowser] Sample video thumbnail URL:', sampleThumb.thumbnailUrl);
+        if (sampleThumb) log('[LibraryBrowser] Sample video thumbnail URL:', sampleThumb.thumbnailUrl);
 
         setLibrary(merged);
         try { saveLibrary(artistId, merged); } catch (e) {}
       }));
 
       unsubscribes.push(subscribeToCollections(db, artistId, (cols) => {
-        console.log('[LibraryBrowser] Firestore sync:', cols.length, 'collections');
+        log('[LibraryBrowser] Firestore sync:', cols.length, 'collections');
         setCollections(cols);
       }));
     }
@@ -584,11 +585,11 @@ const LibraryBrowser = ({
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
-    console.log('[LibraryBrowser] Starting upload for', files.length, 'files, artistId:', artistId);
+    log('[LibraryBrowser] Starting upload for', files.length, 'files, artistId:', artistId);
 
     if (!artistId) {
       console.error('[LibraryBrowser] No artistId provided - cannot save to library');
-      alert('Error: No artist selected. Please select an artist first.');
+      toastError('No artist selected. Please select an artist first.');
       return;
     }
 
@@ -607,14 +608,14 @@ const LibraryBrowser = ({
         else if (file.type === 'audio/mpeg' || file.type === 'audio/mp3') type = MEDIA_TYPES.AUDIO;
         else continue;
 
-        console.log('[LibraryBrowser] Uploading file:', file.name, 'type:', type);
+        log('[LibraryBrowser] Uploading file:', file.name, 'type:', type);
 
         // Upload to Firebase with progress tracking
         const result = await uploadFile(file, type + 's', (filePercent) => {
           const overall = Math.round(basePercent + (filePercent / files.length));
           setUploadProgress(Math.min(overall, 99));
         });
-        console.log('[LibraryBrowser] Firebase upload result:', result);
+        log('[LibraryBrowser] Firebase upload result:', result);
 
         // Get duration for video/audio
         let duration = null;
@@ -673,15 +674,15 @@ const LibraryBrowser = ({
             mimeType: file.type
           }
         });
-        console.log('[LibraryBrowser] Added to library:', newItem);
+        log('[LibraryBrowser] Added to library:', newItem);
       }
 
-      console.log('[LibraryBrowser] Upload complete');
+      log('[LibraryBrowser] Upload complete');
       // Note: If using Firestore subscription, library will auto-update via onSnapshot
       if (!db) loadData();
     } catch (error) {
       console.error('[LibraryBrowser] Upload failed:', error);
-      alert('Upload failed: ' + error.message);
+      toastError('Upload failed: ' + error.message);
     } finally {
       setUploadProgress(100);
       setTimeout(() => {

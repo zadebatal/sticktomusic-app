@@ -16,6 +16,7 @@ import {
   saveSpotifyConfig
 } from './spotifyService';
 import { saveAnalytics } from './analyticsService';
+import log from '../utils/logger';
 
 /**
  * Generate realistic follower growth with some variation
@@ -272,7 +273,7 @@ const generatePostAttributions = (growthEvents, posts) => {
  * Seed all Spotify mock data for an artist
  */
 export const seedSpotifyMockData = (artistId = 'demo_artist') => {
-  console.log('🎵 Seeding Spotify mock data for artist:', artistId);
+  log('🎵 Seeding Spotify mock data for artist:', artistId);
 
   // 1. Save Spotify config
   const config = {
@@ -363,12 +364,12 @@ export const seedSpotifyMockData = (artistId = 'demo_artist') => {
 
   saveAttribution(artistId, { growthEvents, postAttributions });
 
-  console.log('✅ Mock data seeded successfully!');
-  console.log(`   - ${artistSnapshots.length} artist snapshots`);
-  console.log(`   - ${Object.keys(trackSnapshots).length} tracks with snapshots`);
-  console.log(`   - ${Object.keys(mockPosts).length} content posts`);
-  console.log(`   - ${growthEvents.length} growth events`);
-  console.log(`   - ${postAttributions.length} post attributions`);
+  log('✅ Mock data seeded successfully!');
+  log(`   - ${artistSnapshots.length} artist snapshots`);
+  log(`   - ${Object.keys(trackSnapshots).length} tracks with snapshots`);
+  log(`   - ${Object.keys(mockPosts).length} content posts`);
+  log(`   - ${growthEvents.length} growth events`);
+  log(`   - ${postAttributions.length} post attributions`);
 
   return {
     artistId,
@@ -390,7 +391,7 @@ export const clearSpotifyMockData = (artistId = 'demo_artist') => {
   localStorage.removeItem(`stm_spotify_attribution_${artistId}`);
   localStorage.removeItem('stm_analytics');
   localStorage.removeItem('stm_analytics_last_sync');
-  console.log('🗑️ Mock data cleared');
+  log('🗑️ Mock data cleared');
 };
 
 export default {

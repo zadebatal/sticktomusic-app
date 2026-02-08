@@ -19,6 +19,7 @@ import {
   normalizeWordsToTrimRange,
   normalizeBeatsToTrimRange
 } from '../../utils/timelineNormalization';
+import log from '../../utils/logger';
 
 /**
  * VideoEditorModal - Flowstage-inspired video editor modal
@@ -267,14 +268,14 @@ const VideoEditorModal = ({
 
     // Check if trim boundaries changed
     if (previousTrimHashRef.current !== currentHash) {
-      console.log('[TrimChange] Trim boundaries changed');
-      console.log(`  Old: ${previousTrimHashRef.current}`);
-      console.log(`  New: ${currentHash}`);
+      log('[TrimChange] Trim boundaries changed');
+      log(`  Old: ${previousTrimHashRef.current}`);
+      log(`  New: ${currentHash}`);
 
       // If we're in the initial load phase (loading existing video with words),
       // don't clear words - the change is just from audio metadata loading
       if (initialLoadPhaseRef.current) {
-        console.log('[TrimChange] In initial load phase, skipping word clear');
+        log('[TrimChange] In initial load phase, skipping word clear');
         initialLoadPhaseRef.current = false; // Mark initial load as complete
         previousTrimHashRef.current = currentHash;
         return;
@@ -288,7 +289,7 @@ const VideoEditorModal = ({
 
       // Clear words (they were timed to the old trim range)
       if (words.length > 0) {
-        console.log(`  Clearing ${words.length} words`);
+        log(`  Clearing ${words.length} words`);
         setWords([]);
         setLyrics('');
       }
@@ -342,13 +343,13 @@ const VideoEditorModal = ({
 
       if (selectedAudio.file instanceof File || selectedAudio.file instanceof Blob) {
         audioSource = selectedAudio.file;
-        console.log('[VideoEditorModal] Using file object for beat detection');
+        log('[VideoEditorModal] Using file object for beat detection');
       } else if (localUrl && !isBlobUrl) {
         audioSource = localUrl;
-        console.log('[VideoEditorModal] Using localUrl for beat detection');
+        log('[VideoEditorModal] Using localUrl for beat detection');
       } else if (selectedAudio.url) {
         audioSource = selectedAudio.url;
-        console.log('[VideoEditorModal] Using cloud URL for beat detection');
+        log('[VideoEditorModal] Using cloud URL for beat detection');
       }
 
       if (audioSource) {
@@ -378,7 +379,7 @@ const VideoEditorModal = ({
           if (start > 0) {
             audioRef.current.currentTime = start;
           }
-          console.log(`Audio loaded: ${start.toFixed(1)}s - ${end.toFixed(1)}s (${effectiveDuration.toFixed(1)}s)`);
+          log(`Audio loaded: ${start.toFixed(1)}s - ${end.toFixed(1)}s (${effectiveDuration.toFixed(1)}s)`);
         };
         // Handle audio ended
         audioRef.current.onended = () => {
@@ -810,7 +811,7 @@ const VideoEditorModal = ({
     if (audio?.savedLyrics?.length > 0 && words.length === 0) {
       const latestLyrics = audio.savedLyrics[audio.savedLyrics.length - 1];
       if (latestLyrics.words?.length > 0) {
-        console.log('[Lyrics] Auto-loading saved lyrics from audio:', latestLyrics.name);
+        log('[Lyrics] Auto-loading saved lyrics from audio:', latestLyrics.name);
         setWords(latestLyrics.words);
         setLyrics(latestLyrics.words.map(w => w.text).join(' '));
         toast.success(`Loaded saved lyrics: "${latestLyrics.name}"`);
@@ -1313,27 +1314,27 @@ const VideoEditorModal = ({
       // Limit to 90 seconds to be safe and provide better transcription quality.
       const MAX_TRANSCRIBE_DURATION = 90;
       if (trimDuration > MAX_TRANSCRIBE_DURATION) {
-        console.log(`Whisper: Duration ${trimDuration.toFixed(1)}s exceeds max ${MAX_TRANSCRIBE_DURATION}s, limiting`);
+        log(`Whisper: Duration ${trimDuration.toFixed(1)}s exceeds max ${MAX_TRANSCRIBE_DURATION}s, limiting`);
         toast.info(`Audio is ${Math.floor(trimDuration)}s - transcribing first ${MAX_TRANSCRIBE_DURATION}s. Trim your audio for a specific section.`);
         trimEnd = trimStart + MAX_TRANSCRIBE_DURATION;
         trimDuration = MAX_TRANSCRIBE_DURATION;
       }
 
-      console.log(`Whisper: Will transcribe ${trimDuration.toFixed(1)}s (${trimStart.toFixed(1)}s - ${trimEnd.toFixed(1)}s)`);
+      log(`Whisper: Will transcribe ${trimDuration.toFixed(1)}s (${trimStart.toFixed(1)}s - ${trimEnd.toFixed(1)}s)`);
 
       if (!selectedAudio.url) {
         throw new Error('No audio URL available. Please re-upload the audio file.');
       }
 
       // Fetch and trim the audio
-      console.log('Whisper: Fetching audio from Firebase...');
+      log('Whisper: Fetching audio from Firebase...');
       const response = await fetch(selectedAudio.url);
       if (!response.ok) throw new Error('Failed to fetch audio');
       const fullAudioBlob = await response.blob();
-      console.log(`Whisper: Fetched full audio - ${(fullAudioBlob.size / 1024 / 1024).toFixed(1)}MB`);
+      log(`Whisper: Fetched full audio - ${(fullAudioBlob.size / 1024 / 1024).toFixed(1)}MB`);
 
       // Trim the audio to just the selected range using Web Audio API
-      console.log('Whisper: Trimming audio to selected range...');
+      log('Whisper: Trimming audio to selected range...');
       const arrayBuffer = await fullAudioBlob.arrayBuffer();
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
@@ -1342,7 +1343,7 @@ const VideoEditorModal = ({
       const startSample = Math.floor(trimStart * sampleRate);
       const endSample = Math.min(Math.floor(trimEnd * sampleRate), audioBuffer.length);
       const trimmedLength = endSample - startSample;
-      console.log(`Whisper: Trimming ${(trimmedLength/sampleRate).toFixed(1)}s of audio`);
+      log(`Whisper: Trimming ${(trimmedLength/sampleRate).toFixed(1)}s of audio`);
 
       // Create a new buffer with just the trimmed portion
       const trimmedBuffer = audioContext.createBuffer(
@@ -1361,7 +1362,7 @@ const VideoEditorModal = ({
 
       // Convert to WAV
       const wavBlob = audioBufferToWav(trimmedBuffer);
-      console.log(`Whisper: Trimmed audio ready - ${(wavBlob.size / 1024).toFixed(0)}KB`);
+      log(`Whisper: Trimmed audio ready - ${(wavBlob.size / 1024).toFixed(0)}KB`);
       await audioContext.close();
 
       // Helper function to convert AudioBuffer to WAV
@@ -1409,7 +1410,7 @@ const VideoEditorModal = ({
       }
 
       // Send to OpenAI Whisper API with word-level timestamps
-      console.log('Whisper: Sending to OpenAI for transcription...');
+      log('Whisper: Sending to OpenAI for transcription...');
       const formData = new FormData();
       formData.append('file', wavBlob, 'audio.wav');
       formData.append('model', 'whisper-1');
@@ -1430,7 +1431,7 @@ const VideoEditorModal = ({
       }
 
       const result = await whisperResponse.json();
-      console.log('Whisper: Transcription complete', result);
+      log('Whisper: Transcription complete', result);
 
       // Process words from Whisper response
       if (result.words && result.words.length > 0) {
@@ -1441,7 +1442,7 @@ const VideoEditorModal = ({
           duration: word.end - word.start
         }));
 
-        console.log(`Whisper: Got ${newWords.length} words`);
+        log(`Whisper: Got ${newWords.length} words`);
         setWords(newWords);
         setLyrics(result.text || newWords.map(w => w.text).join(' '));
         toast.success(`Transcribed ${newWords.length} words with Whisper`);
@@ -1456,7 +1457,7 @@ const VideoEditorModal = ({
           duration: wordDuration * 0.9
         }));
 
-        console.log(`Whisper: Got ${newWords.length} words (evenly spaced)`);
+        log(`Whisper: Got ${newWords.length} words (evenly spaced)`);
         setWords(newWords);
         setLyrics(result.text);
         toast.success(`Transcribed ${newWords.length} words (adjust timing in Word Timeline)`);
@@ -2412,14 +2413,14 @@ const VideoEditorModal = ({
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   const content = lyric.content || '';
-                                  console.log('Loading lyric:', lyric.title, content);
+                                  log('Loading lyric:', lyric.title, content);
 
                                   let newWords;
 
                                   // Check if lyric has pre-saved word timings
                                   if (lyric.words && lyric.words.length > 0) {
                                     // Use saved word timings
-                                    console.log(`Loading ${lyric.words.length} pre-timed words from bank`);
+                                    log(`Loading ${lyric.words.length} pre-timed words from bank`);
                                     newWords = lyric.words;
                                   } else {
                                     // Parse lyrics into words stacked at beginning with 0.5s duration each
@@ -2432,7 +2433,7 @@ const VideoEditorModal = ({
                                       startTime: i * wordDuration,
                                       duration: wordDuration
                                     }));
-                                    console.log(`Created ${newWords.length} words from bank lyrics (stacked at start)`);
+                                    log(`Created ${newWords.length} words from bank lyrics (stacked at start)`);
                                   }
 
                                   setLyrics(content);
@@ -2930,14 +2931,14 @@ const VideoEditorModal = ({
             onSaveToBank={(lyricId, wordsToSave) => {
               // Save word timings back to the lyric bank entry
               if (lyricId && onUpdateLyrics) {
-                console.log(`Saving ${wordsToSave.length} words to lyric bank entry:`, lyricId);
+                log(`Saving ${wordsToSave.length} words to lyric bank entry:`, lyricId);
                 onUpdateLyrics(lyricId, { words: wordsToSave });
               }
             }}
             onAddToBank={(lyricData) => {
               // Add new lyrics with words to the bank
               if (onAddLyrics) {
-                console.log(`Adding new lyric to bank: "${lyricData.title}" with ${lyricData.words?.length || 0} words`);
+                log(`Adding new lyric to bank: "${lyricData.title}" with ${lyricData.words?.length || 0} words`);
                 onAddLyrics({
                   title: lyricData.title,
                   content: lyricData.content,

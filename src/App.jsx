@@ -77,6 +77,8 @@ import {
   doc,
   onSnapshot
 } from 'firebase/firestore';
+import log from './utils/logger';
+import { loadSettings, saveSettings, clearSettingsCache } from './services/settingsService';
 
 // Firebase configuration - loaded from environment variables for security
 // Set these in .env.local for development or Vercel dashboard for production
@@ -266,7 +268,7 @@ const lateApi = {
         timezone: 'America/Los_Angeles'
       };
 
-      console.log('Sending to Late:', JSON.stringify(payload, null, 2));
+      log('Sending to Late:', JSON.stringify(payload, null, 2));
 
       const url = artistId
         ? `${LATE_API_PROXY}?artistId=${artistId}`
@@ -302,16 +304,16 @@ const lateApi = {
         const url = artistId
           ? `${LATE_API_PROXY}?action=posts&page=${currentPage}&artistId=${artistId}`
           : `${LATE_API_PROXY}?action=posts&page=${currentPage}`;
-        console.log('📡 Fetching Late posts from:', url);
+        log('📡 Fetching Late posts from:', url);
         const response = await fetch(url, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        console.log('📡 Late API response status:', response.status);
+        log('📡 Late API response status:', response.status);
         if (!response.ok) throw new Error(`Failed: ${response.status}`);
         const data = await response.json();
-        console.log('📡 Late API raw response:', JSON.stringify(data, null, 2));
+        log('📡 Late API raw response:', JSON.stringify(data, null, 2));
         const posts = data.posts || data.data || data || [];
-        console.log('📡 Extracted posts count:', posts.length);
+        log('📡 Extracted posts count:', posts.length);
 
         if (Array.isArray(posts) && posts.length > 0) {
           allPosts = [...allPosts, ...posts];
@@ -366,7 +368,7 @@ const loadAppSession = () => {
     const saved = localStorage.getItem(APP_SESSION_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      console.log('[App Session] Loaded:', parsed);
+      log('[App Session] Loaded:', parsed);
       return parsed;
     }
   } catch (e) {
@@ -380,7 +382,7 @@ const saveAppSession = (state) => {
     // Only save authenticated pages (not landing/marketing pages)
     if (['operator', 'artist-portal', 'dashboard'].includes(state.currentPage)) {
       localStorage.setItem(APP_SESSION_KEY, JSON.stringify({ ...state, savedAt: Date.now() }));
-      console.log('[App Session] Saved:', state);
+      log('[App Session] Saved:', state);
     }
   } catch (e) {
     console.warn('Failed to save app session:', e);
@@ -482,7 +484,7 @@ const StickToMusic = () => {
   // Master auth listener - tracks Firebase auth state
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      console.log('🔐 Auth state changed:', firebaseUser?.email || 'null');
+      log('🔐 Auth state changed:', firebaseUser?.email || 'null');
       setCurrentAuthUser(firebaseUser);
       setAuthChecked(true);
     });
@@ -494,13 +496,13 @@ const StickToMusic = () => {
   useEffect(() => {
     // Don't subscribe to Firestore until auth is checked
     if (!authChecked) {
-      console.log('⏳ Waiting for auth check...');
+      log('⏳ Waiting for auth check...');
       return;
     }
 
     // Always load allowedUsers - needed for login whitelist check
     // Even unauthenticated users need this to verify they're on the whitelist
-    console.log('📥 Loading allowedUsers from Firestore...');
+    log('📥 Loading allowedUsers from Firestore...');
     const unsubscribe = onSnapshot(
       collection(db, 'allowedUsers'),
       (snapshot) => {
@@ -528,7 +530,7 @@ const StickToMusic = () => {
         const users = Array.from(userMap.values());
         setAllowedUsers(users);
         setFirestoreLoaded(true);
-        console.log('✅ Loaded allowed users:', users.length, '(deduped from', rawUsers.length, ')');
+        log('✅ Loaded allowed users:', users.length, '(deduped from', rawUsers.length, ')');
       },
       (error) => {
         console.error('❌ Error loading allowed users:', error);
@@ -549,14 +551,14 @@ const StickToMusic = () => {
       return;
     }
 
-    console.log('📥 Loading artists from Firestore...');
+    log('📥 Loading artists from Firestore...');
 
     // First ensure Boon exists and migrate any legacy data (only once)
     if (!boonInitializedRef.current) {
       boonInitializedRef.current = true;
       ensureBoonArtistExists(db).then((boonArtist) => {
         if (boonArtist && !currentArtistId) {
-          console.log('🎵 Setting default artist to Boon:', boonArtist.id);
+          log('🎵 Setting default artist to Boon:', boonArtist.id);
           setCurrentArtistId(boonArtist.id);
           setLastArtistId(boonArtist.id);
         }
@@ -567,7 +569,7 @@ const StickToMusic = () => {
 
     // Subscribe to real-time artist updates
     const unsubscribe = subscribeToArtists(db, (artists) => {
-      console.log('✅ Loaded artists:', artists.length, artists.map(a => a.name).join(', '));
+      log('✅ Loaded artists:', artists.length, artists.map(a => a.name).join(', '));
       setFirestoreArtists(artists);
       setArtistsLoaded(true);
 
@@ -603,7 +605,7 @@ const StickToMusic = () => {
     setCheckingLateStatus(true);
     try {
       const status = await getArtistLateKeyStatus(artistId);
-      console.log('🔗 Late status for artist', artistId, ':', status);
+      log('🔗 Late status for artist', artistId, ':', status);
       setArtistLateConnected(status.configured);
       return status.configured;
     } catch (error) {
@@ -617,7 +619,7 @@ const StickToMusic = () => {
 
   // Handle artist change
   const handleArtistChange = async (newArtistId) => {
-    console.log('🎵 Switching to artist:', newArtistId);
+    log('🎵 Switching to artist:', newArtistId);
     setCurrentArtistId(newArtistId);
     setLastArtistId(newArtistId);
 
@@ -631,6 +633,12 @@ const StickToMusic = () => {
     setPostSearch('');
     setPostPlatformFilter('all');
     setContentStatus('all');
+
+    // BUG-010: Clear settings cache for previous artist, load new artist's settings
+    if (currentArtistId) clearSettingsCache(currentArtistId);
+    loadSettings(db, newArtistId).then(settings => {
+      log('[App] Loaded settings for artist:', newArtistId, settings);
+    }).catch(() => {});
 
     // Check if new artist has Late connected
     const hasLate = await checkArtistLateStatus(newArtistId);
@@ -707,7 +715,7 @@ const StickToMusic = () => {
 
       setLatePages(allPages);
       setUnconfiguredLateArtists(unconfigured);
-      console.log('📱 Loaded', allPages.length, 'Late pages from', artistsToLoad.length, 'artists,', unconfigured.length, 'unconfigured');
+      log('📱 Loaded', allPages.length, 'Late pages from', artistsToLoad.length, 'artists,', unconfigured.length, 'unconfigured');
     } catch (error) {
       console.error('Error loading Late pages:', error);
     } finally {
@@ -740,7 +748,7 @@ const StickToMusic = () => {
         ownerOperatorId: assignToOperatorId
       });
 
-      console.log('✅ Created new artist:', newArtist);
+      log('✅ Created new artist:', newArtist);
 
       // Auto-assign artist to the operator (either selected or self)
       if (assignToOperatorId) {
@@ -752,7 +760,7 @@ const StickToMusic = () => {
           await updateDoc(operatorRef, {
             assignedArtistIds: [...currentAssigned, newArtist.id]
           });
-          console.log('✅ Assigned artist to operator:', operatorUser.email);
+          log('✅ Assigned artist to operator:', operatorUser.email);
         }
       }
 
@@ -796,10 +804,10 @@ const StickToMusic = () => {
           });
         }
       }
-      console.log('Deleted artist:', artist.id, artist.name);
+      log('Deleted artist:', artist.id, artist.name);
     } catch (error) {
       console.error('Failed to delete artist:', error);
-      alert('Failed to delete artist: ' + error.message);
+      showToast('Failed to delete artist: ' + error.message, 'error');
     }
     setDeleteArtistConfirm({ show: false, artist: null, isDeleting: false });
   };
@@ -833,10 +841,10 @@ const StickToMusic = () => {
           }
         }
       }
-      console.log('Reassigned artist:', artistId, '→ owner:', newOwnerId);
+      log('Reassigned artist:', artistId, '→ owner:', newOwnerId);
     } catch (error) {
       console.error('Failed to reassign artist:', error);
-      alert('Failed to reassign: ' + error.message);
+      showToast('Failed to reassign: ' + error.message, 'error');
     }
     setReassignArtist({ show: false, artist: null });
   };
@@ -851,10 +859,10 @@ const StickToMusic = () => {
         cdTier: editArtistModal.cdTier,
         activeSince: editArtistModal.activeSince
       });
-      console.log('Updated artist details:', editArtistModal.artist.id);
+      log('Updated artist details:', editArtistModal.artist.id);
     } catch (error) {
       console.error('Failed to update artist:', error);
-      alert('Failed to save: ' + error.message);
+      showToast('Failed to save: ' + error.message, 'error');
     }
     setEditArtistModal({ show: false, artist: null, tier: '', cdTier: '', activeSince: '', isSaving: false });
   };
@@ -867,7 +875,7 @@ const StickToMusic = () => {
       const email = currentAuthUser.email;
 
       // Debug: Log Firebase Auth user data
-      console.log('🔍 Firebase Auth user:', {
+      log('🔍 Firebase Auth user:', {
         email: currentAuthUser.email,
         displayName: currentAuthUser.displayName,
         photoURL: currentAuthUser.photoURL,
@@ -883,7 +891,7 @@ const StickToMusic = () => {
           photoURL: currentAuthUser.photoURL || null,
           artistId: null
         };
-        console.log('👑 Setting conductor user:', newUser);
+        log('👑 Setting conductor user:', newUser);
         setUser(newUser);
       } else if (allowedUsers.some(u => u.email?.toLowerCase() === email?.toLowerCase() && u.status === 'active')) {
         const userData = allowedUsers.find(u => u.email?.toLowerCase() === email?.toLowerCase());
@@ -895,10 +903,10 @@ const StickToMusic = () => {
           artistId: userData?.artistId || null,
           assignedArtistIds: userData?.assignedArtistIds || [] // Artists this operator can manage
         };
-        console.log('🎨 Setting allowed user:', newUser);
+        log('🎨 Setting allowed user:', newUser);
         setUser(newUser);
       } else {
-        console.log('🚫 User not in allowed list:', email);
+        log('🚫 User not in allowed list:', email);
         setUser(null);
       }
     } else {
@@ -911,7 +919,7 @@ const StickToMusic = () => {
     if (user && pendingPage) {
       // Verify user has access to the pending page
       if (pendingPage === 'operator' && user.role === 'operator') {
-        console.log('[App Session] Restoring operator page, tab:', pendingOperatorTab, 'editor:', pendingShowVideoEditor);
+        log('[App Session] Restoring operator page, tab:', pendingOperatorTab, 'editor:', pendingShowVideoEditor);
         setCurrentPage('operator');
         // Restore operator tab if saved
         if (pendingOperatorTab) {
@@ -924,11 +932,11 @@ const StickToMusic = () => {
           setPendingShowVideoEditor(false);
         }
       } else if (pendingPage === 'artist-portal' && user.role === 'artist') {
-        console.log('[App Session] Restoring artist-portal page');
+        log('[App Session] Restoring artist-portal page');
         setCurrentPage('artist-portal');
       } else if (pendingPage === 'operator' || pendingPage === 'artist-portal') {
         // User is authenticated but role doesn't match - go to their correct dashboard
-        console.log('[App Session] Role mismatch, going to correct dashboard');
+        log('[App Session] Role mismatch, going to correct dashboard');
         setCurrentPage(user.role === 'artist' ? 'artist-portal' : 'operator');
       }
       setPendingPage(null); // Clear pending page after restore
@@ -939,7 +947,7 @@ const StickToMusic = () => {
     } else if (authChecked && firestoreLoaded && !user && pendingPage) {
       // User is NOT authenticated but has a pending page (e.g., was logged out)
       // Clear pending page and proceed to home - user will need to login
-      console.log('[App Session] User not authenticated, clearing pending page:', pendingPage);
+      log('[App Session] User not authenticated, clearing pending page:', pendingPage);
       setPendingPage(null);
       setSessionRestoreComplete(true);
     }
@@ -948,7 +956,7 @@ const StickToMusic = () => {
   // Auto-redirect logged-in users from home page to their dashboard
   useEffect(() => {
     if (user && currentPage === 'home' && sessionRestoreComplete) {
-      console.log('🏠 Redirecting logged-in user from home to dashboard');
+      log('🏠 Redirecting logged-in user from home to dashboard');
       setCurrentPage(user.role === 'artist' ? 'artist-portal' : 'operator');
     }
   }, [user, currentPage, sessionRestoreComplete]);
@@ -971,7 +979,7 @@ const StickToMusic = () => {
           // Sort by submitted date, newest first
           apps.sort((a, b) => new Date(b.submitted) - new Date(a.submitted));
           setApplications(apps);
-          console.log('Loaded applications from Firestore:', apps.length);
+          log('Loaded applications from Firestore:', apps.length);
         },
         (error) => {
           console.error('Error loading applications:', error);
@@ -1274,6 +1282,8 @@ const StickToMusic = () => {
 
   const completeOnboarding = () => {
     localStorage.setItem('stm_onboarding_complete', 'true');
+    // BUG-010: Persist onboarding completion to Firestore
+    saveSettings(db, currentArtistId, { onboarding: { completed: true, completedAt: new Date().toISOString() } });
     setShowOnboarding(false);
     setOnboardingStep(0);
   };
@@ -1385,11 +1395,10 @@ const StickToMusic = () => {
 
   const [contentView, setContentView] = useState(() => {
     try { return sessionStorage.getItem('stm_contentView') || 'list'; } catch { return 'list'; }
-  }); // 'list', 'calendar', or 'month' â persisted in session
+  }); // 'list', 'calendar', or 'month' — persisted in session
   useEffect(() => {
     try { sessionStorage.setItem('stm_contentView', contentView); } catch {}
   }, [contentView]);
-
   const [deletingPostId, setDeletingPostId] = useState(null);
   const [lastSynced, setLastSynced] = useState(null);
 
@@ -1545,7 +1554,7 @@ const StickToMusic = () => {
       // Check whitelist - but if Firestore hasn't loaded yet, try to load it first
       // This handles the case where a new user's page hasn't loaded allowedUsers yet
       if (!firestoreLoaded) {
-        console.log('⏳ Firestore not loaded yet, waiting...');
+        log('⏳ Firestore not loaded yet, waiting...');
         // Wait up to 3 seconds for Firestore to load
         let waited = 0;
         while (!firestoreLoaded && waited < 3000) {
@@ -1606,7 +1615,7 @@ const StickToMusic = () => {
 
       // Check whitelist - but if Firestore hasn't loaded yet, wait for it
       if (!firestoreLoaded) {
-        console.log('⏳ Firestore not loaded yet, waiting...');
+        log('⏳ Firestore not loaded yet, waiting...');
         let waited = 0;
         while (!firestoreLoaded && waited < 3000) {
           await new Promise(resolve => setTimeout(resolve, 100));
@@ -1628,7 +1637,7 @@ const StickToMusic = () => {
       const artistInfo = getArtistInfo(email);
 
       // Debug: Log Google user data
-      console.log('🔍 Google user data:', {
+      log('🔍 Google user data:', {
         displayName: result.user.displayName,
         photoURL: result.user.photoURL,
         email: result.user.email
@@ -2332,7 +2341,7 @@ const StickToMusic = () => {
   const prevFormStep = () => setFormStep(s => s - 1);
 
   const handleSubmit = async () => {
-    console.log('Form submitted:', formData);
+    log('Form submitted:', formData);
     // Store the application
     const tierMap = {
       'starter': 'Starter',
@@ -3944,7 +3953,7 @@ const StickToMusic = () => {
               for (const post of generatedSchedule) {
                 // BUG-008: Abort if artist changed during scheduling
                 if (currentArtistId !== schedulingArtistId) {
-                  errors.push('Artist changed during scheduling â aborting remaining posts');
+                  errors.push('Artist changed during scheduling — aborting remaining posts');
                   failCount += generatedSchedule.length - successCount - failCount;
                   break;
                 }
@@ -4008,7 +4017,7 @@ const StickToMusic = () => {
                   continue;
                 }
 
-                console.log('Scheduling post:', {
+                log('Scheduling post:', {
                   handle: post.handle,
                   platforms: platformsPayload,
                   caption: fullCaption,
@@ -4073,11 +4082,11 @@ const StickToMusic = () => {
                 const posts = Array.isArray(result.posts) ? result.posts : [];
                 // Log full post structure to understand what Late returns
                 if (posts.length > 0) {
-                  console.log('📬 Sample Late post structure:', JSON.stringify(posts[0], null, 2));
-                  console.log('📬 All post keys:', Object.keys(posts[0]));
+                  log('📬 Sample Late post structure:', JSON.stringify(posts[0], null, 2));
+                  log('📬 All post keys:', Object.keys(posts[0]));
                   // Log platform structure specifically
                   if (posts[0].platforms?.length > 0) {
-                    console.log('📬 Platform entry:', JSON.stringify(posts[0].platforms[0], null, 2));
+                    log('📬 Platform entry:', JSON.stringify(posts[0].platforms[0], null, 2));
                   }
                 }
                 setLatePosts(posts);

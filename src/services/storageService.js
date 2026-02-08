@@ -12,6 +12,7 @@
  */
 
 import { findBlobUrls } from '../utils/assets';
+import log from '../utils/logger';
 
 const STORAGE_KEYS = {
   CATEGORIES: 'stm_categories',
@@ -224,12 +225,12 @@ export function migrateToArtistStorage(artistId) {
     return false;
   }
 
-  console.log('[Migration] Starting migration for artist:', artistId);
+  log('[Migration] Starting migration for artist:', artistId);
 
   // Check for existing namespaced data
   const existing = loadFromStorage(`${ARTIST_CATEGORIES_PREFIX}${artistId}`, null);
   if (existing && existing.length > 0) {
-    console.log('[Migration] Artist already has data, skipping migration');
+    log('[Migration] Artist already has data, skipping migration');
     return true;
   }
 
@@ -242,7 +243,7 @@ export function migrateToArtistStorage(artistId) {
   }
 
   if (legacyCategories && legacyCategories.length > 0) {
-    console.log('[Migration] Migrating', legacyCategories.length, 'categories to artist namespace');
+    log('[Migration] Migrating', legacyCategories.length, 'categories to artist namespace');
     saveToStorage(`${ARTIST_CATEGORIES_PREFIX}${artistId}`, legacyCategories);
 
     // Also migrate presets
@@ -253,11 +254,11 @@ export function migrateToArtistStorage(artistId) {
 
     // Mark migration complete
     localStorage.setItem('stm_migration_complete_' + artistId, new Date().toISOString());
-    console.log('[Migration] Migration complete!');
+    log('[Migration] Migration complete!');
     return true;
   }
 
-  console.log('[Migration] No legacy data to migrate');
+  log('[Migration] No legacy data to migrate');
   return false;
 }
 
@@ -386,7 +387,7 @@ export function cleanupStorage() {
     if (categories.length > 0) {
       // Re-save with thumbnails stripped
       saveCategories(categories);
-      console.log('Storage cleanup complete');
+      log('Storage cleanup complete');
       return true;
     }
   } catch (error) {

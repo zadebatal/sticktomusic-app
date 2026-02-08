@@ -2,6 +2,8 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { generateFromCollectionBanks, generatePostContent, getBankNames } from '../../utils/captionGenerator';
 import { getCollections } from '../../services/libraryService';
 import CollectionBankEditor from './CollectionBankEditor';
+import { useToast, useFocusTrap } from '../ui';
+import log from '../../utils/logger';
 
 /**
  * ScheduleQueue - Unified scheduling module for videos and slideshows
@@ -28,6 +30,11 @@ const ScheduleQueue = ({
   accounts = [],
   lateAccountIds = {}
 }) => {
+  // BUG-034: Toast notifications instead of alert()
+  const { success: toastSuccess } = useToast();
+  // BUG-030: Focus trap for modal accessibility
+  const trapRef = useFocusTrap(true);
+
   // Posts state
   const [posts, setPosts] = useState([]);
   const [draggedPostId, setDraggedPostId] = useState(null);
@@ -170,7 +177,7 @@ const ScheduleQueue = ({
       };
     });
 
-    console.log('[ScheduleQueue] Initialized', newPosts.length, 'posts');
+    log('[ScheduleQueue] Initialized', newPosts.length, 'posts');
     setPosts(newPosts);
   }, [contentItems, collections, category, platforms.instagram]);
 
@@ -427,14 +434,14 @@ const ScheduleQueue = ({
     if (failed > 0) {
       setError(`${scheduled} scheduled, ${failed} failed: ${errors.slice(0, 3).join('; ')}`);
     } else {
-      alert(`Successfully scheduled ${scheduled} posts!`);
+      toastSuccess(`Successfully scheduled ${scheduled} posts!`);
       onClose?.();
     }
   }, [posts, selectedHandle, scheduleDate, scheduleTime, intervalType, fixedInterval, randomMin, randomMax, platforms, lateAccountIds, onSchedulePost, onClose, onRenderVideo]);
 
   return (
     <div style={styles.overlay}>
-      <div style={styles.modal}>
+      <div ref={trapRef} style={styles.modal} role="dialog" aria-modal="true">
         {/* Header */}
         <div style={styles.header}>
           <div>

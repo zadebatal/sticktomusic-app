@@ -771,7 +771,7 @@ const MultiClipEditor = ({
       } catch (err) {
         console.error(`[MultiClipEditor] Failed to save video ${savedCount}:`, err);
         toastError(`Failed to save "${video.name || 'Multi-Clip'}". Please try again.`);
-        return;
+        return; // Stop on failure so user doesn't lose context
       }
       savedCount++;
     }
@@ -840,7 +840,6 @@ const MultiClipEditor = ({
   // Get current clip for video display
   const currentClip = getCurrentClip();
 
-  // Check if text overlay should be visible in current clip
   // BUG-032: Memoize overlay visibility check — called for every overlay on every render
   const isOverlayVisible = useCallback((overlay) => {
     // Time range check first

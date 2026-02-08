@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { rerollAllClips } from './AutoRemixEngine';
+import { useToast, useFocusTrap } from '../ui';
 
 /**
  * Batch Export - Generate multiple variations and export them all
@@ -11,6 +12,11 @@ const BatchExport = ({
   onExportAll,
   onClose
 }) => {
+  // BUG-034: Toast notifications instead of alert()
+  const { success: toastSuccess, error: toastError } = useToast();
+  // BUG-030: Focus trap for modal accessibility
+  const trapRef = useFocusTrap(true);
+
   const [variations, setVariations] = useState([
     { id: 1, name: `${project?.name || 'Video'}_v1`, clips: project?.clips || [], selected: true }
   ]);
@@ -21,7 +27,7 @@ const BatchExport = ({
   // Add new variation
   const addVariation = async () => {
     if (!contentBank?.clips?.length) {
-      alert('Need a content bank with clips to generate variations');
+      toastError('Need a content bank with clips to generate variations');
       return;
     }
 
@@ -44,7 +50,7 @@ const BatchExport = ({
   // Generate multiple variations at once
   const generateMultiple = async (count) => {
     if (!contentBank?.clips?.length) {
-      alert('Need a content bank with clips to generate variations');
+      toastError('Need a content bank with clips to generate variations');
       return;
     }
 
@@ -89,7 +95,7 @@ const BatchExport = ({
   // Delete variation
   const deleteVariation = (id) => {
     if (variations.length === 1) {
-      alert('Must keep at least one variation');
+      toastError('Must keep at least one variation');
       return;
     }
     setVariations(variations.filter(v => v.id !== id));
@@ -99,7 +105,7 @@ const BatchExport = ({
   const exportSelected = async () => {
     const selected = variations.filter(v => v.selected);
     if (selected.length === 0) {
-      alert('Select at least one variation to export');
+      toastError('Select at least one variation to export');
       return;
     }
 
@@ -123,14 +129,14 @@ const BatchExport = ({
 
     setIsExporting(false);
     setExportProgress(null);
-    alert(`Exported ${selected.length} video(s) successfully!`);
+    toastSuccess(`Exported ${selected.length} video(s) successfully!`);
   };
 
   const selectedCount = variations.filter(v => v.selected).length;
 
   return (
     <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.modal} onClick={e => e.stopPropagation()}>
+      <div ref={trapRef} style={styles.modal} role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
         <div style={styles.header}>
           <h2 style={styles.title}>Batch Export</h2>
           <button style={styles.closeButton} onClick={onClose}>×</button>

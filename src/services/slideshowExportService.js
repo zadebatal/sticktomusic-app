@@ -6,6 +6,7 @@
  */
 
 import { uploadFile } from './firebaseStorage';
+import log from '../utils/logger';
 
 // Canvas dimensions based on aspect ratio
 const DIMENSIONS = {
@@ -182,7 +183,7 @@ export const exportSlideshowAsImages = async (slideshow, onProgress = () => {}) 
       new File([blob], filename, { type: 'image/jpeg' }),
       'slideshows'
     ).then(({ url, path }) => {
-      console.log(`[Export] Slide ${i + 1}/${totalSlides} exported:`, filename);
+      log(`[Export] Slide ${i + 1}/${totalSlides} exported:`, filename);
       return { url, path, slideIndex: i, filename };
     });
   });

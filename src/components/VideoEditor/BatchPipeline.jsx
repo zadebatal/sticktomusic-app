@@ -4,6 +4,7 @@ import { useBeatDetection } from '../../hooks/useBeatDetection';
 import { isValidBankName, generateBatchPostContent, getBankNames } from '../../utils/captionGenerator';
 import { VIDEO_STATUS } from '../../utils/status';
 import PreviewPlayer from './PreviewPlayer';
+import log from '../../utils/logger';
 
 /**
  * BatchPipeline - Streamlined workflow for batch video creation and scheduling
@@ -209,7 +210,7 @@ const BatchPipeline = ({
   useEffect(() => {
     if (hasUserInteractedAudio.current) return; // User already manually changed selection
     if (!selectedAudio && availableAudio.length === 1) {
-      console.log('[BatchPipeline] Auto-selecting single audio option');
+      log('[BatchPipeline] Auto-selecting single audio option');
       setSelectedAudio(availableAudio[0]);
     }
   }, [availableAudio]); // eslint-disable-line
@@ -223,13 +224,13 @@ const BatchPipeline = ({
 
       if (selectedAudio.file instanceof File || selectedAudio.file instanceof Blob) {
         audioSource = selectedAudio.file;
-        console.log('[BatchPipeline] Using file object for beat detection');
+        log('[BatchPipeline] Using file object for beat detection');
       } else if (selectedAudio.localUrl && !selectedAudio.localUrl.startsWith('blob:')) {
         audioSource = selectedAudio.localUrl;
-        console.log('[BatchPipeline] Using localUrl for beat detection:', audioSource?.substring(0, 50));
+        log('[BatchPipeline] Using localUrl for beat detection:', audioSource?.substring(0, 50));
       } else if (selectedAudio.url) {
         audioSource = selectedAudio.url;
-        console.log('[BatchPipeline] Using cloud URL for beat detection:', audioSource?.substring(0, 50));
+        log('[BatchPipeline] Using cloud URL for beat detection:', audioSource?.substring(0, 50));
       }
 
       if (audioSource) {
@@ -244,7 +245,7 @@ const BatchPipeline = ({
 
   // Select All / Deselect All
   const handleSelectAll = useCallback(() => {
-    console.log('[BatchPipeline] Select All clicked:', {
+    log('[BatchPipeline] Select All clicked:', {
       currentSelected: selectedClips.length,
       available: availableClips.length
     });
@@ -402,10 +403,10 @@ const BatchPipeline = ({
         ? selectedAudio.endTime - (selectedAudio.startTime || 0)
         : selectedAudio.duration || 30;
 
-      console.log('[BatchPipeline] Generating preview with duration:', audioDuration);
+      log('[BatchPipeline] Generating preview with duration:', audioDuration);
 
       const clips = generateClipSequence(audioDuration, selectedClips, clipStrategy);
-      console.log('[BatchPipeline] Generated clips:', clips.length);
+      log('[BatchPipeline] Generated clips:', clips.length);
 
       // Determine words: prioritize initialWords from editor, then selected lyrics, then empty
       const wordsToUse = useTextOverlay
@@ -437,7 +438,7 @@ const BatchPipeline = ({
         duration: Math.min(audioDuration, 10)
       };
 
-      console.log('[BatchPipeline] Rendering preview...');
+      log('[BatchPipeline] Rendering preview...');
       const blob = await renderPreview(videoData, (p) => {
         setGenerationProgress({ current: 1, total: 1, status: `Generating preview... ${p}%` });
       });
@@ -476,9 +477,9 @@ const BatchPipeline = ({
       ? selectedAudio.endTime - (selectedAudio.startTime || 0)
       : selectedAudio.duration || 30;
 
-    console.log('[BatchPipeline] Creating video recipes (instant!)');
-    console.log('[BatchPipeline] Audio duration:', audioDuration);
-    console.log('[BatchPipeline] Selected clips:', selectedClips.length);
+    log('[BatchPipeline] Creating video recipes (instant!)');
+    log('[BatchPipeline] Audio duration:', audioDuration);
+    log('[BatchPipeline] Selected clips:', selectedClips.length);
 
     for (let i = 0; i < quantity; i++) {
       // Generate clip sequence with variation
@@ -492,7 +493,7 @@ const BatchPipeline = ({
       }
 
       const clips = generateClipSequence(audioDuration, clipPool, clipStrategy);
-      console.log(`[BatchPipeline] Video ${i + 1} recipe: ${clips.length} clips`);
+      log(`[BatchPipeline] Video ${i + 1} recipe: ${clips.length} clips`);
 
       // Generate caption - use bank if available, otherwise use template
       let caption, hashtags;
@@ -551,7 +552,7 @@ const BatchPipeline = ({
       videos.push(videoRecipe);
     }
 
-    console.log(`[BatchPipeline] Created ${videos.length} video recipes instantly!`);
+    log(`[BatchPipeline] Created ${videos.length} video recipes instantly!`);
     setGeneratedVideos(videos);
     setCaptions(videos.map(v => v.caption));
     setStage(STAGES.VIDEO_BANK);  // Go to video bank to preview
@@ -960,7 +961,7 @@ const BatchPipeline = ({
                     key={audio.id}
                     style={styles.audioCard(selectedAudio?.id === audio.id)}
                     onClick={() => {
-                      console.log('[BatchPipeline] Audio clicked:', audio.id, audio.name);
+                      log('[BatchPipeline] Audio clicked:', audio.id, audio.name);
                       hasUserInteractedAudio.current = true; // C-11: prevent auto-reselect after manual choice
                       setSelectedAudio(selectedAudio?.id === audio.id ? null : audio); // Toggle: click again to deselect
                     }}

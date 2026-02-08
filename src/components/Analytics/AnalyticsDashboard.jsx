@@ -23,6 +23,7 @@ import {
   getSongAttributionSummary,
   computeAttribution
 } from '../../services/spotifyAttributionService';
+import log from '../../utils/logger';
 
 /**
  * AnalyticsDashboard - Main analytics view
@@ -144,9 +145,9 @@ const AnalyticsDashboard = ({
     try {
       if (onSyncLate) {
         const result = await onSyncLate();
-        console.log('📊 Analytics sync result:', result);
+        log('📊 Analytics sync result:', result);
         if (result.success) {
-          console.log(`📊 Synced ${result.posts?.length || 0} posts from Late`);
+          log(`📊 Synced ${result.posts?.length || 0} posts from Late`);
         }
       }
       // Refresh analytics data after sync

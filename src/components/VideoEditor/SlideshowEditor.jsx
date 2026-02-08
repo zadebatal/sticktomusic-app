@@ -5,6 +5,7 @@ import { useToast } from '../ui';
 import LyricBank from './LyricBank';
 import AudioClipSelector from './AudioClipSelector';
 import LyricAnalyzer from './LyricAnalyzer';
+import log from '../../utils/logger';
 
 /**
  * SlideshowEditor - Flowstage-style carousel/slideshow creator
@@ -1042,20 +1043,20 @@ const SlideshowEditor = ({
       const end = (selectedAudioEnd && selectedAudioEnd > 0)
         ? selectedAudioEnd
         : (isFinite(rawDuration) ? rawDuration : 0);
-      console.log('[Audio] loadedmetadata:', { rawDuration, start, end, computedDuration: Math.max(0, end - start) });
+      log('[Audio] loadedmetadata:', { rawDuration, start, end, computedDuration: Math.max(0, end - start) });
       setAudioDuration(Math.max(0, end - start));
       audioRef.current.currentTime = start;
     };
 
     const onCanPlayThrough = () => {
-      console.log('[Audio] canplaythrough fired');
+      log('[Audio] canplaythrough fired');
       setAudioReady(true);
       setAudioError(null);
     };
 
     const onCanPlay = () => {
       // Fallback: some browsers fire canplay but not canplaythrough
-      console.log('[Audio] canplay fired, readyState:', el.readyState);
+      log('[Audio] canplay fired, readyState:', el.readyState);
       if (el.readyState >= 3) { // HAVE_FUTURE_DATA or better
         setAudioReady(true);
         setAudioError(null);
@@ -1087,7 +1088,7 @@ const SlideshowEditor = ({
     el.addEventListener('ended', onEnded);
 
     // Now set source and start loading
-    console.log('[Audio] Setting src:', selectedAudioUrl?.substring(0, 100));
+    log('[Audio] Setting src:', selectedAudioUrl?.substring(0, 100));
     el.src = selectedAudioUrl;
     el.preload = 'auto';
     el.load();
@@ -1096,7 +1097,7 @@ const SlideshowEditor = ({
     // events may have fired before React committed this effect. Check immediately.
     setTimeout(() => {
       if (el.readyState >= 2 && el.duration > 0) {
-        console.log('[Audio] Fallback: already loaded, readyState:', el.readyState);
+        log('[Audio] Fallback: already loaded, readyState:', el.readyState);
         onLoadedMetadata();
         setAudioReady(true);
         setAudioError(null);
@@ -1693,7 +1694,7 @@ const SlideshowEditor = ({
         (progress) => setExportProgress(progress)
       );
 
-      console.log('[Export] Complete:', images);
+      log('[Export] Complete:', images);
       setExportedImages(images);
 
       // Save the slideshow with export URLs

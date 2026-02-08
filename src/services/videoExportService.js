@@ -6,6 +6,7 @@
 
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
+import log from '../utils/logger';
 
 let ffmpegInstance = null;
 let ffmpegLoadPromise = null;
@@ -20,7 +21,10 @@ const safeProgress = (value) => {
 };
 
 /**
- * Load FFmpeg.wasm instance (lazy loading)
+ * Load FFmpeg.wasm instance (lazy loading, Promise-based singleton)
+ * Uses a shared promise so concurrent callers wait on the same load operation
+ * instead of a busy-wait loop. If loading fails, the promise is cleared so
+ * the next caller retries instead of returning null.
  */
 const loadFFmpeg = async (onProgress = () => {}) => {
   if (ffmpegInstance && ffmpegInstance.loaded) {
@@ -34,7 +38,7 @@ const loadFFmpeg = async (onProgress = () => {}) => {
 
   ffmpegLoadPromise = (async () => {
     try {
-      console.log('[VideoExport] Loading FFmpeg.wasm...');
+      log('[VideoExport] Loading FFmpeg.wasm...');
       const ffmpeg = new FFmpeg();
 
       ffmpeg.on('progress', ({ progress }) => {
@@ -48,7 +52,7 @@ const loadFFmpeg = async (onProgress = () => {}) => {
         wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
       });
 
-      console.log('[VideoExport] FFmpeg.wasm loaded successfully');
+      log('[VideoExport] FFmpeg.wasm loaded successfully');
       ffmpegInstance = ffmpeg;
       return ffmpeg;
     } catch (error) {
@@ -59,7 +63,7 @@ const loadFFmpeg = async (onProgress = () => {}) => {
   })();
 
   return ffmpegLoadPromise;
-};;
+};
 
 /**
  * Process video: add audio and convert to MP4 if needed
@@ -73,7 +77,7 @@ const processVideo = async (videoBlob, onProgress = () => {}, audioInfo = null, 
 
   // If native MP4 and no audio needed, return as-is
   if (isNativeMP4 && !hasAudio) {
-    console.log('[VideoExport] Native MP4 with no audio, returning as-is');
+    log('[VideoExport] Native MP4 with no audio, returning as-is');
     return videoBlob;
   }
 
@@ -81,7 +85,7 @@ const processVideo = async (videoBlob, onProgress = () => {}, audioInfo = null, 
   // If WebM, need to convert to MP4 (slower but necessary)
   const needsVideoConversion = !isNativeMP4;
 
-  console.log('[VideoExport] Processing video:', {
+  log('[VideoExport] Processing video:', {
     needsVideoConversion,
     hasAudio,
     inputSize: (videoBlob.size / 1024 / 1024).toFixed(2) + 'MB'
@@ -132,7 +136,7 @@ const processVideo = async (videoBlob, onProgress = () => {}, audioInfo = null, 
 
     ffmpegArgs.push('-movflags', '+faststart', outputName);
 
-    console.log('[VideoExport] FFmpeg args:', ffmpegArgs.join(' '));
+    log('[VideoExport] FFmpeg args:', ffmpegArgs.join(' '));
     await ffmpeg.exec(ffmpegArgs);
 
     const data = await ffmpeg.readFile(outputName);
@@ -145,7 +149,7 @@ const processVideo = async (videoBlob, onProgress = () => {}, audioInfo = null, 
       try { await ffmpeg.deleteFile(audioName); } catch (e) { /* ignore */ }
     }
 
-    console.log('[VideoExport] Processing complete:', (outputBlob.size / 1024 / 1024).toFixed(2), 'MB');
+    log('[VideoExport] Processing complete:', (outputBlob.size / 1024 / 1024).toFixed(2), 'MB');
     return outputBlob;
   } catch (error) {
     console.error('[VideoExport] Processing failed:', error);
@@ -224,6 +228,8 @@ const loadAudio = (url) => {
       // Try without crossOrigin
       const fallbackAudio = document.createElement('audio');
       fallbackAudio.preload = 'auto';
+
+
       const fallbackTimeout = setTimeout(() => {
         reject(new Error(`Audio fallback load timeout: ${url}`));
       }, 30000);
@@ -253,7 +259,7 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
   // Validate duration to prevent NaN/Infinity in progress calculations
   const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 30;
 
-  console.log('[VideoExport] Starting Canvas render');
+  log('[VideoExport] Starting Canvas render');
   onProgress(safeProgress(5));
 
   // Get dimensions
@@ -271,14 +277,14 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
   const ctx = canvas.getContext('2d');
 
   // Load all clip videos in parallel for faster loading
-  console.log('[VideoExport] Loading clips in parallel...');
+  log('[VideoExport] Loading clips in parallel...');
   const clipPromises = clips.map(async (clip, i) => {
     // Prefer cloud URL over blob URLs (blob URLs expire between sessions)
     const localUrl = clip.localUrl;
     const isBlobUrl = localUrl && localUrl.startsWith('blob:');
     const url = isBlobUrl ? clip.url : (localUrl || clip.url);
 
-    console.log(`[VideoExport] Loading clip ${i}:`, url?.substring(0, 50) + '...');
+    log(`[VideoExport] Loading clip ${i}:`, url?.substring(0, 50) + '...');
     try {
       const video = await loadVideo(url);
       return { ...clip, video, index: i };
@@ -316,7 +322,7 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
 
   let mimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type)) || 'video/webm';
   const isMP4Native = mimeType.includes('mp4');
-  console.log('[VideoExport] Using codec:', mimeType, isMP4Native ? '(native MP4!)' : '(will need conversion)');
+  log('[VideoExport] Using codec:', mimeType, isMP4Native ? '(native MP4!)' : '(will need conversion)');
 
   const recorder = new MediaRecorder(combinedStream, {
     mimeType,
@@ -427,7 +433,7 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
 
     recorder.onstop = () => {
       const blob = new Blob(chunks, { type: mimeType });
-      console.log('[VideoExport] Render complete:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
+      log('[VideoExport] Render complete:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
       onProgress(safeProgress(100));
       // Return blob and whether it's native MP4
       resolve({ blob, isNativeMP4: isMP4Native });
@@ -468,7 +474,7 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
     };
 
     // Start the fast render loop
-    console.log(`[VideoExport] Rendering ${totalFrames} frames at ${FPS}fps...`);
+    log(`[VideoExport] Rendering ${totalFrames} frames at ${FPS}fps...`);
     processNextFrame();
   });
 };
@@ -493,7 +499,7 @@ export const renderVideo = async (videoData, onProgress = () => {}, options = {}
     throw new Error(`${invalidClips.length} clip(s) missing URLs. Re-upload or re-select the clips.`);
   }
 
-  console.log(`[VideoExport] Starting render: ${clips.length} clips, ${duration}s duration`);
+  log(`[VideoExport] Starting render: ${clips.length} clips, ${duration}s duration`);
 
   // Use Canvas + MediaRecorder (most reliable)
   try {
@@ -507,7 +513,7 @@ export const renderVideo = async (videoData, onProgress = () => {}, options = {}
       const audioUrl = isAudioBlobUrl ? audio.url : (audioLocalUrl || audio.url);
 
       if (audioUrl) {
-        console.log('[VideoExport] Pre-fetching audio in parallel...');
+        log('[VideoExport] Pre-fetching audio in parallel...');
         audioBufferPromise = fetch(audioUrl)
           .then(res => res.arrayBuffer())
           .catch(err => {
