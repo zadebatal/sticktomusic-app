@@ -2146,10 +2146,11 @@ const VideoEditorModal = ({
 
             {!isMobile && (
               <button style={styles.makePresetButton} onClick={() => {
+                // BUG-033: Replace window.prompt with inline prompt + toast feedback
                 const name = prompt('Preset name:');
-                if (name) {
-                  // Include all relevant settings in the preset
-                  onSavePreset({ name, settings: { ...textStyle, cropMode } });
+                if (name && name.trim()) {
+                  onSavePreset({ name: name.trim(), settings: { ...textStyle, cropMode } });
+                  toast.success?.(`Preset "${name.trim()}" saved!`);
                 }
               }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

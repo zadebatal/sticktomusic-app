@@ -841,7 +841,8 @@ const MultiClipEditor = ({
   const currentClip = getCurrentClip();
 
   // Check if text overlay should be visible in current clip
-  const isOverlayVisible = (overlay) => {
+  // BUG-032: Memoize overlay visibility check — called for every overlay on every render
+  const isOverlayVisible = useCallback((overlay) => {
     // Time range check first
     if (overlay.startTime !== undefined && overlay.endTime !== undefined) {
       if (currentTime < overlay.startTime || currentTime >= overlay.endTime) return false;
@@ -850,7 +851,7 @@ const MultiClipEditor = ({
     if (overlay.scope === 'full') return true;
     if (typeof overlay.scope === 'number') return overlay.scope === activeClipIndex;
     return true;
-  };
+  }, [currentTime, activeClipIndex]);
 
   // ── RENDER ──
   return (

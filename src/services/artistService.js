@@ -288,30 +288,41 @@ export const needsMigration = () => {
  * @param {string} boonArtistId - The Firestore ID for Boon
  */
 export const migrateExistingData = (boonArtistId) => {
+  // BUG-028: Guard against duplicate migration — check flag first
+  const migrationKey = `stm_migration_complete_${boonArtistId}`;
+  if (localStorage.getItem(migrationKey)) {
+    console.log('[Migration] Already migrated for artist:', boonArtistId);
+    return;
+  }
+
   console.log('[Migration] Starting migration for Boon artist:', boonArtistId);
 
   // Migrate categories
   const legacyCategories = localStorage.getItem(LEGACY_CATEGORIES_KEY);
   if (legacyCategories) {
-    console.log('[Migration] Migrating categories...');
-    localStorage.setItem(`${CATEGORIES_PREFIX}${boonArtistId}`, legacyCategories);
-    // Don't delete legacy data yet - keep as backup
-    // localStorage.removeItem(LEGACY_CATEGORIES_KEY);
-    console.log('[Migration] Categories migrated successfully');
+    // Only migrate if target doesn't already exist (idempotent)
+    if (!localStorage.getItem(`${CATEGORIES_PREFIX}${boonArtistId}`)) {
+      localStorage.setItem(`${CATEGORIES_PREFIX}${boonArtistId}`, legacyCategories);
+      console.log('[Migration] Categories migrated successfully');
+    }
   }
 
   // Migrate analytics
   const legacyAnalytics = localStorage.getItem(LEGACY_ANALYTICS_KEY);
   if (legacyAnalytics) {
-    console.log('[Migration] Migrating analytics...');
-    localStorage.setItem(`${ANALYTICS_PREFIX}${boonArtistId}`, legacyAnalytics);
-    // Don't delete legacy data yet - keep as backup
-    // localStorage.removeItem(LEGACY_ANALYTICS_KEY);
-    console.log('[Migration] Analytics migrated successfully');
+    if (!localStorage.getItem(`${ANALYTICS_PREFIX}${boonArtistId}`)) {
+      localStorage.setItem(`${ANALYTICS_PREFIX}${boonArtistId}`, legacyAnalytics);
+      console.log('[Migration] Analytics migrated successfully');
+    }
   }
 
-  // Mark migration as complete
+  // BUG-028: Mark migration complete per-artist, then clean up legacy keys
+  localStorage.setItem(migrationKey, new Date().toISOString());
+  // Also set the generic flag for backward compatibility
   localStorage.setItem('stm_migration_complete', new Date().toISOString());
+  // Remove legacy keys now that migration is confirmed
+  if (legacyCategories) localStorage.removeItem(LEGACY_CATEGORIES_KEY);
+  if (legacyAnalytics) localStorage.removeItem(LEGACY_ANALYTICS_KEY);
 
   console.log('[Migration] Migration complete!');
 };
