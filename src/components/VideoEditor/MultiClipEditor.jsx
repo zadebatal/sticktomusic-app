@@ -7,6 +7,7 @@ import {
 import { useToast } from '../ui';
 import AudioClipSelector from './AudioClipSelector';
 import LyricBank from './LyricBank';
+import LyricAnalyzer from './LyricAnalyzer';
 
 /**
  * MultiClipEditor v1 — "Multi-Clip" video editor mode
@@ -146,6 +147,10 @@ const MultiClipEditor = ({
   const dragStartRef = useRef(null);
   const previewRef = useRef(null);
 
+  // ── Timeline drag state ──
+  const timelineRef = useRef(null);
+  const [timelineDrag, setTimelineDrag] = useState(null); // { overlayId, type: 'move'|'left'|'right', startX, origStart, origEnd }
+
   // ── Library state ──
   const [collections, setCollections] = useState([]);
   const [libraryMedia, setLibraryMedia] = useState([]);
@@ -165,6 +170,9 @@ const MultiClipEditor = ({
 
   // ── Audio trimmer state ──
   const [showAudioTrimmer, setShowAudioTrimmer] = useState(false);
+
+  // ── Transcriber state ──
+  const [showTranscriber, setShowTranscriber] = useState(false);
 
   // ── Mobile detection ──
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
@@ -372,6 +380,32 @@ const MultiClipEditor = ({
     toastSuccess(`Saved clip "${clipData.name}" to library`);
   }, [selectedAudio, artistId, toastSuccess]);
 
+  // ── AI Transcription handler ──
+  const handleTranscriptionComplete = useCallback((result) => {
+    if (!result?.words?.length) {
+      toastError('No words detected in transcription.');
+      setShowTranscriber(false);
+      return;
+    }
+    const dur = totalDuration || 30;
+    result.words.forEach(w => {
+      const start = Math.min(w.startTime || 0, dur);
+      const end = Math.min(w.startTime + (w.duration || 0.5), dur);
+      const newOverlay = {
+        id: `text_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        text: w.text,
+        style: getDefaultTextStyle(),
+        position: { x: 50, y: 50, width: 80, height: 20 },
+        scope: 'full',
+        startTime: start,
+        endTime: end
+      };
+      setTextOverlays(prev => [...prev, newOverlay]);
+    });
+    toastSuccess(`Added ${result.words.length} text overlays from transcription`);
+    setShowTranscriber(false);
+  }, [totalDuration, getDefaultTextStyle, setTextOverlays, toastSuccess, toastError]);
+
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.muted = isMuted;
@@ -399,18 +433,22 @@ const MultiClipEditor = ({
     textCase: 'default'
   }), []);
 
-  const addTextOverlay = useCallback((prefillText) => {
+  const addTextOverlay = useCallback((prefillText, overrideStart, overrideEnd) => {
+    const start = overrideStart !== undefined ? overrideStart : currentTime;
+    const end = overrideEnd !== undefined ? overrideEnd : Math.min(start + 3, totalDuration || start + 3);
     const newOverlay = {
       id: `text_${Date.now()}`,
       text: prefillText || 'Click to edit',
       style: getDefaultTextStyle(),
       position: { x: 50, y: 50, width: 80, height: 20 },
-      scope: 'full'
+      scope: 'full',
+      startTime: start,
+      endTime: end
     };
     setTextOverlays(prev => [...prev, newOverlay]);
     setEditingTextId(newOverlay.id);
     setEditingTextValue(newOverlay.text);
-  }, [getDefaultTextStyle, setTextOverlays]);
+  }, [getDefaultTextStyle, setTextOverlays, currentTime, totalDuration]);
 
   const updateTextOverlay = useCallback((overlayId, updates) => {
     setTextOverlays(prev => prev.map(o =>
@@ -462,6 +500,56 @@ const MultiClipEditor = ({
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [draggingTextId, textOverlays, updateTextOverlay]);
+
+  // ── Timeline text block drag/resize ──
+  const handleTimelineDragStart = useCallback((e, overlayId, type) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const overlay = textOverlays.find(o => o.id === overlayId);
+    if (!overlay) return;
+    setTimelineDrag({
+      overlayId,
+      type, // 'move', 'left', 'right'
+      startX: e.clientX,
+      origStart: overlay.startTime,
+      origEnd: overlay.endTime
+    });
+    setEditingTextId(overlayId);
+    setEditingTextValue(overlay.text);
+  }, [textOverlays]);
+
+  useEffect(() => {
+    if (!timelineDrag || !timelineRef.current) return;
+    const dur = totalDuration || 1;
+    const handleMouseMove = (e) => {
+      const rect = timelineRef.current.getBoundingClientRect();
+      const deltaX = e.clientX - timelineDrag.startX;
+      const deltaSec = (deltaX / rect.width) * dur;
+      const minDur = 0.5;
+
+      if (timelineDrag.type === 'move') {
+        const length = timelineDrag.origEnd - timelineDrag.origStart;
+        let newStart = Math.max(0, timelineDrag.origStart + deltaSec);
+        let newEnd = newStart + length;
+        if (newEnd > dur) { newEnd = dur; newStart = dur - length; }
+        if (newStart < 0) newStart = 0;
+        updateTextOverlay(timelineDrag.overlayId, { startTime: newStart, endTime: newEnd });
+      } else if (timelineDrag.type === 'left') {
+        const newStart = Math.max(0, Math.min(timelineDrag.origEnd - minDur, timelineDrag.origStart + deltaSec));
+        updateTextOverlay(timelineDrag.overlayId, { startTime: newStart });
+      } else if (timelineDrag.type === 'right') {
+        const newEnd = Math.min(dur, Math.max(timelineDrag.origStart + minDur, timelineDrag.origEnd + deltaSec));
+        updateTextOverlay(timelineDrag.overlayId, { endTime: newEnd });
+      }
+    };
+    const handleMouseUp = () => setTimelineDrag(null);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [timelineDrag, totalDuration, updateTextOverlay]);
 
   // ── Switch between videos ──
   const switchToVideo = useCallback((index) => {
@@ -576,7 +664,9 @@ const MultiClipEditor = ({
             ...overlay,
             id: `text_${timestamp}_${i}_${idx}`,
             text: newText,
-            scope: overlay.scope // preserve scope
+            scope: overlay.scope,
+            startTime: overlay.startTime,
+            endTime: overlay.endTime
           };
         });
 
@@ -782,6 +872,11 @@ const MultiClipEditor = ({
 
   // Check if text overlay should be visible in current clip
   const isOverlayVisible = (overlay) => {
+    // Time range check first
+    if (overlay.startTime !== undefined && overlay.endTime !== undefined) {
+      if (currentTime < overlay.startTime || currentTime >= overlay.endTime) return false;
+    }
+    // Scope check
     if (overlay.scope === 'full') return true;
     if (typeof overlay.scope === 'number') return overlay.scope === activeClipIndex;
     return true;
@@ -1163,7 +1258,14 @@ const MultiClipEditor = ({
                   >
                     {/* Overlay header */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 500 }}>Overlay {idx + 1}</span>
+                      <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 500 }}>
+                        Overlay {idx + 1}
+                        {overlay.startTime !== undefined && (
+                          <span style={{ marginLeft: '6px', fontSize: '9px', color: '#6b7280' }}>
+                            {overlay.startTime.toFixed(1)}s – {overlay.endTime.toFixed(1)}s
+                          </span>
+                        )}
+                      </span>
                       <button
                         onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }}
                         style={styles.removeOverlayButton}
@@ -1362,6 +1464,10 @@ const MultiClipEditor = ({
                         >Trim</button>
                       )}
                       <button
+                        onClick={() => setShowTranscriber(true)}
+                        style={{ background: 'none', border: '1px solid rgba(168,85,247,0.3)', color: '#a855f7', fontSize: '10px', cursor: 'pointer', padding: '2px 6px', borderRadius: '4px' }}
+                      >AI</button>
+                      <button
                         onClick={() => handleAudioSelect(null)}
                         style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '14px', cursor: 'pointer', padding: '0 2px' }}
                       >×</button>
@@ -1538,6 +1644,150 @@ const MultiClipEditor = ({
           </div>
         </div>
 
+        {/* ── Timeline Section ── */}
+        <div style={styles.timelineSection}>
+          <div
+            ref={timelineRef}
+            style={styles.timelineTrackArea}
+            onClick={(e) => {
+              if (e.target === e.currentTarget || e.target.dataset.timelineClickable) {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const clickX = e.clientX - rect.left;
+                const time = (clickX / rect.width) * (totalDuration || 1);
+                handleSeek(Math.max(0, Math.min(totalDuration || 0, time)));
+              }
+            }}
+          >
+            {/* Time Ruler */}
+            <div style={styles.timelineRuler}>
+              {totalDuration > 0 && Array.from({ length: Math.ceil(totalDuration) + 1 }, (_, i) => (
+                <div key={i} style={{ position: 'absolute', left: `${(i / totalDuration) * 100}%`, top: 0, height: '100%' }}>
+                  <div style={{ width: '1px', height: i % 5 === 0 ? '10px' : '6px', backgroundColor: 'rgba(255,255,255,0.15)' }} />
+                  {i % 2 === 0 && <span style={{ fontSize: '9px', color: '#6b7280', position: 'absolute', top: '10px', transform: 'translateX(-50%)' }}>{i}s</span>}
+                </div>
+              ))}
+            </div>
+
+            {/* Text Overlay Track */}
+            <div style={styles.textTrack} data-timeline-clickable="true">
+              {textOverlays.map((overlay) => {
+                const startPct = totalDuration > 0 ? ((overlay.startTime || 0) / totalDuration) * 100 : 0;
+                const widthPct = totalDuration > 0 ? (((overlay.endTime || 0) - (overlay.startTime || 0)) / totalDuration) * 100 : 10;
+                const isSelected = editingTextId === overlay.id;
+                return (
+                  <div
+                    key={overlay.id}
+                    style={{
+                      position: 'absolute',
+                      left: `${startPct}%`,
+                      width: `${widthPct}%`,
+                      top: '2px',
+                      height: '24px',
+                      backgroundColor: isSelected ? '#9333ea' : '#7c3aed',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '0 4px',
+                      cursor: timelineDrag ? 'grabbing' : 'grab',
+                      overflow: 'hidden',
+                      border: isSelected ? '1px solid #a855f7' : '1px solid rgba(124,58,237,0.5)',
+                      boxShadow: isSelected ? '0 2px 8px rgba(168,85,247,0.4)' : 'none',
+                      zIndex: isSelected ? 10 : 5,
+                      transition: timelineDrag ? 'none' : 'background-color 0.15s'
+                    }}
+                    onMouseDown={(e) => handleTimelineDragStart(e, overlay.id, 'move')}
+                  >
+                    {/* Left resize handle */}
+                    <div
+                      style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
+                      onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'left'); }}
+                    />
+                    <span style={{ fontSize: '10px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none', padding: '0 6px' }}>
+                      {overlay.text}
+                    </span>
+                    {/* Right resize handle */}
+                    <div
+                      style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
+                      onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'right'); }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Clip Track — multi-clip: segments for each clip */}
+            <div style={styles.clipTrack}>
+              {clips.map((clipItem, idx) => {
+                const clipId = clipItem.id || clipItem.sourceId;
+                const clipDur = getClipDuration(clipId);
+                let accBefore = 0;
+                for (let j = 0; j < idx; j++) {
+                  accBefore += getClipDuration(clips[j].id || clips[j].sourceId);
+                }
+                const leftPct = totalDuration > 0 ? (accBefore / totalDuration) * 100 : 0;
+                const widthPct = totalDuration > 0 ? (clipDur / totalDuration) * 100 : 100;
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      position: 'absolute',
+                      left: `${leftPct}%`,
+                      width: `${widthPct}%`,
+                      top: '2px',
+                      height: '40px',
+                      backgroundColor: activeClipIndex === idx ? '#475569' : '#334155',
+                      borderRadius: '4px',
+                      overflow: 'hidden',
+                      border: activeClipIndex === idx ? '1px solid rgba(99,102,241,0.4)' : '1px solid rgba(255,255,255,0.08)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    {(clipItem.thumbnailUrl || clipItem.thumbnail) && (
+                      <img
+                        src={clipItem.thumbnailUrl || clipItem.thumbnail}
+                        alt=""
+                        style={{ width: '40px', height: '100%', objectFit: 'cover', opacity: 0.6, flexShrink: 0 }}
+                      />
+                    )}
+                    <span style={{ fontSize: '9px', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 4px' }}>
+                      {clipItem.name || `Clip ${idx + 1}`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Playhead */}
+            {totalDuration > 0 && (
+              <div style={{
+                position: 'absolute',
+                left: `${(currentTime / totalDuration) * 100}%`,
+                top: 0,
+                bottom: 0,
+                width: '2px',
+                backgroundColor: '#ef4444',
+                zIndex: 20,
+                pointerEvents: 'none',
+                transition: isPlaying ? 'none' : 'left 0.1s ease-out'
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  top: '-2px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: '8px',
+                  height: '8px',
+                  backgroundColor: '#ef4444',
+                  borderRadius: '2px',
+                  clipPath: 'polygon(0 0, 100% 0, 50% 100%)'
+                }} />
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* ── Tab Bar (bottom) ── */}
         <div style={styles.tabBar}>
           <div style={styles.tabScroll}>
@@ -1582,6 +1832,15 @@ const MultiClipEditor = ({
             onSave={handleAudioTrimSave}
             onSaveClip={handleAudioSaveClip}
             onCancel={() => setShowAudioTrimmer(false)}
+          />
+        )}
+
+        {/* ── Lyric Analyzer Modal ── */}
+        {showTranscriber && selectedAudio && (
+          <LyricAnalyzer
+            audioUrl={selectedAudio.localUrl || selectedAudio.url}
+            onComplete={handleTranscriptionComplete}
+            onClose={() => setShowTranscriber(false)}
           />
         )}
 
@@ -2133,6 +2392,41 @@ const styles = {
     cursor: 'pointer',
     padding: '0 2px',
     lineHeight: 1
+  },
+
+  // ── Timeline ──
+  timelineSection: {
+    borderTop: '1px solid rgba(255,255,255,0.08)',
+    flexShrink: 0,
+    backgroundColor: '#0f0f23',
+    padding: '0 8px'
+  },
+  timelineTrackArea: {
+    position: 'relative',
+    height: '110px',
+    cursor: 'pointer'
+  },
+  timelineRuler: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '22px',
+    borderBottom: '1px solid rgba(255,255,255,0.06)'
+  },
+  textTrack: {
+    position: 'absolute',
+    top: '22px',
+    left: 0,
+    right: 0,
+    height: '28px'
+  },
+  clipTrack: {
+    position: 'absolute',
+    top: '54px',
+    left: 0,
+    right: 0,
+    height: '44px'
   },
 
   // ── Tab Bar ──
