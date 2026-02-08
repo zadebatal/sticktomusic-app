@@ -10,19 +10,17 @@ import { getCreatedContent } from '../../services/libraryService';
 import log from '../../utils/logger';
 
 /**
- * SchedulingPage — Complete scheduling and queue management system
+ * SchedulingPage — Command Center
  *
- * Features:
- *   - List and calendar view modes
- *   - Draggable queue ladder (left panel)
- *   - Preview panel (center)
- *   - Edit details panel (right) with hashtag bank
- *   - Add from drafts with duplicate detection
- *   - Bulk scheduling with preset intervals
- *   - Pause/resume queue functionality
- *   - Status flow: Draft → Scheduled → Posting → Posted/Failed
- *   - Calendar view with drag-between-days support
- *   - Real-time Firestore subscription
+ * Dense, single-view scheduling interface. Every post and every setting
+ * visible at a glance. Drafts are for viewing content — this is for deploying it.
+ *
+ * Layout:
+ *   - Sticky header with back, add, bulk schedule controls
+ *   - Status filter tabs
+ *   - Scrollable post rows with inline controls (platform toggles, date/time, caption)
+ *   - Expandable detail drawer per row (hashtags, hashtag bank, post results)
+ *   - Calendar toggle for rhythm visualization
  */
 const SchedulingPage = ({
   db,
@@ -39,12 +37,11 @@ const SchedulingPage = ({
   // ── State ──
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedPostId, setSelectedPostId] = useState(null);
+  const [expandedPostId, setExpandedPostId] = useState(null);
   const [draggedId, setDraggedId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
 
   // UI state
-  const [showBulkSchedule, setShowBulkSchedule] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'calendar'
   const [bulkScheduleMode, setBulkScheduleMode] = useState(false);
@@ -62,14 +59,8 @@ const SchedulingPage = ({
 
   // Calendar state
   const [calendarDate, setCalendarDate] = useState(new Date());
-  const [dragFromDay, setDragFromDay] = useState(null);
 
   // ── Derived ──
-  const selectedPost = useMemo(
-    () => posts.find(p => p.id === selectedPostId) || null,
-    [posts, selectedPostId]
-  );
-
   const filteredPosts = useMemo(() => {
     if (statusFilter === 'all') return posts;
     return posts.filter(p => p.status === statusFilter);
@@ -82,6 +73,8 @@ const SchedulingPage = ({
     });
     return counts;
   }, [posts]);
+
+  const draftCount = useMemo(() => posts.filter(p => p.status === POST_STATUS.DRAFT).length, [posts]);
 
   // ── Load & Subscribe ──
   useEffect(() => {
@@ -98,27 +91,17 @@ const SchedulingPage = ({
     setBulkDate(new Date().toISOString().split('T')[0]);
   }, []);
 
-  useEffect(() => {
-    if (!selectedPostId && posts.length > 0) {
-      setSelectedPostId(posts[0].id);
-    }
-  }, [posts, selectedPostId]);
-
   // ── Drag & Drop Handlers ──
   const handleDragStart = useCallback((e, postId) => {
     setDraggedId(postId);
     e.dataTransfer.effectAllowed = 'move';
-    if (e.target) {
-      setTimeout(() => { e.target.style.opacity = '0.4'; }, 0);
-    }
+    if (e.target) setTimeout(() => { e.target.style.opacity = '0.4'; }, 0);
   }, []);
 
   const handleDragOver = useCallback((e, postId) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    if (postId !== dragOverId) {
-      setDragOverId(postId);
-    }
+    if (postId !== dragOverId) setDragOverId(postId);
   }, [dragOverId]);
 
   const handleDrop = useCallback(async (e, targetId) => {
@@ -128,7 +111,6 @@ const SchedulingPage = ({
       setDragOverId(null);
       return;
     }
-
     setPosts(prev => {
       const arr = [...prev];
       const fromIdx = arr.findIndex(p => p.id === draggedId);
@@ -138,7 +120,6 @@ const SchedulingPage = ({
       arr.splice(toIdx, 0, moved);
       return arr.map((p, i) => ({ ...p, queuePosition: i }));
     });
-
     const arr = [...posts];
     const fromIdx = arr.findIndex(p => p.id === draggedId);
     const toIdx = arr.findIndex(p => p.id === targetId);
@@ -148,7 +129,6 @@ const SchedulingPage = ({
       const newOrder = arr.map((p, i) => ({ id: p.id, queuePosition: i }));
       await reorderPosts(db, artistId, newOrder);
     }
-
     setDraggedId(null);
     setDragOverId(null);
   }, [draggedId, posts, db, artistId]);
@@ -161,9 +141,7 @@ const SchedulingPage = ({
 
   // ── CRUD Handlers ──
   const handleUpdatePost = useCallback(async (postId, updates) => {
-    setPosts(prev => prev.map(p =>
-      p.id === postId ? { ...p, ...updates } : p
-    ));
+    setPosts(prev => prev.map(p => p.id === postId ? { ...p, ...updates } : p));
     await updateScheduledPost(db, artistId, postId, updates);
   }, [db, artistId]);
 
@@ -176,42 +154,33 @@ const SchedulingPage = ({
       variant: 'destructive',
       onConfirm: async () => {
         await deleteScheduledPost(db, artistId, postId);
-        if (selectedPostId === postId) {
-          setSelectedPostId(null);
-        }
+        if (expandedPostId === postId) setExpandedPostId(null);
         setConfirmDialog({ isOpen: false });
         toastSuccess('Post removed');
       }
     });
-  }, [posts, db, artistId, selectedPostId, toastSuccess]);
+  }, [posts, db, artistId, expandedPostId, toastSuccess]);
 
   // ── Bulk Scheduling ──
   const handleBulkSchedule = useCallback(async () => {
     if (!bulkDate) return;
     const startTime = new Date(`${bulkDate}T${bulkTime}`);
     const drafts = posts.filter(p => p.status === POST_STATUS.DRAFT);
-
-    if (drafts.length === 0) {
-      toastError('No draft posts to schedule');
-      return;
-    }
-
+    if (drafts.length === 0) { toastError('No draft posts to schedule'); return; }
     let scheduled;
     if (bulkIntervalType === 'fixed') {
       scheduled = assignScheduleTimes(drafts, startTime, bulkFixedInterval);
     } else {
       scheduled = assignRandomScheduleTimes(drafts, startTime, bulkRandomMin, bulkRandomMax);
     }
-
     for (const post of scheduled) {
       await updateScheduledPost(db, artistId, post.id, {
         scheduledTime: post.scheduledTime,
         status: post.status
       });
     }
-
     toastSuccess(`Scheduled ${scheduled.length} posts`);
-    setShowBulkSchedule(false);
+    setBulkScheduleMode(false);
   }, [bulkDate, bulkTime, bulkIntervalType, bulkFixedInterval, bulkRandomMin, bulkRandomMax, posts, db, artistId, toastSuccess, toastError]);
 
   // ── Platform Toggle ──
@@ -258,63 +227,51 @@ const SchedulingPage = ({
   // ── Render ──
   if (loading) {
     return (
-      <div style={s.pageContainer}>
+      <div style={s.page}>
         <div style={s.loadingState}>
           <div style={s.spinner} />
-          <p style={{ color: '#71717a', marginTop: '16px' }}>Loading scheduled posts...</p>
+          <p style={{ color: '#71717a', marginTop: '16px' }}>Loading queue...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={s.pageContainer}>
-      {/* Page Header */}
-      <div style={s.pageHeader}>
+    <div style={s.page}>
+      {/* ═══ HEADER ═══ */}
+      <div style={s.header}>
         <div style={s.headerLeft}>
           <button style={s.backBtn} onClick={onBack} title="Back to Studio">
             <span style={{ fontSize: '18px' }}>&#8592;</span>
           </button>
           <div>
-            <h1 style={s.pageTitle}>Scheduled Posts</h1>
-            <p style={s.pageSubtitle}>
-              {posts.length} post{posts.length !== 1 ? 's' : ''} in queue
+            <h1 style={s.pageTitle}>Schedule</h1>
+            <p style={s.subtitle}>
+              {posts.length} post{posts.length !== 1 ? 's' : ''} &middot; {draftCount} draft{draftCount !== 1 ? 's' : ''}
             </p>
           </div>
         </div>
         <div style={s.headerActions}>
-          <button
-            style={s.headerBtn}
-            onClick={() => setShowAddModal(true)}
-            title="Add from drafts"
-          >
-            <span style={{ marginRight: '6px' }}>+</span>Add from Drafts
+          <button style={s.actionBtn} onClick={() => setShowAddModal(true)}>
+            <span style={{ marginRight: '4px', fontSize: '14px' }}>+</span> Add from Drafts
           </button>
           <button
-            style={{
-              ...s.headerBtn,
-              backgroundColor: bulkScheduleMode ? '#6366f1' : 'transparent'
-            }}
+            style={{ ...s.actionBtn, ...(bulkScheduleMode ? { backgroundColor: '#6366f1', color: '#fff', borderColor: '#6366f1' } : {}) }}
             onClick={() => setBulkScheduleMode(!bulkScheduleMode)}
-            title="Toggle bulk schedule mode"
           >
             Bulk Schedule
           </button>
           <button
-            style={s.viewToggleBtn}
+            style={s.iconBtn}
             onClick={() => setViewMode(viewMode === 'list' ? 'calendar' : 'list')}
-            title={viewMode === 'list' ? 'Switch to calendar' : 'Switch to list'}
+            title={viewMode === 'list' ? 'Calendar view' : 'List view'}
           >
             {viewMode === 'list' ? '📅' : '📋'}
           </button>
           <button
-            style={{
-              ...s.headerBtn,
-              backgroundColor: queuePaused ? '#f59e0b' : 'transparent',
-              borderColor: queuePaused ? '#f59e0b' : '#6366f1'
-            }}
+            style={{ ...s.iconBtn, ...(queuePaused ? { backgroundColor: '#78350f', borderColor: '#f59e0b', color: '#fbbf24' } : {}) }}
             onClick={() => setQueuePaused(!queuePaused)}
-            title={queuePaused ? 'Resume queue' : 'Pause queue'}
+            title={queuePaused ? 'Resume' : 'Pause'}
           >
             {queuePaused ? '▶' : '⏸'}
           </button>
@@ -323,89 +280,71 @@ const SchedulingPage = ({
 
       {/* Pause Banner */}
       {queuePaused && (
-        <div style={s.pauseBanner}>
-          ⏸ Queue paused — no posts will be published
-        </div>
+        <div style={s.pauseBanner}>⏸ Queue paused — no posts will be published automatically</div>
       )}
 
-      {/* Bulk Schedule Bar */}
+      {/* ═══ BULK SCHEDULE BAR ═══ */}
       {bulkScheduleMode && (
         <div style={s.bulkBar}>
           <div style={s.bulkRow}>
             <div style={s.bulkPresets}>
               {[
-                { label: '1/day', fn: () => { setBulkFixedInterval(1440); setBulkIntervalType('fixed'); } },
-                { label: '2/day', fn: () => { setBulkFixedInterval(720); setBulkIntervalType('fixed'); } },
-                { label: '4/day', fn: () => { setBulkFixedInterval(360); setBulkIntervalType('fixed'); } },
-                { label: 'Every 2hr', fn: () => { setBulkFixedInterval(120); setBulkIntervalType('fixed'); } },
-                { label: 'Every 6hr', fn: () => { setBulkFixedInterval(360); setBulkIntervalType('fixed'); } }
-              ].map(preset => (
-                <button key={preset.label} style={s.presetBtn} onClick={preset.fn}>
-                  {preset.label}
+                { label: '1/day', interval: 1440 },
+                { label: '2/day', interval: 720 },
+                { label: '4/day', interval: 360 },
+                { label: 'Every 2hr', interval: 120 },
+                { label: 'Every 6hr', interval: 360 }
+              ].map(p => (
+                <button
+                  key={p.label}
+                  style={{ ...s.presetChip, ...(bulkIntervalType === 'fixed' && bulkFixedInterval === p.interval ? { backgroundColor: '#6366f1', color: '#fff', borderColor: '#6366f1' } : {}) }}
+                  onClick={() => { setBulkFixedInterval(p.interval); setBulkIntervalType('fixed'); }}
+                >
+                  {p.label}
                 </button>
               ))}
-              <button style={s.presetBtn} onClick={() => setBulkIntervalType(bulkIntervalType === 'fixed' ? 'random' : 'fixed')}>
-                {bulkIntervalType === 'fixed' ? 'Custom' : 'Custom (Random)'}
+              <button
+                style={{ ...s.presetChip, ...(bulkIntervalType === 'random' ? { backgroundColor: '#6366f1', color: '#fff', borderColor: '#6366f1' } : {}) }}
+                onClick={() => setBulkIntervalType(bulkIntervalType === 'fixed' ? 'random' : 'fixed')}
+              >
+                Random
               </button>
             </div>
-            <div style={s.controlGroup}>
-              <label style={s.label}>Start Date</label>
-              <input
-                type="date"
-                value={bulkDate}
-                onChange={(e) => setBulkDate(e.target.value)}
-                style={s.dateInput}
-              />
-            </div>
-            <div style={s.controlGroup}>
-              <label style={s.label}>Start Time</label>
-              <input
-                type="time"
-                value={bulkTime}
-                onChange={(e) => setBulkTime(e.target.value)}
-                style={s.timeInput}
-              />
-            </div>
-            {bulkIntervalType === 'fixed' ? (
-              <div style={s.controlGroup}>
-                <label style={s.label}>Every (min)</label>
-                <input
-                  type="number"
-                  value={bulkFixedInterval}
-                  onChange={(e) => setBulkFixedInterval(Number(e.target.value))}
-                  style={s.numberInput}
-                />
+            <div style={s.bulkInputs}>
+              <div style={s.miniField}>
+                <label style={s.miniLabel}>Date</label>
+                <input type="date" value={bulkDate} onChange={(e) => setBulkDate(e.target.value)} style={s.miniInput} />
               </div>
-            ) : (
-              <>
-                <div style={s.controlGroup}>
-                  <label style={s.label}>Min (min)</label>
-                  <input
-                    type="number"
-                    value={bulkRandomMin}
-                    onChange={(e) => setBulkRandomMin(Number(e.target.value))}
-                    style={s.numberInput}
-                  />
+              <div style={s.miniField}>
+                <label style={s.miniLabel}>Time</label>
+                <input type="time" value={bulkTime} onChange={(e) => setBulkTime(e.target.value)} style={s.miniInput} />
+              </div>
+              {bulkIntervalType === 'fixed' ? (
+                <div style={s.miniField}>
+                  <label style={s.miniLabel}>Every (min)</label>
+                  <input type="number" value={bulkFixedInterval} onChange={(e) => setBulkFixedInterval(Number(e.target.value))} style={{ ...s.miniInput, width: '80px' }} />
                 </div>
-                <div style={s.controlGroup}>
-                  <label style={s.label}>Max (min)</label>
-                  <input
-                    type="number"
-                    value={bulkRandomMax}
-                    onChange={(e) => setBulkRandomMax(Number(e.target.value))}
-                    style={s.numberInput}
-                  />
-                </div>
-              </>
-            )}
-            <button style={s.applyBulkBtn} onClick={handleBulkSchedule}>
-              Apply to {posts.filter(p => p.status === POST_STATUS.DRAFT).length} Drafts
-            </button>
+              ) : (
+                <>
+                  <div style={s.miniField}>
+                    <label style={s.miniLabel}>Min (min)</label>
+                    <input type="number" value={bulkRandomMin} onChange={(e) => setBulkRandomMin(Number(e.target.value))} style={{ ...s.miniInput, width: '70px' }} />
+                  </div>
+                  <div style={s.miniField}>
+                    <label style={s.miniLabel}>Max (min)</label>
+                    <input type="number" value={bulkRandomMax} onChange={(e) => setBulkRandomMax(Number(e.target.value))} style={{ ...s.miniInput, width: '70px' }} />
+                  </div>
+                </>
+              )}
+              <button style={s.applyBtn} onClick={handleBulkSchedule}>
+                Apply to {draftCount} Draft{draftCount !== 1 ? 's' : ''}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Status Filter Tabs */}
+      {/* ═══ STATUS FILTER TABS ═══ */}
       <div style={s.filterBar}>
         {[
           { key: 'all', label: 'All' },
@@ -417,85 +356,75 @@ const SchedulingPage = ({
         ].map(tab => (
           <button
             key={tab.key}
-            style={{
-              ...s.filterTab,
-              ...(statusFilter === tab.key ? s.filterTabActive : {})
-            }}
+            style={{ ...s.filterTab, ...(statusFilter === tab.key ? s.filterTabActive : {}) }}
             onClick={() => setStatusFilter(tab.key)}
           >
             {tab.label}
             {statusCounts[tab.key] > 0 && (
-              <span style={s.filterCount}>{statusCounts[tab.key]}</span>
+              <span style={s.badge}>{statusCounts[tab.key]}</span>
             )}
           </button>
         ))}
       </div>
 
-      {/* Main Content Area */}
-      <div style={s.panelsContainer}>
+      {/* ═══ MAIN CONTENT ═══ */}
+      <div style={s.content}>
         {viewMode === 'list' ? (
-          <>
-            {/* Left Panel: Queue Ladder */}
-            <div style={s.leftPanel}>
-              <div style={s.panelHeader}>
-                <span style={s.panelTitle}>Queue</span>
-                <span style={s.panelCount}>{filteredPosts.length}</span>
-              </div>
-              <div style={s.queueList}>
-                {filteredPosts.length === 0 ? (
-                  <div style={s.emptyQueue}>
-                    <p style={{ color: '#71717a', fontSize: '14px', textAlign: 'center' }}>
-                      {posts.length === 0
-                        ? 'No posts yet. Add content from drafts.'
-                        : 'No posts match this filter.'
-                      }
-                    </p>
-                  </div>
-                ) : (
-                  filteredPosts.map((post, index) => (
-                    <QueueCard
-                      key={post.id}
-                      post={post}
-                      index={index}
-                      isSelected={selectedPostId === post.id}
-                      isDragging={draggedId === post.id}
-                      isDragOver={dragOverId === post.id}
-                      isPaused={queuePaused}
-                      onSelect={() => setSelectedPostId(post.id)}
-                      onDragStart={(e) => handleDragStart(e, post.id)}
-                      onDragOver={(e) => handleDragOver(e, post.id)}
-                      onDrop={(e) => handleDrop(e, post.id)}
-                      onDragEnd={handleDragEnd}
-                      onDelete={() => handleDeletePost(post.id)}
-                    />
-                  ))
-                )}
-              </div>
+          /* ── Command Center List ── */
+          <div style={s.listContainer}>
+            {/* Column Headers */}
+            <div style={s.listHeader}>
+              <div style={{ width: '28px' }} />
+              <div style={{ width: '44px' }} />
+              <div style={{ flex: 1.2, minWidth: 0 }}>Content</div>
+              <div style={{ width: '280px' }}>Platforms</div>
+              <div style={{ width: '190px' }}>Schedule</div>
+              <div style={{ width: '200px' }}>Caption</div>
+              <div style={{ width: '80px', textAlign: 'center' }}>Status</div>
+              <div style={{ width: '60px' }} />
             </div>
 
-            {/* Center Panel: Preview */}
-            <div style={s.centerPanel}>
-              {selectedPost ? (
-                <PreviewPanel
-                  post={selectedPost}
-                  onEditDraft={onEditDraft}
-                  onUpdate={(updates) => handleUpdatePost(selectedPost.id, updates)}
-                />
-              ) : (
-                <div style={s.noSelection}>
+            {/* Post Rows */}
+            <div style={s.listScroll}>
+              {filteredPosts.length === 0 ? (
+                <div style={s.emptyState}>
                   <p style={{ color: '#71717a', fontSize: '14px' }}>
-                    Select a post from the queue to preview
+                    {posts.length === 0 ? 'No posts yet. Add content from drafts to start scheduling.' : 'No posts match this filter.'}
                   </p>
                 </div>
+              ) : (
+                filteredPosts.map((post, index) => (
+                  <PostRow
+                    key={post.id}
+                    post={post}
+                    index={index}
+                    isExpanded={expandedPostId === post.id}
+                    isDragging={draggedId === post.id}
+                    isDragOver={dragOverId === post.id}
+                    isPaused={queuePaused}
+                    accounts={accounts}
+                    lateAccountIds={lateAccountIds}
+                    onToggleExpand={() => setExpandedPostId(expandedPostId === post.id ? null : post.id)}
+                    onUpdate={(updates) => handleUpdatePost(post.id, updates)}
+                    onTogglePlatform={(platform) => togglePlatform(post.id, platform)}
+                    onSetPlatformAccount={(platform, accountId, handle) => setPlatformAccount(post.id, platform, accountId, handle)}
+                    onDelete={() => handleDeletePost(post.id)}
+                    onEditDraft={onEditDraft}
+                    onDragStart={(e) => handleDragStart(e, post.id)}
+                    onDragOver={(e) => handleDragOver(e, post.id)}
+                    onDrop={(e) => handleDrop(e, post.id)}
+                    onDragEnd={handleDragEnd}
+                  />
+                ))
               )}
             </div>
-          </>
+          </div>
         ) : (
-          /* Calendar View */
+          /* ── Calendar View ── */
           <CalendarView
             posts={filteredPosts}
-            selectedPostId={selectedPostId}
-            onSelectPost={setSelectedPostId}
+            expandedPostId={expandedPostId}
+            onSelectPost={(id) => setExpandedPostId(expandedPostId === id ? null : id)}
             calendarDate={calendarDate}
             onChangeMonth={setCalendarDate}
             onDragPost={(postId, fromDate, toDate) => {
@@ -510,30 +439,6 @@ const SchedulingPage = ({
             }}
           />
         )}
-
-        {/* Right Panel: Edit Details */}
-        <div style={s.rightPanel}>
-          {selectedPost ? (
-            <EditPanel
-              post={selectedPost}
-              accounts={accounts}
-              lateAccountIds={lateAccountIds}
-              onUpdate={(updates) => handleUpdatePost(selectedPost.id, updates)}
-              onTogglePlatform={(platform) => togglePlatform(selectedPost.id, platform)}
-              onSetPlatformAccount={(platform, accountId, handle) =>
-                setPlatformAccount(selectedPost.id, platform, accountId, handle)
-              }
-              onSchedulePost={onSchedulePost}
-              onRenderVideo={onRenderVideo}
-            />
-          ) : (
-            <div style={s.noSelection}>
-              <p style={{ color: '#71717a', fontSize: '14px' }}>
-                Select a post to edit details
-              </p>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Add from Drafts Modal */}
@@ -560,6 +465,412 @@ const SchedulingPage = ({
 };
 
 // ═══════════════════════════════════════════════════
+// PostRow — Dense inline row with all scheduling controls visible
+// ═══════════════════════════════════════════════════
+
+const PostRow = ({
+  post, index, isExpanded, isDragging, isDragOver, isPaused,
+  accounts, lateAccountIds,
+  onToggleExpand, onUpdate, onTogglePlatform, onSetPlatformAccount,
+  onDelete, onEditDraft,
+  onDragStart, onDragOver, onDrop, onDragEnd
+}) => {
+  const [caption, setCaption] = useState(post.caption || '');
+  const [schedDate, setSchedDate] = useState('');
+  const [schedTime, setSchedTime] = useState('');
+
+  // Sync local state when post changes
+  useEffect(() => {
+    setCaption(post.caption || '');
+    if (post.scheduledTime) {
+      const d = new Date(post.scheduledTime);
+      setSchedDate(d.toISOString().split('T')[0]);
+      setSchedTime(d.toTimeString().substring(0, 5));
+    } else {
+      setSchedDate('');
+      setSchedTime('');
+    }
+  }, [post.id, post.caption, post.scheduledTime]);
+
+  const handleCaptionBlur = () => {
+    if (caption !== (post.caption || '')) onUpdate({ caption });
+  };
+
+  const handleScheduleChange = (newDate, newTime) => {
+    const d = newDate || schedDate;
+    const t = newTime || schedTime;
+    if (d && t) {
+      onUpdate({ scheduledTime: new Date(`${d}T${t}`).toISOString(), status: POST_STATUS.SCHEDULED });
+    }
+  };
+
+  const statusColor = {
+    [POST_STATUS.DRAFT]: '#71717a',
+    [POST_STATUS.SCHEDULED]: '#6366f1',
+    [POST_STATUS.POSTING]: '#f59e0b',
+    [POST_STATUS.POSTED]: '#10b981',
+    [POST_STATUS.FAILED]: '#ef4444'
+  }[post.status] || '#71717a';
+
+  const statusBg = {
+    [POST_STATUS.DRAFT]: '#27272a',
+    [POST_STATUS.SCHEDULED]: '#312e81',
+    [POST_STATUS.POSTING]: '#78350f',
+    [POST_STATUS.POSTED]: '#064e3b',
+    [POST_STATUS.FAILED]: '#7f1d1d'
+  }[post.status] || '#27272a';
+
+  const allPlatforms = Object.values(PLATFORMS);
+  const selectedPlatforms = post.platforms || {};
+  const previewImage = post.thumbnail || post.editorState?.thumbnail || post.editorState?.slides?.[0]?.backgroundImage || null;
+
+  return (
+    <div style={{ borderBottom: '1px solid #1e1e22' }}>
+      {/* ── Main Row ── */}
+      <div
+        draggable
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+        onDragEnd={onDragEnd}
+        style={{
+          ...s.row,
+          ...(isDragOver ? { borderColor: '#a5b4fc', backgroundColor: '#1e1e30' } : {}),
+          opacity: isDragging ? 0.4 : 1,
+          position: 'relative'
+        }}
+      >
+        {isPaused && post.status === POST_STATUS.SCHEDULED && (
+          <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(245,158,11,0.08)', borderRadius: '0', pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: '14px', opacity: 0.5 }}>⏸</span>
+          </div>
+        )}
+
+        {/* Drag Handle + Number */}
+        <div style={s.dragHandle}>
+          <span style={{ color: '#52525b', fontSize: '12px', cursor: 'grab' }}>{'\u2630'}</span>
+          <span style={{ color: '#3f3f46', fontSize: '10px', fontWeight: '600' }}>#{index + 1}</span>
+        </div>
+
+        {/* Thumbnail */}
+        <div style={s.thumb} onClick={onToggleExpand}>
+          {previewImage ? (
+            <img src={previewImage} alt="" style={s.thumbImg} />
+          ) : (
+            <span style={{ fontSize: '16px' }}>{post.contentType === 'slideshow' ? '🖼️' : '🎥'}</span>
+          )}
+        </div>
+
+        {/* Content Name */}
+        <div style={{ flex: 1.2, minWidth: 0, cursor: 'pointer' }} onClick={onToggleExpand}>
+          <div style={s.contentName}>{post.contentName}</div>
+          <div style={{ fontSize: '10px', color: '#52525b', marginTop: '1px' }}>
+            {post.contentType === 'slideshow' ? 'Slideshow' : 'Video'}
+          </div>
+        </div>
+
+        {/* Platform Toggles — inline */}
+        <div style={{ width: '280px', display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {allPlatforms.map(platform => {
+            const isActive = !!selectedPlatforms[platform];
+            const color = PLATFORM_COLORS[platform];
+            return (
+              <button
+                key={platform}
+                onClick={() => onTogglePlatform(platform)}
+                style={{
+                  padding: '3px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid',
+                  fontSize: '11px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  backgroundColor: isActive ? color + '22' : '#1a1a1e',
+                  borderColor: isActive ? color : '#2a2a2e',
+                  color: isActive ? color : '#52525b',
+                  transition: 'all 0.12s'
+                }}
+              >
+                {PLATFORM_LABELS[platform]}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Schedule Date/Time — inline */}
+        <div style={{ width: '190px', display: 'flex', gap: '4px', alignItems: 'center' }}>
+          <input
+            type="date"
+            value={schedDate}
+            onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }}
+            style={s.inlineDate}
+          />
+          <input
+            type="time"
+            value={schedTime}
+            onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }}
+            style={s.inlineTime}
+          />
+        </div>
+
+        {/* Caption preview — inline */}
+        <div style={{ width: '200px' }}>
+          <input
+            type="text"
+            value={caption}
+            onChange={(e) => setCaption(e.target.value)}
+            onBlur={handleCaptionBlur}
+            placeholder="Caption..."
+            style={s.inlineCaption}
+          />
+        </div>
+
+        {/* Status */}
+        <div style={{ width: '80px', textAlign: 'center' }}>
+          <span style={{ ...s.statusPill, backgroundColor: statusBg, color: statusColor }}>
+            {post.status}
+          </span>
+        </div>
+
+        {/* Actions */}
+        <div style={{ width: '60px', display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
+          <button style={s.rowIconBtn} onClick={onToggleExpand} title="Expand details">
+            <span style={{ fontSize: '12px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.15s' }}>▼</span>
+          </button>
+          <button style={{ ...s.rowIconBtn, color: '#ef4444' }} onClick={(e) => { e.stopPropagation(); onDelete(); }} title="Remove">
+            ×
+          </button>
+        </div>
+      </div>
+
+      {/* ── Expanded Detail Drawer ── */}
+      {isExpanded && (
+        <ExpandedDrawer
+          post={post}
+          accounts={accounts}
+          lateAccountIds={lateAccountIds}
+          onUpdate={onUpdate}
+          onTogglePlatform={onTogglePlatform}
+          onSetPlatformAccount={onSetPlatformAccount}
+          onEditDraft={onEditDraft}
+        />
+      )}
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════
+// ExpandedDrawer — Full details for a post (hashtags, bank, results, actions)
+// ═══════════════════════════════════════════════════
+
+const ExpandedDrawer = ({ post, accounts, lateAccountIds, onUpdate, onTogglePlatform, onSetPlatformAccount, onEditDraft }) => {
+  const [hashtags, setHashtags] = useState((post.hashtags || []).join(' '));
+  const [hashtagBank, setHashtagBank] = useState([]);
+  const [showSaveSet, setShowSaveSet] = useState(false);
+  const [newSetName, setNewSetName] = useState('');
+
+  useEffect(() => {
+    setHashtags((post.hashtags || []).join(' '));
+  }, [post.id, post.hashtags]);
+
+  useEffect(() => {
+    const key = `stm_hashtag_bank_${post.id?.split('/')[0] || 'default'}`;
+    const saved = localStorage.getItem(key);
+    if (saved) { try { setHashtagBank(JSON.parse(saved)); } catch { setHashtagBank([]); } }
+  }, [post]);
+
+  const handleHashtagsBlur = () => {
+    const tags = hashtags.split(/[\s,]+/).filter(Boolean).map(h => h.startsWith('#') ? h : `#${h}`);
+    if (tags.join(' ') !== (post.hashtags || []).join(' ')) onUpdate({ hashtags: tags });
+  };
+
+  const handleApplySet = (set) => { setHashtags(set.tags.join(' ')); onUpdate({ hashtags: set.tags }); };
+
+  const handleSaveSet = () => {
+    if (!newSetName.trim()) return;
+    const tags = hashtags.split(/[\s,]+/).filter(Boolean).map(h => h.startsWith('#') ? h : `#${h}`);
+    const newSet = { id: Date.now().toString(), name: newSetName, tags };
+    const updated = [...hashtagBank, newSet];
+    localStorage.setItem(`stm_hashtag_bank_${post.id?.split('/')[0] || 'default'}`, JSON.stringify(updated));
+    setHashtagBank(updated);
+    setNewSetName('');
+    setShowSaveSet(false);
+  };
+
+  const handleDeleteSet = (setId) => {
+    const updated = hashtagBank.filter(s => s.id !== setId);
+    localStorage.setItem(`stm_hashtag_bank_${post.id?.split('/')[0] || 'default'}`, JSON.stringify(updated));
+    setHashtagBank(updated);
+  };
+
+  const availableHandles = useMemo(() => {
+    const handles = new Set();
+    accounts.forEach(acc => handles.add(acc.handle));
+    return Array.from(handles);
+  }, [accounts]);
+
+  const selectedPlatforms = post.platforms || {};
+  const previewImage = post.thumbnail || post.editorState?.thumbnail || post.editorState?.slides?.[0]?.backgroundImage || post.editorState?.slides?.[0]?.imageUrl || post.editorState?.clips?.[0]?.thumbnail || null;
+
+  return (
+    <div style={s.drawer}>
+      <div style={s.drawerGrid}>
+        {/* Left: Preview + Actions */}
+        <div style={s.drawerLeft}>
+          {/* Small preview */}
+          <div style={s.drawerPreview}>
+            {post.cloudUrl || post.editorState?.cloudUrl ? (
+              <video src={post.cloudUrl || post.editorState?.cloudUrl} style={s.drawerVideo} controls muted playsInline />
+            ) : previewImage ? (
+              <img src={previewImage} alt="" style={s.drawerImg} />
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                <span style={{ fontSize: '32px' }}>{post.contentType === 'slideshow' ? '🖼️' : '🎥'}</span>
+              </div>
+            )}
+          </div>
+          {/* Status Actions */}
+          <div style={s.drawerActions}>
+            {post.editorState && onEditDraft && (
+              <button style={s.drawerBtn} onClick={() => onEditDraft(post)}>Edit in Studio</button>
+            )}
+            {post.status === POST_STATUS.DRAFT && post.scheduledTime && (
+              <button style={{ ...s.drawerBtn, backgroundColor: '#312e81', color: '#a5b4fc', borderColor: '#6366f1' }} onClick={() => onUpdate({ status: POST_STATUS.SCHEDULED })}>
+                Confirm Schedule
+              </button>
+            )}
+            {post.status === POST_STATUS.SCHEDULED && (
+              <>
+                <button style={{ ...s.drawerBtn, backgroundColor: '#064e3b', color: '#6ee7b7', borderColor: '#10b981' }} onClick={() => onUpdate({ status: POST_STATUS.POSTING })}>
+                  Publish Now
+                </button>
+                <button style={s.drawerBtn} onClick={() => onUpdate({ status: POST_STATUS.DRAFT, scheduledTime: null })}>
+                  Revert to Draft
+                </button>
+              </>
+            )}
+            {post.status === POST_STATUS.FAILED && (
+              <button style={{ ...s.drawerBtn, backgroundColor: '#78350f', color: '#fbbf24', borderColor: '#f59e0b' }} onClick={() => onUpdate({ status: POST_STATUS.SCHEDULED })}>
+                Retry
+              </button>
+            )}
+            {(post.status === POST_STATUS.POSTING || post.status === POST_STATUS.FAILED) && (
+              <button style={s.drawerBtn} onClick={() => onUpdate({ status: POST_STATUS.DRAFT, scheduledTime: null })}>
+                Revert to Draft
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Center: Hashtags + Bank */}
+        <div style={s.drawerCenter}>
+          <label style={s.drawerLabel}>Hashtags</label>
+          <input
+            type="text"
+            value={hashtags}
+            onChange={(e) => setHashtags(e.target.value)}
+            onBlur={handleHashtagsBlur}
+            placeholder="#tag1 #tag2 #tag3"
+            style={s.drawerInput}
+          />
+          {post.hashtags && post.hashtags.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
+              {post.hashtags.map((tag, i) => (
+                <span key={i} style={s.hashtagPill}>{tag}</span>
+              ))}
+            </div>
+          )}
+
+          {/* Hashtag Bank */}
+          {hashtagBank.length > 0 && (
+            <div style={{ marginTop: '10px' }}>
+              <label style={s.drawerLabel}>Saved Sets</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                {hashtagBank.map(set => (
+                  <div key={set.id} style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                    <button
+                      style={s.hashtagSetBtn}
+                      onClick={() => handleApplySet(set)}
+                      title={set.tags.join(' ')}
+                    >
+                      {set.name} ({set.tags.length})
+                    </button>
+                    <button style={{ background: 'none', border: 'none', color: '#52525b', fontSize: '14px', cursor: 'pointer', padding: '0 2px' }} onClick={() => handleDeleteSet(set.id)}>×</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <div style={{ marginTop: '8px' }}>
+            {!showSaveSet ? (
+              <button style={s.linkBtn} onClick={() => setShowSaveSet(true)}>Save Current as Set</button>
+            ) : (
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <input type="text" value={newSetName} onChange={(e) => setNewSetName(e.target.value)} placeholder="Set name..." style={{ ...s.drawerInput, flex: 1 }} />
+                <button style={{ ...s.drawerBtn, padding: '4px 12px' }} onClick={handleSaveSet}>Save</button>
+                <button style={{ ...s.drawerBtn, padding: '4px 8px' }} onClick={() => setShowSaveSet(false)}>×</button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right: Account Selection + Results */}
+        <div style={s.drawerRight}>
+          {/* Per-platform account selector */}
+          {Object.keys(selectedPlatforms).length > 0 && (
+            <div>
+              <label style={s.drawerLabel}>Accounts</label>
+              {Object.keys(selectedPlatforms).map(platform => (
+                <div key={platform} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '11px', color: PLATFORM_COLORS[platform], fontWeight: '600', width: '70px' }}>{PLATFORM_LABELS[platform]}</span>
+                  <select
+                    value={selectedPlatforms[platform]?.accountId || ''}
+                    onChange={(e) => {
+                      const handle = e.target.selectedOptions?.[0]?.dataset?.handle || '';
+                      onSetPlatformAccount(platform, e.target.value, handle);
+                    }}
+                    style={s.accountSelect}
+                  >
+                    <option value="">Auto</option>
+                    {availableHandles.map(handle => {
+                      const mapping = lateAccountIds[handle];
+                      const accountId = mapping?.[platform];
+                      if (!accountId) return null;
+                      return <option key={handle} value={accountId} data-handle={handle}>@{handle}</option>;
+                    })}
+                  </select>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Post Results */}
+          {post.postResults && Object.keys(post.postResults).length > 0 && (
+            <div style={{ marginTop: '10px' }}>
+              <label style={s.drawerLabel}>Results</label>
+              {Object.entries(post.postResults).map(([platform, result]) => (
+                <div key={platform} style={s.resultRow}>
+                  <span style={{ color: PLATFORM_COLORS[platform] || '#fff', fontSize: '12px', fontWeight: '600' }}>
+                    {PLATFORM_LABELS[platform] || platform}
+                  </span>
+                  {result.error ? (
+                    <span style={{ color: '#ef4444', fontSize: '11px' }}>{result.error}</span>
+                  ) : (
+                    <span style={{ color: '#10b981', fontSize: '11px' }}>
+                      Posted {result.url && <a href={result.url} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', textDecoration: 'underline' }}>View</a>}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════
 // AddFromDraftsModal — Modal to add content from library
 // ═══════════════════════════════════════════════════
 
@@ -574,9 +885,7 @@ const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) =>
       try {
         const data = await getCreatedContent(artistId);
         setContent(data || { videos: [], slideshows: [] });
-      } catch (err) {
-        log.error('Failed to load content:', err);
-      }
+      } catch (err) { log.error('Failed to load content:', err); }
       setLoadingContent(false);
     };
     loadContent();
@@ -597,25 +906,13 @@ const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) =>
 
   const handleSelectItem = (itemId) => {
     const newSet = new Set(selectedItems);
-    if (newSet.has(itemId)) {
-      newSet.delete(itemId);
-    } else {
-      newSet.add(itemId);
-    }
+    if (newSet.has(itemId)) newSet.delete(itemId); else newSet.add(itemId);
     setSelectedItems(newSet);
   };
 
   const handleSelectAll = () => {
-    if (selectedItems.size === items.length) {
-      setSelectedItems(new Set());
-    } else {
-      setSelectedItems(new Set(items.map(item => item.id)));
-    }
-  };
-
-  const handleAdd = () => {
-    const itemsToAdd = items.filter(item => selectedItems.has(item.id));
-    onAdd(itemsToAdd);
+    if (selectedItems.size === items.length) setSelectedItems(new Set());
+    else setSelectedItems(new Set(items.map(item => item.id)));
   };
 
   return (
@@ -623,108 +920,57 @@ const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) =>
       <div style={s.modalContent} onClick={(e) => e.stopPropagation()}>
         <div style={s.modalHeader}>
           <h2 style={s.modalTitle}>Add from Drafts</h2>
-          <button style={s.modalCloseBtn} onClick={onClose}>×</button>
+          <button style={s.modalClose} onClick={onClose}>×</button>
         </div>
-
-        {/* Tabs */}
         <div style={s.modalTabs}>
           {['all', 'videos', 'slideshows'].map(tab => (
             <button
               key={tab}
-              style={{
-                ...s.modalTab,
-                ...(selectedTab === tab ? s.modalTabActive : {})
-              }}
-              onClick={() => {
-                setSelectedTab(tab);
-                setSelectedItems(new Set());
-              }}
+              style={{ ...s.filterTab, ...(selectedTab === tab ? s.filterTabActive : {}) }}
+              onClick={() => { setSelectedTab(tab); setSelectedItems(new Set()); }}
             >
               {tab === 'all' ? 'All' : tab === 'videos' ? 'Videos' : 'Slideshows'}
             </button>
           ))}
         </div>
-
-        {/* Content Grid */}
         {loadingContent ? (
-          <div style={s.modalLoading}>
-            <div style={s.spinner} />
-            <p style={{ color: '#71717a', marginTop: '16px' }}>Loading content...</p>
-          </div>
+          <div style={s.modalLoading}><div style={s.spinner} /><p style={{ color: '#71717a', marginTop: '16px' }}>Loading...</p></div>
         ) : (
           <>
-            <div style={s.modalItemsContainer}>
+            <div style={s.modalGrid}>
               {items.length === 0 ? (
-                <div style={s.modalEmpty}>
-                  <p style={{ color: '#71717a' }}>No content available</p>
-                </div>
-              ) : (
-                <div style={s.modalGrid}>
-                  {items.map(item => {
-                    const isDuplicate = existingContentIds.has(item.id);
-                    const isSelected = selectedItems.has(item.id);
-                    return (
-                      <div
-                        key={item.id}
-                        style={{
-                          ...s.modalCard,
-                          ...(isSelected ? s.modalCardSelected : {}),
-                          opacity: isDuplicate ? 0.7 : 1
-                        }}
-                        onClick={() => handleSelectItem(item.id)}
-                      >
-                        <div style={s.modalCardThumb}>
-                          {item.thumbnail ? (
-                            <img src={item.thumbnail} alt="" style={s.modalCardThumbImg} />
-                          ) : (
-                            <span style={{ fontSize: '32px' }}>
-                              {item.type === 'slideshow' ? '🖼️' : '🎥'}
-                            </span>
-                          )}
-                          {isDuplicate && (
-                            <div style={s.duplicateBadge}>Already queued</div>
-                          )}
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => handleSelectItem(item.id)}
-                            style={s.modalCardCheckbox}
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        </div>
-                        <div style={s.modalCardContent}>
-                          <p style={s.modalCardName}>{item.name}</p>
-                          <span style={s.modalCardType}>
-                            {item.type === 'slideshow' ? 'Slideshow' : 'Video'}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                <div style={{ padding: '60px 20px', textAlign: 'center', color: '#71717a', gridColumn: '1 / -1' }}>No content available</div>
+              ) : items.map(item => {
+                const isDuplicate = existingContentIds.has(item.id);
+                const isSelected = selectedItems.has(item.id);
+                return (
+                  <div
+                    key={item.id}
+                    style={{ ...s.modalCard, ...(isSelected ? { borderColor: '#6366f1', backgroundColor: '#1e1e2e' } : {}), opacity: isDuplicate ? 0.6 : 1 }}
+                    onClick={() => handleSelectItem(item.id)}
+                  >
+                    <div style={s.modalCardThumb}>
+                      {item.thumbnail ? <img src={item.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> :
+                        <span style={{ fontSize: '24px' }}>{item.type === 'slideshow' ? '🖼️' : '🎥'}</span>}
+                      {isDuplicate && <div style={s.dupBadge}>Already queued</div>}
+                      <input type="checkbox" checked={isSelected} onChange={() => handleSelectItem(item.id)} style={{ position: 'absolute', top: '6px', right: '6px', width: '16px', height: '16px' }} onClick={(e) => e.stopPropagation()} />
+                    </div>
+                    <div style={{ padding: '6px 8px' }}>
+                      <p style={{ margin: 0, fontSize: '11px', fontWeight: '500', color: '#e4e4e7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-
-            {/* Footer */}
             <div style={s.modalFooter}>
-              <div style={s.modalFooterLeft}>
-                <button style={s.modalFooterBtn} onClick={handleSelectAll}>
-                  {selectedItems.size === items.length ? 'Clear' : 'Select All'}
-                </button>
-              </div>
-              <div style={s.modalFooterRight}>
-                <button style={{ ...s.modalFooterBtn, backgroundColor: '#27272a' }} onClick={onClose}>
-                  Cancel
-                </button>
+              <button style={s.drawerBtn} onClick={handleSelectAll}>
+                {selectedItems.size === items.length ? 'Clear' : 'Select All'}
+              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button style={s.drawerBtn} onClick={onClose}>Cancel</button>
                 <button
-                  style={{
-                    ...s.modalFooterBtn,
-                    backgroundColor: '#6366f1',
-                    color: '#fff',
-                    opacity: selectedItems.size === 0 ? 0.5 : 1,
-                    cursor: selectedItems.size === 0 ? 'default' : 'pointer'
-                  }}
-                  onClick={handleAdd}
+                  style={{ ...s.applyBtn, opacity: selectedItems.size === 0 ? 0.5 : 1 }}
+                  onClick={() => onAdd(items.filter(i => selectedItems.has(i.id)))}
                   disabled={selectedItems.size === 0}
                 >
                   Add {selectedItems.size > 0 ? `(${selectedItems.size})` : ''} to Queue
@@ -739,632 +985,10 @@ const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) =>
 };
 
 // ═══════════════════════════════════════════════════
-// QueueCard — Left panel item (draggable)
-// ═══════════════════════════════════════════════════
-
-const QueueCard = ({
-  post, index, isSelected, isDragging, isDragOver, isPaused,
-  onSelect, onDragStart, onDragOver, onDrop, onDragEnd, onDelete
-}) => {
-  const statusColor = {
-    [POST_STATUS.DRAFT]: '#71717a',
-    [POST_STATUS.SCHEDULED]: '#6366f1',
-    [POST_STATUS.POSTING]: '#f59e0b',
-    [POST_STATUS.POSTED]: '#10b981',
-    [POST_STATUS.FAILED]: '#ef4444'
-  }[post.status] || '#71717a';
-
-  const typeIcon = post.contentType === 'slideshow' ? '🖼️' : '🎥';
-  const platformChips = Object.keys(post.platforms || {});
-
-  return (
-    <div
-      draggable
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      onDragEnd={onDragEnd}
-      onClick={onSelect}
-      style={{
-        ...s.queueCard,
-        ...(isSelected ? s.queueCardSelected : {}),
-        ...(isDragOver ? s.queueCardDragOver : {}),
-        opacity: isDragging ? 0.4 : 1,
-        cursor: isDragging ? 'grabbing' : 'grab',
-        position: 'relative'
-      }}
-    >
-      {isPaused && post.status === POST_STATUS.SCHEDULED && (
-        <div style={s.pauseOverlay}>⏸</div>
-      )}
-
-      <div style={s.queueCardHandle}>
-        <span style={{ color: '#52525b', fontSize: '14px' }}>{'\u2630'}</span>
-        <span style={s.queueNumber}>#{index + 1}</span>
-      </div>
-
-      <div style={s.queueThumb}>
-        {post.thumbnail ? (
-          <img src={post.thumbnail} alt="" style={s.queueThumbImg} />
-        ) : (
-          <span style={{ fontSize: '18px' }}>{typeIcon}</span>
-        )}
-      </div>
-
-      <div style={s.queueInfo}>
-        <div style={s.queueName}>{post.contentName}</div>
-        <div style={s.queueMeta}>
-          <span style={{ ...s.statusDot, backgroundColor: statusColor }} />
-          <span style={{ color: statusColor, fontSize: '11px', textTransform: 'capitalize' }}>
-            {post.status}
-          </span>
-          {post.scheduledTime && (
-            <span style={s.queueTime}>
-              {new Date(post.scheduledTime).toLocaleString('en-US', {
-                month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
-              })}
-            </span>
-          )}
-        </div>
-        {platformChips.length > 0 && (
-          <div style={s.chipRow}>
-            {platformChips.map(p => (
-              <span
-                key={p}
-                style={{ ...s.platformChip, backgroundColor: PLATFORM_COLORS[p] + '33', color: PLATFORM_COLORS[p] }}
-              >
-                {PLATFORM_LABELS[p]?.charAt(0) || p.charAt(0).toUpperCase()}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <button
-        style={s.queueDeleteBtn}
-        onClick={(e) => { e.stopPropagation(); onDelete(); }}
-        title="Remove from queue"
-      >
-        &times;
-      </button>
-    </div>
-  );
-};
-
-// ═══════════════════════════════════════════════════
-// PreviewPanel — Center panel (video/slideshow preview)
-// ═══════════════════════════════════════════════════
-
-const PreviewPanel = ({ post, onEditDraft, onUpdate }) => {
-  const videoRef = useRef(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-
-  const handlePlayPause = () => {
-    if (!videoRef.current) return;
-    if (isPlaying) {
-      videoRef.current.pause();
-    } else {
-      videoRef.current.play();
-    }
-    setIsPlaying(!isPlaying);
-  };
-
-  const canPlay = !!(post.cloudUrl);
-
-  // Try to find a preview image from multiple sources
-  const previewImage = post.thumbnail
-    || post.editorState?.thumbnail
-    || post.editorState?.slides?.[0]?.backgroundImage
-    || post.editorState?.slides?.[0]?.imageUrl
-    || post.editorState?.clips?.[0]?.thumbnail
-    || null;
-
-  return (
-    <div style={s.previewContainer}>
-      <div style={s.panelHeader}>
-        <span style={s.panelTitle}>Preview</span>
-        {post.editorState && onEditDraft && (
-          <button
-            style={s.editDraftBtn}
-            onClick={() => onEditDraft(post)}
-            title="Re-open in editor with saved state"
-          >
-            Edit in Studio
-          </button>
-        )}
-      </div>
-
-      <div style={s.previewArea}>
-        {canPlay ? (
-          <div style={s.videoWrapper}>
-            <video
-              ref={videoRef}
-              src={post.cloudUrl}
-              style={s.previewVideo}
-              onEnded={() => setIsPlaying(false)}
-              playsInline
-              muted
-            />
-            <button style={s.playOverlay} onClick={handlePlayPause}>
-              {isPlaying ? '⏸' : '▶'}
-            </button>
-          </div>
-        ) : previewImage ? (
-          <img src={previewImage} alt={post.contentName} style={s.previewImage} />
-        ) : post.editorState?.cloudUrl ? (
-          <div style={s.videoWrapper}>
-            <video
-              ref={videoRef}
-              src={post.editorState.cloudUrl}
-              style={s.previewVideo}
-              onEnded={() => setIsPlaying(false)}
-              playsInline
-              muted
-            />
-            <button style={s.playOverlay} onClick={handlePlayPause}>
-              {isPlaying ? '⏸' : '▶'}
-            </button>
-          </div>
-        ) : (
-          <div style={s.previewPlaceholder}>
-            <span style={{ fontSize: '48px' }}>
-              {post.contentType === 'slideshow' ? '🖼️' : '🎥'}
-            </span>
-            <p style={{ color: '#71717a', marginTop: '12px', fontSize: '14px' }}>
-              No preview available
-            </p>
-          </div>
-        )}
-      </div>
-
-      <div style={s.previewMeta}>
-        <div style={s.metaRow}>
-          <span style={s.metaLabel}>Name</span>
-          <span style={s.metaValue}>{post.contentName}</span>
-        </div>
-        <div style={s.metaRow}>
-          <span style={s.metaLabel}>Type</span>
-          <span style={s.metaValue}>{post.contentType === 'slideshow' ? 'Slideshow' : 'Video'}</span>
-        </div>
-        <div style={s.metaRow}>
-          <span style={s.metaLabel}>Status</span>
-          <span style={{
-            ...s.statusPill,
-            backgroundColor: {
-              [POST_STATUS.DRAFT]: '#27272a',
-              [POST_STATUS.SCHEDULED]: '#312e81',
-              [POST_STATUS.POSTING]: '#78350f',
-              [POST_STATUS.POSTED]: '#064e3b',
-              [POST_STATUS.FAILED]: '#7f1d1d'
-            }[post.status] || '#27272a',
-            color: {
-              [POST_STATUS.DRAFT]: '#a1a1aa',
-              [POST_STATUS.SCHEDULED]: '#a5b4fc',
-              [POST_STATUS.POSTING]: '#fbbf24',
-              [POST_STATUS.POSTED]: '#6ee7b7',
-              [POST_STATUS.FAILED]: '#fca5a5'
-            }[post.status] || '#a1a1aa'
-          }}>
-            {post.status}
-          </span>
-        </div>
-        {post.scheduledTime && (
-          <div style={s.metaRow}>
-            <span style={s.metaLabel}>Scheduled</span>
-            <span style={s.metaValue}>
-              {new Date(post.scheduledTime).toLocaleString('en-US', {
-                weekday: 'short', month: 'short', day: 'numeric',
-                hour: 'numeric', minute: '2-digit'
-              })}
-            </span>
-          </div>
-        )}
-        {post.createdAt && (
-          <div style={s.metaRow}>
-            <span style={s.metaLabel}>Created</span>
-            <span style={s.metaValue}>
-              {new Date(post.createdAt).toLocaleString('en-US', {
-                month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
-              })}
-            </span>
-          </div>
-        )}
-
-        {/* Status action buttons */}
-        <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
-          {post.status === POST_STATUS.DRAFT && post.scheduledTime && (
-            <button
-              style={{ ...s.statusActionBtn, backgroundColor: '#312e81', color: '#a5b4fc', borderColor: '#6366f1' }}
-              onClick={() => onUpdate({ status: POST_STATUS.SCHEDULED })}
-            >
-              Schedule
-            </button>
-          )}
-          {post.status === POST_STATUS.SCHEDULED && (
-            <>
-              <button
-                style={{ ...s.statusActionBtn, backgroundColor: '#064e3b', color: '#6ee7b7', borderColor: '#10b981' }}
-                onClick={() => onUpdate({ status: POST_STATUS.POSTING })}
-              >
-                Publish Now
-              </button>
-              <button
-                style={{ ...s.statusActionBtn, backgroundColor: '#27272a', color: '#a1a1aa', borderColor: '#3f3f46' }}
-                onClick={() => onUpdate({ status: POST_STATUS.DRAFT, scheduledTime: null })}
-              >
-                Revert to Draft
-              </button>
-            </>
-          )}
-          {post.status === POST_STATUS.FAILED && (
-            <button
-              style={{ ...s.statusActionBtn, backgroundColor: '#78350f', color: '#fbbf24', borderColor: '#f59e0b' }}
-              onClick={() => onUpdate({ status: POST_STATUS.SCHEDULED })}
-            >
-              Retry
-            </button>
-          )}
-          {(post.status === POST_STATUS.POSTING || post.status === POST_STATUS.FAILED) && (
-            <button
-              style={{ ...s.statusActionBtn, backgroundColor: '#27272a', color: '#a1a1aa', borderColor: '#3f3f46' }}
-              onClick={() => onUpdate({ status: POST_STATUS.DRAFT, scheduledTime: null })}
-            >
-              Revert to Draft
-            </button>
-          )}
-        </div>
-
-        {/* Post results (if posted/failed) */}
-        {post.postResults && Object.keys(post.postResults).length > 0 && (
-          <div style={{ marginTop: '12px' }}>
-            {Object.entries(post.postResults).map(([platform, result]) => (
-              <div key={platform} style={s.resultRow}>
-                <span style={{ color: PLATFORM_COLORS[platform] || '#fff', fontSize: '13px' }}>
-                  {PLATFORM_LABELS[platform] || platform}
-                </span>
-                {result.error ? (
-                  <span style={{ color: '#ef4444', fontSize: '12px' }}>{result.error}</span>
-                ) : (
-                  <span style={{ color: '#10b981', fontSize: '12px' }}>
-                    Posted {result.url && (
-                      <a href={result.url} target="_blank" rel="noopener noreferrer"
-                        style={{ color: '#6366f1', textDecoration: 'underline' }}>
-                        View
-                      </a>
-                    )}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// ═══════════════════════════════════════════════════
-// EditPanel — Right panel (caption, hashtags, platforms, time)
-// ═══════════════════════════════════════════════════
-
-const EditPanel = ({
-  post, accounts, lateAccountIds,
-  onUpdate, onTogglePlatform, onSetPlatformAccount,
-  onSchedulePost, onRenderVideo
-}) => {
-  const [caption, setCaption] = useState(post.caption || '');
-  const [hashtags, setHashtags] = useState((post.hashtags || []).join(' '));
-  const [schedDate, setSchedDate] = useState('');
-  const [schedTime, setSchedTime] = useState('');
-  const [hashtagBank, setHashtagBank] = useState([]);
-  const [showSaveHashtagSet, setShowSaveHashtagSet] = useState(false);
-  const [newSetName, setNewSetName] = useState('');
-
-  // Load hashtag bank from localStorage
-  useEffect(() => {
-    const key = `stm_hashtag_bank_${post.id?.split('/')[0] || 'default'}`;
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      try {
-        setHashtagBank(JSON.parse(saved));
-      } catch {
-        setHashtagBank([]);
-      }
-    }
-  }, [post]);
-
-  // Sync when post changes
-  useEffect(() => {
-    setCaption(post.caption || '');
-    setHashtags((post.hashtags || []).join(' '));
-    if (post.scheduledTime) {
-      const d = new Date(post.scheduledTime);
-      setSchedDate(d.toISOString().split('T')[0]);
-      setSchedTime(d.toTimeString().substring(0, 5));
-    } else {
-      setSchedDate('');
-      setSchedTime('');
-    }
-  }, [post.id, post.caption, post.hashtags, post.scheduledTime]);
-
-  const handleCaptionBlur = () => {
-    if (caption !== (post.caption || '')) {
-      onUpdate({ caption });
-    }
-  };
-
-  const handleHashtagsBlur = () => {
-    const tags = hashtags.split(/[\s,]+/).filter(Boolean).map(h => h.startsWith('#') ? h : `#${h}`);
-    if (tags.join(' ') !== (post.hashtags || []).join(' ')) {
-      onUpdate({ hashtags: tags });
-    }
-  };
-
-  const handleApplyHashtagSet = (set) => {
-    setHashtags(set.tags.join(' '));
-    onUpdate({ hashtags: set.tags });
-  };
-
-  const handleSaveHashtagSet = () => {
-    if (!newSetName.trim()) return;
-    const tags = hashtags.split(/[\s,]+/).filter(Boolean).map(h => h.startsWith('#') ? h : `#${h}`);
-    const newSet = { id: Date.now().toString(), name: newSetName, tags };
-    const updated = [...hashtagBank, newSet];
-    const artistId = post.id?.split('/')[0] || 'default';
-    const key = `stm_hashtag_bank_${artistId}`;
-    localStorage.setItem(key, JSON.stringify(updated));
-    setHashtagBank(updated);
-    setNewSetName('');
-    setShowSaveHashtagSet(false);
-  };
-
-  const handleDeleteHashtagSet = (setId) => {
-    const updated = hashtagBank.filter(s => s.id !== setId);
-    const artistId = post.id?.split('/')[0] || 'default';
-    const key = `stm_hashtag_bank_${artistId}`;
-    localStorage.setItem(key, JSON.stringify(updated));
-    setHashtagBank(updated);
-  };
-
-  const handleScheduleTimeChange = (newDate, newTime) => {
-    const d = newDate || schedDate;
-    const t = newTime || schedTime;
-    if (d && t) {
-      const scheduledTime = new Date(`${d}T${t}`).toISOString();
-      onUpdate({ scheduledTime, status: POST_STATUS.SCHEDULED });
-    }
-  };
-
-  const handleMarkDraft = () => {
-    onUpdate({ status: POST_STATUS.DRAFT, scheduledTime: null });
-  };
-
-  const availableHandles = useMemo(() => {
-    const handles = new Set();
-    accounts.forEach(acc => handles.add(acc.handle));
-    return Array.from(handles);
-  }, [accounts]);
-
-  const allPlatforms = Object.values(PLATFORMS);
-  const selectedPlatforms = post.platforms || {};
-
-  return (
-    <div style={s.editContainer}>
-      <div style={s.panelHeader}>
-        <span style={s.panelTitle}>Details</span>
-      </div>
-
-      <div style={s.editScroll}>
-        {/* Caption */}
-        <div style={s.editSection}>
-          <label style={s.label}>Caption</label>
-          <textarea
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-            onBlur={handleCaptionBlur}
-            style={s.textarea}
-            rows={4}
-            placeholder="Write a caption..."
-          />
-        </div>
-
-        {/* Hashtags */}
-        <div style={s.editSection}>
-          <label style={s.label}>Hashtags</label>
-          <input
-            type="text"
-            value={hashtags}
-            onChange={(e) => setHashtags(e.target.value)}
-            onBlur={handleHashtagsBlur}
-            style={s.textInput}
-            placeholder="#tag1 #tag2 #tag3"
-          />
-          {post.hashtags && post.hashtags.length > 0 && (
-            <div style={s.hashtagPreview}>
-              {post.hashtags.map((tag, i) => (
-                <span key={i} style={s.hashtagPill}>{tag}</span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Hashtag Bank */}
-        {hashtagBank.length > 0 && (
-          <div style={s.editSection}>
-            <label style={s.label}>Hashtag Sets</label>
-            <div style={s.hashtagBank}>
-              {hashtagBank.map(set => (
-                <div key={set.id} style={s.hashtagSet}>
-                  <button
-                    style={s.hashtagSetPill}
-                    onClick={() => handleApplyHashtagSet(set)}
-                    title={`Apply: ${set.tags.join(' ')}`}
-                  >
-                    {set.name} ({set.tags.length})
-                  </button>
-                  <button
-                    style={s.hashtagSetDelete}
-                    onClick={() => handleDeleteHashtagSet(set.id)}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Save current hashtags as set */}
-        <div style={s.editSection}>
-          {!showSaveHashtagSet ? (
-            <button
-              style={s.saveHashtagBtn}
-              onClick={() => setShowSaveHashtagSet(true)}
-            >
-              Save Current as Set
-            </button>
-          ) : (
-            <div style={s.saveHashtagForm}>
-              <input
-                type="text"
-                value={newSetName}
-                onChange={(e) => setNewSetName(e.target.value)}
-                placeholder="Set name (e.g., 'Gaming')"
-                style={s.textInput}
-              />
-              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                <button
-                  style={{ ...s.saveHashtagBtn, flex: 1 }}
-                  onClick={handleSaveHashtagSet}
-                >
-                  Save
-                </button>
-                <button
-                  style={{ ...s.saveHashtagBtn, backgroundColor: '#27272a', color: '#a1a1aa', flex: 1 }}
-                  onClick={() => setShowSaveHashtagSet(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Schedule Time */}
-        <div style={s.editSection}>
-          <label style={s.label}>Schedule Time</label>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <input
-              type="date"
-              value={schedDate}
-              onChange={(e) => {
-                setSchedDate(e.target.value);
-                handleScheduleTimeChange(e.target.value, null);
-              }}
-              style={{ ...s.dateInput, flex: 1 }}
-            />
-            <input
-              type="time"
-              value={schedTime}
-              onChange={(e) => {
-                setSchedTime(e.target.value);
-                handleScheduleTimeChange(null, e.target.value);
-              }}
-              style={{ ...s.timeInput, flex: 1 }}
-            />
-          </div>
-          {post.status === POST_STATUS.SCHEDULED && (
-            <button style={s.linkBtn} onClick={handleMarkDraft}>
-              Revert to Draft
-            </button>
-          )}
-        </div>
-
-        {/* Platforms */}
-        <div style={s.editSection}>
-          <label style={s.label}>Platforms</label>
-          <div style={s.platformGrid}>
-            {allPlatforms.map(platform => {
-              const isActive = !!selectedPlatforms[platform];
-              const color = PLATFORM_COLORS[platform];
-
-              return (
-                <div key={platform} style={s.platformItem}>
-                  <button
-                    style={{
-                      ...s.platformToggle,
-                      backgroundColor: isActive ? color + '22' : '#27272a',
-                      borderColor: isActive ? color : '#3f3f46',
-                      color: isActive ? color : '#71717a'
-                    }}
-                    onClick={() => onTogglePlatform(platform)}
-                  >
-                    {PLATFORM_LABELS[platform]}
-                  </button>
-
-                  {isActive && (
-                    <select
-                      value={selectedPlatforms[platform]?.accountId || ''}
-                      onChange={(e) => {
-                        const handle = e.target.selectedOptions?.[0]?.dataset?.handle || '';
-                        onSetPlatformAccount(platform, e.target.value, handle);
-                      }}
-                      style={s.accountSelect}
-                    >
-                      <option value="">Auto</option>
-                      {availableHandles.map(handle => {
-                        const mapping = lateAccountIds[handle];
-                        const accountId = mapping?.[platform];
-                        if (!accountId) return null;
-                        return (
-                          <option key={handle} value={accountId} data-handle={handle}>
-                            @{handle}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Post Results */}
-        {post.postResults && Object.keys(post.postResults).length > 0 && (
-          <div style={s.editSection}>
-            <label style={s.label}>Post Results</label>
-            {Object.entries(post.postResults).map(([platform, result]) => (
-              <div key={platform} style={s.resultRow}>
-                <span style={{ color: PLATFORM_COLORS[platform] || '#fff', fontSize: '13px' }}>
-                  {PLATFORM_LABELS[platform] || platform}
-                </span>
-                {result.error ? (
-                  <span style={{ color: '#ef4444', fontSize: '12px' }}>{result.error}</span>
-                ) : (
-                  <span style={{ color: '#10b981', fontSize: '12px' }}>
-                    Posted {result.url && (
-                      <a href={result.url} target="_blank" rel="noopener noreferrer"
-                        style={{ color: '#6366f1', textDecoration: 'underline' }}>
-                        View
-                      </a>
-                    )}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// ═══════════════════════════════════════════════════
 // CalendarView — Month calendar with drag support
 // ═══════════════════════════════════════════════════
 
-const CalendarView = ({ posts, selectedPostId, onSelectPost, calendarDate, onChangeMonth, onDragPost }) => {
+const CalendarView = ({ posts, expandedPostId, onSelectPost, calendarDate, onChangeMonth, onDragPost }) => {
   const [draggedPostId, setDraggedPostId] = useState(null);
   const [dragFromDate, setDragFromDate] = useState(null);
 
@@ -1376,12 +1000,8 @@ const CalendarView = ({ posts, selectedPostId, onSelectPost, calendarDate, onCha
   const startingDayOfWeek = firstDay.getDay();
 
   const days = [];
-  for (let i = 0; i < startingDayOfWeek; i++) {
-    days.push(null);
-  }
-  for (let i = 1; i <= daysInMonth; i++) {
-    days.push(new Date(year, month, i));
-  }
+  for (let i = 0; i < startingDayOfWeek; i++) days.push(null);
+  for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month, i));
 
   const postsPerDay = {};
   posts.forEach(post => {
@@ -1394,95 +1014,49 @@ const CalendarView = ({ posts, selectedPostId, onSelectPost, calendarDate, onCha
 
   const today = new Date().toDateString();
 
-  const handleDragPostStart = (e, postId, date) => {
-    e.stopPropagation();
-    setDraggedPostId(postId);
-    setDragFromDate(date);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragPostOver = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  const handleDropPost = (e, toDate) => {
-    e.preventDefault();
-    if (draggedPostId && dragFromDate) {
-      onDragPost(draggedPostId, dragFromDate, toDate);
-    }
-    setDraggedPostId(null);
-    setDragFromDate(null);
-  };
-
   return (
-    <div style={s.calendarView}>
-      <div style={s.calendarHeader}>
-        <div style={s.calendarNav}>
-          <button style={s.calendarNavBtn} onClick={() => onChangeMonth(new Date(year, month - 1))}>
-            &#8249;
-          </button>
-          <span style={s.calendarTitle}>
-            {firstDay.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
-          </span>
-          <button style={s.calendarNavBtn} onClick={() => onChangeMonth(new Date(year, month + 1))}>
-            &#8250;
-          </button>
-          <button style={s.calendarTodayBtn} onClick={() => onChangeMonth(new Date())}>
-            Today
-          </button>
-        </div>
+    <div style={s.calView}>
+      <div style={s.calHeader}>
+        <button style={s.calNavBtn} onClick={() => onChangeMonth(new Date(year, month - 1))}>&#8249;</button>
+        <span style={s.calTitle}>{firstDay.toLocaleString('en-US', { month: 'long', year: 'numeric' })}</span>
+        <button style={s.calNavBtn} onClick={() => onChangeMonth(new Date(year, month + 1))}>&#8250;</button>
+        <button style={{ ...s.drawerBtn, marginLeft: '8px', padding: '4px 10px' }} onClick={() => onChangeMonth(new Date())}>Today</button>
       </div>
-
-      <div style={s.calendarGrid}>
-        {/* Day headers */}
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-          <div key={day} style={s.calendarDayHeader}>
-            {day}
-          </div>
+      <div style={s.calGrid}>
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+          <div key={d} style={s.calDayHeader}>{d}</div>
         ))}
-
-        {/* Day cells */}
         {days.map((date, idx) => {
           const dateKey = date?.toDateString();
           const dayPosts = dateKey ? (postsPerDay[dateKey] || []) : [];
           const isToday = dateKey === today;
-
           return (
             <div
               key={idx}
-              style={{
-                ...s.calendarCell,
-                ...(isToday ? s.calendarCellToday : {})
-              }}
-              onDragOver={date ? handleDragPostOver : null}
-              onDrop={date ? (e) => handleDropPost(e, date) : null}
+              style={{ ...s.calCell, ...(isToday ? { borderColor: '#6366f1', borderWidth: '2px' } : {}) }}
+              onDragOver={date ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } : null}
+              onDrop={date ? (e) => { e.preventDefault(); if (draggedPostId && dragFromDate) onDragPost(draggedPostId, dragFromDate, date); setDraggedPostId(null); setDragFromDate(null); } : null}
             >
               {date && (
                 <>
-                  <div style={s.calendarCellDate}>{date.getDate()}</div>
-                  <div style={s.calendarCellPosts}>
+                  <div style={s.calCellDate}>{date.getDate()}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
                     {dayPosts.map(post => (
                       <div
                         key={post.id}
                         draggable
-                        onDragStart={(e) => handleDragPostStart(e, post.id, date)}
+                        onDragStart={(e) => { e.stopPropagation(); setDraggedPostId(post.id); setDragFromDate(date); e.dataTransfer.effectAllowed = 'move'; }}
                         onClick={() => onSelectPost(post.id)}
                         style={{
-                          ...s.calendarPostChip,
-                          backgroundColor: {
-                            [POST_STATUS.DRAFT]: '#71717a',
-                            [POST_STATUS.SCHEDULED]: '#6366f1',
-                            [POST_STATUS.POSTING]: '#f59e0b',
-                            [POST_STATUS.POSTED]: '#10b981',
-                            [POST_STATUS.FAILED]: '#ef4444'
-                          }[post.status] || '#71717a',
-                          ...(selectedPostId === post.id ? s.calendarPostChipSelected : {}),
+                          padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: '500', color: '#fff', cursor: 'pointer',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          backgroundColor: { [POST_STATUS.DRAFT]: '#71717a', [POST_STATUS.SCHEDULED]: '#6366f1', [POST_STATUS.POSTING]: '#f59e0b', [POST_STATUS.POSTED]: '#10b981', [POST_STATUS.FAILED]: '#ef4444' }[post.status] || '#71717a',
+                          ...(expandedPostId === post.id ? { boxShadow: '0 0 0 2px #6366f1' } : {}),
                           opacity: draggedPostId === post.id ? 0.5 : 1
                         }}
-                        title={post.contentName}
+                        title={`${post.contentName} — ${new Date(post.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}
                       >
-                        {post.contentName.substring(0, 10)}
+                        {post.contentName.substring(0, 12)}
                       </div>
                     ))}
                   </div>
@@ -1497,947 +1071,112 @@ const CalendarView = ({ posts, selectedPostId, onSelectPost, calendarDate, onCha
 };
 
 // ═══════════════════════════════════════════════════
-// Styles
+// Styles — Optimized for command center density
 // ═══════════════════════════════════════════════════
 
 const s = {
-  // Page layout
-  pageContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100%',
-    backgroundColor: '#0a0a0f',
-    color: '#fff',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-  },
-  loadingState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100%'
-  },
-  spinner: {
-    width: '32px',
-    height: '32px',
-    border: '3px solid #27272a',
-    borderTop: '3px solid #6366f1',
-    borderRadius: '50%',
-    animation: 'spin 1s linear infinite'
-  },
+  // Page
+  page: { display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: '#0a0a0f', color: '#fff', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
+  loadingState: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' },
+  spinner: { width: '32px', height: '32px', border: '3px solid #27272a', borderTop: '3px solid #6366f1', borderRadius: '50%', animation: 'spin 1s linear infinite' },
 
   // Header
-  pageHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '16px 24px',
-    borderBottom: '1px solid #27272a',
-    backgroundColor: '#18181b'
-  },
-  headerLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '16px'
-  },
-  backBtn: {
-    background: 'none',
-    border: '1px solid #3f3f46',
-    color: '#a1a1aa',
-    width: '36px',
-    height: '36px',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  pageTitle: {
-    margin: 0,
-    fontSize: '20px',
-    fontWeight: '600',
-    color: '#fff'
-  },
-  pageSubtitle: {
-    margin: '2px 0 0 0',
-    fontSize: '13px',
-    color: '#71717a'
-  },
-  headerActions: {
-    display: 'flex',
-    gap: '8px'
-  },
-  headerBtn: {
-    padding: '8px 14px',
-    borderRadius: '8px',
-    border: '1px solid #6366f1',
-    backgroundColor: 'transparent',
-    color: '#a5b4fc',
-    fontSize: '13px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    whiteSpace: 'nowrap'
-  },
-  viewToggleBtn: {
-    padding: '8px 12px',
-    borderRadius: '8px',
-    border: '1px solid #3f3f46',
-    backgroundColor: 'transparent',
-    color: '#a1a1aa',
-    fontSize: '16px',
-    cursor: 'pointer'
-  },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderBottom: '1px solid #27272a', backgroundColor: '#18181b', flexShrink: 0 },
+  headerLeft: { display: 'flex', alignItems: 'center', gap: '12px' },
+  backBtn: { background: 'none', border: '1px solid #3f3f46', color: '#a1a1aa', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  pageTitle: { margin: 0, fontSize: '18px', fontWeight: '600', color: '#fff' },
+  subtitle: { margin: '1px 0 0 0', fontSize: '12px', color: '#71717a' },
+  headerActions: { display: 'flex', gap: '6px' },
+  actionBtn: { padding: '6px 14px', borderRadius: '8px', border: '1px solid #6366f1', backgroundColor: 'transparent', color: '#a5b4fc', fontSize: '12px', fontWeight: '500', cursor: 'pointer', whiteSpace: 'nowrap' },
+  iconBtn: { padding: '6px 10px', borderRadius: '8px', border: '1px solid #3f3f46', backgroundColor: 'transparent', color: '#a1a1aa', fontSize: '14px', cursor: 'pointer' },
 
   // Pause banner
-  pauseBanner: {
-    padding: '10px 24px',
-    backgroundColor: '#78350f',
-    color: '#fbbf24',
-    fontSize: '13px',
-    fontWeight: '500',
-    borderBottom: '1px solid #27272a'
-  },
+  pauseBanner: { padding: '8px 20px', backgroundColor: '#78350f', color: '#fbbf24', fontSize: '12px', fontWeight: '500', borderBottom: '1px solid #27272a', flexShrink: 0 },
 
-  // Bulk schedule bar
-  bulkBar: {
-    padding: '16px 24px',
-    backgroundColor: '#0f0f13',
-    borderBottom: '1px solid #27272a'
-  },
-  bulkRow: {
-    display: 'flex',
-    gap: '16px',
-    flexWrap: 'wrap',
-    alignItems: 'flex-end'
-  },
-  bulkPresets: {
-    display: 'flex',
-    gap: '6px'
-  },
-  presetBtn: {
-    padding: '6px 12px',
-    borderRadius: '6px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#27272a',
-    color: '#a1a1aa',
-    fontSize: '12px',
-    fontWeight: '500',
-    cursor: 'pointer'
-  },
-  applyBulkBtn: {
-    padding: '8px 20px',
-    borderRadius: '8px',
-    border: 'none',
-    backgroundColor: '#6366f1',
-    color: '#fff',
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer'
-  },
+  // Bulk bar
+  bulkBar: { padding: '12px 20px', backgroundColor: '#0f0f13', borderBottom: '1px solid #27272a', flexShrink: 0 },
+  bulkRow: { display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' },
+  bulkPresets: { display: 'flex', gap: '4px', flexWrap: 'wrap' },
+  bulkInputs: { display: 'flex', gap: '10px', alignItems: 'flex-end', flexWrap: 'wrap' },
+  presetChip: { padding: '5px 10px', borderRadius: '6px', border: '1px solid #3f3f46', backgroundColor: '#27272a', color: '#a1a1aa', fontSize: '11px', fontWeight: '600', cursor: 'pointer' },
+  miniField: { display: 'flex', flexDirection: 'column', gap: '2px' },
+  miniLabel: { fontSize: '9px', fontWeight: '600', color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.5px' },
+  miniInput: { padding: '5px 8px', borderRadius: '6px', border: '1px solid #3f3f46', backgroundColor: '#1a1a1e', color: '#fff', fontSize: '12px' },
+  applyBtn: { padding: '6px 16px', borderRadius: '8px', border: 'none', backgroundColor: '#6366f1', color: '#fff', fontSize: '12px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' },
 
   // Filter bar
-  filterBar: {
-    display: 'flex',
-    gap: '4px',
-    padding: '12px 24px',
-    borderBottom: '1px solid #27272a',
-    backgroundColor: '#18181b',
-    overflowX: 'auto'
-  },
-  filterTab: {
-    padding: '6px 14px',
-    borderRadius: '6px',
-    border: 'none',
-    backgroundColor: 'transparent',
-    color: '#71717a',
-    fontSize: '13px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    whiteSpace: 'nowrap'
-  },
-  filterTabActive: {
-    backgroundColor: '#27272a',
-    color: '#fff'
-  },
-  filterCount: {
-    backgroundColor: '#3f3f46',
-    color: '#a1a1aa',
-    fontSize: '11px',
-    padding: '1px 6px',
-    borderRadius: '10px'
-  },
+  filterBar: { display: 'flex', gap: '3px', padding: '8px 20px', borderBottom: '1px solid #27272a', backgroundColor: '#111114', overflowX: 'auto', flexShrink: 0 },
+  filterTab: { padding: '5px 12px', borderRadius: '6px', border: 'none', backgroundColor: 'transparent', color: '#71717a', fontSize: '12px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' },
+  filterTabActive: { backgroundColor: '#27272a', color: '#fff' },
+  badge: { backgroundColor: '#3f3f46', color: '#a1a1aa', fontSize: '10px', padding: '1px 5px', borderRadius: '8px' },
 
-  // 3-panel layout
-  panelsContainer: {
-    display: 'flex',
-    flex: 1,
-    overflow: 'hidden'
-  },
+  // Content area
+  content: { flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' },
 
-  // Left panel
-  leftPanel: {
-    width: '300px',
-    flexShrink: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    borderRight: '1px solid #27272a',
-    backgroundColor: '#111114'
-  },
-  panelHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '12px 16px',
-    borderBottom: '1px solid #1e1e22'
-  },
-  panelTitle: {
-    fontSize: '13px',
-    fontWeight: '600',
-    color: '#a1a1aa',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px'
-  },
-  panelCount: {
-    fontSize: '12px',
-    color: '#52525b',
-    backgroundColor: '#27272a',
-    padding: '2px 8px',
-    borderRadius: '10px'
-  },
-  queueList: {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '8px'
-  },
-  emptyQueue: {
-    padding: '32px 16px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
+  // List
+  listContainer: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  listHeader: { display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 20px', borderBottom: '1px solid #1e1e22', backgroundColor: '#111114', fontSize: '10px', fontWeight: '600', color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.5px', flexShrink: 0 },
+  listScroll: { flex: 1, overflowY: 'auto' },
+  emptyState: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 20px' },
 
-  // Queue card
-  queueCard: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    padding: '10px 12px',
-    borderRadius: '10px',
-    backgroundColor: '#1a1a1e',
-    marginBottom: '6px',
-    transition: 'background-color 0.15s, opacity 0.2s',
-    border: '1px solid transparent'
-  },
-  queueCardSelected: {
-    backgroundColor: '#1e1e2e',
-    borderColor: '#6366f1'
-  },
-  queueCardDragOver: {
-    borderColor: '#a5b4fc',
-    backgroundColor: '#1e1e30'
-  },
-  queueCardHandle: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '2px',
-    width: '20px',
-    flexShrink: 0
-  },
-  queueNumber: {
-    fontSize: '10px',
-    color: '#52525b',
-    fontWeight: '600'
-  },
-  queueThumb: {
-    width: '40px',
-    height: '56px',
-    borderRadius: '6px',
-    overflow: 'hidden',
-    backgroundColor: '#27272a',
-    flexShrink: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  queueThumbImg: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover'
-  },
-  queueInfo: {
-    flex: 1,
-    minWidth: 0
-  },
-  queueName: {
-    fontSize: '13px',
-    fontWeight: '500',
-    color: '#e4e4e7',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap'
-  },
-  queueMeta: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    marginTop: '3px'
-  },
-  statusDot: {
-    width: '6px',
-    height: '6px',
-    borderRadius: '50%',
-    flexShrink: 0
-  },
-  queueTime: {
-    fontSize: '11px',
-    color: '#52525b',
-    marginLeft: '4px'
-  },
-  chipRow: {
-    display: 'flex',
-    gap: '3px',
-    marginTop: '4px',
-    flexWrap: 'wrap'
-  },
-  platformChip: {
-    fontSize: '9px',
-    fontWeight: '700',
-    padding: '1px 5px',
-    borderRadius: '4px',
-    textTransform: 'uppercase'
-  },
-  queueDeleteBtn: {
-    background: 'none',
-    border: 'none',
-    color: '#52525b',
-    fontSize: '18px',
-    cursor: 'pointer',
-    padding: '2px 6px',
-    borderRadius: '4px',
-    flexShrink: 0
-  },
-  pauseOverlay: {
-    position: 'absolute',
-    inset: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(245, 158, 11, 0.2)',
-    fontSize: '18px',
-    borderRadius: '10px'
-  },
+  // Row
+  row: { display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 20px', backgroundColor: '#0a0a0f', transition: 'background-color 0.1s', border: '1px solid transparent', cursor: 'default' },
+  dragHandle: { width: '28px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px', flexShrink: 0 },
+  thumb: { width: '44px', height: '56px', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#1a1a1e', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
+  thumbImg: { width: '100%', height: '100%', objectFit: 'cover' },
+  contentName: { fontSize: '13px', fontWeight: '500', color: '#e4e4e7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
 
-  // Center panel
-  centerPanel: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    backgroundColor: '#0d0d11'
-  },
-  noSelection: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100%'
-  },
-  previewContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100%'
-  },
-  editDraftBtn: {
-    padding: '5px 12px',
-    borderRadius: '6px',
-    border: '1px solid #6366f1',
-    backgroundColor: 'transparent',
-    color: '#a5b4fc',
-    fontSize: '12px',
-    fontWeight: '500',
-    cursor: 'pointer'
-  },
-  previewArea: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '24px',
-    overflow: 'hidden'
-  },
-  videoWrapper: {
-    position: 'relative',
-    width: '270px',
-    height: '480px',
-    borderRadius: '12px',
-    overflow: 'hidden',
-    backgroundColor: '#000'
-  },
-  previewVideo: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover'
-  },
-  playOverlay: {
-    position: 'absolute',
-    inset: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'rgba(0,0,0,0.3)',
-    border: 'none',
-    color: '#fff',
-    fontSize: '48px',
-    cursor: 'pointer'
-  },
-  previewImage: {
-    maxWidth: '270px',
-    maxHeight: '480px',
-    borderRadius: '12px',
-    objectFit: 'contain'
-  },
-  previewPlaceholder: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  previewMeta: {
-    padding: '16px',
-    borderTop: '1px solid #1e1e22',
-    backgroundColor: '#111114'
-  },
-  metaRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '6px 0',
-    borderBottom: '1px solid #1a1a1e'
-  },
-  metaLabel: {
-    fontSize: '12px',
-    color: '#71717a',
-    fontWeight: '500'
-  },
-  metaValue: {
-    fontSize: '13px',
-    color: '#e4e4e7'
-  },
-  statusPill: {
-    fontSize: '11px',
-    fontWeight: '600',
-    padding: '2px 10px',
-    borderRadius: '12px',
-    textTransform: 'capitalize'
-  },
+  // Inline controls
+  inlineDate: { width: '105px', padding: '4px 6px', borderRadius: '6px', border: '1px solid #2a2a2e', backgroundColor: '#111114', color: '#a1a1aa', fontSize: '11px' },
+  inlineTime: { width: '80px', padding: '4px 6px', borderRadius: '6px', border: '1px solid #2a2a2e', backgroundColor: '#111114', color: '#a1a1aa', fontSize: '11px' },
+  inlineCaption: { width: '100%', padding: '4px 8px', borderRadius: '6px', border: '1px solid #2a2a2e', backgroundColor: '#111114', color: '#d4d4d8', fontSize: '11px', fontFamily: 'inherit' },
 
-  // Right panel
-  rightPanel: {
-    width: '340px',
-    flexShrink: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    borderLeft: '1px solid #27272a',
-    backgroundColor: '#111114'
-  },
-  editContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100%'
-  },
-  editScroll: {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '16px'
-  },
-  editSection: {
-    marginBottom: '20px'
-  },
+  // Status pill
+  statusPill: { fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '10px', textTransform: 'capitalize', display: 'inline-block' },
+  rowIconBtn: { background: 'none', border: 'none', color: '#52525b', fontSize: '14px', cursor: 'pointer', padding: '4px', borderRadius: '4px' },
 
-  // Form elements
-  controlGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px'
-  },
-  label: {
-    fontSize: '11px',
-    fontWeight: '600',
-    color: '#a1a1aa',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-    marginBottom: '6px',
-    display: 'block'
-  },
-  textarea: {
-    width: '100%',
-    padding: '10px 12px',
-    borderRadius: '8px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#1a1a1e',
-    color: '#fff',
-    fontSize: '14px',
-    resize: 'vertical',
-    fontFamily: 'inherit',
-    lineHeight: '1.5'
-  },
-  textInput: {
-    width: '100%',
-    padding: '8px 12px',
-    borderRadius: '8px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#1a1a1e',
-    color: '#fff',
-    fontSize: '14px'
-  },
-  dateInput: {
-    padding: '8px 12px',
-    borderRadius: '8px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#1a1a1e',
-    color: '#fff',
-    fontSize: '14px'
-  },
-  timeInput: {
-    padding: '8px 12px',
-    borderRadius: '8px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#1a1a1e',
-    color: '#fff',
-    fontSize: '14px'
-  },
-  select: {
-    padding: '8px 12px',
-    borderRadius: '8px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#27272a',
-    color: '#fff',
-    fontSize: '14px',
-    minWidth: '120px',
-    cursor: 'pointer'
-  },
-  numberInput: {
-    padding: '8px 12px',
-    borderRadius: '8px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#27272a',
-    color: '#fff',
-    fontSize: '14px',
-    width: '90px'
-  },
-  linkBtn: {
-    background: 'none',
-    border: 'none',
-    color: '#6366f1',
-    fontSize: '12px',
-    cursor: 'pointer',
-    padding: '4px 0',
-    marginTop: '6px'
-  },
-  hashtagPreview: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '4px',
-    marginTop: '8px'
-  },
-  hashtagPill: {
-    fontSize: '12px',
-    color: '#a78bfa',
-    backgroundColor: '#2e1065',
-    padding: '2px 8px',
-    borderRadius: '12px'
-  },
-  hashtagBank: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px'
-  },
-  hashtagSet: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px'
-  },
-  hashtagSetPill: {
-    flex: 1,
-    padding: '4px 10px',
-    borderRadius: '6px',
-    border: '1px solid #6366f1',
-    backgroundColor: '#312e81',
-    color: '#a5b4fc',
-    fontSize: '12px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    textAlign: 'left'
-  },
-  hashtagSetDelete: {
-    background: 'none',
-    border: 'none',
-    color: '#71717a',
-    fontSize: '16px',
-    cursor: 'pointer',
-    padding: '2px 6px'
-  },
-  saveHashtagBtn: {
-    width: '100%',
-    padding: '8px 12px',
-    borderRadius: '8px',
-    border: '1px solid #6366f1',
-    backgroundColor: '#312e81',
-    color: '#a5b4fc',
-    fontSize: '13px',
-    fontWeight: '500',
-    cursor: 'pointer'
-  },
-  saveHashtagForm: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px'
-  },
-
-  // Platform grid
-  platformGrid: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px'
-  },
-  platformItem: {
-    display: 'flex',
-    gap: '8px',
-    alignItems: 'center'
-  },
-  platformToggle: {
-    padding: '6px 14px',
-    borderRadius: '8px',
-    border: '1px solid',
-    fontSize: '13px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    minWidth: '100px',
-    textAlign: 'center',
-    transition: 'all 0.15s'
-  },
-  accountSelect: {
-    flex: 1,
-    padding: '6px 10px',
-    borderRadius: '6px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#1a1a1e',
-    color: '#e4e4e7',
-    fontSize: '12px',
-    cursor: 'pointer'
-  },
-
-  // Status action buttons (Preview panel)
-  statusActionBtn: {
-    padding: '6px 16px',
-    borderRadius: '8px',
-    border: '1px solid',
-    fontSize: '13px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    transition: 'opacity 0.15s'
-  },
-
-  // Post results
-  resultRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '8px 12px',
-    backgroundColor: '#1a1a1e',
-    borderRadius: '8px',
-    marginBottom: '6px'
-  },
+  // Expanded drawer
+  drawer: { backgroundColor: '#111114', borderTop: '1px solid #1e1e22', padding: '16px 20px 16px 100px' },
+  drawerGrid: { display: 'grid', gridTemplateColumns: '180px 1fr 240px', gap: '20px' },
+  drawerLeft: { display: 'flex', flexDirection: 'column', gap: '10px' },
+  drawerPreview: { width: '180px', height: '140px', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#0a0a0f' },
+  drawerVideo: { width: '100%', height: '100%', objectFit: 'contain' },
+  drawerImg: { width: '100%', height: '100%', objectFit: 'cover' },
+  drawerActions: { display: 'flex', flexWrap: 'wrap', gap: '4px' },
+  drawerBtn: { padding: '5px 12px', borderRadius: '6px', border: '1px solid #3f3f46', backgroundColor: '#27272a', color: '#a1a1aa', fontSize: '11px', fontWeight: '500', cursor: 'pointer' },
+  drawerCenter: { flex: 1, minWidth: 0 },
+  drawerRight: { width: '240px' },
+  drawerLabel: { fontSize: '10px', fontWeight: '600', color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px', display: 'block' },
+  drawerInput: { width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #3f3f46', backgroundColor: '#1a1a1e', color: '#fff', fontSize: '13px', fontFamily: 'inherit' },
+  hashtagPill: { fontSize: '11px', color: '#a78bfa', backgroundColor: '#2e1065', padding: '2px 8px', borderRadius: '10px' },
+  hashtagSetBtn: { padding: '3px 8px', borderRadius: '5px', border: '1px solid #6366f1', backgroundColor: '#312e81', color: '#a5b4fc', fontSize: '11px', fontWeight: '500', cursor: 'pointer' },
+  linkBtn: { background: 'none', border: 'none', color: '#6366f1', fontSize: '11px', cursor: 'pointer', padding: '2px 0' },
+  accountSelect: { flex: 1, padding: '4px 8px', borderRadius: '5px', border: '1px solid #3f3f46', backgroundColor: '#1a1a1e', color: '#e4e4e7', fontSize: '11px', cursor: 'pointer' },
+  resultRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', backgroundColor: '#1a1a1e', borderRadius: '6px', marginBottom: '4px' },
 
   // Modal
-  modalOverlay: {
-    position: 'fixed',
-    inset: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000
-  },
-  modalContent: {
-    backgroundColor: '#18181b',
-    borderRadius: '12px',
-    border: '1px solid #27272a',
-    width: '90%',
-    maxWidth: '800px',
-    maxHeight: '80vh',
-    display: 'flex',
-    flexDirection: 'column'
-  },
-  modalHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '16px 20px',
-    borderBottom: '1px solid #27272a'
-  },
-  modalTitle: {
-    margin: 0,
-    fontSize: '18px',
-    fontWeight: '600',
-    color: '#fff'
-  },
-  modalCloseBtn: {
-    background: 'none',
-    border: 'none',
-    color: '#71717a',
-    fontSize: '24px',
-    cursor: 'pointer'
-  },
-  modalTabs: {
-    display: 'flex',
-    gap: '4px',
-    padding: '12px 20px',
-    borderBottom: '1px solid #27272a',
-    backgroundColor: '#111114'
-  },
-  modalTab: {
-    padding: '6px 14px',
-    borderRadius: '6px',
-    border: 'none',
-    backgroundColor: 'transparent',
-    color: '#71717a',
-    fontSize: '13px',
-    fontWeight: '500',
-    cursor: 'pointer'
-  },
-  modalTabActive: {
-    backgroundColor: '#27272a',
-    color: '#fff'
-  },
-  modalLoading: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '60px 20px'
-  },
-  modalItemsContainer: {
-    flex: 1,
-    overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'column'
-  },
-  modalEmpty: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '200px'
-  },
-  modalGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-    gap: '12px',
-    padding: '16px 20px',
-    overflow: 'auto'
-  },
-  modalCard: {
-    display: 'flex',
-    flexDirection: 'column',
-    borderRadius: '10px',
-    border: '1px solid #27272a',
-    backgroundColor: '#1a1a1e',
-    cursor: 'pointer',
-    transition: 'all 0.15s',
-    position: 'relative'
-  },
-  modalCardSelected: {
-    borderColor: '#6366f1',
-    backgroundColor: '#1e1e2e'
-  },
-  modalCardThumb: {
-    width: '100%',
-    height: '120px',
-    backgroundColor: '#27272a',
-    borderRadius: '8px 8px 0 0',
-    overflow: 'hidden',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative'
-  },
-  modalCardThumbImg: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover'
-  },
-  modalCardContent: {
-    padding: '8px 10px',
-    flex: 1
-  },
-  modalCardName: {
-    margin: 0,
-    fontSize: '12px',
-    fontWeight: '500',
-    color: '#e4e4e7',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap'
-  },
-  modalCardType: {
-    fontSize: '10px',
-    color: '#71717a',
-    marginTop: '4px',
-    display: 'block'
-  },
-  modalCardCheckbox: {
-    position: 'absolute',
-    top: '8px',
-    right: '8px',
-    width: '18px',
-    height: '18px',
-    cursor: 'pointer'
-  },
-  duplicateBadge: {
-    position: 'absolute',
-    bottom: '0',
-    left: '0',
-    right: '0',
-    backgroundColor: '#f59e0b',
-    color: '#000',
-    fontSize: '9px',
-    fontWeight: '600',
-    padding: '2px 4px',
-    textAlign: 'center'
-  },
-  modalFooter: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '12px 20px',
-    borderTop: '1px solid #27272a',
-    backgroundColor: '#111114'
-  },
-  modalFooterLeft: {
-    display: 'flex',
-    gap: '8px'
-  },
-  modalFooterRight: {
-    display: 'flex',
-    gap: '8px'
-  },
-  modalFooterBtn: {
-    padding: '8px 16px',
-    borderRadius: '6px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#27272a',
-    color: '#a1a1aa',
-    fontSize: '13px',
-    fontWeight: '500',
-    cursor: 'pointer'
-  },
+  modalOverlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
+  modalContent: { backgroundColor: '#18181b', borderRadius: '12px', border: '1px solid #27272a', width: '90%', maxWidth: '700px', maxHeight: '75vh', display: 'flex', flexDirection: 'column' },
+  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid #27272a' },
+  modalTitle: { margin: 0, fontSize: '16px', fontWeight: '600', color: '#fff' },
+  modalClose: { background: 'none', border: 'none', color: '#71717a', fontSize: '22px', cursor: 'pointer' },
+  modalTabs: { display: 'flex', gap: '3px', padding: '8px 20px', borderBottom: '1px solid #27272a', backgroundColor: '#111114' },
+  modalLoading: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px' },
+  modalGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '10px', padding: '14px 20px', overflow: 'auto', flex: 1 },
+  modalCard: { display: 'flex', flexDirection: 'column', borderRadius: '8px', border: '1px solid #27272a', backgroundColor: '#1a1a1e', cursor: 'pointer', transition: 'all 0.1s', position: 'relative' },
+  modalCardThumb: { width: '100%', height: '100px', backgroundColor: '#27272a', borderRadius: '7px 7px 0 0', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  dupBadge: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#f59e0b', color: '#000', fontSize: '9px', fontWeight: '600', padding: '2px 0', textAlign: 'center' },
+  modalFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 20px', borderTop: '1px solid #27272a', backgroundColor: '#111114' },
 
   // Calendar
-  calendarView: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    backgroundColor: '#0d0d11'
-  },
-  calendarHeader: {
-    padding: '16px 24px',
-    borderBottom: '1px solid #27272a',
-    backgroundColor: '#18181b'
-  },
-  calendarNav: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px'
-  },
-  calendarNavBtn: {
-    background: 'none',
-    border: '1px solid #3f3f46',
-    color: '#a1a1aa',
-    width: '32px',
-    height: '32px',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontSize: '16px'
-  },
-  calendarTitle: {
-    fontSize: '16px',
-    fontWeight: '600',
-    color: '#fff',
-    minWidth: '160px',
-    textAlign: 'center'
-  },
-  calendarTodayBtn: {
-    padding: '6px 12px',
-    borderRadius: '6px',
-    border: '1px solid #6366f1',
-    backgroundColor: 'transparent',
-    color: '#a5b4fc',
-    fontSize: '12px',
-    fontWeight: '500',
-    cursor: 'pointer'
-  },
-  calendarGrid: {
-    flex: 1,
-    display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
-    gap: '1px',
-    padding: '12px',
-    backgroundColor: '#27272a',
-    overflow: 'auto'
-  },
-  calendarDayHeader: {
-    padding: '12px 8px',
-    backgroundColor: '#18181b',
-    color: '#71717a',
-    fontSize: '12px',
-    fontWeight: '600',
-    textAlign: 'center',
-    textTransform: 'uppercase'
-  },
-  calendarCell: {
-    backgroundColor: '#111114',
-    padding: '8px',
-    minHeight: '100px',
-    display: 'flex',
-    flexDirection: 'column',
-    border: '1px solid #27272a'
-  },
-  calendarCellToday: {
-    borderColor: '#6366f1',
-    borderWidth: '2px'
-  },
-  calendarCellDate: {
-    fontSize: '12px',
-    fontWeight: '600',
-    color: '#a1a1aa',
-    marginBottom: '4px'
-  },
-  calendarCellPosts: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-    flex: 1,
-    minWidth: 0
-  },
-  calendarPostChip: {
-    padding: '3px 6px',
-    borderRadius: '4px',
-    fontSize: '10px',
-    fontWeight: '500',
-    color: '#fff',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    cursor: 'pointer',
-    draggable: true
-  },
-  calendarPostChipSelected: {
-    boxShadow: '0 0 0 2px #6366f1'
-  }
+  calView: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  calHeader: { display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 20px', borderBottom: '1px solid #27272a', backgroundColor: '#18181b' },
+  calNavBtn: { background: 'none', border: '1px solid #3f3f46', color: '#a1a1aa', width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer', fontSize: '16px' },
+  calTitle: { fontSize: '15px', fontWeight: '600', color: '#fff', minWidth: '150px', textAlign: 'center' },
+  calGrid: { flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1px', padding: '8px', backgroundColor: '#27272a', overflow: 'auto' },
+  calDayHeader: { padding: '8px 6px', backgroundColor: '#18181b', color: '#71717a', fontSize: '11px', fontWeight: '600', textAlign: 'center', textTransform: 'uppercase' },
+  calCell: { backgroundColor: '#111114', padding: '6px', minHeight: '90px', display: 'flex', flexDirection: 'column', border: '1px solid #27272a' },
+  calCellDate: { fontSize: '11px', fontWeight: '600', color: '#a1a1aa', marginBottom: '3px' }
 };
 
 export default SchedulingPage;
