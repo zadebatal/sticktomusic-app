@@ -668,10 +668,14 @@ const VideoStudio = ({
     setCurrentView('library');
   }, []);
 
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+
   const handleMakeVideo = useCallback((existingVideo = null) => {
     setEditingVideo(existingVideo);
     setShowEditor(true);
     setStudioMode('videos'); // Ensure studioMode is set for breadcrumb
+    // Show template picker only for new videos (not re-edits or session restores)
+    setShowTemplatePicker(!existingVideo);
   }, []);
 
   const handleCloseEditor = useCallback(() => {
@@ -2042,6 +2046,7 @@ const VideoStudio = ({
             onClose={handleCloseEditor}
             artistId={currentArtistId}
             db={db}
+            showTemplatePicker={showTemplatePicker}
           />
         </EditorErrorBoundary>
       )}

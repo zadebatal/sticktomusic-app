@@ -36,10 +36,14 @@ const VideoEditorModal = ({
   onShowBatchPipeline,
   onClose,
   artistId = null,
-  db = null
+  db = null,
+  showTemplatePicker = false
 }) => {
   // Editor mode: null = show picker, 'montage' = current editor, 'solo-clip' = solo clip editor
-  const [editorMode, setEditorMode] = useState(existingVideo?.editorMode || null);
+  // Show picker only when explicitly creating a new video (showTemplatePicker=true)
+  const [editorMode, setEditorMode] = useState(
+    existingVideo?.editorMode || (showTemplatePicker ? null : 'montage')
+  );
 
   // Mobile responsive detection
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
