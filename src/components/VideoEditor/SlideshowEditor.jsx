@@ -339,14 +339,24 @@ const SlideshowEditor = ({
   const imagesA = category?.imagesA || [];
   const imagesB = category?.imagesB || [];
   // Lyrics: merge category lyrics with library lyrics (for StudioHome/library mode)
+  // Filter to only show lyrics tagged to the active collection
   const [libraryLyrics, setLibraryLyrics] = useState([]);
   const refreshLibraryLyrics = useCallback(() => {
     if (artistId) setLibraryLyrics(getLyrics(artistId));
   }, [artistId]);
   useEffect(() => { refreshLibraryLyrics(); }, [refreshLibraryLyrics]);
+  const activeCollectionId = (() => {
+    if (selectedSource && selectedSource.includes(':bank')) return selectedSource.split(':')[0];
+    if (selectedSource && selectedSource !== 'bankA' && selectedSource !== 'bankB' && selectedSource !== 'all') return selectedSource;
+    return null;
+  })();
   const lyrics = (() => {
     const catLyrics = category?.lyrics || [];
     if (catLyrics.length > 0) return catLyrics;
+    // Filter library lyrics by active collection
+    if (activeCollectionId) {
+      return libraryLyrics.filter(l => (l.collectionIds || []).includes(activeCollectionId));
+    }
     return libraryLyrics;
   })();
   // Wrapper: add lyrics then refresh local state so picker updates immediately
