@@ -57,10 +57,6 @@ const SchedulingPage = ({
   const [batchRandomMin, setBatchRandomMin] = useState(30);
   const [batchRandomMax, setBatchRandomMax] = useState(120);
 
-  // ── Campaign hashtags/caption (batch-level) ──
-  const [campaignHashtags, setCampaignHashtags] = useState('');
-  const [campaignCaption, setCampaignCaption] = useState('');
-
   // ── Always-on hashtags from templates ──
   const [alwaysOnHashtags, setAlwaysOnHashtags] = useState([]);
   const [alwaysOnCaption, setAlwaysOnCaption] = useState('');
@@ -108,6 +104,56 @@ const SchedulingPage = ({
     Object.keys(mapping).forEach(p => { if (mapping[p]) enabled[p] = true; });
     setBatchPlatforms(enabled);
   }, [batchAccount, lateAccountIds]);
+
+  // ── Live preview: compute projected schedule times for selected posts ──
+  const previewTimes = useMemo(() => {
+    if (!batchStartDate || selectedCount === 0) return {};
+    const selectedPosts = posts.filter(p => selectedPostIds.has(p.id));
+    if (selectedPosts.length === 0) return {};
+    const startTime = new Date(`${batchStartDate}T${batchStartTime}`);
+    if (isNaN(startTime.getTime())) return {};
+
+    const WAKING_MINUTES = 960;
+    const effectiveSpacing = spacingMode === 'even'
+      ? Math.floor(WAKING_MINUTES / Math.max(postsPerDay, 1))
+      : spacingMinutes;
+    const startHour = startTime.getHours();
+    const startMin = startTime.getMinutes();
+
+    const map = {};
+    if (spacingMode === 'random') {
+      // For random, show approximate mid-range preview
+      const midJitter = (batchRandomMin + batchRandomMax) / 2;
+      let curTime = new Date(startTime);
+      let postsThisDay = 0;
+      let dayOffset = 0;
+      for (const post of selectedPosts) {
+        if (postsThisDay >= postsPerDay) {
+          dayOffset++;
+          curTime = new Date(startTime);
+          curTime.setDate(curTime.getDate() + dayOffset);
+          curTime.setHours(startHour, startMin, 0, 0);
+          postsThisDay = 0;
+        }
+        map[post.id] = new Date(curTime).toISOString();
+        postsThisDay++;
+        if (postsThisDay < postsPerDay) {
+          curTime = new Date(curTime.getTime() + midJitter * 60000);
+        }
+      }
+    } else {
+      selectedPosts.forEach((post, i) => {
+        const dayIndex = Math.floor(i / postsPerDay);
+        const slotInDay = i % postsPerDay;
+        const postTime = new Date(startTime);
+        postTime.setDate(postTime.getDate() + dayIndex);
+        postTime.setHours(startHour, startMin, 0, 0);
+        postTime.setMinutes(postTime.getMinutes() + slotInDay * effectiveSpacing);
+        map[post.id] = postTime.toISOString();
+      });
+    }
+    return map;
+  }, [batchStartDate, batchStartTime, postsPerDay, spacingMode, spacingMinutes, batchRandomMin, batchRandomMax, selectedPostIds, selectedCount, posts]);
 
   // ── Load & Subscribe ──
   useEffect(() => {
@@ -281,9 +327,6 @@ const SchedulingPage = ({
     const selectedPosts = posts.filter(p => selectedPostIds.has(p.id));
     const startTime = new Date(`${batchStartDate}T${batchStartTime}`);
 
-    // Parse campaign hashtags
-    const campaignTags = campaignHashtags.split(/[\s,]+/).filter(Boolean).map(h => h.startsWith('#') ? h : `#${h}`);
-
     // ── Compute staggered times using postsPerDay + spacing ──
     const WAKING_MINUTES = 960; // 16 hours (6am–10pm spread)
     const effectiveSpacing = spacingMode === 'even'
@@ -348,16 +391,11 @@ const SchedulingPage = ({
         status: POST_STATUS.SCHEDULED
       };
 
-      // Merge hashtags: always-on + campaign + existing per-post
+      // Merge hashtags: always-on + existing per-post
       const existingPost = posts.find(p => p.id === post.id);
       const perPostTags = existingPost?.hashtags || [];
-      const mergedTags = [...new Set([...alwaysOnHashtags, ...campaignTags, ...perPostTags])];
+      const mergedTags = [...new Set([...alwaysOnHashtags, ...perPostTags])];
       if (mergedTags.length > 0) updates.hashtags = mergedTags;
-
-      // Apply campaign caption if set (don't override existing per-post captions)
-      if (campaignCaption && !existingPost?.caption) {
-        updates.caption = campaignCaption;
-      }
 
       // Apply batch account platforms
       if (Object.keys(platformUpdate).length > 0) {
@@ -371,27 +409,7 @@ const SchedulingPage = ({
     setSelectedPostIds(new Set());
   }, [batchStartDate, batchStartTime, postsPerDay, spacingMode, spacingMinutes, batchRandomMin, batchRandomMax,
     selectedPostIds, selectedCount, posts, db, artistId, batchAccount, batchPlatforms, lateAccountIds,
-    campaignHashtags, campaignCaption, alwaysOnHashtags, toastSuccess]);
-
-  // ── Batch Assign Account (without scheduling) ──
-  const handleBatchAssignAccount = useCallback(async () => {
-    if (!batchAccount || selectedCount === 0) return;
-    const mapping = lateAccountIds[batchAccount];
-    if (!mapping) return;
-
-    const platformUpdate = {};
-    Object.entries(mapping).forEach(([platform, accountId]) => {
-      if (accountId) platformUpdate[platform] = { accountId, handle: batchAccount };
-    });
-
-    const selectedPosts = posts.filter(p => selectedPostIds.has(p.id));
-    for (const post of selectedPosts) {
-      await updateScheduledPost(db, artistId, post.id, {
-        platforms: { ...(post.platforms || {}), ...platformUpdate }
-      });
-    }
-    toastSuccess(`Assigned @${batchAccount} to ${selectedPosts.length} post${selectedPosts.length !== 1 ? 's' : ''}`);
-  }, [batchAccount, selectedCount, selectedPostIds, posts, db, artistId, lateAccountIds, toastSuccess]);
+    alwaysOnHashtags, toastSuccess]);
 
   // ── Platform Toggle ──
   const togglePlatform = useCallback((postId, platform) => {
@@ -480,31 +498,6 @@ const SchedulingPage = ({
               </button>
             </>
           )}
-          <div style={{ width: '1px', height: '24px', backgroundColor: '#3f3f46' }} />
-          <button style={s.actionBtn} onClick={() => setShowAddModal(true)}>
-            <span style={{ marginRight: '4px', fontSize: '14px' }}>+</span> Add from Drafts
-          </button>
-          <button
-            style={s.iconBtn}
-            onClick={handleRandomizeOrder}
-            title="Randomize post order"
-          >
-            🔀
-          </button>
-          <button
-            style={s.iconBtn}
-            onClick={() => setViewMode(viewMode === 'list' ? 'calendar' : 'list')}
-            title={viewMode === 'list' ? 'Calendar view' : 'List view'}
-          >
-            {viewMode === 'list' ? '📅' : '📋'}
-          </button>
-          <button
-            style={{ ...s.iconBtn, ...(queuePaused ? { backgroundColor: '#78350f', borderColor: '#f59e0b', color: '#fbbf24' } : {}) }}
-            onClick={() => setQueuePaused(!queuePaused)}
-            title={queuePaused ? 'Resume' : 'Pause'}
-          >
-            {queuePaused ? '▶' : '⏸'}
-          </button>
         </div>
       </div>
 
@@ -530,11 +523,6 @@ const SchedulingPage = ({
                   <option key={handle} value={handle}>@{handle}</option>
                 ))}
               </select>
-              {batchAccount && (
-                <button style={s.assignBtn} onClick={handleBatchAssignAccount} title="Assign account to selected posts without scheduling">
-                  Assign
-                </button>
-              )}
             </div>
 
             {/* Platform Toggles — shows linked platforms for selected account */}
@@ -642,47 +630,7 @@ const SchedulingPage = ({
             )}
           </div>
 
-          {/* Row 2: Campaign Hashtags + Caption */}
-          <div style={{ ...s.bulkRow, marginTop: '8px' }}>
-            <div style={{ ...s.bulkSection, flex: 1 }}>
-              <label style={s.miniLabel}>Campaign Hashtags <span style={{ fontWeight: '400', textTransform: 'none' }}>(applied to all selected)</span></label>
-              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                {/* Always-on pills */}
-                {alwaysOnHashtags.length > 0 && (
-                  <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', marginRight: '4px' }}>
-                    {alwaysOnHashtags.slice(0, 5).map((tag, i) => (
-                      <span key={i} style={s.alwaysOnPill} title="Always-on (from templates — can't remove)">{tag}</span>
-                    ))}
-                    {alwaysOnHashtags.length > 5 && (
-                      <span style={{ ...s.alwaysOnPill, opacity: 0.6 }}>+{alwaysOnHashtags.length - 5}</span>
-                    )}
-                  </div>
-                )}
-                <input
-                  type="text"
-                  value={campaignHashtags}
-                  onChange={(e) => setCampaignHashtags(e.target.value)}
-                  placeholder="Add campaign tags... #promo #release"
-                  style={{ ...s.miniInput, flex: 1 }}
-                />
-              </div>
-            </div>
-
-            <div style={{ width: '1px', height: '32px', backgroundColor: '#27272a' }} />
-
-            <div style={{ ...s.bulkSection, flex: 1 }}>
-              <label style={s.miniLabel}>Campaign Caption <span style={{ fontWeight: '400', textTransform: 'none' }}>(for posts without captions)</span></label>
-              <input
-                type="text"
-                value={campaignCaption}
-                onChange={(e) => setCampaignCaption(e.target.value)}
-                placeholder="Default caption for batch..."
-                style={{ ...s.miniInput, flex: 1 }}
-              />
-            </div>
-          </div>
-
-          {/* Row 3: Schedule button */}
+          {/* Schedule button */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px', gap: '8px' }}>
             <button style={s.applyBtn} onClick={handleBatchScheduleSelected}>
               Schedule {selectedCount} Post{selectedCount !== 1 ? 's' : ''}
@@ -712,6 +660,38 @@ const SchedulingPage = ({
             )}
           </button>
         ))}
+      </div>
+
+      {/* ═══ TOOLBAR — between filters and list ═══ */}
+      <div style={s.toolbarRow}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button style={s.toolbarBtn} onClick={() => setShowAddModal(true)}>
+            <span style={{ fontSize: '15px', lineHeight: 1 }}>+</span> Add Drafts
+          </button>
+          <button style={s.toolbarBtn} onClick={handleRandomizeOrder}>
+            <span style={{ fontSize: '14px', lineHeight: 1 }}>🔀</span> Shuffle
+          </button>
+          <button
+            style={{ ...s.toolbarBtn, ...(queuePaused ? { backgroundColor: '#78350f', borderColor: '#f59e0b', color: '#fbbf24' } : {}) }}
+            onClick={() => setQueuePaused(!queuePaused)}
+          >
+            <span style={{ fontSize: '14px', lineHeight: 1 }}>{queuePaused ? '▶' : '⏸'}</span> {queuePaused ? 'Resume' : 'Pause'}
+          </button>
+        </div>
+        <div style={{ display: 'flex', gap: '2px', alignItems: 'center', backgroundColor: '#18181b', borderRadius: '8px', padding: '3px', border: '1px solid #27272a' }}>
+          <button
+            style={{ ...s.viewToggleBtn, ...(viewMode === 'list' ? s.viewToggleBtnActive : {}) }}
+            onClick={() => setViewMode('list')}
+          >
+            List
+          </button>
+          <button
+            style={{ ...s.viewToggleBtn, ...(viewMode === 'calendar' ? s.viewToggleBtnActive : {}) }}
+            onClick={() => setViewMode('calendar')}
+          >
+            Calendar
+          </button>
+        </div>
       </div>
 
       {/* ═══ MAIN CONTENT ═══ */}
@@ -774,6 +754,7 @@ const SchedulingPage = ({
                     onDragOver={(e) => handleDragOver(e, post.id)}
                     onDrop={(e) => handleDrop(e, post.id)}
                     onDragEnd={handleDragEnd}
+                    previewTime={previewTimes[post.id] || null}
                   />
                 ))
               )}
@@ -832,7 +813,8 @@ const PostRow = ({
   accounts, lateAccountIds, alwaysOnHashtags,
   onToggleSelect, onToggleExpand, onUpdate, onTogglePlatform, onSetPlatformAccount,
   onDelete, onEditDraft,
-  onDragStart, onDragOver, onDrop, onDragEnd
+  onDragStart, onDragOver, onDrop, onDragEnd,
+  previewTime
 }) => {
   const [caption, setCaption] = useState(post.caption || '');
   const [schedDate, setSchedDate] = useState('');
@@ -942,9 +924,19 @@ const PostRow = ({
         </div>
 
         {/* Schedule Date/Time */}
-        <div style={{ width: '190px', display: 'flex', gap: '4px', alignItems: 'center' }}>
-          <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} style={s.inlineDate} />
-          <input type="time" value={schedTime} onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }} style={s.inlineTime} />
+        <div style={{ width: '190px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+            <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} style={s.inlineDate} />
+            <input type="time" value={schedTime} onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }} style={s.inlineTime} />
+          </div>
+          {previewTime && !post.scheduledTime && (() => {
+            const pt = new Date(previewTime);
+            return (
+              <div style={{ fontSize: '10px', color: '#818cf8', fontStyle: 'italic', paddingLeft: '2px' }}>
+                → {pt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} {pt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Caption */}
@@ -1444,6 +1436,12 @@ const s = {
   filterTab: { padding: '5px 12px', borderRadius: '6px', border: 'none', backgroundColor: 'transparent', color: '#71717a', fontSize: '12px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' },
   filterTabActive: { backgroundColor: '#27272a', color: '#fff' },
   badge: { backgroundColor: '#3f3f46', color: '#a1a1aa', fontSize: '10px', padding: '1px 5px', borderRadius: '8px' },
+
+  // Toolbar (between filters and list)
+  toolbarRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 20px', borderBottom: '1px solid #27272a', backgroundColor: '#111114', flexShrink: 0 },
+  toolbarBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '8px', border: '1px solid #3f3f46', backgroundColor: 'transparent', color: '#d4d4d8', fontSize: '13px', fontWeight: '500', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.12s' },
+  viewToggleBtn: { padding: '5px 14px', borderRadius: '6px', border: 'none', backgroundColor: 'transparent', color: '#71717a', fontSize: '12px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.12s' },
+  viewToggleBtnActive: { backgroundColor: '#27272a', color: '#fff' },
 
   // Content area
   content: { flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' },

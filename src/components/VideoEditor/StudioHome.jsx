@@ -2534,8 +2534,8 @@ const StudioHome = ({
               </div>
             )}
 
-            {/* ── Captions / Hashtags Column (only for video mode with collection selected) ── */}
-            {selectedCollection && studioMode === 'videos' && (
+            {/* ── Captions / Hashtags Column (visible when collection selected) ── */}
+            {selectedCollection && (
               <div style={{
                 flex: 1,
                 display: 'flex',
@@ -2551,7 +2551,7 @@ const StudioHome = ({
                   flexShrink: 0
                 }}>
                   <span style={{ fontSize: '11px', fontWeight: 600, color: '#fff' }}>
-                    #️⃣ Captions
+                    #️⃣ Hashtags & Captions
                   </span>
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', padding: '4px 6px' }}>
