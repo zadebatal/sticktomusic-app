@@ -20,6 +20,15 @@ import { VideoStudio } from './components/VideoEditor';
 // Analytics Dashboard
 import { AnalyticsDashboard } from './components/Analytics';
 
+// Theme system
+import { ThemeProvider } from './contexts/ThemeContext';
+
+// New UI components (redesign)
+import LandingPage from './components/LandingPage';
+import AppShell from './components/AppShell';
+import PagesTab from './components/tabs/PagesTab';
+import SettingsTab from './components/tabs/SettingsTab';
+
 // Domain enforcement utilities
 import { isUserOperator } from './utils/roles';
 
@@ -464,6 +473,7 @@ const StickToMusic = () => {
   const [loginForm, setLoginForm] = useState({ email: '', password: '', error: null });
   const [showSignupModal, setShowSignupModal] = useState(false);
   const [signupForm, setSignupForm] = useState({ email: '', password: '', name: '', role: 'artist', error: null });
+  const [authError, setAuthError] = useState(null);
 
   // Add Artist modal
   const [showAddArtistModal, setShowAddArtistModal] = useState(false);
@@ -957,7 +967,7 @@ const StickToMusic = () => {
   useEffect(() => {
     if (user && currentPage === 'home' && sessionRestoreComplete) {
       log('🏠 Redirecting logged-in user from home to dashboard');
-      setCurrentPage(user.role === 'artist' ? 'artist-portal' : 'operator');
+      setCurrentPage('operator');
     }
   }, [user, currentPage, sessionRestoreComplete]);
 
@@ -1587,7 +1597,7 @@ const StickToMusic = () => {
 
       // Redirect based on role
       if (role === 'artist') {
-        setCurrentPage('artist-portal');
+        setCurrentPage('operator');
       } else {
         setCurrentPage('operator');
       }
@@ -1655,7 +1665,7 @@ const StickToMusic = () => {
       showToast(`Welcome, ${result.user.displayName || 'there'}!`, 'success');
 
       if (role === 'artist') {
-        setCurrentPage('artist-portal');
+        setCurrentPage('operator');
       } else {
         setCurrentPage('operator');
       }
@@ -1705,7 +1715,7 @@ const StickToMusic = () => {
       showToast(`Welcome to StickToMusic, ${artistInfo?.name || signupForm.name}!`, 'success');
 
       if (role === 'artist') {
-        setCurrentPage('artist-portal');
+        setCurrentPage('operator');
       } else {
         setCurrentPage('operator');
       }
@@ -1733,6 +1743,78 @@ const StickToMusic = () => {
       console.error('Logout error:', error);
       showToast('Logout failed', 'error');
     }
+  };
+
+  // Landing page auth wrappers (accept email/password directly from LandingPage component)
+  const handleLandingLogin = async (email, password) => {
+    setIsLoggingIn(true);
+    setAuthError(null);
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const userEmail = userCredential.user.email;
+      if (!firestoreLoaded) {
+        let waited = 0;
+        while (!firestoreLoaded && waited < 3000) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          waited += 100;
+        }
+      }
+      if (!isEmailAllowed(userEmail)) {
+        await signOut(auth);
+        setAuthError('Access denied. Please contact us to get access.');
+        setIsLoggingIn(false);
+        return;
+      }
+      const role = getUserRole(userEmail);
+      const artistInfo = getArtistInfo(userEmail);
+      setUser({
+        email: userEmail,
+        role: role,
+        name: userCredential.user.displayName || artistInfo?.name || userEmail.split('@')[0],
+        photoURL: userCredential.user.photoURL || null,
+        artistId: artistInfo?.artistId || null
+      });
+      setCurrentPage('operator');
+      showToast('Welcome back!', 'success');
+    } catch (error) {
+      let msg = 'Invalid email or password';
+      if (error.code === 'auth/user-not-found') msg = 'No account found with this email';
+      else if (error.code === 'auth/wrong-password') msg = 'Incorrect password';
+      else if (error.code === 'auth/too-many-requests') msg = 'Too many attempts. Try again later';
+      setAuthError(msg);
+    }
+    setIsLoggingIn(false);
+  };
+
+  const handleLandingSignup = async (email, password, name) => {
+    setIsSigningUp(true);
+    setAuthError(null);
+    if (!isEmailAllowed(email)) {
+      setAuthError('Access denied. Contact us to get access.');
+      setIsSigningUp(false);
+      return;
+    }
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userEmail = userCredential.user.email;
+      const role = getUserRole(userEmail);
+      const artistInfo = getArtistInfo(userEmail);
+      setUser({
+        email: userEmail,
+        role: role,
+        name: artistInfo?.name || name,
+        photoURL: userCredential.user.photoURL || null,
+        artistId: artistInfo?.artistId || null
+      });
+      setCurrentPage('operator');
+      showToast(`Welcome, ${artistInfo?.name || name}!`, 'success');
+    } catch (error) {
+      let msg = 'Signup failed';
+      if (error.code === 'auth/email-already-in-use') msg = 'Email already exists. Try logging in';
+      else if (error.code === 'auth/weak-password') msg = 'Password should be at least 6 characters';
+      setAuthError(msg);
+    }
+    setIsSigningUp(false);
   };
 
   // Campaign functions
@@ -2714,7 +2796,22 @@ const StickToMusic = () => {
     );
   }
 
-  // INTAKE FORM PAGE
+  // ═══ NEW ROUTING: Non-authenticated users → Landing Page ═══
+  if (!user) {
+    return (
+      <ThemeProvider>
+        <LandingPage
+          onLogin={handleLandingLogin}
+          onSignup={handleLandingSignup}
+          onGoogleAuth={handleGoogleSignIn}
+          authError={authError}
+          authLoading={isLoggingIn || isSigningUp}
+        />
+      </ThemeProvider>
+    );
+  }
+
+  // INTAKE FORM PAGE (legacy — agency model)
   if (currentPage === 'intake') {
     if (submitted) {
       return (
@@ -3140,130 +3237,49 @@ const StickToMusic = () => {
     );
   }
 
-  // OPERATOR DASHBOARD PAGE
-  // P0 SECURITY: Guard against non-operators accessing this page
+  // ═══ MAIN DASHBOARD (all authenticated users) ═══
   if (currentPage === 'operator') {
-    // INVARIANT: Operator page requires operator role
-    if (!isUserOperator(user)) {
-      console.warn('[ROLE VIOLATION] Non-operator attempted to access operator dashboard');
-      // Redirect to appropriate page
-      return (
-        <div className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold mb-4">Access Denied</h1>
-            <p className="text-zinc-400 mb-6">This page is only accessible to operators.</p>
-            <button
-              onClick={() => setCurrentPage(user?.role === 'artist' ? 'artist-portal' : 'home')}
-              className="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg transition"
-            >
-              Go Back
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return (
-      <div className="min-h-screen bg-zinc-950 text-zinc-100">
-        {/* Header */}
-        <header className="border-b border-zinc-800 bg-zinc-950/95 backdrop-blur sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-3 sm:gap-6">
-                <button onClick={() => setCurrentPage(user ? (user.role === 'artist' ? 'artist-portal' : 'operator') : 'home')} className="text-lg sm:text-xl font-bold hover:text-zinc-300 transition">StickToMusic</button>
-                <span className="text-zinc-600 hidden sm:inline">|</span>
-                <span className="text-zinc-400 text-sm sm:text-base hidden sm:inline">{isConductor(user) ? 'Conductor Dashboard' : 'Operator Dashboard'}</span>
-              </div>
-              <div className="flex items-center gap-2 sm:gap-4">
-                {/* Settings gear icon - only for conductors */}
-                {isConductor(user) && (
-                  <button
-                    onClick={() => setOperatorTab('settings')}
-                    className="p-2 text-zinc-500 hover:text-white transition rounded-lg hover:bg-zinc-800"
-                    aria-label="Settings"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </button>
-                )}
-                <div className="flex items-center gap-2">
-                  {user?.photoURL ? (
-                    <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full object-cover" referrerPolicy="no-referrer" />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-sm font-bold">
-                      {user?.name?.[0] || 'O'}
-                    </div>
-                  )}
-                  <span className="text-sm text-zinc-400 hidden md:inline">{user?.name || 'Operator'}</span>
-                </div>
-                <button onClick={handleLogout} className="text-sm text-zinc-500 hover:text-white transition">Log out</button>
-              </div>
-            </div>
-          </div>
-        </header>
+    // Tab change handler — routes Studio/Schedule to VideoStudio modal
+    const handleTabChange = (tab) => {
+      if (tab === 'studio' || tab === 'schedule') {
+        setShowVideoEditor(true);
+        return;
+      }
+      setShowVideoEditor(false);
+      setOperatorTab(tab);
+      if ((tab === 'pages' || tab === 'content') && !loadingLatePages) loadLatePages();
+    };
 
+    return (
+      <ThemeProvider>
+        <AppShell
+          activeTab={showVideoEditor ? 'studio' : operatorTab}
+          setActiveTab={handleTabChange}
+          user={user}
+          onLogout={handleLogout}
+          isConductor={isConductor(user)}
+        >
         <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-8">
-          {/* Tab Navigation - scrollable on mobile */}
-          <div
-            className="flex gap-1 sm:gap-2 mb-4 sm:mb-8 border-b border-zinc-800 pb-3 sm:pb-4 overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0"
-            style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-          >
-            {['artists', 'pages', 'content', 'campaigns'].map(tab => (
-              <button
-                key={tab}
-                onClick={() => {
-                  setOperatorTab(tab);
-                  setMobileMenuOpen(false);
-                  // Auto-sync Pages & Content data when their tabs are clicked
-                  if ((tab === 'pages' || tab === 'content') && !loadingLatePages) {
-                    loadLatePages();
-                  }
-                }}
-                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition whitespace-nowrap ${
-                  operatorTab === tab ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
-                }`}
-              >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              </button>
-            ))}
-            {/* Studio - opens modal */}
-            <button
-              onClick={() => setShowVideoEditor(true)}
-              className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition whitespace-nowrap text-zinc-400 hover:text-white hover:bg-zinc-900"
-            >
-              Studio
-            </button>
-            {/* Analytics */}
-            <button
-              onClick={() => { setOperatorTab('analytics'); setMobileMenuOpen(false); }}
-              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition whitespace-nowrap ${
-                operatorTab === 'analytics' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
-              }`}
-            >
-              Analytics
-            </button>
-            {/* Applications tab - visible to all */}
-            <button
-              onClick={() => { setOperatorTab('applications'); setMobileMenuOpen(false); }}
-              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition whitespace-nowrap ${
-                operatorTab === 'applications' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
-              }`}
-            >
-              Applications
-            </button>
-            {/* Settings tab - only visible to conductors */}
-            {isConductor(user) && (
-              <button
-                onClick={() => setOperatorTab('settings')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
-                  operatorTab === 'settings' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
-                }`}
-              >
-                Settings
-              </button>
-            )}
-          </div>
+          {/* ═══ Pages Tab (new) ═══ */}
+          {operatorTab === 'pages' && (
+            <PagesTab
+              latePages={latePages}
+              lateAccountIds={LATE_ACCOUNT_IDS}
+              loadingLatePages={loadingLatePages}
+              onLoadLatePages={loadLatePages}
+              onConfigureLate={() => setShowLateConfigModal && setShowLateConfigModal(true)}
+            />
+          )}
+
+          {/* ═══ Settings Tab (new) ═══ */}
+          {operatorTab === 'settings' && (
+            <SettingsTab
+              user={user}
+              onLogout={handleLogout}
+              db={db}
+              artistId={currentArtistId}
+            />
+          )}
 
           {/* Artists Tab */}
           {operatorTab === 'artists' && (() => {
@@ -6158,17 +6174,13 @@ const StickToMusic = () => {
           )}
         </div>
 
-        <footer className="border-t border-zinc-800 mt-12">
-          <div className="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center">
-            <span className="text-zinc-600 text-sm">StickToMusic {isConductor(user) ? 'Conductor' : 'Operator'} © 2026</span>
-          </div>
-        </footer>
+        </AppShell>
 
         {/* Video Studio Modal - Flowstage-inspired workflow */}
         {showVideoEditor && (
           <VideoStudio
             db={db}
-            onClose={() => { setShowVideoEditor(false); setOperatorTab('artists'); }}
+            onClose={() => { setShowVideoEditor(false); }}
             artists={getVisibleArtists()}
             artistId={currentArtistId}
             onArtistChange={handleArtistChange}
@@ -6901,19 +6913,28 @@ const StickToMusic = () => {
             </div>
           </div>
         )}
-      </div>
+
+        {/* Global UI overlays */}
+        <ConfirmDialog
+          isOpen={confirmDialog.isOpen}
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          confirmLabel={confirmDialog.confirmLabel}
+          confirmVariant={confirmDialog.confirmVariant}
+          onConfirm={handleConfirmDialogConfirm}
+          onCancel={closeConfirmDialog}
+          isLoading={confirmDialog.isLoading}
+        />
+        <ToastContainer />
+        <UndoToast />
+        <OnboardingTooltip />
+      </ThemeProvider>
     );
   }
 
-  // DASHBOARD PAGE - Redirect to Artist Portal (requires authentication)
+  // DASHBOARD PAGE - Redirect (legacy)
   if (currentPage === 'dashboard') {
-    if (!user) {
-      // Require login instead of auto-login with demo user
-      setShowLoginModal(true);
-      setCurrentPage('home');
-      return null;
-    }
-    setCurrentPage('artist-portal');
+    setCurrentPage('operator');
     return null;
   }
 
@@ -7154,9 +7175,10 @@ const StickToMusic = () => {
     );
   }
 
+  // Fallback — should not be reached; redirect to dashboard or landing page
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans">
-      <Nav />
+      {/* Legacy marketing pages — kept for reference, rarely reached */}
 
       {/* HOME */}
       {currentPage === 'home' && (
