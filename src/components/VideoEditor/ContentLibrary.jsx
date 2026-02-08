@@ -295,8 +295,12 @@ const ContentLibrary = ({
                     onEdit={() => onEditSlideshow?.(item)}
                     onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
                     onPost={() => {
-                      setPostingSlideshow(item);
-                      setShowScheduleQueue(true);
+                      if (onViewScheduling) {
+                        onViewScheduling(); // Navigate to scheduling page
+                      } else {
+                        setPostingSlideshow(item);
+                        setShowScheduleQueue(true);
+                      }
                     }}
                   />
                 </div>
