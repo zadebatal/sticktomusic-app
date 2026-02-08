@@ -464,7 +464,31 @@ export const saveLibrary = (artistId, library) => {
 
     localStorage.setItem(getLibraryKey(artistId), JSON.stringify(cleanedLibrary));
   } catch (error) {
-    console.error('Error saving library:', error);
+    if (error?.name === 'QuotaExceededError' || error?.code === 22) {
+      console.warn('[Library] localStorage quota exceeded, attempting cleanup...');
+      try {
+        // Remove old session/temp data to free space
+        const keysToClean = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key?.startsWith('stm_session_') || key?.startsWith('stm_temp_') || key?.startsWith('stm_draft_')) {
+            keysToClean.push(key);
+          }
+        }
+        keysToClean.forEach(k => localStorage.removeItem(k));
+        console.log('[Library] Cleaned', keysToClean.length, 'temp keys, retrying save...');
+        // Retry save after cleanup
+        const cleanedLibrary = library.map(item => ({
+          ...item, thumbnail: null,
+          url: item.url?.startsWith('blob:') ? null : item.url
+        })).filter(item => item.url);
+        localStorage.setItem(getLibraryKey(artistId), JSON.stringify(cleanedLibrary));
+      } catch (retryError) {
+        console.error('[Library] Save failed even after cleanup. Storage is full:', retryError.message);
+      }
+    } else {
+      console.error('Error saving library:', error);
+    }
   }
 };
 
@@ -1615,9 +1639,10 @@ export const addToLibraryAsync = async (db, artistId, mediaItem) => {
         updatedAt: serverTimestamp()
       });
       console.log('[Library] Saved to Firestore:', newItem.id);
+      localResult.syncedToCloud = true;
     } catch (error) {
       console.error('[Library] Firestore write failed:', error.message);
-      // localStorage already has the data, so we're okay
+      localResult.syncedToCloud = false;
     }
   }
 
@@ -1652,8 +1677,10 @@ export const addManyToLibraryAsync = async (db, artistId, mediaItems) => {
 
       await batch.commit();
       console.log('[Library] Batch saved to Firestore:', newItems.length, 'items');
+      localResult.syncedToCloud = true;
     } catch (error) {
       console.error('[Library] Firestore batch write failed:', error.message);
+      localResult.syncedToCloud = false;
     }
   }
 

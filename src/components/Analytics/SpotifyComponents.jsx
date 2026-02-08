@@ -562,7 +562,7 @@ export const SpotifySetupCard = ({ artistId, onConfigured }) => {
           {validationResult.valid ? (
             <>
               <div style={styles.validatedArtist}>
-                {validationResult.artist.images?.[0] && (
+                {validationResult.artist.images?.[0] && /^https?:\/\//.test(validationResult.artist.images[0].url) && (
                   <img
                     src={validationResult.artist.images[0].url}
                     alt=""

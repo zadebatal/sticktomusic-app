@@ -42,7 +42,7 @@ const ALLOWED_ORIGINS = [
 // Also allow Vercel preview deployments
 const isVercelPreview = (origin) => {
   if (!origin) return false;
-  return origin.includes('sticktomusic') && origin.endsWith('.vercel.app');
+  return /^https:\/\/[a-z0-9-]*sticktomusic[a-z0-9-]*\.vercel\.app$/i.test(origin);
 };
 
 // Check if origin is localhost for development
