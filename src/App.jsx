@@ -627,6 +627,11 @@ const StickToMusic = () => {
     setSelectedPosts(new Set());
     setDayDetailDrawer({ isOpen: false, date: null, posts: [] });
 
+    // BUG-009: Reset content filters so stale filters don't carry across artists
+    setPostSearch('');
+    setPostPlatformFilter('all');
+    setContentStatus('all');
+
     // Check if new artist has Late connected
     const hasLate = await checkArtistLateStatus(newArtistId);
 
@@ -1378,7 +1383,13 @@ const StickToMusic = () => {
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
-  const [contentView, setContentView] = useState('list'); // 'list' or 'calendar'
+  const [contentView, setContentView] = useState(() => {
+    try { return sessionStorage.getItem('stm_contentView') || 'list'; } catch { return 'list'; }
+  }); // 'list', 'calendar', or 'month' â persisted in session
+  useEffect(() => {
+    try { sessionStorage.setItem('stm_contentView', contentView); } catch {}
+  }, [contentView]);
+
   const [deletingPostId, setDeletingPostId] = useState(null);
   const [lastSynced, setLastSynced] = useState(null);
 
@@ -3923,11 +3934,20 @@ const StickToMusic = () => {
               setSyncing(true);
               setSyncStatus('Scheduling posts...');
 
+              // BUG-008: Capture artist ID at schedule start to prevent cross-artist scheduling
+              const schedulingArtistId = currentArtistId;
+
               let successCount = 0;
               let failCount = 0;
               const errors = [];
 
               for (const post of generatedSchedule) {
+                // BUG-008: Abort if artist changed during scheduling
+                if (currentArtistId !== schedulingArtistId) {
+                  errors.push('Artist changed during scheduling â aborting remaining posts');
+                  failCount += generatedSchedule.length - successCount - failCount;
+                  break;
+                }
                 const scheduledFor = `${post.date}T${post.time}:00`;
                 const fullCaption = `${post.caption} ${post.hashtags}`;
 
@@ -4026,10 +4046,8 @@ const StickToMusic = () => {
               if (failCount > 0) {
                 setSyncStatus(`⚠️ ${successCount} scheduled, ${failCount} failed`);
                 console.error('Scheduling errors:', errors);
-                alert(`Scheduled ${successCount} ${postWord(successCount)}, ${failCount} failed.\n\nErrors:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? `\n...and ${errors.length - 5} more` : ''}`);
               } else {
-                setSyncStatus(`✓ ${successCount} ${postWord(successCount)} scheduled!`);
-                alert(`${successCount} ${postWord(successCount)} scheduled!\n\n${batchForm.category} category:\n• ${artistCount} artist music ${postWord(artistCount)} (${Math.round(artistCount/generatedSchedule.length*100)}%)\n• ${adjacentCount} adjacent artist ${postWord(adjacentCount)} (${Math.round(adjacentCount/generatedSchedule.length*100)}%)`);
+                setSyncStatus(`✓ ${successCount} ${postWord(successCount)} scheduled! (${artistCount} artist / ${adjacentCount} adjacent)`);
               }
 
               setTimeout(() => setSyncStatus(null), 5000);
