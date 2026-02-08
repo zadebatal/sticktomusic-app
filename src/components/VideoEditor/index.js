@@ -1,5 +1,6 @@
 // Video Studio - Flowstage-inspired workflow (NEW)
 export { default as VideoStudio } from './VideoStudio';
+export { default as SchedulingPage } from './SchedulingPage';
 export { default as AestheticHome } from './AestheticHome';
 export { default as VideoEditorModal } from './VideoEditorModal';
 

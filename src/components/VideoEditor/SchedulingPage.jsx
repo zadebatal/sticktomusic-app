@@ -530,7 +530,7 @@ const SchedulingPage = ({
             {/* Platform Toggles — shows linked platforms for selected account */}
             {batchAccount && linkedPlatforms.length > 0 && (
               <>
-                <div style={{ width: '1px', height: '32px', backgroundColor: '#27272a' }} />
+                <div style={{ width: '1px', height: '32px', backgroundColor: theme.border.default }} />
                 <div style={s.bulkSection}>
                   <label style={s.miniLabel}>Platforms</label>
                   <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
@@ -543,7 +543,7 @@ const SchedulingPage = ({
                           onClick={() => setBatchPlatforms(prev => ({ ...prev, [platform]: !prev[platform] }))}
                           style={{
                             padding: '3px 10px', borderRadius: '6px', border: '1px solid', fontSize: '11px', fontWeight: '600', cursor: 'pointer',
-                            backgroundColor: isOn ? color + '22' : '#1a1a1e', borderColor: isOn ? color : '#2a2a2e',
+                            backgroundColor: isOn ? color + '22' : theme.bg.input, borderColor: isOn ? color : theme.border.default,
                             color: isOn ? color : '#52525b', transition: 'all 0.12s'
                           }}
                         >
@@ -556,7 +556,7 @@ const SchedulingPage = ({
               </>
             )}
 
-            <div style={{ width: '1px', height: '32px', backgroundColor: '#27272a' }} />
+            <div style={{ width: '1px', height: '32px', backgroundColor: theme.border.default }} />
 
             <div style={s.bulkSection}>
               <label style={s.miniLabel}>Per Day</label>
@@ -573,7 +573,7 @@ const SchedulingPage = ({
               </div>
             </div>
 
-            <div style={{ width: '1px', height: '32px', backgroundColor: '#27272a' }} />
+            <div style={{ width: '1px', height: '32px', backgroundColor: theme.border.default }} />
 
             <div style={s.bulkSection}>
               <label style={s.miniLabel}>Spacing</label>
@@ -607,7 +607,7 @@ const SchedulingPage = ({
               </div>
             </div>
 
-            <div style={{ width: '1px', height: '32px', backgroundColor: '#27272a' }} />
+            <div style={{ width: '1px', height: '32px', backgroundColor: theme.border.default }} />
 
             <div style={s.bulkSection}>
               <label style={s.miniLabel}>Start</label>
@@ -619,7 +619,7 @@ const SchedulingPage = ({
 
             {spacingMode === 'random' && (
               <>
-                <div style={{ width: '1px', height: '32px', backgroundColor: '#27272a' }} />
+                <div style={{ width: '1px', height: '32px', backgroundColor: theme.border.default }} />
                 <div style={s.bulkSection}>
                   <label style={s.miniLabel}>Random Range (min)</label>
                   <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
@@ -680,7 +680,7 @@ const SchedulingPage = ({
             <span style={{ fontSize: '14px', lineHeight: 1 }}>{queuePaused ? '▶' : '⏸'}</span> {queuePaused ? 'Resume' : 'Pause'}
           </button>
         </div>
-        <div style={{ display: 'flex', gap: '2px', alignItems: 'center', backgroundColor: '#18181b', borderRadius: '8px', padding: '3px', border: '1px solid #27272a' }}>
+        <div style={{ display: 'flex', gap: '2px', alignItems: 'center', backgroundColor: theme.bg.surface, borderRadius: '8px', padding: '3px', border: `1px solid ${theme.border.default}` }}>
           <button
             style={{ ...s.viewToggleBtn, ...(viewMode === 'list' ? s.viewToggleBtnActive : {}) }}
             onClick={() => setViewMode('list')}
@@ -855,12 +855,12 @@ const PostRow = ({
   }[post.status] || '#71717a';
 
   const statusBg = {
-    [POST_STATUS.DRAFT]: '#27272a',
+    [POST_STATUS.DRAFT]: theme.border.default,
     [POST_STATUS.SCHEDULED]: '#312e81',
     [POST_STATUS.POSTING]: '#78350f',
     [POST_STATUS.POSTED]: '#064e3b',
     [POST_STATUS.FAILED]: '#7f1d1d'
-  }[post.status] || '#27272a';
+  }[post.status] || theme.border.default;
 
   const previewImage = post.thumbnail || post.editorState?.thumbnail || post.editorState?.slides?.[0]?.backgroundImage || null;
 
@@ -1419,7 +1419,7 @@ const s = {
   iconBtn: { padding: '6px 10px', borderRadius: '8px', border: `1px solid ${theme.border.default}`, backgroundColor: 'transparent', color: theme.text.secondary, fontSize: '14px', cursor: 'pointer' },
 
   // Pause banner
-  pauseBanner: { padding: '8px 20px', backgroundColor: '#78350f', color: '#fbbf24', fontSize: '12px', fontWeight: '500', borderBottom: '1px solid #27272a', flexShrink: 0 },
+  pauseBanner: { padding: '8px 20px', backgroundColor: '#78350f', color: '#fbbf24', fontSize: '12px', fontWeight: '500', borderBottom: `1px solid ${theme.border.default}`, flexShrink: 0 },
 
   // Bulk bar (batch-first)
   bulkBar: { padding: '12px 20px', backgroundColor: theme.bg.page, borderBottom: `2px solid ${theme.accent.primary}`, flexShrink: 0 },

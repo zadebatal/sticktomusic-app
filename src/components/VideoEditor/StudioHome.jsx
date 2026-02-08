@@ -56,6 +56,7 @@ import {
 } from '../../services/libraryService';
 import { uploadFile, getMediaDuration } from '../../services/firebaseStorage';
 import CollectionBankEditor from './CollectionBankEditor';
+import CaptionHashtagBank from './CaptionHashtagBank';
 import log from '../../utils/logger';
 
 const StudioHome = ({
@@ -2567,6 +2568,38 @@ const StudioHome = ({
                 </div>
               </div>
             )}
+
+            {/* ── Caption/Hashtag Bank Column (niche-based, always available) ── */}
+            <div style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              borderLeft: '1px solid rgba(255,255,255,0.08)'
+            }}>
+              <div style={{
+                padding: '6px 8px',
+                borderBottom: '1px solid rgba(255,255,255,0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexShrink: 0
+              }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#fff' }}>
+                  🏷️ Caption Bank
+                </span>
+              </div>
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <CaptionHashtagBank
+                  db={db}
+                  artistId={artistId}
+                  compact={true}
+                  onBankChange={(bankData) => {
+                    log('Caption/Hashtag bank updated:', bankData);
+                  }}
+                />
+              </div>
+            </div>
 
             {/* ── Video Text Banks Column (only when collection selected in video mode) ── */}
             {selectedCollection && studioMode === 'videos' && (() => {

@@ -15,13 +15,13 @@ import {
 } from './components/ui';
 
 // Video Studio - Flowstage-inspired workflow
-import { VideoStudio } from './components/VideoEditor';
+import { VideoStudio, SchedulingPage } from './components/VideoEditor';
 
 // Analytics Dashboard
 import { AnalyticsDashboard } from './components/Analytics';
 
 // Theme system
-import { ThemeProvider } from './contexts/ThemeContext';
+import { ThemeProvider, THEMES } from './contexts/ThemeContext';
 
 // New UI components (redesign)
 import LandingPage from './components/LandingPage';
@@ -429,6 +429,17 @@ const StickToMusic = () => {
   const [operatorTab, setOperatorTab] = useState(initialState.tab); // Moved up for restore effect
   const [showVideoEditor, setShowVideoEditor] = useState(initialState.showStudio); // Moved up for restore effect
   const [openFaq, setOpenFaq] = useState(null);
+
+  // ═══ Theme bridge: since ThemeProvider wraps return JSX, we listen for changes via custom event ═══
+  const [appThemeId, setAppThemeId] = useState(() => {
+    try { return localStorage.getItem('stm_theme') || 'dark'; } catch { return 'dark'; }
+  });
+  useEffect(() => {
+    const handler = (e) => setAppThemeId(e.detail);
+    window.addEventListener('stm-theme-change', handler);
+    return () => window.removeEventListener('stm-theme-change', handler);
+  }, []);
+  const t = (THEMES[appThemeId] || THEMES.dark).tw;
 
   // Sync URL when navigation state changes
   useEffect(() => {
@@ -3241,7 +3252,7 @@ const StickToMusic = () => {
   if (currentPage === 'operator') {
     // Tab change handler — routes Studio/Schedule to VideoStudio modal
     const handleTabChange = (tab) => {
-      if (tab === 'studio' || tab === 'schedule') {
+      if (tab === 'studio') {
         setShowVideoEditor(true);
         return;
       }
@@ -3278,6 +3289,24 @@ const StickToMusic = () => {
               onLogout={handleLogout}
               db={db}
               artistId={currentArtistId}
+            />
+          )}
+
+          {/* ═══ Schedule Tab (standalone) ═══ */}
+          {operatorTab === 'schedule' && (
+            <SchedulingPage
+              db={db}
+              artistId={currentArtistId}
+              accounts={latePages}
+              lateAccountIds={LATE_ACCOUNT_IDS}
+              onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: currentArtistId })}
+              onRenderVideo={null}
+              onEditDraft={(post) => {
+                if (post.editorState) {
+                  setShowVideoEditor(true);
+                }
+              }}
+              onBack={() => setOperatorTab('pages')}
             />
           )}
 
@@ -3335,15 +3364,15 @@ const StickToMusic = () => {
             const renderArtistCard = (artist) => (
               <div
                 key={artist.id}
-                className={`group bg-zinc-900 border rounded-xl p-4 sm:p-6 transition cursor-pointer hover:border-zinc-600 ${
-                  currentArtistId === artist.id ? 'border-violet-500' : 'border-zinc-800'
+                className={`group ${t.bgSurface} border rounded-xl p-4 sm:p-6 transition cursor-pointer ${t.hoverBorder} ${
+                  currentArtistId === artist.id ? 'border-violet-500' : t.border
                 }`}
                 onClick={() => handleArtistChange(artist.id)}
               >
                 <div className="flex flex-col md:flex-row justify-between gap-4">
                   <div className="flex items-center gap-3 sm:gap-4">
                     <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-base sm:text-lg font-bold shrink-0 ${
-                      currentArtistId === artist.id ? 'bg-violet-600 text-white' : 'bg-zinc-800'
+                      currentArtistId === artist.id ? 'bg-violet-600 text-white' : t.bgElevated
                     }`}>
                       {artist.name[0]}
                     </div>
@@ -3354,7 +3383,7 @@ const StickToMusic = () => {
                           <span className="px-2 py-0.5 bg-violet-500/20 text-violet-400 text-xs rounded-full">Active</span>
                         )}
                       </div>
-                      <div className="flex flex-wrap gap-x-2 gap-y-1 text-xs sm:text-sm text-zinc-500">
+                      <div className={`flex flex-wrap gap-x-2 gap-y-1 text-xs sm:text-sm ${t.textSecondary}`}>
                         <span>{artist.tier}</span>
                         {artist.cdTier && <><span className="hidden sm:inline">•</span><span>{artist.cdTier}</span></>}
                         <span>•</span>
@@ -3365,15 +3394,15 @@ const StickToMusic = () => {
                   <div className="flex items-center gap-4 sm:gap-6 overflow-x-auto pb-1 -mb-1">
                     <div className="text-center shrink-0">
                       <p className="text-xl sm:text-2xl font-bold">{artist.totalPages || 0}</p>
-                      <p className="text-xs text-zinc-500">Pages</p>
+                      <p className={`text-xs ${t.textSecondary}`}>Pages</p>
                     </div>
                     <div className="text-center shrink-0">
                       <p className="text-xl sm:text-2xl font-bold">{formatNumber(artist.metrics?.views || 0)}</p>
-                      <p className="text-xs text-zinc-500">Views</p>
+                      <p className={`text-xs ${t.textSecondary}`}>Views</p>
                     </div>
                     <div className="text-center shrink-0">
                       <p className="text-xl sm:text-2xl font-bold">{artist.metrics?.rate || 0}%</p>
-                      <p className="text-xs text-zinc-500">Eng. Rate</p>
+                      <p className={`text-xs ${t.textSecondary}`}>Eng. Rate</p>
                     </div>
                     <span className={`px-2 sm:px-3 py-1 rounded-full text-xs shrink-0 ${getStatusColor(artist.status)}`}>
                       {artist.status}
@@ -3383,7 +3412,7 @@ const StickToMusic = () => {
                       <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={(e) => { e.stopPropagation(); setEditArtistModal({ show: true, artist, tier: artist.tier || 'Scale', cdTier: artist.cdTier || 'CD Lite', activeSince: artist.activeSince || '', isSaving: false }); }}
-                          className="p-1.5 rounded-lg hover:bg-zinc-700 text-zinc-400 hover:text-white transition"
+                          className={`p-1.5 rounded-lg ${t.hoverBg} ${t.textSecondary} ${t.hoverText} transition`}
                           title="Edit artist details"
                         >
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -3392,7 +3421,7 @@ const StickToMusic = () => {
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); setReassignArtist({ show: true, artist }); }}
-                          className="p-1.5 rounded-lg hover:bg-zinc-700 text-zinc-400 hover:text-white transition"
+                          className={`p-1.5 rounded-lg ${t.hoverBg} ${t.textSecondary} ${t.hoverText} transition`}
                           title="Reassign to operator"
                         >
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -3401,7 +3430,7 @@ const StickToMusic = () => {
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); setDeleteArtistConfirm({ show: true, artist, isDeleting: false }); }}
-                          className="p-1.5 rounded-lg hover:bg-red-900/50 text-zinc-400 hover:text-red-400 transition"
+                          className={`p-1.5 rounded-lg hover:bg-red-900/50 ${t.textSecondary} hover:text-red-400 transition`}
                           title="Delete artist"
                         >
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -3420,7 +3449,7 @@ const StickToMusic = () => {
                 <div className="flex justify-between items-center">
                   <div>
                     <h1 className="text-2xl font-bold">Artists</h1>
-                    <p className="text-sm text-zinc-500">{displayArtists.length} active artist{displayArtists.length !== 1 ? 's' : ''}</p>
+                    <p className={`text-sm ${t.textSecondary}`}>{displayArtists.length} active artist{displayArtists.length !== 1 ? 's' : ''}</p>
                   </div>
                   {/* Conductors and operators can add artists */}
                   {(isConductor(user) || user?.role === 'operator') && (
@@ -3449,11 +3478,11 @@ const StickToMusic = () => {
                   sectionOrder.map(ownerId => (
                     <div key={ownerId} className="space-y-3">
                       <div className="flex items-center gap-3 pt-2">
-                        <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                        <h2 className={`text-sm font-semibold ${t.textSecondary} uppercase tracking-wider`}>
                           {getOwnerLabel(ownerId)}
                         </h2>
-                        <span className="text-xs text-zinc-600">({grouped[ownerId].length})</span>
-                        <div className="flex-1 border-t border-zinc-800" />
+                        <span className={`text-xs ${t.textMuted}`}>({grouped[ownerId].length})</span>
+                        <div className={`flex-1 border-t ${t.border}`} />
                       </div>
                       {grouped[ownerId].map(renderArtistCard)}
                     </div>
@@ -3463,367 +3492,7 @@ const StickToMusic = () => {
             );
           })()}
 
-          {/* Pages Tab */}
-          {operatorTab === 'pages' && (() => {
-            // Use filtered visible artists (respects user assignment)
-            const artistsList = getVisibleArtists();
 
-            // Filter pages from Late API
-            const filteredPages = latePages.filter(p =>
-              (selectedArtist === 'all' || p.artist === selectedArtist) &&
-              (selectedPlatform === 'all' || p.platform === selectedPlatform)
-            );
-            // Group by artist for display
-            const artistsWithPages = artistsList.filter(a =>
-              selectedArtist === 'all' || a.name === selectedArtist
-            );
-
-            // Auto-load pages on first visit (only if user has visible artists)
-            if (latePages.length === 0 && !loadingLatePages && artistsList.length > 0 && unconfiguredLateArtists.length === 0) {
-              loadLatePages();
-            }
-
-            return (
-              <div>
-                <div className="flex justify-between items-center mb-6">
-                  <div>
-                    <h1 className="text-2xl font-bold">Pages</h1>
-                    <p className="text-sm text-zinc-500">
-                      {loadingLatePages ? 'Loading...' : `${filteredPages.length} connected page${filteredPages.length !== 1 ? 's' : ''}`}
-                    </p>
-                  </div>
-                  <button
-                    onClick={loadLatePages}
-                    disabled={loadingLatePages}
-                    className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm transition disabled:opacity-50 flex items-center gap-2"
-                  >
-                    {loadingLatePages ? (
-                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                    ) : (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                    )}
-                    Refresh
-                  </button>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-4 mb-6">
-                  <div>
-                    <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Artist</label>
-                    <div className="flex gap-1 flex-wrap">
-                      <button onClick={() => setSelectedArtist('all')} className={`px-3 py-1.5 rounded-lg text-sm transition ${selectedArtist === 'all' ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>All</button>
-                      {artistsList.map(a => (
-                        <button key={a.id} onClick={() => setSelectedArtist(a.name)} className={`px-3 py-1.5 rounded-lg text-sm transition ${selectedArtist === a.name ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>{a.name}</button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Platform</label>
-                    <div className="flex gap-1 flex-wrap">
-                      <button onClick={() => setSelectedPlatform('all')} className={`px-3 py-1.5 rounded-lg text-sm transition ${selectedPlatform === 'all' ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>All</button>
-                      {getPlatformKeys().map(p => {
-                        const config = getPlatformConfig(p);
-                        return (
-                          <button key={p} onClick={() => setSelectedPlatform(p)} className={`px-3 py-1.5 rounded-lg text-sm transition ${selectedPlatform === p ? `${config.bgColor} ${config.textColor}` : 'text-zinc-500 hover:bg-zinc-800'}`}>
-                            {config.fullName}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Unconfigured artists banner */}
-                {!loadingLatePages && unconfiguredLateArtists.length > 0 && (
-                  <div className="space-y-2 mb-6">
-                    {unconfiguredLateArtists.map(artist => (
-                      <div key={artist.id} className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <span className="text-lg">🔑</span>
-                          <div>
-                            <p className="text-sm font-medium text-white">{artist.name}</p>
-                            <p className="text-xs text-zinc-500">No Sync API key configured</p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => { setCurrentArtistId(artist.id); setShowLateConnectModal(true); }}
-                          className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium rounded-lg transition"
-                        >
-                          Enter API Key
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="space-y-6">
-                  {loadingLatePages ? (
-                    <div className="flex flex-col items-center justify-center py-16">
-                      <svg className="animate-spin h-8 w-8 text-purple-500 mb-4" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      <p className="text-zinc-500">Loading pages...</p>
-                    </div>
-                  ) : filteredPages.length === 0 && unconfiguredLateArtists.length === 0 ? (
-                    <SharedEmptyState
-                      icon="📱"
-                      title="No pages found"
-                      description={selectedArtist !== 'all' || selectedPlatform !== 'all'
-                        ? "No pages match your current filters. Try adjusting your selection."
-                        : "No social pages connected. Connect each artist to see their pages here."}
-                      actionLabel={selectedArtist !== 'all' || selectedPlatform !== 'all' ? "Clear Filters" : "Refresh"}
-                      onAction={selectedArtist !== 'all' || selectedPlatform !== 'all' ? () => { setSelectedArtist('all'); setSelectedPlatform('all'); } : loadLatePages}
-                    />
-                  ) : artistsWithPages.map(artist => {
-                    const artistPages = filteredPages.filter(p => p.artist === artist.name);
-                    if (artistPages.length === 0) return null;
-
-                    // Get linked account groups for this artist (linkVersion forces re-read)
-                    void linkVersion; // Reference linkVersion to ensure re-render on link changes
-                    const linkedGroups = getLinkedAccountGroups(artist.id);
-
-                    // Create a map of lateAccountId -> groupId (string-coerce for safety)
-                    const accountToGroup = {};
-                    linkedGroups.forEach(group => {
-                      group.accountIds.forEach(accId => {
-                        accountToGroup[String(accId)] = group.id;
-                      });
-                    });
-
-                    // Group pages: first by linked group, then by handle for ungrouped
-                    const grouped = {};
-                    artistPages.forEach(page => {
-                      const groupId = accountToGroup[String(page.lateAccountId)];
-                      const key = groupId || page.handle; // Use group ID if linked, otherwise handle
-
-                      if (!grouped[key]) {
-                        grouped[key] = {
-                          ...page,
-                          rowKey: key, // Unique key per row for selection UI
-                          handles: [{ handle: page.handle, platform: page.platform }],
-                          platforms: [page.platform],
-                          totalFollowers: page.followers,
-                          totalViews: page.views,
-                          linkedAccountIds: [page.lateAccountId],
-                          isLinkedGroup: !!groupId
-                        };
-                      } else {
-                        grouped[key].handles.push({ handle: page.handle, platform: page.platform });
-                        grouped[key].platforms.push(page.platform);
-                        grouped[key].totalFollowers += page.followers;
-                        grouped[key].totalViews += page.views;
-                        grouped[key].linkedAccountIds.push(page.lateAccountId);
-                      }
-                    });
-                    const uniquePages = Object.values(grouped);
-
-                    // Handle linking accounts - use rowKey for selection UI,
-                    // but collect ALL linkedAccountIds from selected rows when actually linking
-                    const handleLinkSelected = () => {
-                      const allAccountIds = [];
-                      uniquePages.forEach(page => {
-                        if (selectedAccountsToLink.includes(page.rowKey)) {
-                          allAccountIds.push(...page.linkedAccountIds);
-                        }
-                      });
-
-                      if (allAccountIds.length >= 2) {
-                        linkAccounts(artist.id, allAccountIds);
-                        setSelectedAccountsToLink([]);
-                        setAccountLinkingArtistId(null);
-                        // Force re-render via dedicated counter + latePages reference
-                        setLinkVersion(v => v + 1);
-                        setLatePages(prev => [...prev]);
-                      }
-                    };
-
-                    const handleUnlinkAccount = (accountId) => {
-                      unlinkAccount(artist.id, accountId);
-                      setLinkVersion(v => v + 1);
-                      setLatePages(prev => [...prev]);
-                    };
-
-                    // Toggle selection using only the first accountId as row key
-                    const toggleRowSelection = (rowKey) => {
-                      setSelectedAccountsToLink(prev =>
-                        prev.includes(rowKey)
-                          ? prev.filter(id => id !== rowKey)
-                          : [...prev, rowKey]
-                      );
-                    };
-
-                    const isLinkingThisArtist = accountLinkingArtistId === artist.id;
-
-                    return (
-                      <div key={artist.id}>
-                        <div className="flex items-center justify-between mb-3">
-                          <h3 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">{artist.name}</h3>
-                          <div className="flex gap-2">
-                            {isLinkingThisArtist ? (
-                              <>
-                                <button
-                                  onClick={handleLinkSelected}
-                                  disabled={selectedAccountsToLink.length < 2}
-                                  className="px-3 py-1 text-xs bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-700 disabled:text-zinc-500 rounded-lg transition"
-                                >
-                                  Link Selected ({selectedAccountsToLink.length})
-                                </button>
-                                <button
-                                  onClick={() => { setAccountLinkingArtistId(null); setSelectedAccountsToLink([]); }}
-                                  className="px-3 py-1 text-xs bg-zinc-700 hover:bg-zinc-600 rounded-lg transition"
-                                >
-                                  Cancel
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                onClick={() => { setAccountLinkingArtistId(artist.id); setSelectedAccountsToLink([]); }}
-                                className="px-3 py-1 text-xs text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition"
-                              >
-                                🔗 Link Accounts
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-x-auto">
-                          <table className="w-full min-w-[600px]">
-                            <thead>
-                              <tr className="border-b border-zinc-800">
-                                {isLinkingThisArtist && (
-                                  <th className="w-10 p-3 sm:p-4"></th>
-                                )}
-                                <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Handle</th>
-                                <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Platforms</th>
-                                <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Niche</th>
-                                <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Followers</th>
-                                <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Views</th>
-                                <th className="text-left p-3 sm:p-4 text-xs sm:text-sm font-medium text-zinc-500">Status</th>
-                                {!isLinkingThisArtist && <th className="w-10 p-3 sm:p-4"></th>}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {uniquePages.map((page) => (
-                                <tr
-                                  key={page.linkedAccountIds.join('-')}
-                                  className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition"
-                                  style={page.isLinkedGroup ? { borderLeft: '3px solid #8b5cf6' } : undefined}
-                                >
-                                  {isLinkingThisArtist && (
-                                    <td className="p-3 sm:p-4">
-                                      <div
-                                        onClick={(e) => { e.stopPropagation(); toggleRowSelection(page.rowKey); }}
-                                        style={{
-                                          width: '18px',
-                                          height: '18px',
-                                          borderRadius: '4px',
-                                          border: selectedAccountsToLink.includes(page.rowKey)
-                                            ? '2px solid #8b5cf6'
-                                            : '2px solid #52525b',
-                                          backgroundColor: selectedAccountsToLink.includes(page.rowKey)
-                                            ? '#8b5cf6'
-                                            : 'transparent',
-                                          cursor: 'pointer',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          transition: 'all 0.15s'
-                                        }}
-                                      >
-                                        {selectedAccountsToLink.includes(page.rowKey) && (
-                                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
-                                            <polyline points="20 6 9 17 4 12"/>
-                                          </svg>
-                                        )}
-                                      </div>
-                                    </td>
-                                  )}
-                                  <td className="p-3 sm:p-4 font-mono text-xs sm:text-sm">
-                                    <div className="flex items-start gap-2">
-                                      {page.isLinkedGroup && (
-                                        <span style={{ fontSize: '10px', color: '#8b5cf6', marginTop: '2px' }} title="Linked accounts">
-                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                                          </svg>
-                                        </span>
-                                      )}
-                                      <div>
-                                        {page.handles.length === 1 ? (
-                                          page.handles[0].handle
-                                        ) : (
-                                          <div className="space-y-1">
-                                            {page.handles.map((h, i) => (
-                                              <div key={i} className="flex items-center gap-2">
-                                                <span>{h.handle}</span>
-                                                <span className={`px-1.5 py-0.5 rounded text-[10px] ${getPlatformConfig(h.platform).bgColor} ${getPlatformConfig(h.platform).textColor}`}>
-                                                  {getPlatformConfig(h.platform).label}
-                                                </span>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </td>
-                                  <td className="p-3 sm:p-4">
-                                    <div className="flex gap-1 flex-wrap">
-                                      {page.platforms.map((p, idx) => {
-                                        const config = getPlatformConfig(p);
-                                        const handleForPlatform = page.handles.find(h => h.platform === p)?.handle || page.handle;
-                                        const url = getPlatformUrl(p, handleForPlatform);
-                                        return (
-                                          <a
-                                            key={`${p}-${idx}`}
-                                            href={url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className={`px-2 py-0.5 rounded text-xs cursor-pointer transition ${config.bgColor} ${config.textColor} ${config.hoverBg}`}
-                                          >
-                                            {config.label}
-                                          </a>
-                                        );
-                                      })}
-                                    </div>
-                                  </td>
-                                  <td className="p-3 sm:p-4 text-zinc-500 text-xs sm:text-sm">{page.niche}</td>
-                                  <td className="p-3 sm:p-4 text-zinc-300 text-xs sm:text-sm">{formatNumber(page.totalFollowers)}</td>
-                                  <td className="p-3 sm:p-4 text-zinc-300 text-xs sm:text-sm">{formatNumber(page.totalViews)}</td>
-                                  <td className="p-3 sm:p-4">
-                                    <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(page.status)}`}>{page.status}</span>
-                                  </td>
-                                  {!isLinkingThisArtist && (
-                                    <td className="p-3 sm:p-4">
-                                      {page.isLinkedGroup && (
-                                        <button
-                                          onClick={() => page.linkedAccountIds.forEach(id => handleUnlinkAccount(id))}
-                                          className="text-zinc-500 hover:text-red-400 transition text-xs"
-                                          title="Unlink accounts"
-                                        >
-                                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M18.84 12.25l1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                                            <path d="M5.16 11.75l-1.72 1.71a5 5 0 0 0 7.07 7.07l1.72-1.71"/>
-                                            <line x1="1" y1="1" x2="23" y2="23"/>
-                                          </svg>
-                                        </button>
-                                      )}
-                                    </td>
-                                  )}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
 
           {/* Content Tab */}
           {operatorTab === 'content' && (() => {
@@ -5215,20 +4884,20 @@ const StickToMusic = () => {
 
               {/* Campaign Stats */}
               <div className="grid grid-cols-4 gap-4">
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                  <p className="text-zinc-500 text-xs mb-1">Active Campaigns</p>
+                <div className={`${t.bgSurface} border ${t.border} rounded-xl p-4`}>
+                  <p className={`${t.textSecondary} text-xs mb-1`}>Active Campaigns</p>
                   <p className="text-2xl font-bold text-green-400">{campaigns.filter(c => c.status === 'active').length}</p>
                 </div>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                  <p className="text-zinc-500 text-xs mb-1">Total Budget</p>
+                <div className={`${t.bgSurface} border ${t.border} rounded-xl p-4`}>
+                  <p className={`${t.textSecondary} text-xs mb-1`}>Total Budget</p>
                   <p className="text-2xl font-bold">${campaigns.reduce((sum, c) => sum + c.budget, 0).toLocaleString()}</p>
                 </div>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                  <p className="text-zinc-500 text-xs mb-1">Total Spent</p>
+                <div className={`${t.bgSurface} border ${t.border} rounded-xl p-4`}>
+                  <p className={`${t.textSecondary} text-xs mb-1`}>Total Spent</p>
                   <p className="text-2xl font-bold text-purple-400">${campaigns.reduce((sum, c) => sum + c.spent, 0).toLocaleString()}</p>
                 </div>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                  <p className="text-zinc-500 text-xs mb-1">Posts Scheduled</p>
+                <div className={`${t.bgSurface} border ${t.border} rounded-xl p-4`}>
+                  <p className={`${t.textSecondary} text-xs mb-1`}>Posts Scheduled</p>
                   <p className="text-2xl font-bold">{campaigns.reduce((sum, c) => sum + c.postsScheduled, 0)}</p>
                 </div>
               </div>
@@ -5249,7 +4918,7 @@ const StickToMusic = () => {
                   const followerProgress = campaign.goals.followers > 0 ? (campaign.achieved.followers / campaign.goals.followers) * 100 : 0;
 
                   return (
-                    <div key={campaign.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                    <div key={campaign.id} className={`${t.bgSurface} border ${t.border} rounded-xl p-6`}>
                       <div className="flex justify-between items-start mb-4">
                         <div>
                           <div className="flex items-center gap-3 mb-1">
@@ -5262,13 +4931,13 @@ const StickToMusic = () => {
                               {campaign.status}
                             </span>
                           </div>
-                          <p className="text-sm text-zinc-500">
+                          <p className={`text-sm ${t.textSecondary}`}>
                             {new Date(campaign.startDate).toLocaleDateString()} - {new Date(campaign.endDate).toLocaleDateString()}
                           </p>
                         </div>
                         <div className="flex gap-2">
                           {campaign.categories.map(cat => (
-                            <span key={cat} className="px-2 py-1 bg-zinc-800 rounded text-xs">{cat}</span>
+                            <span key={cat} className={`px-2 py-1 ${t.bgElevated} rounded text-xs`}>{cat}</span>
                           ))}
                         </div>
                       </div>
@@ -5277,10 +4946,10 @@ const StickToMusic = () => {
                         {/* Budget */}
                         <div>
                           <div className="flex justify-between text-sm mb-2">
-                            <span className="text-zinc-500">Budget</span>
+                            <span className={t.textSecondary}>Budget</span>
                             <span>${campaign.spent.toLocaleString()} / ${campaign.budget.toLocaleString()}</span>
                           </div>
-                          <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                          <div className={`h-2 ${t.bgElevated} rounded-full overflow-hidden`}>
                             <div
                               className="h-full bg-purple-500 rounded-full transition-all"
                               style={{ width: `${Math.min(progress, 100)}%` }}
@@ -5291,10 +4960,10 @@ const StickToMusic = () => {
                         {/* Views Goal */}
                         <div>
                           <div className="flex justify-between text-sm mb-2">
-                            <span className="text-zinc-500">Views</span>
+                            <span className={t.textSecondary}>Views</span>
                             <span>{(campaign.achieved.views / 1000).toFixed(0)}K / {(campaign.goals.views / 1000).toFixed(0)}K</span>
                           </div>
-                          <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                          <div className={`h-2 ${t.bgElevated} rounded-full overflow-hidden`}>
                             <div
                               className="h-full bg-blue-500 rounded-full transition-all"
                               style={{ width: `${Math.min(viewProgress, 100)}%` }}
@@ -5305,10 +4974,10 @@ const StickToMusic = () => {
                         {/* Followers Goal */}
                         <div>
                           <div className="flex justify-between text-sm mb-2">
-                            <span className="text-zinc-500">Followers</span>
+                            <span className={t.textSecondary}>Followers</span>
                             <span>{campaign.achieved.followers.toLocaleString()} / {campaign.goals.followers.toLocaleString()}</span>
                           </div>
-                          <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                          <div className={`h-2 ${t.bgElevated} rounded-full overflow-hidden`}>
                             <div
                               className="h-full bg-green-500 rounded-full transition-all"
                               style={{ width: `${Math.min(followerProgress, 100)}%` }}
@@ -5317,10 +4986,10 @@ const StickToMusic = () => {
                         </div>
                       </div>
 
-                      <div className="flex justify-between items-center mt-4 pt-4 border-t border-zinc-800">
+                      <div className={`flex justify-between items-center mt-4 pt-4 border-t ${t.border}`}>
                         <div className="flex gap-4 text-sm">
-                          <span className="text-zinc-500">{campaign.postsScheduled} posts scheduled</span>
-                          <span className="text-zinc-500">{campaign.postsPublished} published</span>
+                          <span className={t.textSecondary}>{campaign.postsScheduled} posts scheduled</span>
+                          <span className={t.textSecondary}>{campaign.postsPublished} published</span>
                         </div>
                         {/* L-02: "View Details" removed — was a dead button with no handler */}
                       </div>
@@ -5332,58 +5001,58 @@ const StickToMusic = () => {
               {/* New Campaign Modal */}
               {showCampaignModal && (
                 <div className="fixed inset-0 bg-black/80 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={() => setShowCampaignModal(false)}>
-                  <div className="bg-zinc-900 border border-zinc-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                    <div className="p-4 sm:p-6 border-b border-zinc-800 flex justify-between items-center sticky top-0 bg-zinc-900 z-10">
+                  <div className={`${t.bgSurface} border ${t.border} rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
+                    <div className={`p-4 sm:p-6 border-b ${t.border} flex justify-between items-center sticky top-0 ${t.bgSurface} z-10`}>
                       <h2 className="text-lg sm:text-xl font-bold">New Campaign</h2>
-                      <button onClick={() => setShowCampaignModal(false)} className="text-zinc-500 hover:text-white text-2xl">✕</button>
+                      <button onClick={() => setShowCampaignModal(false)} className={`${t.textSecondary} ${t.hoverText} text-2xl`}>✕</button>
                     </div>
                     <form onSubmit={handleCreateCampaign} className="p-4 sm:p-6 space-y-4">
                       <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-2">Campaign Name</label>
+                        <label className={`block text-sm font-medium ${t.textSecondary} mb-2`}>Campaign Name</label>
                         <input
                           type="text"
                           value={campaignForm.name}
                           onChange={e => setCampaignForm(prev => ({ ...prev, name: e.target.value }))}
-                          className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white"
+                          className={`w-full px-4 py-3 ${t.bgElevated} border ${t.inputBorder} rounded-xl text-white`}
                           placeholder="e.g., Boon February Push"
                           required
                         />
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-zinc-400 mb-2">Start Date</label>
+                          <label className={`block text-sm font-medium ${t.textSecondary} mb-2`}>Start Date</label>
                           <input
                             type="date"
                             value={campaignForm.startDate}
                             onChange={e => setCampaignForm(prev => ({ ...prev, startDate: e.target.value }))}
-                            className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white"
+                            className={`w-full px-4 py-3 ${t.bgElevated} border ${t.inputBorder} rounded-xl text-white`}
                             required
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-zinc-400 mb-2">End Date</label>
+                          <label className={`block text-sm font-medium ${t.textSecondary} mb-2`}>End Date</label>
                           <input
                             type="date"
                             value={campaignForm.endDate}
                             onChange={e => setCampaignForm(prev => ({ ...prev, endDate: e.target.value }))}
-                            className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white"
+                            className={`w-full px-4 py-3 ${t.bgElevated} border ${t.inputBorder} rounded-xl text-white`}
                             required
                           />
                         </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-2">Budget ($)</label>
+                        <label className={`block text-sm font-medium ${t.textSecondary} mb-2`}>Budget ($)</label>
                         <input
                           type="number"
                           value={campaignForm.budget}
                           onChange={e => setCampaignForm(prev => ({ ...prev, budget: e.target.value }))}
-                          className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white"
+                          className={`w-full px-4 py-3 ${t.bgElevated} border ${t.inputBorder} rounded-xl text-white`}
                           placeholder="5000"
                           required
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-2">Target Categories</label>
+                        <label className={`block text-sm font-medium ${t.textSecondary} mb-2`}>Target Categories</label>
                         <div className="grid grid-cols-3 gap-2">
                           {['Fashion', 'Y2K', 'Emo'].map(cat => (
                             <label
@@ -5391,7 +5060,7 @@ const StickToMusic = () => {
                               className={`flex items-center justify-center gap-2 p-3 rounded-lg cursor-pointer transition border ${
                                 campaignForm.categories.includes(cat)
                                   ? 'bg-purple-500/20 border-purple-500 text-purple-300'
-                                  : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-600'
+                                  : `${t.bgElevated} ${t.inputBorder} ${t.textSecondary} ${t.hoverBg}`
                               }`}
                             >
                               <input
@@ -5413,22 +5082,22 @@ const StickToMusic = () => {
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-zinc-400 mb-2">Views Goal</label>
+                          <label className={`block text-sm font-medium ${t.textSecondary} mb-2`}>Views Goal</label>
                           <input
                             type="number"
                             value={campaignForm.goalViews}
                             onChange={e => setCampaignForm(prev => ({ ...prev, goalViews: e.target.value }))}
-                            className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white"
+                            className={`w-full px-4 py-3 ${t.bgElevated} border ${t.inputBorder} rounded-xl text-white`}
                             placeholder="500000"
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-zinc-400 mb-2">Followers Goal</label>
+                          <label className={`block text-sm font-medium ${t.textSecondary} mb-2`}>Followers Goal</label>
                           <input
                             type="number"
                             value={campaignForm.goalFollowers}
                             onChange={e => setCampaignForm(prev => ({ ...prev, goalFollowers: e.target.value }))}
-                            className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white"
+                            className={`w-full px-4 py-3 ${t.bgElevated} border ${t.inputBorder} rounded-xl text-white`}
                             placeholder="5000"
                           />
                         </div>
@@ -5700,7 +5369,7 @@ const StickToMusic = () => {
               <div className="flex justify-between items-center mb-6">
                 <div>
                   <h1 className="text-2xl font-bold">Applications</h1>
-                  <p className="text-sm text-zinc-500">{applications.filter(a => a.status === 'pending').length} pending review</p>
+                  <p className={`text-sm ${t.textSecondary}`}>{applications.filter(a => a.status === 'pending').length} pending review</p>
                 </div>
                 <div className="flex gap-2">
                   {['all', 'pending', 'approved', 'declined'].map(filter => (
@@ -5712,7 +5381,7 @@ const StickToMusic = () => {
                           ? 'bg-white text-black'
                           : applicationFilter === filter
                             ? 'bg-white text-black'
-                            : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                            : `${t.textSecondary} ${t.hoverText} ${t.hoverBg}`
                       }`}
                     >
                       {filter.charAt(0).toUpperCase() + filter.slice(1)}
@@ -5745,9 +5414,9 @@ const StickToMusic = () => {
                 ) : (
                 <div className="space-y-4">
                   {filteredApps.map((app) => (
-                    <div key={app.id} className={`bg-zinc-900 border rounded-xl overflow-hidden ${
+                    <div key={app.id} className={`${t.bgSurface} border rounded-xl overflow-hidden ${
                       app.status === 'approved' ? 'border-green-500/30' :
-                      app.status === 'declined' ? 'border-red-500/30' : 'border-zinc-800'
+                      app.status === 'declined' ? 'border-red-500/30' : t.border
                     }`}>
                       <div className="p-6">
                         <div className="flex flex-col md:flex-row justify-between gap-4">
@@ -5763,15 +5432,15 @@ const StickToMusic = () => {
                                 {app.status === 'pending_payment' ? 'Awaiting Payment' : app.status}
                               </span>
                             </div>
-                            <p className="text-zinc-400 text-sm mb-3">{app.email}</p>
+                            <p className={`${t.textSecondary} text-sm mb-3`}>{app.email}</p>
                             <div className="flex flex-wrap gap-2 mb-3">
                               <span className="px-2 py-1 bg-purple-500/20 text-purple-300 rounded text-xs">{app.tier}</span>
-                              {app.genre && <span className="px-2 py-1 bg-zinc-800 text-zinc-400 rounded text-xs">{app.genre}</span>}
+                              {app.genre && <span className={`px-2 py-1 ${t.bgElevated} ${t.textSecondary} rounded text-xs`}>{app.genre}</span>}
                               {app.vibes && app.vibes.slice(0, 3).map((vibe, i) => (
-                                <span key={i} className="px-2 py-1 bg-zinc-800 text-zinc-500 rounded text-xs">{vibe}</span>
+                                <span key={i} className={`px-2 py-1 ${t.bgElevated} ${t.textMuted} rounded text-xs`}>{vibe}</span>
                               ))}
                             </div>
-                            <div className="text-xs text-zinc-500">
+                            <div className={`text-xs ${t.textMuted}`}>
                               Submitted {app.submitted}
                               {app.spotify && <span className="ml-3">• Has Spotify</span>}
                               {app.adjacentArtists && <span className="ml-3">• Provided adjacent artists</span>}
@@ -5822,7 +5491,7 @@ const StickToMusic = () => {
                                   navigator.clipboard.writeText(app.paymentLink || '');
                                   showToast('Payment link copied!', 'success');
                                 }}
-                                className="px-4 py-2 bg-zinc-800 text-zinc-400 rounded-lg text-sm font-medium hover:bg-zinc-700 transition"
+                                className={`px-4 py-2 ${t.bgElevated} ${t.textSecondary} rounded-lg text-sm font-medium ${t.hoverBg} transition`}
                               >
                                 📋 Copy Link
                               </button>
@@ -5832,49 +5501,49 @@ const StickToMusic = () => {
 
                         {/* Expandable details */}
                         {app.projectDescription && (
-                          <details className="mt-4 pt-4 border-t border-zinc-800">
-                            <summary className="text-sm text-zinc-400 cursor-pointer hover:text-white">View full application details</summary>
+                          <details className={`mt-4 pt-4 border-t ${t.border}`}>
+                            <summary className={`text-sm ${t.textSecondary} cursor-pointer ${t.hoverText}`}>View full application details</summary>
                             <div className="mt-4 grid md:grid-cols-2 gap-4 text-sm">
                               {app.projectType && (
                                 <div>
-                                  <span className="text-zinc-500">Project Type:</span>
-                                  <span className="ml-2 text-zinc-300">{app.projectType}</span>
+                                  <span className={t.textSecondary}>Project Type:</span>
+                                  <span className={`ml-2 ${t.textPrimary}`}>{app.projectType}</span>
                                 </div>
                               )}
                               {app.cdTier && (
                                 <div>
-                                  <span className="text-zinc-500">Creative Direction:</span>
-                                  <span className="ml-2 text-zinc-300">{app.cdTier}</span>
+                                  <span className={t.textSecondary}>Creative Direction:</span>
+                                  <span className={`ml-2 ${t.textPrimary}`}>{app.cdTier}</span>
                                 </div>
                               )}
                               {app.duration && (
                                 <div>
-                                  <span className="text-zinc-500">Duration:</span>
-                                  <span className="ml-2 text-zinc-300">{app.duration}</span>
+                                  <span className={t.textSecondary}>Duration:</span>
+                                  <span className={`ml-2 ${t.textPrimary}`}>{app.duration}</span>
                                 </div>
                               )}
                               {app.aestheticWords && (
                                 <div className="md:col-span-2">
-                                  <span className="text-zinc-500">Aesthetic:</span>
-                                  <span className="ml-2 text-zinc-300">{app.aestheticWords}</span>
+                                  <span className={t.textSecondary}>Aesthetic:</span>
+                                  <span className={`ml-2 ${t.textPrimary}`}>{app.aestheticWords}</span>
                                 </div>
                               )}
                               {app.adjacentArtists && (
                                 <div className="md:col-span-2">
-                                  <span className="text-zinc-500">Adjacent Artists:</span>
-                                  <span className="ml-2 text-zinc-300">{app.adjacentArtists}</span>
+                                  <span className={t.textSecondary}>Adjacent Artists:</span>
+                                  <span className={`ml-2 ${t.textPrimary}`}>{app.adjacentArtists}</span>
                                 </div>
                               )}
                               {app.idealListener && (
                                 <div className="md:col-span-2">
-                                  <span className="text-zinc-500">Ideal Listener:</span>
-                                  <span className="ml-2 text-zinc-300">{app.idealListener}</span>
+                                  <span className={t.textSecondary}>Ideal Listener:</span>
+                                  <span className={`ml-2 ${t.textPrimary}`}>{app.idealListener}</span>
                                 </div>
                               )}
                               {app.projectDescription && (
                                 <div className="md:col-span-2">
-                                  <span className="text-zinc-500">Project Description:</span>
-                                  <p className="mt-1 text-zinc-300">{app.projectDescription}</p>
+                                  <span className={t.textSecondary}>Project Description:</span>
+                                  <p className={`mt-1 ${t.textPrimary}`}>{app.projectDescription}</p>
                                 </div>
                               )}
                             </div>

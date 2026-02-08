@@ -24,6 +24,7 @@ import {
   computeAttribution
 } from '../../services/spotifyAttributionService';
 import log from '../../utils/logger';
+import { useTheme } from '../../contexts/ThemeContext';
 
 /**
  * AnalyticsDashboard - Main analytics view
@@ -55,6 +56,10 @@ const AnalyticsDashboard = ({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Theme support
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
 
   // Current artist (for multi-artist support)
   const [currentArtistId, setCurrentArtistId] = useState(initialArtistId);
@@ -694,7 +699,7 @@ const AnalyticsDashboard = ({
                   <span style={styles.videoTableCell}>{formatPercent(video.engagementRate)}</span>
                   <span style={{
                     ...styles.videoTableCell,
-                    color: (attr.spotifyLift7d || 0) > 0 ? '#10b981' : '#6b7280'
+                    color: (attr.spotifyLift7d || 0) > 0 ? '#10b981' : theme.text.secondary
                   }}>
                     {(attr.spotifyLift7d || 0) > 0 ? '+' : ''}{(attr.spotifyLift7d || 0).toFixed(1)}
                   </span>
@@ -734,12 +739,12 @@ const AnalyticsDashboard = ({
 };
 
 // Styles
-const styles = {
+const getStyles = (theme) => ({
   container: {
     padding: '24px',
-    backgroundColor: '#0a0a0f',
+    backgroundColor: theme.bg.page,
     minHeight: '100vh',
-    color: '#fff'
+    color: theme.text.primary
   },
   // Spotify Growth Row (Overview)
   spotifyGrowthRow: {
@@ -751,11 +756,11 @@ const styles = {
   attributionNote: {
     marginTop: '16px',
     padding: '12px 16px',
-    backgroundColor: 'rgba(139, 92, 246, 0.1)',
-    border: '1px solid rgba(139, 92, 246, 0.2)',
+    backgroundColor: `${theme.accent.primary}15`,
+    border: `1px solid ${theme.accent.muted}`,
     borderRadius: '8px',
     fontSize: '12px',
-    color: '#a78bfa',
+    color: theme.accent.hover,
     lineHeight: '1.6'
   },
   header: {
@@ -780,18 +785,18 @@ const styles = {
   },
   lastUpdated: {
     fontSize: '13px',
-    color: '#6b7280'
+    color: theme.text.secondary
   },
   artistSelector: {
     position: 'relative'
   },
   artistSelect: {
     appearance: 'none',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    border: '1px solid #2a2a3e',
+    backgroundColor: `${theme.text.primary}08`,
+    border: `1px solid ${theme.border.default}`,
     borderRadius: '6px',
     padding: '6px 28px 6px 10px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '13px',
     fontWeight: '500',
     cursor: 'pointer',
@@ -800,8 +805,8 @@ const styles = {
   singleArtistLabel: {
     fontSize: '13px',
     fontWeight: '500',
-    color: '#a78bfa',
-    backgroundColor: 'rgba(167, 139, 250, 0.1)',
+    color: theme.accent.hover,
+    backgroundColor: `${theme.accent.primary}18`,
     padding: '4px 12px',
     borderRadius: '6px'
   },
@@ -810,10 +815,10 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     padding: '10px 20px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.elevated,
+    border: `1px solid ${theme.border.default}`,
     borderRadius: '8px',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     fontSize: '14px',
     fontWeight: '500',
@@ -822,9 +827,9 @@ const styles = {
   backButton: {
     padding: '8px 16px',
     backgroundColor: 'transparent',
-    border: '1px solid #2d2d3d',
+    border: `1px solid ${theme.border.default}`,
     borderRadius: '8px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     fontSize: '14px',
     marginRight: '16px'
@@ -833,7 +838,7 @@ const styles = {
     display: 'flex',
     gap: '8px',
     marginBottom: '24px',
-    borderBottom: '1px solid #1f1f2e',
+    borderBottom: `1px solid ${theme.border.default}`,
     paddingBottom: '16px'
   },
   tabButton: {
@@ -841,15 +846,15 @@ const styles = {
     backgroundColor: 'transparent',
     border: 'none',
     borderRadius: '8px',
-    color: '#6b7280',
+    color: theme.text.secondary,
     cursor: 'pointer',
     fontSize: '14px',
     fontWeight: '500',
     transition: 'all 0.2s'
   },
   tabButtonActive: {
-    backgroundColor: '#1f1f2e',
-    color: '#fff'
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary
   },
   statsGrid: {
     display: 'grid',
@@ -858,8 +863,8 @@ const styles = {
     marginBottom: '24px'
   },
   statCard: {
-    backgroundColor: '#111118',
-    border: '1px solid #1f1f2e',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.border.default}`,
     borderRadius: '12px',
     padding: '20px',
     textAlign: 'center'
@@ -871,12 +876,12 @@ const styles = {
   statValue: {
     fontSize: '32px',
     fontWeight: '700',
-    color: '#fff',
+    color: theme.text.primary,
     marginBottom: '4px'
   },
   statLabel: {
     fontSize: '13px',
-    color: '#6b7280',
+    color: theme.text.secondary,
     marginBottom: '8px'
   },
   statTrend: {
@@ -900,20 +905,20 @@ const styles = {
     gap: '24px'
   },
   card: {
-    backgroundColor: '#111118',
-    border: '1px solid #1f1f2e',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.border.default}`,
     borderRadius: '12px',
     padding: '20px'
   },
   cardTitle: {
     fontSize: '16px',
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text.primary,
     margin: '0 0 16px 0'
   },
   chartCard: {
-    backgroundColor: '#111118',
-    border: '1px solid #1f1f2e',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.border.default}`,
     borderRadius: '12px',
     padding: '20px'
   },
@@ -926,7 +931,7 @@ const styles = {
   periodSelector: {
     display: 'flex',
     gap: '4px',
-    backgroundColor: '#0a0a0f',
+    backgroundColor: theme.bg.page,
     borderRadius: '6px',
     padding: '4px'
   },
@@ -935,14 +940,14 @@ const styles = {
     backgroundColor: 'transparent',
     border: 'none',
     borderRadius: '4px',
-    color: '#6b7280',
+    color: theme.text.secondary,
     cursor: 'pointer',
     fontSize: '12px',
     fontWeight: '500'
   },
   periodButtonActive: {
-    backgroundColor: '#1f1f2e',
-    color: '#fff'
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary
   },
   chartContainer: {
     height: '200px',
@@ -966,14 +971,14 @@ const styles = {
   },
   chartBar: {
     width: '100%',
-    backgroundColor: '#8b5cf6',
+    backgroundColor: theme.accent.primary,
     borderRadius: '4px 4px 0 0',
     minHeight: '4px',
     transition: 'height 0.3s'
   },
   chartBarLabel: {
     fontSize: '10px',
-    color: '#6b7280',
+    color: theme.text.secondary,
     marginTop: '4px'
   },
   chartLegend: {
@@ -986,13 +991,13 @@ const styles = {
     alignItems: 'center',
     gap: '6px',
     fontSize: '12px',
-    color: '#9ca3af'
+    color: theme.text.muted
   },
   legendDot: {
     width: '8px',
     height: '8px',
     borderRadius: '50%',
-    backgroundColor: '#8b5cf6'
+    backgroundColor: theme.accent.primary
   },
   categoryPerformance: {
     display: 'flex',
@@ -1007,7 +1012,7 @@ const styles = {
   categoryPerfName: {
     width: '100px',
     fontSize: '13px',
-    color: '#e5e7eb',
+    color: theme.text.primary,
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis'
@@ -1015,7 +1020,7 @@ const styles = {
   categoryPerfBarContainer: {
     flex: 1,
     height: '8px',
-    backgroundColor: '#1f1f2e',
+    backgroundColor: theme.bg.elevated,
     borderRadius: '4px',
     overflow: 'hidden'
   },
@@ -1028,7 +1033,7 @@ const styles = {
     width: '60px',
     textAlign: 'right',
     fontSize: '13px',
-    color: '#9ca3af'
+    color: theme.text.muted
   },
   songList: {
     display: 'flex',
@@ -1040,7 +1045,7 @@ const styles = {
     alignItems: 'center',
     gap: '12px',
     padding: '12px',
-    backgroundColor: '#0a0a0f',
+    backgroundColor: theme.bg.page,
     borderRadius: '8px',
     cursor: 'pointer',
     transition: 'background-color 0.2s'
@@ -1049,13 +1054,13 @@ const styles = {
     width: '24px',
     height: '24px',
     borderRadius: '50%',
-    backgroundColor: '#1f1f2e',
+    backgroundColor: theme.bg.elevated,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '12px',
     fontWeight: '600',
-    color: '#9ca3af'
+    color: theme.text.muted
   },
   songInfo: {
     flex: 1,
@@ -1065,14 +1070,14 @@ const styles = {
     display: 'block',
     fontSize: '13px',
     fontWeight: '500',
-    color: '#fff',
+    color: theme.text.primary,
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis'
   },
   songMeta: {
     fontSize: '11px',
-    color: '#6b7280'
+    color: theme.text.secondary
   },
   songStats: {
     textAlign: 'right'
@@ -1085,7 +1090,7 @@ const styles = {
   },
   songTrend: {
     fontSize: '10px',
-    color: '#6b7280'
+    color: theme.text.secondary
   },
   accountList: {
     display: 'flex',
@@ -1104,17 +1109,17 @@ const styles = {
     display: 'block',
     fontSize: '13px',
     fontWeight: '500',
-    color: '#fff'
+    color: theme.text.primary
   },
   accountPlatform: {
     fontSize: '11px',
-    color: '#6b7280',
+    color: theme.text.secondary,
     textTransform: 'capitalize'
   },
   accountBarContainer: {
     flex: 1,
     height: '8px',
-    backgroundColor: '#1f1f2e',
+    backgroundColor: theme.bg.elevated,
     borderRadius: '4px',
     overflow: 'hidden'
   },
@@ -1127,15 +1132,15 @@ const styles = {
     width: '60px',
     textAlign: 'right',
     fontSize: '13px',
-    color: '#9ca3af'
+    color: theme.text.muted
   },
   viewAllButton: {
     width: '100%',
     padding: '10px',
     backgroundColor: 'transparent',
-    border: '1px solid #2d2d3d',
+    border: `1px solid ${theme.border.default}`,
     borderRadius: '8px',
-    color: '#9ca3af',
+    color: theme.text.muted,
     cursor: 'pointer',
     fontSize: '13px',
     marginTop: '12px',
@@ -1148,18 +1153,18 @@ const styles = {
   videoTableHeader: {
     display: 'flex',
     padding: '12px',
-    borderBottom: '1px solid #1f1f2e',
+    borderBottom: `1px solid ${theme.border.default}`,
     fontSize: '12px',
     fontWeight: '600',
-    color: '#6b7280',
+    color: theme.text.secondary,
     textTransform: 'uppercase'
   },
   videoTableRow: {
     display: 'flex',
     padding: '12px',
-    borderBottom: '1px solid #1f1f2e',
+    borderBottom: `1px solid ${theme.border.default}`,
     fontSize: '13px',
-    color: '#e5e7eb',
+    color: theme.text.primary,
     alignItems: 'center'
   },
   videoTableCell: {
@@ -1176,13 +1181,13 @@ const styles = {
     width: '20px',
     height: '20px',
     borderRadius: '50%',
-    backgroundColor: '#1f1f2e',
+    backgroundColor: theme.bg.elevated,
     fontSize: '11px',
     marginRight: '8px',
-    color: '#9ca3af'
+    color: theme.text.muted
   },
   songLink: {
-    color: '#8b5cf6',
+    color: theme.accent.primary,
     cursor: 'pointer',
     textDecoration: 'none'
   },
@@ -1196,8 +1201,8 @@ const styles = {
     gap: '16px'
   },
   songCard: {
-    backgroundColor: '#111118',
-    border: '1px solid #1f1f2e',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.border.default}`,
     borderRadius: '12px',
     padding: '20px',
     cursor: 'pointer',
@@ -1211,7 +1216,7 @@ const styles = {
   },
   songCardRank: {
     fontSize: '12px',
-    color: '#6b7280',
+    color: theme.text.secondary,
     fontWeight: '600'
   },
   songCardIcon: {
@@ -1220,7 +1225,7 @@ const styles = {
   songCardName: {
     fontSize: '15px',
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text.primary,
     margin: '0 0 4px 0',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
@@ -1228,7 +1233,7 @@ const styles = {
   },
   songCardMeta: {
     fontSize: '12px',
-    color: '#6b7280',
+    color: theme.text.secondary,
     margin: '0 0 16px 0'
   },
   songCardStats: {
@@ -1244,11 +1249,11 @@ const styles = {
     display: 'block',
     fontSize: '18px',
     fontWeight: '600',
-    color: '#fff'
+    color: theme.text.primary
   },
   songCardStatLabel: {
     fontSize: '11px',
-    color: '#6b7280'
+    color: theme.text.secondary
   },
   songCardAvg: {
     fontSize: '12px',
@@ -1272,17 +1277,17 @@ const styles = {
     alignItems: 'center',
     marginTop: '8px',
     padding: '8px 12px',
-    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    backgroundColor: `${theme.accent.primary}18`,
     borderRadius: '6px'
   },
   attrLiftLabel: {
     fontSize: '11px',
-    color: '#a78bfa'
+    color: theme.accent.hover
   },
   attrLiftValue: {
     fontSize: '14px',
     fontWeight: '600',
-    color: '#a78bfa'
+    color: theme.accent.hover
   },
   // Videos tab
   videosTab: {
@@ -1328,16 +1333,17 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     padding: '12px 16px',
-    backgroundColor: '#111118',
+    backgroundColor: theme.bg.surface,
     borderRadius: '8px'
   },
   categoryName: {
     flex: 1,
-    fontWeight: '500'
+    fontWeight: '500',
+    color: theme.text.primary
   },
   categoryVideos: {
     width: '100px',
-    color: '#6b7280',
+    color: theme.text.secondary,
     fontSize: '13px'
   },
   categoryViews: {
@@ -1353,13 +1359,13 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     height: '400px',
-    color: '#6b7280'
+    color: theme.text.secondary
   },
   spinner: {
     width: '40px',
     height: '40px',
-    border: '3px solid #1f1f2e',
-    borderTopColor: '#8b5cf6',
+    border: `3px solid ${theme.border.default}`,
+    borderTopColor: theme.accent.primary,
     borderRadius: '50%',
     animation: 'spin 1s linear infinite',
     marginBottom: '16px'
@@ -1367,17 +1373,17 @@ const styles = {
   miniSpinner: {
     width: '14px',
     height: '14px',
-    border: '2px solid #1f1f2e',
-    borderTopColor: '#fff',
+    border: `2px solid ${theme.border.default}`,
+    borderTopColor: theme.text.primary,
     borderRadius: '50%',
     animation: 'spin 1s linear infinite'
   },
   emptyState: {
     textAlign: 'center',
     padding: '48px',
-    color: '#6b7280'
+    color: theme.text.muted
   }
-};
+});
 
 // Add keyframes for spinner
 if (typeof document !== 'undefined' && !document.getElementById('analytics-dashboard-styles')) {

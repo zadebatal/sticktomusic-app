@@ -69,6 +69,8 @@ export const ThemeProvider = ({ children }) => {
     if (THEMES[id]) {
       setThemeId(id);
       try { localStorage.setItem('stm_theme', id); } catch {}
+      // Dispatch event so components outside ThemeProvider (e.g. App.jsx) can react
+      window.dispatchEvent(new CustomEvent('stm-theme-change', { detail: id }));
     }
   }, []);
 

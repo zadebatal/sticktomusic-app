@@ -102,14 +102,15 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
 
       {/* ═══ PRICING ═══ */}
       <section className="py-24 px-6">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-6xl mx-auto">
           <h2 className={`text-3xl md:text-4xl font-bold text-center mb-4 ${t.textPrimary}`}>Simple pricing</h2>
-          <p className={`text-center ${t.textSecondary} mb-16`}>Start free. Scale when you're ready.</p>
-          <div className="grid md:grid-cols-3 gap-6">
+          <p className={`text-center ${t.textSecondary} mb-16`}>Scale your content creation from day one.</p>
+          <div className="grid md:grid-cols-4 gap-6">
             {[
-              { name: 'Starter', price: 'Free', desc: 'Get started with the basics', features: ['1 connected account', '30 scheduled posts/mo', 'Basic analytics', 'Studio access'] },
-              { name: 'Pro', price: '$29', desc: 'For serious creators', features: ['5 connected accounts', 'Unlimited scheduled posts', 'Full analytics', 'Batch scheduling', '1 team member'], popular: true },
-              { name: 'Team', price: '$79', desc: 'For managers & agencies', features: ['Unlimited accounts', 'Unlimited posts', 'Advanced analytics', 'Priority support', '5 team members'] }
+              { name: 'Starter', price: '$500', accounts: '5 accounts', features: ['5 connected accounts', 'Unlimited posting', 'Studio access', 'Basic analytics'] },
+              { name: 'Growth', price: '$1,000', accounts: '10 accounts', features: ['10 connected accounts', 'Unlimited posting', 'Studio access', 'Full analytics'], popular: true },
+              { name: 'Scale', price: '$2,500', accounts: '25 accounts', features: ['25 connected accounts', 'Unlimited posting', 'Studio access', 'Advanced analytics'] },
+              { name: 'Enterprise', price: '$5,000', accounts: '50 accounts', features: ['50 connected accounts', 'Unlimited posting', 'Studio access', 'Advanced analytics'] }
             ].map((tier, i) => (
               <div key={i} className={`p-8 rounded-2xl border ${tier.popular ? 'border-indigo-500' : t.cardBorder} ${t.cardBg} relative`}>
                 {tier.popular && (
@@ -118,10 +119,10 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
                   </span>
                 )}
                 <h3 className={`text-lg font-semibold ${t.textPrimary}`}>{tier.name}</h3>
-                <p className={`text-sm ${t.textSecondary} mb-4`}>{tier.desc}</p>
+                <p className={`text-xs ${t.textSecondary} mb-4`}>{tier.accounts}</p>
                 <div className="mb-6">
                   <span className={`text-4xl font-bold ${t.textPrimary}`}>{tier.price}</span>
-                  {tier.price !== 'Free' && <span className={`${t.textMuted}`}>/mo</span>}
+                  <span className={`${t.textMuted}`}>/mo</span>
                 </div>
                 <ul className="space-y-2 mb-8">
                   {tier.features.map((f, j) => (
