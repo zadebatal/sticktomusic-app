@@ -1185,7 +1185,7 @@ const SoloClipEditor = ({
                 );
               })}
 
-              <button onClick={addTextOverlay} style={styles.addTextButton}>
+              <button onClick={() => addTextOverlay()} style={styles.addTextButton}>
                 + Add Text Overlay
               </button>
 
