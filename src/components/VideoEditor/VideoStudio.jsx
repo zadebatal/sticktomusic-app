@@ -291,6 +291,15 @@ const VideoStudio = ({
   // Track previous artist ID to detect actual changes (not just re-renders)
   const prevArtistIdRef = useRef(initialArtistId);
 
+  // Sync with parent when initialArtistId changes (e.g., from null to valid ID after login)
+  useEffect(() => {
+    if (initialArtistId && initialArtistId !== currentArtistId) {
+      log('[VideoStudio] Syncing artistId from parent:', initialArtistId);
+      setCurrentArtistId(initialArtistId);
+      prevArtistIdRef.current = initialArtistId;
+    }
+  }, [initialArtistId]);
+
   // Update parent when artist changes
   const handleArtistIdChange = (newArtistId) => {
     if (newArtistId === currentArtistId) return; // No change
