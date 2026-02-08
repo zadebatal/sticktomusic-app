@@ -48,6 +48,7 @@ const SchedulingPage = ({
 
   // ── Batch schedule controls ──
   const [batchAccount, setBatchAccount] = useState('');
+  const [batchPlatforms, setBatchPlatforms] = useState({}); // { tiktok: true, instagram: true, ... }
   const [batchStartDate, setBatchStartDate] = useState('');
   const [batchStartTime, setBatchStartTime] = useState('14:00');
   const [postsPerDay, setPostsPerDay] = useState(2);
@@ -91,6 +92,22 @@ const SchedulingPage = ({
     accounts.forEach(acc => handles.add(acc.handle));
     return Array.from(handles);
   }, [accounts]);
+
+  // Linked platforms for the currently selected batch account
+  const linkedPlatforms = useMemo(() => {
+    if (!batchAccount) return [];
+    const mapping = lateAccountIds[batchAccount] || {};
+    return Object.keys(mapping).filter(p => mapping[p]);
+  }, [batchAccount, lateAccountIds]);
+
+  // Auto-enable all linked platforms when account changes
+  useEffect(() => {
+    if (!batchAccount) { setBatchPlatforms({}); return; }
+    const mapping = lateAccountIds[batchAccount] || {};
+    const enabled = {};
+    Object.keys(mapping).forEach(p => { if (mapping[p]) enabled[p] = true; });
+    setBatchPlatforms(enabled);
+  }, [batchAccount, lateAccountIds]);
 
   // ── Load & Subscribe ──
   useEffect(() => {
@@ -311,13 +328,13 @@ const SchedulingPage = ({
       });
     }
 
-    // Build account/platform assignments from batchAccount
+    // Build account/platform assignments from batchAccount + batchPlatforms
     let platformUpdate = {};
     if (batchAccount) {
       const mapping = lateAccountIds[batchAccount];
       if (mapping) {
         Object.entries(mapping).forEach(([platform, accountId]) => {
-          if (accountId) {
+          if (accountId && batchPlatforms[platform]) {
             platformUpdate[platform] = { accountId, handle: batchAccount };
           }
         });
@@ -353,7 +370,7 @@ const SchedulingPage = ({
     toastSuccess(`Scheduled ${scheduled.length} post${scheduled.length !== 1 ? 's' : ''}`);
     setSelectedPostIds(new Set());
   }, [batchStartDate, batchStartTime, postsPerDay, spacingMode, spacingMinutes, batchRandomMin, batchRandomMax,
-    selectedPostIds, selectedCount, posts, db, artistId, batchAccount, lateAccountIds,
+    selectedPostIds, selectedCount, posts, db, artistId, batchAccount, batchPlatforms, lateAccountIds,
     campaignHashtags, campaignCaption, alwaysOnHashtags, toastSuccess]);
 
   // ── Batch Assign Account (without scheduling) ──
@@ -519,6 +536,35 @@ const SchedulingPage = ({
                 </button>
               )}
             </div>
+
+            {/* Platform Toggles — shows linked platforms for selected account */}
+            {batchAccount && linkedPlatforms.length > 0 && (
+              <>
+                <div style={{ width: '1px', height: '32px', backgroundColor: '#27272a' }} />
+                <div style={s.bulkSection}>
+                  <label style={s.miniLabel}>Platforms</label>
+                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                    {linkedPlatforms.map(platform => {
+                      const isOn = !!batchPlatforms[platform];
+                      const color = PLATFORM_COLORS[platform];
+                      return (
+                        <button
+                          key={platform}
+                          onClick={() => setBatchPlatforms(prev => ({ ...prev, [platform]: !prev[platform] }))}
+                          style={{
+                            padding: '3px 10px', borderRadius: '6px', border: '1px solid', fontSize: '11px', fontWeight: '600', cursor: 'pointer',
+                            backgroundColor: isOn ? color + '22' : '#1a1a1e', borderColor: isOn ? color : '#2a2a2e',
+                            color: isOn ? color : '#52525b', transition: 'all 0.12s'
+                          }}
+                        >
+                          {PLATFORM_LABELS[platform]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
 
             <div style={{ width: '1px', height: '32px', backgroundColor: '#27272a' }} />
 
@@ -689,7 +735,6 @@ const SchedulingPage = ({
               <div style={{ width: '28px' }} />
               <div style={{ width: '44px' }} />
               <div style={{ flex: 1.2, minWidth: 0 }}>Content</div>
-              <div style={{ width: '280px' }}>Platforms</div>
               <div style={{ width: '190px' }}>Schedule</div>
               <div style={{ width: '200px' }}>Caption</div>
               <div style={{ width: '80px', textAlign: 'center' }}>Status</div>
@@ -833,8 +878,6 @@ const PostRow = ({
     [POST_STATUS.FAILED]: '#7f1d1d'
   }[post.status] || '#27272a';
 
-  const allPlatforms = Object.values(PLATFORMS);
-  const selectedPlatforms = post.platforms || {};
   const previewImage = post.thumbnail || post.editorState?.thumbnail || post.editorState?.slides?.[0]?.backgroundImage || null;
 
   return (
@@ -896,27 +939,6 @@ const PostRow = ({
               </span>
             )}
           </div>
-        </div>
-
-        {/* Platform Toggles */}
-        <div style={{ width: '280px', display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
-          {allPlatforms.map(platform => {
-            const isActive = !!selectedPlatforms[platform];
-            const color = PLATFORM_COLORS[platform];
-            return (
-              <button
-                key={platform}
-                onClick={() => onTogglePlatform(platform)}
-                style={{
-                  padding: '3px 10px', borderRadius: '6px', border: '1px solid', fontSize: '11px', fontWeight: '600', cursor: 'pointer',
-                  backgroundColor: isActive ? color + '22' : '#1a1a1e', borderColor: isActive ? color : '#2a2a2e',
-                  color: isActive ? color : '#52525b', transition: 'all 0.12s'
-                }}
-              >
-                {PLATFORM_LABELS[platform]}
-              </button>
-            );
-          })}
         </div>
 
         {/* Schedule Date/Time */}

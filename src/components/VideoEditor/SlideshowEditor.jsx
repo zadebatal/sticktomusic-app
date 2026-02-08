@@ -3422,14 +3422,15 @@ const SlideshowEditor = ({
                     title="Number of slideshows to generate"
                   />
                   {/* Keep template text toggle */}
+                  <span style={{ fontSize: '9px', color: '#9ca3af', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase', marginRight: '2px' }}>Keep Text:</span>
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: '2px',
                     backgroundColor: 'rgba(255,255,255,0.04)',
                     borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)',
                     padding: '1px'
-                  }} title="Keep exact text from template: None = use text banks, Slide 1/2 = keep that slide's text, Both = keep all text">
+                  }} title="Keep exact text from template: Randomize = pull from text banks, Slide 1/2 = keep that slide's text, Both = keep all text">
                     {[
-                      { value: 'none', label: 'None' },
+                      { value: 'none', label: 'Randomize' },
                       { value: 'slideA', label: 'Slide 1' },
                       { value: 'slideB', label: 'Slide 2' },
                       { value: 'both', label: 'Both' }

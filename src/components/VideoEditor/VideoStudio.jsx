@@ -809,7 +809,7 @@ const VideoStudio = ({
       setSchedulerEditPostId(null);
       setSelectedLibraryMedia({ videos: [], audio: null, images: [], lyrics: [] });
       setPullFromCollection(null);
-      setCurrentView('schedule');
+      setCurrentView('scheduling');
       return;
     }
 
@@ -1483,7 +1483,7 @@ const VideoStudio = ({
       setEditingSlideshow(null);
       setSchedulerEditPostId(null);
       setSelectedLibraryMedia(prev => ({ ...prev, images: [] }));
-      setCurrentView('schedule');
+      setCurrentView('scheduling');
       return;
     }
 
