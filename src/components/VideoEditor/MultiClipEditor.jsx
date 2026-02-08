@@ -1,9 +1,12 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  subscribeToLibrary, subscribeToCollections, getCollections, getLibrary,
-  addToVideoTextBank, removeFromVideoTextBank, updateVideoTextBank, MEDIA_TYPES
+  subscribeToLibrary, subscribeToCollections, getCollections, getLibrary, getLyrics,
+  addToVideoTextBank, removeFromVideoTextBank, updateVideoTextBank,
+  addToLibrary, MEDIA_TYPES
 } from '../../services/libraryService';
 import { useToast } from '../ui';
+import AudioClipSelector from './AudioClipSelector';
+import LyricBank from './LyricBank';
 
 /**
  * MultiClipEditor v1 — "Multi-Clip" video editor mode
@@ -157,6 +160,12 @@ const MultiClipEditor = ({
   // ── Close confirmation ──
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
+  // ── Lyrics state ──
+  const [lyricsBank, setLyricsBank] = useState([]);
+
+  // ── Audio trimmer state ──
+  const [showAudioTrimmer, setShowAudioTrimmer] = useState(false);
+
   // ── Mobile detection ──
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
   useEffect(() => {
@@ -172,6 +181,7 @@ const MultiClipEditor = ({
     setCollections(localCols.filter(c => c.type !== 'smart'));
     const localLib = getLibrary(artistId);
     setLibraryMedia(localLib);
+    setLyricsBank(getLyrics(artistId));
   }, [artistId]);
 
   useEffect(() => {
@@ -317,6 +327,50 @@ const MultiClipEditor = ({
       audioRef.current.src = '';
     }
   }, []);
+
+  // ── Audio trim save handler ──
+  const handleAudioTrimSave = useCallback((trimResult) => {
+    // Create a local URL for the trimmed file if we have one
+    if (trimResult.trimmedFile) {
+      const localUrl = URL.createObjectURL(trimResult.trimmedFile);
+      const savedAudio = {
+        id: `audio_trim_${Date.now()}`,
+        type: MEDIA_TYPES.AUDIO,
+        name: trimResult.trimmedName || 'Trimmed Audio',
+        url: localUrl,
+        localUrl: localUrl,
+        duration: trimResult.duration
+      };
+      // Save to library
+      if (artistId) {
+        addToLibrary(artistId, savedAudio);
+        setLibraryMedia(getLibrary(artistId));
+      }
+      handleAudioSelect(savedAudio);
+      toastSuccess(`Saved "${savedAudio.name}"`);
+    } else {
+      // Metadata-only trim — update selectedAudio with trim points
+      setSelectedAudio(prev => prev ? { ...prev, startTime: trimResult.startTime, endTime: trimResult.endTime } : prev);
+    }
+    setShowAudioTrimmer(false);
+  }, [artistId, handleAudioSelect, toastSuccess]);
+
+  const handleAudioSaveClip = useCallback((clipData) => {
+    if (!selectedAudio || !artistId) return;
+    const savedClip = {
+      id: `audio_clip_${Date.now()}`,
+      type: MEDIA_TYPES.AUDIO,
+      name: clipData.name,
+      url: selectedAudio.url || selectedAudio.localUrl,
+      localUrl: selectedAudio.localUrl || selectedAudio.url,
+      duration: clipData.clipDuration,
+      startTime: clipData.startTime,
+      endTime: clipData.endTime
+    };
+    addToLibrary(artistId, savedClip);
+    setLibraryMedia(getLibrary(artistId));
+    toastSuccess(`Saved clip "${clipData.name}" to library`);
+  }, [selectedAudio, artistId, toastSuccess]);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -1256,6 +1310,19 @@ const MultiClipEditor = ({
                             ))}
                           </div>
                         </div>
+
+                        {/* Save to Bank */}
+                        <div style={{ ...styles.controlRow, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '6px', marginTop: '2px' }}>
+                          <span style={{ fontSize: '10px', color: '#9ca3af' }}>Save to:</span>
+                          <button
+                            style={{ ...styles.toggleButton, borderColor: 'rgba(20,184,166,0.3)', color: '#14b8a6', fontSize: '10px' }}
+                            onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(1, overlay.text); toastSuccess('Saved to Bank A'); }}
+                          >Bank A</button>
+                          <button
+                            style={{ ...styles.toggleButton, borderColor: 'rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '10px' }}
+                            onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(2, overlay.text); toastSuccess('Saved to Bank B'); }}
+                          >Bank B</button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1277,19 +1344,28 @@ const MultiClipEditor = ({
                 {/* Now playing indicator */}
                 {selectedAudio && (
                   <div style={styles.audioNowPlaying}>
-                    <span style={{ fontSize: '11px' }}>Now playing:</span>
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#22c55e' }}>
-                      {selectedAudio.isSourceVideo ? 'Source Video Audio' : (selectedAudio.name || selectedAudio.fileName || 'Audio Track')}
-                    </span>
-                    {selectedAudio.duration && (
-                      <span style={{ fontSize: '10px', color: '#9ca3af' }}>
-                        {Math.floor(selectedAudio.duration / 60)}:{Math.floor(selectedAudio.duration % 60).toString().padStart(2, '0')}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#22c55e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {selectedAudio.isSourceVideo ? 'Source Video Audio' : (selectedAudio.name || selectedAudio.fileName || 'Audio Track')}
                       </span>
-                    )}
-                    <button
-                      onClick={() => handleAudioSelect(null)}
-                      style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '14px', cursor: 'pointer', padding: '0 2px', marginLeft: 'auto' }}
-                    >×</button>
+                      {selectedAudio.duration && (
+                        <span style={{ fontSize: '10px', color: '#9ca3af', flexShrink: 0 }}>
+                          {Math.floor(selectedAudio.duration / 60)}:{Math.floor(selectedAudio.duration % 60).toString().padStart(2, '0')}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                      {!selectedAudio.isSourceVideo && (
+                        <button
+                          onClick={() => setShowAudioTrimmer(true)}
+                          style={{ background: 'none', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', fontSize: '10px', cursor: 'pointer', padding: '2px 6px', borderRadius: '4px' }}
+                        >Trim</button>
+                      )}
+                      <button
+                        onClick={() => handleAudioSelect(null)}
+                        style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '14px', cursor: 'pointer', padding: '0 2px' }}
+                      >×</button>
+                    </div>
                   </div>
                 )}
 
@@ -1345,6 +1421,35 @@ const MultiClipEditor = ({
                     No audio available. Add audio to your library to use here.
                   </div>
                 )}
+              </div>
+
+              {/* ── DIVIDER ── */}
+              <div style={styles.divider} />
+
+              {/* ── LYRICS SECTION ── */}
+              <div style={styles.sectionHeader}>
+                <span>Lyrics</span>
+                <span style={{ fontSize: '10px', color: '#6b7280' }}>{lyricsBank.length}</span>
+              </div>
+              <div style={{ margin: '0 4px 4px', maxHeight: '200px', overflow: 'auto' }}>
+                <LyricBank
+                  lyrics={lyricsBank}
+                  onAddLyrics={(data) => {
+                    onAddLyrics?.(data);
+                    if (artistId) setTimeout(() => setLyricsBank(getLyrics(artistId)), 100);
+                  }}
+                  onUpdateLyrics={(id, updates) => {
+                    onUpdateLyrics?.(id, updates);
+                    if (artistId) setTimeout(() => setLyricsBank(getLyrics(artistId)), 100);
+                  }}
+                  onDeleteLyrics={(id) => {
+                    onDeleteLyrics?.(id);
+                    if (artistId) setTimeout(() => setLyricsBank(getLyrics(artistId)), 100);
+                  }}
+                  onSelectText={(text) => addTextOverlay(text)}
+                  compact={true}
+                  showAddForm={true}
+                />
               </div>
 
               {/* ── DIVIDER ── */}
@@ -1468,6 +1573,17 @@ const MultiClipEditor = ({
 
         {/* ── Hidden Audio Element ── */}
         <audio ref={audioRef} style={{ display: 'none' }} crossOrigin="anonymous" />
+
+        {/* ── Audio Trimmer Modal ── */}
+        {showAudioTrimmer && selectedAudio && (
+          <AudioClipSelector
+            audioUrl={selectedAudio.localUrl || selectedAudio.url}
+            audioName={selectedAudio.name || selectedAudio.fileName || 'Audio'}
+            onSave={handleAudioTrimSave}
+            onSaveClip={handleAudioSaveClip}
+            onCancel={() => setShowAudioTrimmer(false)}
+          />
+        )}
 
         {/* ── Close Confirmation ── */}
         {showCloseConfirm && (
