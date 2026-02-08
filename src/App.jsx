@@ -118,7 +118,7 @@ const STRIPE_PUBLISHABLE_KEY = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY;
 // Can be overridden via REACT_APP_CONDUCTOR_EMAILS environment variable (comma-separated)
 // Conductors can see ALL artists and onboard operators
 // Operators (added via allowedUsers) can only see their assigned artists
-const CONDUCTOR_EMAILS = (process.env.REACT_APP_CONDUCTOR_EMAILS || process.env.REACT_APP_CONDUCTOR_EMAILS || 'zade@sticktomusic.com,zadebatal@gmail.com')
+const CONDUCTOR_EMAILS = (process.env.REACT_APP_CONDUCTOR_EMAILS || process.env.REACT_APP_CONDUCTOR_EMAILS || 'zade@sticktomusic.com,zadebatal@gmail.com,mcclain@livetwocreate.com')
   .split(',')
   .map(email => email.trim().toLowerCase())
   .filter(Boolean);

@@ -820,6 +820,7 @@ const PostRow = ({
   previewTime
 }) => {
   const { theme } = useTheme();
+  const s = getS(theme);
   const [caption, setCaption] = useState(post.caption || '');
   const [schedDate, setSchedDate] = useState('');
   const [schedTime, setSchedTime] = useState('');
@@ -1205,6 +1206,8 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
 // ═══════════════════════════════════════════════════
 
 const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) => {
+  const { theme } = useTheme();
+  const s = getS(theme);
   const [content, setContent] = useState({ videos: [], slideshows: [] });
   const [selectedTab, setSelectedTab] = useState('all');
   const [selectedItems, setSelectedItems] = useState(new Set());
