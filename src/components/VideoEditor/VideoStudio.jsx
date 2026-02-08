@@ -250,6 +250,7 @@ const DraftsView = (props) => {
           onSchedulePost={props.onSchedulePost}
           onViewScheduling={props.onViewScheduling}
           onShowBatchPipeline={props.onShowBatchPipeline}
+          db={props.db}
           accounts={props.accounts}
           lateAccountIds={props.lateAccountIds}
           artistId={props.artistId}
@@ -2124,6 +2125,7 @@ const VideoStudio = ({
             onSchedulePost={onSchedulePost}
             onViewScheduling={() => setCurrentView('scheduling')}
             onShowBatchPipeline={() => setShowBatchPipeline(true)}
+            db={db}
             accounts={accounts}
             lateAccountIds={lateAccountIds}
             artistId={currentArtistId}
@@ -2143,6 +2145,7 @@ const VideoStudio = ({
             onShowBatchPipeline={() => {
               handleMakeSlideshow({ batch: true });
             }}
+            db={db}
             accounts={accounts}
             lateAccountIds={lateAccountIds}
             artistId={currentArtistId}
@@ -2165,6 +2168,7 @@ const VideoStudio = ({
             onSchedulePost={onSchedulePost}
             onViewScheduling={() => setCurrentView('scheduling')}
             onShowBatchPipeline={() => setShowBatchPipeline(true)}
+            db={db}
             accounts={accounts}
             lateAccountIds={lateAccountIds}
             artistId={currentArtistId}
@@ -2181,8 +2185,11 @@ const VideoStudio = ({
             onRenderVideo={null}
             onEditDraft={(post) => {
               if (post.editorState) {
-                // Restore editor with saved state
-                handleMakeVideo(post.editorState);
+                if (post.contentType === 'slideshow') {
+                  handleMakeSlideshow(post.editorState);
+                } else {
+                  handleMakeVideo(post.editorState);
+                }
               }
             }}
             onBack={() => setCurrentView('home')}

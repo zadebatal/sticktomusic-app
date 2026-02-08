@@ -6,6 +6,7 @@ import { VIDEO_STATUS } from '../../utils/status';
 import { renderVideo } from '../../services/videoExportService';
 import { uploadFile } from '../../services/firebaseStorage';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
+import { createScheduledPost, POST_STATUS } from '../../services/scheduledPostsService';
 import log from '../../utils/logger';
 
 /**
@@ -30,6 +31,7 @@ const ContentLibrary = ({
   // Shared
   onShowBatchPipeline, // Open the main batch create workflow
   onViewScheduling, // Navigate to scheduling page
+  db = null, // Firestore instance for creating scheduled posts
   // Posting module props
   accounts = [],
   lateAccountIds = {},
@@ -294,9 +296,26 @@ const ContentLibrary = ({
                     onPreview={() => setPreviewingSlideshow(item)}
                     onEdit={() => onEditSlideshow?.(item)}
                     onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
-                    onPost={() => {
-                      if (onViewScheduling) {
-                        onViewScheduling(); // Navigate to scheduling page
+                    onPost={async () => {
+                      if (onViewScheduling && db && artistId) {
+                        // Create a scheduled post and navigate to scheduling page
+                        try {
+                          await createScheduledPost(db, artistId, {
+                            contentId: item.id,
+                            contentType: 'slideshow',
+                            contentName: item.name || item.title || 'Untitled Slideshow',
+                            thumbnail: item.thumbnail || (item.slides?.[0]?.imageUrl) || null,
+                            cloudUrl: null,
+                            editorState: item,
+                            status: POST_STATUS.DRAFT
+                          });
+                          toastSuccess('Added to schedule queue');
+                        } catch (err) {
+                          console.error('[ContentLibrary] Failed to create scheduled post:', err);
+                        }
+                        onViewScheduling();
+                      } else if (onViewScheduling) {
+                        onViewScheduling();
                       } else {
                         setPostingSlideshow(item);
                         setShowScheduleQueue(true);
@@ -313,7 +332,28 @@ const ContentLibrary = ({
                     onEdit={() => onEditVideo(item)}
                     onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
                     onApprove={() => onApproveVideo(item.id)}
-                    onPost={() => setExportingVideo(item)}
+                    onPost={async () => {
+                      if (onViewScheduling && db && artistId) {
+                        // Create a scheduled post and navigate to scheduling page
+                        try {
+                          await createScheduledPost(db, artistId, {
+                            contentId: item.id,
+                            contentType: 'video',
+                            contentName: item.name || item.title || 'Untitled Video',
+                            thumbnail: item.thumbnail || null,
+                            cloudUrl: item.cloudUrl || null,
+                            editorState: item,
+                            status: POST_STATUS.DRAFT
+                          });
+                          toastSuccess('Added to schedule queue');
+                        } catch (err) {
+                          console.error('[ContentLibrary] Failed to create scheduled post:', err);
+                        }
+                        onViewScheduling();
+                      } else {
+                        setExportingVideo(item);
+                      }
+                    }}
                     onRender={() => handleRenderVideo(item)}
                     onPreview={() => setPreviewingVideo(item)}
                     isRendering={renderingVideoId === item.id}
