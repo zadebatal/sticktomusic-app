@@ -499,7 +499,7 @@ const StickToMusic = () => {
 
   // Multi-artist state - artists loaded from Firestore
   const [firestoreArtists, setFirestoreArtists] = useState([]);
-  const [currentArtistId, setCurrentArtistId] = useState(() => getLastArtistId());
+  const [currentArtistId, setCurrentArtistId] = useState(null); // Set by artist subscription after login validates permissions
   const [artistsLoaded, setArtistsLoaded] = useState(false);
 
   // Master auth listener - tracks Firebase auth state
@@ -628,7 +628,7 @@ const StickToMusic = () => {
     });
 
     return () => unsubscribe();
-  }, [authChecked, currentAuthUser]);
+  }, [authChecked, currentAuthUser, allowedUsers]);
 
   // Check Late connection status for an artist
   const checkArtistLateStatus = async (artistId) => {
@@ -1703,6 +1703,7 @@ const StickToMusic = () => {
       await signOut(auth);
       setUser(null);
       setCurrentArtistId(null);   // Clear artist selection so next user gets their own
+      try { localStorage.removeItem('stm_last_artist_id'); } catch {} // Clear persisted artist
       setCurrentPage('home');
       showToast('Logged out successfully', 'success');
     } catch (error) {
