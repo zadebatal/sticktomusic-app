@@ -34,7 +34,8 @@ const SlideshowEditor = ({
   onSchedulePost,
   onAddLyrics,
   onImportToBank,
-  lateAccountIds = {}
+  lateAccountIds = {},
+  schedulerEditMode = false
 }) => {
   // Mobile responsive detection
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
@@ -1930,7 +1931,7 @@ const SlideshowEditor = ({
             </button>
             {!isMobile && (
               <>
-                {allSlideshows.length > 1 && (
+                {!schedulerEditMode && allSlideshows.length > 1 && (
                   <button
                     style={{
                       ...styles.saveButton,
@@ -1943,7 +1944,7 @@ const SlideshowEditor = ({
                   </button>
                 )}
                 <button style={{ ...styles.saveButton, backgroundColor: '#059669', border: 'none', color: '#fff' }} onClick={handleSave}>
-                  Save Draft
+                  {schedulerEditMode ? 'Save' : 'Save Draft'}
                 </button>
               </>
             )}
@@ -3371,6 +3372,9 @@ const SlideshowEditor = ({
                   {slides.length} / 10 slides
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {schedulerEditMode ? (
+                    <span style={{ fontSize: '11px', color: '#6b7280' }}>Editing scheduled post</span>
+                  ) : <>
                   {/* Template quick-switch */}
                   <button
                     onClick={() => switchToSlideshow(0)}
@@ -3488,6 +3492,7 @@ const SlideshowEditor = ({
                       {allSlideshows.length} total
                     </span>
                   )}
+                  </>}
                 </div>
               </div>
             </div>

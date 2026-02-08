@@ -39,7 +39,8 @@ const VideoEditorModal = ({
   onClose,
   artistId = null,
   db = null,
-  showTemplatePicker = false
+  showTemplatePicker = false,
+  schedulerEditMode = false
 }) => {
   // Editor mode: null = show picker, 'montage' = current editor, 'solo-clip' = solo clip editor
   // Show picker only when explicitly creating a new video (showTemplatePicker=true)
@@ -2838,7 +2839,7 @@ const VideoEditorModal = ({
               }}
               onClick={handleSave}
             >
-              Confirm
+              {schedulerEditMode ? 'Save' : 'Confirm'}
             </button>
           </div>
         </div>

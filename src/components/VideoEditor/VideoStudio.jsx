@@ -37,6 +37,7 @@ import {
   STARTER_TEMPLATES
 } from '../../services/libraryService';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { updateScheduledPost } from '../../services/scheduledPostsService';
 import { VIDEO_STATUS } from '../../utils/status';
 import { useToast, ConfirmDialog } from '../ui';
 import log from '../../utils/logger';
@@ -549,6 +550,9 @@ const VideoStudio = ({
   const [showSlideshowEditor, setShowSlideshowEditor] = useState(false);
   const [editingSlideshow, setEditingSlideshow] = useState(null);
 
+  // Scheduler edit mode — when editing a post from the scheduler, save goes back to scheduler
+  const [schedulerEditPostId, setSchedulerEditPostId] = useState(null);
+
   // Wave 4: Save draft prompt dialog state
   const [draftDialog, setDraftDialog] = useState({ isOpen: false, pendingAction: null });
 
@@ -787,7 +791,28 @@ const VideoStudio = ({
     setPullFromCollection(null);
   }, []);
 
-  const handleSaveVideo = useCallback((videoData) => {
+  const handleSaveVideo = useCallback(async (videoData) => {
+    // Scheduler edit mode: update the scheduledPost directly and return to scheduler
+    if (schedulerEditPostId) {
+      try {
+        await updateScheduledPost(db, currentArtistId, schedulerEditPostId, {
+          editorState: videoData,
+          contentName: videoData.name || videoData.id || 'Edited Video',
+          thumbnail: videoData.thumbnail || null
+        });
+        log('[VideoStudio] Updated scheduledPost from editor:', schedulerEditPostId);
+      } catch (err) {
+        console.error('[VideoStudio] Failed to update scheduledPost:', err);
+      }
+      setShowEditor(false);
+      setEditingVideo(null);
+      setSchedulerEditPostId(null);
+      setSelectedLibraryMedia({ videos: [], audio: null, images: [], lyrics: [] });
+      setPullFromCollection(null);
+      setCurrentView('schedule');
+      return;
+    }
+
     // Library mode: save via libraryService when no category is selected
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
@@ -847,7 +872,7 @@ const VideoStudio = ({
     // Navigate to content library after saving
     setCurrentView('library');
     setStudioMode('videos');
-  }, [selectedCategory, currentArtistId]);
+  }, [selectedCategory, currentArtistId, schedulerEditPostId, db]);
 
   const handleUploadVideos = useCallback(async (files) => {
     if (!selectedCategory) return;
@@ -1441,6 +1466,27 @@ const VideoStudio = ({
   }, []);
 
   const handleSaveSlideshow = useCallback(async (slideshowData) => {
+    // Scheduler edit mode: update the scheduledPost directly and return to scheduler
+    if (schedulerEditPostId) {
+      try {
+        const firstSlide = slideshowData.slides?.[0];
+        await updateScheduledPost(db, currentArtistId, schedulerEditPostId, {
+          editorState: slideshowData,
+          contentName: slideshowData.name || 'Edited Slideshow',
+          thumbnail: firstSlide?.backgroundImage || firstSlide?.thumbnail || null
+        });
+        log('[VideoStudio] Updated scheduledPost (slideshow) from editor:', schedulerEditPostId);
+      } catch (err) {
+        console.error('[VideoStudio] Failed to update scheduledPost:', err);
+      }
+      setShowSlideshowEditor(false);
+      setEditingSlideshow(null);
+      setSchedulerEditPostId(null);
+      setSelectedLibraryMedia(prev => ({ ...prev, images: [] }));
+      setCurrentView('schedule');
+      return;
+    }
+
     // Library mode: save via libraryService (with Firestore sync)
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
@@ -1496,7 +1542,7 @@ const VideoStudio = ({
 
     setShowSlideshowEditor(false);
     setEditingSlideshow(null);
-  }, [selectedCategory, currentArtistId]);
+  }, [selectedCategory, currentArtistId, schedulerEditPostId, db]);
 
   // ============================================
   // IMAGE BANK HANDLERS (for Slideshow mode)
@@ -2186,6 +2232,7 @@ const VideoStudio = ({
             onRenderVideo={null}
             onEditDraft={(post) => {
               if (post.editorState) {
+                setSchedulerEditPostId(post.id); // Track which scheduledPost we're editing
                 if (post.contentType === 'slideshow') {
                   handleMakeSlideshow(post.editorState);
                 } else {
@@ -2234,14 +2281,15 @@ const VideoStudio = ({
             onAddLyrics={handleAddLyrics}
             onUpdateLyrics={handleUpdateLyrics}
             onDeleteLyrics={handleDeleteLyrics}
-            onShowBatchPipeline={(settings) => {
+            onShowBatchPipeline={schedulerEditPostId ? null : (settings) => {
               setBatchLyricSettings(settings || null);
               setShowBatchPipeline(true);
             }}
-            onClose={handleCloseEditor}
+            onClose={() => { handleCloseEditor(); setSchedulerEditPostId(null); }}
             artistId={currentArtistId}
             db={db}
-            showTemplatePicker={showTemplatePicker}
+            showTemplatePicker={schedulerEditPostId ? false : showTemplatePicker}
+            schedulerEditMode={!!schedulerEditPostId}
           />
         </EditorErrorBoundary>
       )}
@@ -2265,11 +2313,12 @@ const VideoStudio = ({
           initialSelectedBanks={selectedLibraryMedia?.selectedBanks || null}
           batchMode={slideshowBatchMode}
           onSave={handleSaveSlideshow}
-          onClose={handleCloseSlideshowEditor}
-          onSchedulePost={onSchedulePost}
+          onClose={() => { handleCloseSlideshowEditor(); setSchedulerEditPostId(null); }}
+          onSchedulePost={schedulerEditPostId ? null : onSchedulePost}
           onAddLyrics={handleAddLyrics}
           onImportToBank={handleUploadImages}
           lateAccountIds={lateAccountIds}
+          schedulerEditMode={!!schedulerEditPostId}
         />
       )}
 

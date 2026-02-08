@@ -200,6 +200,19 @@ const SchedulingPage = ({
     setDragOverId(null);
   }, []);
 
+  // ── Shuffle / Randomize Order ──
+  const handleRandomizeOrder = useCallback(async () => {
+    const shuffled = [...posts];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    setPosts(shuffled.map((p, i) => ({ ...p, queuePosition: i })));
+    const newOrder = shuffled.map((p, i) => ({ id: p.id, queuePosition: i }));
+    await reorderPosts(db, artistId, newOrder);
+    toastSuccess('Queue randomized');
+  }, [posts, db, artistId, toastSuccess]);
+
   // ── CRUD Handlers ──
   const handleUpdatePost = useCallback(async (postId, updates) => {
     setPosts(prev => prev.map(p => p.id === postId ? { ...p, ...updates } : p));
@@ -222,6 +235,27 @@ const SchedulingPage = ({
       }
     });
   }, [posts, db, artistId, expandedPostId, toastSuccess]);
+
+  // ── Delete Selected Posts ──
+  const handleDeleteSelected = useCallback(() => {
+    if (selectedCount === 0) return;
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Selected Posts',
+      message: `Permanently remove ${selectedCount} post${selectedCount !== 1 ? 's' : ''} from the queue?`,
+      variant: 'destructive',
+      onConfirm: async () => {
+        const ids = [...selectedPostIds];
+        for (const id of ids) {
+          await deleteScheduledPost(db, artistId, id);
+        }
+        setSelectedPostIds(new Set());
+        if (expandedPostId && ids.includes(expandedPostId)) setExpandedPostId(null);
+        setConfirmDialog({ isOpen: false });
+        toastSuccess(`Removed ${ids.length} post${ids.length !== 1 ? 's' : ''}`);
+      }
+    });
+  }, [selectedPostIds, selectedCount, db, artistId, expandedPostId, toastSuccess]);
 
   // ── Batch Schedule Selected ──
   const handleBatchScheduleSelected = useCallback(async () => {
@@ -420,13 +454,25 @@ const SchedulingPage = ({
             Drafts Only
           </button>
           {hasSelection && (
-            <button style={{ ...s.actionBtnSm, color: '#f87171', borderColor: '#7f1d1d' }} onClick={clearSelection}>
-              Clear ({selectedCount})
-            </button>
+            <>
+              <button style={{ ...s.actionBtnSm, color: '#f87171', borderColor: '#7f1d1d' }} onClick={handleDeleteSelected}>
+                Delete ({selectedCount})
+              </button>
+              <button style={{ ...s.actionBtnSm, color: '#a1a1aa', borderColor: '#3f3f46' }} onClick={clearSelection}>
+                Deselect
+              </button>
+            </>
           )}
           <div style={{ width: '1px', height: '24px', backgroundColor: '#3f3f46' }} />
           <button style={s.actionBtn} onClick={() => setShowAddModal(true)}>
             <span style={{ marginRight: '4px', fontSize: '14px' }}>+</span> Add from Drafts
+          </button>
+          <button
+            style={s.iconBtn}
+            onClick={handleRandomizeOrder}
+            title="Randomize post order"
+          >
+            🔀
           </button>
           <button
             style={s.iconBtn}
@@ -839,11 +885,16 @@ const PostRow = ({
           )}
         </div>
 
-        {/* Content Name */}
+        {/* Content Name + Audio */}
         <div style={{ flex: 1.2, minWidth: 0, cursor: 'pointer' }} onClick={onToggleExpand}>
           <div style={s.contentName}>{post.contentName}</div>
-          <div style={{ fontSize: '10px', color: '#52525b', marginTop: '1px' }}>
-            {post.contentType === 'slideshow' ? 'Slideshow' : 'Video'}
+          <div style={{ fontSize: '10px', color: '#52525b', marginTop: '1px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+            <span>{post.contentType === 'slideshow' ? 'Slideshow' : 'Video'}</span>
+            {post.editorState?.audio && (
+              <span style={{ color: '#6366f1', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={post.editorState.audio.name || post.editorState.audio.title || 'Audio'}>
+                ♪ {post.editorState.audio.name || post.editorState.audio.title || 'Audio'}
+              </span>
+            )}
           </div>
         </div>
 
