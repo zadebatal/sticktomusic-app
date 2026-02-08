@@ -483,8 +483,6 @@ const SlideshowEditor = ({
       if (allBankBIds.size > 0) return libraryImages.filter(img => allBankBIds.has(img.id));
       return imagesB;
     }
-    if (selectedSource === 'all') return libraryImages;
-
     // Collection bank source — format: "collectionId:bankA" or "collectionId:bankB"
     if (selectedSource.includes(':bank')) {
       const [colId, bankKey] = selectedSource.split(':');
@@ -495,12 +493,7 @@ const SlideshowEditor = ({
       }
     }
 
-    // Plain collection ID - filter library images by collection membership
-    const col = collections.find(c => c.id === selectedSource);
-    if (col && col.mediaIds) {
-      return libraryImages.filter(img => col.mediaIds.includes(img.id));
-    }
-    // Fallback: aggregate from all collection bankA
+    // Fallback: aggregate from all collection bankA (Slide 1 photos)
     const fallbackIds = new Set();
     collections.forEach(col => (col.bankA || []).forEach(id => fallbackIds.add(id)));
     if (fallbackIds.size > 0) return libraryImages.filter(img => fallbackIds.has(img.id));
@@ -588,13 +581,15 @@ const SlideshowEditor = ({
   useEffect(() => {
     if (slides.length === 0) {
       if (initialImages && initialImages.length > 0) {
-        // Create slides from images passed from StudioHome
-        const initSlides = initialImages.map((img, i) => ({
+        // Create exactly 2 slides — one from first image (Slide 1), one from second (Slide 2)
+        // Even if many images are passed, template always starts as a 2-slide slideshow
+        const cappedImages = initialImages.slice(0, 2);
+        const initSlides = cappedImages.map((img, i) => ({
           id: `slide_${Date.now()}_${i}`,
           index: i,
           backgroundImage: img.url || img.localUrl,
           thumbnail: img.url || img.localUrl,
-          sourceBank: 'library',
+          sourceBank: i === 0 ? 'imageA' : 'imageB',
           sourceImageId: img.id,
           textOverlays: [],
           duration: 3,
@@ -1596,7 +1591,7 @@ const SlideshowEditor = ({
       const allImgB = [...imgB, ...collBankB];
 
       if (allImgA.length === 0 && allImgB.length === 0) {
-        toastError('No images in banks. Add images to Bank A and Bank B first.');
+        toastError('No images in banks. Add images to Slide 1 and Slide 2 photos first.');
         return;
       }
 
@@ -2057,14 +2052,13 @@ const SlideshowEditor = ({
               >
                 <option value="bankA">Image Bank A (Category)</option>
                 <option value="bankB">Image Bank B (Category)</option>
-                {(db && artistId) && <option value="all">All Media (Library)</option>}
                 {collections.filter(c => c.type !== 'smart').map(c => {
                   const hasBanks = (c.bankA?.length > 0 || c.bankB?.length > 0);
+                  if (!hasBanks) return null;
                   return (
                     <React.Fragment key={c.id}>
-                      <option value={c.id}>{c.name} — All</option>
-                      {hasBanks && <option value={`${c.id}:bankA`}>{c.name} → Bank A ({c.bankA?.length || 0})</option>}
-                      {hasBanks && <option value={`${c.id}:bankB`}>{c.name} → Bank B ({c.bankB?.length || 0})</option>}
+                      <option value={`${c.id}:bankA`}>{c.name} → Slide 1 ({c.bankA?.length || 0})</option>
+                      <option value={`${c.id}:bankB`}>{c.name} → Slide 2 ({c.bankB?.length || 0})</option>
                     </React.Fragment>
                   );
                 })}
