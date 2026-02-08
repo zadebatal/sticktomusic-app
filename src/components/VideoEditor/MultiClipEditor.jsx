@@ -583,11 +583,18 @@ const MultiClipEditor = ({
   }, [setClips]);
 
   const removeClipFromTimeline = useCallback((clipIndex) => {
-    setClips(prev => prev.filter((_, i) => i !== clipIndex));
-    if (activeClipIndex >= clipIndex && activeClipIndex > 0) {
-      setActiveClipIndex(prev => Math.max(0, prev - 1));
-    }
-  }, [setClips, activeClipIndex]);
+    setClips(prev => {
+      const updated = prev.filter((_, i) => i !== clipIndex);
+      // BUG-025: Clamp activeClipIndex to valid range after removal
+      setActiveClipIndex(current => {
+        if (updated.length === 0) return 0;
+        if (current >= clipIndex && current > 0) return current - 1;
+        if (current >= updated.length) return updated.length - 1;
+        return current;
+      });
+      return updated;
+    });
+  }, [setClips]);
 
   const moveClipUp = useCallback((clipIndex) => {
     if (clipIndex <= 0) return;

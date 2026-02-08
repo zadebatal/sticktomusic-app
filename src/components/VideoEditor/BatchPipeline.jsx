@@ -166,6 +166,13 @@ const BatchPipeline = ({
   const [previewUrl, setPreviewUrl] = useState(null);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
 
+  // BUG-019: Revoke preview blob URL on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
   // Generated videos
   const [generatedVideos, setGeneratedVideos] = useState([]);
   const [playingVideoId, setPlayingVideoId] = useState(null);  // Track which video is playing

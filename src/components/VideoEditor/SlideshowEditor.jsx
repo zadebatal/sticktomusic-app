@@ -263,7 +263,8 @@ const SlideshowEditor = ({
     setCanRedo(false);
   }, []);
 
-  // Track slides changes and push to history (skip during active drags)
+  // BUG-022: Debounce history pushes to prevent flooding on rapid state changes
+  const historyTimerRef = useRef(null);
   useEffect(() => {
     if (isUndoRedoRef.current) {
       isUndoRedoRef.current = false;
@@ -272,8 +273,12 @@ const SlideshowEditor = ({
     // Don't flood history during drag operations — snapshot pushed on release
     if (draggingTextId || isDraggingImage || isResizingImage) return;
     if (slides.length > 0) {
-      pushHistory(slides);
+      clearTimeout(historyTimerRef.current);
+      historyTimerRef.current = setTimeout(() => {
+        pushHistory(slides);
+      }, 500);
     }
+    return () => clearTimeout(historyTimerRef.current);
   }, [slides, pushHistory, draggingTextId, isDraggingImage, isResizingImage]);
 
   const handleUndo = useCallback(() => {

@@ -184,7 +184,7 @@ const ContentLibrary = ({
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerLeft}>
-          <button style={styles.backButton} onClick={onBack}>
+          <button style={styles.backButton} onClick={() => { setPreviewingVideo(null); setPreviewingSlideshow(null); onBack?.(); }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>

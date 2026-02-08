@@ -6616,8 +6616,13 @@ const StickToMusic = () => {
                       <button
                         onClick={async () => {
                           const categoryName = editingCategory === '__new__' ? templateForm.name.trim() : editingCategory;
+                          // BUG-023: Validate category name — non-empty and max 50 chars
                           if (!categoryName) {
                             showToast('Please enter a template name', 'error');
+                            return;
+                          }
+                          if (categoryName.length > 50) {
+                            showToast('Template name must be 50 characters or less', 'error');
                             return;
                           }
 

@@ -1622,9 +1622,10 @@ export const subscribeToLibrary = (db, artistId, callback) => {
 export const addToLibraryAsync = async (db, artistId, mediaItem) => {
   const newItem = mediaItem.id ? mediaItem : createMediaItem(mediaItem);
 
-  // Validate duration for audio
+  // BUG-027: Validate duration for audio — reject items with missing/zero duration
   if (newItem.type === MEDIA_TYPES.AUDIO && (!newItem.duration || newItem.duration <= 0)) {
-    console.warn('[Library] Audio item has invalid duration:', newItem.duration);
+    console.error('[Library] Audio item rejected — invalid duration:', newItem.duration);
+    throw new Error('Audio must have a valid duration before saving to library');
   }
 
   // Always save to localStorage first (immediate)

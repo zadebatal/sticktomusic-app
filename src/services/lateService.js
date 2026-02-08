@@ -201,6 +201,10 @@ export async function getArtistLateKeyStatus(artistId) {
 // ============================================
 
 export async function fetchLateAccounts(artistId = null) {
+  // BUG-026: Operator check for Late account enumeration
+  const auth = getAuth();
+  assertLateAccess(auth.currentUser, 'fetchLateAccounts');
+
   try {
     const data = await proxyRequest('accounts', 'GET', null, artistId);
     const accounts = (data.accounts || data.data || []).map(account => ({
@@ -220,6 +224,10 @@ export async function fetchLateAccounts(artistId = null) {
 }
 
 export async function validateLateToken(artistId = null) {
+  // BUG-026: Operator check for Late token validation
+  const auth = getAuth();
+  assertLateAccess(auth.currentUser, 'validateLateToken');
+
   // Token validation now happens server-side
   // This just checks if we can successfully call the proxy for this artist
   try {

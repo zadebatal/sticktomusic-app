@@ -339,7 +339,7 @@ const ExportAndPostModal = ({
                 </button>
               </div>
 
-              {/* Caption Editor */}
+              {/* Caption Editor — BUG-024: Show character count with platform limits */}
               <div style={styles.captionSection}>
                 <label style={styles.captionLabel}>Caption:</label>
                 <textarea
@@ -348,6 +348,17 @@ const ExportAndPostModal = ({
                   placeholder="Add a caption for your post..."
                   style={styles.captionInput}
                 />
+                <div style={{ display: 'flex', gap: '12px', marginTop: '4px', fontSize: '11px', color: '#94a3b8' }}>
+                  <span style={{ color: caption.length > 150 ? '#f87171' : caption.length > 120 ? '#fbbf24' : '#94a3b8' }}>
+                    TikTok: {caption.length}/150
+                  </span>
+                  <span style={{ color: caption.length > 2200 ? '#f87171' : caption.length > 2000 ? '#fbbf24' : '#94a3b8' }}>
+                    IG: {caption.length}/2200
+                  </span>
+                  <span style={{ color: caption.length > 5000 ? '#f87171' : '#94a3b8' }}>
+                    YT: {caption.length}/5000
+                  </span>
+                </div>
               </div>
 
               {/* Post Actions */}
