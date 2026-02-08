@@ -973,6 +973,7 @@ const StudioHome = ({
   const handleLaunchSlideshowEditor = (existingSlideshow = null) => {
     let imagesForEditor = selectedMedia.images;
     let audioForEditor = selectedMedia.audio;
+    let lyricsForEditor = [];
 
     if (selectedCollection) {
       const colMedia = getCollectionMedia(artistId, selectedCollection);
@@ -986,6 +987,11 @@ const StudioHome = ({
       if (!audioForEditor && colAudioItems.length > 0) {
         audioForEditor = colAudioItems[0];
       }
+
+      // Get lyrics associated with this collection
+      lyricsForEditor = lyrics.filter(l =>
+        (l.collectionIds || []).includes(selectedCollection)
+      );
     }
 
     // Mark images as used
@@ -996,6 +1002,7 @@ const StudioHome = ({
         existingSlideshow,
         libraryImages: imagesForEditor,
         libraryAudio: audioForEditor,
+        libraryLyrics: lyricsForEditor,
         pullFromCollection: selectedCollection,
         collectionId: selectedCollection || null
       });

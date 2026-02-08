@@ -24,6 +24,8 @@ const SlideshowEditor = ({
   category,
   existingSlideshow = null,
   initialImages = [],
+  initialAudio = null,
+  initialLyrics = [],
   batchMode = false,
   onSave,
   onClose,
@@ -48,7 +50,7 @@ const SlideshowEditor = ({
     id: 'template',
     name: existingSlideshow?.name || 'Untitled Slideshow',
     slides: existingSlideshow?.slides || [],
-    audio: existingSlideshow?.audio || null,
+    audio: existingSlideshow?.audio || initialAudio || null,
     isTemplate: true
   }]);
   const [activeSlideshowIndex, setActiveSlideshowIndex] = useState(0);
@@ -355,9 +357,12 @@ const SlideshowEditor = ({
     if (catLyrics.length > 0) return catLyrics;
     // Filter library lyrics by active collection
     if (activeCollectionId) {
-      return libraryLyrics.filter(l => (l.collectionIds || []).includes(activeCollectionId));
+      const filtered = libraryLyrics.filter(l => (l.collectionIds || []).includes(activeCollectionId));
+      if (filtered.length > 0) return filtered;
     }
-    return libraryLyrics;
+    if (libraryLyrics.length > 0) return libraryLyrics;
+    // Fallback to initialLyrics passed from parent (e.g. StudioHome selection)
+    return initialLyrics;
   })();
   // Wrapper: add lyrics then refresh local state so picker updates immediately
   const handleAddLyricsAndRefresh = useCallback((data) => {

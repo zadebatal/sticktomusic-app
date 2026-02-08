@@ -226,6 +226,15 @@ const LibraryBrowser = ({
 
   const fileInputRef = useRef(null);
 
+  // Sync activeView when parent changes pullFromCollection (e.g. CollectionPicker dropdown)
+  useEffect(() => {
+    if (pullFromCollection) {
+      setActiveView(pullFromCollection);
+    } else if (pullFromCollection === null) {
+      setActiveView('library');
+    }
+  }, [pullFromCollection]);
+
   // Load data when artistId changes or refresh is triggered
   // Strategy: load from localStorage FIRST for instant UI, then merge Firestore in background
   useEffect(() => {

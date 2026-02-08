@@ -1888,10 +1888,12 @@ const VideoStudio = ({
               handleMakeVideo(options?.existingVideo || null);
             }}
             onMakeSlideshow={(options) => {
-              if (options?.libraryImages) {
+              if (options?.libraryImages || options?.libraryAudio || options?.libraryLyrics) {
                 setSelectedLibraryMedia(prev => ({
                   ...prev,
-                  images: options.libraryImages || []
+                  images: options.libraryImages || prev.images,
+                  audio: options.libraryAudio || prev.audio,
+                  lyrics: options.libraryLyrics || prev.lyrics
                 }));
               }
               if (options?.collectionId) {
@@ -2057,6 +2059,8 @@ const VideoStudio = ({
           }}
           existingSlideshow={editingSlideshow}
           initialImages={selectedLibraryMedia?.images || []}
+          initialAudio={selectedLibraryMedia?.audio || null}
+          initialLyrics={selectedLibraryMedia?.lyrics || []}
           batchMode={slideshowBatchMode}
           onSave={handleSaveSlideshow}
           onClose={handleCloseSlideshowEditor}
