@@ -304,7 +304,7 @@ const ContentLibrary = ({
                             contentId: item.id,
                             contentType: 'slideshow',
                             contentName: item.name || item.title || 'Untitled Slideshow',
-                            thumbnail: item.thumbnail || (item.slides?.[0]?.imageUrl) || null,
+                            thumbnail: item.thumbnail || item.slides?.[0]?.backgroundImage || item.slides?.[0]?.imageUrl || null,
                             cloudUrl: null,
                             editorState: item,
                             status: POST_STATUS.DRAFT
@@ -393,9 +393,30 @@ const ContentLibrary = ({
                 Export
               </button>
             )}
-            <button style={styles.batchBtnPost} onClick={() => {
-              if (onViewScheduling) {
-                onViewScheduling(); // Navigate directly to scheduling page
+            <button style={styles.batchBtnPost} onClick={async () => {
+              if (onViewScheduling && db && artistId) {
+                // Create scheduled posts for ALL selected items
+                try {
+                  const postsToCreate = selectedItems.map(item => ({
+                    contentId: item.id,
+                    contentType: isSlideshow ? 'slideshow' : 'video',
+                    contentName: item.name || item.title || (isSlideshow ? 'Untitled Slideshow' : 'Untitled Video'),
+                    thumbnail: item.thumbnail || (isSlideshow ? (item.slides?.[0]?.backgroundImage || item.slides?.[0]?.imageUrl) : null) || null,
+                    cloudUrl: item.cloudUrl || null,
+                    editorState: item,
+                    status: POST_STATUS.DRAFT
+                  }));
+                  const { addManyScheduledPosts } = await import('../../services/scheduledPostsService');
+                  await addManyScheduledPosts(db, artistId, postsToCreate);
+                  toastSuccess(`Added ${postsToCreate.length} item(s) to schedule queue`);
+                  clearSelection();
+                } catch (err) {
+                  console.error('[ContentLibrary] Batch schedule failed:', err);
+                  toastError('Failed to add items to queue');
+                }
+                onViewScheduling();
+              } else if (onViewScheduling) {
+                onViewScheduling();
               } else {
                 setShowScheduleQueue(true); // Fallback to modal
               }

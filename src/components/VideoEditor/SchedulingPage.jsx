@@ -241,8 +241,8 @@ const SchedulingPage = ({
       const itemsToAdd = selectedItems.map(item => ({
         contentId: item.id,
         contentType: item.type,
-        contentName: item.name,
-        thumbnail: item.thumbnail || null,
+        contentName: item.name || item.title || (item.type === 'slideshow' ? 'Untitled Slideshow' : 'Untitled Video'),
+        thumbnail: item.thumbnail || item.slides?.[0]?.backgroundImage || item.slides?.[0]?.imageUrl || null,
         cloudUrl: item.cloudUrl || null,
         editorState: item
       }));
@@ -851,6 +851,14 @@ const PreviewPanel = ({ post, onEditDraft, onUpdate }) => {
 
   const canPlay = !!(post.cloudUrl);
 
+  // Try to find a preview image from multiple sources
+  const previewImage = post.thumbnail
+    || post.editorState?.thumbnail
+    || post.editorState?.slides?.[0]?.backgroundImage
+    || post.editorState?.slides?.[0]?.imageUrl
+    || post.editorState?.clips?.[0]?.thumbnail
+    || null;
+
   return (
     <div style={s.previewContainer}>
       <div style={s.panelHeader}>
@@ -881,8 +889,22 @@ const PreviewPanel = ({ post, onEditDraft, onUpdate }) => {
               {isPlaying ? '⏸' : '▶'}
             </button>
           </div>
-        ) : post.thumbnail ? (
-          <img src={post.thumbnail} alt={post.contentName} style={s.previewImage} />
+        ) : previewImage ? (
+          <img src={previewImage} alt={post.contentName} style={s.previewImage} />
+        ) : post.editorState?.cloudUrl ? (
+          <div style={s.videoWrapper}>
+            <video
+              ref={videoRef}
+              src={post.editorState.cloudUrl}
+              style={s.previewVideo}
+              onEnded={() => setIsPlaying(false)}
+              playsInline
+              muted
+            />
+            <button style={s.playOverlay} onClick={handlePlayPause}>
+              {isPlaying ? '⏸' : '▶'}
+            </button>
+          </div>
         ) : (
           <div style={s.previewPlaceholder}>
             <span style={{ fontSize: '48px' }}>

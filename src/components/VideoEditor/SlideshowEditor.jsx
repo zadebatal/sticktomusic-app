@@ -48,10 +48,15 @@ const SlideshowEditor = ({
   }, []);
 
   // Multi-timeline state: all slideshows (index 0 = template, rest = generated)
+  // Ensure every slide has textOverlays array (handles legacy data from localStorage)
+  const ensureTextOverlays = (slides) => (slides || []).map(s => ({
+    ...s,
+    textOverlays: s.textOverlays || []
+  }));
   const [allSlideshows, setAllSlideshows] = useState([{
     id: 'template',
     name: existingSlideshow?.name || 'Untitled Slideshow',
-    slides: existingSlideshow?.slides || [],
+    slides: ensureTextOverlays(existingSlideshow?.slides),
     audio: existingSlideshow?.audio || initialAudio || null,
     isTemplate: true
   }]);
@@ -833,7 +838,7 @@ const SlideshowEditor = ({
 
     setSlides(prev => prev.map((slide, i) => {
       if (i !== selectedSlideIndex) return slide;
-      const updatedOverlays = slide.textOverlays.map((overlay, idx) => {
+      const updatedOverlays = (slide.textOverlays || []).map((overlay, idx) => {
         // If a specific overlay ID is given, only reroll that one
         if (overlayId && overlay.id !== overlayId) return overlay;
 
@@ -1298,7 +1303,7 @@ const SlideshowEditor = ({
 
     setSlides(prev => prev.map((slide, i) =>
       i === selectedSlideIndex
-        ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] }
+        ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] }
         : slide
     ));
 
@@ -1311,7 +1316,7 @@ const SlideshowEditor = ({
       i === selectedSlideIndex
         ? {
             ...slide,
-            textOverlays: slide.textOverlays.map(overlay =>
+            textOverlays: (slide.textOverlays || []).map(overlay =>
               overlay.id === overlayId ? { ...overlay, ...updates } : overlay
             )
           }
@@ -1325,7 +1330,7 @@ const SlideshowEditor = ({
       i === selectedSlideIndex
         ? {
             ...slide,
-            textOverlays: slide.textOverlays.filter(o => o.id !== overlayId)
+            textOverlays: (slide.textOverlays || []).filter(o => o.id !== overlayId)
           }
         : slide
     ));
@@ -1376,7 +1381,7 @@ const SlideshowEditor = ({
         if (idx !== selectedSlideIndex) return slide;
         return {
           ...slide,
-          textOverlays: slide.textOverlays.map(o =>
+          textOverlays: (slide.textOverlays || []).map(o =>
             o.id === draggingTextId
               ? { ...o, position: { ...o.position, x: newX, y: newY } }
               : o
@@ -1436,7 +1441,7 @@ const SlideshowEditor = ({
       };
       setSlides(prev => prev.map((slide, i) =>
         i === selectedSlideIndex
-          ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] }
+          ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] }
           : slide
       ));
       setEditingTextId(newOverlay.id);
@@ -1617,12 +1622,18 @@ const SlideshowEditor = ({
           // Text bank is assigned per SLIDE index: slide 0 → textBank1, slide 1 → textBank2
           // Cycle through the bank using the generation index `i` so each slideshow
           // gets the next item in sequence (wrapping around when exhausted)
+          const templateOverlays = templateSlide.textOverlays || [];
           const slideTBank = s === 0 ? textBank1 : s === 1 ? textBank2 : [...textBank1, ...textBank2];
-          const newTextOverlays = (templateSlide.textOverlays || []).map((overlay, textIdx) => {
+          if (i === 0 && s === 0) {
+            log('[SlideshowGen] Template slide 0 has', templateOverlays.length, 'text overlays, textBank has', slideTBank.length, 'entries');
+          }
+          const newTextOverlays = templateOverlays.map((overlay, textIdx) => {
             let newText = overlay.text; // Fallback: keep template text
             if (slideTBank.length > 0) {
-              // Cycle: generation 0 → bank[0], generation 1 → bank[1], etc.
-              newText = slideTBank[i % slideTBank.length];
+              // Cycle: use both generation index AND overlay index for variety
+              // generation 0 overlay 0 → bank[0], generation 0 overlay 1 → bank[1], etc.
+              const bankIndex = (i * Math.max(templateOverlays.length, 1) + textIdx) % slideTBank.length;
+              newText = slideTBank[bankIndex];
             }
             return {
               ...overlay,
@@ -2207,7 +2218,7 @@ const SlideshowEditor = ({
                             <div key={i} onClick={() => {
                               if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
                                 const newOverlay = { id: `text_${Date.now()}_${i}`, text, style: getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
-                                setSlides(prev => prev.map((slide, idx) => idx === selectedSlideIndex ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] } : slide));
+                                setSlides(prev => prev.map((slide, idx) => idx === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
                                 setEditingTextId(newOverlay.id);
                               }
                             }} style={{ padding: '6px 8px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px', color: '#d1d5db', fontSize: '11px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word' }} title="Click to add as overlay">{text}</div>
@@ -2239,7 +2250,7 @@ const SlideshowEditor = ({
                             <div key={i} onClick={() => {
                               if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
                                 const newOverlay = { id: `text_${Date.now()}_${i}`, text, style: getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
-                                setSlides(prev => prev.map((slide, idx) => idx === selectedSlideIndex ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] } : slide));
+                                setSlides(prev => prev.map((slide, idx) => idx === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
                                 setEditingTextId(newOverlay.id);
                               }
                             }} style={{ padding: '6px 8px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px', color: '#d1d5db', fontSize: '11px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word' }} title="Click to add as overlay">{text}</div>
@@ -3026,7 +3037,7 @@ const SlideshowEditor = ({
                                     };
                                     setSlides(prev => prev.map((slide, i) =>
                                       i === selectedSlideIndex
-                                        ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] }
+                                        ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] }
                                         : slide
                                     ));
                                     setEditingTextId(newOverlay.id);
@@ -3555,7 +3566,7 @@ const SlideshowEditor = ({
                   };
                   setSlides(prev => prev.map((slide, i) =>
                     i === selectedSlideIndex
-                      ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] }
+                      ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] }
                       : slide
                   ));
                   setEditingTextId(newOverlay.id);
@@ -3578,7 +3589,7 @@ const SlideshowEditor = ({
                   };
                   setSlides(prev => prev.map((slide, i) =>
                     i === selectedSlideIndex
-                      ? { ...slide, textOverlays: [...slide.textOverlays, newOverlay] }
+                      ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] }
                       : slide
                   ));
                   setEditingTextId(newOverlay.id);
@@ -3589,7 +3600,7 @@ const SlideshowEditor = ({
                     idx === selectedSlideIndex
                       ? {
                           ...slide,
-                          textOverlays: slide.textOverlays.map(overlay =>
+                          textOverlays: (slide.textOverlays || []).map(overlay =>
                             overlay.id === overlayId ? { ...overlay, ...updates } : overlay
                           )
                         }
@@ -3601,7 +3612,7 @@ const SlideshowEditor = ({
                     idx === selectedSlideIndex
                       ? {
                           ...slide,
-                          textOverlays: slide.textOverlays.filter(o => o.id !== overlayId)
+                          textOverlays: (slide.textOverlays || []).filter(o => o.id !== overlayId)
                         }
                       : slide
                   ));
