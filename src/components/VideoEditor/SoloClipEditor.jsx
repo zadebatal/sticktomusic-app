@@ -1,17 +1,22 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   subscribeToLibrary, subscribeToCollections, getCollections, getLibrary,
-  addToTextBank, MEDIA_TYPES
+  addToVideoTextBank, removeFromVideoTextBank, updateVideoTextBank, MEDIA_TYPES
 } from '../../services/libraryService';
 import { useToast } from '../ui';
 
 /**
- * SoloClipEditor — "Solo Clip" video editor mode
+ * SoloClipEditor v2 — "Solo Clip" video editor mode
+ *
+ * 3-column layout:
+ *   Left (260px):  Clip grid + generation controls
+ *   Center:        Video preview + playback
+ *   Right (320px): Text overlays (with inline style) + Video text banks (always visible)
  *
  * Mirrors SlideshowEditor's template/generation architecture:
- * - allVideos[0] = template (one clip + text overlays the user designs)
- * - allVideos[1..N] = generated (same overlay style/position, different clip + cycled text)
- * - Tab bar at bottom to switch between them
+ *   allVideos[0] = template
+ *   allVideos[1..N] = generated
+ *   Tab bar at bottom to switch between them
  */
 const SoloClipEditor = ({
   category,
@@ -29,12 +34,31 @@ const SoloClipEditor = ({
 
   // ── Multi-video state (mirrors SlideshowEditor allSlideshows) ──
   const [allVideos, setAllVideos] = useState(() => {
+    if (existingVideo && existingVideo.editorMode === 'solo-clip') {
+      // Re-editing an existing solo clip draft
+      const existingClip = existingVideo.clips?.[0]
+        ? (category?.videos || []).find(v => v.id === existingVideo.clips[0].sourceId) || {
+            id: existingVideo.clips[0].sourceId,
+            url: existingVideo.clips[0].url,
+            localUrl: existingVideo.clips[0].localUrl,
+            thumbnailUrl: existingVideo.clips[0].thumbnail,
+            thumbnail: existingVideo.clips[0].thumbnail
+          }
+        : category?.videos?.[0] || null;
+      return [{
+        id: 'template',
+        name: 'Template',
+        clip: existingClip,
+        textOverlays: existingVideo.textOverlays || [],
+        isTemplate: true
+      }];
+    }
     const firstClip = category?.videos?.[0] || null;
     return [{
       id: 'template',
       name: 'Template',
       clip: firstClip,
-      textOverlays: existingVideo?.textOverlays || [],
+      textOverlays: [],
       isTemplate: true
     }];
   });
@@ -43,13 +67,14 @@ const SoloClipEditor = ({
     Math.min(10, Math.max(1, (category?.videos?.length || 1) - 1))
   );
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Derived reads from active video
   const activeVideo = allVideos[activeVideoIndex];
   const clip = activeVideo?.clip;
   const textOverlays = activeVideo?.textOverlays || [];
 
-  // Wrapper setters (route through allVideos — same pattern as SlideshowEditor)
+  // Wrapper setters (route through allVideos)
   const setTextOverlays = useCallback((updater) => {
     setAllVideos(prev => {
       const copy = [...prev];
@@ -84,7 +109,7 @@ const SoloClipEditor = ({
   const animationRef = useRef(null);
 
   // ── Aspect ratio ──
-  const [aspectRatio, setAspectRatio] = useState('9:16');
+  const [aspectRatio, setAspectRatio] = useState(existingVideo?.cropMode || '9:16');
 
   // ── Text editing state ──
   const [editingTextId, setEditingTextId] = useState(null);
@@ -100,7 +125,6 @@ const SoloClipEditor = ({
   // ── Text bank input state ──
   const [newTextA, setNewTextA] = useState('');
   const [newTextB, setNewTextB] = useState('');
-  const [activePanel, setActivePanel] = useState('clips'); // 'clips' | 'text' | 'style' | 'textBank'
 
   // ── Close confirmation ──
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
@@ -113,10 +137,9 @@ const SoloClipEditor = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // ── Library subscriptions (same as SlideshowEditor) ──
+  // ── Library subscriptions ──
   useEffect(() => {
     if (!artistId) return;
-    // Load from localStorage first
     const localCols = getCollections(artistId);
     setCollections(localCols.filter(c => c.type !== 'smart'));
     const localLib = getLibrary(artistId);
@@ -135,23 +158,34 @@ const SoloClipEditor = ({
     return () => unsubs.forEach(u => u());
   }, [db, artistId]);
 
-  // ── Text banks (same as SlideshowEditor) ──
-  const getTextBanks = useCallback(() => {
-    let textBank1 = [], textBank2 = [];
+  // ── Video Text Banks (uses videoTextBank1/videoTextBank2, NOT textBank1/textBank2) ──
+  const getVideoTextBanks = useCallback(() => {
+    let videoTextBank1 = [], videoTextBank2 = [];
     for (const col of collections) {
-      if (col.textBank1?.length > 0) textBank1 = [...textBank1, ...col.textBank1];
-      if (col.textBank2?.length > 0) textBank2 = [...textBank2, ...col.textBank2];
+      if (col.videoTextBank1?.length > 0) videoTextBank1 = [...videoTextBank1, ...col.videoTextBank1];
+      if (col.videoTextBank2?.length > 0) videoTextBank2 = [...videoTextBank2, ...col.videoTextBank2];
     }
-    return { textBank1, textBank2 };
+    return { videoTextBank1, videoTextBank2 };
   }, [collections]);
 
-  const handleAddToTextBank = useCallback((bankNum, text) => {
+  const handleAddToVideoTextBank = useCallback((bankNum, text) => {
     if (!text.trim() || !artistId || collections.length === 0) return;
     const targetCol = collections[0];
-    addToTextBank(artistId, targetCol.id, bankNum, text.trim());
+    addToVideoTextBank(artistId, targetCol.id, bankNum, text.trim());
     setCollections(prev => prev.map(col =>
       col.id === targetCol.id
-        ? { ...col, [`textBank${bankNum}`]: [...(col[`textBank${bankNum}`] || []), text.trim()] }
+        ? { ...col, [`videoTextBank${bankNum}`]: [...(col[`videoTextBank${bankNum}`] || []), text.trim()] }
+        : col
+    ));
+  }, [artistId, collections]);
+
+  const handleRemoveFromVideoTextBank = useCallback((bankNum, index) => {
+    if (!artistId || collections.length === 0) return;
+    const targetCol = collections[0];
+    removeFromVideoTextBank(artistId, targetCol.id, bankNum, index);
+    setCollections(prev => prev.map(col =>
+      col.id === targetCol.id
+        ? { ...col, [`videoTextBank${bankNum}`]: (col[`videoTextBank${bankNum}`] || []).filter((_, i) => i !== index) }
         : col
     ));
   }, [artistId, collections]);
@@ -195,14 +229,13 @@ const SoloClipEditor = ({
     }
   }, [isMuted]);
 
-  // Clean up animation frame on unmount
   useEffect(() => {
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
   }, []);
 
-  // ── Text overlay CRUD (same pattern as SlideshowEditor) ──
+  // ── Text overlay CRUD ──
   const getDefaultTextStyle = useCallback(() => ({
     fontSize: 48,
     fontFamily: 'Inter, sans-serif',
@@ -240,7 +273,7 @@ const SoloClipEditor = ({
     }
   }, [setTextOverlays, editingTextId]);
 
-  // ── Text overlay dragging (same as SlideshowEditor) ──
+  // ── Text overlay dragging ──
   const handleTextMouseDown = useCallback((e, overlayId) => {
     e.preventDefault();
     e.stopPropagation();
@@ -277,7 +310,7 @@ const SoloClipEditor = ({
     };
   }, [draggingTextId, textOverlays, updateTextOverlay]);
 
-  // ── Switch between videos (same as SlideshowEditor switchToSlideshow) ──
+  // ── Switch between videos ──
   const switchToVideo = useCallback((index) => {
     if (index === activeVideoIndex) return;
     if (videoRef.current) {
@@ -293,7 +326,7 @@ const SoloClipEditor = ({
 
   // ── Delete generated video ──
   const handleDeleteVideo = useCallback((index) => {
-    if (index === 0) return; // Can't delete template
+    if (index === 0) return;
     setAllVideos(prev => prev.filter((_, i) => i !== index));
     if (activeVideoIndex === index) {
       setActiveVideoIndex(Math.max(0, index - 1));
@@ -302,7 +335,7 @@ const SoloClipEditor = ({
     }
   }, [activeVideoIndex]);
 
-  // ── Generation (adapted from SlideshowEditor executeGeneration) ──
+  // ── Generation (uses video text banks) ──
   const executeGeneration = useCallback(() => {
     const template = allVideos[0];
     if (!template?.clip) {
@@ -323,8 +356,8 @@ const SoloClipEditor = ({
     setIsGenerating(true);
 
     try {
-      const { textBank1, textBank2 } = getTextBanks();
-      const combinedBank = [...textBank1, ...textBank2];
+      const { videoTextBank1, videoTextBank2 } = getVideoTextBanks();
+      const combinedBank = [...videoTextBank1, ...videoTextBank2];
       const existingGenCount = allVideos.filter(v => !v.isTemplate).length;
       const timestamp = Date.now();
       const generated = [];
@@ -333,10 +366,9 @@ const SoloClipEditor = ({
       for (let i = 0; i < clipsToUse.length; i++) {
         const clipItem = clipsToUse[i];
 
-        // Clone template overlays — preserve style + position, cycle text
         const newOverlays = template.textOverlays.map((overlay, idx) => {
           let newText = overlay.text;
-          const bank = idx === 0 ? textBank1 : idx === 1 ? textBank2 : combinedBank;
+          const bank = idx === 0 ? videoTextBank1 : idx === 1 ? videoTextBank2 : combinedBank;
           if (bank.length > 0) {
             newText = bank[i % bank.length];
           }
@@ -361,16 +393,93 @@ const SoloClipEditor = ({
     } finally {
       setIsGenerating(false);
     }
-  }, [allVideos, generateCount, category, getTextBanks, toastSuccess, toastError]);
+  }, [allVideos, generateCount, category, getVideoTextBanks, toastSuccess, toastError]);
 
-  // ── Save ──
-  const handleSave = useCallback(() => {
+  // ── Save Draft (active video only) ──
+  const handleSaveDraft = useCallback(() => {
+    const video = allVideos[activeVideoIndex];
+    if (!video?.clip) {
+      toastError('No clip to save.');
+      return;
+    }
+    const clipUrl = video.clip.url || video.clip.localUrl || video.clip.src;
+    const videoData = {
+      id: video.id === 'template' ? (existingVideo?.id || `solovideo_${Date.now()}`) : video.id,
+      editorMode: 'solo-clip',
+      name: video.name || 'Solo Clip',
+      clips: [{
+        id: `clip_${Date.now()}_0`,
+        sourceId: video.clip.id,
+        url: clipUrl,
+        localUrl: video.clip.localUrl || clipUrl,
+        thumbnail: video.clip.thumbnailUrl || video.clip.thumbnail,
+        startTime: 0,
+        duration: clipDuration || 5,
+        locked: true
+      }],
+      textOverlays: video.textOverlays,
+      cropMode: aspectRatio,
+      duration: clipDuration || 5,
+      thumbnail: video.clip.thumbnailUrl || video.clip.thumbnail,
+      isTemplate: video.isTemplate,
+      status: 'draft',
+      createdAt: existingVideo?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    onSave(videoData);
+    toastSuccess(`Saved "${video.name || 'Solo Clip'}"`);
+  }, [allVideos, activeVideoIndex, clipDuration, aspectRatio, existingVideo, onSave, toastSuccess, toastError]);
+
+  // ── Save All & Close ──
+  const handleSaveAllAndClose = useCallback(() => {
+    let savedCount = 0;
     allVideos.forEach((video) => {
       if (!video.clip) return;
       const clipUrl = video.clip.url || video.clip.localUrl || video.clip.src;
       const videoData = {
-        id: video.id === 'template' ? undefined : video.id,
+        id: video.id === 'template' ? (existingVideo?.id || `solovideo_${Date.now()}_${savedCount}`) : video.id,
         editorMode: 'solo-clip',
+        name: video.name || 'Solo Clip',
+        clips: [{
+          id: `clip_${Date.now()}_${savedCount}`,
+          sourceId: video.clip.id,
+          url: clipUrl,
+          localUrl: video.clip.localUrl || clipUrl,
+          thumbnail: video.clip.thumbnailUrl || video.clip.thumbnail,
+          startTime: 0,
+          duration: clipDuration || 5,
+          locked: true
+        }],
+        textOverlays: video.textOverlays,
+        cropMode: aspectRatio,
+        duration: clipDuration || 5,
+        thumbnail: video.clip.thumbnailUrl || video.clip.thumbnail,
+        isTemplate: video.isTemplate,
+        status: 'draft',
+        createdAt: existingVideo?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      onSave(videoData);
+      savedCount++;
+    });
+    toastSuccess(`Saved ${savedCount} video${savedCount !== 1 ? 's' : ''}!`);
+    onClose();
+  }, [allVideos, clipDuration, aspectRatio, existingVideo, onSave, onClose, toastSuccess]);
+
+  // ── Export ──
+  const handleExport = useCallback(() => {
+    const video = allVideos[activeVideoIndex];
+    if (!video?.clip || video.textOverlays.length === 0) {
+      toastError('Need a clip and at least one text overlay to export.');
+      return;
+    }
+    setIsExporting(true);
+    try {
+      const clipUrl = video.clip.url || video.clip.localUrl || video.clip.src;
+      const videoData = {
+        id: video.id === 'template' ? (existingVideo?.id || `solovideo_${Date.now()}`) : video.id,
+        editorMode: 'solo-clip',
+        name: video.name || 'Solo Clip',
         clips: [{
           id: `clip_${Date.now()}_0`,
           sourceId: video.clip.id,
@@ -385,11 +494,17 @@ const SoloClipEditor = ({
         cropMode: aspectRatio,
         duration: clipDuration || 5,
         thumbnail: video.clip.thumbnailUrl || video.clip.thumbnail,
-        isTemplate: video.isTemplate
+        isTemplate: video.isTemplate,
+        status: 'rendered',
+        createdAt: existingVideo?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       };
       onSave(videoData);
-    });
-  }, [allVideos, clipDuration, aspectRatio, onSave]);
+      toastSuccess(`Exported "${video.name || 'Solo Clip'}"`);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [allVideos, activeVideoIndex, clipDuration, aspectRatio, existingVideo, onSave, toastSuccess, toastError]);
 
   // ── Close with confirmation ──
   const handleCloseRequest = useCallback(() => {
@@ -437,12 +552,14 @@ const SoloClipEditor = ({
   };
   const previewDims = getPreviewDimensions();
 
-  // Format time
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Video text banks for right panel
+  const { videoTextBank1, videoTextBank2 } = getVideoTextBanks();
 
   // ── RENDER ──
   return (
@@ -464,8 +581,8 @@ const SoloClipEditor = ({
               </span>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {/* Aspect ratio toggle */}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {/* Aspect ratio toggles */}
             {['9:16', '1:1', '4:3'].map(ratio => (
               <button
                 key={ratio}
@@ -478,351 +595,110 @@ const SoloClipEditor = ({
                 {ratio}
               </button>
             ))}
-            <button onClick={handleSave} style={styles.saveButton}>
-              Save{allVideos.length > 1 ? ` All (${allVideos.length})` : ''}
+            <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />
+            {/* Export */}
+            <button
+              onClick={handleExport}
+              disabled={!clip || textOverlays.length === 0 || isExporting}
+              style={{
+                ...styles.exportButton,
+                ...(!clip || textOverlays.length === 0 || isExporting ? { opacity: 0.4, cursor: 'not-allowed' } : {})
+              }}
+            >
+              {isExporting ? 'Exporting...' : 'Export'}
+            </button>
+            {/* Save Draft */}
+            <button onClick={handleSaveDraft} style={styles.saveDraftButton}>
+              Save Draft
+            </button>
+            {/* Save All */}
+            {allVideos.length > 1 && (
+              <button onClick={handleSaveAllAndClose} style={styles.saveAllButton}>
+                Save All ({allVideos.length})
+              </button>
+            )}
+            {/* Close */}
+            <button onClick={handleCloseRequest} style={styles.closeButton}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
             </button>
           </div>
         </div>
 
-        {/* ── Main Content ── */}
+        {/* ── Main Content — 3 Columns ── */}
         <div style={styles.mainContent}>
 
-          {/* ── Left Sidebar ── */}
-          <div style={styles.sidebar}>
-            {/* Panel tabs */}
-            <div style={styles.panelTabs}>
-              {[
-                { id: 'clips', label: 'Clips' },
-                { id: 'text', label: 'Text' },
-                { id: 'style', label: 'Style' },
-                { id: 'textBank', label: 'Banks' }
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActivePanel(tab.id)}
-                  style={{
-                    ...styles.panelTab,
-                    ...(activePanel === tab.id ? styles.panelTabActive : {})
-                  }}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            <div style={styles.panelContent}>
-              {/* ── Clips Panel ── */}
-              {activePanel === 'clips' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '4px' }}>
-                    Click a clip to use as template. Remaining clips are used for generation.
-                  </div>
-                  <div style={styles.clipGrid}>
-                    {(category?.videos || []).map((v) => {
-                      const isActive = clip?.id === v.id;
-                      return (
-                        <div
-                          key={v.id}
-                          onClick={() => setClip(v)}
-                          style={{
-                            ...styles.clipThumb,
-                            ...(isActive ? styles.clipThumbActive : {})
-                          }}
-                        >
-                          {v.thumbnailUrl || v.thumbnail ? (
-                            <img src={v.thumbnailUrl || v.thumbnail} alt="" style={styles.clipThumbImg} />
-                          ) : (
-                            <div style={styles.clipThumbPlaceholder}>
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                                <rect x="2" y="4" width="20" height="16" rx="2" />
-                                <path d="M10 9l5 3-5 3V9z" />
-                              </svg>
-                            </div>
-                          )}
-                          {isActive && (
-                            <div style={styles.clipThumbBadge}>Template</div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Generation controls */}
-                  <div style={styles.generateSection}>
-                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>Generate Videos</div>
-                    <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
-                      {(category?.videos || []).length - 1} other clip{(category?.videos || []).length - 1 !== 1 ? 's' : ''} available
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <span style={{ fontSize: '12px', color: '#d1d5db' }}>Count:</span>
-                      <input
-                        type="number"
-                        min={1}
-                        max={Math.max(1, (category?.videos?.length || 1) - 1)}
-                        value={generateCount}
-                        onChange={(e) => setGenerateCount(Math.max(1, Math.min((category?.videos?.length || 1) - 1, parseInt(e.target.value) || 1)))}
-                        style={styles.generateInput}
-                      />
-                      <button
-                        onClick={executeGeneration}
-                        disabled={isGenerating || textOverlays.length === 0}
-                        style={{
-                          ...styles.generateButton,
-                          ...(isGenerating || textOverlays.length === 0 ? { opacity: 0.5, cursor: 'not-allowed' } : {})
-                        }}
-                      >
-                        {isGenerating ? 'Generating...' : 'Generate'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Text Panel ── */}
-              {activePanel === 'text' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <button onClick={addTextOverlay} style={styles.addTextButton}>
-                    + Add Text Overlay
-                  </button>
-
-                  {textOverlays.length === 0 && (
-                    <div style={{ fontSize: '12px', color: '#6b7280', textAlign: 'center', padding: '20px 0' }}>
-                      No text overlays yet. Click "Add Text Overlay" to start designing your template.
-                    </div>
-                  )}
-
-                  {textOverlays.map((overlay, idx) => (
+          {/* ── LEFT PANEL: Clips + Generation ── */}
+          <div style={styles.leftPanel}>
+            <div style={{ padding: '12px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>Clips</div>
+              <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
+                Click to set as template clip
+              </div>
+              <div style={styles.clipGrid}>
+                {(category?.videos || []).map((v) => {
+                  const isActive = clip?.id === v.id;
+                  return (
                     <div
-                      key={overlay.id}
-                      onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
+                      key={v.id}
+                      onClick={() => setClip(v)}
                       style={{
-                        ...styles.textOverlayItem,
-                        ...(editingTextId === overlay.id ? styles.textOverlayItemActive : {})
+                        ...styles.clipThumb,
+                        ...(isActive ? styles.clipThumbActive : {})
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '11px', color: '#9ca3af' }}>Overlay {idx + 1}</span>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }}
-                          style={styles.removeOverlayButton}
-                        >×</button>
-                      </div>
-                      {editingTextId === overlay.id ? (
-                        <input
-                          value={editingTextValue}
-                          onChange={(e) => setEditingTextValue(e.target.value)}
-                          onBlur={() => updateTextOverlay(overlay.id, { text: editingTextValue })}
-                          onKeyDown={(e) => { if (e.key === 'Enter') { updateTextOverlay(overlay.id, { text: editingTextValue }); e.target.blur(); } }}
-                          style={styles.textEditInput}
-                          autoFocus
-                        />
+                      {v.thumbnailUrl || v.thumbnail ? (
+                        <img src={v.thumbnailUrl || v.thumbnail} alt="" style={styles.clipThumbImg} />
                       ) : (
-                        <div style={{ fontSize: '13px', color: '#e5e7eb', marginTop: '4px' }}>{overlay.text}</div>
+                        <div style={styles.clipThumbPlaceholder}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <rect x="2" y="4" width="20" height="16" rx="2" />
+                            <path d="M10 9l5 3-5 3V9z" />
+                          </svg>
+                        </div>
+                      )}
+                      {isActive && (
+                        <div style={styles.clipThumbBadge}>Template</div>
                       )}
                     </div>
-                  ))}
+                  );
+                })}
+              </div>
+
+              {/* Generation controls */}
+              <div style={styles.generateSection}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '6px' }}>Generate Videos</div>
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
+                  {(category?.videos || []).length - 1} other clip{(category?.videos || []).length - 1 !== 1 ? 's' : ''} available
                 </div>
-              )}
-
-              {/* ── Style Panel ── */}
-              {activePanel === 'style' && editingOverlay && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb' }}>
-                    Editing: Overlay "{editingOverlay.text.substring(0, 20)}{editingOverlay.text.length > 20 ? '...' : ''}"
-                  </div>
-
-                  {/* Font Family */}
-                  <div style={styles.controlRow}>
-                    <span style={styles.controlLabel}>Font</span>
-                    <select
-                      value={editingOverlay.style.fontFamily}
-                      onChange={(e) => updateTextOverlay(editingTextId, { style: { ...editingOverlay.style, fontFamily: e.target.value } })}
-                      style={styles.selectInput}
-                    >
-                      <option value="Inter, sans-serif">Sans</option>
-                      <option value="'Playfair Display', serif">Serif</option>
-                      <option value="'Space Grotesk', sans-serif">Grotesk</option>
-                      <option value="monospace">Mono</option>
-                    </select>
-                  </div>
-
-                  {/* Font Size */}
-                  <div style={styles.controlRow}>
-                    <span style={styles.controlLabel}>Size</span>
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      <button
-                        style={styles.sizeButton}
-                        onClick={() => updateTextOverlay(editingTextId, {
-                          style: { ...editingOverlay.style, fontSize: Math.max(16, editingOverlay.style.fontSize - 4) }
-                        })}
-                      >A-</button>
-                      <span style={{ fontSize: '12px', color: '#d1d5db', minWidth: '30px', textAlign: 'center' }}>{editingOverlay.style.fontSize}</span>
-                      <button
-                        style={styles.sizeButton}
-                        onClick={() => updateTextOverlay(editingTextId, {
-                          style: { ...editingOverlay.style, fontSize: Math.min(120, editingOverlay.style.fontSize + 4) }
-                        })}
-                      >A+</button>
-                    </div>
-                  </div>
-
-                  {/* Colors */}
-                  <div style={styles.controlRow}>
-                    <span style={styles.controlLabel}>Color</span>
-                    <input
-                      type="color"
-                      value={editingOverlay.style.color}
-                      onChange={(e) => updateTextOverlay(editingTextId, { style: { ...editingOverlay.style, color: e.target.value } })}
-                      style={styles.colorInput}
-                    />
-                  </div>
-
-                  {/* Outline */}
-                  <div style={styles.controlRow}>
-                    <span style={styles.controlLabel}>Outline</span>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <button
-                        style={{
-                          ...styles.toggleButton,
-                          ...(editingOverlay.style.outline ? styles.toggleButtonActive : {})
-                        }}
-                        onClick={() => updateTextOverlay(editingTextId, { style: { ...editingOverlay.style, outline: true } })}
-                      >On</button>
-                      <button
-                        style={{
-                          ...styles.toggleButton,
-                          ...(!editingOverlay.style.outline ? styles.toggleButtonActive : {})
-                        }}
-                        onClick={() => updateTextOverlay(editingTextId, { style: { ...editingOverlay.style, outline: false } })}
-                      >Off</button>
-                    </div>
-                    {editingOverlay.style.outline && (
-                      <input
-                        type="color"
-                        value={editingOverlay.style.outlineColor}
-                        onChange={(e) => updateTextOverlay(editingTextId, { style: { ...editingOverlay.style, outlineColor: e.target.value } })}
-                        style={styles.colorInput}
-                      />
-                    )}
-                  </div>
-
-                  {/* Text Align */}
-                  <div style={styles.controlRow}>
-                    <span style={styles.controlLabel}>Align</span>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      {['left', 'center', 'right'].map(align => (
-                        <button
-                          key={align}
-                          style={{
-                            ...styles.toggleButton,
-                            ...(editingOverlay.style.textAlign === align ? styles.toggleButtonActive : {})
-                          }}
-                          onClick={() => updateTextOverlay(editingTextId, { style: { ...editingOverlay.style, textAlign: align } })}
-                        >
-                          {align.charAt(0).toUpperCase() + align.slice(1)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Text Case */}
-                  <div style={styles.controlRow}>
-                    <span style={styles.controlLabel}>Case</span>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      {[
-                        { id: 'default', label: 'Default' },
-                        { id: 'upper', label: 'UPPER' },
-                        { id: 'lower', label: 'lower' }
-                      ].map(opt => (
-                        <button
-                          key={opt.id}
-                          style={{
-                            ...styles.toggleButton,
-                            ...(editingOverlay.style.textCase === opt.id ? styles.toggleButtonActive : {})
-                          }}
-                          onClick={() => updateTextOverlay(editingTextId, { style: { ...editingOverlay.style, textCase: opt.id } })}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', color: '#d1d5db' }}>Count:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={Math.max(1, (category?.videos?.length || 1) - 1)}
+                    value={generateCount}
+                    onChange={(e) => setGenerateCount(Math.max(1, Math.min((category?.videos?.length || 1) - 1, parseInt(e.target.value) || 1)))}
+                    style={styles.generateInput}
+                  />
+                  <button
+                    onClick={executeGeneration}
+                    disabled={isGenerating || textOverlays.length === 0}
+                    style={{
+                      ...styles.generateButton,
+                      ...(isGenerating || textOverlays.length === 0 ? { opacity: 0.5, cursor: 'not-allowed' } : {})
+                    }}
+                  >
+                    {isGenerating ? 'Generating...' : 'Generate'}
+                  </button>
                 </div>
-              )}
-
-              {activePanel === 'style' && !editingOverlay && (
-                <div style={{ fontSize: '12px', color: '#6b7280', textAlign: 'center', padding: '20px 0' }}>
-                  Select a text overlay to edit its style.
-                </div>
-              )}
-
-              {/* ── Text Bank Panel ── */}
-              {activePanel === 'textBank' && (() => {
-                const { textBank1, textBank2 } = getTextBanks();
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div style={{ fontSize: '11px', color: '#9ca3af' }}>
-                      Text banks cycle through overlays during generation. Overlay 1 uses Bank A, Overlay 2 uses Bank B.
-                    </div>
-
-                    {/* Text Bank A */}
-                    <div>
-                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#14b8a6', marginBottom: '8px' }}>
-                        Text Bank A ({textBank1.length})
-                      </div>
-                      <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
-                        <input
-                          value={newTextA}
-                          onChange={(e) => setNewTextA(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToTextBank(1, newTextA); setNewTextA(''); } }}
-                          placeholder="Add text..."
-                          style={styles.textBankInput}
-                        />
-                        <button
-                          onClick={() => { if (newTextA.trim()) { handleAddToTextBank(1, newTextA); setNewTextA(''); } }}
-                          style={styles.textBankAddButton}
-                        >+</button>
-                      </div>
-                      <div style={styles.textBankList}>
-                        {textBank1.map((text, i) => (
-                          <div key={i} style={styles.textBankTag}>{text}</div>
-                        ))}
-                        {textBank1.length === 0 && <span style={{ fontSize: '11px', color: '#6b7280' }}>Empty</span>}
-                      </div>
-                    </div>
-
-                    {/* Text Bank B */}
-                    <div>
-                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#f59e0b', marginBottom: '8px' }}>
-                        Text Bank B ({textBank2.length})
-                      </div>
-                      <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
-                        <input
-                          value={newTextB}
-                          onChange={(e) => setNewTextB(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToTextBank(2, newTextB); setNewTextB(''); } }}
-                          placeholder="Add text..."
-                          style={styles.textBankInput}
-                        />
-                        <button
-                          onClick={() => { if (newTextB.trim()) { handleAddToTextBank(2, newTextB); setNewTextB(''); } }}
-                          style={{ ...styles.textBankAddButton, backgroundColor: '#f59e0b' }}
-                        >+</button>
-                      </div>
-                      <div style={styles.textBankList}>
-                        {textBank2.map((text, i) => (
-                          <div key={i} style={{ ...styles.textBankTag, borderColor: 'rgba(245,158,11,0.3)' }}>{text}</div>
-                        ))}
-                        {textBank2.length === 0 && <span style={{ fontSize: '11px', color: '#6b7280' }}>Empty</span>}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
+              </div>
             </div>
           </div>
 
-          {/* ── Center Preview ── */}
+          {/* ── CENTER: Video Preview ── */}
           <div style={styles.previewArea}>
             <div
               ref={previewRef}
@@ -859,7 +735,7 @@ const SoloClipEditor = ({
                 </div>
               )}
 
-              {/* Text Overlays (rendered on top of video) */}
+              {/* Text Overlays on video */}
               {textOverlays.map((overlay) => {
                 const style = overlay.style || {};
                 const pos = overlay.position || { x: 50, y: 50 };
@@ -921,7 +797,6 @@ const SoloClipEditor = ({
                 )}
               </button>
 
-              {/* Progress bar */}
               <div
                 style={styles.progressBar}
                 onClick={(e) => {
@@ -953,9 +828,248 @@ const SoloClipEditor = ({
               </button>
             </div>
           </div>
+
+          {/* ── RIGHT PANEL: Text Overlays + Style + Video Text Banks ── */}
+          <div style={styles.rightPanel}>
+            <div style={styles.rightPanelScroll}>
+
+              {/* ── TEXT OVERLAYS SECTION ── */}
+              <div style={styles.sectionHeader}>
+                <span>Text Overlays</span>
+                <span style={{ fontSize: '10px', color: '#6b7280' }}>{textOverlays.length}</span>
+              </div>
+
+              {textOverlays.length === 0 && (
+                <div style={{ fontSize: '12px', color: '#6b7280', textAlign: 'center', padding: '16px 12px' }}>
+                  No text overlays yet. Add one to start designing.
+                </div>
+              )}
+
+              {textOverlays.map((overlay, idx) => {
+                const isSelected = editingTextId === overlay.id;
+                return (
+                  <div
+                    key={overlay.id}
+                    onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
+                    style={{
+                      ...styles.overlayCard,
+                      ...(isSelected ? styles.overlayCardActive : {})
+                    }}
+                  >
+                    {/* Overlay header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 500 }}>Overlay {idx + 1}</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }}
+                        style={styles.removeOverlayButton}
+                      >×</button>
+                    </div>
+
+                    {/* Inline text edit */}
+                    {isSelected ? (
+                      <input
+                        value={editingTextValue}
+                        onChange={(e) => setEditingTextValue(e.target.value)}
+                        onBlur={() => updateTextOverlay(overlay.id, { text: editingTextValue })}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { updateTextOverlay(overlay.id, { text: editingTextValue }); e.target.blur(); } }}
+                        style={styles.textEditInput}
+                        autoFocus
+                      />
+                    ) : (
+                      <div style={{ fontSize: '13px', color: '#e5e7eb' }}>{overlay.text}</div>
+                    )}
+
+                    {/* Style controls — always shown for selected overlay */}
+                    {isSelected && (
+                      <div style={styles.styleControls}>
+                        {/* Font Family */}
+                        <div style={styles.controlRow}>
+                          <span style={styles.controlLabel}>Font</span>
+                          <select
+                            value={overlay.style.fontFamily}
+                            onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, fontFamily: e.target.value } })}
+                            style={styles.selectInput}
+                          >
+                            <option value="Inter, sans-serif">Sans</option>
+                            <option value="'Playfair Display', serif">Serif</option>
+                            <option value="'Space Grotesk', sans-serif">Grotesk</option>
+                            <option value="monospace">Mono</option>
+                          </select>
+                        </div>
+
+                        {/* Font Size */}
+                        <div style={styles.controlRow}>
+                          <span style={styles.controlLabel}>Size</span>
+                          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                            <button
+                              style={styles.sizeButton}
+                              onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.max(16, overlay.style.fontSize - 4) } }); }}
+                            >A-</button>
+                            <span style={{ fontSize: '11px', color: '#d1d5db', minWidth: '26px', textAlign: 'center' }}>{overlay.style.fontSize}</span>
+                            <button
+                              style={styles.sizeButton}
+                              onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.min(120, overlay.style.fontSize + 4) } }); }}
+                            >A+</button>
+                          </div>
+                        </div>
+
+                        {/* Color + Outline */}
+                        <div style={styles.controlRow}>
+                          <span style={styles.controlLabel}>Color</span>
+                          <input
+                            type="color"
+                            value={overlay.style.color}
+                            onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, color: e.target.value } })}
+                            style={styles.colorInput}
+                          />
+                          <span style={{ ...styles.controlLabel, marginLeft: '8px' }}>Outline</span>
+                          <button
+                            style={{
+                              ...styles.toggleButton,
+                              ...(overlay.style.outline ? styles.toggleButtonActive : {})
+                            }}
+                            onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, outline: !overlay.style.outline } }); }}
+                          >{overlay.style.outline ? 'On' : 'Off'}</button>
+                          {overlay.style.outline && (
+                            <input
+                              type="color"
+                              value={overlay.style.outlineColor}
+                              onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, outlineColor: e.target.value } })}
+                              style={styles.colorInput}
+                            />
+                          )}
+                        </div>
+
+                        {/* Align */}
+                        <div style={styles.controlRow}>
+                          <span style={styles.controlLabel}>Align</span>
+                          <div style={{ display: 'flex', gap: '3px' }}>
+                            {['left', 'center', 'right'].map(align => (
+                              <button
+                                key={align}
+                                style={{
+                                  ...styles.toggleButton,
+                                  ...(overlay.style.textAlign === align ? styles.toggleButtonActive : {})
+                                }}
+                                onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, textAlign: align } }); }}
+                              >
+                                {align.charAt(0).toUpperCase() + align.slice(1)}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Case */}
+                        <div style={styles.controlRow}>
+                          <span style={styles.controlLabel}>Case</span>
+                          <div style={{ display: 'flex', gap: '3px' }}>
+                            {[
+                              { id: 'default', label: 'Aa' },
+                              { id: 'upper', label: 'AA' },
+                              { id: 'lower', label: 'aa' }
+                            ].map(opt => (
+                              <button
+                                key={opt.id}
+                                style={{
+                                  ...styles.toggleButton,
+                                  ...(overlay.style.textCase === opt.id ? styles.toggleButtonActive : {})
+                                }}
+                                onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, textCase: opt.id } }); }}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <button onClick={addTextOverlay} style={styles.addTextButton}>
+                + Add Text Overlay
+              </button>
+
+              {/* ── DIVIDER ── */}
+              <div style={styles.divider} />
+
+              {/* ── VIDEO TEXT BANKS SECTION (always visible) ── */}
+              <div style={styles.sectionHeader}>
+                <span>Video Text Banks</span>
+              </div>
+              <div style={{ fontSize: '11px', color: '#6b7280', padding: '0 12px 8px', lineHeight: '1.4' }}>
+                Overlay 1 cycles Bank A, Overlay 2 cycles Bank B during generation.
+              </div>
+
+              {/* Bank A */}
+              <div style={styles.bankContainer}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: '#14b8a6', marginBottom: '6px' }}>
+                  Bank A ({videoTextBank1.length})
+                </div>
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                  <input
+                    value={newTextA}
+                    onChange={(e) => setNewTextA(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
+                    placeholder="Add text..."
+                    style={styles.textBankInput}
+                  />
+                  <button
+                    onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
+                    style={styles.textBankAddButton}
+                  >+</button>
+                </div>
+                <div style={styles.textBankList}>
+                  {videoTextBank1.map((text, i) => (
+                    <div key={i} style={styles.textBankTag}>
+                      <span>{text}</span>
+                      <button
+                        onClick={() => handleRemoveFromVideoTextBank(1, i)}
+                        style={styles.textBankRemove}
+                      >×</button>
+                    </div>
+                  ))}
+                  {videoTextBank1.length === 0 && <span style={{ fontSize: '11px', color: '#4b5563' }}>Empty</span>}
+                </div>
+              </div>
+
+              {/* Bank B */}
+              <div style={styles.bankContainer}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: '#f59e0b', marginBottom: '6px' }}>
+                  Bank B ({videoTextBank2.length})
+                </div>
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                  <input
+                    value={newTextB}
+                    onChange={(e) => setNewTextB(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
+                    placeholder="Add text..."
+                    style={styles.textBankInput}
+                  />
+                  <button
+                    onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
+                    style={{ ...styles.textBankAddButton, backgroundColor: '#f59e0b' }}
+                  >+</button>
+                </div>
+                <div style={styles.textBankList}>
+                  {videoTextBank2.map((text, i) => (
+                    <div key={i} style={{ ...styles.textBankTag, borderColor: 'rgba(245,158,11,0.3)' }}>
+                      <span>{text}</span>
+                      <button
+                        onClick={() => handleRemoveFromVideoTextBank(2, i)}
+                        style={styles.textBankRemove}
+                      >×</button>
+                    </div>
+                  ))}
+                  {videoTextBank2.length === 0 && <span style={{ fontSize: '11px', color: '#4b5563' }}>Empty</span>}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* ── Tab Bar (bottom — same pattern as SlideshowEditor) ── */}
+        {/* ── Tab Bar (bottom) ── */}
         <div style={styles.tabBar}>
           <div style={styles.tabScroll}>
             {allVideos.map((video, idx) => (
@@ -1025,8 +1139,8 @@ const styles = {
     borderRadius: '12px',
     border: '1px solid rgba(255,255,255,0.08)',
     width: '100%',
-    maxWidth: '1100px',
-    height: '90vh',
+    maxWidth: '1400px',
+    height: '92vh',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden'
@@ -1035,7 +1149,7 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '12px 16px',
+    padding: '10px 16px',
     borderBottom: '1px solid rgba(255,255,255,0.08)',
     flexShrink: 0
   },
@@ -1074,8 +1188,29 @@ const styles = {
     borderColor: '#6366f1',
     color: '#a5b4fc'
   },
-  saveButton: {
-    padding: '6px 16px',
+  exportButton: {
+    padding: '6px 14px',
+    borderRadius: '8px',
+    border: '1px solid rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    color: '#d1d5db',
+    fontSize: '12px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.15s'
+  },
+  saveDraftButton: {
+    padding: '6px 14px',
+    borderRadius: '8px',
+    border: 'none',
+    backgroundColor: '#059669',
+    color: '#fff',
+    fontSize: '12px',
+    fontWeight: '600',
+    cursor: 'pointer'
+  },
+  saveAllButton: {
+    padding: '6px 14px',
     borderRadius: '8px',
     border: 'none',
     background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
@@ -1084,48 +1219,36 @@ const styles = {
     fontWeight: '600',
     cursor: 'pointer'
   },
+  closeButton: {
+    background: 'none',
+    border: 'none',
+    color: '#6b7280',
+    cursor: 'pointer',
+    padding: '6px',
+    borderRadius: '6px',
+    display: 'flex',
+    alignItems: 'center'
+  },
   mainContent: {
     display: 'flex',
     flex: 1,
     overflow: 'hidden'
   },
-  sidebar: {
+
+  // ── Left Panel ──
+  leftPanel: {
     width: '260px',
     borderRight: '1px solid rgba(255,255,255,0.08)',
     display: 'flex',
     flexDirection: 'column',
-    flexShrink: 0
-  },
-  panelTabs: {
-    display: 'flex',
-    borderBottom: '1px solid rgba(255,255,255,0.08)',
-    flexShrink: 0
-  },
-  panelTab: {
-    flex: 1,
-    padding: '8px 4px',
-    border: 'none',
-    background: 'none',
-    color: '#6b7280',
-    fontSize: '11px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    borderBottom: '2px solid transparent',
-    transition: 'all 0.15s'
-  },
-  panelTabActive: {
-    color: '#a5b4fc',
-    borderBottomColor: '#6366f1'
-  },
-  panelContent: {
-    flex: 1,
-    overflow: 'auto',
-    padding: '12px'
+    flexShrink: 0,
+    overflow: 'auto'
   },
   clipGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '6px'
+    gap: '6px',
+    marginBottom: '12px'
   },
   clipThumb: {
     position: 'relative',
@@ -1167,7 +1290,6 @@ const styles = {
     borderRadius: '0 0 4px 4px'
   },
   generateSection: {
-    marginTop: '16px',
     padding: '12px',
     backgroundColor: 'rgba(99,102,241,0.08)',
     borderRadius: '8px',
@@ -1193,19 +1315,120 @@ const styles = {
     fontWeight: '600',
     cursor: 'pointer'
   },
-  addTextButton: {
-    padding: '10px',
-    borderRadius: '8px',
-    border: '1px dashed rgba(99,102,241,0.4)',
-    backgroundColor: 'transparent',
-    color: '#a5b4fc',
-    fontSize: '12px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    textAlign: 'center',
-    transition: 'all 0.15s'
+
+  // ── Center Preview ──
+  previewArea: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '16px',
+    overflow: 'hidden'
   },
-  textOverlayItem: {
+  previewContainer: {
+    position: 'relative',
+    borderRadius: '10px',
+    overflow: 'hidden',
+    backgroundColor: '#111118',
+    flexShrink: 0
+  },
+  previewPlaceholder: {
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  playbackControls: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    marginTop: '12px',
+    width: '100%',
+    maxWidth: '480px'
+  },
+  playButton: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '50%',
+    border: 'none',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    color: '#fff',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0
+  },
+  progressBar: {
+    flex: 1,
+    height: '6px',
+    borderRadius: '3px',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    cursor: 'pointer',
+    position: 'relative',
+    overflow: 'hidden'
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: '3px',
+    background: 'linear-gradient(90deg, #6366f1, #8b5cf6)',
+    transition: 'width 0.1s linear'
+  },
+  timeDisplay: {
+    fontSize: '11px',
+    color: '#9ca3af',
+    fontFamily: 'monospace',
+    minWidth: '80px',
+    textAlign: 'center',
+    flexShrink: 0
+  },
+  muteButton: {
+    background: 'none',
+    border: 'none',
+    color: '#9ca3af',
+    cursor: 'pointer',
+    padding: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    flexShrink: 0
+  },
+
+  // ── Right Panel ──
+  rightPanel: {
+    width: '320px',
+    borderLeft: '1px solid rgba(255,255,255,0.08)',
+    display: 'flex',
+    flexDirection: 'column',
+    flexShrink: 0,
+    overflow: 'hidden'
+  },
+  rightPanelScroll: {
+    flex: 1,
+    overflow: 'auto',
+    padding: '0 0 12px 0'
+  },
+  sectionHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '12px 12px 6px',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: '#e5e7eb',
+    letterSpacing: '-0.01em'
+  },
+  divider: {
+    height: '1px',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    margin: '12px 0'
+  },
+
+  // ── Overlay cards ──
+  overlayCard: {
+    margin: '0 8px 6px',
     padding: '10px',
     borderRadius: '8px',
     backgroundColor: 'rgba(255,255,255,0.03)',
@@ -1213,7 +1436,7 @@ const styles = {
     cursor: 'pointer',
     transition: 'all 0.15s'
   },
-  textOverlayItemActive: {
+  overlayCardActive: {
     backgroundColor: 'rgba(99,102,241,0.1)',
     borderColor: 'rgba(99,102,241,0.3)'
   },
@@ -1234,54 +1457,62 @@ const styles = {
     backgroundColor: '#111118',
     color: '#fff',
     fontSize: '13px',
-    marginTop: '4px',
-    outline: 'none'
+    outline: 'none',
+    boxSizing: 'border-box'
+  },
+  styleControls: {
+    marginTop: '8px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    paddingTop: '8px',
+    borderTop: '1px solid rgba(255,255,255,0.06)'
   },
   controlRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '6px',
     flexWrap: 'wrap'
   },
   controlLabel: {
-    fontSize: '11px',
+    fontSize: '10px',
     color: '#9ca3af',
-    minWidth: '40px'
+    minWidth: '34px'
   },
   selectInput: {
     flex: 1,
-    padding: '4px 8px',
+    padding: '3px 6px',
     borderRadius: '4px',
     border: '1px solid rgba(255,255,255,0.15)',
     backgroundColor: '#111118',
     color: '#fff',
-    fontSize: '12px'
+    fontSize: '11px'
   },
   sizeButton: {
-    padding: '4px 10px',
+    padding: '3px 8px',
     borderRadius: '4px',
     border: '1px solid rgba(255,255,255,0.15)',
     backgroundColor: 'rgba(255,255,255,0.05)',
     color: '#d1d5db',
-    fontSize: '12px',
+    fontSize: '11px',
     cursor: 'pointer'
   },
   colorInput: {
-    width: '28px',
-    height: '28px',
-    borderRadius: '6px',
+    width: '24px',
+    height: '24px',
+    borderRadius: '4px',
     border: '1px solid rgba(255,255,255,0.15)',
     cursor: 'pointer',
     backgroundColor: 'transparent',
     padding: 0
   },
   toggleButton: {
-    padding: '4px 10px',
+    padding: '3px 8px',
     borderRadius: '4px',
     border: '1px solid rgba(255,255,255,0.1)',
     backgroundColor: 'transparent',
     color: '#9ca3af',
-    fontSize: '11px',
+    fontSize: '10px',
     cursor: 'pointer',
     transition: 'all 0.15s'
   },
@@ -1290,9 +1521,31 @@ const styles = {
     borderColor: '#6366f1',
     color: '#a5b4fc'
   },
+  addTextButton: {
+    margin: '6px 8px',
+    padding: '10px',
+    borderRadius: '8px',
+    border: '1px dashed rgba(99,102,241,0.4)',
+    backgroundColor: 'transparent',
+    color: '#a5b4fc',
+    fontSize: '12px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    textAlign: 'center',
+    transition: 'all 0.15s'
+  },
+
+  // ── Text banks ──
+  bankContainer: {
+    margin: '0 12px 10px',
+    padding: '10px',
+    borderRadius: '8px',
+    backgroundColor: 'rgba(255,255,255,0.02)',
+    border: '1px solid rgba(255,255,255,0.05)'
+  },
   textBankInput: {
     flex: 1,
-    padding: '6px 8px',
+    padding: '5px 8px',
     borderRadius: '6px',
     border: '1px solid rgba(255,255,255,0.1)',
     backgroundColor: '#111118',
@@ -1301,13 +1554,14 @@ const styles = {
     outline: 'none'
   },
   textBankAddButton: {
-    padding: '6px 10px',
+    padding: '4px 10px',
     borderRadius: '6px',
     border: 'none',
     backgroundColor: '#14b8a6',
     color: '#fff',
+    fontSize: '14px',
+    fontWeight: '600',
     cursor: 'pointer',
-    fontSize: '12px',
     flexShrink: 0
   },
   textBankList: {
@@ -1316,131 +1570,71 @@ const styles = {
     gap: '4px'
   },
   textBankTag: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
     padding: '3px 8px',
-    borderRadius: '4px',
-    border: '1px solid rgba(20,184,166,0.3)',
-    backgroundColor: 'rgba(20,184,166,0.08)',
+    borderRadius: '6px',
+    backgroundColor: 'rgba(20,184,166,0.1)',
+    border: '1px solid rgba(20,184,166,0.2)',
     color: '#d1d5db',
     fontSize: '11px'
   },
-  previewArea: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '12px',
-    padding: '16px',
-    overflow: 'hidden'
-  },
-  previewContainer: {
-    position: 'relative',
-    backgroundColor: '#000',
-    borderRadius: '8px',
-    overflow: 'hidden',
-    flexShrink: 0
-  },
-  previewPlaceholder: {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  playbackControls: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    width: '100%',
-    maxWidth: '400px'
-  },
-  playButton: {
+  textBankRemove: {
     background: 'none',
     border: 'none',
-    color: '#fff',
+    color: '#6b7280',
+    fontSize: '13px',
     cursor: 'pointer',
-    padding: '6px',
-    display: 'flex',
-    alignItems: 'center',
-    borderRadius: '50%',
-    backgroundColor: 'rgba(255,255,255,0.1)'
+    padding: '0 2px',
+    lineHeight: 1
   },
-  progressBar: {
-    flex: 1,
-    height: '4px',
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: '2px',
-    cursor: 'pointer',
-    position: 'relative'
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#6366f1',
-    borderRadius: '2px',
-    transition: 'width 0.05s linear'
-  },
-  timeDisplay: {
-    fontSize: '11px',
-    color: '#9ca3af',
-    fontVariantNumeric: 'tabular-nums',
-    minWidth: '70px',
-    textAlign: 'right'
-  },
-  muteButton: {
-    background: 'none',
-    border: 'none',
-    color: '#9ca3af',
-    cursor: 'pointer',
-    padding: '4px',
-    display: 'flex',
-    alignItems: 'center'
-  },
+
+  // ── Tab Bar ──
   tabBar: {
     borderTop: '1px solid rgba(255,255,255,0.08)',
-    padding: '10px 16px',
-    backgroundColor: 'rgba(0,0,0,0.15)',
-    flexShrink: 0
+    flexShrink: 0,
+    backgroundColor: 'rgba(0,0,0,0.2)'
   },
   tabScroll: {
     display: 'flex',
-    gap: '8px',
-    overflowX: 'auto',
-    paddingBottom: '4px',
-    scrollbarWidth: 'thin',
-    scrollbarColor: 'rgba(255,255,255,0.15) transparent'
+    overflow: 'auto',
+    padding: '6px 8px',
+    gap: '4px'
   },
   tab: {
-    flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
-    padding: '8px 12px',
-    borderRadius: '8px',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    border: '1px solid rgba(255,255,255,0.08)',
+    padding: '6px 12px',
+    borderRadius: '6px',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    border: '1px solid transparent',
     color: '#9ca3af',
-    fontSize: '12px',
-    fontWeight: '400',
+    fontSize: '11px',
+    fontWeight: '500',
     cursor: 'pointer',
-    transition: 'all 0.15s ease',
-    whiteSpace: 'nowrap'
+    whiteSpace: 'nowrap',
+    transition: 'all 0.15s',
+    flexShrink: 0
   },
   tabActive: {
-    backgroundColor: '#6366f1',
-    borderColor: '#818cf8',
-    color: '#fff',
-    fontWeight: '600'
+    backgroundColor: 'rgba(99,102,241,0.15)',
+    borderColor: 'rgba(99,102,241,0.3)',
+    color: '#e5e7eb'
   },
   tabDeleteButton: {
     background: 'none',
     border: 'none',
-    color: 'rgba(255,255,255,0.5)',
-    cursor: 'pointer',
-    padding: '0 0 0 4px',
+    color: '#6b7280',
     fontSize: '14px',
+    cursor: 'pointer',
+    padding: '0 2px',
+    marginLeft: '2px',
     lineHeight: 1
   },
+
+  // ── Confirm Modal ──
   confirmOverlay: {
     position: 'absolute',
     inset: 0,
@@ -1448,21 +1642,20 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 100,
-    borderRadius: '12px'
+    zIndex: 100
   },
   confirmModal: {
-    backgroundColor: '#1f1f2e',
+    backgroundColor: '#1e1e32',
     borderRadius: '12px',
-    border: '1px solid rgba(255,255,255,0.1)',
     padding: '24px',
     maxWidth: '360px',
-    width: '100%'
+    width: '100%',
+    border: '1px solid rgba(255,255,255,0.1)'
   },
   confirmKeepButton: {
     padding: '8px 16px',
-    borderRadius: '6px',
-    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '8px',
+    border: '1px solid rgba(255,255,255,0.15)',
     backgroundColor: 'transparent',
     color: '#d1d5db',
     fontSize: '13px',
@@ -1470,12 +1663,11 @@ const styles = {
   },
   confirmCloseButton: {
     padding: '8px 16px',
-    borderRadius: '6px',
+    borderRadius: '8px',
     border: 'none',
-    background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+    backgroundColor: '#dc2626',
     color: '#fff',
     fontSize: '13px',
-    fontWeight: '600',
     cursor: 'pointer'
   }
 };

@@ -25,6 +25,9 @@ import {
   addToTextBank,
   removeFromTextBank,
   updateTextBank,
+  addToVideoTextBank,
+  removeFromVideoTextBank,
+  updateVideoTextBank,
   saveTextTemplates,
   MEDIA_TYPES,
   COLLECTION_TYPES,
@@ -405,7 +408,7 @@ const LibraryBrowser = ({
   // Compute from component state (library + collections) instead of localStorage
   // so it stays in sync with Firestore subscription data
   const collectionBanks = (() => {
-    if (!isUserCollectionView || mode === 'videos' || mode === 'audio') return null;
+    if (!isUserCollectionView || mode === 'audio') return null;
     const col = collections.find(c => c.id === activeView);
     if (!col) return null;
     const allMedia = library.filter(item => (col.mediaIds || []).includes(item.id));
@@ -2058,6 +2061,36 @@ const LibraryBrowser = ({
                       onRemove={(index) => { removeFromTextBank(artistId, activeView, 2, index); loadData(); syncCollection(activeView); }}
                       onUpdate={(texts) => { updateTextBank(artistId, activeView, 2, texts); loadData(); syncCollection(activeView); }}
                     />
+                    {mode === 'videos' && (
+                      <>
+                        {/* Video Text Bank 1 */}
+                        <TextBankPanel
+                          bankNum={1}
+                          label="Video Text 1"
+                          color="#38bdf8"
+                          texts={(() => {
+                            const col = collections.find(c => c.id === activeView);
+                            return col?.videoTextBank1 || [];
+                          })()}
+                          onAdd={(text) => { addToVideoTextBank(artistId, activeView, 1, text); loadData(); syncCollection(activeView); }}
+                          onRemove={(index) => { removeFromVideoTextBank(artistId, activeView, 1, index); loadData(); syncCollection(activeView); }}
+                          onUpdate={(texts) => { updateVideoTextBank(artistId, activeView, 1, texts); loadData(); syncCollection(activeView); }}
+                        />
+                        {/* Video Text Bank 2 */}
+                        <TextBankPanel
+                          bankNum={2}
+                          label="Video Text 2"
+                          color="#fb923c"
+                          texts={(() => {
+                            const col = collections.find(c => c.id === activeView);
+                            return col?.videoTextBank2 || [];
+                          })()}
+                          onAdd={(text) => { addToVideoTextBank(artistId, activeView, 2, text); loadData(); syncCollection(activeView); }}
+                          onRemove={(index) => { removeFromVideoTextBank(artistId, activeView, 2, index); loadData(); syncCollection(activeView); }}
+                          onUpdate={(texts) => { updateVideoTextBank(artistId, activeView, 2, texts); loadData(); syncCollection(activeView); }}
+                        />
+                      </>
+                    )}
                     {/* Template Editor Button */}
                     <div style={{ padding: '8px', flexShrink: 0 }}>
                       <button

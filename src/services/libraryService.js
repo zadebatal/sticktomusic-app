@@ -833,6 +833,56 @@ export const updateTextBank = (artistId, collectionId, bankNum, texts) => {
 };
 
 /**
+ * Add text to a video text bank
+ * @param {string} artistId
+ * @param {string} collectionId
+ * @param {number} bankNum - 1 or 2
+ * @param {string} text
+ */
+export const addToVideoTextBank = (artistId, collectionId, bankNum, text) => {
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection) return;
+  const key = `videoTextBank${bankNum}`;
+  collection[key] = [...(collection[key] || []), text];
+  collection.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
+};
+
+/**
+ * Remove text from a video text bank
+ * @param {string} artistId
+ * @param {string} collectionId
+ * @param {number} bankNum - 1 or 2
+ * @param {number} index
+ */
+export const removeFromVideoTextBank = (artistId, collectionId, bankNum, index) => {
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection) return;
+  const key = `videoTextBank${bankNum}`;
+  collection[key] = (collection[key] || []).filter((_, i) => i !== index);
+  collection.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
+};
+
+/**
+ * Update entire video text bank
+ * @param {string} artistId
+ * @param {string} collectionId
+ * @param {number} bankNum - 1 or 2
+ * @param {string[]} texts
+ */
+export const updateVideoTextBank = (artistId, collectionId, bankNum, texts) => {
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection) return;
+  collection[`videoTextBank${bankNum}`] = texts;
+  collection.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
+};
+
+/**
  * Save text style templates for a collection
  * @param {string} artistId
  * @param {string} collectionId
@@ -1689,6 +1739,8 @@ export const getCollectionsAsync = async (db, artistId) => {
               bankB: localCol.bankB || col.bankB || [],
               textBank1: localCol.textBank1 || col.textBank1 || [],
               textBank2: localCol.textBank2 || col.textBank2 || [],
+              videoTextBank1: localCol.videoTextBank1 || col.videoTextBank1 || [],
+              videoTextBank2: localCol.videoTextBank2 || col.videoTextBank2 || [],
               textTemplates: localCol.textTemplates || col.textTemplates || [],
             };
           }
@@ -1743,6 +1795,8 @@ export const subscribeToCollections = (db, artistId, callback) => {
               bankB: (col.bankB?.length > 0 ? col.bankB : localCol.bankB) || [],
               textBank1: (col.textBank1?.length > 0 ? col.textBank1 : localCol.textBank1) || [],
               textBank2: (col.textBank2?.length > 0 ? col.textBank2 : localCol.textBank2) || [],
+              videoTextBank1: (col.videoTextBank1?.length > 0 ? col.videoTextBank1 : localCol.videoTextBank1) || [],
+              videoTextBank2: (col.videoTextBank2?.length > 0 ? col.videoTextBank2 : localCol.videoTextBank2) || [],
               textTemplates: (col.textTemplates?.length > 0 ? col.textTemplates : localCol.textTemplates) || [],
               mediaIds: (col.mediaIds?.length > 0 ? col.mediaIds : localCol.mediaIds) || [],
             };
