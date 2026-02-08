@@ -2408,7 +2408,12 @@ const StudioHome = ({
                                       e.stopPropagation();
                                       if (!inCol) {
                                         addToCollection(artistId, col.id, audio.id);
-                                        saveCollectionToFirestore(db, artistId, col).catch(() => {});
+                                        loadData();
+                                        if (db) {
+                                          const freshCols = getCollections(artistId);
+                                          const freshCol = freshCols.find(c => c.id === col.id && c.type !== 'smart');
+                                          if (freshCol) saveCollectionToFirestore(db, artistId, freshCol).catch(() => {});
+                                        }
                                         setLibraryRefreshTrigger(t => t + 1);
                                       }
                                       setAudioDropdownId(null);
