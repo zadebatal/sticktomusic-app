@@ -23,7 +23,7 @@ const CaptionHashtagBank = ({
   compact = false,
   onBankChange
 }) => {
-  const theme = useTheme();
+  const { theme } = useTheme();
   const [templates, setTemplates] = useState({});
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [showAddCategory, setShowAddCategory] = useState(false);
