@@ -985,6 +985,8 @@ const PostRow = ({
 // ═══════════════════════════════════════════════════
 
 const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [], onUpdate, onTogglePlatform, onSetPlatformAccount, onEditDraft }) => {
+  const { theme } = useTheme();
+  const s = getS(theme);
   const [hashtags, setHashtags] = useState((post.hashtags || []).join(' '));
   const [hashtagBank, setHashtagBank] = useState([]);
   const [showSaveSet, setShowSaveSet] = useState(false);
@@ -1322,6 +1324,8 @@ const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) =>
 // ═══════════════════════════════════════════════════
 
 const CalendarView = ({ posts, expandedPostId, onSelectPost, calendarDate, onChangeMonth, onDragPost }) => {
+  const { theme } = useTheme();
+  const s = getS(theme);
   const [draggedPostId, setDraggedPostId] = useState(null);
   const [dragFromDate, setDragFromDate] = useState(null);
 
