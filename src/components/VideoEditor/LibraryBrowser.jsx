@@ -408,7 +408,7 @@ const LibraryBrowser = ({
   // Compute from component state (library + collections) instead of localStorage
   // so it stays in sync with Firestore subscription data
   const collectionBanks = (() => {
-    if (!isUserCollectionView || mode === 'audio') return null;
+    if (!isUserCollectionView || mode === 'audio' || mode === 'videos') return null;
     const col = collections.find(c => c.id === activeView);
     if (!col) return null;
     const allMedia = library.filter(item => (col.mediaIds || []).includes(item.id));
@@ -2035,32 +2035,35 @@ const LibraryBrowser = ({
                   </div>
                 ) : (
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden' }}>
-                    {/* Text Bank 1 */}
-                    <TextBankPanel
-                      bankNum={1}
-                      label="Text Bank 1"
-                      color="#c4b5fd"
-                      texts={(() => {
-                        const col = collections.find(c => c.id === activeView);
-                        return col?.textBank1 || [];
-                      })()}
-                      onAdd={(text) => { addToTextBank(artistId, activeView, 1, text); loadData(); syncCollection(activeView); }}
-                      onRemove={(index) => { removeFromTextBank(artistId, activeView, 1, index); loadData(); syncCollection(activeView); }}
-                      onUpdate={(texts) => { updateTextBank(artistId, activeView, 1, texts); loadData(); syncCollection(activeView); }}
-                    />
-                    {/* Text Bank 2 */}
-                    <TextBankPanel
-                      bankNum={2}
-                      label="Text Bank 2"
-                      color="#86efac"
-                      texts={(() => {
-                        const col = collections.find(c => c.id === activeView);
-                        return col?.textBank2 || [];
-                      })()}
-                      onAdd={(text) => { addToTextBank(artistId, activeView, 2, text); loadData(); syncCollection(activeView); }}
-                      onRemove={(index) => { removeFromTextBank(artistId, activeView, 2, index); loadData(); syncCollection(activeView); }}
-                      onUpdate={(texts) => { updateTextBank(artistId, activeView, 2, texts); loadData(); syncCollection(activeView); }}
-                    />
+                    {/* Slideshow Text Banks (only in images/slideshows mode) */}
+                    {mode !== 'videos' && (
+                      <>
+                        <TextBankPanel
+                          bankNum={1}
+                          label="Text Bank 1"
+                          color="#c4b5fd"
+                          texts={(() => {
+                            const col = collections.find(c => c.id === activeView);
+                            return col?.textBank1 || [];
+                          })()}
+                          onAdd={(text) => { addToTextBank(artistId, activeView, 1, text); loadData(); syncCollection(activeView); }}
+                          onRemove={(index) => { removeFromTextBank(artistId, activeView, 1, index); loadData(); syncCollection(activeView); }}
+                          onUpdate={(texts) => { updateTextBank(artistId, activeView, 1, texts); loadData(); syncCollection(activeView); }}
+                        />
+                        <TextBankPanel
+                          bankNum={2}
+                          label="Text Bank 2"
+                          color="#86efac"
+                          texts={(() => {
+                            const col = collections.find(c => c.id === activeView);
+                            return col?.textBank2 || [];
+                          })()}
+                          onAdd={(text) => { addToTextBank(artistId, activeView, 2, text); loadData(); syncCollection(activeView); }}
+                          onRemove={(index) => { removeFromTextBank(artistId, activeView, 2, index); loadData(); syncCollection(activeView); }}
+                          onUpdate={(texts) => { updateTextBank(artistId, activeView, 2, texts); loadData(); syncCollection(activeView); }}
+                        />
+                      </>
+                    )}
                     {mode === 'videos' && (
                       <>
                         {/* Video Text Bank 1 */}
