@@ -262,6 +262,10 @@ const SoloClipEditor = ({
     } else if (audioRef.current && !audio) {
       audioRef.current.src = '';
     }
+    // When library audio is selected, mute source video audio so they don't overlap
+    if (videoRef.current) {
+      videoRef.current.muted = !!(audio && !audio.isSourceVideo);
+    }
   }, []);
 
   // ── Audio trim save handler ──
@@ -347,12 +351,14 @@ const SoloClipEditor = ({
 
   useEffect(() => {
     if (videoRef.current) {
-      videoRef.current.muted = isMuted;
+      // Mute source video when: global mute is on, OR library audio is replacing source
+      const hasLibraryAudio = selectedAudio && !selectedAudio.isSourceVideo;
+      videoRef.current.muted = isMuted || hasLibraryAudio;
     }
     if (audioRef.current) {
       audioRef.current.muted = isMuted;
     }
-  }, [isMuted]);
+  }, [isMuted, selectedAudio]);
 
   useEffect(() => {
     return () => {
@@ -684,14 +690,45 @@ const SoloClipEditor = ({
   // Currently editing overlay
   const editingOverlay = textOverlays.find(o => o.id === editingTextId);
 
-  // Aspect ratio dimensions
-  const getPreviewDimensions = () => {
-    if (aspectRatio === '9:16') return { width: 270, height: 480 };
-    if (aspectRatio === '4:3') return { width: 400, height: 300 };
-    if (aspectRatio === '1:1') return { width: 360, height: 360 };
-    return { width: 270, height: 480 };
+  // Canvas is ALWAYS 9:16 — aspect ratio only controls how media is cropped within it
+  const previewDims = { width: 270, height: 480 };
+
+  // Compute video style based on crop mode (aspect ratio)
+  const getVideoCropStyle = () => {
+    // 9:16 = fill the canvas (default, no crop needed)
+    if (aspectRatio === '9:16') {
+      return { width: '100%', height: '100%', objectFit: 'cover' };
+    }
+    // 1:1 = square crop centered in the 9:16 canvas
+    if (aspectRatio === '1:1') {
+      return {
+        width: '100%',
+        height: 'auto',
+        aspectRatio: '1 / 1',
+        objectFit: 'cover',
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        maxWidth: '100%'
+      };
+    }
+    // 4:3 = landscape crop centered in the 9:16 canvas
+    if (aspectRatio === '4:3') {
+      return {
+        width: '100%',
+        height: 'auto',
+        aspectRatio: '4 / 3',
+        objectFit: 'cover',
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        maxWidth: '100%'
+      };
+    }
+    return { width: '100%', height: '100%', objectFit: 'cover' };
   };
-  const previewDims = getPreviewDimensions();
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -848,9 +885,7 @@ const SoloClipEditor = ({
                   loop={false}
                   playsInline
                   style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
+                    ...getVideoCropStyle(),
                     borderRadius: '8px'
                   }}
                   crossOrigin="anonymous"

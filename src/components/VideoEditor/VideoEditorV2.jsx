@@ -17,6 +17,7 @@ import {
   generateAutoRemix,
   parseLyrics
 } from './AutoRemixEngine';
+import MontageEditorLayout from './MontageEditorLayout';
 import { useToast } from '../ui';
 import log from '../../utils/logger';
 
@@ -539,209 +540,181 @@ const VideoEditorV2 = ({
         <span style={styles.shortcut}><kbd>G</kbd> Generate</span>
       </div>
 
-      {/* Main Editor Area */}
-      <div style={styles.mainArea}>
-        {/* Left Panel - Preview */}
-        <div style={styles.previewPanel}>
-          {videoFile || audioFile ? (
-            <VideoPreview
-              videoSrc={videoFile}
-              audioSrc={audioFile}
-              currentTime={currentTime}
-              onTimeUpdate={setCurrentTime}
-              isPlaying={isPlaying}
-              onPlayPause={() => setIsPlaying(!isPlaying)}
-              visibleWords={getVisibleWords()}
-              textStyle={textStyle}
-              clips={clips}
-              videoRef={videoRef}
-              audioRef={audioRef}
-            />
-          ) : (
-            <div style={styles.uploadPrompt}>
-              <div style={styles.uploadIcon}>🎬</div>
-              <p style={styles.uploadText}>Upload video or audio to get started</p>
-              <div style={styles.uploadButtons}>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  style={styles.uploadButton}
-                >
-                  🎬 Choose Video
-                </button>
-                <button
-                  onClick={() => audioInputRef.current?.click()}
-                  style={styles.uploadButtonAlt}
-                >
-                  🎵 Choose Audio
-                </button>
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="video/*"
-                onChange={handleVideoUpload}
-                style={{ display: 'none' }}
-              />
-              <input
-                ref={audioInputRef}
-                type="file"
-                accept=".mp3,audio/mpeg"
-                onChange={handleAudioUpload}
-                style={{ display: 'none' }}
-              />
-            </div>
-          )}
-
-          {/* Generate Button */}
-          {(videoFile || audioFile) && selectedBank?.clips?.length > 0 && beats.length > 0 && (
-            <button
-              onClick={handleGenerate}
-              style={styles.generateButton}
-            >
-              ⚡ Auto-Generate
-            </button>
-          )}
-
-          {isAnalyzing && (
-            <div style={styles.analyzingOverlay}>
-              <div style={styles.spinner} />
-              <p>Analyzing beats...</p>
-            </div>
-          )}
-        </div>
-
-        {/* Right Panel - Controls */}
-        <div style={styles.controlsPanel}>
-          {/* Panel Tabs */}
-          <div style={styles.panelTabs}>
-            <button
-              style={activePanel === 'library' ? styles.panelTabActive : styles.panelTab}
-              onClick={() => setActivePanel('library')}
-            >
-              📁 Library
-            </button>
-            <button
-              style={activePanel === 'lyrics' ? styles.panelTabActive : styles.panelTab}
-              onClick={() => setActivePanel('lyrics')}
-            >
-              📝 Lyrics
-            </button>
-            <button
-              style={activePanel === 'style' ? styles.panelTabActive : styles.panelTab}
-              onClick={() => setActivePanel('style')}
-            >
-              🎨 Style
-            </button>
-          </div>
-
-          {/* Panel Content */}
-          <div style={styles.panelContent}>
-            {activePanel === 'library' && (
-              <ContentBankManager
-                artists={artists}
-                banks={contentBanks}
-                selectedArtist={selectedArtist}
-                selectedBank={selectedBank}
-                onSelectArtist={setSelectedArtist}
-                onSelectBank={setSelectedBank}
-                onCreateBank={handleCreateBank}
-                onUploadClips={handleUploadClips}
-                onDeleteClip={handleDeleteBankClip}
-                onToggleNeverUse={handleToggleNeverUse}
-              />
-            )}
-
-            {activePanel === 'lyrics' && (
-              <LyricEditor
-                words={words}
-                lyrics={lyrics}
-                beats={beats}
+      {/* Main Editor Area — Multi-Panel NLE Layout (Wave 3) */}
+      <MontageEditorLayout
+        headerContent={null}
+        previewContent={
+          <div style={styles.previewPanel}>
+            {videoFile || audioFile ? (
+              <VideoPreview
+                videoSrc={videoFile}
+                audioSrc={audioFile}
                 currentTime={currentTime}
-                displayMode={displayMode}
-                onWordsChange={setWords}
-                onLyricsChange={setLyrics}
-                onDisplayModeChange={setDisplayMode}
+                onTimeUpdate={setCurrentTime}
                 isPlaying={isPlaying}
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
+                onPlayPause={() => setIsPlaying(!isPlaying)}
+                visibleWords={getVisibleWords()}
+                textStyle={textStyle}
+                clips={clips}
+                videoRef={videoRef}
                 audioRef={audioRef}
-                audioUrl={audioFile}
-                audioDuration={duration}
               />
+            ) : (
+              <div style={styles.uploadPrompt}>
+                <div style={styles.uploadIcon}>🎬</div>
+                <p style={styles.uploadText}>Upload video or audio to get started</p>
+                <div style={styles.uploadButtons}>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    style={styles.uploadButton}
+                  >
+                    🎬 Choose Video
+                  </button>
+                  <button
+                    onClick={() => audioInputRef.current?.click()}
+                    style={styles.uploadButtonAlt}
+                  >
+                    🎵 Choose Audio
+                  </button>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="video/*"
+                  onChange={handleVideoUpload}
+                  style={{ display: 'none' }}
+                />
+                <input
+                  ref={audioInputRef}
+                  type="file"
+                  accept=".mp3,audio/mpeg"
+                  onChange={handleAudioUpload}
+                  style={{ display: 'none' }}
+                />
+              </div>
             )}
 
-            {activePanel === 'style' && (
-              <div style={styles.stylePanel}>
-                <button
-                  style={styles.styleTemplateButton}
-                  onClick={() => {
-                    setTemplateSelectorMode('lyric');
-                    setShowTemplateSelector(true);
-                  }}
-                >
-                  🎨 Choose Style Template
-                </button>
+            {/* Generate Button */}
+            {(videoFile || audioFile) && selectedBank?.clips?.length > 0 && beats.length > 0 && (
+              <button
+                onClick={handleGenerate}
+                style={styles.generateButton}
+              >
+                ⚡ Auto-Generate
+              </button>
+            )}
 
-                {/* Manual style controls */}
-                <div style={styles.styleControls}>
-                  <label style={styles.styleLabel}>
-                    Font Size
-                    <input
-                      type="range"
-                      min="24"
-                      max="120"
-                      value={textStyle.fontSize}
-                      onChange={(e) => setTextStyle({...textStyle, fontSize: parseInt(e.target.value)})}
-                      style={styles.slider}
-                    />
-                    <span>{textStyle.fontSize}px</span>
-                  </label>
-
-                  <label style={styles.styleLabel}>
-                    Color
-                    <input
-                      type="color"
-                      value={textStyle.color}
-                      onChange={(e) => setTextStyle({...textStyle, color: e.target.value})}
-                      style={styles.colorInput}
-                    />
-                  </label>
-
-                  <label style={styles.styleLabel}>
-                    Outline
-                    <input
-                      type="checkbox"
-                      checked={textStyle.outline}
-                      onChange={(e) => setTextStyle({...textStyle, outline: e.target.checked})}
-                    />
-                    {textStyle.outline && (
-                      <input
-                        type="color"
-                        value={textStyle.outlineColor}
-                        onChange={(e) => setTextStyle({...textStyle, outlineColor: e.target.value})}
-                        style={styles.colorInput}
-                      />
-                    )}
-                  </label>
-
-                  <label style={styles.styleLabel}>
-                    Case
-                    <select
-                      value={textStyle.textCase}
-                      onChange={(e) => setTextStyle({...textStyle, textCase: e.target.value})}
-                      style={styles.select}
-                    >
-                      <option value="default">Default</option>
-                      <option value="upper">UPPERCASE</option>
-                      <option value="lower">lowercase</option>
-                    </select>
-                  </label>
-                </div>
+            {isAnalyzing && (
+              <div style={styles.analyzingOverlay}>
+                <div style={styles.spinner} />
+                <p>Analyzing beats...</p>
               </div>
             )}
           </div>
-        </div>
-      </div>
+        }
+        libraryContent={
+          <ContentBankManager
+            artists={artists}
+            banks={contentBanks}
+            selectedArtist={selectedArtist}
+            selectedBank={selectedBank}
+            onSelectArtist={setSelectedArtist}
+            onSelectBank={setSelectedBank}
+            onCreateBank={handleCreateBank}
+            onUploadClips={handleUploadClips}
+            onDeleteClip={handleDeleteBankClip}
+            onToggleNeverUse={handleToggleNeverUse}
+          />
+        }
+        lyricsContent={
+          <LyricEditor
+            words={words}
+            lyrics={lyrics}
+            beats={beats}
+            currentTime={currentTime}
+            displayMode={displayMode}
+            onWordsChange={setWords}
+            onLyricsChange={setLyrics}
+            onDisplayModeChange={setDisplayMode}
+            isPlaying={isPlaying}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            audioRef={audioRef}
+            audioUrl={audioFile}
+            audioDuration={duration}
+          />
+        }
+        styleContent={
+          <div style={styles.stylePanel}>
+            <button
+              style={styles.styleTemplateButton}
+              onClick={() => {
+                setTemplateSelectorMode('lyric');
+                setShowTemplateSelector(true);
+              }}
+            >
+              🎨 Choose Style Template
+            </button>
+
+            {/* Manual style controls */}
+            <div style={styles.styleControls}>
+              <label style={styles.styleLabel}>
+                Font Size
+                <input
+                  type="range"
+                  min="24"
+                  max="120"
+                  value={textStyle.fontSize}
+                  onChange={(e) => setTextStyle({...textStyle, fontSize: parseInt(e.target.value)})}
+                  style={styles.slider}
+                />
+                <span>{textStyle.fontSize}px</span>
+              </label>
+
+              <label style={styles.styleLabel}>
+                Color
+                <input
+                  type="color"
+                  value={textStyle.color}
+                  onChange={(e) => setTextStyle({...textStyle, color: e.target.value})}
+                  style={styles.colorInput}
+                />
+              </label>
+
+              <label style={styles.styleLabel}>
+                Outline
+                <input
+                  type="checkbox"
+                  checked={textStyle.outline}
+                  onChange={(e) => setTextStyle({...textStyle, outline: e.target.checked})}
+                />
+                {textStyle.outline && (
+                  <input
+                    type="color"
+                    value={textStyle.outlineColor}
+                    onChange={(e) => setTextStyle({...textStyle, outlineColor: e.target.value})}
+                    style={styles.colorInput}
+                  />
+                )}
+              </label>
+
+              <label style={styles.styleLabel}>
+                Case
+                <select
+                  value={textStyle.textCase}
+                  onChange={(e) => setTextStyle({...textStyle, textCase: e.target.value})}
+                  style={styles.select}
+                >
+                  <option value="default">Default</option>
+                  <option value="upper">UPPERCASE</option>
+                  <option value="lower">lowercase</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        }
+        timelineContent={
+          <div style={{ height: '100%' }}>
 
       {/* Timeline */}
       <EnhancedTimeline
@@ -761,6 +734,9 @@ const VideoEditorV2 = ({
         selectedClipIndex={selectedClipIndex}
         audioBuffer={audioBuffer}
         isPlaying={isPlaying}
+      />
+          </div>
+        }
       />
 
       {/* Modals */}

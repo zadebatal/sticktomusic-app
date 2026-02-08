@@ -68,7 +68,12 @@ const StudioHome = ({
   // Lyrics handlers
   onAddLyrics: externalAddLyrics,
   onUpdateLyrics: externalUpdateLyrics,
-  onDeleteLyrics: externalDeleteLyrics
+  onDeleteLyrics: externalDeleteLyrics,
+  onViewScheduling,
+  // Wave 5: Google Drive integration
+  onImportFromDrive,
+  onExportToDrive,
+  driveConnected = false
 }) => {
   // UI State
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -1791,6 +1796,30 @@ const StudioHome = ({
                   >
                     View Library
                   </button>
+                  {onViewScheduling && (
+                    <button
+                      style={{...styles.actionButton, ...styles.secondaryButton, borderColor: '#6366f1', color: '#a5b4fc'}}
+                      onClick={onViewScheduling}
+                    >
+                      Scheduled Posts
+                    </button>
+                  )}
+                  {onImportFromDrive && (
+                    <button
+                      style={{...styles.actionButton, ...styles.secondaryButton, borderColor: '#10b981', color: '#6ee7b7'}}
+                      onClick={onImportFromDrive}
+                    >
+                      {driveConnected ? 'Import from Drive' : 'Connect Drive'}
+                    </button>
+                  )}
+                  {onExportToDrive && selectedMedia.videos.length > 0 && driveConnected && (
+                    <button
+                      style={{...styles.actionButton, ...styles.secondaryButton, borderColor: '#10b981', color: '#6ee7b7'}}
+                      onClick={() => onExportToDrive(selectedMedia.videos)}
+                    >
+                      Export to Drive
+                    </button>
+                  )}
                   <button
                     style={{
                       ...styles.actionButton,
@@ -2509,6 +2538,84 @@ const StudioHome = ({
                 </div>
               </div>
             )}
+
+            {/* ── Video Text Banks Column (only when collection selected in video mode) ── */}
+            {selectedCollection && studioMode === 'videos' && (() => {
+              const col = collections.find(c => c.id === selectedCollection);
+              const vt1 = col?.videoTextBank1 || [];
+              const vt2 = col?.videoTextBank2 || [];
+              if (vt1.length === 0 && vt2.length === 0) return null;
+              return (
+                <div style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    padding: '10px 12px',
+                    borderBottom: '1px solid rgba(255,255,255,0.08)',
+                    flexShrink: 0
+                  }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>
+                      Video Text Banks
+                    </span>
+                  </div>
+                  <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px' }}>
+                    {/* Bank A */}
+                    <div style={{ marginBottom: '10px' }}>
+                      <div style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>
+                        Bank A ({vt1.length})
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {vt1.map((text, i) => (
+                          <span key={i} style={{
+                            display: 'inline-block',
+                            padding: '3px 8px',
+                            backgroundColor: 'rgba(124,58,237,0.15)',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            color: '#a78bfa',
+                            maxWidth: '150px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }} title={text}>
+                            {text}
+                          </span>
+                        ))}
+                        {vt1.length === 0 && <span style={{ fontSize: '10px', color: '#4b5563' }}>Empty</span>}
+                      </div>
+                    </div>
+                    {/* Bank B */}
+                    <div>
+                      <div style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>
+                        Bank B ({vt2.length})
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {vt2.map((text, i) => (
+                          <span key={i} style={{
+                            display: 'inline-block',
+                            padding: '3px 8px',
+                            backgroundColor: 'rgba(99,102,241,0.15)',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            color: '#818cf8',
+                            maxWidth: '150px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }} title={text}>
+                            {text}
+                          </span>
+                        ))}
+                        {vt2.length === 0 && <span style={{ fontSize: '10px', color: '#4b5563' }}>Empty</span>}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
           </div>
         )}

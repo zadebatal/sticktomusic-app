@@ -6,6 +6,7 @@ import ContentLibrary from './ContentLibrary';
 import VideoEditorModal from './VideoEditorModal';
 import BatchPipeline from './BatchPipeline';
 import SlideshowEditor from './SlideshowEditor';
+import SchedulingPage from './SchedulingPage';
 // OnboardingModal removed - auto-setup Music Artist template instead
 import { uploadFile, deleteFile, getMediaDuration, generateThumbnail } from '../../services/firebaseStorage';
 import {
@@ -37,7 +38,7 @@ import {
 } from '../../services/libraryService';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { VIDEO_STATUS } from '../../utils/status';
-import { useToast } from '../ui';
+import { useToast, ConfirmDialog } from '../ui';
 import log from '../../utils/logger';
 
 // Firestore sync helpers for categories - ensures cross-device access
@@ -256,6 +257,7 @@ const VideoStudio = ({
     const path = location.pathname;
     if (path.includes('/studio/library')) return 'library';
     if (path.includes('/studio/slideshows')) return 'slideshows';
+    if (path.includes('/studio/scheduling')) return 'scheduling';
     return 'home';
   };
 
@@ -272,6 +274,7 @@ const VideoStudio = ({
     let targetPath = '/operator/studio';
     if (view === 'library') targetPath = '/operator/studio/library';
     else if (view === 'slideshows') targetPath = '/operator/studio/slideshows';
+    else if (view === 'scheduling') targetPath = '/operator/studio/scheduling';
     if (location.pathname !== targetPath) {
       navigate(targetPath, { replace: false });
     }
@@ -280,7 +283,9 @@ const VideoStudio = ({
   // Handle browser back/forward within studio
   useEffect(() => {
     const path = location.pathname;
-    if (path.includes('/studio/library') && currentView !== 'library') {
+    if (path.includes('/studio/scheduling') && currentView !== 'scheduling') {
+      setCurrentViewState('scheduling');
+    } else if (path.includes('/studio/library') && currentView !== 'library') {
       setCurrentViewState('library');
     } else if (path.includes('/studio/slideshows') && currentView !== 'slideshows') {
       setCurrentViewState('slideshows');
@@ -294,6 +299,38 @@ const VideoStudio = ({
   const [firestoreContentLoaded, setFirestoreContentLoaded] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null); // Track upload progress
   const [sessionRestored, setSessionRestored] = useState(false);
+
+  // Wave 4: Save draft prompt dialog state
+  const [draftDialog, setDraftDialog] = useState({ isOpen: false, pendingAction: null });
+
+  /**
+   * navigateWithDraftCheck — wraps navigation to prompt "Save draft?" when
+   * leaving an editor with potentially unsaved work (Wave 4).
+   * @param {Function} action — The navigation callback to execute
+   */
+  const navigateWithDraftCheck = useCallback((action) => {
+    const inEditor = showEditor || showSlideshowEditor;
+    if (!inEditor) {
+      // Not in editor — navigate directly
+      action();
+      return;
+    }
+    // In editor — show draft prompt
+    setDraftDialog({
+      isOpen: true,
+      pendingAction: action
+    });
+  }, [showEditor, showSlideshowEditor]);
+
+  const handleDraftDialogDiscard = useCallback(() => {
+    const action = draftDialog.pendingAction;
+    setDraftDialog({ isOpen: false, pendingAction: null });
+    if (action) action();
+  }, [draftDialog.pendingAction]);
+
+  const handleDraftDialogCancel = useCallback(() => {
+    setDraftDialog({ isOpen: false, pendingAction: null });
+  }, []);
 
   // Derive accounts array from lateAccountIds for PostingModule
   const accounts = useMemo(() => {
@@ -1763,59 +1800,86 @@ const VideoStudio = ({
               </>
             )}
 
-            {/* LIBRARY-BASED MODE: Persistent breadcrumb trail */}
+            {/* LIBRARY-BASED MODE: Full breadcrumb with all destinations (Wave 4) */}
             {USE_LIBRARY_SYSTEM && !selectedCategory && (
               <>
                 {/* Dashboard - always visible, exits studio */}
                 <button
                   style={styles.breadcrumbLink}
-                  onClick={onClose}
+                  onClick={() => navigateWithDraftCheck(onClose)}
                 >
                   Dashboard
                 </button>
 
                 <span style={styles.breadcrumbSep}>/</span>
 
-                {/* Studio - always visible */}
+                {/* Studio Home - always visible */}
                 <button
                   style={{
                     ...styles.breadcrumbLink,
                     ...(!studioMode && currentView === 'home' && !showEditor && !showSlideshowEditor ? styles.breadcrumbCurrent : {})
                   }}
-                  onClick={() => {
+                  onClick={() => navigateWithDraftCheck(() => {
                     setCurrentView('home');
                     setStudioMode(null);
                     setShowEditor(false);
                     setShowSlideshowEditor(false);
-                  }}
+                  })}
                 >
                   Studio
                 </button>
 
-                {/* Videos / Slideshows / Audio - shown when a mode is active */}
-                {(studioMode || currentView === 'library' || currentView === 'slideshows' || showEditor || showSlideshowEditor) && (
-                  <>
-                    <span style={styles.breadcrumbSep}>/</span>
-                    <button
-                      style={{
-                        ...styles.breadcrumbLink,
-                        ...(!showEditor && !showSlideshowEditor ? styles.breadcrumbCurrent : {})
-                      }}
-                      onClick={() => {
-                        const isSlideshows = studioMode === 'slideshows' || currentView === 'slideshows' || showSlideshowEditor;
-                        setCurrentView(isSlideshows ? 'slideshows' : 'library');
-                        setShowEditor(false);
-                        setShowSlideshowEditor(false);
-                      }}
-                    >
-                      {(studioMode === 'slideshows' || currentView === 'slideshows' || showSlideshowEditor)
-                        ? 'Slideshows'
-                        : (studioMode === 'audio' ? 'Audio' : 'Videos')}
-                    </button>
-                  </>
-                )}
+                {/* Quick nav: always-visible destination links */}
+                <span style={styles.breadcrumbSep}>|</span>
+                <button
+                  style={{
+                    ...styles.breadcrumbQuickLink,
+                    ...(currentView === 'library' && !showEditor ? styles.breadcrumbQuickLinkActive : {})
+                  }}
+                  onClick={() => navigateWithDraftCheck(() => {
+                    setCurrentView('library');
+                    setStudioMode('videos');
+                    setShowEditor(false);
+                    setShowSlideshowEditor(false);
+                    if (!selectedCategory && artistCategories.length > 0) {
+                      setSelectedCategory(artistCategories[0]);
+                    }
+                  })}
+                >
+                  Videos
+                </button>
+                <button
+                  style={{
+                    ...styles.breadcrumbQuickLink,
+                    ...(currentView === 'slideshows' && !showSlideshowEditor ? styles.breadcrumbQuickLinkActive : {})
+                  }}
+                  onClick={() => navigateWithDraftCheck(() => {
+                    setCurrentView('slideshows');
+                    setStudioMode('slideshows');
+                    setShowEditor(false);
+                    setShowSlideshowEditor(false);
+                    if (!selectedCategory && artistCategories.length > 0) {
+                      setSelectedCategory(artistCategories[0]);
+                    }
+                  })}
+                >
+                  Slideshows
+                </button>
+                <button
+                  style={{
+                    ...styles.breadcrumbQuickLink,
+                    ...(currentView === 'scheduling' ? styles.breadcrumbQuickLinkActive : {})
+                  }}
+                  onClick={() => navigateWithDraftCheck(() => {
+                    setCurrentView('scheduling');
+                    setShowEditor(false);
+                    setShowSlideshowEditor(false);
+                  })}
+                >
+                  Schedule
+                </button>
 
-                {/* Editor - shown when editing */}
+                {/* Current context trail */}
                 {(showEditor || showSlideshowEditor) && (
                   <>
                     <span style={styles.breadcrumbSep}>/</span>
@@ -1925,6 +1989,7 @@ const VideoStudio = ({
             onAddLyrics={handleAddLyrics}
             onUpdateLyrics={handleUpdateLyrics}
             onDeleteLyrics={handleDeleteLyrics}
+            onViewScheduling={() => setCurrentView('scheduling')}
           />
         )}
 
@@ -2004,6 +2069,24 @@ const VideoStudio = ({
             accounts={accounts}
             lateAccountIds={lateAccountIds}
             artistId={currentArtistId}
+          />
+        )}
+
+        {currentView === 'scheduling' && (
+          <SchedulingPage
+            db={db}
+            artistId={currentArtistId}
+            accounts={accounts}
+            lateAccountIds={lateAccountIds}
+            onSchedulePost={onSchedulePost}
+            onRenderVideo={null}
+            onEditDraft={(post) => {
+              if (post.editorState) {
+                // Restore editor with saved state
+                handleMakeVideo(post.editorState);
+              }
+            }}
+            onBack={() => setCurrentView('home')}
           />
         )}
 
@@ -2121,6 +2204,17 @@ const VideoStudio = ({
           }}
         />
       )}
+
+      {/* Wave 4: Save Draft Prompt */}
+      <ConfirmDialog
+        isOpen={draftDialog.isOpen}
+        title="Unsaved Changes"
+        message="You have unsaved work in the editor. Do you want to discard your changes and navigate away?"
+        variant="destructive"
+        confirmText="Discard"
+        onConfirm={handleDraftDialogDiscard}
+        onCancel={handleDraftDialogCancel}
+      />
 
       {/* UI-20: Upload Progress Overlay */}
       {uploadProgress && (
@@ -2265,6 +2359,22 @@ const styles = {
     color: '#fff',
     fontWeight: '500',
     cursor: 'default'
+  },
+  // Wave 4: Quick-nav breadcrumb links (always visible)
+  breadcrumbQuickLink: {
+    background: 'none',
+    border: 'none',
+    color: '#6b7280',
+    cursor: 'pointer',
+    padding: '3px 8px',
+    borderRadius: '4px',
+    fontSize: '12px',
+    fontWeight: '500',
+    transition: 'color 0.15s, background-color 0.15s'
+  },
+  breadcrumbQuickLinkActive: {
+    color: '#a5b4fc',
+    backgroundColor: 'rgba(99, 102, 241, 0.15)'
   },
   closeButton: {
     display: 'flex',

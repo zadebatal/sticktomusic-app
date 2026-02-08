@@ -229,10 +229,43 @@ const LyricBank = ({
                       {isExpanded && (
                         <div style={compactStyles.expandedBody}>
                           {lyric.content.split('\n').map((line, i) => (
-                            <div key={i} style={compactStyles.lyricLine}>
+                            <div
+                              key={i}
+                              style={{
+                                ...compactStyles.lyricLine,
+                                ...(line.trim() ? { cursor: 'pointer' } : {}),
+                                ...(selectedLines.includes(i) && expandedLyricsId === lyric.id
+                                  ? { backgroundColor: 'rgba(124,58,237,0.3)', color: '#fff', borderRadius: '3px' }
+                                  : {})
+                              }}
+                              onClick={() => {
+                                if (line.trim() && onSelectText) {
+                                  onSelectText(line.trim());
+                                }
+                              }}
+                              onMouseDown={() => { if (line.trim()) handleLineMouseDown(lyric.id, i); }}
+                              onMouseEnter={() => handleLineMouseEnter(i)}
+                              title={line.trim() ? 'Click to add as text overlay' : ''}
+                            >
                               {line || '\u00A0'}
                             </div>
                           ))}
+                          {selectedLines.length > 1 && onSelectText && (
+                            <div style={{ display: 'flex', gap: '6px', padding: '6px 4px 2px', borderTop: '1px solid rgba(255,255,255,0.05)', marginTop: '4px' }}>
+                              <button
+                                style={{ ...compactStyles.addBtn, flex: 1 }}
+                                onClick={() => handleUseSelected(lyric)}
+                              >
+                                Use {selectedLines.length} lines
+                              </button>
+                              <button
+                                style={{ ...compactStyles.editorCancel, padding: '3px 8px', fontSize: '10px' }}
+                                onClick={() => setSelectedLines([])}
+                              >
+                                Clear
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
