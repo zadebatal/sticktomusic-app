@@ -1361,7 +1361,6 @@ const SlideshowEditor = ({
 
   // State for showing "save to bank" option after transcription
   const [transcribedLyrics, setTranscribedLyrics] = useState(null);
-  const [showSaveToBankPrompt, setShowSaveToBankPrompt] = useState(false);
 
   // State for lyric bank picker dropdown
   const [showLyricBankPicker, setShowLyricBankPicker] = useState(false);
@@ -1404,27 +1403,21 @@ const SlideshowEditor = ({
       setEditingTextId(newOverlay.id);
       // Text editor is now inline — editingTextId activates it
 
-      // Store transcribed lyrics and show save prompt
+      // Auto-save transcribed lyrics to lyric bank (no popup)
       setTranscribedLyrics(result.text);
-      setShowSaveToBankPrompt(true);
+      if (onAddLyrics) {
+        const title = selectedAudio?.name || 'Transcribed Lyrics';
+        onAddLyrics({
+          id: `lyric_${Date.now()}`,
+          title: title.replace(/\.[^/.]+$/, ''),
+          content: result.text,
+          createdAt: new Date().toISOString()
+        });
+      }
     }
     setShowLyricAnalyzer(false);
   }, [selectedSlideIndex]);
 
-  // Save transcribed lyrics to lyric bank
-  const handleSaveToLyricBank = useCallback(() => {
-    if (transcribedLyrics && onAddLyrics) {
-      const title = selectedAudio?.name || 'Transcribed Lyrics';
-      onAddLyrics({
-        id: `lyric_${Date.now()}`,
-        title: title.replace(/\.[^/.]+$/, ''), // Remove file extension
-        content: transcribedLyrics,
-        createdAt: new Date().toISOString()
-      });
-    }
-    setShowSaveToBankPrompt(false);
-    setTranscribedLyrics(null);
-  }, [transcribedLyrics, selectedAudio, onAddLyrics]);
 
   // Handle audio file upload in slideshow editor - opens the audio editor/trimmer
   const handleSlideshowAudioUpload = useCallback((e) => {
@@ -2635,6 +2628,7 @@ const SlideshowEditor = ({
                         left: `${overlay.position.x}%`,
                         top: `${overlay.position.y}%`,
                         transform: 'translate(-50%, -50%)',
+                        width: `${overlay.position.width || 80}%`,
                         fontSize: `${overlay.style.fontSize * previewScale}px`,
                         fontFamily: overlay.style.fontFamily,
                         fontWeight: overlay.style.fontWeight,
@@ -2648,7 +2642,10 @@ const SlideshowEditor = ({
                         padding: '4px 8px',
                         borderRadius: '4px',
                         transition: isDragging ? 'none' : 'border-color 0.15s',
-                        backgroundColor: isSelected ? 'rgba(99,102,241,0.1)' : 'transparent'
+                        backgroundColor: isSelected ? 'rgba(99,102,241,0.1)' : 'transparent',
+                        boxSizing: 'border-box',
+                        overflow: 'hidden',
+                        wordBreak: 'break-word'
                       }}
                       onMouseDown={(e) => handleTextMouseDown(e, overlay.id)}
                       onClick={(e) => {
@@ -3741,87 +3738,6 @@ const SlideshowEditor = ({
           />
         )}
 
-        {/* Save to Lyric Bank Prompt - Premium Card Design */}
-        {showSaveToBankPrompt && transcribedLyrics && (
-          <div style={styles.saveToBankOverlay}>
-            <div style={styles.saveToBankModal}>
-              {/* Close button */}
-              <button
-                style={styles.saveToBankCloseBtn}
-                onClick={() => {
-                  setShowSaveToBankPrompt(false);
-                  setTranscribedLyrics(null);
-                }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
-
-              {/* Success Icon with Glow */}
-              <div style={styles.saveToBankIconWrapper}>
-                <div style={styles.saveToBankIconGlow} />
-                <div style={styles.saveToBankIcon}>
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
-                    <path d="M9 12l2 2 4-4"/>
-                    <circle cx="12" cy="12" r="10"/>
-                  </svg>
-                </div>
-              </div>
-
-              {/* Title & Subtitle */}
-              <h3 style={styles.saveToBankTitle}>Lyrics Ready!</h3>
-              <p style={styles.saveToBankSubtitle}>
-                We've transcribed your audio. Save to your Lyric Bank for easy access.
-              </p>
-
-              {/* Lyrics Preview Card */}
-              <div style={styles.saveToBankPreviewCard}>
-                <div style={styles.saveToBankPreviewHeader}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2">
-                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-                    <path d="M14 2v6h6"/>
-                  </svg>
-                  <span style={styles.saveToBankPreviewLabel}>Preview</span>
-                </div>
-                <div style={styles.saveToBankPreviewContent}>
-                  {transcribedLyrics.split('\n').slice(0, 4).map((line, i) => (
-                    <div key={i} style={styles.saveToBankLyricLine}>
-                      {line || '\u00A0'}
-                    </div>
-                  ))}
-                  {transcribedLyrics.split('\n').length > 4 && (
-                    <div style={styles.saveToBankMoreLines}>
-                      +{transcribedLyrics.split('\n').length - 4} more lines
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div style={styles.saveToBankActions}>
-                <button
-                  style={styles.saveToBankSkipBtn}
-                  onClick={() => {
-                    setShowSaveToBankPrompt(false);
-                    setTranscribedLyrics(null);
-                  }}
-                >
-                  Not Now
-                </button>
-                <button
-                  style={styles.saveToBankSaveBtn}
-                  onClick={handleSaveToLyricBank}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 5v14M5 12h14"/>
-                  </svg>
-                  Save to Bank
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Audio Trimmer Modal */}
         {showAudioTrimmer && audioToTrim && (
@@ -5567,160 +5483,6 @@ const textPanelStyles = {
     fontSize: '13px',
     marginTop: '8px'
   },
-  // Save to Lyric Bank prompt styles - Premium Design
-  saveToBankOverlay: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    backdropFilter: 'blur(8px)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10001,
-    animation: 'fadeIn 0.2s ease-out'
-  },
-  saveToBankModal: {
-    position: 'relative',
-    backgroundColor: '#1a1a2e',
-    borderRadius: '20px',
-    padding: '32px',
-    maxWidth: '400px',
-    width: '90%',
-    boxShadow: '0 25px 60px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255,255,255,0.1)',
-    textAlign: 'center',
-    animation: 'slideUp 0.3s ease-out'
-  },
-  saveToBankCloseBtn: {
-    position: 'absolute',
-    top: '16px',
-    right: '16px',
-    background: 'rgba(255,255,255,0.1)',
-    border: 'none',
-    borderRadius: '8px',
-    padding: '8px',
-    cursor: 'pointer',
-    color: '#6b7280',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'all 0.2s'
-  },
-  saveToBankIconWrapper: {
-    position: 'relative',
-    display: 'inline-flex',
-    marginBottom: '20px'
-  },
-  saveToBankIconGlow: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    width: '80px',
-    height: '80px',
-    borderRadius: '50%',
-    background: 'radial-gradient(circle, rgba(16, 185, 129, 0.3) 0%, transparent 70%)',
-    animation: 'pulse 2s ease-in-out infinite'
-  },
-  saveToBankIcon: {
-    position: 'relative',
-    width: '64px',
-    height: '64px',
-    borderRadius: '50%',
-    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%)',
-    border: '2px solid rgba(16, 185, 129, 0.3)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  saveToBankTitle: {
-    margin: '0 0 8px 0',
-    fontSize: '22px',
-    fontWeight: '700',
-    color: '#fff',
-    letterSpacing: '-0.02em'
-  },
-  saveToBankSubtitle: {
-    color: '#9ca3af',
-    fontSize: '14px',
-    lineHeight: '1.5',
-    marginBottom: '24px',
-    padding: '0 12px'
-  },
-  saveToBankPreviewCard: {
-    backgroundColor: 'rgba(139, 92, 246, 0.08)',
-    border: '1px solid rgba(139, 92, 246, 0.2)',
-    borderRadius: '12px',
-    padding: '16px',
-    marginBottom: '24px',
-    textAlign: 'left'
-  },
-  saveToBankPreviewHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    marginBottom: '12px',
-    paddingBottom: '12px',
-    borderBottom: '1px solid rgba(255,255,255,0.08)'
-  },
-  saveToBankPreviewLabel: {
-    fontSize: '12px',
-    fontWeight: '600',
-    color: '#8b5cf6',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em'
-  },
-  saveToBankPreviewContent: {
-    maxHeight: '120px',
-    overflow: 'hidden'
-  },
-  saveToBankLyricLine: {
-    color: '#e4e4e7',
-    fontSize: '13px',
-    lineHeight: '1.8',
-    fontFamily: "'Inter', sans-serif"
-  },
-  saveToBankMoreLines: {
-    marginTop: '8px',
-    fontSize: '12px',
-    color: '#6b7280',
-    fontStyle: 'italic'
-  },
-  saveToBankActions: {
-    display: 'flex',
-    gap: '12px'
-  },
-  saveToBankSkipBtn: {
-    flex: 1,
-    padding: '14px 20px',
-    backgroundColor: 'transparent',
-    border: '1px solid rgba(255, 255, 255, 0.15)',
-    borderRadius: '10px',
-    color: '#9ca3af',
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    transition: 'all 0.2s'
-  },
-  saveToBankSaveBtn: {
-    flex: 1.2,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    padding: '14px 20px',
-    background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-    border: 'none',
-    borderRadius: '10px',
-    color: '#fff',
-    fontSize: '14px',
-    fontWeight: '600',
-    fontWeight: '500',
-    cursor: 'pointer',
-    transition: 'all 0.2s'
-  }
 };
 
 // Add hover effect for remove button and animations
