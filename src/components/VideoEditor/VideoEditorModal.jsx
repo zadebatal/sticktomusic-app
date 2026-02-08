@@ -2655,31 +2655,6 @@ const VideoEditorModal = ({
                     </div>
                   </div>
 
-                  {/* Clip Info Panel */}
-                  {selectedClips.length > 0 && (
-                    <div style={styles.clipInfoPanel}>
-                      <div style={styles.clipInfoRow}>
-                        <span style={styles.clipInfoLabel}>Selected Clip(s):</span>
-                        <span>{selectedClips.length} clip{selectedClips.length !== 1 ? 's' : ''}</span>
-                      </div>
-                      {selectedClips.length === 1 && (
-                        <div style={styles.clipInfoRow}>
-                          <span style={styles.clipInfoLabel}>Duration:</span>
-                          <input
-                            type="number"
-                            min="0.1"
-                            max="30"
-                            step="0.1"
-                            value={(clips[selectedClips[0]]?.duration || 0.5).toFixed(1)}
-                            onChange={(e) => handleUpdateClipDuration(selectedClips[0], parseFloat(e.target.value))}
-                            style={styles.clipDurationInput}
-                          />
-                          <span>seconds</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
                   {/* Cut Actions */}
                   <div style={styles.cutActions}>
                     <span style={styles.cutHint}>Shift + drag checkboxes to select multiple!</span>
@@ -4013,33 +3988,6 @@ const styles = {
     color: '#fff',
     cursor: 'pointer',
     fontSize: '12px'
-  },
-  clipInfoPanel: {
-    padding: '12px',
-    backgroundColor: '#111118',
-    border: '1px solid #2d2d3d',
-    borderRadius: '4px',
-    marginBottom: '12px',
-  },
-  clipInfoRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    marginBottom: '8px',
-    fontSize: '12px'
-  },
-  clipInfoLabel: {
-    color: '#9ca3af',
-    minWidth: '80px'
-  },
-  clipDurationInput: {
-    padding: '4px 8px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
-    borderRadius: '4px',
-    color: '#fff',
-    fontSize: '12px',
-    width: '60px'
   },
   scaleControl: {
     display: 'flex',
