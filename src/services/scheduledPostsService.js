@@ -5,7 +5,7 @@
  *   artists/{artistId}/scheduledPosts/{postId}
  *
  * Supports:
- * - Multi-platform scheduling (Instagram, TikTok, YouTube, Facebook, Twitter/X)
+ * - Multi-platform scheduling (Instagram, TikTok, YouTube, Facebook)
  * - Multiple accounts per platform
  * - Drag-to-reorder queue positions
  * - Draft ↔ Scheduled ↔ Posted status tracking
@@ -33,24 +33,21 @@ export const PLATFORMS = Object.freeze({
   INSTAGRAM: 'instagram',
   TIKTOK: 'tiktok',
   YOUTUBE: 'youtube',
-  FACEBOOK: 'facebook',
-  TWITTER: 'twitter'
+  FACEBOOK: 'facebook'
 });
 
 export const PLATFORM_LABELS = Object.freeze({
   instagram: 'Instagram',
   tiktok: 'TikTok',
   youtube: 'YouTube',
-  facebook: 'Facebook',
-  twitter: 'X (Twitter)'
+  facebook: 'Facebook'
 });
 
 export const PLATFORM_COLORS = Object.freeze({
   instagram: '#E1306C',
   tiktok: '#00f2ea',
   youtube: '#FF0000',
-  facebook: '#1877F2',
-  twitter: '#1DA1F2'
+  facebook: '#1877F2'
 });
 
 // ── Helpers ──

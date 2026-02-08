@@ -31,6 +31,7 @@ const ContentLibrary = ({
   // Shared
   onShowBatchPipeline, // Open the main batch create workflow
   onViewScheduling, // Navigate to scheduling page
+  isDraftsView = false, // When true, hide Make buttons and show Delete Selected
   db = null, // Firestore instance for creating scheduled posts
   // Posting module props
   accounts = [],
@@ -207,18 +208,36 @@ const ContentLibrary = ({
           </div>
         </div>
         <div style={styles.headerActions}>
-          <button
-            style={styles.primaryButton}
-            onClick={() => isSlideshow ? onMakeSlideshow?.() : onMakeVideo?.()}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            {isSlideshow ? 'Make a slideshow' : 'Make a video'}
-          </button>
-          <button style={styles.secondaryButton} onClick={onShowBatchPipeline}>
-            Make up to 10 at once
-          </button>
+          {isDraftsView ? (
+            /* Drafts view: show Delete Selected when items are selected */
+            selectedVideoIds.size > 0 && (
+              <button
+                style={{ ...styles.secondaryButton, backgroundColor: 'rgba(239,68,68,0.15)', color: '#f87171', borderColor: 'rgba(239,68,68,0.3)' }}
+                onClick={() => setDeleteConfirm({ isOpen: true, videoId: null, isBulk: true })}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                </svg>
+                Delete Selected ({selectedVideoIds.size})
+              </button>
+            )
+          ) : (
+            /* Normal category view: show Make buttons */
+            <>
+              <button
+                style={styles.primaryButton}
+                onClick={() => isSlideshow ? onMakeSlideshow?.() : onMakeVideo?.()}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                {isSlideshow ? 'Make a slideshow' : 'Make a video'}
+              </button>
+              <button style={styles.secondaryButton} onClick={onShowBatchPipeline}>
+                Make up to 10 at once
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -275,14 +294,18 @@ const ContentLibrary = ({
               {isSlideshow ? 'No slideshows yet' : 'No videos yet'}
             </h3>
             <p style={styles.emptyText}>
-              {isSlideshow ? 'Create your first slideshow to get started' : 'Create your first video to get started'}
+              {isDraftsView
+                ? 'No drafts to show'
+                : (isSlideshow ? 'Create your first slideshow to get started' : 'Create your first video to get started')}
             </p>
-            <button
-              style={styles.emptyButton}
-              onClick={() => isSlideshow ? onMakeSlideshow?.() : onMakeVideo?.()}
-            >
-              {isSlideshow ? 'Make a slideshow' : 'Make a video'}
-            </button>
+            {!isDraftsView && (
+              <button
+                style={styles.emptyButton}
+                onClick={() => isSlideshow ? onMakeSlideshow?.() : onMakeVideo?.()}
+              >
+                {isSlideshow ? 'Make a slideshow' : 'Make a video'}
+              </button>
+            )}
           </div>
         ) : (
           <div style={styles.grid}>

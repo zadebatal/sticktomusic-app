@@ -238,6 +238,7 @@ const DraftsView = (props) => {
         <ContentLibrary
           category={props.category}
           contentType={draftsTab}
+          isDraftsView={true}
           onBack={props.onBack}
           onMakeVideo={props.onMakeVideo}
           onEditVideo={props.onEditVideo}

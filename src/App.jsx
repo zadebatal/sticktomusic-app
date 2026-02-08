@@ -6160,7 +6160,7 @@ const StickToMusic = () => {
 
         <footer className="border-t border-zinc-800 mt-12">
           <div className="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center">
-            <span className="text-zinc-600 text-sm">StickToMusic {isConductor(user) ? 'Conductor' : 'Operator'} © 2025</span>
+            <span className="text-zinc-600 text-sm">StickToMusic {isConductor(user) ? 'Conductor' : 'Operator'} © 2026</span>
           </div>
         </footer>
 
@@ -7147,7 +7147,7 @@ const StickToMusic = () => {
         {/* Dashboard Footer */}
         <footer className="border-t border-zinc-800 mt-12">
           <div className="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center">
-            <span className="text-zinc-600 text-sm">StickToMusic © 2025</span>
+            <span className="text-zinc-600 text-sm">StickToMusic © 2026</span>
           </div>
         </footer>
       </div>

@@ -624,10 +624,18 @@ export const getCollections = (artistId) => {
     const data = localStorage.getItem(getCollectionsKey(artistId));
     const userCollections = data ? JSON.parse(data) : [];
 
+    // Deduplicate user collections by id (migration may have created duplicates)
+    const seen = new Set();
+    const dedupedCollections = userCollections.filter(col => {
+      if (seen.has(col.id)) return false;
+      seen.add(col.id);
+      return true;
+    });
+
     // Always include smart collections
     const smartCollections = createSmartCollections();
 
-    return [...smartCollections, ...userCollections];
+    return [...smartCollections, ...dedupedCollections];
   } catch (error) {
     console.error('Error loading collections:', error);
     return createSmartCollections();
@@ -1974,10 +1982,19 @@ export const subscribeToCollections = (db, artistId, callback) => {
   return onSnapshot(
     collectionsRef,
     (snapshot) => {
-      const firestoreCollections = snapshot.docs.map(doc => ({
+      const rawFirestoreCollections = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
+
+      // Deduplicate by name (migration may have created duplicate entries)
+      const seenNames = new Set();
+      const firestoreCollections = rawFirestoreCollections.filter(col => {
+        const key = col.name || col.id;
+        if (seenNames.has(key)) return false;
+        seenNames.add(key);
+        return true;
+      });
 
       if (firestoreCollections.length > 0) {
         // Merge localStorage bank data onto Firestore results

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   subscribeToLibrary, subscribeToCollections, getCollections, getLibrary, getLyrics,
   addToVideoTextBank, removeFromVideoTextBank, updateVideoTextBank,

@@ -123,10 +123,11 @@ export const createArtist = async (db, artistData) => {
       tier: artistData.tier || 'Scale',
       cdTier: artistData.cdTier || 'CD Lite',
       status: 'active',
-      activeSince: new Date().toISOString().split('T')[0].replace(/-/g, '/').replace(/\/(\d{4})/, ' $1').replace(/^(\d+)\//, (m, p1) => {
+      activeSince: (() => {
+        const d = new Date();
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return months[parseInt(p1) - 1] + ' ';
-      }),
+        return `${months[d.getMonth()]} ${d.getFullYear()}`;
+      })(),
       totalPages: 0,
       lateConnected: false,
       // NOTE: Late API keys stored securely in artistSecrets collection (server-side only)
