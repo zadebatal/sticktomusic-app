@@ -3,6 +3,8 @@ import { useBeatDetection } from '../../hooks/useBeatDetection';
 import WordTimeline from './WordTimeline';
 import BeatSelector from './BeatSelector';
 import LyricBank from './LyricBank';
+import TemplatePicker from './TemplatePicker';
+import SoloClipEditor from './SoloClipEditor';
 import { saveApiKey, loadApiKey } from '../../services/storageService';
 import { ErrorPanel, EmptyState as SharedEmptyState, useToast } from '../ui';
 import {
@@ -36,6 +38,9 @@ const VideoEditorModal = ({
   artistId = null,
   db = null
 }) => {
+  // Editor mode: null = show picker, 'montage' = current editor, 'solo-clip' = solo clip editor
+  const [editorMode, setEditorMode] = useState(existingVideo?.editorMode || null);
+
   // Mobile responsive detection
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
   const [mobilePreviewExpanded, setMobilePreviewExpanded] = useState(false);
@@ -1493,6 +1498,36 @@ const VideoEditorModal = ({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // ── Template Picker (no mode selected yet) ──
+  if (!editorMode) {
+    return (
+      <TemplatePicker
+        onSelect={(mode) => setEditorMode(mode)}
+        onClose={onClose}
+        clipCount={category?.videos?.length || 0}
+      />
+    );
+  }
+
+  // ── Solo Clip mode ──
+  if (editorMode === 'solo-clip') {
+    return (
+      <SoloClipEditor
+        category={category}
+        existingVideo={existingVideo}
+        onSave={onSave}
+        onClose={onClose}
+        artistId={artistId}
+        db={db}
+        onSaveLyrics={onSaveLyrics}
+        onAddLyrics={onAddLyrics}
+        onUpdateLyrics={onUpdateLyrics}
+        onDeleteLyrics={onDeleteLyrics}
+      />
+    );
+  }
+
+  // ── Montage mode (existing editor) ──
   return (
     <div
       style={{
