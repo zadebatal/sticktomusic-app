@@ -40,17 +40,21 @@ const CollectionPicker = ({
     }
   }, [artistId, liveCollections]);
 
-  // Compute media counts — uses live data if available, includes bank images
+  // Compute media counts — uses live data if available, filtered by mediaType
   useEffect(() => {
     if (!showMediaCount || collections.length === 0) return;
     const counts = {};
     collections.forEach(col => {
       if (liveLibrary) {
-        // Count from live library + bank assignments
-        const bankCount = (col.bankA?.length || 0) + (col.bankB?.length || 0);
-        const mediaIdCount = col.mediaIds?.length || 0;
-        // Use whichever is larger — banks may have IDs not in mediaIds
-        counts[col.id] = Math.max(bankCount, mediaIdCount);
+        // Count from live library, filtered by mediaType when set
+        const colMediaIds = col.mediaIds || [];
+        if (mediaType && colMediaIds.length > 0) {
+          counts[col.id] = liveLibrary.filter(m =>
+            colMediaIds.includes(m.id) && m.type === mediaType
+          ).length;
+        } else {
+          counts[col.id] = colMediaIds.length;
+        }
       } else {
         // Fallback: read from localStorage
         const media = getCollectionMedia(artistId, col.id);
