@@ -71,7 +71,6 @@ const SoloClipEditor = ({
     Math.min(10, Math.max(1, (category?.videos?.length || 1) - 1))
   );
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
 
   // Derived reads from active video
   const activeVideo = allVideos[activeVideoIndex];
@@ -603,10 +602,10 @@ const SoloClipEditor = ({
   }, [allVideos, activeVideoIndex, clipDuration, aspectRatio, selectedAudio, existingVideo, onSave, toastSuccess, toastError]);
 
   // ── Save All & Close ──
-  const handleSaveAllAndClose = useCallback(() => {
+  const handleSaveAllAndClose = useCallback(async () => {
     let savedCount = 0;
-    allVideos.forEach((video) => {
-      if (!video.clip) return;
+    for (const video of allVideos) {
+      if (!video.clip) continue;
       const clipUrl = video.clip.url || video.clip.localUrl || video.clip.src;
       const videoData = {
         id: video.id === 'template' ? (existingVideo?.id || `solovideo_${Date.now()}_${savedCount}`) : video.id,
@@ -632,53 +631,21 @@ const SoloClipEditor = ({
         createdAt: existingVideo?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
-      onSave(videoData);
+      try {
+        await onSave(videoData);
+      } catch (err) {
+        console.error(`[SoloClipEditor] Failed to save video ${savedCount}:`, err);
+        toastError(`Failed to save "${video.name || 'Solo Clip'}". Please try again.`);
+        return;
+      }
       savedCount++;
-    });
+    }
     toastSuccess(`Saved ${savedCount} video${savedCount !== 1 ? 's' : ''}!`);
     onClose();
-  }, [allVideos, clipDuration, aspectRatio, selectedAudio, existingVideo, onSave, onClose, toastSuccess]);
+  }, [allVideos, clipDuration, aspectRatio, selectedAudio, existingVideo, onSave, onClose, toastSuccess, toastError]);
 
-  // ── Export ──
-  const handleExport = useCallback(() => {
-    const video = allVideos[activeVideoIndex];
-    if (!video?.clip || video.textOverlays.length === 0) {
-      toastError('Need a clip and at least one text overlay to export.');
-      return;
-    }
-    setIsExporting(true);
-    try {
-      const clipUrl = video.clip.url || video.clip.localUrl || video.clip.src;
-      const videoData = {
-        id: video.id === 'template' ? (existingVideo?.id || `solovideo_${Date.now()}`) : video.id,
-        editorMode: 'solo-clip',
-        name: video.name || 'Solo Clip',
-        clips: [{
-          id: `clip_${Date.now()}_0`,
-          sourceId: video.clip.id,
-          url: clipUrl,
-          localUrl: video.clip.localUrl || clipUrl,
-          thumbnail: video.clip.thumbnailUrl || video.clip.thumbnail,
-          startTime: 0,
-          duration: clipDuration || 5,
-          locked: true
-        }],
-        textOverlays: video.textOverlays,
-        audio: selectedAudio,
-        cropMode: aspectRatio,
-        duration: clipDuration || 5,
-        thumbnail: video.clip.thumbnailUrl || video.clip.thumbnail,
-        isTemplate: video.isTemplate,
-        status: 'rendered',
-        createdAt: existingVideo?.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      onSave(videoData);
-      toastSuccess(`Exported "${video.name || 'Solo Clip'}"`);
-    } finally {
-      setIsExporting(false);
-    }
-  }, [allVideos, activeVideoIndex, clipDuration, aspectRatio, selectedAudio, existingVideo, onSave, toastSuccess, toastError]);
+  // Export removed — was identical to Save Draft but set status='rendered' without actually rendering.
+  // Real video export (FFmpeg render + download) will be added as a future feature.
 
   // ── Close with confirmation ──
   const handleCloseRequest = useCallback(() => {
@@ -770,17 +737,6 @@ const SoloClipEditor = ({
               </button>
             ))}
             <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />
-            {/* Export */}
-            <button
-              onClick={handleExport}
-              disabled={!clip || textOverlays.length === 0 || isExporting}
-              style={{
-                ...styles.exportButton,
-                ...(!clip || textOverlays.length === 0 || isExporting ? { opacity: 0.4, cursor: 'not-allowed' } : {})
-              }}
-            >
-              {isExporting ? 'Exporting...' : 'Export'}
-            </button>
             {/* Save Draft */}
             <button onClick={handleSaveDraft} style={styles.saveDraftButton}>
               Save Draft

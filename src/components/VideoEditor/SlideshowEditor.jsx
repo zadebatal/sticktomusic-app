@@ -1492,7 +1492,7 @@ const SlideshowEditor = ({
   }, [allSlideshows, activeSlideshowIndex, aspectRatio, existingSlideshow, onSave]);
 
   // Save all slideshows and close
-  const handleSaveAllAndClose = useCallback(() => {
+  const handleSaveAllAndClose = useCallback(async () => {
     for (const ss of allSlideshows) {
       const slideshowData = {
         id: ss.isTemplate ? (existingSlideshow?.id || `slideshow_${Date.now()}`) : ss.id,
@@ -1504,7 +1504,12 @@ const SlideshowEditor = ({
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
-      onSave?.(slideshowData);
+      try {
+        await onSave?.(slideshowData);
+      } catch (err) {
+        console.error(`[SlideshowEditor] Failed to save "${ss.name}":`, err);
+        return; // Stop on failure
+      }
     }
     onClose?.();
   }, [allSlideshows, aspectRatio, existingSlideshow, onSave, onClose]);

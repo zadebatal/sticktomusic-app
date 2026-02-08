@@ -3810,7 +3810,8 @@ const StickToMusic = () => {
               (contentArtist === 'all' || c.artist === contentArtist)
             ));
 
-            const todayPostsCount = contentQueue.filter(c => c.scheduledFor.startsWith('2026-01-31')).length / 2;
+            const todayStr = new Date().toISOString().split('T')[0];
+            const todayPostsCount = contentQueue.filter(c => c.scheduledFor.startsWith(todayStr)).length / 2;
 
             // Get unique accounts and categories for selected artist (from Late API)
             const artistPages = latePages.filter(p => p.artist === batchForm.artist);

@@ -8,7 +8,7 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
 let ffmpegInstance = null;
-let ffmpegLoading = false;
+let ffmpegLoadPromise = null;
 
 /**
  * Safely clamp progress to 0-100 range
@@ -27,41 +27,39 @@ const loadFFmpeg = async (onProgress = () => {}) => {
     return ffmpegInstance;
   }
 
-  if (ffmpegLoading) {
-    // Wait for existing load to complete
-    while (ffmpegLoading) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+  if (ffmpegLoadPromise) {
+    // Another call is already loading — wait on the same promise
+    return ffmpegLoadPromise;
+  }
+
+  ffmpegLoadPromise = (async () => {
+    try {
+      console.log('[VideoExport] Loading FFmpeg.wasm...');
+      const ffmpeg = new FFmpeg();
+
+      ffmpeg.on('progress', ({ progress }) => {
+        onProgress(safeProgress(progress * 100));
+      });
+
+      // Load FFmpeg with CDN URLs
+      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+      await ffmpeg.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+      });
+
+      console.log('[VideoExport] FFmpeg.wasm loaded successfully');
+      ffmpegInstance = ffmpeg;
+      return ffmpeg;
+    } catch (error) {
+      console.error('[VideoExport] Failed to load FFmpeg:', error);
+      ffmpegLoadPromise = null; // Clear so next call retries instead of returning stale failure
+      throw error;
     }
-    return ffmpegInstance;
-  }
+  })();
 
-  ffmpegLoading = true;
-
-  try {
-    console.log('[VideoExport] Loading FFmpeg.wasm...');
-    const ffmpeg = new FFmpeg();
-
-    ffmpeg.on('progress', ({ progress }) => {
-      onProgress(safeProgress(progress * 100));
-    });
-
-    // Load FFmpeg with CDN URLs
-    const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-    await ffmpeg.load({
-      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-    });
-
-    console.log('[VideoExport] FFmpeg.wasm loaded successfully');
-    ffmpegInstance = ffmpeg;
-    ffmpegLoading = false;
-    return ffmpeg;
-  } catch (error) {
-    console.error('[VideoExport] Failed to load FFmpeg:', error);
-    ffmpegLoading = false;
-    throw error;
-  }
-};
+  return ffmpegLoadPromise;
+};;
 
 /**
  * Process video: add audio and convert to MP4 if needed
@@ -184,8 +182,18 @@ const loadVideo = (url) => {
       fallbackVideo.playsInline = true;
       fallbackVideo.preload = 'auto';
 
-      fallbackVideo.onloadeddata = () => resolve(fallbackVideo);
-      fallbackVideo.onerror = () => reject(new Error(`Failed to load video: ${url}`));
+      const fallbackTimeout = setTimeout(() => {
+        reject(new Error(`Video fallback load timeout: ${url}`));
+      }, 30000);
+
+      fallbackVideo.onloadeddata = () => {
+        clearTimeout(fallbackTimeout);
+        resolve(fallbackVideo);
+      };
+      fallbackVideo.onerror = () => {
+        clearTimeout(fallbackTimeout);
+        reject(new Error(`Failed to load video: ${url}`));
+      };
       fallbackVideo.src = url;
     };
 
@@ -216,8 +224,18 @@ const loadAudio = (url) => {
       // Try without crossOrigin
       const fallbackAudio = document.createElement('audio');
       fallbackAudio.preload = 'auto';
-      fallbackAudio.onloadeddata = () => resolve(fallbackAudio);
-      fallbackAudio.onerror = () => reject(new Error(`Failed to load audio: ${url}`));
+      const fallbackTimeout = setTimeout(() => {
+        reject(new Error(`Audio fallback load timeout: ${url}`));
+      }, 30000);
+
+      fallbackAudio.onloadeddata = () => {
+        clearTimeout(fallbackTimeout);
+        resolve(fallbackAudio);
+      };
+      fallbackAudio.onerror = () => {
+        clearTimeout(fallbackTimeout);
+        reject(new Error(`Failed to load audio: ${url}`));
+      };
       fallbackAudio.src = url;
     };
 

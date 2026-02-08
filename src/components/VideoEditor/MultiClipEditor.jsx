@@ -69,7 +69,6 @@ const MultiClipEditor = ({
     Math.min(10, Math.max(1, (category?.videos?.length || 1) - 1))
   );
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
 
   // Derived reads from active video
   const activeVideo = allVideos[activeVideoIndex];
@@ -727,11 +726,11 @@ const MultiClipEditor = ({
   }, [allVideos, activeVideoIndex, totalDuration, aspectRatio, selectedAudio, existingVideo, onSave, toastSuccess, toastError]);
 
   // ── Save All & Close ──
-  const handleSaveAllAndClose = useCallback(() => {
+  const handleSaveAllAndClose = useCallback(async () => {
     let savedCount = 0;
     const timestamp = Date.now();
-    allVideos.forEach((video) => {
-      if (!video.clips || video.clips.length === 0) return;
+    for (const video of allVideos) {
+      if (!video.clips || video.clips.length === 0) continue;
       const videoData = {
         id: video.id === 'template' ? (existingVideo?.id || `multivideo_${timestamp}_${savedCount}`) : video.id,
         editorMode: 'multi-clip',
@@ -760,57 +759,21 @@ const MultiClipEditor = ({
         createdAt: existingVideo?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
-      onSave(videoData);
+      try {
+        await onSave(videoData);
+      } catch (err) {
+        console.error(`[MultiClipEditor] Failed to save video ${savedCount}:`, err);
+        toastError(`Failed to save "${video.name || 'Multi-Clip'}". Please try again.`);
+        return;
+      }
       savedCount++;
-    });
+    }
     toastSuccess(`Saved ${savedCount} video${savedCount !== 1 ? 's' : ''}!`);
     onClose();
-  }, [allVideos, totalDuration, aspectRatio, selectedAudio, existingVideo, onSave, onClose, toastSuccess]);
+  }, [allVideos, totalDuration, aspectRatio, selectedAudio, existingVideo, onSave, onClose, toastSuccess, toastError]);
 
-  // ── Export ──
-  const handleExport = useCallback(() => {
-    const video = allVideos[activeVideoIndex];
-    if (!video?.clips || video.clips.length === 0 || video.textOverlays.length === 0) {
-      toastError('Need clips and at least one text overlay to export.');
-      return;
-    }
-    setIsExporting(true);
-    try {
-      const timestamp = Date.now();
-      const videoData = {
-        id: video.id === 'template' ? (existingVideo?.id || `multivideo_${timestamp}`) : video.id,
-        editorMode: 'multi-clip',
-        name: video.name || 'Multi-Clip',
-        clips: video.clips.map((clip, i) => {
-          const clipUrl = clip.url || clip.localUrl || clip.src;
-          const clipId = clip.id || clip.sourceId;
-          return {
-            id: `clip_${timestamp}_${i}`,
-            sourceId: clip.id || clipId,
-            url: clipUrl,
-            localUrl: clip.localUrl || clipUrl,
-            thumbnail: clip.thumbnailUrl || clip.thumbnail,
-            startTime: 0,
-            duration: getClipDuration(clipId),
-            locked: true
-          };
-        }),
-        textOverlays: video.textOverlays,
-        audio: selectedAudio,
-        cropMode: aspectRatio,
-        duration: totalDuration,
-        thumbnail: video.clips[0]?.thumbnailUrl || video.clips[0]?.thumbnail,
-        isTemplate: video.isTemplate,
-        status: 'rendered',
-        createdAt: existingVideo?.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      onSave(videoData);
-      toastSuccess(`Exported "${video.name || 'Multi-Clip'}"`);
-    } finally {
-      setIsExporting(false);
-    }
-  }, [allVideos, activeVideoIndex, totalDuration, aspectRatio, selectedAudio, existingVideo, onSave, toastSuccess, toastError]);
+  // Export removed — was identical to Save Draft but set status='rendered' without actually rendering.
+  // Real video export (FFmpeg render + download) will be added as a future feature.
 
   // ── Close with confirmation ──
   const handleCloseRequest = useCallback(() => {
@@ -917,17 +880,6 @@ const MultiClipEditor = ({
               </button>
             ))}
             <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />
-            {/* Export */}
-            <button
-              onClick={handleExport}
-              disabled={!currentClip || textOverlays.length === 0 || isExporting}
-              style={{
-                ...styles.exportButton,
-                ...(!currentClip || textOverlays.length === 0 || isExporting ? { opacity: 0.4, cursor: 'not-allowed' } : {})
-              }}
-            >
-              {isExporting ? 'Exporting...' : 'Export'}
-            </button>
             {/* Save Draft */}
             <button onClick={handleSaveDraft} style={styles.saveDraftButton}>
               Save Draft
