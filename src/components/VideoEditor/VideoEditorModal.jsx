@@ -71,6 +71,23 @@ const VideoEditorModal = ({
     }
   }, []); // Run once on mount — intentionally empty deps
 
+  // Auto-populate timeline with collection/library videos on first open
+  useEffect(() => {
+    if (!existingVideo && clips.length === 0 && category?.videos?.length > 0) {
+      const initialClips = category.videos.map((v, i) => ({
+        id: `clip_${Date.now()}_${i}`,
+        sourceId: v.id,
+        url: v.url || v.localUrl || v.src,
+        localUrl: v.localUrl || v.url || v.src,
+        thumbnail: v.thumbnailUrl || v.thumbnail,
+        startTime: i * 2,
+        duration: 2,
+        locked: false
+      }));
+      setClips(initialClips);
+    }
+  }, []); // Run once on mount
+
   // ── Left sidebar state (Videos/Audio/Lyrics/Text tabs) ──
   const [activeBank, setActiveBank] = useState('videos');
   const [selectedCollection, setSelectedCollection] = useState('all');
