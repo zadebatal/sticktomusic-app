@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
 import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, getLyrics, MEDIA_TYPES, addToTextBank, assignToBank, saveCollectionToFirestore } from '../../services/libraryService';
 import { useToast } from '../ui';
+import { useTheme } from '../../contexts/ThemeContext';
 import LyricBank from './LyricBank';
 import AudioClipSelector from './AudioClipSelector';
 import LyricAnalyzer from './LyricAnalyzer';
@@ -37,6 +38,8 @@ const SlideshowEditor = ({
   lateAccountIds = {},
   schedulerEditMode = false
 }) => {
+  const { theme } = useTheme();
+
   // Mobile responsive detection
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
 
@@ -4331,7 +4334,7 @@ const styles = {
   modal: {
     width: '95vw',
     height: '95vh',
-    backgroundColor: '#0f0f1a',
+    backgroundColor: theme.bg.page,
     borderRadius: '16px',
     display: 'flex',
     flexDirection: 'column',
@@ -4342,8 +4345,8 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '16px 24px',
-    borderBottom: '1px solid rgba(255,255,255,0.1)',
-    backgroundColor: '#1a1a2e'
+    borderBottom: `1px solid ${theme.border.default}`,
+    backgroundColor: theme.bg.surface
   },
   headerLeft: {
     flex: 1
@@ -4361,7 +4364,7 @@ const styles = {
   nameInput: {
     backgroundColor: 'transparent',
     border: 'none',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '18px',
     fontWeight: '600',
     outline: 'none',
@@ -4369,7 +4372,7 @@ const styles = {
   },
   aspectToggle: {
     display: 'flex',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: theme.bg.elevated,
     borderRadius: '8px',
     padding: '4px'
   },
@@ -4378,34 +4381,34 @@ const styles = {
     border: 'none',
     borderRadius: '6px',
     backgroundColor: 'transparent',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     fontSize: '14px',
     transition: 'all 0.2s'
   },
   aspectButtonActive: {
-    backgroundColor: '#6366f1',
-    color: '#fff'
+    backgroundColor: theme.accent.primary,
+    color: theme.text.primary
   },
   templateSelector: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: theme.bg.elevated,
     padding: '6px 12px',
     borderRadius: '8px',
-    border: '1px solid rgba(255,255,255,0.1)'
+    border: `1px solid ${theme.border.default}`
   },
   templateLabel: {
-    color: '#9ca3af',
+    color: theme.text.secondary,
     fontSize: '13px',
     fontWeight: '500',
     whiteSpace: 'nowrap'
   },
   templateSelect: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    color: '#fff',
-    border: '1px solid rgba(255,255,255,0.15)',
+    backgroundColor: theme.bg.input,
+    color: theme.text.primary,
+    border: `1px solid ${theme.border.subtle}`,
     borderRadius: '6px',
     padding: '6px 10px',
     fontSize: '13px',
@@ -4415,9 +4418,9 @@ const styles = {
   },
   saveButton: {
     padding: '10px 24px',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    color: '#fff',
-    border: '1px solid rgba(255,255,255,0.2)',
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary,
+    border: `1px solid ${theme.border.default}`,
     borderRadius: '8px',
     cursor: 'pointer',
     fontSize: '14px',
@@ -4440,17 +4443,17 @@ const styles = {
   exportSpinner: {
     width: '14px',
     height: '14px',
-    border: '2px solid rgba(255,255,255,0.3)',
-    borderTopColor: '#fff',
+    border: `2px solid ${theme.border.subtle}`,
+    borderTopColor: theme.text.primary,
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite'
   },
   closeButton: {
     padding: '8px',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: theme.bg.elevated,
     border: 'none',
     borderRadius: '8px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
@@ -4463,30 +4466,30 @@ const styles = {
   },
   leftPanel: {
     width: '660px',
-    borderRight: '1px solid rgba(255,255,255,0.1)',
+    borderRight: `1px solid ${theme.border.default}`,
     display: 'flex',
     flexDirection: 'column',
-    backgroundColor: '#16162a'
+    backgroundColor: theme.bg.surface
   },
   bankTabs: {
     display: 'flex',
-    borderBottom: '1px solid rgba(255,255,255,0.1)'
+    borderBottom: `1px solid ${theme.border.default}`
   },
   bankTab: {
     flex: 1,
     padding: '12px',
     border: 'none',
     backgroundColor: 'transparent',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     fontSize: '13px',
     fontWeight: '500',
     transition: 'all 0.2s'
   },
   bankTabActive: {
-    color: '#fff',
-    backgroundColor: 'rgba(99, 102, 241, 0.2)',
-    borderBottom: '2px solid #6366f1'
+    color: theme.text.primary,
+    backgroundColor: `${theme.accent.muted}40`,
+    borderBottom: `2px solid ${theme.accent.primary}`
   },
   // Colored tab variants
   bankTabTeal: {
@@ -4532,13 +4535,13 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     height: '200px',
-    color: '#6b7280',
+    color: theme.text.muted,
     textAlign: 'center'
   },
   emptySubtext: {
     fontSize: '12px',
     marginTop: '8px',
-    color: '#4b5563'
+    color: theme.text.muted
   },
   clipGrid: {
     display: 'grid',
@@ -4547,7 +4550,7 @@ const styles = {
   },
   clipCard: {
     aspectRatio: '1',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: theme.bg.elevated,
     borderRadius: '8px',
     overflow: 'hidden',
     cursor: 'grab',
@@ -4566,12 +4569,12 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: '#4b5563'
+    color: theme.text.muted
   },
   clipName: {
     padding: '4px 8px',
     fontSize: '11px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis'
@@ -4613,7 +4616,7 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    color: '#4b5563',
+    color: theme.text.muted,
     gap: '12px'
   },
   textOverlay: {
@@ -4632,10 +4635,10 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     padding: '8px 16px',
-    backgroundColor: 'rgba(99, 102, 241, 0.2)',
-    border: '1px solid rgba(99, 102, 241, 0.5)',
+    backgroundColor: `${theme.accent.primary}26`,
+    border: `1px solid ${theme.accent.primary}66`,
     borderRadius: '8px',
-    color: '#a5b4fc',
+    color: theme.accent.hover,
     cursor: 'pointer',
     fontSize: '13px'
   },
@@ -4658,8 +4661,8 @@ const styles = {
     transform: 'translateX(-50%)',
     marginBottom: '8px',
     width: '220px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    backgroundColor: theme.bg.elevated,
+    border: `1px solid ${theme.border.default}`,
     borderRadius: '12px',
     boxShadow: '0 10px 40px rgba(0, 0, 0, 0.5)',
     zIndex: 1000,
@@ -4669,9 +4672,9 @@ const styles = {
     padding: '10px 12px',
     fontSize: '11px',
     fontWeight: '600',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     textTransform: 'uppercase',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+    borderBottom: `1px solid ${theme.border.default}`
   },
   audioPickerList: {
     maxHeight: '150px',
@@ -4685,7 +4688,7 @@ const styles = {
     padding: '10px 12px',
     backgroundColor: 'transparent',
     border: 'none',
-    color: '#e4e4e7',
+    color: theme.text.primary,
     cursor: 'pointer',
     fontSize: '13px',
     textAlign: 'left',
@@ -4700,12 +4703,12 @@ const styles = {
   audioPickerEmpty: {
     padding: '16px 12px',
     fontSize: '12px',
-    color: '#6b7280',
+    color: theme.text.muted,
     textAlign: 'center'
   },
   audioPickerDivider: {
     height: '1px',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: theme.border.default,
     margin: '4px 0'
   },
   audioPickerUpload: {

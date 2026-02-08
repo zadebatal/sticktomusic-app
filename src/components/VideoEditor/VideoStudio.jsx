@@ -41,6 +41,7 @@ import { updateScheduledPost } from '../../services/scheduledPostsService';
 import { VIDEO_STATUS } from '../../utils/status';
 import { useToast, ConfirmDialog } from '../ui';
 import log from '../../utils/logger';
+import { useTheme } from '../../contexts/ThemeContext';
 
 // Firestore sync helpers for categories - ensures cross-device access
 const FIRESTORE_CATEGORY_DOC = 'studioData';
@@ -273,6 +274,7 @@ const VideoStudio = ({
 }) => {
   // BUG-034: Toast notifications instead of alert()
   const { success: toastSuccess, error: toastError } = useToast();
+  const { theme } = useTheme();
 
   // Mobile responsive detection
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
@@ -2413,9 +2415,9 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     height: '100vh',
-    backgroundColor: 'rgba(10, 10, 15, 0.98)',
+    backgroundColor: theme.bg.page,
     backdropFilter: 'blur(8px)',
-    color: '#e5e7eb',
+    color: theme.text.primary,
     fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     boxShadow: '0 0 60px rgba(0, 0, 0, 0.8)'
   },
@@ -2424,8 +2426,8 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '12px 20px',
-    backgroundColor: '#111118',
-    borderBottom: '1px solid #1f1f2e'
+    backgroundColor: theme.bg.surface,
+    borderBottom: `1px solid ${theme.border.subtle}`
   },
   headerLeft: {
     display: 'flex',
@@ -2447,7 +2449,7 @@ const styles = {
     padding: '8px 12px',
     backgroundColor: 'transparent',
     border: 'none',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     borderRadius: '8px'
   },
@@ -2464,10 +2466,10 @@ const styles = {
   artistSelect: {
     appearance: 'none',
     backgroundColor: 'rgba(255,255,255,0.05)',
-    border: '1px solid #2a2a3e',
+    border: `1px solid ${theme.border.default}`,
     borderRadius: '6px',
     padding: '6px 28px 6px 10px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '13px',
     fontWeight: '500',
     cursor: 'pointer',
@@ -2559,7 +2561,7 @@ const styles = {
     zIndex: 9999
   },
   uploadModal: {
-    backgroundColor: '#111118',
+    backgroundColor: theme.bg.surface,
     borderRadius: '16px',
     padding: '32px 48px',
     textAlign: 'center',
@@ -2572,31 +2574,31 @@ const styles = {
   uploadTitle: {
     fontSize: '18px',
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text.primary,
     margin: '0 0 8px 0'
   },
   uploadStatus: {
     fontSize: '13px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     margin: '0 0 20px 0'
   },
   uploadProgressBar: {
     width: '100%',
     height: '6px',
-    backgroundColor: '#1f1f2e',
+    backgroundColor: theme.bg.elevated,
     borderRadius: '3px',
     overflow: 'hidden'
   },
   uploadProgressFill: {
     height: '100%',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     borderRadius: '3px',
     transition: 'width 0.3s ease'
   },
   uploadPercent: {
     fontSize: '24px',
     fontWeight: '700',
-    color: '#7c3aed',
+    color: theme.accent.primary,
     margin: '16px 0 0 0'
   }
 };

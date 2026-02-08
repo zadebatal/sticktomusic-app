@@ -12,6 +12,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 // OnboardingModal removed - auto-setup happens in VideoStudio
+import { useTheme } from '../../contexts/ThemeContext';
 import LibraryBrowser from './LibraryBrowser';
 import CollectionPicker from './CollectionPicker';
 import AudioClipSelector from './AudioClipSelector';
@@ -79,6 +80,8 @@ const StudioHome = ({
   onExportToDrive,
   driveConnected = false
 }) => {
+  const { theme } = useTheme();
+
   // UI State
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [activeTab, setActiveTab] = useState('media'); // kept for compat
@@ -1246,13 +1249,13 @@ const StudioHome = ({
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
-      backgroundColor: '#0a0a0f',
-      color: '#ffffff',
+      backgroundColor: theme.bg.page,
+      color: theme.text.primary,
       overflow: 'hidden'
     },
     header: {
       padding: isMobile ? '12px 16px' : '16px 24px',
-      borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+      borderBottom: `1px solid ${theme.border.default}`,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -1277,7 +1280,7 @@ const StudioHome = ({
     tabs: {
       display: 'flex',
       gap: '4px',
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+      backgroundColor: theme.bg.surface,
       padding: '4px',
       borderRadius: '8px'
     },
@@ -1286,15 +1289,15 @@ const StudioHome = ({
       backgroundColor: 'transparent',
       border: 'none',
       borderRadius: '6px',
-      color: 'rgba(255, 255, 255, 0.6)',
+      color: theme.text.secondary,
       fontSize: '13px',
       fontWeight: '500',
       cursor: 'pointer',
       transition: 'all 0.2s'
     },
     tabActive: {
-      backgroundColor: 'rgba(99, 102, 241, 0.2)',
-      color: '#ffffff'
+      backgroundColor: `${theme.accent.muted}40`,
+      color: theme.text.primary
     },
     body: {
       display: 'flex',
@@ -1308,8 +1311,8 @@ const StudioHome = ({
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: 'rgba(99, 102, 241, 0.15)',
-      border: '3px dashed #6366f1',
+      backgroundColor: `${theme.accent.primary}26`,
+      border: `3px dashed ${theme.accent.primary}`,
       borderRadius: '12px',
       display: 'flex',
       alignItems: 'center',
@@ -1322,7 +1325,7 @@ const StudioHome = ({
       flexDirection: 'column',
       alignItems: 'center',
       gap: '12px',
-      color: '#c7d2fe',
+      color: theme.accent.hover,
       textAlign: 'center'
     },
     mainContent: {
@@ -1341,16 +1344,16 @@ const StudioHome = ({
     modeCard: {
       width: isMobile ? '100%' : '280px',
       padding: '32px 24px',
-      backgroundColor: 'rgba(255, 255, 255, 0.03)',
-      border: '2px solid rgba(255, 255, 255, 0.1)',
+      backgroundColor: theme.bg.surface,
+      border: `2px solid ${theme.border.default}`,
       borderRadius: '16px',
       cursor: 'pointer',
       textAlign: 'center',
       transition: 'all 0.2s'
     },
     modeCardActive: {
-      borderColor: '#6366f1',
-      backgroundColor: 'rgba(99, 102, 241, 0.1)'
+      borderColor: theme.accent.primary,
+      backgroundColor: theme.accent.muted
     },
     modeIcon: {
       fontSize: '48px',
@@ -1363,7 +1366,7 @@ const StudioHome = ({
     },
     modeCount: {
       fontSize: '14px',
-      color: 'rgba(255, 255, 255, 0.5)'
+      color: theme.text.secondary
     },
     librarySection: {
       flex: 1,
@@ -1373,7 +1376,7 @@ const StudioHome = ({
     },
     libraryHeader: {
       padding: '16px 24px',
-      borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+      borderBottom: `1px solid ${theme.border.default}`,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -1388,10 +1391,10 @@ const StudioHome = ({
       alignItems: 'center',
       gap: '8px',
       padding: '10px 20px',
-      backgroundColor: '#6366f1',
+      backgroundColor: theme.accent.primary,
       border: 'none',
       borderRadius: '8px',
-      color: '#ffffff',
+      color: theme.text.primary,
       fontSize: '14px',
       fontWeight: '500',
       cursor: 'pointer'
@@ -1403,16 +1406,16 @@ const StudioHome = ({
     },
     actionBar: {
       padding: '16px 24px',
-      borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+      borderTop: `1px solid ${theme.border.default}`,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
       gap: '16px',
-      backgroundColor: 'rgba(0, 0, 0, 0.3)'
+      backgroundColor: theme.bg.surface
     },
     actionInfo: {
       fontSize: '14px',
-      color: 'rgba(255, 255, 255, 0.6)'
+      color: theme.text.secondary
     },
     actionButtons: {
       display: 'flex',
@@ -1427,14 +1430,14 @@ const StudioHome = ({
       transition: 'all 0.2s'
     },
     primaryButton: {
-      backgroundColor: '#6366f1',
+      backgroundColor: theme.accent.primary,
       border: 'none',
-      color: '#ffffff'
+      color: theme.text.primary
     },
     secondaryButton: {
       backgroundColor: 'transparent',
-      border: '1px solid rgba(255, 255, 255, 0.2)',
-      color: 'rgba(255, 255, 255, 0.8)'
+      border: `1px solid ${theme.border.default}`,
+      color: theme.text.primary
     },
     uploadOverlay: {
       position: 'fixed',

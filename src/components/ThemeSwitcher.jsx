@@ -8,7 +8,6 @@ const ThemeSwitcher = () => {
   const themeOptions = [
     { id: 'dark', label: 'Dark', preview: '#18181b', ring: '#6366f1' },
     { id: 'bright', label: 'Bright', preview: '#f4f4f5', ring: '#4f46e5' },
-    { id: 'saintLaurent', label: 'SL', preview: '#000000', ring: '#ffffff' },
   ];
 
   return (
@@ -70,9 +69,7 @@ const ThemeSwitcher = () => {
           width: '14px', height: '14px', borderRadius: '50%',
           background: themeId === 'bright'
             ? 'linear-gradient(135deg, #f4f4f5, #4f46e5)'
-            : themeId === 'saintLaurent'
-              ? 'linear-gradient(135deg, #000, #fff)'
-              : 'linear-gradient(135deg, #18181b, #6366f1)'
+            : 'linear-gradient(135deg, #18181b, #6366f1)'
         }} />
       </button>
     </div>

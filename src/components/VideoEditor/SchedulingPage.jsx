@@ -9,6 +9,7 @@ import { getTemplates } from '../../services/contentTemplateService';
 import { useToast, ConfirmDialog } from '../ui';
 import { getCreatedContent } from '../../services/libraryService';
 import log from '../../utils/logger';
+import { useTheme } from '../../contexts/ThemeContext';
 
 /**
  * SchedulingPage — Batch-First Command Center
@@ -28,6 +29,7 @@ const SchedulingPage = ({
   onRenderVideo
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
+  const { theme } = useTheme();
 
   // ── Core State ──
   const [posts, setPosts] = useState([]);
@@ -1401,118 +1403,118 @@ const CalendarView = ({ posts, expandedPostId, onSelectPost, calendarDate, onCha
 // ═══════════════════════════════════════════════════
 
 const s = {
-  page: { display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: '#0a0a0f', color: '#fff', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
+  page: { display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: theme.bg.page, color: theme.text.primary, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
   loadingState: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' },
-  spinner: { width: '32px', height: '32px', border: '3px solid #27272a', borderTop: '3px solid #6366f1', borderRadius: '50%', animation: 'spin 1s linear infinite' },
+  spinner: { width: '32px', height: '32px', border: `3px solid ${theme.border.default}`, borderTop: `3px solid ${theme.accent.primary}`, borderRadius: '50%', animation: 'spin 1s linear infinite' },
 
   // Header
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderBottom: '1px solid #27272a', backgroundColor: '#18181b', flexShrink: 0 },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderBottom: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.surface, flexShrink: 0 },
   headerLeft: { display: 'flex', alignItems: 'center', gap: '12px' },
-  backBtn: { background: 'none', border: '1px solid #3f3f46', color: '#a1a1aa', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  pageTitle: { margin: 0, fontSize: '18px', fontWeight: '600', color: '#fff' },
-  subtitle: { margin: '1px 0 0 0', fontSize: '12px', color: '#71717a' },
+  backBtn: { background: 'none', border: `1px solid ${theme.border.default}`, color: theme.text.secondary, width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  pageTitle: { margin: 0, fontSize: '18px', fontWeight: '600', color: theme.text.primary },
+  subtitle: { margin: '1px 0 0 0', fontSize: '12px', color: theme.text.muted },
   headerActions: { display: 'flex', gap: '6px', alignItems: 'center' },
-  actionBtn: { padding: '6px 14px', borderRadius: '8px', border: '1px solid #6366f1', backgroundColor: 'transparent', color: '#a5b4fc', fontSize: '12px', fontWeight: '500', cursor: 'pointer', whiteSpace: 'nowrap' },
-  actionBtnSm: { padding: '4px 10px', borderRadius: '6px', border: '1px solid #3f3f46', backgroundColor: 'transparent', color: '#a1a1aa', fontSize: '11px', fontWeight: '500', cursor: 'pointer', whiteSpace: 'nowrap' },
-  iconBtn: { padding: '6px 10px', borderRadius: '8px', border: '1px solid #3f3f46', backgroundColor: 'transparent', color: '#a1a1aa', fontSize: '14px', cursor: 'pointer' },
+  actionBtn: { padding: '6px 14px', borderRadius: '8px', border: `1px solid ${theme.accent.primary}`, backgroundColor: 'transparent', color: theme.accent.hover, fontSize: '12px', fontWeight: '500', cursor: 'pointer', whiteSpace: 'nowrap' },
+  actionBtnSm: { padding: '4px 10px', borderRadius: '6px', border: `1px solid ${theme.border.default}`, backgroundColor: 'transparent', color: theme.text.secondary, fontSize: '11px', fontWeight: '500', cursor: 'pointer', whiteSpace: 'nowrap' },
+  iconBtn: { padding: '6px 10px', borderRadius: '8px', border: `1px solid ${theme.border.default}`, backgroundColor: 'transparent', color: theme.text.secondary, fontSize: '14px', cursor: 'pointer' },
 
   // Pause banner
   pauseBanner: { padding: '8px 20px', backgroundColor: '#78350f', color: '#fbbf24', fontSize: '12px', fontWeight: '500', borderBottom: '1px solid #27272a', flexShrink: 0 },
 
   // Bulk bar (batch-first)
-  bulkBar: { padding: '12px 20px', backgroundColor: '#0f0f1a', borderBottom: '2px solid #6366f1', flexShrink: 0 },
+  bulkBar: { padding: '12px 20px', backgroundColor: theme.bg.page, borderBottom: `2px solid ${theme.accent.primary}`, flexShrink: 0 },
   bulkRow: { display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' },
   bulkSection: { display: 'flex', flexDirection: 'column', gap: '4px' },
-  bulkSelect: { padding: '5px 10px', borderRadius: '6px', border: '1px solid #6366f1', backgroundColor: '#1a1a2e', color: '#a5b4fc', fontSize: '12px', fontWeight: '500', cursor: 'pointer', minWidth: '150px' },
-  assignBtn: { padding: '5px 10px', borderRadius: '6px', border: '1px solid #6366f1', backgroundColor: '#312e81', color: '#a5b4fc', fontSize: '11px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' },
+  bulkSelect: { padding: '5px 10px', borderRadius: '6px', border: `1px solid ${theme.accent.primary}`, backgroundColor: theme.bg.input, color: theme.accent.hover, fontSize: '12px', fontWeight: '500', cursor: 'pointer', minWidth: '150px' },
+  assignBtn: { padding: '5px 10px', borderRadius: '6px', border: `1px solid ${theme.accent.primary}`, backgroundColor: theme.accent.muted, color: theme.accent.hover, fontSize: '11px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' },
   bulkPresets: { display: 'flex', gap: '4px', flexWrap: 'wrap' },
-  presetChip: { padding: '5px 10px', borderRadius: '6px', border: '1px solid #3f3f46', backgroundColor: '#27272a', color: '#a1a1aa', fontSize: '11px', fontWeight: '600', cursor: 'pointer' },
-  miniLabel: { fontSize: '9px', fontWeight: '600', color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.5px' },
-  miniInput: { padding: '5px 8px', borderRadius: '6px', border: '1px solid #3f3f46', backgroundColor: '#1a1a1e', color: '#fff', fontSize: '12px' },
-  applyBtn: { padding: '6px 16px', borderRadius: '8px', border: 'none', backgroundColor: '#6366f1', color: '#fff', fontSize: '12px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' },
+  presetChip: { padding: '5px 10px', borderRadius: '6px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.elevated, color: theme.text.secondary, fontSize: '11px', fontWeight: '600', cursor: 'pointer' },
+  miniLabel: { fontSize: '9px', fontWeight: '600', color: theme.text.muted, textTransform: 'uppercase', letterSpacing: '0.5px' },
+  miniInput: { padding: '5px 8px', borderRadius: '6px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.input, color: theme.text.primary, fontSize: '12px' },
+  applyBtn: { padding: '6px 16px', borderRadius: '8px', border: 'none', backgroundColor: theme.accent.primary, color: theme.text.primary, fontSize: '12px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' },
 
   // Filter bar
-  filterBar: { display: 'flex', gap: '3px', padding: '8px 20px', borderBottom: '1px solid #27272a', backgroundColor: '#111114', overflowX: 'auto', flexShrink: 0 },
-  filterTab: { padding: '5px 12px', borderRadius: '6px', border: 'none', backgroundColor: 'transparent', color: '#71717a', fontSize: '12px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' },
-  filterTabActive: { backgroundColor: '#27272a', color: '#fff' },
-  badge: { backgroundColor: '#3f3f46', color: '#a1a1aa', fontSize: '10px', padding: '1px 5px', borderRadius: '8px' },
+  filterBar: { display: 'flex', gap: '3px', padding: '8px 20px', borderBottom: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.surface, overflowX: 'auto', flexShrink: 0 },
+  filterTab: { padding: '5px 12px', borderRadius: '6px', border: 'none', backgroundColor: 'transparent', color: theme.text.muted, fontSize: '12px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' },
+  filterTabActive: { backgroundColor: theme.bg.elevated, color: theme.text.primary },
+  badge: { backgroundColor: theme.border.default, color: theme.text.secondary, fontSize: '10px', padding: '1px 5px', borderRadius: '8px' },
 
   // Toolbar (between filters and list)
-  toolbarRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 20px', borderBottom: '1px solid #27272a', backgroundColor: '#111114', flexShrink: 0 },
-  toolbarBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '8px', border: '1px solid #3f3f46', backgroundColor: 'transparent', color: '#d4d4d8', fontSize: '13px', fontWeight: '500', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.12s' },
-  viewToggleBtn: { padding: '5px 14px', borderRadius: '6px', border: 'none', backgroundColor: 'transparent', color: '#71717a', fontSize: '12px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.12s' },
-  viewToggleBtnActive: { backgroundColor: '#27272a', color: '#fff' },
+  toolbarRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 20px', borderBottom: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.surface, flexShrink: 0 },
+  toolbarBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '8px', border: `1px solid ${theme.border.default}`, backgroundColor: 'transparent', color: theme.text.primary, fontSize: '13px', fontWeight: '500', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.12s' },
+  viewToggleBtn: { padding: '5px 14px', borderRadius: '6px', border: 'none', backgroundColor: 'transparent', color: theme.text.muted, fontSize: '12px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.12s' },
+  viewToggleBtnActive: { backgroundColor: theme.bg.elevated, color: theme.text.primary },
 
   // Content area
   content: { flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' },
 
   // List
   listContainer: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-  listHeader: { display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 20px', borderBottom: '1px solid #1e1e22', backgroundColor: '#111114', fontSize: '10px', fontWeight: '600', color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.5px', flexShrink: 0 },
+  listHeader: { display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 20px', borderBottom: `1px solid ${theme.border.subtle}`, backgroundColor: theme.bg.surface, fontSize: '10px', fontWeight: '600', color: theme.text.secondary, textTransform: 'uppercase', letterSpacing: '0.5px', flexShrink: 0 },
   listScroll: { flex: 1, overflowY: 'auto' },
   emptyState: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 20px' },
 
   // Row
-  row: { display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 20px', backgroundColor: '#0a0a0f', transition: 'background-color 0.1s', border: '1px solid transparent', cursor: 'default' },
+  row: { display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 20px', backgroundColor: theme.bg.page, transition: 'background-color 0.1s', border: '1px solid transparent', cursor: 'default' },
   dragHandle: { width: '28px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px', flexShrink: 0 },
-  thumb: { width: '44px', height: '56px', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#1a1a1e', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
+  thumb: { width: '44px', height: '56px', borderRadius: '6px', overflow: 'hidden', backgroundColor: theme.bg.input, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
   thumbImg: { width: '100%', height: '100%', objectFit: 'cover' },
-  contentName: { fontSize: '13px', fontWeight: '500', color: '#e4e4e7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  contentName: { fontSize: '13px', fontWeight: '500', color: theme.bg.elevated, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
 
   // Inline controls
-  inlineDate: { width: '105px', padding: '4px 6px', borderRadius: '6px', border: '1px solid #2a2a2e', backgroundColor: '#111114', color: '#a1a1aa', fontSize: '11px' },
-  inlineTime: { width: '80px', padding: '4px 6px', borderRadius: '6px', border: '1px solid #2a2a2e', backgroundColor: '#111114', color: '#a1a1aa', fontSize: '11px' },
-  inlineCaption: { width: '100%', padding: '4px 8px', borderRadius: '6px', border: '1px solid #2a2a2e', backgroundColor: '#111114', color: '#d4d4d8', fontSize: '11px', fontFamily: 'inherit' },
+  inlineDate: { width: '105px', padding: '4px 6px', borderRadius: '6px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.surface, color: theme.text.secondary, fontSize: '11px' },
+  inlineTime: { width: '80px', padding: '4px 6px', borderRadius: '6px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.surface, color: theme.text.secondary, fontSize: '11px' },
+  inlineCaption: { width: '100%', padding: '4px 8px', borderRadius: '6px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.surface, color: theme.text.primary, fontSize: '11px', fontFamily: 'inherit' },
 
   // Status pill
   statusPill: { fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '10px', textTransform: 'capitalize', display: 'inline-block' },
   rowIconBtn: { background: 'none', border: 'none', color: '#52525b', fontSize: '14px', cursor: 'pointer', padding: '4px', borderRadius: '4px' },
 
   // Expanded drawer
-  drawer: { backgroundColor: '#111114', borderTop: '1px solid #1e1e22', padding: '16px 20px 16px 100px' },
+  drawer: { backgroundColor: theme.bg.surface, borderTop: `1px solid ${theme.border.subtle}`, padding: '16px 20px 16px 100px' },
   drawerGrid: { display: 'grid', gridTemplateColumns: '180px 1fr 240px', gap: '20px' },
   drawerLeft: { display: 'flex', flexDirection: 'column', gap: '10px' },
-  drawerPreview: { width: '180px', height: '140px', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#0a0a0f' },
+  drawerPreview: { width: '180px', height: '140px', borderRadius: '8px', overflow: 'hidden', backgroundColor: theme.bg.page },
   drawerVideo: { width: '100%', height: '100%', objectFit: 'contain' },
   drawerImg: { width: '100%', height: '100%', objectFit: 'cover' },
   drawerActions: { display: 'flex', flexWrap: 'wrap', gap: '4px' },
-  drawerBtn: { padding: '5px 12px', borderRadius: '6px', border: '1px solid #3f3f46', backgroundColor: '#27272a', color: '#a1a1aa', fontSize: '11px', fontWeight: '500', cursor: 'pointer' },
+  drawerBtn: { padding: '5px 12px', borderRadius: '6px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.elevated, color: theme.text.secondary, fontSize: '11px', fontWeight: '500', cursor: 'pointer' },
   drawerCenter: { flex: 1, minWidth: 0 },
   drawerRight: { width: '240px' },
-  drawerLabel: { fontSize: '10px', fontWeight: '600', color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px', display: 'block' },
-  drawerInput: { width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid #3f3f46', backgroundColor: '#1a1a1e', color: '#fff', fontSize: '13px', fontFamily: 'inherit' },
+  drawerLabel: { fontSize: '10px', fontWeight: '600', color: theme.text.muted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px', display: 'block' },
+  drawerInput: { width: '100%', padding: '6px 10px', borderRadius: '6px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.input, color: theme.text.primary, fontSize: '13px', fontFamily: 'inherit' },
 
   // Hashtag pills — tiered
-  alwaysOnPill: { fontSize: '10px', color: '#9ca3af', backgroundColor: '#27272a', padding: '2px 7px', borderRadius: '10px', border: '1px solid #3f3f46' },
-  hashtagPill: { fontSize: '11px', color: '#a78bfa', backgroundColor: '#2e1065', padding: '2px 8px', borderRadius: '10px' },
-  hashtagSetBtn: { padding: '3px 8px', borderRadius: '5px', border: '1px solid #6366f1', backgroundColor: '#312e81', color: '#a5b4fc', fontSize: '11px', fontWeight: '500', cursor: 'pointer' },
-  linkBtn: { background: 'none', border: 'none', color: '#6366f1', fontSize: '11px', cursor: 'pointer', padding: '2px 0' },
-  accountSelect: { flex: 1, padding: '4px 8px', borderRadius: '5px', border: '1px solid #3f3f46', backgroundColor: '#1a1a1e', color: '#e4e4e7', fontSize: '11px', cursor: 'pointer' },
-  resultRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', backgroundColor: '#1a1a1e', borderRadius: '6px', marginBottom: '4px' },
+  alwaysOnPill: { fontSize: '10px', color: theme.text.secondary, backgroundColor: theme.bg.elevated, padding: '2px 7px', borderRadius: '10px', border: `1px solid ${theme.border.default}` },
+  hashtagPill: { fontSize: '11px', color: theme.accent.hover, backgroundColor: theme.accent.muted, padding: '2px 8px', borderRadius: '10px' },
+  hashtagSetBtn: { padding: '3px 8px', borderRadius: '5px', border: `1px solid ${theme.accent.primary}`, backgroundColor: theme.accent.muted, color: theme.accent.hover, fontSize: '11px', fontWeight: '500', cursor: 'pointer' },
+  linkBtn: { background: 'none', border: 'none', color: theme.accent.primary, fontSize: '11px', cursor: 'pointer', padding: '2px 0' },
+  accountSelect: { flex: 1, padding: '4px 8px', borderRadius: '5px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.input, color: theme.bg.elevated, fontSize: '11px', cursor: 'pointer' },
+  resultRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', backgroundColor: theme.bg.input, borderRadius: '6px', marginBottom: '4px' },
 
   // Modal
   modalOverlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-  modalContent: { backgroundColor: '#18181b', borderRadius: '12px', border: '1px solid #27272a', width: '90%', maxWidth: '700px', maxHeight: '75vh', display: 'flex', flexDirection: 'column' },
-  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid #27272a' },
-  modalTitle: { margin: 0, fontSize: '16px', fontWeight: '600', color: '#fff' },
-  modalClose: { background: 'none', border: 'none', color: '#71717a', fontSize: '22px', cursor: 'pointer' },
-  modalTabs: { display: 'flex', gap: '3px', padding: '8px 20px', borderBottom: '1px solid #27272a', backgroundColor: '#111114' },
+  modalContent: { backgroundColor: theme.bg.surface, borderRadius: '12px', border: `1px solid ${theme.border.default}`, width: '90%', maxWidth: '700px', maxHeight: '75vh', display: 'flex', flexDirection: 'column' },
+  modalHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: `1px solid ${theme.border.default}` },
+  modalTitle: { margin: 0, fontSize: '16px', fontWeight: '600', color: theme.text.primary },
+  modalClose: { background: 'none', border: 'none', color: theme.text.muted, fontSize: '22px', cursor: 'pointer' },
+  modalTabs: { display: 'flex', gap: '3px', padding: '8px 20px', borderBottom: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.surface },
   modalLoading: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px' },
   modalGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '10px', padding: '14px 20px', overflow: 'auto', flex: 1 },
-  modalCard: { display: 'flex', flexDirection: 'column', borderRadius: '8px', border: '1px solid #27272a', backgroundColor: '#1a1a1e', cursor: 'pointer', transition: 'all 0.1s', position: 'relative' },
-  modalCardThumb: { width: '100%', height: '100px', backgroundColor: '#27272a', borderRadius: '7px 7px 0 0', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  modalCard: { display: 'flex', flexDirection: 'column', borderRadius: '8px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.input, cursor: 'pointer', transition: 'all 0.1s', position: 'relative' },
+  modalCardThumb: { width: '100%', height: '100px', backgroundColor: theme.bg.elevated, borderRadius: '7px 7px 0 0', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   dupBadge: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#f59e0b', color: '#000', fontSize: '9px', fontWeight: '600', padding: '2px 0', textAlign: 'center' },
-  modalFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 20px', borderTop: '1px solid #27272a', backgroundColor: '#111114' },
+  modalFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 20px', borderTop: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.surface },
 
   // Calendar
   calView: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-  calHeader: { display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 20px', borderBottom: '1px solid #27272a', backgroundColor: '#18181b' },
-  calNavBtn: { background: 'none', border: '1px solid #3f3f46', color: '#a1a1aa', width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer', fontSize: '16px' },
-  calTitle: { fontSize: '15px', fontWeight: '600', color: '#fff', minWidth: '150px', textAlign: 'center' },
-  calGrid: { flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1px', padding: '8px', backgroundColor: '#27272a', overflow: 'auto' },
-  calDayHeader: { padding: '8px 6px', backgroundColor: '#18181b', color: '#71717a', fontSize: '11px', fontWeight: '600', textAlign: 'center', textTransform: 'uppercase' },
-  calCell: { backgroundColor: '#111114', padding: '6px', minHeight: '90px', display: 'flex', flexDirection: 'column', border: '1px solid #27272a' },
-  calCellDate: { fontSize: '11px', fontWeight: '600', color: '#a1a1aa', marginBottom: '3px' }
+  calHeader: { display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 20px', borderBottom: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.surface },
+  calNavBtn: { background: 'none', border: `1px solid ${theme.border.default}`, color: theme.text.secondary, width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer', fontSize: '16px' },
+  calTitle: { fontSize: '15px', fontWeight: '600', color: theme.text.primary, minWidth: '150px', textAlign: 'center' },
+  calGrid: { flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1px', padding: '8px', backgroundColor: theme.border.default, overflow: 'auto' },
+  calDayHeader: { padding: '8px 6px', backgroundColor: theme.bg.surface, color: theme.text.muted, fontSize: '11px', fontWeight: '600', textAlign: 'center', textTransform: 'uppercase' },
+  calCell: { backgroundColor: theme.bg.surface, padding: '6px', minHeight: '90px', display: 'flex', flexDirection: 'column', border: `1px solid ${theme.border.default}` },
+  calCellDate: { fontSize: '11px', fontWeight: '600', color: theme.text.secondary, marginBottom: '3px' }
 };
 
 export default SchedulingPage;

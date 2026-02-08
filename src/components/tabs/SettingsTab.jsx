@@ -21,7 +21,6 @@ const SettingsTab = ({ user, onLogout, db, artistId }) => {
   const themeOptions = [
     { id: 'dark', name: 'Dark', desc: 'Deep purple accents on dark zinc', preview: ['#09090b', '#18181b', '#6366f1'] },
     { id: 'bright', name: 'Bright', desc: 'Clean light theme with indigo accents', preview: ['#ffffff', '#f4f4f5', '#4f46e5'] },
-    { id: 'saintLaurent', name: 'Saint Laurent', desc: 'Black & white monochrome', preview: ['#000000', '#0a0a0a', '#ffffff'] },
   ];
 
   return (
@@ -75,7 +74,7 @@ const SettingsTab = ({ user, onLogout, db, artistId }) => {
         {/* ═══ THEME ═══ */}
         <section className={`p-6 rounded-2xl border ${t.cardBorder} ${t.cardBg}`}>
           <h2 className={`text-sm font-semibold uppercase tracking-wider ${t.textMuted} mb-4`}>Theme</h2>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {themeOptions.map(opt => (
               <button
                 key={opt.id}

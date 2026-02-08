@@ -48,27 +48,6 @@ const THEMES = {
       btnSecondary: 'border border-gray-300 text-gray-700 hover:bg-gray-50',
       btnDanger: 'bg-red-600 text-white hover:bg-red-700',
     }
-  },
-  saintLaurent: {
-    id: 'saintLaurent',
-    name: 'Saint Laurent',
-    bg: { page: '#000000', surface: '#0a0a0a', elevated: '#141414', input: '#0a0a0a' },
-    text: { primary: '#ffffff', secondary: '#999999', muted: '#555555' },
-    accent: { primary: '#ffffff', hover: '#cccccc', muted: '#222222' },
-    border: { default: '#222222', subtle: '#111111' },
-    tw: {
-      bgPage: 'bg-black', bgSurface: 'bg-neutral-950', bgElevated: 'bg-neutral-900', bgInput: 'bg-neutral-950',
-      textPrimary: 'text-white', textSecondary: 'text-neutral-400', textMuted: 'text-neutral-600',
-      accentText: 'text-white', accentBg: 'bg-white', accentBgHover: 'hover:bg-neutral-200',
-      border: 'border-neutral-800', borderSubtle: 'border-neutral-900',
-      hoverBg: 'hover:bg-neutral-900', hoverText: 'hover:text-white',
-      tabActive: 'bg-white text-black', tabInactive: 'text-neutral-500 hover:text-white hover:bg-neutral-900',
-      cardBg: 'bg-neutral-950', cardBorder: 'border-neutral-800',
-      inputBorder: 'border-neutral-700', inputFocus: 'focus:border-white',
-      btnPrimary: 'bg-white text-black hover:bg-neutral-200',
-      btnSecondary: 'border border-neutral-700 text-white hover:bg-neutral-900',
-      btnDanger: 'bg-red-700 text-white hover:bg-red-800',
-    }
   }
 };
 
