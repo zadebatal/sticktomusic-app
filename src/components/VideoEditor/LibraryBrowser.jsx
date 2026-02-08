@@ -2091,7 +2091,7 @@ const LibraryBrowser = ({
               )}
             </div>
           ) : (
-            <div ref={gridRef} onMouseDown={handleGridMouseDown}>
+            <div ref={gridRef} onMouseDown={handleGridMouseDown} style={{ minHeight: '100%' }}>
               {groupMediaByDate(displayedMedia).map((group, gi) => (
                 <div key={group.label + gi}>
                   <div style={{
