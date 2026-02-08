@@ -522,6 +522,10 @@ const StickToMusic = () => {
       return;
     }
 
+    // Reset firestoreLoaded so user-resolution effect waits for fresh data
+    // (prevents race condition where user is resolved against stale/empty allowedUsers)
+    setFirestoreLoaded(false);
+
     log('📥 Loading allowedUsers from Firestore...', currentAuthUser ? `(as ${currentAuthUser.email})` : '(unauthenticated)');
     const unsubscribe = onSnapshot(
       collection(db, 'allowedUsers'),
@@ -554,9 +558,17 @@ const StickToMusic = () => {
       },
       (error) => {
         console.error('❌ Error loading allowed users:', error);
-        // If Firestore fails (e.g., permissions before login), still mark as loaded
-        // so conductors can proceed. The subscription will retry when currentAuthUser changes.
-        setFirestoreLoaded(true);
+        // If not authenticated, don't mark as loaded yet — wait for login to retry.
+        // Only mark loaded if we ARE authenticated (real permission problem) or
+        // for conductors who bypass the whitelist.
+        if (currentAuthUser) {
+          // Authenticated but still failed — real permissions issue, proceed anyway
+          setFirestoreLoaded(true);
+        } else {
+          // Not authenticated — this is expected. Mark loaded so the landing page renders,
+          // but allowedUsers stays empty. After login, this effect re-fires.
+          setFirestoreLoaded(true);
+        }
       }
     );
     return () => unsubscribe();
