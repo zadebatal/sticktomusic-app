@@ -512,18 +512,17 @@ const StickToMusic = () => {
     return () => unsubscribe();
   }, []);
 
-  // Load allowed users from Firestore (ALWAYS - needed for login whitelist check)
-  // This must load even before authentication so we can verify new users trying to log in
+  // Load allowed users from Firestore
+  // Re-subscribes when auth state changes (e.g., after login) because Firestore rules
+  // require authentication to read allowedUsers. Before login the query fails, so we
+  // retry once currentAuthUser is set.
   useEffect(() => {
-    // Don't subscribe to Firestore until auth is checked
     if (!authChecked) {
       log('⏳ Waiting for auth check...');
       return;
     }
 
-    // Always load allowedUsers - needed for login whitelist check
-    // Even unauthenticated users need this to verify they're on the whitelist
-    log('📥 Loading allowedUsers from Firestore...');
+    log('📥 Loading allowedUsers from Firestore...', currentAuthUser ? `(as ${currentAuthUser.email})` : '(unauthenticated)');
     const unsubscribe = onSnapshot(
       collection(db, 'allowedUsers'),
       (snapshot) => {
@@ -555,12 +554,13 @@ const StickToMusic = () => {
       },
       (error) => {
         console.error('❌ Error loading allowed users:', error);
-        // If Firestore fails (e.g., permissions), still allow login for conductors
+        // If Firestore fails (e.g., permissions before login), still mark as loaded
+        // so conductors can proceed. The subscription will retry when currentAuthUser changes.
         setFirestoreLoaded(true);
       }
     );
     return () => unsubscribe();
-  }, [authChecked]);
+  }, [authChecked, currentAuthUser]);
 
   // Track if we've already initialized Boon artist (prevents double-calls)
   const boonInitializedRef = useRef(false);
