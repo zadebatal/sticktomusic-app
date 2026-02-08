@@ -63,6 +63,8 @@ const SlideshowEditor = ({
   const [activeSlideshowIndex, setActiveSlideshowIndex] = useState(0);
   const [generateCount, setGenerateCount] = useState(10);
   const [isGenerating, setIsGenerating] = useState(false);
+  // Keep-template-text options: 'none' (use text banks), 'slideA', 'slideB', 'both'
+  const [keepTemplateText, setKeepTemplateText] = useState('none');
 
   // Derived reads from active slideshow (existing code reads these unchanged)
   const slides = allSlideshows[activeSlideshowIndex]?.slides || [];
@@ -1619,17 +1621,24 @@ const SlideshowEditor = ({
           const randomImg = bank.length > 0 ? bank[Math.floor(Math.random() * bank.length)] : null;
 
           // Copy text overlays from template — keep styling + position, cycle text content
-          // Text bank is assigned per SLIDE index: slide 0 → textBank1, slide 1 → textBank2
-          // Cycle through the bank using the generation index `i` so each slideshow
-          // gets the next item in sequence (wrapping around when exhausted)
+          // keepTemplateText controls whether to use template text or pull from text banks:
+          //   'slideA' → keep text from slide 0 (even-indexed), pull banks for slide 1
+          //   'slideB' → keep text from slide 1 (odd-indexed), pull banks for slide 0
+          //   'both'   → keep text from ALL template slides (no bank replacement)
+          //   'none'   → pull from text banks for all slides (original behavior)
           const templateOverlays = templateSlide.textOverlays || [];
           const slideTBank = s === 0 ? textBank1 : s === 1 ? textBank2 : [...textBank1, ...textBank2];
+          const isSlideA = s % 2 === 0;  // even slides = A, odd = B
+          const shouldKeepText =
+            keepTemplateText === 'both' ||
+            (keepTemplateText === 'slideA' && isSlideA) ||
+            (keepTemplateText === 'slideB' && !isSlideA);
           if (i === 0 && s === 0) {
-            log('[SlideshowGen] Template slide 0 has', templateOverlays.length, 'text overlays, textBank has', slideTBank.length, 'entries');
+            log('[SlideshowGen] Template slide 0 has', templateOverlays.length, 'text overlays, textBank has', slideTBank.length, 'entries, keepText:', keepTemplateText);
           }
           const newTextOverlays = templateOverlays.map((overlay, textIdx) => {
-            let newText = overlay.text; // Fallback: keep template text
-            if (slideTBank.length > 0) {
+            let newText = overlay.text; // Default: keep template text
+            if (!shouldKeepText && slideTBank.length > 0) {
               // Cycle: use both generation index AND overlay index for variety
               // generation 0 overlay 0 → bank[0], generation 0 overlay 1 → bank[1], etc.
               const bankIndex = (i * Math.max(templateOverlays.length, 1) + textIdx) % slideTBank.length;
@@ -1670,7 +1679,7 @@ const SlideshowEditor = ({
     } finally {
       setIsGenerating(false);
     }
-  }, [allSlideshows, generateCount, category, collections, libraryImages, getTextBanks]);
+  }, [allSlideshows, generateCount, category, collections, libraryImages, getTextBanks, keepTemplateText]);
 
   // Public generate handler — checks for audio prompt on first generation
   const handleGenerateMore = useCallback(() => {
@@ -3414,6 +3423,39 @@ const SlideshowEditor = ({
                     }}
                     title="Number of slideshows to generate"
                   />
+                  {/* Keep template text toggle */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '2px',
+                    backgroundColor: 'rgba(255,255,255,0.04)',
+                    borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)',
+                    padding: '1px'
+                  }} title="Keep template text on generated slides (otherwise pulls from text banks)">
+                    {[
+                      { value: 'none', label: 'Banks' },
+                      { value: 'slideA', label: 'A' },
+                      { value: 'slideB', label: 'B' },
+                      { value: 'both', label: 'A+B' }
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setKeepTemplateText(opt.value)}
+                        style={{
+                          padding: '3px 6px',
+                          borderRadius: '5px',
+                          border: 'none',
+                          backgroundColor: keepTemplateText === opt.value ? 'rgba(99,102,241,0.6)' : 'transparent',
+                          color: keepTemplateText === opt.value ? '#fff' : '#9ca3af',
+                          fontSize: '9px',
+                          fontWeight: keepTemplateText === opt.value ? '700' : '500',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s',
+                          letterSpacing: '0.3px'
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                   {/* Generate button */}
                   <button
                     onClick={handleGenerateMore}
