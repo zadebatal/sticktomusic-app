@@ -50,8 +50,9 @@ const SchedulingPage = ({
   const [batchAccount, setBatchAccount] = useState('');
   const [batchStartDate, setBatchStartDate] = useState('');
   const [batchStartTime, setBatchStartTime] = useState('14:00');
-  const [batchIntervalType, setBatchIntervalType] = useState('fixed');
-  const [batchFixedInterval, setBatchFixedInterval] = useState(60);
+  const [postsPerDay, setPostsPerDay] = useState(2);
+  const [spacingMode, setSpacingMode] = useState('even'); // 'even' | 'fixed' | 'random'
+  const [spacingMinutes, setSpacingMinutes] = useState(120); // used when spacingMode === 'fixed'
   const [batchRandomMin, setBatchRandomMin] = useState(30);
   const [batchRandomMax, setBatchRandomMax] = useState(120);
 
@@ -232,12 +233,48 @@ const SchedulingPage = ({
     // Parse campaign hashtags
     const campaignTags = campaignHashtags.split(/[\s,]+/).filter(Boolean).map(h => h.startsWith('#') ? h : `#${h}`);
 
-    // Assign staggered times
+    // ── Compute staggered times using postsPerDay + spacing ──
+    const WAKING_MINUTES = 960; // 16 hours (6am–10pm spread)
+    const effectiveSpacing = spacingMode === 'even'
+      ? Math.floor(WAKING_MINUTES / Math.max(postsPerDay, 1))
+      : spacingMinutes;
+
+    const startHour = startTime.getHours();
+    const startMin = startTime.getMinutes();
+
     let scheduled;
-    if (batchIntervalType === 'fixed') {
-      scheduled = assignScheduleTimes(selectedPosts, startTime, batchFixedInterval);
+    if (spacingMode === 'random') {
+      // Random spacing within each day, respecting postsPerDay limit
+      scheduled = [];
+      let curTime = new Date(startTime);
+      let postsThisDay = 0;
+      let dayOffset = 0;
+      for (const post of selectedPosts) {
+        if (postsThisDay >= postsPerDay) {
+          dayOffset++;
+          curTime = new Date(startTime);
+          curTime.setDate(curTime.getDate() + dayOffset);
+          curTime.setHours(startHour, startMin, 0, 0);
+          postsThisDay = 0;
+        }
+        scheduled.push({ ...post, scheduledTime: new Date(curTime) });
+        postsThisDay++;
+        if (postsThisDay < postsPerDay) {
+          const jitter = batchRandomMin + Math.random() * (batchRandomMax - batchRandomMin);
+          curTime = new Date(curTime.getTime() + jitter * 60000);
+        }
+      }
     } else {
-      scheduled = assignRandomScheduleTimes(selectedPosts, startTime, batchRandomMin, batchRandomMax);
+      // Fixed or even spacing — deterministic
+      scheduled = selectedPosts.map((post, i) => {
+        const dayIndex = Math.floor(i / postsPerDay);
+        const slotInDay = i % postsPerDay;
+        const postTime = new Date(startTime);
+        postTime.setDate(postTime.getDate() + dayIndex);
+        postTime.setHours(startHour, startMin, 0, 0);
+        postTime.setMinutes(postTime.getMinutes() + slotInDay * effectiveSpacing);
+        return { ...post, scheduledTime: postTime };
+      });
     }
 
     // Build account/platform assignments from batchAccount
@@ -281,7 +318,7 @@ const SchedulingPage = ({
 
     toastSuccess(`Scheduled ${scheduled.length} post${scheduled.length !== 1 ? 's' : ''}`);
     setSelectedPostIds(new Set());
-  }, [batchStartDate, batchStartTime, batchIntervalType, batchFixedInterval, batchRandomMin, batchRandomMax,
+  }, [batchStartDate, batchStartTime, postsPerDay, spacingMode, spacingMinutes, batchRandomMin, batchRandomMax,
     selectedPostIds, selectedCount, posts, db, artistId, batchAccount, lateAccountIds,
     campaignHashtags, campaignCaption, alwaysOnHashtags, toastSuccess]);
 
@@ -440,28 +477,50 @@ const SchedulingPage = ({
             <div style={{ width: '1px', height: '32px', backgroundColor: '#27272a' }} />
 
             <div style={s.bulkSection}>
-              <label style={s.miniLabel}>Cadence</label>
+              <label style={s.miniLabel}>Per Day</label>
               <div style={s.bulkPresets}>
+                {[1, 2, 3, 4, 5].map(n => (
+                  <button
+                    key={n}
+                    style={{ ...s.presetChip, ...(postsPerDay === n ? { backgroundColor: '#6366f1', color: '#fff', borderColor: '#6366f1' } : {}) }}
+                    onClick={() => setPostsPerDay(n)}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ width: '1px', height: '32px', backgroundColor: '#27272a' }} />
+
+            <div style={s.bulkSection}>
+              <label style={s.miniLabel}>Spacing</label>
+              <div style={s.bulkPresets}>
+                <button
+                  style={{ ...s.presetChip, ...(spacingMode === 'even' ? { backgroundColor: '#6366f1', color: '#fff', borderColor: '#6366f1' } : {}) }}
+                  onClick={() => setSpacingMode('even')}
+                >
+                  Even
+                </button>
                 {[
-                  { label: '1/day', interval: 1440 },
-                  { label: '2/day', interval: 720 },
-                  { label: '4/day', interval: 360 },
-                  { label: 'Every 2hr', interval: 120 },
-                  { label: 'Every 6hr', interval: 360 }
+                  { label: '2hr', min: 120 },
+                  { label: '3hr', min: 180 },
+                  { label: '4hr', min: 240 },
+                  { label: '6hr', min: 360 }
                 ].map(p => (
                   <button
                     key={p.label}
-                    style={{ ...s.presetChip, ...(batchIntervalType === 'fixed' && batchFixedInterval === p.interval ? { backgroundColor: '#6366f1', color: '#fff', borderColor: '#6366f1' } : {}) }}
-                    onClick={() => { setBatchFixedInterval(p.interval); setBatchIntervalType('fixed'); }}
+                    style={{ ...s.presetChip, ...(spacingMode === 'fixed' && spacingMinutes === p.min ? { backgroundColor: '#6366f1', color: '#fff', borderColor: '#6366f1' } : {}) }}
+                    onClick={() => { setSpacingMinutes(p.min); setSpacingMode('fixed'); }}
                   >
                     {p.label}
                   </button>
                 ))}
                 <button
-                  style={{ ...s.presetChip, ...(batchIntervalType === 'random' ? { backgroundColor: '#6366f1', color: '#fff', borderColor: '#6366f1' } : {}) }}
-                  onClick={() => setBatchIntervalType(batchIntervalType === 'fixed' ? 'random' : 'fixed')}
+                  style={{ ...s.presetChip, ...(spacingMode === 'random' ? { backgroundColor: '#6366f1', color: '#fff', borderColor: '#6366f1' } : {}) }}
+                  onClick={() => setSpacingMode(spacingMode === 'random' ? 'even' : 'random')}
                 >
-                  Random
+                  Rand
                 </button>
               </div>
             </div>
@@ -476,7 +535,7 @@ const SchedulingPage = ({
               </div>
             </div>
 
-            {batchIntervalType === 'random' && (
+            {spacingMode === 'random' && (
               <>
                 <div style={{ width: '1px', height: '32px', backgroundColor: '#27272a' }} />
                 <div style={s.bulkSection}>
@@ -1205,12 +1264,12 @@ const CalendarView = ({ posts, expandedPostId, onSelectPost, calendarDate, onCha
   for (let i = 0; i < startingDayOfWeek; i++) days.push(null);
   for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month, i));
 
-  const postsPerDay = {};
+  const postsByDate = {};
   posts.forEach(post => {
     if (post.scheduledTime) {
       const dateKey = new Date(post.scheduledTime).toDateString();
-      if (!postsPerDay[dateKey]) postsPerDay[dateKey] = [];
-      postsPerDay[dateKey].push(post);
+      if (!postsByDate[dateKey]) postsByDate[dateKey] = [];
+      postsByDate[dateKey].push(post);
     }
   });
 
@@ -1230,7 +1289,7 @@ const CalendarView = ({ posts, expandedPostId, onSelectPost, calendarDate, onCha
         ))}
         {days.map((date, idx) => {
           const dateKey = date?.toDateString();
-          const dayPosts = dateKey ? (postsPerDay[dateKey] || []) : [];
+          const dayPosts = dateKey ? (postsByDate[dateKey] || []) : [];
           const isToday = dateKey === today;
           return (
             <div
