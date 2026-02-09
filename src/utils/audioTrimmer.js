@@ -1,4 +1,4 @@
-import lamejs from 'lamejs';
+import * as lamejs from 'lamejs';
 
 /**
  * Audio Trimmer Utility

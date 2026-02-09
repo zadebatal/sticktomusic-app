@@ -829,8 +829,13 @@ const PostRow = ({
     setCaption(post.caption || '');
     if (post.scheduledTime) {
       const d = new Date(post.scheduledTime);
-      setSchedDate(d.toISOString().split('T')[0]);
-      setSchedTime(d.toTimeString().substring(0, 5));
+      if (!isNaN(d.getTime())) {
+        setSchedDate(d.toISOString().split('T')[0]);
+        setSchedTime(d.toTimeString().substring(0, 5));
+      } else {
+        setSchedDate('');
+        setSchedTime('');
+      }
     } else {
       setSchedDate('');
       setSchedTime('');
