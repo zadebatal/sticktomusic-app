@@ -60,7 +60,9 @@ import {
   getBankColor,
   getBankLabel,
   addBankToCollection,
-  MAX_BANKS
+  MAX_BANKS,
+  // Created content subscription
+  subscribeToCreatedContent
 } from '../../services/libraryService';
 import { uploadFile, getMediaDuration } from '../../services/firebaseStorage';
 import log from '../../utils/logger';
@@ -232,6 +234,12 @@ const StudioHome = ({
         setLyrics(firestoreLyrics);
       });
       unsubscribes.push(unsubLyrics);
+
+      // Subscribe to created content for real-time draft count updates
+      const unsubCreated = subscribeToCreatedContent(db, artistId, (content) => {
+        setCreatedContent(content);
+      });
+      unsubscribes.push(unsubCreated);
     }
 
     // For library + collections, use Firestore real-time subscription if db is available

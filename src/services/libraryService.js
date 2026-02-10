@@ -1430,6 +1430,28 @@ export const loadCreatedContentAsync = async (db, artistId) => {
 };
 
 /**
+ * Subscribe to created content changes in real-time
+ * @param {Object} db - Firestore instance
+ * @param {string} artistId
+ * @param {Function} callback - Called with updated content { videos: [], slideshows: [] }
+ * @returns {Function} Unsubscribe function
+ */
+export const subscribeToCreatedContent = (db, artistId, callback) => {
+  if (!db || !artistId) return () => {};
+  const docRef = doc(db, 'artists', artistId, 'studio', 'createdContent');
+  return onSnapshot(docRef, (snap) => {
+    if (snap.exists()) {
+      const data = snap.data();
+      const content = { videos: data.videos || [], slideshows: data.slideshows || [] };
+      saveCreatedContent(artistId, content); // sync to localStorage
+      callback(content);
+    }
+  }, (error) => {
+    console.error('[Library] Created content subscription error:', error);
+  });
+};
+
+/**
  * Add a created slideshow (with Firestore sync)
  */
 export const addCreatedSlideshowAsync = async (db, artistId, slideshowData) => {
@@ -2815,6 +2837,7 @@ export default {
   // Created Content
   getCreatedContent,
   saveCreatedContent,
+  subscribeToCreatedContent,
   addCreatedVideo,
   updateCreatedVideo,
   deleteCreatedVideo,

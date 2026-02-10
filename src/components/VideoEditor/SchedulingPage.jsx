@@ -6,6 +6,7 @@ import {
   addManyScheduledPosts
 } from '../../services/scheduledPostsService';
 import { getTemplates } from '../../services/contentTemplateService';
+import CaptionHashtagBank from './CaptionHashtagBank';
 import { useToast, ConfirmDialog } from '../ui';
 import { getCreatedContent } from '../../services/libraryService';
 import { renderVideo } from '../../services/videoExportService';
@@ -53,6 +54,7 @@ const SchedulingPage = ({
   const [queuePaused, setQueuePaused] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
+  const [showCaptionBank, setShowCaptionBank] = useState(false);
 
   // ── BATCH SELECT STATE (new — batch-first) ──
   const [selectedPostIds, setSelectedPostIds] = useState(new Set());
@@ -209,29 +211,27 @@ const SchedulingPage = ({
     setBatchStartDate(new Date().toISOString().split('T')[0]);
   }, []);
 
-  // Load always-on hashtags from content templates
-  useEffect(() => {
+  // Load always-on hashtags/captions from content templates (reusable)
+  const loadAlwaysOnFromTemplates = useCallback(async () => {
     if (!db || !artistId) return;
-    const loadTemplates = async () => {
-      try {
-        const templates = await getTemplates(db, artistId);
-        if (templates) {
-          // Merge all "always" hashtags across categories
-          const allAlways = new Set();
-          let firstCaption = '';
-          Object.values(templates).forEach(t => {
-            if (t?.hashtags?.always) t.hashtags.always.forEach(h => allAlways.add(h));
-            if (!firstCaption && t?.captions?.always?.length > 0) firstCaption = t.captions.always[0];
-          });
-          setAlwaysOnHashtags(Array.from(allAlways));
-          setAlwaysOnCaption(firstCaption);
-        }
-      } catch (err) {
-        log.error('Failed to load templates for always-on hashtags:', err);
+    try {
+      const templates = await getTemplates(db, artistId);
+      if (templates) {
+        const allAlways = new Set();
+        let firstCaption = '';
+        Object.values(templates).forEach(t => {
+          if (t?.hashtags?.always) t.hashtags.always.forEach(h => allAlways.add(h));
+          if (!firstCaption && t?.captions?.always?.length > 0) firstCaption = t.captions.always[0];
+        });
+        setAlwaysOnHashtags(Array.from(allAlways));
+        setAlwaysOnCaption(firstCaption);
       }
-    };
-    loadTemplates();
+    } catch (err) {
+      log.error('Failed to load templates for always-on hashtags:', err);
+    }
   }, [db, artistId]);
+
+  useEffect(() => { loadAlwaysOnFromTemplates(); }, [loadAlwaysOnFromTemplates]);
 
   // ── Selection Handlers ──
   const togglePostSelection = useCallback((postId) => {
@@ -314,6 +314,12 @@ const SchedulingPage = ({
     const locked = posts.filter(p => p.locked);
     const unlocked = posts.filter(p => !p.locked);
 
+    // Collect existing scheduled times from unlocked posts (sorted chronologically)
+    const existingTimes = unlocked
+      .filter(p => p.scheduledTime)
+      .map(p => p.scheduledTime)
+      .sort((a, b) => new Date(a) - new Date(b));
+
     // Shuffle only unlocked posts
     for (let i = unlocked.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -329,9 +335,28 @@ const SchedulingPage = ({
       if (!lockedPositions.has(i)) { result[i] = unlocked[ui++]; }
     }
 
+    // Redistribute scheduled times: assign sorted times to unlocked posts in new order
+    let timeIdx = 0;
+    const timeUpdates = [];
+    for (let i = 0; i < result.length; i++) {
+      if (!lockedPositions.has(i) && result[i].scheduledTime && timeIdx < existingTimes.length) {
+        const newTime = existingTimes[timeIdx++];
+        if (newTime !== result[i].scheduledTime) {
+          timeUpdates.push({ id: result[i].id, scheduledTime: newTime });
+          result[i] = { ...result[i], scheduledTime: newTime };
+        }
+      }
+    }
+
     setPosts(result.map((p, i) => ({ ...p, queuePosition: i })));
     const newOrder = result.map((p, i) => ({ id: p.id, queuePosition: i }));
     await reorderPosts(db, artistId, newOrder);
+
+    // Persist redistributed times to Firestore
+    for (const update of timeUpdates) {
+      await updateScheduledPost(db, artistId, update.id, { scheduledTime: update.scheduledTime });
+    }
+
     toastSuccess(locked.length > 0 ? `Shuffled (${locked.length} locked)` : 'Queue randomized');
   }, [posts, db, artistId, toastSuccess]);
 
@@ -548,7 +573,9 @@ const SchedulingPage = ({
     // Apply to each selected post
     for (const post of scheduled) {
       const updates = {
-        scheduledTime: post.scheduledTime,
+        scheduledTime: post.scheduledTime instanceof Date
+          ? post.scheduledTime.toISOString()
+          : post.scheduledTime,
         status: POST_STATUS.SCHEDULED
       };
 
@@ -955,6 +982,12 @@ const SchedulingPage = ({
               >
                 <span style={{ fontSize: '14px', lineHeight: 1 }}>{queuePaused ? '▶' : '⏸'}</span> {queuePaused ? 'Resume' : 'Pause'}
               </button>
+              <button
+                style={{ ...s.toolbarBtn, ...(showCaptionBank ? { backgroundColor: '#312e81', borderColor: '#6366f1', color: '#a5b4fc' } : {}) }}
+                onClick={() => setShowCaptionBank(!showCaptionBank)}
+              >
+                <span style={{ fontSize: '14px', lineHeight: 1 }}>#</span> Caption Bank
+              </button>
             </>
           )}
         </div>
@@ -973,6 +1006,18 @@ const SchedulingPage = ({
           </button>
         </div>
       </div>
+
+      {/* ═══ CAPTION/HASHTAG BANK PANEL ═══ */}
+      {showCaptionBank && (
+        <div style={{ borderBottom: `1px solid ${theme.border.default}`, maxHeight: '350px', overflow: 'hidden' }}>
+          <CaptionHashtagBank
+            db={db}
+            artistId={artistId}
+            compact={true}
+            onBankChange={() => { loadAlwaysOnFromTemplates(); }}
+          />
+        </div>
+      )}
 
       {/* ═══ MAIN CONTENT ═══ */}
       <div style={s.content}>
@@ -1023,6 +1068,7 @@ const SchedulingPage = ({
                     accounts={accounts}
                     lateAccountIds={lateAccountIds}
                     alwaysOnHashtags={alwaysOnHashtags}
+                    alwaysOnCaption={alwaysOnCaption}
                     onToggleSelect={() => togglePostSelection(post.id)}
                     onToggleExpand={() => setExpandedPostId(expandedPostId === post.id ? null : post.id)}
                     onUpdate={(updates) => handleUpdatePost(post.id, updates)}
@@ -1096,7 +1142,7 @@ const SchedulingPage = ({
 
 const PostRow = ({
   post, index, isExpanded, isSelected, isDragging, isDragOver, isPaused,
-  accounts, lateAccountIds, alwaysOnHashtags,
+  accounts, lateAccountIds, alwaysOnHashtags, alwaysOnCaption,
   onToggleSelect, onToggleExpand, onUpdate, onTogglePlatform, onSetPlatformAccount,
   onDelete, onEditDraft, onPublish,
   onDragStart, onDragOver, onDrop, onDragEnd,
@@ -1115,7 +1161,9 @@ const PostRow = ({
   useEffect(() => {
     setCaption(post.caption || '');
     if (post.scheduledTime) {
-      const d = new Date(post.scheduledTime);
+      // Handle both Firestore Timestamp objects and ISO strings
+      const raw = post.scheduledTime;
+      const d = new Date(raw?.toDate ? raw.toDate() : raw);
       if (!isNaN(d.getTime())) {
         setSchedDate(d.toISOString().split('T')[0]);
         setSchedTime(d.toTimeString().substring(0, 5));
@@ -1195,79 +1243,56 @@ const PostRow = ({
           </div>
         )}
 
-        {/* Top row: Checkbox + Drag Handle + Thumbnail + Content Name + Status + Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', ...(isMobile ? { flexWrap: 'wrap' } : {}) }}>
-          {/* Checkbox */}
-          <div style={{ width: isMobile ? '44px' : '24px', minHeight: isMobile ? '44px' : 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <input
-              type="checkbox"
-              checked={isSelected}
-              onChange={onToggleSelect}
-              style={{ cursor: 'pointer', width: isMobile ? '20px' : '14px', height: isMobile ? '20px' : '14px', accentColor: '#6366f1' }}
-              onClick={(e) => e.stopPropagation()}
-            />
-          </div>
+        {/* Checkbox */}
+        <div style={{ width: isMobile ? '44px' : '24px', minHeight: isMobile ? '44px' : 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={onToggleSelect}
+            style={{ cursor: 'pointer', width: isMobile ? '20px' : '14px', height: isMobile ? '20px' : '14px', accentColor: '#6366f1' }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
 
-          {/* Drag Handle + Number */}
-          <div style={{ ...s.dragHandle, ...(isMobile ? { display: 'none' } : {}) }}>
-            <span style={{ color: '#52525b', fontSize: '12px', cursor: 'grab' }}>{'\u2630'}</span>
-            <span style={{ color: '#3f3f46', fontSize: '10px', fontWeight: '600' }}>#{index + 1}</span>
-          </div>
+        {/* Drag Handle + Number */}
+        <div style={{ ...s.dragHandle, ...(isMobile ? { display: 'none' } : {}) }}>
+          <span style={{ color: '#52525b', fontSize: '12px', cursor: 'grab' }}>{'\u2630'}</span>
+          <span style={{ color: '#3f3f46', fontSize: '10px', fontWeight: '600' }}>#{index + 1}</span>
+        </div>
 
-          {/* Thumbnail */}
-          <div style={s.thumb} onClick={onToggleExpand}>
-            {previewImage ? (
-              <img src={previewImage} alt="" style={s.thumbImg} />
-            ) : (
-              <span style={{ fontSize: '16px' }}>{post.contentType === 'slideshow' ? '🖼️' : '🎥'}</span>
+        {/* Thumbnail */}
+        <div style={s.thumb} onClick={onToggleExpand}>
+          {previewImage ? (
+            <img src={previewImage} alt="" style={s.thumbImg} />
+          ) : (
+            <span style={{ fontSize: '16px' }}>{post.contentType === 'slideshow' ? '🖼️' : '🎥'}</span>
+          )}
+        </div>
+
+        {/* Content Name + Audio + Collection */}
+        <div style={{ flex: 1.2, minWidth: 0, cursor: 'pointer' }} onClick={onToggleExpand}>
+          <div style={s.contentName}>{post.contentName}</div>
+          <div style={{ fontSize: '10px', color: '#52525b', marginTop: '1px', display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>{post.contentType === 'slideshow' ? 'Slideshow' : 'Video'}</span>
+            {post.collectionName && (
+              <span style={{ color: '#14b8a6', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(20,184,166,0.12)', border: '1px solid rgba(20,184,166,0.2)' }} title={`From: ${post.collectionName}`}>
+                {post.collectionName}
+              </span>
             )}
-          </div>
-
-          {/* Content Name + Audio + Collection */}
-          <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={onToggleExpand}>
-            <div style={s.contentName}>{post.contentName}</div>
-            <div style={{ fontSize: '10px', color: '#52525b', marginTop: '1px', display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <span>{post.contentType === 'slideshow' ? 'Slideshow' : 'Video'}</span>
-              {post.collectionName && (
-                <span style={{ color: '#14b8a6', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(20,184,166,0.12)', border: '1px solid rgba(20,184,166,0.2)' }} title={`From: ${post.collectionName}`}>
-                  {post.collectionName}
-                </span>
-              )}
-              {post._isGhost && (
-                <span style={{ color: '#f59e0b', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)' }} title="Original draft was deleted">
-                  orphan
-                </span>
-              )}
-              {post.editorState?.audio && (
-                <span style={{ color: '#6366f1', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={post.editorState.audio.name || post.editorState.audio.title || 'Audio'}>
-                  {post.editorState.audio.name || post.editorState.audio.title || 'Audio'}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Status */}
-          <div style={{ width: isMobile ? 'auto' : '80px', textAlign: 'center', flexShrink: 0 }}>
-            <span style={{ ...s.statusPill, backgroundColor: statusBg, color: statusColor }}>{post.status}</span>
-          </div>
-
-          {/* Actions */}
-          <div style={{ width: isMobile ? 'auto' : '80px', display: 'flex', gap: '4px', justifyContent: 'flex-end', flexShrink: 0 }}>
-            <button
-              style={{ ...s.rowIconBtn, color: post.locked ? '#f59e0b' : '#52525b', fontSize: '13px', ...(isMobile ? { minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}) }}
-              onClick={(e) => { e.stopPropagation(); onUpdate({ locked: !post.locked }); }}
-              title={post.locked ? 'Unlock position' : 'Lock position (prevents reorder)'}
-            >
-              {post.locked ? '🔒' : '🔓'}
-            </button>
-            <button style={{ ...s.rowIconBtn, ...(isMobile ? { minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}) }} onClick={onToggleExpand} title="Expand details">
-              <span style={{ fontSize: '12px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.15s' }}>▼</span>
-            </button>
-            {!readOnly && <button style={{ ...s.rowIconBtn, color: '#ef4444', ...(isMobile ? { minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}) }} onClick={(e) => { e.stopPropagation(); onDelete(); }} title="Remove">x</button>}
+            {post._isGhost && (
+              <span style={{ color: '#f59e0b', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)' }} title="Original draft was deleted">
+                orphan
+              </span>
+            )}
+            {post.editorState?.audio && (
+              <span style={{ color: '#6366f1', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={post.editorState.audio.name || post.editorState.audio.title || 'Audio'}>
+                {post.editorState.audio.name || post.editorState.audio.title || 'Audio'}
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Bottom row on mobile: Schedule + Caption */}
+        {/* Schedule Date/Time — mobile stacks below, desktop inline */}
         {isMobile ? (
           <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '6px', paddingLeft: '32px' }}>
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1287,7 +1312,7 @@ const PostRow = ({
         ) : (
           <>
             {/* Schedule Date/Time */}
-            <div style={{ width: '190px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <div style={{ width: '190px', display: 'flex', flexDirection: 'column', gap: '2px', flexShrink: 0 }}>
               <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} style={s.inlineDate} />
                 <input type="time" value={schedTime} onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }} style={s.inlineTime} />
@@ -1303,11 +1328,31 @@ const PostRow = ({
             </div>
 
             {/* Caption */}
-            <div style={{ width: '200px' }}>
+            <div style={{ width: '200px', flexShrink: 0 }}>
               <input type="text" value={caption} onChange={(e) => setCaption(e.target.value)} onBlur={handleCaptionBlur} placeholder="Caption..." style={s.inlineCaption} />
             </div>
           </>
         )}
+
+        {/* Status */}
+        <div style={{ width: isMobile ? 'auto' : '80px', textAlign: 'center', flexShrink: 0 }}>
+          <span style={{ ...s.statusPill, backgroundColor: statusBg, color: statusColor }}>{post.status}</span>
+        </div>
+
+        {/* Actions */}
+        <div style={{ width: isMobile ? 'auto' : '60px', display: 'flex', gap: '4px', justifyContent: 'flex-end', flexShrink: 0 }}>
+          <button
+            style={{ ...s.rowIconBtn, color: post.locked ? '#f59e0b' : '#52525b', fontSize: '13px', ...(isMobile ? { minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}) }}
+            onClick={(e) => { e.stopPropagation(); onUpdate({ locked: !post.locked }); }}
+            title={post.locked ? 'Unlock position' : 'Lock position (prevents reorder)'}
+          >
+            {post.locked ? '🔒' : '🔓'}
+          </button>
+          <button style={{ ...s.rowIconBtn, ...(isMobile ? { minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}) }} onClick={onToggleExpand} title="Expand details">
+            <span style={{ fontSize: '12px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.15s' }}>▼</span>
+          </button>
+          {!readOnly && <button style={{ ...s.rowIconBtn, color: '#ef4444', ...(isMobile ? { minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}) }} onClick={(e) => { e.stopPropagation(); onDelete(); }} title="Remove">x</button>}
+        </div>
       </div>
 
       {/* Expanded Detail Drawer */}
@@ -1317,6 +1362,7 @@ const PostRow = ({
           accounts={accounts}
           lateAccountIds={lateAccountIds}
           alwaysOnHashtags={alwaysOnHashtags}
+          alwaysOnCaption={alwaysOnCaption}
           onUpdate={readOnly ? () => {} : onUpdate}
           onTogglePlatform={readOnly ? () => {} : onTogglePlatform}
           onSetPlatformAccount={readOnly ? () => {} : onSetPlatformAccount}
@@ -1334,7 +1380,7 @@ const PostRow = ({
 // ExpandedDrawer — Full details with tiered hashtags
 // ═══════════════════════════════════════════════════
 
-const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [], onUpdate, onTogglePlatform, onSetPlatformAccount, onEditDraft, onPublish, readOnly = false, isMobile = false }) => {
+const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [], alwaysOnCaption = '', onUpdate, onTogglePlatform, onSetPlatformAccount, onEditDraft, onPublish, readOnly = false, isMobile = false }) => {
   const { theme } = useTheme();
   const s = getS(theme);
   const [hashtags, setHashtags] = useState((post.hashtags || []).join(' '));
@@ -1497,6 +1543,16 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
               </div>
             )}
           </div>
+
+          {/* Always-on caption from templates */}
+          {alwaysOnCaption && (
+            <div style={{ marginTop: '10px' }}>
+              <label style={s.drawerLabel}>Always-on Caption</label>
+              <div style={{ padding: '6px 8px', borderRadius: '6px', backgroundColor: theme.bg.input, border: `1px solid ${theme.border.default}`, fontSize: '11px', color: theme.text.secondary, fontStyle: 'italic' }}>
+                {alwaysOnCaption}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right: Account Selection + Results */}
