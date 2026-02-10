@@ -792,10 +792,15 @@ const StickToMusic = () => {
           const result = await lateApi.fetchAccounts(artist.id);
           if (result.success && result.accounts) {
             // Transform Late accounts to page format
-            result.accounts.forEach((account, index) => {
+            result.accounts.forEach((account) => {
+              const realId = account._id || account.id || account.account_id;
+              if (!realId) {
+                console.warn(`[Late] Skipping account without ID for ${artist.name}:`, JSON.stringify(account));
+                return;
+              }
               const platform = (account.platform || account.type || '').toLowerCase();
               allPages.push({
-                id: `${artist.id}-${account.id || index}`,
+                id: `${artist.id}-${realId}`,
                 handle: account.username ? `@${account.username.replace('@', '')}` : (account.handle || account.name || 'Unknown'),
                 platform: platform === 'tik_tok' ? 'tiktok' : platform,
                 artist: artist.name,
@@ -805,7 +810,7 @@ const StickToMusic = () => {
                 views: account.total_views || account.views || 0,
                 status: account.is_active !== false ? 'active' : 'inactive',
                 profileImage: account.profile_image || account.avatar,
-                lateAccountId: String(account.id || account.account_id || `fallback_${index}`)
+                lateAccountId: String(realId)
               });
             });
           }
