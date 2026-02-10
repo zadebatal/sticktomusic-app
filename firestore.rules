@@ -33,8 +33,16 @@ service cloud.firestore {
       return isAuthenticated() && (
         isConductor() ||
         (isOperatorOrAbove() &&
-          artistId in get(/databases/$(database)/documents/allowedUsers/$(request.auth.token.email)).data.assignedArtistIds)
+          artistId in get(/databases/$(database)/documents/allowedUsers/$(request.auth.token.email)).data.assignedArtistIds) ||
+        isLinkedToArtist(artistId)
       );
+    }
+
+    // Check if user is an artist or collaborator linked to this specific artist
+    function isLinkedToArtist(artistId) {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/allowedUsers/$(request.auth.token.email)) &&
+        get(/databases/$(database)/documents/allowedUsers/$(request.auth.token.email)).data.linkedArtistId == artistId;
     }
 
     // Check if user is the owner of the document (by email)
@@ -48,29 +56,28 @@ service cloud.firestore {
 
     // Artists collection
     // - Conductors: full read/write
-    // - Operators: read/write only their assigned artists
-    // - Artists: no direct access (they use their portal)
+    // - Operators: read/write their assigned artists
+    // - Artists/Collaborators: read their own linked artist
     match /artists/{artistId} {
-      allow read: if isOperatorOrAbove();
+      allow read: if isOperatorOrAbove() || isLinkedToArtist(artistId);
       allow create: if isOperatorOrAbove();
       allow update, delete: if isConductor() || canAccessArtist(artistId);
 
       // Library subcollections (media items, collections, onboarding)
-      // Nested under: artists/{artistId}/library/{docId}/{subcollection}/{itemId}
       match /library/{document=**} {
-        allow read: if isOperatorOrAbove();
+        allow read: if isOperatorOrAbove() || isLinkedToArtist(artistId);
         allow write: if isConductor() || canAccessArtist(artistId);
       }
 
       // Studio data (categories, presets) - for cross-device sync
       match /studio/{document=**} {
-        allow read: if isOperatorOrAbove();
+        allow read: if isOperatorOrAbove() || isLinkedToArtist(artistId);
         allow write: if isConductor() || canAccessArtist(artistId);
       }
 
       // Scheduled Posts subcollection (scheduling module)
       match /scheduledPosts/{postId} {
-        allow read: if isOperatorOrAbove();
+        allow read: if isOperatorOrAbove() || isLinkedToArtist(artistId);
         allow write: if isConductor() || canAccessArtist(artistId);
       }
     }

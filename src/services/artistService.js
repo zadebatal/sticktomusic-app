@@ -70,6 +70,23 @@ export const subscribeToArtists = (db, callback) => {
 };
 
 /**
+ * Subscribe to a single artist document by ID (for artist/collaborator roles)
+ */
+export const subscribeToArtistById = (db, artistId, callback) => {
+  const artistRef = doc(db, 'artists', artistId);
+  return onSnapshot(artistRef, (snapshot) => {
+    if (snapshot.exists()) {
+      callback([{ id: snapshot.id, ...snapshot.data() }]);
+    } else {
+      callback([]);
+    }
+  }, (error) => {
+    console.error('Error subscribing to artist:', artistId, error);
+    callback([]);
+  });
+};
+
+/**
  * Get all artists (one-time fetch)
  * @param {Object} db - Firestore database instance
  */

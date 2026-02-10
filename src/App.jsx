@@ -41,6 +41,7 @@ import { computeSocialSetsUsed, canAddSocialSet, shouldShowPaymentUI } from './s
 // Artist Service for multi-artist management
 import {
   subscribeToArtists,
+  subscribeToArtistById,
   ensureBoonArtistExists,
   getLastArtistId,
   setLastArtistId,
@@ -609,49 +610,66 @@ const StickToMusic = () => {
       });
     }
 
-    // Subscribe to real-time artist updates
-    const unsubscribe = subscribeToArtists(db, (artists) => {
-      log('✅ Loaded artists:', artists.length, artists.map(a => a.name).join(', '));
-      setFirestoreArtists(artists);
-      setArtistsLoaded(true);
+    // Determine the user's role and linked artist from allowedUsers
+    const userRecord = allowedUsers.find(u => u.email?.toLowerCase() === currentAuthUser?.email?.toLowerCase());
+    const userRole = userRecord?.role;
+    const isUserConductor = userRole === 'conductor' || isCond;
+    const isArtistOrCollab = userRole === 'artist' || userRole === 'collaborator';
+    const linkedArtistId = userRecord?.linkedArtistId;
 
-      // Always validate artist selection against the current user's permissions.
-      // This prevents cross-user data leakage if localStorage retains a stale artist ID.
-      if (artists.length > 0) {
-        // Check BOTH allowedUsers collection AND CONDUCTOR_EMAILS for conductor status
-        const userRole = allowedUsers.find(u => u.email?.toLowerCase() === currentAuthUser?.email?.toLowerCase());
-        const isUserConductor = userRole?.role === 'conductor' || CONDUCTOR_EMAILS.includes(currentAuthUser?.email?.toLowerCase());
-        const userId = userRole?.id || null;
-        const visibleArtists = isUserConductor ? artists : artists.filter(a =>
-          userId && a.ownerOperatorId === userId
-        );
+    // For artist/collaborator roles: subscribe to just their linked artist document
+    // For conductor/operator roles: subscribe to all artists
+    let unsubscribe;
 
-        log('🔐 Artist isolation check:', {
-          email: currentAuthUser?.email,
-          isUserConductor,
-          userId,
-          visibleCount: visibleArtists.length,
-          currentArtistId
-        });
+    if (isArtistOrCollab && linkedArtistId) {
+      log('📥 Artist/collaborator mode — subscribing to linked artist:', linkedArtistId);
+      unsubscribe = subscribeToArtistById(db, linkedArtistId, (artists) => {
+        log('✅ Loaded linked artist:', artists.length, artists.map(a => a.name).join(', '));
+        setFirestoreArtists(artists);
+        setArtistsLoaded(true);
+        if (artists.length > 0) {
+          setCurrentArtistId(artists[0].id);
+          setLastArtistId(artists[0].id);
+        }
+      });
+    } else {
+      // Conductor/operator: subscribe to all artists
+      unsubscribe = subscribeToArtists(db, (artists) => {
+        log('✅ Loaded artists:', artists.length, artists.map(a => a.name).join(', '));
+        setFirestoreArtists(artists);
+        setArtistsLoaded(true);
 
-        // If current artist is already valid for this user, keep it; otherwise re-select
-        const currentIsValid = currentArtistId && visibleArtists.find(a => a.id === currentArtistId);
-        if (!currentIsValid) {
-          if (visibleArtists.length > 0) {
-            const lastId = getLastArtistId();
-            const artistToSelect = lastId && visibleArtists.find(a => a.id === lastId)
-              ? lastId
-              : visibleArtists[0].id;
-            setCurrentArtistId(artistToSelect);
-            setLastArtistId(artistToSelect);
-          } else if (!isUserConductor) {
-            // Non-conductor with no assigned artists — clear selection to prevent seeing another user's data
-            log('⚠️ Non-conductor has no assigned artists, clearing selection');
-            setCurrentArtistId(null);
+        if (artists.length > 0) {
+          const userId = userRecord?.id || null;
+          const visibleArtists = isUserConductor ? artists : artists.filter(a =>
+            userId && a.ownerOperatorId === userId
+          );
+
+          log('🔐 Artist isolation check:', {
+            email: currentAuthUser?.email,
+            isUserConductor,
+            userId,
+            visibleCount: visibleArtists.length,
+            currentArtistId
+          });
+
+          const currentIsValid = currentArtistId && visibleArtists.find(a => a.id === currentArtistId);
+          if (!currentIsValid) {
+            if (visibleArtists.length > 0) {
+              const lastId = getLastArtistId();
+              const artistToSelect = lastId && visibleArtists.find(a => a.id === lastId)
+                ? lastId
+                : visibleArtists[0].id;
+              setCurrentArtistId(artistToSelect);
+              setLastArtistId(artistToSelect);
+            } else if (!isUserConductor) {
+              log('⚠️ Non-conductor has no assigned artists, clearing selection');
+              setCurrentArtistId(null);
+            }
           }
         }
-      }
-    });
+      });
+    }
 
     return () => unsubscribe();
   }, [authChecked, currentAuthUser, allowedUsers]);
