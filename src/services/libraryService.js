@@ -2109,10 +2109,13 @@ export const subscribeToCollections = (db, artistId, callback) => {
   return onSnapshot(
     collectionsRef,
     (snapshot) => {
-      const rawFirestoreCollections = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      const rawFirestoreCollections = snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Deserialize banks/textBanks (stored as JSON strings to avoid Firestore nested array restriction)
+        if (typeof data.banks === 'string') try { data.banks = JSON.parse(data.banks); } catch { data.banks = []; }
+        if (typeof data.textBanks === 'string') try { data.textBanks = JSON.parse(data.textBanks); } catch { data.textBanks = []; }
+        return { id: doc.id, ...data };
+      });
 
       // Deduplicate by name (migration may have created duplicate entries)
       const seenNames = new Set();
@@ -2208,7 +2211,11 @@ export const saveCollectionToFirestore = async (db, artistId, collectionData) =>
   if (!db || !artistId || !collectionData?.id) return false;
   try {
     const docRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', collectionData.id);
-    await setDoc(docRef, { ...collectionData, updatedAt: serverTimestamp() });
+    // Firestore doesn't support nested arrays. Serialize banks/textBanks as JSON strings.
+    const data = { ...collectionData, updatedAt: serverTimestamp() };
+    if (Array.isArray(data.banks)) data.banks = JSON.stringify(data.banks);
+    if (Array.isArray(data.textBanks)) data.textBanks = JSON.stringify(data.textBanks);
+    await setDoc(docRef, data);
     return true;
   } catch (error) {
     console.error('[Collections] Failed to save to Firestore:', error);
