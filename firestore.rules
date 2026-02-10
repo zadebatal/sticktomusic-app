@@ -86,7 +86,7 @@ service cloud.firestore {
     // Content Templates collection (caption/hashtag templates per artist)
     // - Operators can read/write templates for their assigned artists
     match /contentTemplates/{artistId} {
-      allow read: if isOperatorOrAbove();
+      allow read: if isOperatorOrAbove() || isLinkedToArtist(artistId);
       allow write: if isConductor() || canAccessArtist(artistId);
     }
 

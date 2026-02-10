@@ -1476,7 +1476,7 @@ const VideoEditorModal = ({
     } finally {
       setIsTranscribing(false);
     }
-  }, [selectedAudio, duration, toast, fetchSharedOpenAIKey]);
+  }, [selectedAudio, duration, toast]);
 
   const handleSaveApiKey = useCallback(() => {
     if (apiKeyInput.trim()) {
