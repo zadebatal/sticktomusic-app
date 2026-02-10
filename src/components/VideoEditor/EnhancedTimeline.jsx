@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import useTimelineZoom from '../../hooks/useTimelineZoom';
 
 /**
  * Enhanced Timeline - Clip timeline with thumbnails, waveform, beat markers, and quick actions
@@ -29,10 +30,21 @@ const EnhancedTimeline = ({
   onShuffleOrder,
   selectedClipIndex,
   audioBuffer, // For waveform
-  isPlaying = false // New prop to know if video is playing
+  isPlaying = false, // New prop to know if video is playing
+  onZoomChange, // Callback when pinch-zoom changes zoom level
 }) => {
   const { theme } = useTheme();
   const timelineRef = useRef(null);
+
+  // Pinch-to-zoom: if parent provides onZoomChange, pipe zoom there
+  useTimelineZoom(timelineRef, {
+    zoom,
+    setZoom: onZoomChange || (() => {}),
+    minZoom: 0.5,
+    maxZoom: 3,
+    basePixelsPerSecond: 50,
+  });
+
   const [waveformData, setWaveformData] = useState([]);
   const [hoveredClip, setHoveredClip] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { useTheme, THEMES } from '../../contexts/ThemeContext';
+import { useToast } from '../ui';
 import { getTierForSets, shouldShowPaymentUI, computeSocialSetsUsed } from '../../services/subscriptionService';
 
 /**
@@ -17,6 +18,7 @@ const ArtistSettingsTab = ({
   socialSetsAllowed = 0,
 }) => {
   const { theme, themeId, setTheme } = useTheme();
+  const { toastInfo } = useToast();
   const t = theme.tw;
 
   const socialSetsUsed = computeSocialSetsUsed(latePages.filter(p => p.artistId === artistId));
@@ -182,7 +184,10 @@ const ArtistSettingsTab = ({
               )}
               {showPayment && (
                 <div className="flex gap-2 mt-3">
-                  <button className={`px-5 py-2 rounded-xl text-sm font-semibold transition ${t.btnPrimary}`}>
+                  <button
+                    onClick={() => toastInfo('Contact your operator to upgrade your plan')}
+                    className={`px-5 py-2 rounded-xl text-sm font-semibold transition ${t.btnPrimary}`}
+                  >
                     Upgrade Plan
                   </button>
                   {canCancel && (

@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useToast } from '../ui';
 import { getLateProfiles, createLateProfile, getConnectUrl } from '../../services/lateService';
 import useIsMobile from '../../hooks/useIsMobile';
 
@@ -563,6 +564,7 @@ const PagesTab = ({
   onRemoveManualAccount,
 }) => {
   const { theme } = useTheme();
+  const { toastError } = useToast();
   const { isMobile } = useIsMobile();
   const t = theme.tw;
   const [expandedArtists, setExpandedArtists] = useState({});
@@ -654,7 +656,7 @@ const PagesTab = ({
       }
     } catch (error) {
       console.error('Failed to start connect flow:', error);
-      alert(`Failed to connect ${platform}: ${error.message}`);
+      toastError(`Failed to connect ${platform}: ${error.message}`);
     } finally {
       setConnectingPlatform(null);
     }

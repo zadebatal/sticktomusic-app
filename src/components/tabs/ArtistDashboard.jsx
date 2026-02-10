@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useToast } from '../ui';
 import { getTierForSets, computeSocialSetsUsed, shouldShowPaymentUI } from '../../services/subscriptionService';
 
 /**
@@ -14,6 +15,7 @@ const ArtistDashboard = ({
   socialSetsAllowed = 0,
 }) => {
   const { theme } = useTheme();
+  const { toastInfo } = useToast();
   const t = theme.tw;
 
   // latePages is pre-filtered to this artist's pages by parent
@@ -176,7 +178,10 @@ const ArtistDashboard = ({
             <p className={`text-sm ${t.textSecondary} mb-3`}>
               Need more Social Sets? Upgrade your plan to connect more accounts.
             </p>
-            <button className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition ${t.btnPrimary}`}>
+            <button
+              onClick={() => toastInfo('Contact your operator to upgrade your plan')}
+              className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition ${t.btnPrimary}`}
+            >
               Upgrade Plan
             </button>
           </div>

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import useTimelineZoom from '../../hooks/useTimelineZoom';
 
 const ClipTimeline = ({
   clips = [],
@@ -17,7 +18,9 @@ const ClipTimeline = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragIndex, setDragIndex] = useState(null);
 
-  const pixelsPerSecond = 50 * zoom;
+  const { pixelsPerSecond } = useTimelineZoom(timelineRef, {
+    zoom, setZoom, minZoom: 0.5, maxZoom: 3, basePixelsPerSecond: 50,
+  });
   const timelineWidth = Math.max(totalDuration * pixelsPerSecond, 800);
 
   // Handle clip selection

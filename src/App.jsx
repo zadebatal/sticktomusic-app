@@ -3525,7 +3525,7 @@ const StickToMusic = () => {
               unconfiguredLateArtists={unconfiguredLateArtists}
               loadingLatePages={loadingLatePages}
               onLoadLatePages={loadLatePages}
-              onConfigureLate={(artistId) => { setOperatorTab('settings'); showToast('Configure Late API connection in Settings', 'info'); }}
+              onConfigureLate={(artistId) => { setCurrentArtistId(artistId); setShowLateConnectModal(true); }}
               user={user}
               socialSetsAllowed={user?.socialSetsAllowed || 0}
               manualAccountsByArtist={manualAccountsByArtist}
@@ -6798,6 +6798,8 @@ const StickToMusic = () => {
                         setShowLateConnectModal(false);
                         setLateApiKeyInput('');
                         showToast('Sync enabled successfully!', 'success');
+                        // Refresh pages list so PagesTab updates
+                        loadLatePages();
                         // Fetch posts after connecting
                         const result = await lateApi.fetchScheduledPosts(1, currentArtistId);
                         if (result.success) {

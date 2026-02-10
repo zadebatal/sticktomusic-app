@@ -728,6 +728,7 @@ const VideoEditorV2 = ({
         duration={duration}
         currentTime={currentTime}
         zoom={zoom}
+        onZoomChange={setZoom}
         onTimeChange={setCurrentTime}
         onClipClick={setSelectedClipIndex}
         onClipReroll={handleRerollClip}
