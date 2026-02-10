@@ -1635,33 +1635,6 @@ const StudioHome = ({
           )}
         </div>
 
-        <div style={styles.headerRight}>
-          {studioMode && studioMode !== 'audio' && (
-            <CloudImportButton
-              artistId={artistId}
-              db={db}
-              mediaType={studioMode === 'videos' ? 'video' : 'image'}
-              onImportMedia={(files) => {
-                const newItems = files.map((f, i) => ({
-                  id: `cloud_${Date.now()}_${i}`,
-                  name: f.name,
-                  url: f.url || f.localUrl,
-                  localUrl: f.localUrl,
-                  type: f.type || (studioMode === 'videos' ? 'video' : 'image'),
-                  source: f.source
-                }));
-                addManyToLibraryAsync(db, artistId, newItems).then(() => {
-                  // Also assign to current collection if one is selected
-                  if (selectedCollection && newItems.length > 0) {
-                    const addedIds = newItems.map(a => a.id);
-                    addToCollectionAsync(db, artistId, selectedCollection, addedIds);
-                  }
-                  setLibraryRefreshTrigger(prev => prev + 1);
-                }).catch(err => console.warn('[StudioHome] Cloud import save failed:', err));
-              }}
-            />
-          )}
-        </div>
       </div>
 
       {/* Body */}
@@ -1826,6 +1799,30 @@ const StudioHome = ({
                   isMobile={isMobile}
                   compact
                   refreshTrigger={libraryRefreshTrigger}
+                  extraToolbarContent={
+                    <CloudImportButton
+                      artistId={artistId}
+                      db={db}
+                      mediaType="video"
+                      onImportMedia={(files) => {
+                        const newItems = files.map((f, i) => ({
+                          id: `cloud_${Date.now()}_${i}`,
+                          name: f.name,
+                          url: f.url || f.localUrl,
+                          localUrl: f.localUrl,
+                          type: f.type || 'video',
+                          source: f.source
+                        }));
+                        addManyToLibraryAsync(db, artistId, newItems).then(() => {
+                          if (selectedCollection && newItems.length > 0) {
+                            const addedIds = newItems.map(a => a.id);
+                            addToCollectionAsync(db, artistId, selectedCollection, addedIds);
+                          }
+                          setLibraryRefreshTrigger(prev => prev + 1);
+                        }).catch(err => console.warn('[StudioHome] Cloud import save failed:', err));
+                      }}
+                    />
+                  }
                 />
               </div>
 
@@ -1961,6 +1958,30 @@ const StudioHome = ({
                   isMobile={isMobile}
                   compact
                   refreshTrigger={libraryRefreshTrigger}
+                  extraToolbarContent={
+                    <CloudImportButton
+                      artistId={artistId}
+                      db={db}
+                      mediaType="image"
+                      onImportMedia={(files) => {
+                        const newItems = files.map((f, i) => ({
+                          id: `cloud_${Date.now()}_${i}`,
+                          name: f.name,
+                          url: f.url || f.localUrl,
+                          localUrl: f.localUrl,
+                          type: f.type || 'image',
+                          source: f.source
+                        }));
+                        addManyToLibraryAsync(db, artistId, newItems).then(() => {
+                          if (selectedCollection && newItems.length > 0) {
+                            const addedIds = newItems.map(a => a.id);
+                            addToCollectionAsync(db, artistId, selectedCollection, addedIds);
+                          }
+                          setLibraryRefreshTrigger(prev => prev + 1);
+                        }).catch(err => console.warn('[StudioHome] Cloud import save failed:', err));
+                      }}
+                    />
+                  }
                 />
               </div>
 

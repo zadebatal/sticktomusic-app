@@ -202,7 +202,8 @@ const LibraryBrowser = ({
   onCollectionsUpdated = null, // Notify parent when collections are mutated (create/delete/rename)
   isMobile: isMobileProp = false,
   compact = false,
-  refreshTrigger = 0 // Increment to force refresh
+  refreshTrigger = 0, // Increment to force refresh
+  extraToolbarContent = null // Extra content to render next to Upload button
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
@@ -1906,6 +1907,8 @@ const LibraryBrowser = ({
               🗑 Delete {selectedMediaIds.length}
             </button>
           )}
+
+          {extraToolbarContent}
 
           <label style={{...styles.uploadButton, ...(isMobile ? { padding: '10px 16px', minHeight: '44px' } : {})}}>
             <span>⬆️</span>
