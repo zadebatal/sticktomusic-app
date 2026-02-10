@@ -209,7 +209,7 @@ const LibraryBrowser = ({
   const [renamingCollectionId, setRenamingCollectionId] = useState(null);
   const [renameText, setRenameText] = useState('');
   const [bankTab, setBankTab] = useState('images'); // 'images' | 'text'
-  const [selectedBankItems, setSelectedBankItems] = useState({ A: new Set(), B: new Set() });
+  const [selectedBankItems, setSelectedBankItems] = useState({ A: new Set(), B: new Set(), C: new Set(), D: new Set() });
   const [showTemplateEditor, setShowTemplateEditor] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState(null);
 
@@ -415,10 +415,15 @@ const LibraryBrowser = ({
     const allMedia = library.filter(item => (col.mediaIds || []).includes(item.id));
     const bankAIds = col.bankA || [];
     const bankBIds = col.bankB || [];
+    const bankCIds = col.bankC || [];
+    const bankDIds = col.bankD || [];
+    const allAssigned = new Set([...bankAIds, ...bankBIds, ...bankCIds, ...bankDIds]);
     return {
       bankA: allMedia.filter(item => bankAIds.includes(item.id)),
       bankB: allMedia.filter(item => bankBIds.includes(item.id)),
-      unassigned: allMedia.filter(item => !bankAIds.includes(item.id) && !bankBIds.includes(item.id))
+      bankC: allMedia.filter(item => bankCIds.includes(item.id)),
+      bankD: allMedia.filter(item => bankDIds.includes(item.id)),
+      unassigned: allMedia.filter(item => !allAssigned.has(item.id))
     };
   })();
 
@@ -445,7 +450,7 @@ const LibraryBrowser = ({
     setDragOverBank(null);
   };
 
-  const [dragOverBank, setDragOverBank] = useState(null); // 'A' | 'B' | null
+  const [dragOverBank, setDragOverBank] = useState(null); // 'A' | 'B' | 'C' | 'D' | null
 
   // Keep ref in sync for use in drag selection effect
   displayedMediaRef.current = displayedMedia;
@@ -1316,7 +1321,8 @@ const LibraryBrowser = ({
   };
 
   const handleSelectAllBank = (bank) => {
-    const items = bank === 'A' ? collectionBanks?.bankA : collectionBanks?.bankB;
+    const bankKey = `bank${bank}`;
+    const items = collectionBanks?.[bankKey];
     if (!items) return;
     setSelectedBankItems(prev => ({
       ...prev,
@@ -2033,6 +2039,158 @@ const LibraryBrowser = ({
                         ) : collectionBanks.bankB.map(media => renderBankMediaCard(media, 'B'))}
                       </div>
                     </div>
+
+                    {/* Bank C */}
+                    <div
+                      style={{
+                        flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0,
+                        borderRadius: '10px',
+                        border: dragOverBank === 'C' ? '2px dashed rgba(192, 132, 252, 0.6)' : '1px solid rgba(255,255,255,0.08)',
+                        backgroundColor: dragOverBank === 'C' ? 'rgba(192, 132, 252, 0.05)' : 'transparent',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBank('C'); }}
+                      onDragLeave={() => setDragOverBank(null)}
+                      onDrop={(e) => handleDropOnBank(e, 'C')}
+                    >
+                      <div style={{
+                        padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px',
+                        borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0,
+                        background: 'linear-gradient(135deg, rgba(192, 132, 252, 0.06), transparent)'
+                      }}>
+                        <div style={{
+                          width: '22px', height: '22px', borderRadius: '6px',
+                          background: 'linear-gradient(135deg, #a855f7, #c084fc)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '11px', fontWeight: 700, color: '#fff'
+                        }}>C</div>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: '#d8b4fe' }}>Bank C</span>
+                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>
+                          {collectionBanks.bankC.length}
+                        </span>
+                        {collectionBanks.bankC.length > 0 && (
+                          <>
+                            <button
+                              onClick={() => handleSelectAllBank('C')}
+                              style={{
+                                marginLeft: '8px', padding: '4px 10px', fontSize: '11px',
+                                backgroundColor: 'rgba(192, 132, 252, 0.2)', border: 'none',
+                                borderRadius: '4px', color: '#d8b4fe', cursor: 'pointer',
+                                transition: 'background-color 0.2s'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(192, 132, 252, 0.35)'}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(192, 132, 252, 0.2)'}
+                              title="Select all items in Bank C"
+                            >
+                              Select All
+                            </button>
+                            {selectedBankItems.C.size > 0 && (
+                              <button
+                                onClick={() => handleRemoveFromBank('C', Array.from(selectedBankItems.C))}
+                                style={{
+                                  padding: '4px 10px', fontSize: '11px',
+                                  backgroundColor: 'rgba(239, 68, 68, 0.2)', border: 'none',
+                                  borderRadius: '4px', color: '#fca5a5', cursor: 'pointer',
+                                  transition: 'background-color 0.2s'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.35)'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.2)'}
+                                title={`Remove selected items (${selectedBankItems.C.size})`}
+                              >
+                                Remove {selectedBankItems.C.size}
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      <div style={{
+                        flex: 1, overflowY: 'auto', padding: '16px', minHeight: 0,
+                        display: 'flex', flexWrap: 'wrap',
+                        gap: '8px', alignContent: 'start'
+                      }}>
+                        {collectionBanks.bankC.length === 0 ? (
+                          <div style={{ width: '100%', padding: '16px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
+                            Drag images here
+                          </div>
+                        ) : collectionBanks.bankC.map(media => renderBankMediaCard(media, 'C'))}
+                      </div>
+                    </div>
+
+                    {/* Bank D */}
+                    <div
+                      style={{
+                        flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0,
+                        borderRadius: '10px',
+                        border: dragOverBank === 'D' ? '2px dashed rgba(251, 113, 133, 0.6)' : '1px solid rgba(255,255,255,0.08)',
+                        backgroundColor: dragOverBank === 'D' ? 'rgba(251, 113, 133, 0.05)' : 'transparent',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBank('D'); }}
+                      onDragLeave={() => setDragOverBank(null)}
+                      onDrop={(e) => handleDropOnBank(e, 'D')}
+                    >
+                      <div style={{
+                        padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px',
+                        borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0,
+                        background: 'linear-gradient(135deg, rgba(251, 113, 133, 0.06), transparent)'
+                      }}>
+                        <div style={{
+                          width: '22px', height: '22px', borderRadius: '6px',
+                          background: 'linear-gradient(135deg, #f43f5e, #fb7185)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '11px', fontWeight: 700, color: '#fff'
+                        }}>D</div>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: '#fda4af' }}>Bank D</span>
+                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>
+                          {collectionBanks.bankD.length}
+                        </span>
+                        {collectionBanks.bankD.length > 0 && (
+                          <>
+                            <button
+                              onClick={() => handleSelectAllBank('D')}
+                              style={{
+                                marginLeft: '8px', padding: '4px 10px', fontSize: '11px',
+                                backgroundColor: 'rgba(251, 113, 133, 0.2)', border: 'none',
+                                borderRadius: '4px', color: '#fda4af', cursor: 'pointer',
+                                transition: 'background-color 0.2s'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(251, 113, 133, 0.35)'}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(251, 113, 133, 0.2)'}
+                              title="Select all items in Bank D"
+                            >
+                              Select All
+                            </button>
+                            {selectedBankItems.D.size > 0 && (
+                              <button
+                                onClick={() => handleRemoveFromBank('D', Array.from(selectedBankItems.D))}
+                                style={{
+                                  padding: '4px 10px', fontSize: '11px',
+                                  backgroundColor: 'rgba(239, 68, 68, 0.2)', border: 'none',
+                                  borderRadius: '4px', color: '#fca5a5', cursor: 'pointer',
+                                  transition: 'background-color 0.2s'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.35)'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.2)'}
+                                title={`Remove selected items (${selectedBankItems.D.size})`}
+                              >
+                                Remove {selectedBankItems.D.size}
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      <div style={{
+                        flex: 1, overflowY: 'auto', padding: '16px', minHeight: 0,
+                        display: 'flex', flexWrap: 'wrap',
+                        gap: '8px', alignContent: 'start'
+                      }}>
+                        {collectionBanks.bankD.length === 0 ? (
+                          <div style={{ width: '100%', padding: '16px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
+                            Drag images here
+                          </div>
+                        ) : collectionBanks.bankD.map(media => renderBankMediaCard(media, 'D'))}
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden' }}>
@@ -2302,6 +2460,44 @@ const LibraryBrowser = ({
                       fontSize: '10px', fontWeight: 700, color: '#fff'
                     }}>B</span>
                     <span>Bank B</span>
+                  </div>
+                  <div
+                    style={{...styles.contextMenuItem, paddingLeft: '24px'}}
+                    onClick={() => {
+                      assignToBank(artistId, collection.id, contextMenu.media.id, 'C');
+                      loadData();
+                      syncCollection(collection.id);
+                      setContextMenu(null);
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(192,132,252,0.1)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
+                    <span style={{
+                      display: 'inline-flex', width: '18px', height: '18px', borderRadius: '4px',
+                      background: 'linear-gradient(135deg, #a855f7, #c084fc)',
+                      alignItems: 'center', justifyContent: 'center',
+                      fontSize: '10px', fontWeight: 700, color: '#fff'
+                    }}>C</span>
+                    <span>Bank C</span>
+                  </div>
+                  <div
+                    style={{...styles.contextMenuItem, paddingLeft: '24px'}}
+                    onClick={() => {
+                      assignToBank(artistId, collection.id, contextMenu.media.id, 'D');
+                      loadData();
+                      syncCollection(collection.id);
+                      setContextMenu(null);
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(251,113,133,0.1)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
+                    <span style={{
+                      display: 'inline-flex', width: '18px', height: '18px', borderRadius: '4px',
+                      background: 'linear-gradient(135deg, #f43f5e, #fb7185)',
+                      alignItems: 'center', justifyContent: 'center',
+                      fontSize: '10px', fontWeight: 700, color: '#fff'
+                    }}>D</span>
+                    <span>Bank D</span>
                   </div>
                 </React.Fragment>
               ))}
