@@ -33,7 +33,10 @@ const loadImage = (src) => {
  * Draw text with proper styling on canvas
  */
 const drawTextOverlay = (ctx, overlay, dimensions) => {
-  const { text, style, position } = overlay;
+  const { style, position } = overlay;
+  // Apply textTransform (uppercase, etc.)
+  let text = overlay.text || '';
+  if (style.textTransform === 'uppercase') text = text.toUpperCase();
 
   // Calculate actual position from percentages
   const x = (position.x / 100) * dimensions.width;
@@ -43,6 +46,22 @@ const drawTextOverlay = (ctx, overlay, dimensions) => {
   ctx.font = `${style.fontWeight} ${style.fontSize}px ${style.fontFamily}`;
   ctx.textAlign = style.textAlign || 'center';
   ctx.textBaseline = 'middle';
+
+  // Draw text stroke/border if enabled
+  if (style.textStroke) {
+    const strokeMatch = (style.textStroke || '').match(/(\d+)px\s+(.*)/);
+    if (strokeMatch) {
+      ctx.strokeStyle = strokeMatch[2] || '#000000';
+      ctx.lineWidth = parseInt(strokeMatch[1], 10) * 2;
+      ctx.lineJoin = 'round';
+      const lines = text.split('\n');
+      const lineHeight = style.fontSize * 1.2;
+      lines.forEach((line, i) => {
+        const lineY = y + (i - (lines.length - 1) / 2) * lineHeight;
+        ctx.strokeText(line, x, lineY);
+      });
+    }
+  }
 
   // Draw outline/shadow if enabled
   if (style.outline) {

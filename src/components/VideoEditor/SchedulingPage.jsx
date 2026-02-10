@@ -158,12 +158,26 @@ const SchedulingPage = ({
     return map;
   }, [batchStartDate, batchStartTime, postsPerDay, spacingMode, spacingMinutes, batchRandomMin, batchRandomMax, selectedPostIds, selectedCount, posts]);
 
-  // ── Load & Subscribe ──
+  // ── Load & Subscribe (with ghost draft detection) ──
   useEffect(() => {
     if (!db || !artistId) return;
     setLoading(true);
+
+    // Get current drafts to detect ghosts
+    let draftIds = new Set();
+    try {
+      const content = getCreatedContent(artistId);
+      (content.videos || []).forEach(v => draftIds.add(v.id));
+      (content.slideshows || []).forEach(s => draftIds.add(s.id));
+    } catch (e) { /* no local content yet */ }
+
     const unsubscribe = subscribeToScheduledPosts(db, artistId, (newPosts) => {
-      setPosts(newPosts);
+      // Tag posts whose source draft no longer exists
+      const tagged = newPosts.map(p => ({
+        ...p,
+        _isGhost: p.contentId ? !draftIds.has(p.contentId) : false
+      }));
+      setPosts(tagged);
       setLoading(false);
     });
     return () => unsubscribe();
@@ -238,6 +252,13 @@ const SchedulingPage = ({
       setDragOverId(null);
       return;
     }
+    // Prevent dragging locked posts or dropping onto locked positions
+    const draggedPost = posts.find(p => p.id === draggedId);
+    if (draggedPost?.locked) {
+      setDraggedId(null);
+      setDragOverId(null);
+      return;
+    }
     setPosts(prev => {
       const arr = [...prev];
       const fromIdx = arr.findIndex(p => p.id === draggedId);
@@ -266,17 +287,30 @@ const SchedulingPage = ({
     setDragOverId(null);
   }, []);
 
-  // ── Shuffle / Randomize Order ──
+  // ── Shuffle / Randomize Order (locked posts stay in place) ──
   const handleRandomizeOrder = useCallback(async () => {
-    const shuffled = [...posts];
-    for (let i = shuffled.length - 1; i > 0; i--) {
+    const locked = posts.filter(p => p.locked);
+    const unlocked = posts.filter(p => !p.locked);
+
+    // Shuffle only unlocked posts
+    for (let i = unlocked.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      [unlocked[i], unlocked[j]] = [unlocked[j], unlocked[i]];
     }
-    setPosts(shuffled.map((p, i) => ({ ...p, queuePosition: i })));
-    const newOrder = shuffled.map((p, i) => ({ id: p.id, queuePosition: i }));
+
+    // Rebuild the full list: locked posts stay at their original indices
+    const result = new Array(posts.length);
+    const lockedPositions = new Set();
+    posts.forEach((p, i) => { if (p.locked) { result[i] = p; lockedPositions.add(i); } });
+    let ui = 0;
+    for (let i = 0; i < result.length; i++) {
+      if (!lockedPositions.has(i)) { result[i] = unlocked[ui++]; }
+    }
+
+    setPosts(result.map((p, i) => ({ ...p, queuePosition: i })));
+    const newOrder = result.map((p, i) => ({ id: p.id, queuePosition: i }));
     await reorderPosts(db, artistId, newOrder);
-    toastSuccess('Queue randomized');
+    toastSuccess(locked.length > 0 ? `Shuffled (${locked.length} locked)` : 'Queue randomized');
   }, [posts, db, artistId, toastSuccess]);
 
   // ── CRUD Handlers ──
@@ -444,6 +478,7 @@ const SchedulingPage = ({
         contentName: item.name || item.title || (item.type === 'slideshow' ? 'Untitled Slideshow' : 'Untitled Video'),
         thumbnail: item.thumbnail || item.slides?.[0]?.backgroundImage || item.slides?.[0]?.imageUrl || null,
         cloudUrl: item.cloudUrl || null,
+        collectionName: item.collectionName || item.collectionId || null, // Track originating collection
         editorState: item
       }));
       await addManyScheduledPosts(db, artistId, itemsToAdd);
@@ -920,11 +955,21 @@ const PostRow = ({
           )}
         </div>
 
-        {/* Content Name + Audio */}
+        {/* Content Name + Audio + Collection */}
         <div style={{ flex: 1.2, minWidth: 0, cursor: 'pointer' }} onClick={onToggleExpand}>
           <div style={s.contentName}>{post.contentName}</div>
-          <div style={{ fontSize: '10px', color: '#52525b', marginTop: '1px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <div style={{ fontSize: '10px', color: '#52525b', marginTop: '1px', display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
             <span>{post.contentType === 'slideshow' ? 'Slideshow' : 'Video'}</span>
+            {post.collectionName && (
+              <span style={{ color: '#14b8a6', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(20,184,166,0.12)', border: '1px solid rgba(20,184,166,0.2)' }} title={`From: ${post.collectionName}`}>
+                {post.collectionName}
+              </span>
+            )}
+            {post._isGhost && (
+              <span style={{ color: '#f59e0b', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)' }} title="Original draft was deleted">
+                ⚠ orphan
+              </span>
+            )}
             {post.editorState?.audio && (
               <span style={{ color: '#6366f1', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={post.editorState.audio.name || post.editorState.audio.title || 'Audio'}>
                 ♪ {post.editorState.audio.name || post.editorState.audio.title || 'Audio'}
@@ -960,7 +1005,14 @@ const PostRow = ({
         </div>
 
         {/* Actions */}
-        <div style={{ width: '60px', display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
+        <div style={{ width: '80px', display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
+          <button
+            style={{ ...s.rowIconBtn, color: post.locked ? '#f59e0b' : '#52525b', fontSize: '13px' }}
+            onClick={(e) => { e.stopPropagation(); onUpdate({ locked: !post.locked }); }}
+            title={post.locked ? 'Unlock position' : 'Lock position (prevents reorder)'}
+          >
+            {post.locked ? '🔒' : '🔓'}
+          </button>
           <button style={s.rowIconBtn} onClick={onToggleExpand} title="Expand details">
             <span style={{ fontSize: '12px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.15s' }}>▼</span>
           </button>
@@ -1297,6 +1349,9 @@ const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) =>
                     </div>
                     <div style={{ padding: '6px 8px' }}>
                       <p style={{ margin: 0, fontSize: '11px', fontWeight: '500', color: '#e4e4e7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
+                      {(item.collectionName || item.collectionId) && (
+                        <p style={{ margin: '2px 0 0', fontSize: '9px', color: '#14b8a6' }}>{item.collectionName || item.collectionId}</p>
+                      )}
                     </div>
                   </div>
                 );

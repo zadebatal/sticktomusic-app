@@ -96,6 +96,10 @@ export async function createScheduledPost(db, artistId, data) {
     // Status
     status: data.status || POST_STATUS.DRAFT,
     queuePosition: data.queuePosition ?? 0,
+    locked: data.locked || false, // If true, reorder/shuffle will skip this post
+
+    // Source context
+    collectionName: data.collectionName || null, // Originating collection name
 
     // Editor state for re-editing
     editorState: data.editorState || null,
@@ -159,6 +163,28 @@ export async function deleteScheduledPost(db, artistId, postId) {
     console.error('[ScheduledPosts] Delete failed:', error);
     removeLocalPost(artistId, postId);
     return false;
+  }
+}
+
+/**
+ * Delete all scheduled posts that reference a given content ID (cascade delete).
+ * Called when a draft is deleted from createdContent.
+ */
+export async function deletePostsByContentId(db, artistId, contentId) {
+  try {
+    const allPosts = await getScheduledPosts(db, artistId);
+    const matching = allPosts.filter(p => p.contentId === contentId);
+    if (matching.length === 0) return 0;
+
+    const batch = writeBatch(db);
+    matching.forEach(p => batch.delete(getDocRef(db, artistId, p.id)));
+    await batch.commit();
+    matching.forEach(p => removeLocalPost(artistId, p.id));
+    log('[ScheduledPosts] Cascade-deleted', matching.length, 'posts for contentId:', contentId);
+    return matching.length;
+  } catch (error) {
+    console.error('[ScheduledPosts] Cascade delete failed:', error);
+    return 0;
   }
 }
 
@@ -252,6 +278,8 @@ export async function addManyScheduledPosts(db, artistId, posts) {
       hashtags: data.hashtags || [],
       status: data.status || POST_STATUS.DRAFT,
       queuePosition: maxPosition,
+      locked: data.locked || false,
+      collectionName: data.collectionName || null,
       editorState: data.editorState || null,
       postResults: {},
       createdAt: now,

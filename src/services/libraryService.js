@@ -770,8 +770,8 @@ export const addToCollection = (artistId, collectionId, mediaIds) => {
  */
 export const assignToBank = (artistId, collectionId, mediaIds, bank) => {
   const idsToAssign = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
-  const bankKey = bank === 'A' ? 'bankA' : 'bankB';
-  const otherBankKey = bank === 'A' ? 'bankB' : 'bankA';
+  const bankMap = { A: 'bankA', B: 'bankB', C: 'bankC', D: 'bankD' };
+  const bankKey = bankMap[bank] || `bank${bank}`;
 
   const collections = getUserCollections(artistId);
   const collection = collections.find(c => c.id === collectionId);
@@ -811,6 +811,8 @@ export const removeFromBank = (artistId, collectionId, mediaIds) => {
 
   collection.bankA = (collection.bankA || []).filter(id => !idsToRemove.includes(id));
   collection.bankB = (collection.bankB || []).filter(id => !idsToRemove.includes(id));
+  collection.bankC = (collection.bankC || []).filter(id => !idsToRemove.includes(id));
+  collection.bankD = (collection.bankD || []).filter(id => !idsToRemove.includes(id));
   collection.updatedAt = new Date().toISOString();
   saveCollections(artistId, collections);
 };
@@ -940,16 +942,21 @@ export const getCollectionBanks = (artistId, collectionId) => {
   const library = getLibrary(artistId);
   const collections = getUserCollections(artistId);
   const collection = collections.find(c => c.id === collectionId);
-  if (!collection) return { bankA: [], bankB: [], unassigned: [] };
+  if (!collection) return { bankA: [], bankB: [], bankC: [], bankD: [], unassigned: [] };
 
   const allMedia = library.filter(item => collection.mediaIds.includes(item.id));
   const bankAIds = collection.bankA || [];
   const bankBIds = collection.bankB || [];
+  const bankCIds = collection.bankC || [];
+  const bankDIds = collection.bankD || [];
+  const allAssigned = new Set([...bankAIds, ...bankBIds, ...bankCIds, ...bankDIds]);
 
   return {
     bankA: allMedia.filter(item => bankAIds.includes(item.id)),
     bankB: allMedia.filter(item => bankBIds.includes(item.id)),
-    unassigned: allMedia.filter(item => !bankAIds.includes(item.id) && !bankBIds.includes(item.id))
+    bankC: allMedia.filter(item => bankCIds.includes(item.id)),
+    bankD: allMedia.filter(item => bankDIds.includes(item.id)),
+    unassigned: allMedia.filter(item => !allAssigned.has(item.id))
   };
 };
 
@@ -1943,8 +1950,12 @@ export const getCollectionsAsync = async (db, artistId) => {
               ...col,
               bankA: localCol.bankA || col.bankA || [],
               bankB: localCol.bankB || col.bankB || [],
+              bankC: localCol.bankC || col.bankC || [],
+              bankD: localCol.bankD || col.bankD || [],
               textBank1: localCol.textBank1 || col.textBank1 || [],
               textBank2: localCol.textBank2 || col.textBank2 || [],
+              textBank3: localCol.textBank3 || col.textBank3 || [],
+              textBank4: localCol.textBank4 || col.textBank4 || [],
               videoTextBank1: localCol.videoTextBank1 || col.videoTextBank1 || [],
               videoTextBank2: localCol.videoTextBank2 || col.videoTextBank2 || [],
               textTemplates: localCol.textTemplates || col.textTemplates || [],
@@ -2008,8 +2019,12 @@ export const subscribeToCollections = (db, artistId, callback) => {
               ...col,
               bankA: (col.bankA?.length > 0 ? col.bankA : localCol.bankA) || [],
               bankB: (col.bankB?.length > 0 ? col.bankB : localCol.bankB) || [],
+              bankC: (col.bankC?.length > 0 ? col.bankC : localCol.bankC) || [],
+              bankD: (col.bankD?.length > 0 ? col.bankD : localCol.bankD) || [],
               textBank1: (col.textBank1?.length > 0 ? col.textBank1 : localCol.textBank1) || [],
               textBank2: (col.textBank2?.length > 0 ? col.textBank2 : localCol.textBank2) || [],
+              textBank3: (col.textBank3?.length > 0 ? col.textBank3 : localCol.textBank3) || [],
+              textBank4: (col.textBank4?.length > 0 ? col.textBank4 : localCol.textBank4) || [],
               videoTextBank1: (col.videoTextBank1?.length > 0 ? col.videoTextBank1 : localCol.videoTextBank1) || [],
               videoTextBank2: (col.videoTextBank2?.length > 0 ? col.videoTextBank2 : localCol.videoTextBank2) || [],
               textTemplates: (col.textTemplates?.length > 0 ? col.textTemplates : localCol.textTemplates) || [],

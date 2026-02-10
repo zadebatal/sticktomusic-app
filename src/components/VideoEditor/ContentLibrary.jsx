@@ -6,7 +6,7 @@ import { VIDEO_STATUS } from '../../utils/status';
 import { renderVideo } from '../../services/videoExportService';
 import { uploadFile } from '../../services/firebaseStorage';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
-import { createScheduledPost, POST_STATUS } from '../../services/scheduledPostsService';
+import { createScheduledPost, deleteScheduledPost, getScheduledPosts, POST_STATUS } from '../../services/scheduledPostsService';
 import log from '../../utils/logger';
 
 /**
@@ -53,6 +53,16 @@ const ContentLibrary = ({
   // Rendering state
   const [renderingVideoId, setRenderingVideoId] = useState(null);
   const [renderProgress, setRenderProgress] = useState(0);
+
+  // Scheduled posts for "Already Scheduled" section in Drafts view
+  const [scheduledPosts, setScheduledPosts] = useState([]);
+  const [showScheduled, setShowScheduled] = useState(true);
+
+  // Load scheduled posts when in drafts view
+  React.useEffect(() => {
+    if (!isDraftsView || !db || !artistId) return;
+    getScheduledPosts(db, artistId).then(posts => setScheduledPosts(posts)).catch(() => {});
+  }, [isDraftsView, db, artistId]);
 
   // Handle rendering a video recipe into a real video
   // Returns the cloudUrl when called from PostingModule
@@ -113,10 +123,17 @@ const ContentLibrary = ({
   // Legacy: postingSlideshow kept for single-slideshow post button
   const [postingSlideshow, setPostingSlideshow] = useState(null);
 
-  // Get content array based on type
-  const items = isSlideshow
-    ? (category?.slideshows || [])
-    : (category?.createdVideos || []);
+  // Get content array based on type — reverse chronological (newest first)
+  const items = useMemo(() => {
+    const raw = isSlideshow
+      ? (category?.slideshows || [])
+      : (category?.createdVideos || []);
+    return [...raw].sort((a, b) => {
+      const ta = new Date(b.createdAt || 0).getTime();
+      const tb = new Date(a.createdAt || 0).getTime();
+      return ta - tb;
+    });
+  }, [isSlideshow, category?.slideshows, category?.createdVideos]);
 
   // For backwards compatibility, also alias as videos for video-specific logic
   const videos = isSlideshow ? [] : items;
@@ -209,18 +226,29 @@ const ContentLibrary = ({
         </div>
         <div style={styles.headerActions}>
           {isDraftsView ? (
-            /* Drafts view: show Delete Selected when items are selected */
-            selectedVideoIds.size > 0 && (
+            /* Drafts view: show prominent create CTAs + delete */
+            <>
               <button
-                style={{ ...styles.secondaryButton, backgroundColor: 'rgba(239,68,68,0.15)', color: '#f87171', borderColor: 'rgba(239,68,68,0.3)' }}
-                onClick={() => setDeleteConfirm({ isOpen: true, videoId: null, isBulk: true })}
+                style={{ ...styles.primaryButton, backgroundColor: '#7c3aed' }}
+                onClick={() => onMakeVideo?.()}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                </svg>
-                Delete Selected ({selectedVideoIds.size})
+                🎥 New Video Draft
               </button>
-            )
+              <button
+                style={{ ...styles.primaryButton, backgroundColor: '#6366f1' }}
+                onClick={() => onMakeSlideshow?.()}
+              >
+                🖼️ New Slideshow Draft
+              </button>
+              {selectedVideoIds.size > 0 && (
+                <button
+                  style={{ ...styles.secondaryButton, backgroundColor: 'rgba(239,68,68,0.15)', color: '#f87171', borderColor: 'rgba(239,68,68,0.3)' }}
+                  onClick={() => setDeleteConfirm({ isOpen: true, videoId: null, isBulk: true })}
+                >
+                  Delete Selected ({selectedVideoIds.size})
+                </button>
+              )}
+            </>
           ) : (
             /* Normal category view: show Make buttons */
             <>
@@ -274,6 +302,43 @@ const ContentLibrary = ({
           </select>
         </div>
       </div>
+
+      {/* Already Scheduled section (Drafts view only) */}
+      {isDraftsView && scheduledPosts.length > 0 && (
+        <div style={{ padding: '0 24px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <button
+            onClick={() => setShowScheduled(!showScheduled)}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 0', background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '13px', fontWeight: '600', width: '100%' }}
+          >
+            <span style={{ transform: showScheduled ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', fontSize: '10px' }}>▶</span>
+            Already Scheduled ({scheduledPosts.length})
+          </button>
+          {showScheduled && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingBottom: '12px' }}>
+              {scheduledPosts.map(post => (
+                <div key={post.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', backgroundColor: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: '8px', fontSize: '11px', color: '#a5b4fc' }}>
+                  <span>{post.contentType === 'slideshow' ? '🖼️' : '🎥'}</span>
+                  <span style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.contentName}</span>
+                  <span style={{ color: '#6b7280', fontSize: '10px' }}>
+                    {post.status === 'scheduled' && post.scheduledTime ? new Date(post.scheduledTime).toLocaleDateString() : post.status}
+                  </span>
+                  <button
+                    onClick={async () => {
+                      if (confirm('Remove from schedule?')) {
+                        await deleteScheduledPost(db, artistId, post.id);
+                        setScheduledPosts(prev => prev.filter(p => p.id !== post.id));
+                        toastSuccess('Removed from schedule');
+                      }
+                    }}
+                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '12px', padding: '0 2px' }}
+                    title="Unschedule"
+                  >×</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Content Grid */}
       <div style={styles.contentArea}>
@@ -329,6 +394,7 @@ const ContentLibrary = ({
                             contentName: item.name || item.title || 'Untitled Slideshow',
                             thumbnail: item.thumbnail || item.slides?.[0]?.backgroundImage || item.slides?.[0]?.imageUrl || null,
                             cloudUrl: null,
+                            collectionName: item.collectionName || item.collectionId || null,
                             editorState: item,
                             status: POST_STATUS.DRAFT
                           });
@@ -365,6 +431,7 @@ const ContentLibrary = ({
                             contentName: item.name || item.title || 'Untitled Video',
                             thumbnail: item.thumbnail || null,
                             cloudUrl: item.cloudUrl || null,
+                            collectionName: item.collectionName || item.collectionId || null,
                             editorState: item,
                             status: POST_STATUS.DRAFT
                           });
@@ -1528,7 +1595,7 @@ const styles = {
   emptyText: { fontSize: '14px', color: '#6b7280', margin: '0 0 24px 0' },
   emptyButton: { padding: '12px 24px', backgroundColor: '#7c3aed', border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '500' },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' },
-  videoCard: { position: 'relative', backgroundColor: '#111118', borderRadius: '12px', overflow: 'hidden', border: '2px solid transparent' },
+  videoCard: { position: 'relative', backgroundColor: '#111118', borderRadius: '12px', overflow: 'hidden', border: '2px solid transparent', userSelect: 'none' },
   videoCardSelected: { border: '2px solid #7c3aed', boxShadow: '0 0 0 2px rgba(124, 58, 237, 0.3)' },
   videoCheckbox: { position: 'absolute', top: '12px', left: '12px', zIndex: 10 },
   checkbox: { width: '18px', height: '18px', accentColor: '#7c3aed', cursor: 'pointer' },

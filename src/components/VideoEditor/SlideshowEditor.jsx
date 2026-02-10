@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
-import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, getLyrics, MEDIA_TYPES, addToTextBank, assignToBank, saveCollectionToFirestore } from '../../services/libraryService';
+import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, getLyrics, MEDIA_TYPES, addToTextBank, removeFromTextBank, assignToBank, saveCollectionToFirestore } from '../../services/libraryService';
 import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
 import LyricBank from './LyricBank';
@@ -125,6 +125,8 @@ const SlideshowEditor = ({
   // Text bank input state
   const [newTextA, setNewTextA] = useState('');
   const [newTextB, setNewTextB] = useState('');
+  const [newTextC, setNewTextC] = useState('');
+  const [newTextD, setNewTextD] = useState('');
 
   // Add text to a text bank and update local collections state
   const handleAddToTextBank = useCallback((bankNum, text) => {
@@ -135,6 +137,18 @@ const SlideshowEditor = ({
     setCollections(prev => prev.map(col =>
       col.id === targetCol.id
         ? { ...col, [`textBank${bankNum}`]: [...(col[`textBank${bankNum}`] || []), text.trim()] }
+        : col
+    ));
+  }, [artistId, collections]);
+
+  // Delete text from a text bank
+  const handleRemoveFromTextBank = useCallback((bankNum, index) => {
+    if (!artistId || collections.length === 0) return;
+    const targetCol = collections[0];
+    removeFromTextBank(artistId, targetCol.id, bankNum, index);
+    setCollections(prev => prev.map(col =>
+      col.id === targetCol.id
+        ? { ...col, [`textBank${bankNum}`]: (col[`textBank${bankNum}`] || []).filter((_, i) => i !== index) }
         : col
     ));
   }, [artistId, collections]);
@@ -159,7 +173,9 @@ const SlideshowEditor = ({
 
   // Text overlay drag state
   const [draggingTextId, setDraggingTextId] = useState(null);
+  const [resizingTextId, setResizingTextId] = useState(null);
   const dragStartRef = useRef(null); // { mouseX, mouseY, startPosX, startPosY }
+  const resizeStartRef = useRef(null); // { mouseX, startWidth }
 
   // AI Transcription state
   const [showLyricAnalyzer, setShowLyricAnalyzer] = useState(false);
@@ -284,7 +300,7 @@ const SlideshowEditor = ({
       return;
     }
     // Don't flood history during drag operations — snapshot pushed on release
-    if (draggingTextId || isDraggingImage || isResizingImage) return;
+    if (draggingTextId || resizingTextId || isDraggingImage || isResizingImage) return;
     if (slides.length > 0) {
       clearTimeout(historyTimerRef.current);
       historyTimerRef.current = setTimeout(() => {
@@ -292,7 +308,7 @@ const SlideshowEditor = ({
       }, 500);
     }
     return () => clearTimeout(historyTimerRef.current);
-  }, [slides, pushHistory, draggingTextId, isDraggingImage, isResizingImage]);
+  }, [slides, pushHistory, draggingTextId, resizingTextId, isDraggingImage, isResizingImage]);
 
   const handleUndo = useCallback(() => {
     if (historyIndexRef.current <= 0) return;
@@ -315,8 +331,14 @@ const SlideshowEditor = ({
   }, [setSlides]);
 
   // Keyboard shortcut: Cmd+Z / Ctrl+Z for undo, Cmd+Shift+Z / Ctrl+Shift+Z for redo
+  // Skip if user is editing text overlays or typing in an input/textarea
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Don't steal undo/redo from text inputs
+      if (editingTextId) return;
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
         e.preventDefault();
         if (e.shiftKey) {
@@ -328,7 +350,7 @@ const SlideshowEditor = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo]);
+  }, [handleUndo, handleRedo, editingTextId]);
 
   // Image drag/resize continued state
   const [imgDragStart, setImgDragStart] = useState({ x: 0, y: 0 });
@@ -359,6 +381,8 @@ const SlideshowEditor = ({
   // Get content from category's banks (separate from video banks)
   const imagesA = category?.imagesA || [];
   const imagesB = category?.imagesB || [];
+  const imagesC = category?.imagesC || [];
+  const imagesD = category?.imagesD || [];
   // Lyrics: merge category lyrics with library lyrics (for StudioHome/library mode)
   // Filter to only show lyrics tagged to the active collection
   const [libraryLyrics, setLibraryLyrics] = useState([]);
@@ -469,7 +493,7 @@ const SlideshowEditor = ({
   }, [db, artistId]);
 
   // Compute active images based on selected source
-  // Supports: 'bankA', 'bankB', 'all', collectionId, 'collectionId:bankA', 'collectionId:bankB'
+  // Supports: 'bankA', 'bankB', 'bankC', 'bankD', 'all', collectionId, 'collectionId:bankA', 'collectionId:bankB', 'collectionId:bankC', 'collectionId:bankD'
   // When category banks are empty, aggregates from all collection banks
   const activeImages = (() => {
     if (selectedSource === 'bankA') {
@@ -488,12 +512,28 @@ const SlideshowEditor = ({
       if (allBankBIds.size > 0) return libraryImages.filter(img => allBankBIds.has(img.id));
       return imagesB;
     }
-    // Collection bank source — format: "collectionId:bankA" or "collectionId:bankB"
+    if (selectedSource === 'bankC') {
+      // Use category bank first; if empty, aggregate from all collection bankC
+      if (imagesC.length > 0) return imagesC;
+      const allBankCIds = new Set();
+      collections.forEach(col => (col.bankC || []).forEach(id => allBankCIds.add(id)));
+      if (allBankCIds.size > 0) return libraryImages.filter(img => allBankCIds.has(img.id));
+      return imagesC;
+    }
+    if (selectedSource === 'bankD') {
+      // Use category bank first; if empty, aggregate from all collection bankD
+      if (imagesD.length > 0) return imagesD;
+      const allBankDIds = new Set();
+      collections.forEach(col => (col.bankD || []).forEach(id => allBankDIds.add(id)));
+      if (allBankDIds.size > 0) return libraryImages.filter(img => allBankDIds.has(img.id));
+      return imagesD;
+    }
+    // Collection bank source — format: "collectionId:bankA", "collectionId:bankB", "collectionId:bankC", or "collectionId:bankD"
     if (selectedSource.includes(':bank')) {
       const [colId, bankKey] = selectedSource.split(':');
       const col = collections.find(c => c.id === colId);
       if (col) {
-        const bankIds = bankKey === 'bankA' ? (col.bankA || []) : (col.bankB || []);
+        const bankIds = col[bankKey] || [];
         return libraryImages.filter(img => bankIds.includes(img.id));
       }
     }
@@ -826,11 +866,15 @@ const SlideshowEditor = ({
   const getTextBanks = useCallback(() => {
     let textBank1 = [];
     let textBank2 = [];
+    let textBank3 = [];
+    let textBank4 = [];
     for (const col of collections) {
       if (col.textBank1?.length > 0) textBank1 = [...textBank1, ...col.textBank1];
       if (col.textBank2?.length > 0) textBank2 = [...textBank2, ...col.textBank2];
+      if (col.textBank3?.length > 0) textBank3 = [...textBank3, ...col.textBank3];
+      if (col.textBank4?.length > 0) textBank4 = [...textBank4, ...col.textBank4];
     }
-    return { textBank1, textBank2 };
+    return { textBank1, textBank2, textBank3, textBank4 };
   }, [collections]);
 
   // Re-roll text: Replace text overlays with random text from banks
@@ -1405,6 +1449,43 @@ const SlideshowEditor = ({
     };
   }, [draggingTextId, selectedSlideIndex]);
 
+  // Text overlay resize handler (corner handle drag)
+  useEffect(() => {
+    if (!resizingTextId) return;
+
+    const handleMouseMove = (e) => {
+      if (!resizeStartRef.current || !previewRef.current) return;
+      const rect = previewRef.current.getBoundingClientRect();
+      const dx = e.clientX - resizeStartRef.current.mouseX;
+      const newWidth = Math.max(15, Math.min(100, resizeStartRef.current.startWidth + (dx / rect.width) * 100));
+
+      setSlides(prev => prev.map((slide, idx) => {
+        if (idx !== selectedSlideIndex) return slide;
+        return {
+          ...slide,
+          textOverlays: (slide.textOverlays || []).map(o =>
+            o.id === resizingTextId
+              ? { ...o, position: { ...o.position, width: newWidth } }
+              : o
+          )
+        };
+      }));
+    };
+
+    const handleMouseUp = () => {
+      setResizingTextId(null);
+      resizeStartRef.current = null;
+      pushHistory(slides);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizingTextId, selectedSlideIndex]);
+
   // State for showing "save to bank" option after transcription
   const [transcribedLyrics, setTranscribedLyrics] = useState(null);
 
@@ -1526,6 +1607,37 @@ const SlideshowEditor = ({
     }
     onClose?.();
   }, [allSlideshows, aspectRatio, existingSlideshow, onSave, onClose]);
+
+  // Apply template text styles to ALL generated slideshows (retroactive)
+  const handleApplyTemplateToAll = useCallback(() => {
+    if (allSlideshows.length <= 1) return;
+    const template = allSlideshows[0];
+    if (!template?.slides?.length) return;
+
+    // Extract text styles from template slides
+    const templateStyles = template.slides.map(slide =>
+      (slide.textOverlays || []).map(o => ({ ...o.style }))
+    );
+
+    setAllSlideshows(prev => prev.map((ss, ssIdx) => {
+      if (ssIdx === 0) return ss; // Skip template itself
+      return {
+        ...ss,
+        slides: ss.slides.map((slide, slideIdx) => {
+          const tStyles = templateStyles[slideIdx % templateStyles.length] || [];
+          return {
+            ...slide,
+            textOverlays: (slide.textOverlays || []).map((overlay, oIdx) => {
+              const tStyle = tStyles[oIdx % Math.max(tStyles.length, 1)];
+              if (!tStyle) return overlay;
+              return { ...overlay, style: { ...overlay.style, ...tStyle } };
+            })
+          };
+        })
+      };
+    }));
+    toastSuccess(`Applied template styles to ${allSlideshows.length - 1} slideshows`);
+  }, [allSlideshows, toastSuccess]);
 
   // Switch active slideshow (timeline)
   const switchToSlideshow = useCallback((index) => {
@@ -2057,13 +2169,31 @@ const SlideshowEditor = ({
               >
                 <option value="bankA">Image Bank A (Category)</option>
                 <option value="bankB">Image Bank B (Category)</option>
+                {(() => {
+                  const hasCOrD = collections.some(c => (c.bankC?.length > 0 || c.bankD?.length > 0));
+                  if (hasCOrD) {
+                    return (
+                      <>
+                        <option value="bankC">Image Bank C (Category)</option>
+                        <option value="bankD">Image Bank D (Category)</option>
+                      </>
+                    );
+                  }
+                  return null;
+                })()}
                 {collections.filter(c => c.type !== 'smart').map(c => {
-                  const hasBanks = (c.bankA?.length > 0 || c.bankB?.length > 0);
+                  const hasBanks = (c.bankA?.length > 0 || c.bankB?.length > 0 || c.bankC?.length > 0 || c.bankD?.length > 0);
                   if (!hasBanks) return null;
                   return (
                     <React.Fragment key={c.id}>
                       <option value={`${c.id}:bankA`}>{c.name} → Slide 1 ({c.bankA?.length || 0})</option>
                       <option value={`${c.id}:bankB`}>{c.name} → Slide 2 ({c.bankB?.length || 0})</option>
+                      {(c.bankC?.length > 0 || c.bankD?.length > 0) && (
+                        <>
+                          <option value={`${c.id}:bankC`}>{c.name} → Slide 3 ({c.bankC?.length || 0})</option>
+                          <option value={`${c.id}:bankD`}>{c.name} → Slide 4 ({c.bankD?.length || 0})</option>
+                        </>
+                      )}
                     </React.Fragment>
                   );
                 })}
@@ -2200,14 +2330,154 @@ const SlideshowEditor = ({
                 </div>
               </div>
 
+              {(() => {
+                const hasCOrD = collections.some(c => (c.bankC?.length > 0 || c.bankD?.length > 0));
+                if (!hasCOrD) return null;
+                return (
+                  <>
+                    {/* Column C: Image C — drop zone */}
+                    <div
+                      style={{
+                        flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden',
+                        border: dragOverBankCol === 'C' ? '2px dashed rgba(192, 132, 252, 0.6)' : undefined,
+                        backgroundColor: dragOverBankCol === 'C' ? 'rgba(192, 132, 252, 0.05)' : undefined,
+                        transition: 'all 0.15s ease'
+                      }}
+                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBankCol('C'); }}
+                      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverBankCol(null); }}
+                      onDrop={(e) => handleDropOnBankColumn(e, 'C')}
+                    >
+                      <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: '#d8b4fe', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(192,132,252,0.08)', textAlign: 'center' }}>
+                        Slide 3 Photos
+                      </div>
+                      <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
+                        {(() => {
+                          const bankCImages = (() => {
+                            const col = collections.find(c => c.id === (typeof selectedSource === 'string' && selectedSource.includes(':') ? selectedSource.split(':')[0] : selectedSource));
+                            if (col?.bankC?.length > 0) {
+                              return libraryImages.filter(item => col.bankC.includes(item.id));
+                            }
+                            return imagesC;
+                          })();
+                          return bankCImages.length === 0 ? (
+                            <div style={{ fontSize: '11px', color: '#6b7280', padding: '16px 8px', textAlign: 'center' }}>
+                              No images in Slide 3
+                              {onImportToBank && (
+                                <button
+                                  style={{ marginTop: '8px', padding: '6px 12px', borderRadius: '6px', border: '1px solid rgba(192,132,252,0.3)', backgroundColor: 'rgba(192,132,252,0.1)', color: '#d8b4fe', fontSize: '11px', cursor: 'pointer', display: 'block', width: '100%' }}
+                                  onClick={() => importImageBRef.current?.click()}
+                                >
+                                  + Import
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px' }}>
+                              {bankCImages.map(image => {
+                                const isSel = selectedBankImages.has(image.id);
+                                return (
+                                  <div key={image.id} style={{ ...styles.clipCard, border: isSel ? '1px solid rgba(192,132,252,0.5)' : '1px solid transparent', position: 'relative' }}
+                                    draggable
+                                    onClick={(e) => {
+                                      if (e.metaKey || e.ctrlKey) {
+                                        setSelectedBankImages(prev => { const next = new Set(prev); if (next.has(image.id)) next.delete(image.id); else next.add(image.id); return next; });
+                                      } else {
+                                        setSelectedBankImages(prev => prev.size === 1 && prev.has(image.id) ? new Set() : new Set([image.id]));
+                                      }
+                                      setActiveBank('imageC');
+                                    }}
+                                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ ...image, url: image.url || image.localUrl, thumbnail: image.url || image.localUrl, sourceBank: 'imageC' })); }}
+                                  >
+                                    {isSel && <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(192,132,252,0.2)', zIndex: 1, pointerEvents: 'none', borderRadius: '6px' }}><div style={{ position: 'absolute', bottom: 3, right: 3, width: '14px', height: '14px', backgroundColor: '#c084fc', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', color: '#fff', fontWeight: 'bold' }}>✓</div></div>}
+                                    <img src={image.thumbnailUrl || image.url || image.localUrl} alt={image.name} style={styles.clipThumbnail} loading="lazy" />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* Column D: Image D — drop zone */}
+                    <div
+                      style={{
+                        flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden',
+                        border: dragOverBankCol === 'D' ? '2px dashed rgba(251, 113, 133, 0.6)' : undefined,
+                        backgroundColor: dragOverBankCol === 'D' ? 'rgba(251, 113, 133, 0.05)' : undefined,
+                        transition: 'all 0.15s ease'
+                      }}
+                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBankCol('D'); }}
+                      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverBankCol(null); }}
+                      onDrop={(e) => handleDropOnBankColumn(e, 'D')}
+                    >
+                      <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: '#fb9cc6', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(251,113,133,0.08)', textAlign: 'center' }}>
+                        Slide 4 Photos
+                      </div>
+                      <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
+                        {(() => {
+                          const bankDImages = (() => {
+                            const col = collections.find(c => c.id === (typeof selectedSource === 'string' && selectedSource.includes(':') ? selectedSource.split(':')[0] : selectedSource));
+                            if (col?.bankD?.length > 0) {
+                              return libraryImages.filter(item => col.bankD.includes(item.id));
+                            }
+                            return imagesD;
+                          })();
+                          return bankDImages.length === 0 ? (
+                            <div style={{ fontSize: '11px', color: '#6b7280', padding: '16px 8px', textAlign: 'center' }}>
+                              No images in Slide 4
+                              {onImportToBank && (
+                                <button
+                                  style={{ marginTop: '8px', padding: '6px 12px', borderRadius: '6px', border: '1px solid rgba(251,113,133,0.3)', backgroundColor: 'rgba(251,113,133,0.1)', color: '#fb9cc6', fontSize: '11px', cursor: 'pointer', display: 'block', width: '100%' }}
+                                  onClick={() => importImageBRef.current?.click()}
+                                >
+                                  + Import
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px' }}>
+                              {bankDImages.map(image => {
+                                const isSel = selectedBankImages.has(image.id);
+                                return (
+                                  <div key={image.id} style={{ ...styles.clipCard, border: isSel ? '1px solid rgba(251,113,133,0.5)' : '1px solid transparent', position: 'relative' }}
+                                    draggable
+                                    onClick={(e) => {
+                                      if (e.metaKey || e.ctrlKey) {
+                                        setSelectedBankImages(prev => { const next = new Set(prev); if (next.has(image.id)) next.delete(image.id); else next.add(image.id); return next; });
+                                      } else {
+                                        setSelectedBankImages(prev => prev.size === 1 && prev.has(image.id) ? new Set() : new Set([image.id]));
+                                      }
+                                      setActiveBank('imageD');
+                                    }}
+                                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ ...image, url: image.url || image.localUrl, thumbnail: image.url || image.localUrl, sourceBank: 'imageD' })); }}
+                                  >
+                                    {isSel && <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(251,113,133,0.2)', zIndex: 1, pointerEvents: 'none', borderRadius: '6px' }}><div style={{ position: 'absolute', bottom: 3, right: 3, width: '14px', height: '14px', backgroundColor: '#fb7185', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', color: '#fff', fontWeight: 'bold' }}>✓</div></div>}
+                                    <img src={image.thumbnailUrl || image.url || image.localUrl} alt={image.name} style={styles.clipThumbnail} loading="lazy" />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+
               {/* Column 3: Text Banks + Audio */}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: '#f9a8d4', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(236,72,153,0.08)', textAlign: 'center' }}>
                   Text Banks
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
-                  {/* Text Bank A */}
-                  <div style={{ marginBottom: '12px' }}>
+                  {/* Text Bank A — drop lyrics here */}
+                  <div style={{ marginBottom: '12px' }}
+                    onDragOver={(e) => { if (e.dataTransfer.types.includes('text/lyric')) { e.preventDefault(); e.currentTarget.style.outline = '1px dashed #f9a8d4'; } }}
+                    onDragLeave={(e) => { e.currentTarget.style.outline = 'none'; }}
+                    onDrop={(e) => { e.preventDefault(); e.currentTarget.style.outline = 'none'; const text = e.dataTransfer.getData('text/lyric'); if (text) handleAddToTextBank(1, text); }}
+                  >
                     <div style={{ fontSize: '11px', fontWeight: '600', color: '#f9a8d4', marginBottom: '6px' }}>
                       Slide 1 Text
                     </div>
@@ -2223,13 +2493,17 @@ const SlideshowEditor = ({
                       return textBank1.length > 0 ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                           {textBank1.map((text, i) => (
-                            <div key={i} onClick={() => {
-                              if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
-                                const newOverlay = { id: `text_${Date.now()}_${i}`, text, style: getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
-                                setSlides(prev => prev.map((slide, idx) => idx === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
-                                setEditingTextId(newOverlay.id);
-                              }
-                            }} style={{ padding: '6px 8px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px', color: '#d1d5db', fontSize: '11px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word' }} title="Click to add as overlay">{text}</div>
+                            <div key={i} style={{ display: 'flex', alignItems: 'stretch', gap: '2px' }}>
+                              <div onClick={() => {
+                                if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
+                                  const newOverlay = { id: `text_${Date.now()}_${i}`, text, style: getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
+                                  setSlides(prev => prev.map((slide, idx) => idx === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
+                                  setEditingTextId(newOverlay.id);
+                                }
+                              }} style={{ flex: 1, padding: '6px 8px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px 0 0 5px', color: '#d1d5db', fontSize: '11px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word' }} title="Click to add as overlay">{text}</div>
+                              <button onClick={(e) => { e.stopPropagation(); handleRemoveFromTextBank(1, i); }}
+                                style={{ padding: '0 6px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.2)', borderLeft: 'none', borderRadius: '0 5px 5px 0', color: '#ef4444', fontSize: '10px', cursor: 'pointer', flexShrink: 0 }} title="Remove">×</button>
+                            </div>
                           ))}
                         </div>
                       ) : <div style={{ fontSize: '10px', color: '#6b7280', padding: '6px', textAlign: 'center' }}>No text yet</div>;
@@ -2238,8 +2512,12 @@ const SlideshowEditor = ({
 
                   <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: '12px' }} />
 
-                  {/* Text Bank B */}
-                  <div style={{ marginBottom: '12px' }}>
+                  {/* Text Bank B — drop lyrics here */}
+                  <div style={{ marginBottom: '12px' }}
+                    onDragOver={(e) => { if (e.dataTransfer.types.includes('text/lyric')) { e.preventDefault(); e.currentTarget.style.outline = '1px dashed #a5b4fc'; } }}
+                    onDragLeave={(e) => { e.currentTarget.style.outline = 'none'; }}
+                    onDrop={(e) => { e.preventDefault(); e.currentTarget.style.outline = 'none'; const text = e.dataTransfer.getData('text/lyric'); if (text) handleAddToTextBank(2, text); }}
+                  >
                     <div style={{ fontSize: '11px', fontWeight: '600', color: '#a5b4fc', marginBottom: '6px' }}>
                       Slide 2 Text
                     </div>
@@ -2255,20 +2533,102 @@ const SlideshowEditor = ({
                       return textBank2.length > 0 ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                           {textBank2.map((text, i) => (
-                            <div key={i} onClick={() => {
-                              if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
-                                const newOverlay = { id: `text_${Date.now()}_${i}`, text, style: getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
-                                setSlides(prev => prev.map((slide, idx) => idx === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
-                                setEditingTextId(newOverlay.id);
-                              }
-                            }} style={{ padding: '6px 8px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px', color: '#d1d5db', fontSize: '11px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word' }} title="Click to add as overlay">{text}</div>
+                            <div key={i} style={{ display: 'flex', alignItems: 'stretch', gap: '2px' }}>
+                              <div onClick={() => {
+                                if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
+                                  const newOverlay = { id: `text_${Date.now()}_${i}`, text, style: getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
+                                  setSlides(prev => prev.map((slide, idx) => idx === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
+                                  setEditingTextId(newOverlay.id);
+                                }
+                              }} style={{ flex: 1, padding: '6px 8px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px 0 0 5px', color: '#d1d5db', fontSize: '11px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word' }} title="Click to add as overlay">{text}</div>
+                              <button onClick={(e) => { e.stopPropagation(); handleRemoveFromTextBank(2, i); }}
+                                style={{ padding: '0 6px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.2)', borderLeft: 'none', borderRadius: '0 5px 5px 0', color: '#ef4444', fontSize: '10px', cursor: 'pointer', flexShrink: 0 }} title="Remove">×</button>
+                            </div>
                           ))}
                         </div>
                       ) : <div style={{ fontSize: '10px', color: '#6b7280', padding: '6px', textAlign: 'center' }}>No text yet</div>;
                     })()}
                   </div>
 
+                  <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: '12px' }} />
 
+                  {/* Text Bank C — drop lyrics here */}
+                  <div style={{ marginBottom: '12px' }}
+                    onDragOver={(e) => { if (e.dataTransfer.types.includes('text/lyric')) { e.preventDefault(); e.currentTarget.style.outline = '1px dashed #c084fc'; } }}
+                    onDragLeave={(e) => { e.currentTarget.style.outline = 'none'; }}
+                    onDrop={(e) => { e.preventDefault(); e.currentTarget.style.outline = 'none'; const text = e.dataTransfer.getData('text/lyric'); if (text) handleAddToTextBank(3, text); }}
+                  >
+                    <div style={{ fontSize: '11px', fontWeight: '600', color: '#c084fc', marginBottom: '6px' }}>
+                      Slide 3 Text
+                    </div>
+                    <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
+                      <input type="text" value={newTextC} onChange={(e) => setNewTextC(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && newTextC.trim()) { handleAddToTextBank(3, newTextC); setNewTextC(''); } }}
+                        placeholder="Add text..." style={{ flex: 1, padding: '5px 7px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '11px', outline: 'none' }} />
+                      <button onClick={() => { if (newTextC.trim()) { handleAddToTextBank(3, newTextC); setNewTextC(''); } }} disabled={!newTextC.trim()}
+                        style={{ padding: '5px 8px', borderRadius: '5px', border: 'none', backgroundColor: newTextC.trim() ? 'rgba(192,132,252,0.3)' : 'rgba(255,255,255,0.05)', color: newTextC.trim() ? '#c084fc' : '#4b5563', fontSize: '11px', cursor: newTextC.trim() ? 'pointer' : 'default' }}>+</button>
+                    </div>
+                    {(() => {
+                      const { textBank3 } = getTextBanks();
+                      return textBank3.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          {textBank3.map((text, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'stretch', gap: '2px' }}>
+                              <div onClick={() => {
+                                if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
+                                  const newOverlay = { id: `text_${Date.now()}_${i}`, text, style: getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
+                                  setSlides(prev => prev.map((slide, idx) => idx === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
+                                  setEditingTextId(newOverlay.id);
+                                }
+                              }} style={{ flex: 1, padding: '6px 8px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px 0 0 5px', color: '#d1d5db', fontSize: '11px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word' }} title="Click to add as overlay">{text}</div>
+                              <button onClick={(e) => { e.stopPropagation(); handleRemoveFromTextBank(3, i); }}
+                                style={{ padding: '0 6px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.2)', borderLeft: 'none', borderRadius: '0 5px 5px 0', color: '#ef4444', fontSize: '10px', cursor: 'pointer', flexShrink: 0 }} title="Remove">×</button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : <div style={{ fontSize: '10px', color: '#6b7280', padding: '6px', textAlign: 'center' }}>No text yet</div>;
+                    })()}
+                  </div>
+
+                  <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: '12px' }} />
+
+                  {/* Text Bank D — drop lyrics here */}
+                  <div style={{ marginBottom: '12px' }}
+                    onDragOver={(e) => { if (e.dataTransfer.types.includes('text/lyric')) { e.preventDefault(); e.currentTarget.style.outline = '1px dashed #fb7185'; } }}
+                    onDragLeave={(e) => { e.currentTarget.style.outline = 'none'; }}
+                    onDrop={(e) => { e.preventDefault(); e.currentTarget.style.outline = 'none'; const text = e.dataTransfer.getData('text/lyric'); if (text) handleAddToTextBank(4, text); }}
+                  >
+                    <div style={{ fontSize: '11px', fontWeight: '600', color: '#fb7185', marginBottom: '6px' }}>
+                      Slide 4 Text
+                    </div>
+                    <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
+                      <input type="text" value={newTextD} onChange={(e) => setNewTextD(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && newTextD.trim()) { handleAddToTextBank(4, newTextD); setNewTextD(''); } }}
+                        placeholder="Add text..." style={{ flex: 1, padding: '5px 7px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '11px', outline: 'none' }} />
+                      <button onClick={() => { if (newTextD.trim()) { handleAddToTextBank(4, newTextD); setNewTextD(''); } }} disabled={!newTextD.trim()}
+                        style={{ padding: '5px 8px', borderRadius: '5px', border: 'none', backgroundColor: newTextD.trim() ? 'rgba(251,113,133,0.3)' : 'rgba(255,255,255,0.05)', color: newTextD.trim() ? '#fb7185' : '#4b5563', fontSize: '11px', cursor: newTextD.trim() ? 'pointer' : 'default' }}>+</button>
+                    </div>
+                    {(() => {
+                      const { textBank4 } = getTextBanks();
+                      return textBank4.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          {textBank4.map((text, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'stretch', gap: '2px' }}>
+                              <div onClick={() => {
+                                if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
+                                  const newOverlay = { id: `text_${Date.now()}_${i}`, text, style: getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
+                                  setSlides(prev => prev.map((slide, idx) => idx === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
+                                  setEditingTextId(newOverlay.id);
+                                }
+                              }} style={{ flex: 1, padding: '6px 8px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px 0 0 5px', color: '#d1d5db', fontSize: '11px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word' }} title="Click to add as overlay">{text}</div>
+                              <button onClick={(e) => { e.stopPropagation(); handleRemoveFromTextBank(4, i); }}
+                                style={{ padding: '0 6px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.2)', borderLeft: 'none', borderRadius: '0 5px 5px 0', color: '#ef4444', fontSize: '10px', cursor: 'pointer', flexShrink: 0 }} title="Remove">×</button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : <div style={{ fontSize: '10px', color: '#6b7280', padding: '6px', textAlign: 'center' }}>No text yet</div>;
+                    })()}
+                  </div>
 
                 </div>
               </div>
@@ -2697,6 +3057,8 @@ const SlideshowEditor = ({
                         fontWeight: overlay.style.fontWeight,
                         color: overlay.style.color,
                         textAlign: overlay.style.textAlign,
+                        textTransform: overlay.style.textTransform || 'none',
+                        WebkitTextStroke: overlay.style.textStroke || 'none',
                         textShadow: overlay.style.outline
                           ? `0 0 ${4 * previewScale}px ${overlay.style.outlineColor}`
                           : 'none',
@@ -2718,12 +3080,32 @@ const SlideshowEditor = ({
                     >
                       {overlay.text}
                       {isSelected && (
-                        <div style={{
-                          position: 'absolute', top: '-14px', left: '50%', transform: 'translateX(-50%)',
-                          fontSize: '8px', color: 'rgba(163,180,252,0.9)', whiteSpace: 'nowrap',
-                          backgroundColor: 'rgba(30,30,40,0.85)', padding: '1px 5px', borderRadius: '3px',
-                          pointerEvents: 'none'
-                        }}>drag to move</div>
+                        <>
+                          <div style={{
+                            position: 'absolute', top: '-14px', left: '50%', transform: 'translateX(-50%)',
+                            fontSize: '8px', color: 'rgba(163,180,252,0.9)', whiteSpace: 'nowrap',
+                            backgroundColor: 'rgba(30,30,40,0.85)', padding: '1px 5px', borderRadius: '3px',
+                            pointerEvents: 'none'
+                          }}>drag to move</div>
+                          {/* Right-edge resize handle */}
+                          <div
+                            style={{
+                              position: 'absolute', right: '-4px', top: '50%', transform: 'translateY(-50%)',
+                              width: '8px', height: '24px', backgroundColor: 'rgba(99,102,241,0.8)',
+                              borderRadius: '3px', cursor: 'ew-resize', zIndex: 5
+                            }}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setResizingTextId(overlay.id);
+                              resizeStartRef.current = {
+                                mouseX: e.clientX,
+                                startWidth: overlay.position.width || 80
+                              };
+                            }}
+                            title="Drag to resize width"
+                          />
+                        </>
                       )}
                     </div>
                   );
@@ -3032,6 +3414,11 @@ const SlideshowEditor = ({
                             lyrics.map((lyric) => (
                               <div
                                 key={lyric.id}
+                                draggable
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData('text/lyric', lyric.content || lyric.title || '');
+                                  e.dataTransfer.effectAllowed = 'copy';
+                                }}
                                 style={styles.lyricBankDropdownItem}
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -3267,6 +3654,20 @@ const SlideshowEditor = ({
                       title="Bold"
                     >B</button>
 
+                    {/* ALL CAPS toggle */}
+                    <button
+                      onClick={() => updateTextOverlay(selOverlay.id, {
+                        style: { ...selOverlay.style, textTransform: selOverlay.style.textTransform === 'uppercase' ? 'none' : 'uppercase' }
+                      })}
+                      style={{
+                        padding: '4px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
+                        backgroundColor: selOverlay.style.textTransform === 'uppercase' ? 'rgba(99,102,241,0.3)' : 'transparent',
+                        color: selOverlay.style.textTransform === 'uppercase' ? '#a5b4fc' : '#6b7280',
+                        fontSize: '10px', fontWeight: '700', letterSpacing: '1px'
+                      }}
+                      title="ALL CAPS"
+                    >AA</button>
+
                     {/* Outline toggle */}
                     <button
                       onClick={() => updateTextOverlay(selOverlay.id, {
@@ -3280,6 +3681,20 @@ const SlideshowEditor = ({
                       }}
                       title="Text shadow/outline"
                     >Sh</button>
+
+                    {/* Text stroke/border toggle */}
+                    <button
+                      onClick={() => updateTextOverlay(selOverlay.id, {
+                        style: { ...selOverlay.style, textStroke: selOverlay.style.textStroke ? '' : '1px black' }
+                      })}
+                      style={{
+                        padding: '4px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
+                        backgroundColor: selOverlay.style.textStroke ? 'rgba(99,102,241,0.3)' : 'transparent',
+                        color: selOverlay.style.textStroke ? '#a5b4fc' : '#6b7280',
+                        fontSize: '11px', fontWeight: '600'
+                      }}
+                      title="Text border/stroke"
+                    >St</button>
                   </div>
                 </div>
               );
@@ -3493,9 +3908,46 @@ const SlideshowEditor = ({
                     )}
                   </button>
                   {allSlideshows.length > 1 && (
-                    <span style={{ fontSize: '10px', color: '#6b7280', whiteSpace: 'nowrap' }}>
-                      {allSlideshows.length} total
-                    </span>
+                    <>
+                      <span style={{ fontSize: '10px', color: '#6b7280', whiteSpace: 'nowrap' }}>
+                        {allSlideshows.length} total
+                      </span>
+                      <button
+                        onClick={handleApplyTemplateToAll}
+                        title="Apply template text styles to all generated slideshows"
+                        style={{
+                          padding: '4px 8px',
+                          marginLeft: '8px',
+                          borderRadius: '4px',
+                          border: '1px solid #4b5563',
+                          background: '#1f2937',
+                          color: '#d1d5db',
+                          fontSize: '11px',
+                          fontWeight: '500',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          whiteSpace: 'nowrap'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.background = '#374151';
+                          e.target.style.borderColor = '#6b7280';
+                          e.target.style.color = '#f3f4f6';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.background = '#1f2937';
+                          e.target.style.borderColor = '#4b5563';
+                          e.target.style.color = '#d1d5db';
+                        }}
+                      >
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M7 12c0-1.657 1.343-3 3-3h4c1.657 0 3 1.343 3 3v4c0 1.657-1.343 3-3 3h-4c-1.657 0-3-1.343-3-3v-4zM3 3l9 9M15 21l-9-9"/>
+                        </svg>
+                        Apply Style
+                      </button>
+                    </>
                   )}
                   </>}
                 </div>
@@ -3759,28 +4211,9 @@ const SlideshowEditor = ({
               </div>
             </div>
 
-            {/* Caption */}
-            <div style={styles.scheduleField}>
-              <label style={styles.scheduleLabel}>Caption</label>
-              <textarea
-                value={caption}
-                onChange={(e) => setCaption(e.target.value)}
-                style={styles.scheduleCaptionInput}
-                placeholder="Write a caption..."
-                rows={2}
-              />
-            </div>
-
-            {/* Hashtags */}
-            <div style={styles.scheduleField}>
-              <label style={styles.scheduleLabel}>Hashtags</label>
-              <input
-                type="text"
-                value={hashtags}
-                onChange={(e) => setHashtags(e.target.value)}
-                style={styles.scheduleHashtagInput}
-                placeholder="#hashtag1 #hashtag2..."
-              />
+            {/* Caption & hashtags managed in Scheduler */}
+            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', padding: '4px 0', fontStyle: 'italic' }}>
+              Caption & hashtags can be added in the Scheduler
             </div>
 
             {/* Preview */}

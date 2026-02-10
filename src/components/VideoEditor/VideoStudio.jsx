@@ -37,7 +37,7 @@ import {
   STARTER_TEMPLATES
 } from '../../services/libraryService';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { updateScheduledPost } from '../../services/scheduledPostsService';
+import { updateScheduledPost, deletePostsByContentId } from '../../services/scheduledPostsService';
 import { VIDEO_STATUS } from '../../utils/status';
 import { useToast, ConfirmDialog } from '../ui';
 import log from '../../utils/logger';
@@ -1149,6 +1149,12 @@ const VideoStudio = ({
         if (video?.thumbnailPath) await deleteFile(video.thumbnailPath);
         deleteCreatedVideo(currentArtistId, videoId);
         setCreatedContentVersion(v => v + 1);
+        // Cascade: remove any scheduled posts referencing this draft
+        if (db && currentArtistId) {
+          deletePostsByContentId(db, currentArtistId, videoId).catch(err =>
+            console.warn('[VideoStudio] Cascade delete for video failed:', err)
+          );
+        }
       }
       return;
     }
@@ -1175,7 +1181,14 @@ const VideoStudio = ({
       ...prev,
       createdVideos: prev.createdVideos.filter(v => v.id !== videoId)
     } : prev);
-  }, [selectedCategory]);
+
+    // Cascade: remove any scheduled posts referencing this draft
+    if (db && currentArtistId) {
+      deletePostsByContentId(db, currentArtistId, videoId).catch(err =>
+        console.warn('[VideoStudio] Cascade delete for video failed:', err)
+      );
+    }
+  }, [selectedCategory, currentArtistId, db]);
 
   // Delete a video clip from the bank (source videos)
   const handleDeleteBankVideo = useCallback(async (videoId) => {
@@ -1646,6 +1659,12 @@ const VideoStudio = ({
           deleteCreatedSlideshowAsync(db, currentArtistId, slideshowId).catch(console.error);
         }
         setCreatedContentVersion(v => v + 1);
+        // Cascade: remove any scheduled posts referencing this draft
+        if (db && currentArtistId) {
+          deletePostsByContentId(db, currentArtistId, slideshowId).catch(err =>
+            console.warn('[VideoStudio] Cascade delete for slideshow failed:', err)
+          );
+        }
       }
       return;
     }
@@ -1661,7 +1680,14 @@ const VideoStudio = ({
       ...prev,
       slideshows: (prev.slideshows || []).filter(s => s.id !== slideshowId)
     } : prev);
-  }, [selectedCategory, currentArtistId]);
+
+    // Cascade: remove any scheduled posts referencing this draft
+    if (db && currentArtistId) {
+      deletePostsByContentId(db, currentArtistId, slideshowId).catch(err =>
+        console.warn('[VideoStudio] Cascade delete for slideshow failed:', err)
+      );
+    }
+  }, [selectedCategory, currentArtistId, db]);
 
   // ============================================
   // LYRIC BANK HANDLERS (shared between modes)

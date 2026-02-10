@@ -88,7 +88,7 @@ const StudioHome = ({
   const [activeTab, setActiveTab] = useState('media'); // kept for compat
   const [sidebarSection, setSidebarSection] = useState({ audio: true, lyrics: false, banks: false });
   const [selectedCollection, setSelectedCollection] = useState(null);
-  const [selectedBanks, setSelectedBanks] = useState({ bankA: true, bankB: true }); // Which banks feed into editor
+  const [selectedBanks, setSelectedBanks] = useState({ bankA: true, bankB: true, bankC: false, bankD: false }); // Which banks feed into editor
   // autoCollectionSet removed — we always default to All Media now
 
   // Library State
@@ -144,6 +144,8 @@ const StudioHome = ({
   const [editingAudio, setEditingAudio] = useState(null); // { id, name } - for inline editing audio bank items
   const [trimmingAudio, setTrimmingAudio] = useState(null); // library audio item being re-trimmed
   const [audioDropdownId, setAudioDropdownId] = useState(null); // which audio item has collection dropdown open
+  const [playingAudioId, setPlayingAudioId] = useState(null); // inline audio preview
+  const inlineAudioRef = useRef(null);
 
   // Selected media for editor
   const [selectedMedia, setSelectedMedia] = useState({
@@ -602,6 +604,34 @@ const StudioHome = ({
     e.target.value = '';
     handleFileUpload(files, MEDIA_TYPES.VIDEO);
   };
+
+  // Inline audio preview play/stop
+  const handleInlinePlay = useCallback((audioItem) => {
+    if (playingAudioId === audioItem.id) {
+      // Stop
+      if (inlineAudioRef.current) { inlineAudioRef.current.pause(); inlineAudioRef.current = null; }
+      setPlayingAudioId(null);
+      return;
+    }
+    // Stop any currently playing
+    if (inlineAudioRef.current) { inlineAudioRef.current.pause(); }
+    const el = new Audio(audioItem.url || audioItem.localUrl);
+    el.currentTime = audioItem.startTime || 0;
+    el.onended = () => setPlayingAudioId(null);
+    el.ontimeupdate = () => {
+      if (audioItem.endTime && el.currentTime >= audioItem.endTime) {
+        el.pause(); setPlayingAudioId(null);
+      }
+    };
+    el.play().catch(() => {});
+    inlineAudioRef.current = el;
+    setPlayingAudioId(audioItem.id);
+  }, [playingAudioId]);
+
+  // Cleanup inline audio on unmount
+  useEffect(() => {
+    return () => { if (inlineAudioRef.current) { inlineAudioRef.current.pause(); } };
+  }, []);
 
   const handleAudioUpload = (e) => {
     const files = e.target.files;
@@ -1891,12 +1921,23 @@ const StudioHome = ({
               {selectedCollection && (() => {
                 const col = collections.find(c => c.id === selectedCollection);
                 if (!col) return null;
-                const bankACount = (col.bankA || []).length;
-                const bankBCount = (col.bankB || []).length;
-                if (bankACount === 0 && bankBCount === 0) return null;
+                const bankCounts = {
+                  bankA: (col.bankA || []).length,
+                  bankB: (col.bankB || []).length,
+                  bankC: (col.bankC || []).length,
+                  bankD: (col.bankD || []).length
+                };
+                const totalBanked = bankCounts.bankA + bankCounts.bankB + bankCounts.bankC + bankCounts.bankD;
+                if (totalBanked === 0) return null;
+                const bankDefs = [
+                  { key: 'bankA', label: 'Bank A', color: '#14b8a6' },
+                  { key: 'bankB', label: 'Bank B', color: '#f59e0b' },
+                  { key: 'bankC', label: 'Bank C', color: '#a78bfa' },
+                  { key: 'bankD', label: 'Bank D', color: '#f472b6' }
+                ];
                 return (
                   <div style={{
-                    display: 'flex', alignItems: 'center', gap: '16px',
+                    display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap',
                     padding: '8px 12px', margin: '0 0 4px 0',
                     backgroundColor: 'rgba(255,255,255,0.03)',
                     borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)'
@@ -1904,32 +1945,25 @@ const StudioHome = ({
                     <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                       Pull from:
                     </span>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px', color: bankACount > 0 ? '#fff' : 'rgba(255,255,255,0.3)' }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedBanks.bankA}
-                        onChange={(e) => setSelectedBanks(prev => ({ ...prev, bankA: e.target.checked }))}
-                        disabled={bankACount === 0}
-                        style={{ accentColor: '#14b8a6', width: '16px', height: '16px', cursor: 'pointer' }}
-                      />
-                      <span style={{ color: '#14b8a6', fontWeight: 600 }}>Bank A</span>
-                      <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', backgroundColor: 'rgba(255,255,255,0.05)', padding: '1px 6px', borderRadius: '4px' }}>
-                        {bankACount}
-                      </span>
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px', color: bankBCount > 0 ? '#fff' : 'rgba(255,255,255,0.3)' }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedBanks.bankB}
-                        onChange={(e) => setSelectedBanks(prev => ({ ...prev, bankB: e.target.checked }))}
-                        disabled={bankBCount === 0}
-                        style={{ accentColor: '#f59e0b', width: '16px', height: '16px', cursor: 'pointer' }}
-                      />
-                      <span style={{ color: '#f59e0b', fontWeight: 600 }}>Bank B</span>
-                      <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', backgroundColor: 'rgba(255,255,255,0.05)', padding: '1px 6px', borderRadius: '4px' }}>
-                        {bankBCount}
-                      </span>
-                    </label>
+                    {bankDefs.map(({ key, label, color }) => {
+                      const count = bankCounts[key];
+                      if (count === 0 && key !== 'bankA' && key !== 'bankB') return null; // Only show C/D if they have items
+                      return (
+                        <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px', color: count > 0 ? '#fff' : 'rgba(255,255,255,0.3)' }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedBanks[key]}
+                            onChange={(e) => setSelectedBanks(prev => ({ ...prev, [key]: e.target.checked }))}
+                            disabled={count === 0}
+                            style={{ accentColor: color, width: '16px', height: '16px', cursor: 'pointer' }}
+                          />
+                          <span style={{ color, fontWeight: 600 }}>{label}</span>
+                          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', backgroundColor: 'rgba(255,255,255,0.05)', padding: '1px 6px', borderRadius: '4px' }}>
+                            {count}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
                 );
               })()}
@@ -2090,7 +2124,7 @@ const StudioHome = ({
               flex: 1,
               display: 'flex',
               flexDirection: 'column',
-              overflow: 'hidden',
+              minHeight: 0,
               borderRight: selectedCollection ? `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}` : 'none'
             }}>
               <div style={{
@@ -2333,6 +2367,19 @@ const StudioHome = ({
                           {isSelected && (
                             <span style={{ color: '#6366f1', fontSize: '12px', flexShrink: 0 }}>✓</span>
                           )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleInlinePlay(audio);
+                            }}
+                            style={{
+                              background: 'none', border: 'none',
+                              color: playingAudioId === audio.id ? '#10b981' : 'rgba(255,255,255,0.3)',
+                              cursor: 'pointer', fontSize: '10px', padding: '0 1px', flexShrink: 0,
+                              lineHeight: 1
+                            }}
+                            title={playingAudioId === audio.id ? 'Stop preview' : 'Preview audio'}
+                          >{playingAudioId === audio.id ? '⏹' : '▶'}</button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
