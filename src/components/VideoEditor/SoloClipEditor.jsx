@@ -5,6 +5,7 @@ import {
   addToLibraryAsync, MEDIA_TYPES
 } from '../../services/libraryService';
 import { useToast } from '../ui';
+import useIsMobile from '../../hooks/useIsMobile';
 import AudioClipSelector from './AudioClipSelector';
 import LyricBank from './LyricBank';
 import LyricAnalyzer from './LyricAnalyzer';
@@ -155,12 +156,10 @@ const SoloClipEditor = ({
   const [showTranscriber, setShowTranscriber] = useState(false);
 
   // ── Mobile detection ──
-  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  const { isMobile } = useIsMobile();
+
+  // ── Mobile tool tab state ──
+  const [mobileToolTab, setMobileToolTab] = useState(null); // 'clips' | 'text' | 'audio' | 'banks' | null
 
   // ── Library subscriptions ──
   useEffect(() => {
@@ -760,27 +759,50 @@ const SoloClipEditor = ({
 
   // ── RENDER ──
   return (
-    <div style={styles.overlay} onClick={(e) => e.target === e.currentTarget && handleCloseRequest()}>
-      <div style={styles.modal}>
+    <div style={{
+      ...styles.overlay,
+      ...(isMobile ? { padding: 0 } : {})
+    }} onClick={(e) => e.target === e.currentTarget && handleCloseRequest()}>
+      <div style={{
+        ...styles.modal,
+        ...(isMobile ? {
+          borderRadius: 0,
+          maxWidth: '100%',
+          height: '100vh',
+          width: '100vw',
+          border: 'none'
+        } : {})
+      }}>
 
         {/* ── Header ── */}
-        <div style={styles.header}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button onClick={handleCloseRequest} style={styles.backButton}>
+        <div style={{
+          ...styles.header,
+          ...(isMobile ? { padding: '8px 10px', gap: '6px' } : {})
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '12px', minWidth: 0 }}>
+            <button onClick={handleCloseRequest} style={{
+              ...styles.backButton,
+              ...(isMobile ? { minWidth: '44px', minHeight: '44px', justifyContent: 'center' } : {})
+            }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M19 12H5M12 19l-7-7 7-7" />
               </svg>
             </button>
-            <div>
-              <h2 style={styles.headerTitle}>Solo Clip Editor</h2>
-              <span style={styles.headerSubtitle}>
-                {allVideos.length === 1 ? 'Design your template' : `${allVideos.length} videos (1 template + ${allVideos.length - 1} generated)`}
-              </span>
+            <div style={{ minWidth: 0 }}>
+              <h2 style={{
+                ...styles.headerTitle,
+                ...(isMobile ? { fontSize: '13px' } : {})
+              }}>Solo Clip Editor</h2>
+              {!isMobile && (
+                <span style={styles.headerSubtitle}>
+                  {allVideos.length === 1 ? 'Design your template' : `${allVideos.length} videos (1 template + ${allVideos.length - 1} generated)`}
+                </span>
+              )}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {/* Aspect ratio toggles */}
-            {['9:16', '1:1', '4:3'].map(ratio => (
+          <div style={{ display: 'flex', gap: isMobile ? '4px' : '8px', alignItems: 'center', flexShrink: 0 }}>
+            {/* Aspect ratio toggles — hide on mobile */}
+            {!isMobile && ['9:16', '1:1', '4:3'].map(ratio => (
               <button
                 key={ratio}
                 onClick={() => setAspectRatio(ratio)}
@@ -792,19 +814,30 @@ const SoloClipEditor = ({
                 {ratio}
               </button>
             ))}
-            <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />
+            {!isMobile && (
+              <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />
+            )}
             {/* Save Draft */}
-            <button onClick={handleSaveDraft} style={styles.saveDraftButton}>
-              Save Draft
+            <button onClick={handleSaveDraft} style={{
+              ...styles.saveDraftButton,
+              ...(isMobile ? { minWidth: '44px', minHeight: '44px', padding: '6px 10px', fontSize: '11px' } : {})
+            }}>
+              {isMobile ? 'Save' : 'Save Draft'}
             </button>
             {/* Save All */}
             {allVideos.length > 1 && (
-              <button onClick={handleSaveAllAndClose} style={styles.saveAllButton}>
-                Save All ({allVideos.length})
+              <button onClick={handleSaveAllAndClose} style={{
+                ...styles.saveAllButton,
+                ...(isMobile ? { minWidth: '44px', minHeight: '44px', padding: '6px 10px', fontSize: '11px' } : {})
+              }}>
+                {isMobile ? `All (${allVideos.length})` : `Save All (${allVideos.length})`}
               </button>
             )}
             {/* Close */}
-            <button onClick={handleCloseRequest} style={styles.closeButton}>
+            <button onClick={handleCloseRequest} style={{
+              ...styles.closeButton,
+              ...(isMobile ? { minWidth: '44px', minHeight: '44px', justifyContent: 'center' } : {})
+            }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -813,10 +846,14 @@ const SoloClipEditor = ({
           </div>
         </div>
 
-        {/* ── Main Content — 3 Columns ── */}
-        <div style={styles.mainContent}>
+        {/* ── Main Content — 3 Columns (desktop) / stacked (mobile) ── */}
+        <div style={{
+          ...styles.mainContent,
+          ...(isMobile ? { flexDirection: 'column', overflow: 'auto' } : {})
+        }}>
 
-          {/* ── LEFT PANEL: Clips + Generation ── */}
+          {/* ── LEFT PANEL: Clips + Generation (desktop only) ── */}
+          {!isMobile && (
           <div style={styles.leftPanel}>
             <div style={{ padding: '12px' }}>
               <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>Clips</div>
@@ -883,9 +920,13 @@ const SoloClipEditor = ({
               </div>
             </div>
           </div>
+          )}
 
           {/* ── CENTER: Video Preview ── */}
-          <div style={styles.previewArea}>
+          <div style={{
+            ...styles.previewArea,
+            ...(isMobile ? { padding: '8px', flexShrink: 0 } : {})
+          }}>
             <div
               ref={previewRef}
               style={{
@@ -979,8 +1020,14 @@ const SoloClipEditor = ({
             </div>
 
             {/* Playback Controls */}
-            <div style={styles.playbackControls}>
-              <button onClick={handlePlayPause} style={styles.playButton}>
+            <div style={{
+              ...styles.playbackControls,
+              ...(isMobile ? { maxWidth: '100%' } : {})
+            }}>
+              <button onClick={handlePlayPause} style={{
+                ...styles.playButton,
+                ...(isMobile ? { minWidth: '44px', minHeight: '44px', width: '44px', height: '44px' } : {})
+              }}>
                 {isPlaying ? (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                     <rect x="6" y="4" width="4" height="16" />
@@ -1008,7 +1055,10 @@ const SoloClipEditor = ({
                 {formatTime(currentTime)} / {formatTime(clipDuration)}
               </span>
 
-              <button onClick={() => setIsMuted(!isMuted)} style={styles.muteButton}>
+              <button onClick={() => setIsMuted(!isMuted)} style={{
+                ...styles.muteButton,
+                ...(isMobile ? { minWidth: '44px', minHeight: '44px', justifyContent: 'center' } : {})
+              }}>
                 {isMuted ? (
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" fill="currentColor" />
@@ -1025,7 +1075,472 @@ const SoloClipEditor = ({
             </div>
           </div>
 
-          {/* ── RIGHT PANEL: Text Overlays + Style + Video Text Banks ── */}
+          {/* ── MOBILE TOOL TOOLBAR ── */}
+          {isMobile && (
+            <div style={styles.mobileToolbar}>
+              {[
+                { id: 'clips', label: 'Clips', icon: '\uD83C\uDFAC' },
+                { id: 'text', label: 'Text', icon: '\uD83D\uDCDD' },
+                { id: 'audio', label: 'Audio', icon: '\uD83C\uDFB5' },
+                { id: 'banks', label: 'Banks', icon: '\uD83D\uDCE6' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setMobileToolTab(mobileToolTab === tab.id ? null : tab.id)}
+                  style={{
+                    ...styles.mobileToolbarTab,
+                    ...(mobileToolTab === tab.id ? styles.mobileToolbarTabActive : {})
+                  }}
+                >
+                  <span style={{ fontSize: '16px' }}>{tab.icon}</span>
+                  <span style={{ fontSize: '10px' }}>{tab.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* ── MOBILE TOOL PANEL (shown when a tool tab is active) ── */}
+          {isMobile && mobileToolTab && (
+            <div style={styles.mobileToolPanel}>
+              {/* Clips tab */}
+              {mobileToolTab === 'clips' && (
+                <div style={{ padding: '12px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>Clips</div>
+                  <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
+                    Tap to set as template clip
+                  </div>
+                  <div style={{ ...styles.clipGrid, gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                    {(category?.videos || []).map((v) => {
+                      const isActive = clip?.id === v.id;
+                      return (
+                        <div
+                          key={v.id}
+                          onClick={() => setClip(v)}
+                          style={{
+                            ...styles.clipThumb,
+                            ...(isActive ? styles.clipThumbActive : {}),
+                            minHeight: '44px'
+                          }}
+                        >
+                          {v.thumbnailUrl || v.thumbnail ? (
+                            <img src={v.thumbnailUrl || v.thumbnail} alt="" style={styles.clipThumbImg} />
+                          ) : (
+                            <div style={styles.clipThumbPlaceholder}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                <rect x="2" y="4" width="20" height="16" rx="2" />
+                                <path d="M10 9l5 3-5 3V9z" />
+                              </svg>
+                            </div>
+                          )}
+                          {isActive && (
+                            <div style={styles.clipThumbBadge}>Template</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Aspect ratio on mobile — moved here from header */}
+                  <div style={{ marginTop: '12px', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>Aspect Ratio</div>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {['9:16', '1:1', '4:3'].map(ratio => (
+                        <button
+                          key={ratio}
+                          onClick={() => setAspectRatio(ratio)}
+                          style={{
+                            ...styles.ratioButton,
+                            ...(aspectRatio === ratio ? styles.ratioButtonActive : {}),
+                            minWidth: '44px',
+                            minHeight: '44px'
+                          }}
+                        >
+                          {ratio}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Generation controls */}
+                  <div style={styles.generateSection}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '6px' }}>Generate Videos</div>
+                    <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
+                      {(category?.videos || []).length - 1} other clip{(category?.videos || []).length - 1 !== 1 ? 's' : ''} available
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <span style={{ fontSize: '12px', color: '#d1d5db' }}>Count:</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={Math.max(1, (category?.videos?.length || 1) - 1)}
+                        value={generateCount}
+                        onChange={(e) => setGenerateCount(Math.max(1, Math.min((category?.videos?.length || 1) - 1, parseInt(e.target.value) || 1)))}
+                        style={{ ...styles.generateInput, minHeight: '44px' }}
+                      />
+                      <button
+                        onClick={executeGeneration}
+                        disabled={isGenerating || textOverlays.length === 0}
+                        style={{
+                          ...styles.generateButton,
+                          minHeight: '44px',
+                          ...(isGenerating || textOverlays.length === 0 ? { opacity: 0.5, cursor: 'not-allowed' } : {})
+                        }}
+                      >
+                        {isGenerating ? 'Generating...' : 'Generate'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Text tab */}
+              {mobileToolTab === 'text' && (
+                <div style={{ padding: '0 0 12px 0' }}>
+                  <div style={styles.sectionHeader}>
+                    <span>Text Overlays</span>
+                    <span style={{ fontSize: '10px', color: '#6b7280' }}>{textOverlays.length}</span>
+                  </div>
+
+                  {textOverlays.length === 0 && (
+                    <div style={{ fontSize: '12px', color: '#6b7280', textAlign: 'center', padding: '16px 12px' }}>
+                      No text overlays yet. Add one to start designing.
+                    </div>
+                  )}
+
+                  {textOverlays.map((overlay, idx) => {
+                    const isSelected = editingTextId === overlay.id;
+                    return (
+                      <div
+                        key={overlay.id}
+                        onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
+                        style={{
+                          ...styles.overlayCard,
+                          ...(isSelected ? styles.overlayCardActive : {})
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 500 }}>
+                            Overlay {idx + 1}
+                            {overlay.startTime !== undefined && (
+                              <span style={{ marginLeft: '6px', fontSize: '9px', color: '#6b7280' }}>
+                                {overlay.startTime.toFixed(1)}s - {overlay.endTime.toFixed(1)}s
+                              </span>
+                            )}
+                          </span>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }}
+                            style={{ ...styles.removeOverlayButton, minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          >x</button>
+                        </div>
+                        {isSelected ? (
+                          <input
+                            value={editingTextValue}
+                            onChange={(e) => setEditingTextValue(e.target.value)}
+                            onBlur={() => updateTextOverlay(overlay.id, { text: editingTextValue })}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { updateTextOverlay(overlay.id, { text: editingTextValue }); e.target.blur(); } }}
+                            style={{ ...styles.textEditInput, minHeight: '44px' }}
+                            autoFocus
+                          />
+                        ) : (
+                          <div style={{ fontSize: '13px', color: '#e5e7eb' }}>{overlay.text}</div>
+                        )}
+                        {isSelected && (
+                          <div style={styles.styleControls}>
+                            <div style={styles.controlRow}>
+                              <span style={styles.controlLabel}>Font</span>
+                              <select
+                                value={overlay.style.fontFamily}
+                                onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, fontFamily: e.target.value } })}
+                                style={{ ...styles.selectInput, minHeight: '44px' }}
+                              >
+                                <option value="Inter, sans-serif">Sans</option>
+                                <option value="'Playfair Display', serif">Serif</option>
+                                <option value="'Space Grotesk', sans-serif">Grotesk</option>
+                                <option value="monospace">Mono</option>
+                              </select>
+                            </div>
+                            <div style={styles.controlRow}>
+                              <span style={styles.controlLabel}>Size</span>
+                              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                <button
+                                  style={{ ...styles.sizeButton, minWidth: '44px', minHeight: '44px' }}
+                                  onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.max(16, overlay.style.fontSize - 4) } }); }}
+                                >A-</button>
+                                <span style={{ fontSize: '11px', color: '#d1d5db', minWidth: '26px', textAlign: 'center' }}>{overlay.style.fontSize}</span>
+                                <button
+                                  style={{ ...styles.sizeButton, minWidth: '44px', minHeight: '44px' }}
+                                  onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.min(120, overlay.style.fontSize + 4) } }); }}
+                                >A+</button>
+                              </div>
+                            </div>
+                            <div style={styles.controlRow}>
+                              <span style={styles.controlLabel}>Color</span>
+                              <input
+                                type="color"
+                                value={overlay.style.color}
+                                onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, color: e.target.value } })}
+                                style={{ ...styles.colorInput, minWidth: '44px', minHeight: '44px' }}
+                              />
+                              <span style={{ ...styles.controlLabel, marginLeft: '8px' }}>Outline</span>
+                              <button
+                                style={{
+                                  ...styles.toggleButton,
+                                  ...(overlay.style.outline ? styles.toggleButtonActive : {}),
+                                  minWidth: '44px',
+                                  minHeight: '44px'
+                                }}
+                                onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, outline: !overlay.style.outline } }); }}
+                              >{overlay.style.outline ? 'On' : 'Off'}</button>
+                            </div>
+                            <div style={styles.controlRow}>
+                              <span style={styles.controlLabel}>Align</span>
+                              <div style={{ display: 'flex', gap: '3px' }}>
+                                {['left', 'center', 'right'].map(align => (
+                                  <button
+                                    key={align}
+                                    style={{
+                                      ...styles.toggleButton,
+                                      ...(overlay.style.textAlign === align ? styles.toggleButtonActive : {}),
+                                      minWidth: '44px',
+                                      minHeight: '44px'
+                                    }}
+                                    onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, textAlign: align } }); }}
+                                  >
+                                    {align.charAt(0).toUpperCase() + align.slice(1)}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div style={styles.controlRow}>
+                              <span style={styles.controlLabel}>Case</span>
+                              <div style={{ display: 'flex', gap: '3px' }}>
+                                {[
+                                  { id: 'default', label: 'Aa' },
+                                  { id: 'upper', label: 'AA' },
+                                  { id: 'lower', label: 'aa' }
+                                ].map(opt => (
+                                  <button
+                                    key={opt.id}
+                                    style={{
+                                      ...styles.toggleButton,
+                                      ...(overlay.style.textCase === opt.id ? styles.toggleButtonActive : {}),
+                                      minWidth: '44px',
+                                      minHeight: '44px'
+                                    }}
+                                    onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, textCase: opt.id } }); }}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  <button onClick={() => addTextOverlay()} style={{ ...styles.addTextButton, minHeight: '44px' }}>
+                    + Add Text Overlay
+                  </button>
+                </div>
+              )}
+
+              {/* Audio tab */}
+              {mobileToolTab === 'audio' && (
+                <div style={{ padding: '0 0 12px 0' }}>
+                  <div style={styles.sectionHeader}>
+                    <span>Audio</span>
+                  </div>
+                  <div style={styles.audioSection}>
+                    {selectedAudio && (
+                      <div style={styles.audioNowPlaying}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
+                          <span style={{ fontSize: '12px', fontWeight: 600, color: '#22c55e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {selectedAudio.isSourceVideo ? 'Source Video Audio' : (selectedAudio.name || selectedAudio.fileName || 'Audio Track')}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                          {!selectedAudio.isSourceVideo && (
+                            <button
+                              onClick={() => setShowAudioTrimmer(true)}
+                              style={{ background: 'none', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', fontSize: '10px', cursor: 'pointer', padding: '2px 6px', borderRadius: '4px', minWidth: '44px', minHeight: '44px' }}
+                            >Trim</button>
+                          )}
+                          <button
+                            onClick={() => setShowTranscriber(true)}
+                            style={{ background: 'none', border: '1px solid rgba(168,85,247,0.3)', color: '#a855f7', fontSize: '10px', cursor: 'pointer', padding: '2px 6px', borderRadius: '4px', minWidth: '44px', minHeight: '44px' }}
+                          >AI</button>
+                          <button
+                            onClick={() => handleAudioSelect(null)}
+                            style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '14px', cursor: 'pointer', padding: '0 2px', minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          >x</button>
+                        </div>
+                      </div>
+                    )}
+                    {clip && (
+                      <button
+                        onClick={() => {
+                          const clipUrl = clip.localUrl || clip.url || clip.src;
+                          handleAudioSelect({ id: 'source_video', name: 'Source Video Audio', url: clipUrl, localUrl: clipUrl, isSourceVideo: true });
+                        }}
+                        style={{
+                          ...styles.audioTrackButton,
+                          ...(selectedAudio?.isSourceVideo ? styles.audioTrackButtonActive : {}),
+                          minHeight: '44px'
+                        }}
+                      >
+                        <span style={{ fontSize: '13px' }}>{'\uD83C\uDFA4'}</span>
+                        <span style={{ flex: 1, textAlign: 'left' }}>Source Video Audio</span>
+                      </button>
+                    )}
+                    {libraryAudio.length > 0 && (
+                      <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        {libraryAudio.map(audio => {
+                          const isSelected = selectedAudio && !selectedAudio.isSourceVideo && selectedAudio.id === audio.id;
+                          return (
+                            <button
+                              key={audio.id}
+                              onClick={() => handleAudioSelect(audio)}
+                              style={{
+                                ...styles.audioTrackButton,
+                                ...(isSelected ? styles.audioTrackButtonActive : {}),
+                                minHeight: '44px'
+                              }}
+                            >
+                              <span style={{ fontSize: '13px' }}>{'\uD83C\uDFB5'}</span>
+                              <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {audio.name || audio.fileName || 'Untitled'}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {!clip && libraryAudio.length === 0 && (
+                      <div style={{ fontSize: '11px', color: '#4b5563', padding: '8px 0', textAlign: 'center' }}>
+                        No audio available. Add audio to your library to use here.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Lyrics in Audio tab on mobile */}
+                  <div style={styles.divider} />
+                  <div style={styles.sectionHeader}>
+                    <span>Lyrics</span>
+                    <span style={{ fontSize: '10px', color: '#6b7280' }}>{lyricsBank.length}</span>
+                  </div>
+                  <div style={{ margin: '0 4px 4px', maxHeight: '200px', overflow: 'auto' }}>
+                    <LyricBank
+                      lyrics={lyricsBank}
+                      onAddLyrics={(data) => {
+                        onAddLyrics?.(data);
+                        if (artistId) setTimeout(() => setLyricsBank(getLyrics(artistId)), 100);
+                      }}
+                      onUpdateLyrics={(id, updates) => {
+                        onUpdateLyrics?.(id, updates);
+                        if (artistId) setTimeout(() => setLyricsBank(getLyrics(artistId)), 100);
+                      }}
+                      onDeleteLyrics={(id) => {
+                        onDeleteLyrics?.(id);
+                        if (artistId) setTimeout(() => setLyricsBank(getLyrics(artistId)), 100);
+                      }}
+                      onSelectText={(text) => addTextOverlay(text)}
+                      compact={true}
+                      showAddForm={true}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Banks tab */}
+              {mobileToolTab === 'banks' && (
+                <div style={{ padding: '0 0 12px 0' }}>
+                  <div style={styles.sectionHeader}>
+                    <span>Video Text Banks</span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#6b7280', padding: '0 12px 8px', lineHeight: '1.4' }}>
+                    Tap any bank text to add it as an overlay.
+                  </div>
+
+                  {/* Bank A */}
+                  <div style={styles.bankContainer}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#14b8a6', marginBottom: '6px' }}>
+                      Bank A ({videoTextBank1.length})
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                      <input
+                        value={newTextA}
+                        onChange={(e) => setNewTextA(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
+                        placeholder="Add text..."
+                        style={{ ...styles.textBankInput, minHeight: '44px' }}
+                      />
+                      <button
+                        onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
+                        style={{ ...styles.textBankAddButton, minWidth: '44px', minHeight: '44px' }}
+                      >+</button>
+                    </div>
+                    <div style={styles.textBankList}>
+                      {videoTextBank1.map((text, i) => (
+                        <div key={i} style={{ ...styles.textBankTag, minHeight: '44px', display: 'flex', alignItems: 'center' }}>
+                          <span
+                            onClick={() => addTextOverlay(text)}
+                            style={{ cursor: 'pointer' }}
+                            title="Tap to add as overlay"
+                          >{text}</span>
+                          <button
+                            onClick={() => handleRemoveFromVideoTextBank(1, i)}
+                            style={{ ...styles.textBankRemove, minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          >x</button>
+                        </div>
+                      ))}
+                      {videoTextBank1.length === 0 && <span style={{ fontSize: '11px', color: '#4b5563' }}>Empty</span>}
+                    </div>
+                  </div>
+
+                  {/* Bank B */}
+                  <div style={styles.bankContainer}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#f59e0b', marginBottom: '6px' }}>
+                      Bank B ({videoTextBank2.length})
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                      <input
+                        value={newTextB}
+                        onChange={(e) => setNewTextB(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
+                        placeholder="Add text..."
+                        style={{ ...styles.textBankInput, minHeight: '44px' }}
+                      />
+                      <button
+                        onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
+                        style={{ ...styles.textBankAddButton, backgroundColor: '#f59e0b', minWidth: '44px', minHeight: '44px' }}
+                      >+</button>
+                    </div>
+                    <div style={styles.textBankList}>
+                      {videoTextBank2.map((text, i) => (
+                        <div key={i} style={{ ...styles.textBankTag, borderColor: 'rgba(245,158,11,0.3)', minHeight: '44px', display: 'flex', alignItems: 'center' }}>
+                          <span
+                            onClick={() => addTextOverlay(text)}
+                            style={{ cursor: 'pointer' }}
+                            title="Tap to add as overlay"
+                          >{text}</span>
+                          <button
+                            onClick={() => handleRemoveFromVideoTextBank(2, i)}
+                            style={{ ...styles.textBankRemove, minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          >x</button>
+                        </div>
+                      ))}
+                      {videoTextBank2.length === 0 && <span style={{ fontSize: '11px', color: '#4b5563' }}>Empty</span>}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── RIGHT PANEL: Text Overlays + Style + Video Text Banks (desktop only) ── */}
+          {!isMobile && (
           <div style={styles.rightPanel}>
             <div style={styles.rightPanelScroll}>
 
@@ -1414,6 +1929,7 @@ const SoloClipEditor = ({
               </div>
             </div>
           </div>
+          )}
         </div>
 
         {/* ── Timeline Section ── */}
@@ -2266,6 +2782,45 @@ const styles = {
     color: '#fff',
     fontSize: '13px',
     cursor: 'pointer'
+  },
+
+  // ── Mobile Tool Toolbar ──
+  mobileToolbar: {
+    display: 'flex',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    borderTop: '1px solid rgba(255,255,255,0.08)',
+    borderBottom: '1px solid rgba(255,255,255,0.08)',
+    backgroundColor: '#0f0f23',
+    flexShrink: 0,
+    padding: '4px 0'
+  },
+  mobileToolbarTab: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '2px',
+    minWidth: '44px',
+    minHeight: '44px',
+    padding: '6px 12px',
+    borderRadius: '8px',
+    border: 'none',
+    backgroundColor: 'transparent',
+    color: '#9ca3af',
+    cursor: 'pointer',
+    transition: 'all 0.15s'
+  },
+  mobileToolbarTabActive: {
+    backgroundColor: 'rgba(99,102,241,0.2)',
+    color: '#a5b4fc'
+  },
+  mobileToolPanel: {
+    flex: 1,
+    overflow: 'auto',
+    backgroundColor: '#1a1a2e',
+    borderTop: '1px solid rgba(255,255,255,0.06)',
+    minHeight: 0
   }
 };
 

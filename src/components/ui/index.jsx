@@ -1,4 +1,5 @@
 import React, { useEffect, useCallback, useState, useRef, createContext, useContext } from 'react';
+import useIsMobile from '../../hooks/useIsMobile';
 
 /**
  * Shared UI Components for StickToMusic
@@ -134,10 +135,21 @@ export const ToastProvider = ({ children }) => {
 };
 
 export const Toasts = ({ toasts = [], onRemove }) => {
+  const { isMobile } = useIsMobile();
   if (!toasts.length) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-[100] space-y-2 pointer-events-none">
+    <div style={{
+      position: 'fixed',
+      bottom: isMobile ? 80 : 16,
+      right: 16,
+      zIndex: 1000,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 8,
+      pointerEvents: 'none',
+      ...(isMobile ? { left: 16 } : {}),
+    }}>
       {toasts.map(toast => (
         <div
           key={toast.id}
@@ -147,6 +159,7 @@ export const Toasts = ({ toasts = [], onRemove }) => {
             toast.type === 'info' ? 'bg-blue-600 text-white' :
             'bg-zinc-800 text-white'
           }`}
+          style={isMobile ? { maxWidth: '100%' } : undefined}
         >
           <span className="flex-shrink-0">
             {toast.type === 'success' ? '✓' : toast.type === 'error' ? '✕' : 'ℹ'}
@@ -155,6 +168,7 @@ export const Toasts = ({ toasts = [], onRemove }) => {
           {onRemove && (
             <button
               onClick={() => onRemove(toast.id)}
+              style={{ minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               className="ml-2 opacity-70 hover:opacity-100 flex-shrink-0"
             >
               ✕

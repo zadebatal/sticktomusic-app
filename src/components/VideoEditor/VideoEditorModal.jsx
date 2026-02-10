@@ -20,6 +20,7 @@ import {
   normalizeBeatsToTrimRange
 } from '../../utils/timelineNormalization';
 import log from '../../utils/logger';
+import useIsMobile from '../../hooks/useIsMobile';
 
 /**
  * VideoEditorModal - Flowstage-inspired video editor modal
@@ -49,14 +50,8 @@ const VideoEditorModal = ({
   );
 
   // Mobile responsive detection
-  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+  const { isMobile } = useIsMobile();
   const [mobilePreviewExpanded, setMobilePreviewExpanded] = useState(false);
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   // Media state
   const [selectedAudio, setSelectedAudio] = useState(existingVideo?.audio || null);

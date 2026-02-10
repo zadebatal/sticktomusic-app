@@ -4,6 +4,7 @@ import { useBeatDetection } from '../../hooks/useBeatDetection';
 import { isValidBankName, generateBatchPostContent, getBankNames } from '../../utils/captionGenerator';
 import { VIDEO_STATUS } from '../../utils/status';
 import PreviewPlayer from './PreviewPlayer';
+import useIsMobile from '../../hooks/useIsMobile';
 import log from '../../utils/logger';
 
 /**
@@ -130,13 +131,7 @@ const BatchPipeline = ({
   initialTextStyle = null // Text style from editor (applies to all batch videos)
 }) => {
   // Mobile responsive detection
-  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  const { isMobile } = useIsMobile();
 
   // Stage management
   const [stage, setStage] = useState(STAGES.OPTIONS);

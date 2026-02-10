@@ -5,6 +5,7 @@ import {
   addToLibraryAsync, MEDIA_TYPES
 } from '../../services/libraryService';
 import { useToast } from '../ui';
+import useIsMobile from '../../hooks/useIsMobile';
 import AudioClipSelector from './AudioClipSelector';
 import LyricBank from './LyricBank';
 import LyricAnalyzer from './LyricAnalyzer';
@@ -176,12 +177,10 @@ const MultiClipEditor = ({
   const [showTranscriber, setShowTranscriber] = useState(false);
 
   // ── Mobile detection ──
-  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  const { isMobile } = useIsMobile();
+
+  // ── Mobile tool tab state ──
+  const [mobileToolTab, setMobileToolTab] = useState(null); // 'clips', 'text', 'audio', 'banks', or null
 
   // ── Library subscriptions ──
   useEffect(() => {
@@ -880,7 +879,9 @@ const MultiClipEditor = ({
   const editingOverlay = textOverlays.find(o => o.id === editingTextId);
 
   // Canvas is ALWAYS 9:16 — aspect ratio only controls how media is cropped within it
-  const previewDims = { width: 270, height: 480 };
+  const previewDims = isMobile
+    ? { width: Math.min(window.innerWidth - 32, 300), height: Math.min(window.innerWidth - 32, 300) * (480 / 270) }
+    : { width: 270, height: 480 };
 
   // Compute video style based on crop mode (aspect ratio)
   const getVideoCropStyle = () => {
@@ -942,25 +943,42 @@ const MultiClipEditor = ({
 
   // ── RENDER ──
   return (
-    <div style={styles.overlay} onClick={(e) => e.target === e.currentTarget && handleCloseRequest()}>
-      <div style={styles.modal}>
+    <div style={{
+      ...styles.overlay,
+      ...(isMobile ? { padding: 0 } : {})
+    }} onClick={(e) => e.target === e.currentTarget && handleCloseRequest()}>
+      <div style={{
+        ...styles.modal,
+        ...(isMobile ? { borderRadius: 0, maxWidth: '100%', height: '100vh', width: '100vw', border: 'none' } : {})
+      }}>
 
         {/* ── Header ── */}
-        <div style={styles.header}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button onClick={handleCloseRequest} style={styles.backButton}>
+        <div style={{
+          ...styles.header,
+          ...(isMobile ? { padding: '8px 10px' } : {})
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '12px' }}>
+            <button onClick={handleCloseRequest} style={{
+              ...styles.backButton,
+              ...(isMobile ? { minWidth: '44px', minHeight: '44px', justifyContent: 'center' } : {})
+            }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M19 12H5M12 19l-7-7 7-7" />
               </svg>
             </button>
             <div>
-              <h2 style={styles.headerTitle}>Multi-Clip Editor</h2>
-              <span style={styles.headerSubtitle}>
-                {allVideos.length === 1 ? 'Design your template' : `${allVideos.length} videos (1 template + ${allVideos.length - 1} generated)`}
-              </span>
+              <h2 style={{
+                ...styles.headerTitle,
+                ...(isMobile ? { fontSize: '13px' } : {})
+              }}>Multi-Clip Editor</h2>
+              {!isMobile && (
+                <span style={styles.headerSubtitle}>
+                  {allVideos.length === 1 ? 'Design your template' : `${allVideos.length} videos (1 template + ${allVideos.length - 1} generated)`}
+                </span>
+              )}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: isMobile ? '4px' : '8px', alignItems: 'center' }}>
             {/* Aspect ratio toggles */}
             {['9:16', '1:1', '4:3'].map(ratio => (
               <button
@@ -968,25 +986,35 @@ const MultiClipEditor = ({
                 onClick={() => setAspectRatio(ratio)}
                 style={{
                   ...styles.ratioButton,
-                  ...(aspectRatio === ratio ? styles.ratioButtonActive : {})
+                  ...(aspectRatio === ratio ? styles.ratioButtonActive : {}),
+                  ...(isMobile ? { padding: '4px 8px', fontSize: '10px', minHeight: '44px', minWidth: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' } : {})
                 }}
               >
                 {ratio}
               </button>
             ))}
-            <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />
+            {!isMobile && <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />}
             {/* Save Draft */}
-            <button onClick={handleSaveDraft} style={styles.saveDraftButton}>
-              Save Draft
+            <button onClick={handleSaveDraft} style={{
+              ...styles.saveDraftButton,
+              ...(isMobile ? { padding: '6px 10px', fontSize: '11px', minHeight: '44px', minWidth: '44px' } : {})
+            }}>
+              {isMobile ? 'Save' : 'Save Draft'}
             </button>
             {/* Save All */}
             {allVideos.length > 1 && (
-              <button onClick={handleSaveAllAndClose} style={styles.saveAllButton}>
-                Save All ({allVideos.length})
+              <button onClick={handleSaveAllAndClose} style={{
+                ...styles.saveAllButton,
+                ...(isMobile ? { padding: '6px 10px', fontSize: '11px', minHeight: '44px' } : {})
+              }}>
+                {isMobile ? `All (${allVideos.length})` : `Save All (${allVideos.length})`}
               </button>
             )}
             {/* Close */}
-            <button onClick={handleCloseRequest} style={styles.closeButton}>
+            <button onClick={handleCloseRequest} style={{
+              ...styles.closeButton,
+              ...(isMobile ? { minWidth: '44px', minHeight: '44px', justifyContent: 'center' } : {})
+            }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -995,11 +1023,14 @@ const MultiClipEditor = ({
           </div>
         </div>
 
-        {/* ── Main Content — 3 Columns ── */}
-        <div style={styles.mainContent}>
+        {/* ── Main Content — 3 Columns (desktop) / stacked (mobile) ── */}
+        <div style={{
+          ...styles.mainContent,
+          ...(isMobile ? { flexDirection: 'column', overflow: 'auto' } : {})
+        }}>
 
           {/* ── LEFT PANEL: Clips Grid + Timeline ── */}
-          <div style={styles.leftPanel}>
+          {!isMobile && <div style={styles.leftPanel}>
             <div style={{ padding: '12px', flex: 1, overflow: 'auto' }}>
               {/* Available Clips Grid */}
               <div style={{ marginBottom: '16px' }}>
@@ -1133,10 +1164,13 @@ const MultiClipEditor = ({
                 </div>
               </div>
             </div>
-          </div>
+          </div>}
 
           {/* ── CENTER: Video Preview ── */}
-          <div style={styles.previewArea}>
+          <div style={{
+            ...styles.previewArea,
+            ...(isMobile ? { padding: '8px', flex: 'none', width: '100%' } : {})
+          }}>
             <div
               ref={previewRef}
               style={{
@@ -1232,8 +1266,14 @@ const MultiClipEditor = ({
             </div>
 
             {/* Playback Controls */}
-            <div style={styles.playbackControls}>
-              <button onClick={handlePlayPause} style={styles.playButton}>
+            <div style={{
+              ...styles.playbackControls,
+              ...(isMobile ? { maxWidth: '100%', width: '100%' } : {})
+            }}>
+              <button onClick={handlePlayPause} style={{
+                ...styles.playButton,
+                ...(isMobile ? { width: '44px', height: '44px' } : {})
+              }}>
                 {isPlaying ? (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                     <rect x="6" y="4" width="4" height="16" />
@@ -1247,10 +1287,13 @@ const MultiClipEditor = ({
               </button>
 
               <div
-                style={styles.progressBar}
+                style={{
+                  ...styles.progressBar,
+                  ...(isMobile ? { height: '12px', borderRadius: '6px' } : {})
+                }}
                 onClick={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
-                  const percent = (e.clientX - rect.left) / rect.width;
+                  const percent = ((e.touches ? e.touches[0].clientX : e.clientX) - rect.left) / rect.width;
                   handleSeek(percent * totalDuration);
                 }}
               >
@@ -1261,7 +1304,10 @@ const MultiClipEditor = ({
                 {formatTime(currentTime)} / {formatTime(totalDuration)}
               </span>
 
-              <button onClick={() => setIsMuted(!isMuted)} style={styles.muteButton}>
+              <button onClick={() => setIsMuted(!isMuted)} style={{
+                ...styles.muteButton,
+                ...(isMobile ? { minWidth: '44px', minHeight: '44px', justifyContent: 'center' } : {})
+              }}>
                 {isMuted ? (
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" fill="currentColor" />
@@ -1278,8 +1324,546 @@ const MultiClipEditor = ({
             </div>
           </div>
 
+          {/* ── MOBILE TOOL TOOLBAR + PANEL ── */}
+          {isMobile && (
+            <div style={{ width: '100%', flexShrink: 0 }}>
+              {/* Mobile toolbar tabs */}
+              <div style={{
+                display: 'flex',
+                borderTop: '1px solid rgba(255,255,255,0.08)',
+                borderBottom: '1px solid rgba(255,255,255,0.08)',
+                backgroundColor: '#0f0f23'
+              }}>
+                {[
+                  { id: 'clips', label: 'Clips', icon: '\uD83C\uDFAC' },
+                  { id: 'text', label: 'Text', icon: '\uD83D\uDCDD' },
+                  { id: 'audio', label: 'Audio', icon: '\uD83C\uDFB5' },
+                  { id: 'banks', label: 'Banks', icon: '\uD83D\uDCE6' }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setMobileToolTab(mobileToolTab === tab.id ? null : tab.id)}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '2px',
+                      padding: '10px 4px',
+                      minHeight: '52px',
+                      border: 'none',
+                      backgroundColor: mobileToolTab === tab.id ? 'rgba(99,102,241,0.15)' : 'transparent',
+                      color: mobileToolTab === tab.id ? '#a5b4fc' : '#9ca3af',
+                      fontSize: '10px',
+                      fontWeight: mobileToolTab === tab.id ? 600 : 400,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                      borderBottom: mobileToolTab === tab.id ? '2px solid #6366f1' : '2px solid transparent'
+                    }}
+                  >
+                    <span style={{ fontSize: '18px' }}>{tab.icon}</span>
+                    <span>{tab.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Mobile panel content */}
+              {mobileToolTab && (
+                <div style={{
+                  maxHeight: '45vh',
+                  overflowY: 'auto',
+                  backgroundColor: '#1a1a2e',
+                  borderBottom: '1px solid rgba(255,255,255,0.08)'
+                }}>
+                  {/* ── CLIPS TAB ── */}
+                  {mobileToolTab === 'clips' && (
+                    <div style={{ padding: '12px' }}>
+                      {/* Available Clips Grid */}
+                      <div style={{ marginBottom: '16px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>Available Clips</div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
+                          Tap to add to timeline
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '12px' }}>
+                          {(category?.videos || []).map((v) => (
+                            <div
+                              key={v.id}
+                              onClick={() => addClipToTimeline(v)}
+                              style={{ ...styles.clipThumb, minHeight: '44px' }}
+                              title="Tap to add to timeline"
+                            >
+                              {v.thumbnailUrl || v.thumbnail ? (
+                                <img src={v.thumbnailUrl || v.thumbnail} alt="" style={styles.clipThumbImg} />
+                              ) : (
+                                <div style={styles.clipThumbPlaceholder}>
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                    <rect x="2" y="4" width="20" height="16" rx="2" />
+                                    <path d="M10 9l5 3-5 3V9z" />
+                                  </svg>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Timeline */}
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>
+                          Timeline ({clips.length} clip{clips.length !== 1 ? 's' : ''})
+                        </div>
+                        {clips.length === 0 ? (
+                          <div style={{ fontSize: '11px', color: '#6b7280', padding: '12px', textAlign: 'center', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}>
+                            No clips added. Tap available clips to add them.
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {clips.map((clip, idx) => (
+                              <div
+                                key={idx}
+                                style={{
+                                  ...styles.timelineItem,
+                                  ...(activeClipIndex === idx ? styles.timelineItemActive : {}),
+                                  minHeight: '44px'
+                                }}
+                                onClick={() => setActiveClipIndex(idx)}
+                              >
+                                <div style={{ fontSize: '10px', color: '#9ca3af', fontWeight: 500, minWidth: '20px' }}>
+                                  {idx + 1}.
+                                </div>
+                                {clip.thumbnailUrl || clip.thumbnail ? (
+                                  <img src={clip.thumbnailUrl || clip.thumbnail} alt="" style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover' }} />
+                                ) : (
+                                  <div style={{ width: '32px', height: '32px', borderRadius: '4px', backgroundColor: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <rect x="2" y="4" width="20" height="16" rx="2" />
+                                      <path d="M10 9l5 3-5 3V9z" />
+                                    </svg>
+                                  </div>
+                                )}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: '11px', color: '#d1d5db', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {clip.name || 'Clip'}
+                                  </div>
+                                  <div style={{ fontSize: '9px', color: '#6b7280' }}>
+                                    {formatTime(getClipDuration(clip.id || clip.sourceId))}
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); moveClipUp(idx); }}
+                                    disabled={idx === 0}
+                                    style={{ ...styles.timelineButton, ...(idx === 0 ? { opacity: 0.3, cursor: 'not-allowed' } : {}), minWidth: '36px', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                    title="Move up"
+                                  >
+                                    &#9650;
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); moveClipDown(idx); }}
+                                    disabled={idx >= clips.length - 1}
+                                    style={{ ...styles.timelineButton, ...(idx >= clips.length - 1 ? { opacity: 0.3, cursor: 'not-allowed' } : {}), minWidth: '36px', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                    title="Move down"
+                                  >
+                                    &#9660;
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); removeClipFromTimeline(idx); }}
+                                    style={{ ...styles.timelineRemoveButton, minWidth: '36px', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                    title="Remove"
+                                  >
+                                    &#215;
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Generation controls */}
+                      <div style={{ ...styles.generateSection, marginTop: '12px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '6px' }}>Generate Videos</div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
+                          Randomize clips and text from banks
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <span style={{ fontSize: '12px', color: '#d1d5db' }}>Count:</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={Math.max(1, (category?.videos?.length || 1) - 1)}
+                            value={generateCount}
+                            onChange={(e) => setGenerateCount(Math.max(1, Math.min((category?.videos?.length || 1) - 1, parseInt(e.target.value) || 1)))}
+                            style={{ ...styles.generateInput, minHeight: '44px' }}
+                          />
+                          <button
+                            onClick={executeGeneration}
+                            disabled={isGenerating || textOverlays.length === 0 || clips.length === 0}
+                            style={{
+                              ...styles.generateButton,
+                              ...(isGenerating || textOverlays.length === 0 || clips.length === 0 ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
+                              minHeight: '44px', padding: '8px 16px'
+                            }}
+                          >
+                            {isGenerating ? 'Generating...' : 'Generate'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── TEXT TAB ── */}
+                  {mobileToolTab === 'text' && (
+                    <div style={{ padding: '12px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>
+                        Text Overlays ({textOverlays.length})
+                      </div>
+
+                      {textOverlays.length === 0 && (
+                        <div style={{ fontSize: '12px', color: '#6b7280', textAlign: 'center', padding: '16px 12px' }}>
+                          No text overlays yet. Add one to start designing.
+                        </div>
+                      )}
+
+                      {textOverlays.map((overlay, idx) => {
+                        const isSelected = editingTextId === overlay.id;
+                        return (
+                          <div
+                            key={overlay.id}
+                            onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
+                            style={{
+                              ...styles.overlayCard,
+                              margin: '0 0 6px',
+                              ...(isSelected ? styles.overlayCardActive : {})
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                              <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 500 }}>
+                                Overlay {idx + 1}
+                              </span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }}
+                                style={{ ...styles.removeOverlayButton, minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              >&#215;</button>
+                            </div>
+                            {isSelected ? (
+                              <input
+                                value={editingTextValue}
+                                onChange={(e) => setEditingTextValue(e.target.value)}
+                                onBlur={() => updateTextOverlay(overlay.id, { text: editingTextValue })}
+                                onKeyDown={(e) => { if (e.key === 'Enter') { updateTextOverlay(overlay.id, { text: editingTextValue }); e.target.blur(); } }}
+                                style={{ ...styles.textEditInput, minHeight: '44px', fontSize: '14px' }}
+                                autoFocus
+                              />
+                            ) : (
+                              <div style={{ fontSize: '13px', color: '#e5e7eb' }}>{overlay.text}</div>
+                            )}
+
+                            {isSelected && (
+                              <div style={styles.styleControls}>
+                                {/* Font Family */}
+                                <div style={styles.controlRow}>
+                                  <span style={styles.controlLabel}>Font</span>
+                                  <select
+                                    value={overlay.style.fontFamily}
+                                    onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, fontFamily: e.target.value } })}
+                                    style={{ ...styles.selectInput, minHeight: '44px' }}
+                                  >
+                                    <option value="Inter, sans-serif">Sans</option>
+                                    <option value="'Playfair Display', serif">Serif</option>
+                                    <option value="'Space Grotesk', sans-serif">Grotesk</option>
+                                    <option value="monospace">Mono</option>
+                                  </select>
+                                </div>
+                                {/* Font Size */}
+                                <div style={styles.controlRow}>
+                                  <span style={styles.controlLabel}>Size</span>
+                                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                    <button
+                                      style={{ ...styles.sizeButton, minWidth: '44px', minHeight: '44px' }}
+                                      onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.max(16, overlay.style.fontSize - 4) } }); }}
+                                    >A-</button>
+                                    <span style={{ fontSize: '11px', color: '#d1d5db', minWidth: '26px', textAlign: 'center' }}>{overlay.style.fontSize}</span>
+                                    <button
+                                      style={{ ...styles.sizeButton, minWidth: '44px', minHeight: '44px' }}
+                                      onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.min(120, overlay.style.fontSize + 4) } }); }}
+                                    >A+</button>
+                                  </div>
+                                </div>
+                                {/* Color + Outline */}
+                                <div style={styles.controlRow}>
+                                  <span style={styles.controlLabel}>Color</span>
+                                  <input
+                                    type="color"
+                                    value={overlay.style.color}
+                                    onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, color: e.target.value } })}
+                                    style={{ ...styles.colorInput, width: '44px', height: '44px' }}
+                                  />
+                                  <span style={{ ...styles.controlLabel, marginLeft: '8px' }}>Outline</span>
+                                  <button
+                                    style={{
+                                      ...styles.toggleButton,
+                                      ...(overlay.style.outline ? styles.toggleButtonActive : {}),
+                                      minWidth: '44px', minHeight: '44px'
+                                    }}
+                                    onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, outline: !overlay.style.outline } }); }}
+                                  >{overlay.style.outline ? 'On' : 'Off'}</button>
+                                </div>
+                                {/* Scope */}
+                                <div style={styles.controlRow}>
+                                  <span style={styles.controlLabel}>Scope</span>
+                                  <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
+                                    <button
+                                      style={{
+                                        ...styles.toggleButton,
+                                        ...(overlay.scope === 'full' ? styles.toggleButtonActive : {}),
+                                        minHeight: '44px', padding: '6px 10px'
+                                      }}
+                                      onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { scope: 'full' }); }}
+                                    >Full Video</button>
+                                    {clips.map((_, i) => (
+                                      <button
+                                        key={i}
+                                        style={{
+                                          ...styles.toggleButton,
+                                          ...(overlay.scope === i ? styles.toggleButtonActive : {}),
+                                          minHeight: '44px', padding: '6px 10px'
+                                        }}
+                                        onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { scope: i }); }}
+                                      >Clip {i + 1}</button>
+                                    ))}
+                                  </div>
+                                </div>
+                                {/* Save to Bank */}
+                                <div style={{ ...styles.controlRow, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '6px', marginTop: '2px' }}>
+                                  <span style={{ fontSize: '10px', color: '#9ca3af' }}>Save to:</span>
+                                  <button
+                                    style={{ ...styles.toggleButton, borderColor: 'rgba(20,184,166,0.3)', color: '#14b8a6', fontSize: '10px', minHeight: '44px', padding: '6px 10px' }}
+                                    onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(1, overlay.text); toastSuccess('Saved to Bank A'); }}
+                                  >Bank A</button>
+                                  <button
+                                    style={{ ...styles.toggleButton, borderColor: 'rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '10px', minHeight: '44px', padding: '6px 10px' }}
+                                    onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(2, overlay.text); toastSuccess('Saved to Bank B'); }}
+                                  >Bank B</button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      <button onClick={() => addTextOverlay()} style={{ ...styles.addTextButton, minHeight: '44px', margin: '6px 0' }}>
+                        + Add Text Overlay
+                      </button>
+
+                      {/* Lyrics sub-section */}
+                      <div style={{ ...styles.divider, margin: '12px 0' }} />
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>Lyrics</div>
+                      <div style={{ maxHeight: '200px', overflow: 'auto' }}>
+                        <LyricBank
+                          lyrics={lyricsBank}
+                          onAddLyrics={(data) => {
+                            onAddLyrics?.(data);
+                            if (artistId) setTimeout(() => setLyricsBank(getLyrics(artistId)), 100);
+                          }}
+                          onUpdateLyrics={(id, updates) => {
+                            onUpdateLyrics?.(id, updates);
+                            if (artistId) setTimeout(() => setLyricsBank(getLyrics(artistId)), 100);
+                          }}
+                          onDeleteLyrics={(id) => {
+                            onDeleteLyrics?.(id);
+                            if (artistId) setTimeout(() => setLyricsBank(getLyrics(artistId)), 100);
+                          }}
+                          onSelectText={(text) => addTextOverlay(text)}
+                          compact={true}
+                          showAddForm={true}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── AUDIO TAB ── */}
+                  {mobileToolTab === 'audio' && (
+                    <div style={{ padding: '12px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>Audio</div>
+                      <div style={{
+                        padding: '10px',
+                        borderRadius: '8px',
+                        backgroundColor: 'rgba(255,255,255,0.02)',
+                        border: '1px solid rgba(255,255,255,0.05)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px'
+                      }}>
+                        {/* Now playing indicator */}
+                        {selectedAudio && (
+                          <div style={styles.audioNowPlaying}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
+                              <span style={{ fontSize: '12px', fontWeight: 600, color: '#22c55e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {selectedAudio.isSourceVideo ? 'Source Video Audio' : (selectedAudio.name || selectedAudio.fileName || 'Audio Track')}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                              {!selectedAudio.isSourceVideo && (
+                                <button
+                                  onClick={() => setShowAudioTrimmer(true)}
+                                  style={{ background: 'none', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', fontSize: '10px', cursor: 'pointer', padding: '6px 10px', borderRadius: '4px', minHeight: '44px' }}
+                                >Trim</button>
+                              )}
+                              <button
+                                onClick={() => setShowTranscriber(true)}
+                                style={{ background: 'none', border: '1px solid rgba(168,85,247,0.3)', color: '#a855f7', fontSize: '10px', cursor: 'pointer', padding: '6px 10px', borderRadius: '4px', minHeight: '44px' }}
+                              >AI</button>
+                              <button
+                                onClick={() => handleAudioSelect(null)}
+                                style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '18px', cursor: 'pointer', padding: '0 4px', minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              >&#215;</button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Source Video Audio button */}
+                        {currentClip && (
+                          <button
+                            onClick={() => {
+                              const clipUrl = currentClip.localUrl || currentClip.url || currentClip.src;
+                              handleAudioSelect({ id: 'source_video', name: 'Source Video Audio', url: clipUrl, localUrl: clipUrl, isSourceVideo: true });
+                            }}
+                            style={{
+                              ...styles.audioTrackButton,
+                              ...(selectedAudio?.isSourceVideo ? styles.audioTrackButtonActive : {}),
+                              minHeight: '44px'
+                            }}
+                          >
+                            <span style={{ fontSize: '13px' }}>{'\uD83C\uDFA4'}</span>
+                            <span style={{ flex: 1, textAlign: 'left' }}>Source Video Audio</span>
+                          </button>
+                        )}
+
+                        {/* Library audio tracks */}
+                        {libraryAudio.length > 0 && (
+                          <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            {libraryAudio.map(audio => {
+                              const isAudioSelected = selectedAudio && !selectedAudio.isSourceVideo && selectedAudio.id === audio.id;
+                              return (
+                                <button
+                                  key={audio.id}
+                                  onClick={() => handleAudioSelect(audio)}
+                                  style={{
+                                    ...styles.audioTrackButton,
+                                    ...(isAudioSelected ? styles.audioTrackButtonActive : {}),
+                                    minHeight: '44px'
+                                  }}
+                                >
+                                  <span style={{ fontSize: '13px' }}>{'\uD83C\uDFB5'}</span>
+                                  <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {audio.name || audio.fileName || 'Untitled'}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Empty state */}
+                        {!currentClip && libraryAudio.length === 0 && (
+                          <div style={{ fontSize: '11px', color: '#4b5563', padding: '8px 0', textAlign: 'center' }}>
+                            No audio available. Add audio to your library to use here.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── BANKS TAB ── */}
+                  {mobileToolTab === 'banks' && (
+                    <div style={{ padding: '12px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>Video Text Banks</div>
+                      <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '12px', lineHeight: '1.4' }}>
+                        Tap any bank text to add it as an overlay. During generation, Overlay 1 cycles Bank A, Overlay 2 cycles Bank B.
+                      </div>
+
+                      {/* Bank A */}
+                      <div style={{ ...styles.bankContainer, margin: '0 0 10px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#14b8a6', marginBottom: '6px' }}>
+                          Bank A ({videoTextBank1.length})
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                          <input
+                            value={newTextA}
+                            onChange={(e) => setNewTextA(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
+                            placeholder="Add text..."
+                            style={{ ...styles.textBankInput, minHeight: '44px' }}
+                          />
+                          <button
+                            onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
+                            style={{ ...styles.textBankAddButton, minWidth: '44px', minHeight: '44px' }}
+                          >+</button>
+                        </div>
+                        <div style={styles.textBankList}>
+                          {videoTextBank1.map((text, i) => (
+                            <div key={i} style={{ ...styles.textBankTag, minHeight: '36px' }}>
+                              <span
+                                onClick={() => addTextOverlay(text)}
+                                style={{ cursor: 'pointer' }}
+                                title="Tap to add as overlay"
+                              >{text}</span>
+                              <button
+                                onClick={() => handleRemoveFromVideoTextBank(1, i)}
+                                style={{ ...styles.textBankRemove, minWidth: '36px', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              >&#215;</button>
+                            </div>
+                          ))}
+                          {videoTextBank1.length === 0 && <span style={{ fontSize: '11px', color: '#4b5563' }}>Empty</span>}
+                        </div>
+                      </div>
+
+                      {/* Bank B */}
+                      <div style={{ ...styles.bankContainer, margin: '0 0 10px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#f59e0b', marginBottom: '6px' }}>
+                          Bank B ({videoTextBank2.length})
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                          <input
+                            value={newTextB}
+                            onChange={(e) => setNewTextB(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
+                            placeholder="Add text..."
+                            style={{ ...styles.textBankInput, minHeight: '44px' }}
+                          />
+                          <button
+                            onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
+                            style={{ ...styles.textBankAddButton, backgroundColor: '#f59e0b', minWidth: '44px', minHeight: '44px' }}
+                          >+</button>
+                        </div>
+                        <div style={styles.textBankList}>
+                          {videoTextBank2.map((text, i) => (
+                            <div key={i} style={{ ...styles.textBankTag, borderColor: 'rgba(245,158,11,0.3)', minHeight: '36px' }}>
+                              <span
+                                onClick={() => addTextOverlay(text)}
+                                style={{ cursor: 'pointer' }}
+                                title="Tap to add as overlay"
+                              >{text}</span>
+                              <button
+                                onClick={() => handleRemoveFromVideoTextBank(2, i)}
+                                style={{ ...styles.textBankRemove, minWidth: '36px', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              >&#215;</button>
+                            </div>
+                          ))}
+                          {videoTextBank2.length === 0 && <span style={{ fontSize: '11px', color: '#4b5563' }}>Empty</span>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── RIGHT PANEL: Text Overlays + Style + Video Text Banks ── */}
-          <div style={styles.rightPanel}>
+          {!isMobile && <div style={styles.rightPanel}>
             <div style={styles.rightPanelScroll}>
 
               {/* ── TEXT OVERLAYS SECTION ── */}
@@ -1690,11 +2274,11 @@ const MultiClipEditor = ({
                 </div>
               </div>
             </div>
-          </div>
+          </div>}
         </div>
 
         {/* ── Timeline Section ── */}
-        <div style={styles.timelineSection}>
+        {!isMobile && <div style={styles.timelineSection}>
           <div
             ref={timelineRef}
             style={styles.timelineTrackArea}
@@ -1881,10 +2465,13 @@ const MultiClipEditor = ({
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
         {/* ── Tab Bar (bottom) ── */}
-        <div style={styles.tabBar}>
+        <div style={{
+          ...styles.tabBar,
+          ...(isMobile ? { flexShrink: 0 } : {})
+        }}>
           <div style={styles.tabScroll}>
             {allVideos.map((video, idx) => (
               <div
@@ -1892,7 +2479,8 @@ const MultiClipEditor = ({
                 onClick={() => switchToVideo(idx)}
                 style={{
                   ...styles.tab,
-                  ...(idx === activeVideoIndex ? styles.tabActive : {})
+                  ...(idx === activeVideoIndex ? styles.tabActive : {}),
+                  ...(isMobile ? { minHeight: '44px', padding: '6px 14px' } : {})
                 }}
               >
                 {video.isTemplate ? (

@@ -3104,6 +3104,19 @@ const StickToMusic = () => {
           onLogout={handleLogout}
           userRole={user?.role || 'artist'}
         >
+          {/* Studio (full-screen overlay) */}
+          {artistTab === 'studio' && (
+            <VideoStudio
+              db={db}
+              onClose={() => { setArtistTab('dashboard'); }}
+              artists={[firestoreArtists.find(a => a.id === effectiveArtistId)].filter(Boolean)}
+              artistId={effectiveArtistId}
+              onArtistChange={() => {}}
+              lateAccountIds={derivedLateAccountIds}
+              onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: effectiveArtistId })}
+            />
+          )}
+
           <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-8">
             {/* Dashboard Tab */}
             {artistTab === 'dashboard' && (
@@ -3111,7 +3124,7 @@ const StickToMusic = () => {
                 user={user}
                 artistId={effectiveArtistId}
                 scheduledPosts={latePosts}
-                latePages={latePages}
+                latePages={latePages.filter(p => p.artistId === effectiveArtistId)}
                 socialSetsAllowed={user?.socialSetsAllowed || 0}
               />
             )}

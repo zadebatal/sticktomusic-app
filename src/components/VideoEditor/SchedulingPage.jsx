@@ -10,6 +10,7 @@ import { useToast, ConfirmDialog } from '../ui';
 import { getCreatedContent } from '../../services/libraryService';
 import log from '../../utils/logger';
 import { useTheme } from '../../contexts/ThemeContext';
+import useIsMobile from '../../hooks/useIsMobile';
 
 /**
  * SchedulingPage — Batch-First Command Center
@@ -30,6 +31,7 @@ const SchedulingPage = ({
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
+  const { isMobile } = useIsMobile();
   const s = getS(theme);
 
   // ── Core State ──
@@ -625,7 +627,7 @@ const SchedulingPage = ({
   return (
     <div style={s.page}>
       {/* ═══ HEADER ═══ */}
-      <div style={s.header}>
+      <div style={{ ...s.header, ...(isMobile ? { flexDirection: 'column', alignItems: 'flex-start', gap: '8px' } : {}) }}>
         <div style={s.headerLeft}>
           <button style={s.backBtn} onClick={onBack} title="Back to Studio">
             <span style={{ fontSize: '18px' }}>&#8592;</span>
@@ -638,7 +640,7 @@ const SchedulingPage = ({
             </p>
           </div>
         </div>
-        <div style={s.headerActions}>
+        <div style={{ ...s.headerActions, ...(isMobile ? { flexWrap: 'wrap', width: '100%' } : {}) }}>
           {/* Selection helpers */}
           <button style={s.actionBtnSm} onClick={selectAllVisible} title="Select all visible posts">
             Select All
@@ -668,8 +670,8 @@ const SchedulingPage = ({
       {hasSelection && (
         <div style={s.bulkBar}>
           {/* Row 1: Account + Platforms + Cadence */}
-          <div style={s.bulkRow}>
-            <div style={s.bulkSection}>
+          <div style={{ ...s.bulkRow, ...(isMobile ? { flexDirection: 'column', gap: '10px' } : {}) }}>
+            <div style={{ ...s.bulkSection, ...(isMobile ? { width: '100%' } : {}) }}>
               <label style={s.miniLabel}>Account</label>
               <select
                 value={batchAccount}
@@ -686,8 +688,8 @@ const SchedulingPage = ({
             {/* Platform Toggles — shows linked platforms for selected account */}
             {batchAccount && linkedPlatforms.length > 0 && (
               <>
-                <div style={{ width: '1px', height: '32px', backgroundColor: theme.border.default }} />
-                <div style={s.bulkSection}>
+                <div style={{ width: '1px', height: '32px', backgroundColor: theme.border.default, display: isMobile ? 'none' : 'block' }} />
+                <div style={{ ...s.bulkSection, ...(isMobile ? { width: '100%' } : {}) }}>
                   <label style={s.miniLabel}>Platforms</label>
                   <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                     {linkedPlatforms.map(platform => {
@@ -712,9 +714,9 @@ const SchedulingPage = ({
               </>
             )}
 
-            <div style={{ width: '1px', height: '32px', backgroundColor: theme.border.default }} />
+            <div style={{ width: '1px', height: '32px', backgroundColor: theme.border.default, display: isMobile ? 'none' : 'block' }} />
 
-            <div style={s.bulkSection}>
+            <div style={{ ...s.bulkSection, ...(isMobile ? { width: '100%' } : {}) }}>
               <label style={s.miniLabel}>Per Day</label>
               <div style={s.bulkPresets}>
                 {[1, 2, 3, 4, 5].map(n => (
@@ -729,9 +731,9 @@ const SchedulingPage = ({
               </div>
             </div>
 
-            <div style={{ width: '1px', height: '32px', backgroundColor: theme.border.default }} />
+            <div style={{ width: '1px', height: '32px', backgroundColor: theme.border.default, display: isMobile ? 'none' : 'block' }} />
 
-            <div style={s.bulkSection}>
+            <div style={{ ...s.bulkSection, ...(isMobile ? { width: '100%' } : {}) }}>
               <label style={s.miniLabel}>Spacing</label>
               <div style={s.bulkPresets}>
                 <button
@@ -763,9 +765,9 @@ const SchedulingPage = ({
               </div>
             </div>
 
-            <div style={{ width: '1px', height: '32px', backgroundColor: theme.border.default }} />
+            <div style={{ width: '1px', height: '32px', backgroundColor: theme.border.default, display: isMobile ? 'none' : 'block' }} />
 
-            <div style={s.bulkSection}>
+            <div style={{ ...s.bulkSection, ...(isMobile ? { width: '100%' } : {}) }}>
               <label style={s.miniLabel}>Start</label>
               <div style={{ display: 'flex', gap: '4px' }}>
                 <input type="date" value={batchStartDate} onChange={(e) => setBatchStartDate(e.target.value)} style={s.miniInput} />
@@ -775,8 +777,8 @@ const SchedulingPage = ({
 
             {spacingMode === 'random' && (
               <>
-                <div style={{ width: '1px', height: '32px', backgroundColor: theme.border.default }} />
-                <div style={s.bulkSection}>
+                <div style={{ width: '1px', height: '32px', backgroundColor: theme.border.default, display: isMobile ? 'none' : 'block' }} />
+                <div style={{ ...s.bulkSection, ...(isMobile ? { width: '100%' } : {}) }}>
                   <label style={s.miniLabel}>Random Range (min)</label>
                   <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                     <input type="number" value={batchRandomMin} onChange={(e) => setBatchRandomMin(Number(e.target.value))} style={{ ...s.miniInput, width: '60px' }} />
@@ -806,7 +808,7 @@ const SchedulingPage = ({
       )}
 
       {/* ═══ STATUS FILTER TABS ═══ */}
-      <div style={s.filterBar}>
+      <div style={{ ...s.filterBar, ...(isMobile ? { overflowX: 'auto', whiteSpace: 'nowrap', WebkitOverflowScrolling: 'touch', flexWrap: 'nowrap' } : {}) }}>
         {[
           { key: 'all', label: 'All' },
           { key: POST_STATUS.DRAFT, label: 'Drafts' },
@@ -829,8 +831,8 @@ const SchedulingPage = ({
       </div>
 
       {/* ═══ TOOLBAR — between filters and list ═══ */}
-      <div style={s.toolbarRow}>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+      <div style={{ ...s.toolbarRow, ...(isMobile ? { flexDirection: 'column', gap: '8px', alignItems: 'stretch' } : {}) }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', ...(isMobile ? { flexWrap: 'wrap' } : {}) }}>
           {!readOnly && (
             <>
               <button style={s.toolbarBtn} onClick={() => setShowAddModal(true)}>
@@ -869,7 +871,7 @@ const SchedulingPage = ({
         {viewMode === 'list' ? (
           <div style={s.listContainer}>
             {/* Column Headers */}
-            <div style={s.listHeader}>
+            <div style={{ ...s.listHeader, ...(isMobile ? { display: 'none' } : {}) }}>
               <div style={{ width: '24px' }}>
                 <input
                   type="checkbox"
@@ -927,6 +929,7 @@ const SchedulingPage = ({
                     onDragEnd={handleDragEnd}
                     previewTime={previewTimes[post.id] || null}
                     readOnly={readOnly}
+                    isMobile={isMobile}
                   />
                 ))
               )}
@@ -937,6 +940,7 @@ const SchedulingPage = ({
             posts={filteredPosts}
             expandedPostId={expandedPostId}
             onSelectPost={(id) => setExpandedPostId(expandedPostId === id ? null : id)}
+            isMobile={isMobile}
             calendarDate={calendarDate}
             onChangeMonth={setCalendarDate}
             onDragPost={(postId, fromDate, toDate) => {
@@ -987,7 +991,8 @@ const PostRow = ({
   onDelete, onEditDraft, onPublish,
   onDragStart, onDragOver, onDrop, onDragEnd,
   previewTime,
-  readOnly = false
+  readOnly = false,
+  isMobile = false
 }) => {
   const { theme } = useTheme();
   const s = getS(theme);
@@ -1055,7 +1060,8 @@ const PostRow = ({
           ...(isDragOver ? { borderColor: '#a5b4fc', backgroundColor: '#1e1e30' } : {}),
           ...(isSelected ? { backgroundColor: '#12122a' } : {}),
           opacity: isDragging ? 0.4 : 1,
-          position: 'relative'
+          position: 'relative',
+          ...(isMobile ? { flexDirection: 'column', alignItems: 'flex-start', gap: '8px', padding: '12px 16px', flexWrap: 'wrap' } : {})
         }}
       >
         {isPaused && post.status === POST_STATUS.SCHEDULED && (
@@ -1064,95 +1070,119 @@ const PostRow = ({
           </div>
         )}
 
-        {/* Checkbox */}
-        <div style={{ width: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <input
-            type="checkbox"
-            checked={isSelected}
-            onChange={onToggleSelect}
-            style={{ cursor: 'pointer', width: '14px', height: '14px', accentColor: '#6366f1' }}
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
+        {/* Top row: Checkbox + Drag Handle + Thumbnail + Content Name + Status + Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', ...(isMobile ? { flexWrap: 'wrap' } : {}) }}>
+          {/* Checkbox */}
+          <div style={{ width: isMobile ? '44px' : '24px', minHeight: isMobile ? '44px' : 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={onToggleSelect}
+              style={{ cursor: 'pointer', width: isMobile ? '20px' : '14px', height: isMobile ? '20px' : '14px', accentColor: '#6366f1' }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
 
-        {/* Drag Handle + Number */}
-        <div style={s.dragHandle}>
-          <span style={{ color: '#52525b', fontSize: '12px', cursor: 'grab' }}>{'\u2630'}</span>
-          <span style={{ color: '#3f3f46', fontSize: '10px', fontWeight: '600' }}>#{index + 1}</span>
-        </div>
+          {/* Drag Handle + Number */}
+          <div style={{ ...s.dragHandle, ...(isMobile ? { display: 'none' } : {}) }}>
+            <span style={{ color: '#52525b', fontSize: '12px', cursor: 'grab' }}>{'\u2630'}</span>
+            <span style={{ color: '#3f3f46', fontSize: '10px', fontWeight: '600' }}>#{index + 1}</span>
+          </div>
 
-        {/* Thumbnail */}
-        <div style={s.thumb} onClick={onToggleExpand}>
-          {previewImage ? (
-            <img src={previewImage} alt="" style={s.thumbImg} />
-          ) : (
-            <span style={{ fontSize: '16px' }}>{post.contentType === 'slideshow' ? '🖼️' : '🎥'}</span>
-          )}
-        </div>
+          {/* Thumbnail */}
+          <div style={s.thumb} onClick={onToggleExpand}>
+            {previewImage ? (
+              <img src={previewImage} alt="" style={s.thumbImg} />
+            ) : (
+              <span style={{ fontSize: '16px' }}>{post.contentType === 'slideshow' ? '🖼️' : '🎥'}</span>
+            )}
+          </div>
 
-        {/* Content Name + Audio + Collection */}
-        <div style={{ flex: 1.2, minWidth: 0, cursor: 'pointer' }} onClick={onToggleExpand}>
-          <div style={s.contentName}>{post.contentName}</div>
-          <div style={{ fontSize: '10px', color: '#52525b', marginTop: '1px', display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <span>{post.contentType === 'slideshow' ? 'Slideshow' : 'Video'}</span>
-            {post.collectionName && (
-              <span style={{ color: '#14b8a6', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(20,184,166,0.12)', border: '1px solid rgba(20,184,166,0.2)' }} title={`From: ${post.collectionName}`}>
-                {post.collectionName}
-              </span>
-            )}
-            {post._isGhost && (
-              <span style={{ color: '#f59e0b', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)' }} title="Original draft was deleted">
-                ⚠ orphan
-              </span>
-            )}
-            {post.editorState?.audio && (
-              <span style={{ color: '#6366f1', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={post.editorState.audio.name || post.editorState.audio.title || 'Audio'}>
-                ♪ {post.editorState.audio.name || post.editorState.audio.title || 'Audio'}
-              </span>
-            )}
+          {/* Content Name + Audio + Collection */}
+          <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={onToggleExpand}>
+            <div style={s.contentName}>{post.contentName}</div>
+            <div style={{ fontSize: '10px', color: '#52525b', marginTop: '1px', display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span>{post.contentType === 'slideshow' ? 'Slideshow' : 'Video'}</span>
+              {post.collectionName && (
+                <span style={{ color: '#14b8a6', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(20,184,166,0.12)', border: '1px solid rgba(20,184,166,0.2)' }} title={`From: ${post.collectionName}`}>
+                  {post.collectionName}
+                </span>
+              )}
+              {post._isGhost && (
+                <span style={{ color: '#f59e0b', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)' }} title="Original draft was deleted">
+                  orphan
+                </span>
+              )}
+              {post.editorState?.audio && (
+                <span style={{ color: '#6366f1', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={post.editorState.audio.name || post.editorState.audio.title || 'Audio'}>
+                  {post.editorState.audio.name || post.editorState.audio.title || 'Audio'}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Status */}
+          <div style={{ width: isMobile ? 'auto' : '80px', textAlign: 'center', flexShrink: 0 }}>
+            <span style={{ ...s.statusPill, backgroundColor: statusBg, color: statusColor }}>{post.status}</span>
+          </div>
+
+          {/* Actions */}
+          <div style={{ width: isMobile ? 'auto' : '80px', display: 'flex', gap: '4px', justifyContent: 'flex-end', flexShrink: 0 }}>
+            <button
+              style={{ ...s.rowIconBtn, color: post.locked ? '#f59e0b' : '#52525b', fontSize: '13px', ...(isMobile ? { minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}) }}
+              onClick={(e) => { e.stopPropagation(); onUpdate({ locked: !post.locked }); }}
+              title={post.locked ? 'Unlock position' : 'Lock position (prevents reorder)'}
+            >
+              {post.locked ? '🔒' : '🔓'}
+            </button>
+            <button style={{ ...s.rowIconBtn, ...(isMobile ? { minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}) }} onClick={onToggleExpand} title="Expand details">
+              <span style={{ fontSize: '12px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.15s' }}>▼</span>
+            </button>
+            {!readOnly && <button style={{ ...s.rowIconBtn, color: '#ef4444', ...(isMobile ? { minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}) }} onClick={(e) => { e.stopPropagation(); onDelete(); }} title="Remove">x</button>}
           </div>
         </div>
 
-        {/* Schedule Date/Time */}
-        <div style={{ width: '190px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-            <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} style={s.inlineDate} />
-            <input type="time" value={schedTime} onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }} style={s.inlineTime} />
+        {/* Bottom row on mobile: Schedule + Caption */}
+        {isMobile ? (
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '6px', paddingLeft: '32px' }}>
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} style={{ ...s.inlineDate, flex: 1, minWidth: '120px' }} />
+              <input type="time" value={schedTime} onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }} style={{ ...s.inlineTime, flex: 1, minWidth: '90px' }} />
+            </div>
+            {previewTime && !post.scheduledTime && (() => {
+              const pt = new Date(previewTime);
+              return (
+                <div style={{ fontSize: '10px', color: '#818cf8', fontStyle: 'italic', paddingLeft: '2px' }}>
+                  {pt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} {pt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                </div>
+              );
+            })()}
+            <input type="text" value={caption} onChange={(e) => setCaption(e.target.value)} onBlur={handleCaptionBlur} placeholder="Caption..." style={{ ...s.inlineCaption, width: '100%' }} />
           </div>
-          {previewTime && !post.scheduledTime && (() => {
-            const pt = new Date(previewTime);
-            return (
-              <div style={{ fontSize: '10px', color: '#818cf8', fontStyle: 'italic', paddingLeft: '2px' }}>
-                → {pt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} {pt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+        ) : (
+          <>
+            {/* Schedule Date/Time */}
+            <div style={{ width: '190px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} style={s.inlineDate} />
+                <input type="time" value={schedTime} onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }} style={s.inlineTime} />
               </div>
-            );
-          })()}
-        </div>
+              {previewTime && !post.scheduledTime && (() => {
+                const pt = new Date(previewTime);
+                return (
+                  <div style={{ fontSize: '10px', color: '#818cf8', fontStyle: 'italic', paddingLeft: '2px' }}>
+                    {pt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} {pt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                  </div>
+                );
+              })()}
+            </div>
 
-        {/* Caption */}
-        <div style={{ width: '200px' }}>
-          <input type="text" value={caption} onChange={(e) => setCaption(e.target.value)} onBlur={handleCaptionBlur} placeholder="Caption..." style={s.inlineCaption} />
-        </div>
-
-        {/* Status */}
-        <div style={{ width: '80px', textAlign: 'center' }}>
-          <span style={{ ...s.statusPill, backgroundColor: statusBg, color: statusColor }}>{post.status}</span>
-        </div>
-
-        {/* Actions */}
-        <div style={{ width: '80px', display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
-          <button
-            style={{ ...s.rowIconBtn, color: post.locked ? '#f59e0b' : '#52525b', fontSize: '13px' }}
-            onClick={(e) => { e.stopPropagation(); onUpdate({ locked: !post.locked }); }}
-            title={post.locked ? 'Unlock position' : 'Lock position (prevents reorder)'}
-          >
-            {post.locked ? '🔒' : '🔓'}
-          </button>
-          <button style={s.rowIconBtn} onClick={onToggleExpand} title="Expand details">
-            <span style={{ fontSize: '12px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.15s' }}>▼</span>
-          </button>
-          {!readOnly && <button style={{ ...s.rowIconBtn, color: '#ef4444' }} onClick={(e) => { e.stopPropagation(); onDelete(); }} title="Remove">×</button>}
-        </div>
+            {/* Caption */}
+            <div style={{ width: '200px' }}>
+              <input type="text" value={caption} onChange={(e) => setCaption(e.target.value)} onBlur={handleCaptionBlur} placeholder="Caption..." style={s.inlineCaption} />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Expanded Detail Drawer */}
@@ -1168,6 +1198,7 @@ const PostRow = ({
           onEditDraft={readOnly ? null : onEditDraft}
           onPublish={readOnly ? null : onPublish}
           readOnly={readOnly}
+          isMobile={isMobile}
         />
       )}
     </div>
@@ -1178,7 +1209,7 @@ const PostRow = ({
 // ExpandedDrawer — Full details with tiered hashtags
 // ═══════════════════════════════════════════════════
 
-const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [], onUpdate, onTogglePlatform, onSetPlatformAccount, onEditDraft, onPublish, readOnly = false }) => {
+const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [], onUpdate, onTogglePlatform, onSetPlatformAccount, onEditDraft, onPublish, readOnly = false, isMobile = false }) => {
   const { theme } = useTheme();
   const s = getS(theme);
   const [hashtags, setHashtags] = useState((post.hashtags || []).join(' '));
@@ -1233,11 +1264,11 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
   const perPostTags = (post.hashtags || []).filter(t => !alwaysOnHashtags.includes(t));
 
   return (
-    <div style={s.drawer}>
-      <div style={s.drawerGrid}>
+    <div style={{ ...s.drawer, ...(isMobile ? { padding: '12px 16px' } : {}) }}>
+      <div style={{ ...s.drawerGrid, ...(isMobile ? { gridTemplateColumns: '1fr', gap: '16px' } : {}) }}>
         {/* Left: Preview + Actions */}
         <div style={s.drawerLeft}>
-          <div style={s.drawerPreview}>
+          <div style={{ ...s.drawerPreview, ...(isMobile ? { width: '100%', height: '180px' } : {}) }}>
             {post.cloudUrl || post.editorState?.cloudUrl ? (
               <video src={post.cloudUrl || post.editorState?.cloudUrl} style={s.drawerVideo} controls muted playsInline />
             ) : previewImage ? (
@@ -1344,7 +1375,7 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
         </div>
 
         {/* Right: Account Selection + Results */}
-        <div style={s.drawerRight}>
+        <div style={{ ...s.drawerRight, ...(isMobile ? { width: '100%' } : {}) }}>
           {Object.keys(selectedPlatforms).length > 0 && (
             <div>
               <label style={s.drawerLabel}>Accounts</label>
@@ -1520,7 +1551,7 @@ const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) =>
 // CalendarView
 // ═══════════════════════════════════════════════════
 
-const CalendarView = ({ posts, expandedPostId, onSelectPost, calendarDate, onChangeMonth, onDragPost }) => {
+const CalendarView = ({ posts, expandedPostId, onSelectPost, calendarDate, onChangeMonth, onDragPost, isMobile = false }) => {
   const { theme } = useTheme();
   const s = getS(theme);
   const [draggedPostId, setDraggedPostId] = useState(null);
@@ -1554,11 +1585,11 @@ const CalendarView = ({ posts, expandedPostId, onSelectPost, calendarDate, onCha
         <button style={s.calNavBtn} onClick={() => onChangeMonth(new Date(year, month - 1))}>&#8249;</button>
         <span style={s.calTitle}>{firstDay.toLocaleString('en-US', { month: 'long', year: 'numeric' })}</span>
         <button style={s.calNavBtn} onClick={() => onChangeMonth(new Date(year, month + 1))}>&#8250;</button>
-        <button style={{ ...s.drawerBtn, marginLeft: '8px', padding: '4px 10px' }} onClick={() => onChangeMonth(new Date())}>Today</button>
+        <button style={{ ...s.drawerBtn, marginLeft: '8px', padding: isMobile ? '8px 14px' : '4px 10px', minHeight: isMobile ? '44px' : 'auto' }} onClick={() => onChangeMonth(new Date())}>Today</button>
       </div>
-      <div style={s.calGrid}>
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-          <div key={d} style={s.calDayHeader}>{d}</div>
+      <div style={{ ...s.calGrid, ...(isMobile ? { padding: '4px' } : {}) }}>
+        {(isMobile ? ['S', 'M', 'T', 'W', 'T', 'F', 'S'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']).map((d, i) => (
+          <div key={`${d}-${i}`} style={s.calDayHeader}>{d}</div>
         ))}
         {days.map((date, idx) => {
           const dateKey = date?.toDateString();
@@ -1567,7 +1598,7 @@ const CalendarView = ({ posts, expandedPostId, onSelectPost, calendarDate, onCha
           return (
             <div
               key={idx}
-              style={{ ...s.calCell, ...(isToday ? { borderColor: '#6366f1', borderWidth: '2px' } : {}) }}
+              style={{ ...s.calCell, ...(isToday ? { borderColor: '#6366f1', borderWidth: '2px' } : {}), ...(isMobile ? { minHeight: '60px', padding: '3px' } : {}) }}
               onDragOver={date ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } : null}
               onDrop={date ? (e) => { e.preventDefault(); if (draggedPostId && dragFromDate) onDragPost(draggedPostId, dragFromDate, date); setDraggedPostId(null); setDragFromDate(null); } : null}
             >
@@ -1582,7 +1613,7 @@ const CalendarView = ({ posts, expandedPostId, onSelectPost, calendarDate, onCha
                         onDragStart={(e) => { e.stopPropagation(); setDraggedPostId(post.id); setDragFromDate(date); e.dataTransfer.effectAllowed = 'move'; }}
                         onClick={() => onSelectPost(post.id)}
                         style={{
-                          padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: '500', color: '#fff', cursor: 'pointer',
+                          padding: isMobile ? '1px 3px' : '2px 6px', borderRadius: isMobile ? '3px' : '4px', fontSize: isMobile ? '8px' : '10px', fontWeight: '500', color: '#fff', cursor: 'pointer',
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                           backgroundColor: { [POST_STATUS.DRAFT]: '#71717a', [POST_STATUS.SCHEDULED]: '#6366f1', [POST_STATUS.POSTING]: '#f59e0b', [POST_STATUS.POSTED]: '#10b981', [POST_STATUS.FAILED]: '#ef4444' }[post.status] || '#71717a',
                           ...(expandedPostId === post.id ? { boxShadow: '0 0 0 2px #6366f1' } : {}),
@@ -1590,7 +1621,7 @@ const CalendarView = ({ posts, expandedPostId, onSelectPost, calendarDate, onCha
                         }}
                         title={`${post.contentName} — ${new Date(post.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}
                       >
-                        {post.contentName.substring(0, 12)}
+                        {post.contentName.substring(0, isMobile ? 6 : 12)}
                       </div>
                     ))}
                   </div>
@@ -1715,7 +1746,7 @@ const getS = (theme) => ({
   // Calendar
   calView: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
   calHeader: { display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 20px', borderBottom: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.surface },
-  calNavBtn: { background: 'none', border: `1px solid ${theme.border.default}`, color: theme.text.secondary, width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer', fontSize: '16px' },
+  calNavBtn: { background: 'none', border: `1px solid ${theme.border.default}`, color: theme.text.secondary, width: isMobile ? '44px' : '28px', height: isMobile ? '44px' : '28px', borderRadius: '6px', cursor: 'pointer', fontSize: isMobile ? '20px' : '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   calTitle: { fontSize: '15px', fontWeight: '600', color: theme.text.primary, minWidth: '150px', textAlign: 'center' },
   calGrid: { flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1px', padding: '8px', backgroundColor: theme.border.default, overflow: 'auto' },
   calDayHeader: { padding: '8px 6px', backgroundColor: theme.bg.surface, color: theme.text.muted, fontSize: '11px', fontWeight: '600', textAlign: 'center', textTransform: 'uppercase' },

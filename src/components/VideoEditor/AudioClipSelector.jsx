@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { trimAudioToFile } from '../../utils/audioTrimmer';
 import log from '../../utils/logger';
+import useIsMobile from '../../hooks/useIsMobile';
+import usePointerDrag from '../../hooks/usePointerDrag';
 
 /**
  * AudioClipSelector - Professional dual-playhead audio region selector
@@ -25,13 +27,7 @@ const AudioClipSelector = ({
   initialEnd = null
 }) => {
   // Mobile responsive detection
-  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  const { isMobile } = useIsMobile();
 
   const [isLoading, setIsLoading] = useState(true);
   const [duration, setDuration] = useState(0);
@@ -248,100 +244,105 @@ const AudioClipSelector = ({
     const inX = (inPoint / duration) * rect.width;
     const outX = (outPoint / duration) * rect.width;
 
-    // Check if near IN handle (within 15px)
-    if (Math.abs(x - inX) < 15) return 'in';
+    // Larger hit zone on mobile for 44px touch targets
+    const hitZone = isMobile ? 22 : 15;
+    // Check if near IN handle
+    if (Math.abs(x - inX) < hitZone) return 'in';
     // Check if near OUT handle
-    if (Math.abs(x - outX) < 15) return 'out';
+    if (Math.abs(x - outX) < hitZone) return 'out';
     // Check if inside region
     if (x > inX && x < outX) return 'region';
     return 'none';
-  }, [inPoint, outPoint, duration]);
+  }, [inPoint, outPoint, duration, isMobile]);
 
-  // Track if mouse actually moved during a mousedown (to distinguish click from drag)
+  // Track if pointer actually moved during a pointerdown (to distinguish click from drag)
   const didDragRef = useRef(false);
-  const mouseDownTimeRef = useRef(null);
+  const pointerDownTimeRef = useRef(null);
+  // Refs to hold latest state for pointer drag callbacks (avoids stale closures)
+  const dragTargetRef = useRef(null);
+  const dragStartXRef = useRef(0);
+  const dragStartInRef = useRef(0);
+  const dragStartOutRef = useRef(0);
+  const inPointRef = useRef(inPoint);
+  const outPointRef = useRef(outPoint);
+  const durationRef = useRef(duration);
+  inPointRef.current = inPoint;
+  outPointRef.current = outPoint;
+  durationRef.current = duration;
 
-  // Mouse handlers
-  const handleMouseDown = useCallback((e) => {
-    const target = getClickTarget(e.clientX);
-    const time = getTimeFromX(e.clientX);
-    didDragRef.current = false;
-    mouseDownTimeRef.current = time;
+  // Pointer drag handler for waveform (replaces mouse events - works with touch + mouse)
+  const { getPointerProps: getWaveformPointerProps } = usePointerDrag({
+    onDragStart: useCallback((e) => {
+      const target = getClickTarget(e.clientX);
+      const time = getTimeFromX(e.clientX);
+      didDragRef.current = false;
+      pointerDownTimeRef.current = time;
 
-    if (target === 'in' || target === 'out') {
-      setDragging(target);
-      e.preventDefault();
-    } else if (target === 'region') {
-      setDragging('region');
-      setDragStartX(e.clientX);
-      setDragStartIn(inPoint);
-      setDragStartOut(outPoint);
-      e.preventDefault();
-    } else {
-      // Click outside region - move scrub playhead
-      setPlayheadTime(time);
-      if (audioRef.current) {
-        audioRef.current.currentTime = time;
+      if (target === 'in' || target === 'out') {
+        dragTargetRef.current = target;
+        setDragging(target);
+      } else if (target === 'region') {
+        dragTargetRef.current = 'region';
+        setDragging('region');
+        dragStartXRef.current = e.clientX;
+        dragStartInRef.current = inPointRef.current;
+        dragStartOutRef.current = outPointRef.current;
+      } else {
+        dragTargetRef.current = null;
+        // Click outside region - move scrub playhead
+        setPlayheadTime(time);
+        if (audioRef.current) {
+          audioRef.current.currentTime = time;
+        }
       }
-    }
-  }, [getClickTarget, getTimeFromX, inPoint, outPoint]);
-
-  useEffect(() => {
-    if (!dragging) return;
-
-    const handleMouseMove = (e) => {
+    }, [getClickTarget, getTimeFromX]),
+    onDragMove: useCallback((e) => {
+      const target = dragTargetRef.current;
+      if (!target) return;
       didDragRef.current = true;
       const time = getTimeFromX(e.clientX);
 
-      if (dragging === 'in') {
-        setInPoint(Math.max(0, Math.min(time, outPoint - 0.5)));
-      } else if (dragging === 'out') {
-        setOutPoint(Math.min(duration, Math.max(time, inPoint + 0.5)));
-      } else if (dragging === 'region') {
-        const deltaX = e.clientX - dragStartX;
+      if (target === 'in') {
+        setInPoint(Math.max(0, Math.min(time, outPointRef.current - 0.5)));
+      } else if (target === 'out') {
+        setOutPoint(Math.min(durationRef.current, Math.max(time, inPointRef.current + 0.5)));
+      } else if (target === 'region') {
+        const deltaX = e.clientX - dragStartXRef.current;
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
-        const deltaTime = (deltaX / rect.width) * duration;
-        const regionDuration = dragStartOut - dragStartIn;
+        const deltaTime = (deltaX / rect.width) * durationRef.current;
+        const regionDuration = dragStartOutRef.current - dragStartInRef.current;
 
-        let newIn = dragStartIn + deltaTime;
-        let newOut = dragStartOut + deltaTime;
+        let newIn = dragStartInRef.current + deltaTime;
+        let newOut = dragStartOutRef.current + deltaTime;
 
         // Clamp to bounds
         if (newIn < 0) {
           newIn = 0;
           newOut = regionDuration;
         }
-        if (newOut > duration) {
-          newOut = duration;
-          newIn = duration - regionDuration;
+        if (newOut > durationRef.current) {
+          newOut = durationRef.current;
+          newIn = durationRef.current - regionDuration;
         }
 
         setInPoint(newIn);
         setOutPoint(newOut);
       }
-    };
-
-    const handleMouseUp = () => {
+    }, [getTimeFromX]),
+    onDragEnd: useCallback(() => {
       // If user clicked inside the region without dragging, seek the playhead there
-      if (dragging === 'region' && !didDragRef.current && mouseDownTimeRef.current != null) {
-        const time = mouseDownTimeRef.current;
+      if (dragTargetRef.current === 'region' && !didDragRef.current && pointerDownTimeRef.current != null) {
+        const time = pointerDownTimeRef.current;
         setPlayheadTime(time);
         if (audioRef.current) {
           audioRef.current.currentTime = time;
         }
       }
+      dragTargetRef.current = null;
       setDragging(null);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [dragging, dragStartX, dragStartIn, dragStartOut, inPoint, outPoint, duration, getTimeFromX]);
+    }, [])
+  });
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -614,11 +615,9 @@ const AudioClipSelector = ({
             <div
               ref={containerRef}
               style={{
-                ...styles.canvasContainer,
-                ...(isMobile ? { touchAction: 'none' } : {})
+                ...styles.canvasContainer
               }}
-              onMouseDown={handleMouseDown}
-              onTouchStart={isMobile ? handleMouseDown : undefined}
+              {...getWaveformPointerProps()}
             >
               <canvas
                 ref={canvasRef}

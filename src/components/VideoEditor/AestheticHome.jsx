@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import useIsMobile from '../../hooks/useIsMobile';
 import AudioClipSelector from './AudioClipSelector';
 import LyricBank from './LyricBank';
 import { ConfirmDialog } from '../ui';
@@ -58,19 +59,12 @@ const AestheticHome = ({
 
   // Mobile responsive state
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const { isMobile } = useIsMobile();
 
-  // Track window resize for mobile detection
+  // Auto-close sidebar when resizing to desktop
   useEffect(() => {
-    const handleResize = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      // Auto-close sidebar when resizing to desktop
-      if (!mobile) setMobileSidebarOpen(false);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    if (!isMobile) setMobileSidebarOpen(false);
+  }, [isMobile]);
 
   // File input refs
   const videoInputRef = useRef(null);
@@ -540,6 +534,7 @@ const AestheticHome = ({
                           <VideoCard
                             key={video.id}
                             video={video}
+                            isMobile={isMobile}
                             onDelete={() => setDeleteVideoConfirm({ isOpen: true, videoId: video.id, videoName: video.name || 'this video' })}
                             onRename={(newName) => onRenameBankVideo?.(video.id, newName)}
                           />
@@ -783,6 +778,7 @@ const AestheticHome = ({
                           <ImageCard
                             key={image.id}
                             image={image}
+                            isMobile={isMobile}
                             onDelete={() => setDeleteImageConfirm({ isOpen: true, imageId: image.id, imageName: image.name, bank: 'A' })}
                           />
                         ))
@@ -803,6 +799,7 @@ const AestheticHome = ({
                           <ImageCard
                             key={image.id}
                             image={image}
+                            isMobile={isMobile}
                             onDelete={() => setDeleteImageConfirm({ isOpen: true, imageId: image.id, imageName: image.name, bank: 'B' })}
                           />
                         ))
@@ -965,10 +962,11 @@ const AestheticHome = ({
 // Sub-components
 // ============================================
 
-const VideoCard = ({ video, onDelete, onRename }) => {
+const VideoCard = ({ video, onDelete, onRename, isMobile = false }) => {
   const [showActions, setShowActions] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(video.name || '');
+  const actionsVisible = isMobile || showActions;
 
   const handleRename = () => {
     if (editName.trim() && editName.trim() !== video.name) onRename(editName.trim());
@@ -992,10 +990,10 @@ const VideoCard = ({ video, onDelete, onRename }) => {
         )}
       </div>
       <span style={styles.videoDuration}>{video.duration ? `${Math.floor(video.duration / 60)}:${String(Math.floor(video.duration % 60)).padStart(2, '0')}` : '0:00'}</span>
-      {showActions && !isEditing && (
+      {actionsVisible && !isEditing && (
         <div style={styles.videoActionBtns}>
-          <button style={styles.renameVideoBtn} onClick={(e) => { e.stopPropagation(); setIsEditing(true); }} title="Rename">✎</button>
-          <button style={styles.deleteVideoBtn} onClick={(e) => { e.stopPropagation(); onDelete(); }} title="Delete">✕</button>
+          <button style={{...styles.renameVideoBtn, ...(isMobile ? { minWidth: 44, minHeight: 44 } : {})}} onClick={(e) => { e.stopPropagation(); setIsEditing(true); }} title="Rename">✎</button>
+          <button style={{...styles.deleteVideoBtn, ...(isMobile ? { minWidth: 44, minHeight: 44 } : {})}} onClick={(e) => { e.stopPropagation(); onDelete(); }} title="Delete">✕</button>
         </div>
       )}
     </div>
@@ -1038,14 +1036,15 @@ const AudioItem = ({ audio, onEdit, onDelete, onRename }) => {
   );
 };
 
-const ImageCard = ({ image, onDelete }) => {
+const ImageCard = ({ image, onDelete, isMobile = false }) => {
   const [showActions, setShowActions] = useState(false);
+  const actionsVisible = isMobile || showActions;
 
   return (
     <div style={styles.imageCard} onMouseEnter={() => setShowActions(true)} onMouseLeave={() => setShowActions(false)}>
       <img src={image.url || image.localUrl} alt={image.name} style={styles.imageThumb} />
-      {showActions && (
-        <button style={styles.imageDeleteBtn} onClick={onDelete} title="Delete">✕</button>
+      {actionsVisible && (
+        <button style={{...styles.imageDeleteBtn, ...(isMobile ? { minWidth: 44, minHeight: 44 } : {})}} onClick={onDelete} title="Delete">✕</button>
       )}
     </div>
   );

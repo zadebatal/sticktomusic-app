@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import useIsMobile from '../../hooks/useIsMobile';
 import AestheticHome from './AestheticHome';
 import StudioHome from './StudioHome';
 import ContentLibrary from './ContentLibrary';
@@ -278,13 +279,7 @@ const VideoStudio = ({
   const styles = getStyles(theme);
 
   // Mobile responsive detection
-  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  const { isMobile } = useIsMobile();
 
   // Current artist ID - used for namespaced storage
   const [currentArtistId, setCurrentArtistId] = useState(initialArtistId);
@@ -1829,6 +1824,43 @@ const VideoStudio = ({
             {/* CATEGORY-BASED MODE: When selectedCategory exists */}
             {selectedCategory && (
               <>
+                {isMobile ? (
+                  /* Mobile: back arrow + current level only */
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button
+                      style={{ ...styles.breadcrumbLink, padding: '6px', display: 'flex', alignItems: 'center' }}
+                      onClick={() => {
+                        if (showEditor || showSlideshowEditor) {
+                          const targetView = studioMode === 'slideshows' || currentView === 'slideshows' || showSlideshowEditor ? 'slideshows' : 'library';
+                          setCurrentView(targetView);
+                          setShowEditor(false);
+                          setShowSlideshowEditor(false);
+                        } else if (currentView === 'library' || currentView === 'slideshows') {
+                          setCurrentView('home');
+                          setStudioMode(null);
+                        } else if (studioMode) {
+                          setCurrentView('home');
+                          setStudioMode(null);
+                        } else {
+                          setSelectedCategory(null);
+                          setStudioMode(null);
+                        }
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="15 18 9 12 15 6"/>
+                      </svg>
+                    </button>
+                    <span style={styles.breadcrumbCurrent}>
+                      {(showEditor || showSlideshowEditor) ? 'Editor'
+                        : (currentView === 'library' || currentView === 'slideshows') ? 'Dashboard'
+                        : studioMode ? ((studioMode === 'slideshows') ? 'Slideshows' : 'Videos')
+                        : selectedCategory.name}
+                    </span>
+                  </div>
+                ) : (
+                  /* Desktop: full breadcrumb path */
+                  <>
                 {/* Root: Categories */}
                 <button
                   style={{
@@ -1914,6 +1946,8 @@ const VideoStudio = ({
                     <span style={styles.breadcrumbCurrent}>Editor</span>
                   </>
                 )}
+                  </>
+                )}
               </>
             )}
 
@@ -1921,6 +1955,45 @@ const VideoStudio = ({
             {/* Dashboard > Studio > Videos > Slideshows > Drafts > Schedule */}
             {USE_LIBRARY_SYSTEM && !selectedCategory && (
               <>
+                {isMobile ? (
+                  /* Mobile: back arrow + current level only */
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button
+                      style={{ ...styles.breadcrumbLink, padding: '6px', display: 'flex', alignItems: 'center' }}
+                      onClick={() => {
+                        if (showEditor || showSlideshowEditor) {
+                          setShowEditor(false);
+                          setShowSlideshowEditor(false);
+                          const targetView = studioMode === 'slideshows' ? 'slideshows' : 'library';
+                          setCurrentView(targetView);
+                        } else if (currentView === 'drafts' || currentView === 'scheduling') {
+                          setCurrentView('home');
+                          setStudioMode(null);
+                        } else if (studioMode) {
+                          setCurrentView('home');
+                          setStudioMode(null);
+                        } else {
+                          navigateWithDraftCheck(onClose);
+                        }
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="15 18 9 12 15 6"/>
+                      </svg>
+                    </button>
+                    <span style={styles.breadcrumbCurrent}>
+                      {(showEditor || showSlideshowEditor)
+                        ? (showSlideshowEditor ? 'Slideshow Editor' : 'Video Editor')
+                        : currentView === 'scheduling' ? 'Schedule'
+                        : currentView === 'drafts' ? 'Drafts'
+                        : studioMode === 'videos' ? 'Videos'
+                        : studioMode === 'slideshows' ? 'Slideshows'
+                        : 'Studio'}
+                    </span>
+                  </div>
+                ) : (
+                  /* Desktop: full linear breadcrumb */
+                  <>
                 {/* 1. Dashboard */}
                 <button
                   style={styles.breadcrumbLink}
@@ -2021,6 +2094,8 @@ const VideoStudio = ({
                     </span>
                   </>
                 )}
+                  </>
+                )}
               </>
             )}
           </div>
@@ -2117,6 +2192,7 @@ const VideoStudio = ({
             db={db}
             artistId={currentArtistId}
             artists={artists}
+            isMobile={isMobile}
             studioMode={studioMode}
             onSetStudioMode={setStudioMode}
             onMakeVideo={(options) => {
@@ -2168,6 +2244,7 @@ const VideoStudio = ({
         {currentView === 'home' && (!USE_LIBRARY_SYSTEM || selectedCategory) && (
           <AestheticHome
             artists={artists}
+            isMobile={isMobile}
             selectedArtist={selectedArtist}
             onSelectArtist={setSelectedArtist}
             categories={artistCategories}
@@ -2212,6 +2289,7 @@ const VideoStudio = ({
           <ContentLibrary
             category={selectedCategory || libraryCategory}
             contentType="videos"
+            isMobile={isMobile}
             onBack={() => setCurrentView('home')}
             onMakeVideo={handleMakeVideo}
             onEditVideo={handleMakeVideo}
@@ -2232,6 +2310,7 @@ const VideoStudio = ({
           <ContentLibrary
             category={selectedCategory || libraryCategory}
             contentType="slideshows"
+            isMobile={isMobile}
             onBack={() => setCurrentView('home')}
             onMakeSlideshow={handleMakeSlideshow}
             onEditSlideshow={(slideshow) => handleMakeSlideshow(slideshow)}
@@ -2252,6 +2331,7 @@ const VideoStudio = ({
         {currentView === 'drafts' && (selectedCategory || (USE_LIBRARY_SYSTEM && libraryCategory)) && (
           <DraftsView
             category={selectedCategory || libraryCategory}
+            isMobile={isMobile}
             onBack={() => setCurrentView('home')}
             onMakeVideo={handleMakeVideo}
             onEditVideo={handleMakeVideo}
@@ -2275,6 +2355,7 @@ const VideoStudio = ({
           <SchedulingPage
             db={db}
             artistId={currentArtistId}
+            isMobile={isMobile}
             accounts={accounts}
             lateAccountIds={lateAccountIds}
             onSchedulePost={onSchedulePost}
@@ -2299,6 +2380,7 @@ const VideoStudio = ({
       {showEditor && (selectedCategory || USE_LIBRARY_SYSTEM) && (
         <EditorErrorBoundary onClose={handleCloseEditor}>
           <VideoEditorModal
+            isMobile={isMobile}
             category={selectedCategory || {
               id: 'library-session',
               name: 'Library',
@@ -2346,6 +2428,7 @@ const VideoStudio = ({
       {showSlideshowEditor && (selectedCategory || (USE_LIBRARY_SYSTEM && currentArtistId)) && (
         <SlideshowEditor
           db={db}
+          isMobile={isMobile}
           artistId={currentArtistId}
           category={selectedCategory || {
             id: 'library-session',
@@ -2374,6 +2457,7 @@ const VideoStudio = ({
       {showBatchPipeline && selectedCategory && (
         <BatchPipeline
           category={selectedCategory}
+          isMobile={isMobile}
           lateAccountIds={lateAccountIds}
           onSchedulePost={onSchedulePost}
           initialWords={batchLyricSettings?.words}

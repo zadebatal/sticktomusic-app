@@ -59,6 +59,7 @@ import {
   createFolder as driveCreateFolder, DRIVE_MIME_TYPES
 } from '../../services/googleDriveService';
 import { useToast } from '../ui';
+import useIsMobile from '../../hooks/useIsMobile';
 import log from '../../utils/logger';
 
 // Extracted outside LibraryBrowser so React doesn't recreate on parent re-render
@@ -137,7 +138,7 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
               onClick={() => onRemove(i)}
               style={{
                 background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)',
-                cursor: 'pointer', fontSize: '14px', padding: '0 4px', flexShrink: 0
+                cursor: 'pointer', fontSize: '16px', padding: '4px 8px', flexShrink: 0, minWidth: '32px', minHeight: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}
               title="Remove"
             >×</button>
@@ -193,11 +194,13 @@ const LibraryBrowser = ({
   onCollectionChange = null, // Notify parent when sidebar collection changes
   liveCollections = null, // Shared collections from parent for consistent ordering
   onCollectionsUpdated = null, // Notify parent when collections are mutated (create/delete/rename)
-  isMobile = false,
+  isMobile: isMobileProp = false,
   compact = false,
   refreshTrigger = 0 // Increment to force refresh
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
+  const { isMobile: isMobileHook } = useIsMobile();
+  const isMobile = isMobileHook || isMobileProp;
 
   // State
   const [library, setLibrary] = useState([]);
@@ -893,9 +896,10 @@ const LibraryBrowser = ({
   // Context menu
   const handleContextMenu = (e, media) => {
     e.preventDefault();
+    // On mobile, position is ignored (menu is centered via CSS)
     setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
+      x: isMobile ? 0 : e.clientX,
+      y: isMobile ? 0 : e.clientY,
       media
     });
   };
@@ -947,7 +951,8 @@ const LibraryBrowser = ({
     controls: {
       display: 'flex',
       gap: '8px',
-      alignItems: 'center'
+      alignItems: 'center',
+      ...(isMobile ? { flexWrap: 'wrap', justifyContent: 'flex-end' } : {})
     },
     select: {
       backgroundColor: 'rgba(255, 255, 255, 0.05)',
@@ -975,20 +980,43 @@ const LibraryBrowser = ({
     },
     body: {
       display: 'flex',
+      flexDirection: isMobile ? 'column' : 'row',
       flex: 1,
       overflow: 'hidden'
     },
-    sidebar: {
-      width: isMobile ? '100%' : '200px',
-      borderRight: isMobile ? 'none' : '1px solid rgba(255, 255, 255, 0.1)',
+    sidebar: isMobile ? {
+      width: '100%',
+      borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+      padding: '8px 12px',
+      overflowX: 'auto',
+      overflowY: 'hidden',
+      display: 'flex',
+      flexDirection: 'row',
+      gap: '8px',
+      alignItems: 'center',
+      flexShrink: 0,
+      WebkitOverflowScrolling: 'touch',
+      msOverflowStyle: 'none',
+      scrollbarWidth: 'none'
+    } : {
+      width: '200px',
+      borderRight: '1px solid rgba(255, 255, 255, 0.1)',
       padding: '12px',
       overflowY: 'auto',
-      display: isMobile && activeView !== 'collections' ? 'none' : 'block'
+      display: 'block'
     },
-    sidebarSection: {
+    sidebarSection: isMobile ? {
+      display: 'flex',
+      flexDirection: 'row',
+      gap: '6px',
+      alignItems: 'center',
+      flexShrink: 0
+    } : {
       marginBottom: '20px'
     },
-    sidebarTitle: {
+    sidebarTitle: isMobile ? {
+      display: 'none'
+    } : {
       fontSize: '11px',
       fontWeight: '600',
       color: 'rgba(255, 255, 255, 0.4)',
@@ -997,7 +1025,21 @@ const LibraryBrowser = ({
       marginBottom: '8px',
       padding: '0 8px'
     },
-    sidebarItem: {
+    sidebarItem: isMobile ? {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      padding: '6px 12px',
+      borderRadius: '20px',
+      cursor: 'pointer',
+      fontSize: '13px',
+      color: 'rgba(255, 255, 255, 0.8)',
+      whiteSpace: 'nowrap',
+      flexShrink: 0,
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      minHeight: '36px',
+      transition: 'all 0.2s'
+    } : {
       display: 'flex',
       alignItems: 'center',
       gap: '8px',
@@ -1008,14 +1050,32 @@ const LibraryBrowser = ({
       color: 'rgba(255, 255, 255, 0.8)',
       transition: 'all 0.2s'
     },
-    sidebarItemActive: {
+    sidebarItemActive: isMobile ? {
+      backgroundColor: 'rgba(99, 102, 241, 0.3)',
+      color: '#ffffff',
+      borderColor: 'rgba(99, 102, 241, 0.6)'
+    } : {
       backgroundColor: 'rgba(99, 102, 241, 0.2)',
       color: '#ffffff'
     },
     sidebarItemIcon: {
-      fontSize: '16px'
+      fontSize: isMobile ? '14px' : '16px'
     },
-    addCollectionButton: {
+    addCollectionButton: isMobile ? {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px',
+      padding: '6px 12px',
+      color: 'rgba(255, 255, 255, 0.5)',
+      fontSize: '12px',
+      cursor: 'pointer',
+      borderRadius: '20px',
+      border: '1px dashed rgba(255, 255, 255, 0.2)',
+      whiteSpace: 'nowrap',
+      flexShrink: 0,
+      minHeight: '36px',
+      transition: 'all 0.2s'
+    } : {
       display: 'flex',
       alignItems: 'center',
       gap: '6px',
@@ -1033,8 +1093,10 @@ const LibraryBrowser = ({
     },
     mediaGrid: {
       display: 'grid',
-      gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? '100px' : '140px'}, 1fr))`,
-      gap: compact ? '8px' : '12px',
+      gridTemplateColumns: isMobile
+        ? 'repeat(3, 1fr)'
+        : `repeat(auto-fill, minmax(${compact ? '100px' : '140px'}, 1fr))`,
+      gap: isMobile ? '6px' : (compact ? '8px' : '12px'),
       userSelect: 'none',
       WebkitUserSelect: 'none',
       minHeight: '100%',
@@ -1045,8 +1107,10 @@ const LibraryBrowser = ({
       width: '100%',
       paddingBottom: '100%',
       height: 0,
+      minHeight: isMobile ? '44px' : undefined,
+      minWidth: isMobile ? '44px' : undefined,
       backgroundColor: 'rgba(255, 255, 255, 0.05)',
-      borderRadius: '8px',
+      borderRadius: isMobile ? '6px' : '8px',
       overflow: 'hidden',
       cursor: 'pointer',
       border: '1px solid transparent',
@@ -1150,7 +1214,22 @@ const LibraryBrowser = ({
       borderRadius: '3px',
       transition: 'width 0.3s ease'
     },
-    contextMenu: {
+    contextMenu: isMobile ? {
+      position: 'fixed',
+      left: '50%',
+      top: '50%',
+      transform: 'translate(-50%, -50%)',
+      backgroundColor: '#1a1a1a',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      borderRadius: '12px',
+      padding: '8px 0',
+      width: '85vw',
+      maxWidth: '320px',
+      maxHeight: '70vh',
+      overflowY: 'auto',
+      zIndex: 10000,
+      boxShadow: '0 10px 40px rgba(0, 0, 0, 0.7)'
+    } : {
       position: 'fixed',
       backgroundColor: '#1a1a1a',
       border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -1161,13 +1240,14 @@ const LibraryBrowser = ({
       boxShadow: '0 10px 40px rgba(0, 0, 0, 0.5)'
     },
     contextMenuItem: {
-      padding: '10px 16px',
+      padding: isMobile ? '14px 16px' : '10px 16px',
       fontSize: '14px',
       color: 'rgba(255, 255, 255, 0.8)',
       cursor: 'pointer',
       display: 'flex',
       alignItems: 'center',
       gap: '10px',
+      minHeight: isMobile ? '44px' : undefined,
       transition: 'background-color 0.2s'
     },
     contextMenuDivider: {
@@ -1820,14 +1900,15 @@ const LibraryBrowser = ({
             </button>
           )}
 
-          <label style={styles.uploadButton}>
+          <label style={{...styles.uploadButton, ...(isMobile ? { padding: '10px 16px', minHeight: '44px' } : {})}}>
             <span>⬆️</span>
             <span>{isMobile ? 'Add' : 'Upload'}</span>
             <input
               ref={fileInputRef}
               type="file"
               multiple
-              accept={getAcceptTypes()}
+              accept={isMobile ? 'image/*,video/*' : getAcceptTypes()}
+              {...(isMobile ? { capture: 'environment' } : {})}
               onChange={handleFileUpload}
               style={{ display: 'none' }}
             />
@@ -1935,6 +2016,7 @@ const LibraryBrowser = ({
                     ) : (
                       <span style={{ flex: 1 }}>{collection.name}</span>
                     )}
+                    {!isMobile && (
                     <div style={{ display: 'flex', gap: '4px' }}>
                       {renamingCollectionId !== collection.id && (
                         <span
@@ -1960,6 +2042,7 @@ const LibraryBrowser = ({
                         ✕
                       </span>
                     </div>
+                    )}
                   </div>
                 ))}
 
@@ -2002,16 +2085,29 @@ const LibraryBrowser = ({
         <div style={styles.content}>
           {/* Collection view: all images on left, Bank A/B stacked on right */}
           {isUserCollectionView && collectionBanks ? (
-            <div style={{ display: 'flex', gap: '12px', height: '100%', overflow: 'hidden' }}>
+            <div style={{
+              display: 'flex',
+              flexDirection: isMobile ? 'column' : 'row',
+              gap: isMobile ? '8px' : '12px',
+              height: '100%',
+              overflow: isMobile ? 'auto' : 'hidden'
+            }}>
               {/* Left half — all collection images */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+              <div style={{
+                flex: isMobile ? 'none' : 1,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                minWidth: 0,
+                ...(isMobile ? { maxHeight: '50vh' } : {})
+              }}>
                 <div style={{
                   padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '8px',
                   borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0
                 }}>
                   <span style={{ fontSize: '13px', fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>All Images</span>
                   <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', flex: 1 }}>
-                    {displayedMedia.length} items — drag into banks →
+                    {displayedMedia.length} items{isMobile ? '' : ' — drag into banks →'}
                   </span>
 
                   {/* Google Drive cloud menu */}
@@ -2086,10 +2182,12 @@ const LibraryBrowser = ({
                 <div
                   ref={gridRef}
                   style={{
-                    flex: 1, overflowY: 'auto', padding: '10px',
+                    flex: 1, overflowY: 'auto', padding: isMobile ? '8px' : '10px',
                     display: 'grid',
-                    gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? '80px' : '110px'}, 1fr))`,
-                    gap: '8px', alignContent: 'start',
+                    gridTemplateColumns: isMobile
+                      ? 'repeat(3, 1fr)'
+                      : `repeat(auto-fill, minmax(${compact ? '80px' : '110px'}, 1fr))`,
+                    gap: isMobile ? '6px' : '8px', alignContent: 'start',
                     userSelect: 'none', WebkitUserSelect: 'none'
                   }}
                   onMouseDown={handleGridMouseDown}
@@ -2103,7 +2201,15 @@ const LibraryBrowser = ({
               </div>
 
               {/* Right half — Banks with tabs */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
+              <div style={{
+                flex: isMobile ? 'none' : 1,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                minWidth: 0,
+                minHeight: 0,
+                ...(isMobile ? { width: '100%' } : {})
+              }}>
                 {/* Tab bar */}
                 <div style={{ display: 'flex', gap: '2px', padding: '4px', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '8px', marginBottom: '8px', flexShrink: 0 }}>
                   <button
@@ -2131,7 +2237,17 @@ const LibraryBrowser = ({
                 </div>
 
                 {bankTab === 'images' ? (
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden', minHeight: 0 }}>
+                  <div style={{
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: isMobile ? 'row' : 'column',
+                    gap: '8px',
+                    overflow: isMobile ? 'auto' : 'hidden',
+                    overflowX: isMobile ? 'auto' : undefined,
+                    minHeight: 0,
+                    WebkitOverflowScrolling: isMobile ? 'touch' : undefined,
+                    paddingBottom: isMobile ? '8px' : undefined
+                  }}>
                     {(collectionBanks?.banks || []).map((bankMedia, idx) => {
                       const color = getBankColor(idx);
                       const bankSel = selectedBankItems[idx] || new Set();
@@ -2139,7 +2255,13 @@ const LibraryBrowser = ({
                         <div
                           key={idx}
                           style={{
-                            flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0,
+                            flex: isMobile ? 'none' : 1,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            overflow: 'hidden',
+                            minHeight: isMobile ? '120px' : 0,
+                            minWidth: isMobile ? '200px' : undefined,
+                            flexShrink: isMobile ? 0 : undefined,
                             borderRadius: '10px',
                             border: dragOverBank === idx ? `2px dashed ${color.border}` : '1px solid rgba(255,255,255,0.08)',
                             backgroundColor: dragOverBank === idx ? color.bg : 'transparent',
@@ -2324,13 +2446,14 @@ const LibraryBrowser = ({
                 }
               </div>
               {!searchQuery && activeView === 'library' && (
-                <label style={{...styles.uploadButton, marginTop: '8px'}}>
+                <label style={{...styles.uploadButton, marginTop: '8px', ...(isMobile ? { padding: '12px 20px', minHeight: '44px' } : {})}}>
                   <span>⬆️</span>
-                  <span>Upload Media</span>
+                  <span>{isMobile ? 'Add Media' : 'Upload Media'}</span>
                   <input
                     type="file"
                     multiple
-                    accept={getAcceptTypes()}
+                    accept={isMobile ? 'image/*,video/*' : getAcceptTypes()}
+                    {...(isMobile ? { capture: 'environment' } : {})}
                     onChange={handleFileUpload}
                     style={{ display: 'none' }}
                   />
@@ -2404,11 +2527,21 @@ const LibraryBrowser = ({
 
       {/* Context Menu */}
       {contextMenu && (
+        <>
+        {isMobile && (
+          <div
+            style={{
+              position: 'fixed', inset: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              zIndex: 9999
+            }}
+            onClick={() => setContextMenu(null)}
+          />
+        )}
         <div
           style={{
             ...styles.contextMenu,
-            left: contextMenu.x,
-            top: contextMenu.y
+            ...(isMobile ? {} : { left: contextMenu.x, top: contextMenu.y })
           }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -2520,6 +2653,7 @@ const LibraryBrowser = ({
             <span>Delete from library</span>
           </div>
         </div>
+        </>
       )}
 
       {/* Smart Delete Modal — remove from folder vs delete everywhere */}

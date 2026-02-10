@@ -12,6 +12,7 @@ import {
   initGoogleDrive, authenticate as driveAuth, isAuthenticated as isDriveAuth,
   uploadFile as driveUploadFile, ensureAppFolder
 } from '../../services/googleDriveService';
+import useIsMobile from '../../hooks/useIsMobile';
 
 /**
  * ContentLibrary - Shows all videos or slideshows created within a category
@@ -44,6 +45,7 @@ const ContentLibrary = ({
 }) => {
   // BUG-034: Toast notifications instead of alert()
   const { success: toastSuccess, error: toastError } = useToast();
+  const { isMobile } = useIsMobile();
 
   const isSlideshow = contentType === 'slideshows';
   const [filter, setFilter] = useState('all');
@@ -270,7 +272,10 @@ const ContentLibrary = ({
   return (
     <div style={styles.container}>
       {/* Header */}
-      <div style={styles.header}>
+      <div style={{
+        ...styles.header,
+        ...(isMobile ? { flexDirection: 'column', alignItems: 'stretch', gap: '12px', padding: '16px' } : {})
+      }}>
         <div style={styles.headerLeft}>
           <button style={styles.backButton} onClick={() => { setPreviewingVideo(null); setPreviewingSlideshow(null); onBack?.(); }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -287,25 +292,28 @@ const ContentLibrary = ({
             </div>
           </div>
         </div>
-        <div style={styles.headerActions}>
+        <div style={{
+          ...styles.headerActions,
+          ...(isMobile ? { flexDirection: 'column', width: '100%', gap: '8px' } : {})
+        }}>
           {isDraftsView ? (
             /* Drafts view: show prominent create CTAs + delete */
             <>
               <button
-                style={{ ...styles.primaryButton, backgroundColor: '#7c3aed' }}
+                style={{ ...styles.primaryButton, backgroundColor: '#7c3aed', ...(isMobile ? { width: '100%', justifyContent: 'center' } : {}) }}
                 onClick={() => onMakeVideo?.()}
               >
                 🎥 New Video Draft
               </button>
               <button
-                style={{ ...styles.primaryButton, backgroundColor: '#6366f1' }}
+                style={{ ...styles.primaryButton, backgroundColor: '#6366f1', ...(isMobile ? { width: '100%', justifyContent: 'center' } : {}) }}
                 onClick={() => onMakeSlideshow?.()}
               >
                 🖼️ New Slideshow Draft
               </button>
               {selectedVideoIds.size > 0 && (
                 <button
-                  style={{ ...styles.secondaryButton, backgroundColor: 'rgba(239,68,68,0.15)', color: '#f87171', borderColor: 'rgba(239,68,68,0.3)' }}
+                  style={{ ...styles.secondaryButton, backgroundColor: 'rgba(239,68,68,0.15)', color: '#f87171', borderColor: 'rgba(239,68,68,0.3)', ...(isMobile ? { width: '100%', textAlign: 'center' } : {}) }}
                   onClick={() => setDeleteConfirm({ isOpen: true, videoId: null, isBulk: true })}
                 >
                   Delete Selected ({selectedVideoIds.size})
@@ -316,7 +324,7 @@ const ContentLibrary = ({
             /* Normal category view: show Make buttons */
             <>
               <button
-                style={styles.primaryButton}
+                style={{ ...styles.primaryButton, ...(isMobile ? { width: '100%', justifyContent: 'center' } : {}) }}
                 onClick={() => isSlideshow ? onMakeSlideshow?.() : onMakeVideo?.()}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -325,7 +333,7 @@ const ContentLibrary = ({
                 {isSlideshow ? 'Make a slideshow' : 'Make a video'}
               </button>
               {!isSlideshow && (
-                <button style={styles.secondaryButton} onClick={onShowBatchPipeline}>
+                <button style={{ ...styles.secondaryButton, ...(isMobile ? { width: '100%', textAlign: 'center' } : {}) }} onClick={onShowBatchPipeline}>
                   Make up to 10 at once
                 </button>
               )}
@@ -335,7 +343,10 @@ const ContentLibrary = ({
       </div>
 
       {/* Filters */}
-      <div style={styles.filters}>
+      <div style={{
+        ...styles.filters,
+        ...(isMobile ? { flexDirection: 'column', alignItems: 'stretch', gap: '8px', padding: '12px 16px' } : {})
+      }}>
         <div style={styles.filterGroup}>
           {['all', 'today', 'week', 'month'].map(range => (
             <button
@@ -395,7 +406,7 @@ const ContentLibrary = ({
                         toastSuccess('Removed from schedule');
                       }
                     }}
-                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '12px', padding: '0 2px' }}
+                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '14px', padding: '4px 8px', minWidth: '32px', minHeight: '32px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                     title="Unschedule"
                   >×</button>
                 </div>
@@ -406,7 +417,10 @@ const ContentLibrary = ({
       )}
 
       {/* Content Grid */}
-      <div style={styles.contentArea}>
+      <div style={{
+        ...styles.contentArea,
+        ...(isMobile ? { padding: '12px' } : {})
+      }}>
         {filteredItems.length === 0 ? (
           <div style={styles.emptyState}>
             {isSlideshow ? (
@@ -438,7 +452,11 @@ const ContentLibrary = ({
             )}
           </div>
         ) : (
-          <div style={styles.grid}>
+          <div style={{
+            ...styles.grid,
+            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(200px, 1fr))',
+            ...(isMobile ? { gap: '10px', padding: '0' } : {})
+          }}>
             {filteredItems.map((item, index) => (
               isSlideshow ? (
                 <div key={item.id} onClick={(e) => handleCardSelect(item.id, index, e)} style={{ cursor: 'pointer' }}>
@@ -451,6 +469,7 @@ const ContentLibrary = ({
                     onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
                     onExportToDrive={driveConfigured ? () => handleExportToDrive(item) : null}
                     isDriveExporting={driveExporting === item.id}
+                    isMobile={isMobile}
                     onPost={async () => {
                       if (onViewScheduling && db && artistId) {
                         // Create a scheduled post and navigate to scheduling page
@@ -487,6 +506,7 @@ const ContentLibrary = ({
                     onToggleSelect={() => toggleItemSelection(item.id)}
                     onEdit={() => onEditVideo(item)}
                     onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
+                    isMobile={isMobile}
                     onApprove={() => onApproveVideo(item.id)}
                     onExportToDrive={driveConfigured ? () => handleExportToDrive(item) : null}
                     isDriveExporting={driveExporting === item.id}
@@ -527,12 +547,24 @@ const ContentLibrary = ({
 
       {/* Batch Action Bar */}
       {selectedItems.length > 0 && (
-        <div style={styles.batchBar}>
+        <div style={{
+          ...styles.batchBar,
+          ...(isMobile ? {
+            flexDirection: 'column',
+            gap: '12px',
+            margin: '0 12px 12px',
+            padding: '12px 16px',
+            paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))'
+          } : {})
+        }}>
           <div style={styles.batchLeft}>
             <input type="checkbox" checked={filteredItems.every(v => selectedVideoIds.has(v.id))} onChange={toggleSelectAll} style={styles.checkbox} />
             <span style={styles.batchText}>{selectedItems.length} selected</span>
           </div>
-          <div style={styles.batchRight}>
+          <div style={{
+            ...styles.batchRight,
+            ...(isMobile ? { flexWrap: 'wrap', justifyContent: 'center', width: '100%' } : {})
+          }}>
             <button style={styles.batchBtnClear} onClick={clearSelection}>Clear</button>
             <button
               style={styles.batchBtnDelete}
@@ -667,9 +699,12 @@ const ContentLibrary = ({
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column'
         }} onClick={() => setPreviewingSlideshow(null)}>
           <div style={{
-            position: 'relative', maxWidth: '90vw', maxHeight: '85vh',
-            width: 'fit-content', minWidth: '320px',
-            backgroundColor: '#1a1a2e', borderRadius: 16, overflow: 'hidden',
+            position: 'relative',
+            ...(isMobile
+              ? { width: '100%', height: '100%', maxWidth: '100vw', maxHeight: '100vh', minWidth: 'unset', borderRadius: 0 }
+              : { maxWidth: '90vw', maxHeight: '85vh', width: 'fit-content', minWidth: '320px', borderRadius: 16 }
+            ),
+            backgroundColor: '#1a1a2e', overflow: 'hidden',
             boxShadow: '0 25px 60px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column'
           }} onClick={e => e.stopPropagation()}>
             {/* Header */}
@@ -689,8 +724,8 @@ const ContentLibrary = ({
                 }}>Edit</button>
                 <button onClick={() => setPreviewingSlideshow(null)} style={{
                   background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white',
-                  borderRadius: '50%', width: 32, height: 32, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18
+                  borderRadius: '50%', width: isMobile ? 44 : 32, height: isMobile ? 44 : 32, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isMobile ? 22 : 18
                 }}>×</button>
               </div>
             </div>
@@ -702,7 +737,7 @@ const ContentLibrary = ({
             }}>
               {(previewingSlideshow.slides || []).map((slide, i) => (
                 <div key={slide.id || i} style={{
-                  width: '180px', flexShrink: 0,
+                  width: isMobile ? '120px' : '180px', flexShrink: 0,
                   aspectRatio: '9/16', borderRadius: 10, overflow: 'hidden',
                   backgroundColor: '#000', position: 'relative',
                   border: '1px solid rgba(255,255,255,0.1)'
@@ -748,17 +783,18 @@ const ContentLibrary = ({
         }} onClick={() => setPreviewingVideo(null)}>
           <div style={{
             position: 'relative',
-            width: 'min(320px, 80vh * 9 / 16)',
-            maxHeight: '85vh',
-            aspectRatio: '9 / 16',
-            backgroundColor: '#000', borderRadius: 16, overflow: 'hidden',
+            ...(isMobile
+              ? { width: '100%', height: '100%', maxHeight: '100vh', borderRadius: 0 }
+              : { width: 'min(320px, 80vh * 9 / 16)', maxHeight: '85vh', aspectRatio: '9 / 16', borderRadius: 16 }
+            ),
+            backgroundColor: '#000', overflow: 'hidden',
             boxShadow: '0 25px 60px rgba(0,0,0,0.5)'
           }} onClick={e => e.stopPropagation()}>
             <button onClick={() => setPreviewingVideo(null)} style={{
               position: 'absolute', top: 10, right: 10, zIndex: 10,
               background: 'rgba(0,0,0,0.6)', border: 'none', color: 'white',
-              borderRadius: '50%', width: 32, height: 32, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+              borderRadius: '50%', width: isMobile ? 44 : 32, height: isMobile ? 44 : 32, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isMobile ? 22 : 18,
               backdropFilter: 'blur(4px)'
             }}>×</button>
             {previewingVideo.cloudUrl ? (
@@ -802,8 +838,9 @@ const ContentLibrary = ({
   );
 };
 
-const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onApprove, onPost, onRender, isRendering, renderProgress, onPreview, onExportToDrive, isDriveExporting }) => {
+const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onApprove, onPost, onRender, isRendering, renderProgress, onPreview, onExportToDrive, isDriveExporting, isMobile = false }) => {
   const [showActions, setShowActions] = useState(false);
+  const actionsVisible = isMobile || showActions;
 
   // UI-34: Prevent action buttons from triggering selection
   const handleActionClick = (e, action) => {
@@ -901,8 +938,11 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
           </div>
         )}
 
-        {showActions && !isRendering && (
-          <div style={styles.videoActions}>
+        {actionsVisible && !isRendering && (
+          <div style={{
+            ...styles.videoActions,
+            ...(isMobile ? { position: 'absolute', bottom: '8px', left: '8px', right: '8px', top: 'auto', justifyContent: 'center', flexWrap: 'wrap', background: 'rgba(0,0,0,0.6)', borderRadius: '6px', padding: '4px' } : {})
+          }}>
             <button style={styles.actionBtn} onClick={(e) => handleActionClick(e, onEdit)}>Edit</button>
             {needsRendering ? (
               <button
@@ -966,8 +1006,9 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
   );
 };
 
-const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdit, onDelete, onPost, onExportToDrive, isDriveExporting }) => {
+const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdit, onDelete, onPost, onExportToDrive, isDriveExporting, isMobile = false }) => {
   const [showActions, setShowActions] = useState(false);
+  const actionsVisible = isMobile || showActions;
 
   const handleActionClick = (e, action) => {
     e.stopPropagation();
@@ -1148,8 +1189,11 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
           </div>
         )}
 
-        {showActions && (
-          <div style={styles.videoActions}>
+        {actionsVisible && (
+          <div style={{
+            ...styles.videoActions,
+            ...(isMobile ? { position: 'absolute', bottom: '8px', left: '8px', right: '8px', top: 'auto', justifyContent: 'center', flexWrap: 'wrap', background: 'rgba(0,0,0,0.6)', borderRadius: '6px', padding: '4px' } : {})
+          }}>
             <button style={styles.actionBtn} onClick={(e) => handleActionClick(e, onEdit)}>Edit</button>
             {onExportToDrive && (
               <button
@@ -1536,6 +1580,11 @@ const slideshowPostingStyles = {
   },
   closeBtn: {
     padding: '8px',
+    minWidth: '44px',
+    minHeight: '44px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'transparent',
     border: 'none',
     color: '#9ca3af',
@@ -1698,16 +1747,16 @@ const styles = {
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' },
   videoCard: { position: 'relative', backgroundColor: '#111118', borderRadius: '12px', overflow: 'hidden', border: '2px solid transparent' },
   videoCardSelected: { border: '2px solid #7c3aed', boxShadow: '0 0 0 2px rgba(124, 58, 237, 0.3)' },
-  videoCheckbox: { position: 'absolute', top: '12px', left: '12px', zIndex: 10 },
-  checkbox: { width: '18px', height: '18px', accentColor: '#7c3aed', cursor: 'pointer' },
+  videoCheckbox: { position: 'absolute', top: '8px', left: '8px', zIndex: 10, minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  checkbox: { width: '20px', height: '20px', accentColor: '#7c3aed', cursor: 'pointer' },
   videoThumb: { position: 'relative', aspectRatio: '9/16', backgroundColor: '#0a0a0f', userSelect: 'none' },
   videoThumbImg: { width: '100%', height: '100%', objectFit: 'cover' },
   videoThumbPlaceholder: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   textOverlay: { position: 'absolute', bottom: '40%', left: '50%', transform: 'translateX(-50%)', padding: '8px 16px', backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: '4px', color: '#fff', fontSize: '12px', fontWeight: '500' },
-  videoActions: { position: 'absolute', top: '8px', right: '8px', display: 'flex', gap: '4px' },
-  actionBtn: { padding: '6px 10px', backgroundColor: '#1f1f2e', border: 'none', borderRadius: '4px', color: '#fff', cursor: 'pointer', fontSize: '11px', fontWeight: '500' },
-  actionBtnPost: { padding: '6px 12px', backgroundColor: '#7c3aed', border: 'none', borderRadius: '4px', color: '#fff', cursor: 'pointer', fontSize: '11px', fontWeight: '600' },
-  actionBtnDel: { padding: '6px 10px', backgroundColor: '#dc2626', border: 'none', borderRadius: '4px', color: '#fff', cursor: 'pointer', fontSize: '11px' },
+  videoActions: { position: 'absolute', top: '8px', right: '8px', display: 'flex', gap: '6px' },
+  actionBtn: { padding: '8px 12px', minHeight: '36px', backgroundColor: '#1f1f2e', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+  actionBtnPost: { padding: '8px 14px', minHeight: '36px', backgroundColor: '#7c3aed', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: '600' },
+  actionBtnDel: { padding: '8px 12px', minHeight: '36px', backgroundColor: '#dc2626', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '12px' },
   statusBadge: { padding: '10px 12px', fontSize: '12px', fontWeight: '500', textAlign: 'center' },
   statusDraft: { backgroundColor: '#1f1f2e', color: '#9ca3af' },
   statusApproved: { backgroundColor: '#065f46', color: '#34d399' },

@@ -25,6 +25,7 @@ import {
 } from '../../services/spotifyAttributionService';
 import log from '../../utils/logger';
 import { useTheme } from '../../contexts/ThemeContext';
+import useIsMobile from '../../hooks/useIsMobile';
 
 /**
  * AnalyticsDashboard - Main analytics view
@@ -49,13 +50,7 @@ const AnalyticsDashboard = ({
   latePosts = []
 }) => {
   // Mobile responsive detection
-  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  const { isMobile } = useIsMobile();
 
   // Theme support
   const { theme } = useTheme();

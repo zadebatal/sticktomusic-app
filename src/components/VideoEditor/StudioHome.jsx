@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import useIsMobile from '../../hooks/useIsMobile';
 // OnboardingModal removed - auto-setup happens in VideoStudio
 import { useTheme } from '../../contexts/ThemeContext';
 import LibraryBrowser from './LibraryBrowser';
@@ -88,9 +89,10 @@ const StudioHome = ({
   const { theme } = useTheme();
 
   // UI State
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const { isMobile } = useIsMobile();
   const [activeTab, setActiveTab] = useState('media'); // kept for compat
   const [sidebarSection, setSidebarSection] = useState({ audio: true, lyrics: false, banks: false });
+  const [mobileSidebarTab, setMobileSidebarTab] = useState('audio'); // 'audio' | 'lyrics' | 'banks'
   const [selectedCollection, setSelectedCollection] = useState(null);
   const [selectedBanks, setSelectedBanks] = useState(new Set([0, 1])); // indices of selected banks
   // autoCollectionSet removed — we always default to All Media now
@@ -211,13 +213,6 @@ const StudioHome = ({
   const [batchAudio, setBatchAudio] = useState(null);
   const [batchSlidesPerShow, setBatchSlidesPerShow] = useState(2);
   const [batchGenerating, setBatchGenerating] = useState(false);
-
-  // Mobile detection
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   // Load data when artist changes - use Firestore subscription if available
   useEffect(() => {
@@ -1266,7 +1261,8 @@ const StudioHome = ({
       height: '100%',
       backgroundColor: theme.bg.page,
       color: theme.text.primary,
-      overflow: 'hidden'
+      overflow: isMobile ? 'auto' : 'hidden',
+      WebkitOverflowScrolling: 'touch'
     },
     header: {
       padding: isMobile ? '12px 16px' : '16px 24px',
@@ -1279,8 +1275,10 @@ const StudioHome = ({
     },
     headerLeft: {
       display: 'flex',
-      alignItems: 'center',
-      gap: '16px'
+      alignItems: isMobile ? 'stretch' : 'center',
+      flexDirection: isMobile ? 'column' : 'row',
+      gap: isMobile ? '8px' : '16px',
+      ...(isMobile ? { width: '100%' } : {})
     },
     headerTitle: {
       fontSize: isMobile ? '18px' : '20px',
@@ -1289,7 +1287,7 @@ const StudioHome = ({
     },
     headerCenter: {
       flex: 1,
-      display: 'flex',
+      display: isMobile ? 'none' : 'flex',
       justifyContent: 'center',
       gap: '8px'
     },
@@ -1322,8 +1320,9 @@ const StudioHome = ({
     },
     body: {
       display: 'flex',
+      flexDirection: isMobile ? 'column' : 'row',
       flex: 1,
-      overflow: 'hidden',
+      overflow: isMobile ? 'auto' : 'hidden',
       position: 'relative'
     },
     dropOverlay: {
@@ -1350,16 +1349,17 @@ const StudioHome = ({
       textAlign: 'center'
     },
     mainContent: {
-      flex: 1,
+      flex: isMobile ? 'none' : 1,
       display: 'flex',
       flexDirection: 'column',
-      overflow: 'hidden'
+      overflow: isMobile ? 'visible' : 'hidden',
+      ...(isMobile ? { minHeight: '50vh' } : {})
     },
     modeSelector: {
-      padding: '24px',
+      padding: isMobile ? '16px 12px' : '24px',
       display: 'flex',
       justifyContent: 'center',
-      gap: '24px',
+      gap: isMobile ? '12px' : '24px',
       flexWrap: 'wrap'
     },
     modeCard: {
@@ -1390,18 +1390,19 @@ const StudioHome = ({
       color: theme.text.secondary
     },
     librarySection: {
-      flex: 1,
+      flex: isMobile ? 'none' : 1,
       display: 'flex',
       flexDirection: 'column',
-      overflow: 'hidden'
+      overflow: isMobile ? 'visible' : 'hidden'
     },
     libraryHeader: {
-      padding: '16px 24px',
+      padding: isMobile ? '12px 16px' : '16px 24px',
       borderBottom: `1px solid ${theme.border.default}`,
       display: 'flex',
-      alignItems: 'center',
+      alignItems: isMobile ? 'stretch' : 'center',
       justifyContent: 'space-between',
-      gap: '16px'
+      gap: isMobile ? '8px' : '16px',
+      flexDirection: isMobile ? 'column' : 'row'
     },
     libraryTitle: {
       fontSize: '16px',
@@ -1410,28 +1411,31 @@ const StudioHome = ({
     uploadButton: {
       display: 'flex',
       alignItems: 'center',
+      justifyContent: isMobile ? 'center' : 'flex-start',
       gap: '8px',
-      padding: '10px 20px',
+      padding: isMobile ? '12px 20px' : '10px 20px',
       backgroundColor: theme.accent.primary,
       border: 'none',
       borderRadius: '8px',
       color: theme.text.primary,
       fontSize: '14px',
       fontWeight: '500',
-      cursor: 'pointer'
+      cursor: 'pointer',
+      ...(isMobile ? { width: '100%' } : {})
     },
     mediaGrid: {
       flex: 1,
-      padding: '16px 24px',
+      padding: isMobile ? '8px 12px' : '16px 24px',
       overflowY: 'auto'
     },
     actionBar: {
-      padding: '16px 24px',
+      padding: isMobile ? '12px 12px' : '16px 24px',
       borderTop: `1px solid ${theme.border.default}`,
       display: 'flex',
-      alignItems: 'center',
+      flexDirection: isMobile ? 'column' : 'row',
+      alignItems: isMobile ? 'stretch' : 'center',
       justifyContent: 'space-between',
-      gap: '16px',
+      gap: isMobile ? '10px' : '16px',
       backgroundColor: theme.bg.surface
     },
     actionInfo: {
@@ -1440,15 +1444,18 @@ const StudioHome = ({
     },
     actionButtons: {
       display: 'flex',
-      gap: '12px'
+      gap: isMobile ? '8px' : '12px',
+      flexWrap: 'wrap',
+      ...(isMobile ? { justifyContent: 'stretch' } : {})
     },
     actionButton: {
-      padding: '10px 24px',
+      padding: isMobile ? '12px 16px' : '10px 24px',
       borderRadius: '8px',
-      fontSize: '14px',
+      fontSize: isMobile ? '13px' : '14px',
       fontWeight: '500',
       cursor: 'pointer',
-      transition: 'all 0.2s'
+      transition: 'all 0.2s',
+      ...(isMobile ? { flex: '1 1 auto', minHeight: '44px', textAlign: 'center' } : {})
     },
     primaryButton: {
       backgroundColor: theme.accent.primary,
@@ -1491,9 +1498,10 @@ const StudioHome = ({
       color: 'rgba(255, 255, 255, 0.5)'
     },
     audioSidebar: {
-      width: '300px',
+      width: isMobile ? '100%' : '300px',
       flexShrink: 0,
-      borderLeft: '1px solid rgba(255,255,255,0.1)',
+      borderLeft: isMobile ? 'none' : '1px solid rgba(255,255,255,0.1)',
+      borderTop: isMobile ? '1px solid rgba(255,255,255,0.1)' : 'none',
       backgroundColor: '#0d0d14',
       display: 'flex',
       flexDirection: 'column',
@@ -1745,17 +1753,38 @@ const StudioHome = ({
                 <span style={styles.libraryTitle}>
                   Video Clips ({libraryVideos.length})
                 </span>
-                <label style={styles.uploadButton}>
-                  ⬆️ Upload Videos
-                  <input
-                    ref={videoInputRef}
-                    type="file"
-                    accept="video/*"
-                    multiple
-                    onChange={handleVideoUpload}
-                    style={{ display: 'none' }}
-                  />
-                </label>
+                <div style={isMobile ? { display: 'flex', gap: '8px', width: '100%' } : {}}>
+                  <label style={styles.uploadButton}>
+                    ⬆️ Upload Videos
+                    <input
+                      ref={videoInputRef}
+                      type="file"
+                      accept="video/*"
+                      multiple
+                      onChange={handleVideoUpload}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                  {isMobile && (
+                    <label style={{
+                      ...styles.uploadButton,
+                      backgroundColor: 'rgba(16, 185, 129, 0.8)',
+                      flex: 'none',
+                      width: '48px',
+                      justifyContent: 'center',
+                      padding: '12px'
+                    }}>
+                      📷
+                      <input
+                        type="file"
+                        accept="video/*"
+                        capture="environment"
+                        onChange={handleVideoUpload}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
 
               <div style={styles.mediaGrid}>
@@ -1934,10 +1963,16 @@ const StudioHome = ({
                       const color = getBankColor(idx);
                       const count = bankCounts[idx] || 0;
                       return (
-                        <label key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: selectedBanks.has(idx) ? color.light : 'rgba(255,255,255,0.3)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        <label key={idx} style={{
+                          display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '4px',
+                          fontSize: isMobile ? '13px' : '11px',
+                          color: selectedBanks.has(idx) ? color.light : 'rgba(255,255,255,0.3)',
+                          cursor: 'pointer', whiteSpace: 'nowrap',
+                          ...(isMobile ? { minHeight: '44px', padding: '6px 12px', borderRadius: '8px', backgroundColor: selectedBanks.has(idx) ? `${color.primary}20` : 'rgba(255,255,255,0.04)' } : {})
+                        }}>
                           <input type="checkbox" checked={selectedBanks.has(idx)}
                             onChange={() => setSelectedBanks(prev => { const next = new Set(prev); if (next.has(idx)) next.delete(idx); else next.add(idx); return next; })}
-                            style={{ accentColor: color.primary }} />
+                            style={{ accentColor: color.primary, ...(isMobile ? { width: '20px', height: '20px' } : {}) }} />
                           {getBankLabel(idx)} <span style={{ opacity: 0.5 }}>{count}</span>
                         </label>
                       );
@@ -2089,21 +2124,62 @@ const StudioHome = ({
         {(studioMode === 'videos' || studioMode === 'slideshows') && (
           <div style={{
             display: 'flex',
-            width: selectedCollection ? '680px' : '240px',
-            flexShrink: 0,
-            borderLeft: `1px solid ${theme?.border?.default || 'rgba(255,255,255,0.1)'}`,
+            flexDirection: isMobile ? 'column' : 'row',
+            width: isMobile ? '100%' : (selectedCollection ? '680px' : '240px'),
+            flexShrink: isMobile ? 0 : 0,
+            borderLeft: isMobile ? 'none' : `1px solid ${theme?.border?.default || 'rgba(255,255,255,0.1)'}`,
+            borderTop: isMobile ? `1px solid ${theme?.border?.default || 'rgba(255,255,255,0.1)'}` : 'none',
             backgroundColor: theme?.bg?.surface || '#0d0d14',
             overflow: 'visible',
-            transition: 'width 0.2s ease'
+            transition: isMobile ? 'none' : 'width 0.2s ease'
           }}>
+
+            {/* Mobile sidebar pill tabs */}
+            {isMobile && (
+              <div style={{
+                display: 'flex',
+                gap: '6px',
+                padding: '10px 12px',
+                borderBottom: `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}`,
+                overflowX: 'auto',
+                WebkitOverflowScrolling: 'touch',
+                flexShrink: 0
+              }}>
+                {[
+                  { key: 'audio', label: 'Audio' },
+                  ...(selectedCollection ? [{ key: 'lyrics', label: 'Lyrics' }] : []),
+                  ...(selectedCollection && studioMode === 'videos' ? [{ key: 'banks', label: 'Banks' }] : [])
+                ].map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setMobileSidebarTab(tab.key)}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '20px',
+                      border: 'none',
+                      backgroundColor: mobileSidebarTab === tab.key ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.06)',
+                      color: mobileSidebarTab === tab.key ? '#a5b4fc' : 'rgba(255,255,255,0.5)',
+                      fontSize: '13px',
+                      fontWeight: mobileSidebarTab === tab.key ? 600 : 500,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      minHeight: '36px',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* ── Audio Bank Column ── */}
             <div style={{
               flex: 1,
-              display: 'flex',
+              display: (isMobile && mobileSidebarTab !== 'audio') ? 'none' : 'flex',
               flexDirection: 'column',
               minHeight: 0,
-              borderRight: selectedCollection ? `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}` : 'none'
+              borderRight: isMobile ? 'none' : (selectedCollection ? `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}` : 'none')
             }}>
               <div style={{
                 padding: '6px 8px',
@@ -2464,13 +2540,13 @@ const StudioHome = ({
             </div>
 
             {/* ── Lyrics Column (only when collection selected) ── */}
-            {selectedCollection && (
+            {selectedCollection && (!isMobile || mobileSidebarTab === 'lyrics') && (
               <div style={{
                 flex: 1,
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden',
-                borderRight: `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}`
+                borderRight: isMobile ? 'none' : `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}`
               }}>
                 <div style={{
                   padding: '6px 8px',
@@ -2553,7 +2629,7 @@ const StudioHome = ({
 
 
             {/* ── Video Text Banks Column (only when collection selected in video mode) ── */}
-            {selectedCollection && studioMode === 'videos' && (() => {
+            {selectedCollection && studioMode === 'videos' && (!isMobile || mobileSidebarTab === 'banks') && (() => {
               const col = collections.find(c => c.id === selectedCollection);
               const vt1 = col?.videoTextBank1 || [];
               const vt2 = col?.videoTextBank2 || [];
@@ -2641,10 +2717,23 @@ const StudioHome = ({
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
         }} onClick={() => setShowBatchModal(false)}>
           <div style={{
-            backgroundColor: '#1a1a2e', borderRadius: '16px', padding: '24px',
-            width: '440px', maxHeight: '80vh', overflowY: 'auto'
+            backgroundColor: '#1a1a2e',
+            borderRadius: isMobile ? '0' : '16px',
+            padding: isMobile ? '20px 16px' : '24px',
+            width: isMobile ? '100%' : '440px',
+            maxHeight: isMobile ? '100%' : '80vh',
+            overflowY: 'auto',
+            ...(isMobile ? { position: 'fixed', inset: 0 } : {})
           }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#fff' }}>Batch Generate Slideshows</h3>
+            <div style={isMobile ? { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } : {}}>
+              <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#fff' }}>Batch Generate Slideshows</h3>
+              {isMobile && (
+                <button
+                  onClick={() => setShowBatchModal(false)}
+                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '24px', cursor: 'pointer', padding: '4px 8px', lineHeight: 1 }}
+                >×</button>
+              )}
+            </div>
             <p style={{ margin: '0 0 20px', fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>
               Generate multiple slideshows from the current collection's banks
             </p>

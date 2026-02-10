@@ -70,14 +70,14 @@ const LyricBank = ({
     setEditContent('');
   }, []);
 
-  // Handle line selection with click-drag
-  const handleLineMouseDown = useCallback((lyricsId, lineIndex) => {
+  // Handle line selection with click-drag (pointer events for mouse + touch)
+  const handleLinePointerDown = useCallback((lyricsId, lineIndex) => {
     setExpandedLyricsId(lyricsId);
     setDragStart(lineIndex);
     setSelectedLines([lineIndex]);
   }, []);
 
-  const handleLineMouseEnter = useCallback((lineIndex) => {
+  const handleLinePointerEnter = useCallback((lineIndex) => {
     if (dragStart !== null) {
       const start = Math.min(dragStart, lineIndex);
       const end = Math.max(dragStart, lineIndex);
@@ -89,7 +89,7 @@ const LyricBank = ({
     }
   }, [dragStart]);
 
-  const handleMouseUp = useCallback(() => {
+  const handlePointerUp = useCallback(() => {
     setDragStart(null);
   }, []);
 
@@ -108,11 +108,15 @@ const LyricBank = ({
     setSelectedLines([]);
   }, [selectedLines, onSelectText]);
 
-  // Global mouse up listener
+  // Global pointer up listener (works for both mouse and touch)
   useEffect(() => {
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => document.removeEventListener('mouseup', handleMouseUp);
-  }, [handleMouseUp]);
+    document.addEventListener('pointerup', handlePointerUp);
+    document.addEventListener('pointercancel', handlePointerUp);
+    return () => {
+      document.removeEventListener('pointerup', handlePointerUp);
+      document.removeEventListener('pointercancel', handlePointerUp);
+    };
+  }, [handlePointerUp]);
 
   if (compact) {
     return (
@@ -262,8 +266,8 @@ const LyricBank = ({
                                   onSelectText(line.trim());
                                 }
                               }}
-                              onMouseDown={() => { if (line.trim()) handleLineMouseDown(lyric.id, i); }}
-                              onMouseEnter={() => handleLineMouseEnter(i)}
+                              onPointerDown={() => { if (line.trim()) handleLinePointerDown(lyric.id, i); }}
+                              onPointerEnter={() => handleLinePointerEnter(i)}
                               title={line.trim() ? 'Drag to text bank or click to add as overlay' : ''}
                             >
                               {line || '\u00A0'}
@@ -299,7 +303,7 @@ const LyricBank = ({
   }
 
   return (
-    <div style={styles.container} onMouseUp={handleMouseUp}>
+    <div style={styles.container} onPointerUp={handlePointerUp}>
       <div style={styles.header}>
         <div style={styles.headerLeft}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -437,8 +441,8 @@ const LyricBank = ({
                             : {}),
                           ...(line.trim() === '' ? styles.lyricLineEmpty : {})
                         }}
-                        onMouseDown={() => handleLineMouseDown(lyric.id, lineIndex)}
-                        onMouseEnter={() => handleLineMouseEnter(lineIndex)}
+                        onPointerDown={() => handleLinePointerDown(lyric.id, lineIndex)}
+                        onPointerEnter={() => handleLinePointerEnter(lineIndex)}
                       >
                         <span style={styles.lineNumber}>{lineIndex + 1}</span>
                         <span style={styles.lineText}>{line || '\u00A0'}</span>
@@ -685,7 +689,8 @@ const styles = {
     padding: '4px 8px',
     borderRadius: '4px',
     cursor: 'pointer',
-    transition: 'background-color 0.1s'
+    transition: 'background-color 0.1s',
+    touchAction: 'none'
   },
   lyricLineSelected: {
     backgroundColor: 'rgba(124, 58, 237, 0.3)',

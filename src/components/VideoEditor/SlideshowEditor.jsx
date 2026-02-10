@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import useIsMobile from '../../hooks/useIsMobile';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
 import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, getLyrics, MEDIA_TYPES, addToTextBank, removeFromTextBank, assignToBank, saveCollectionToFirestore, migrateCollectionBanks, getBankColor, getBankLabel, BANK_COLORS, MAX_BANKS, addBankToCollection, updateLibraryItem } from '../../services/libraryService';
 import { useToast } from '../ui';
@@ -42,15 +43,9 @@ const SlideshowEditor = ({
   const styles = getStyles(theme);
 
   // Mobile responsive detection
-  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+  const { isMobile } = useIsMobile();
 
   const { success: toastSuccess, error: toastError } = useToast();
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   // Multi-timeline state: all slideshows (index 0 = template, rest = generated)
   // Ensure every slide has textOverlays array (handles legacy data from localStorage)

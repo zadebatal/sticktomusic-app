@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import log from '../../utils/logger';
+import useIsMobile from '../../hooks/useIsMobile';
 
 /**
  * WordTimeline - Flowstage-inspired word timing editor
@@ -31,13 +32,7 @@ const WordTimeline = ({
   onAddToBank // Callback to add new lyrics to bank (create new)
 }) => {
   // Mobile responsive detection
-  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  const { isMobile } = useIsMobile();
 
   const [zoom, setZoom] = useState(() => {
     try {
@@ -434,8 +429,8 @@ const WordTimeline = ({
     }
   };
 
-  // Handle word block dragging/resizing
-  const handleWordMouseDown = (e, index, type = 'move') => {
+  // Handle word block dragging/resizing (pointer events for mouse + touch)
+  const handleWordPointerDown = (e, index, type = 'move') => {
     e.stopPropagation();
     const word = words[index];
 
@@ -489,7 +484,7 @@ const WordTimeline = ({
   useEffect(() => {
     if (!dragState) return;
 
-    const handleMouseMove = (e) => {
+    const handlePointerMove = (e) => {
       const deltaX = e.clientX - dragState.startX;
       const deltaTime = pixelsToTime(deltaX);
 
@@ -526,24 +521,26 @@ const WordTimeline = ({
       });
     };
 
-    const handleMouseUp = () => {
+    const handlePointerUp = () => {
       // Set flag to prevent click from clearing selection after drag
       justFinishedDragRef.current = true;
       setDragState(null);
       setIsDraggingSelection(false);
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
 
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
     };
   }, [dragState, pixelsToTime, duration, setWords]);
 
-  // Handle playhead dragging
-  const handlePlayheadMouseDown = (e) => {
+  // Handle playhead dragging (pointer events for mouse + touch)
+  const handlePlayheadPointerDown = (e) => {
     e.stopPropagation();
     setPlayheadDragging(true);
     // Pause playback when drag starts to prevent audio from restarting
@@ -557,7 +554,7 @@ const WordTimeline = ({
 
     let lastScrubTime = Date.now();
 
-    const handleMouseMove = (e) => {
+    const handlePointerMove = (e) => {
       const rect = timelineRef.current?.getBoundingClientRect();
       if (!rect) return;
       const scrollLeft = timelineRef.current?.scrollLeft || 0;
@@ -574,7 +571,7 @@ const WordTimeline = ({
       }
     };
 
-    const handleMouseUp = () => {
+    const handlePointerUp = () => {
       setPlayheadDragging(false);
       // Stop any playing scrub audio
       if (scrubSourceRef.current) {
@@ -582,12 +579,14 @@ const WordTimeline = ({
       }
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
 
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
     };
   }, [playheadDragging, pixelsToTime, duration, onSeek, playScrubSnippet]);
 
@@ -621,8 +620,8 @@ const WordTimeline = ({
     }
   };
 
-  // Start marquee selection on mouse down in empty timeline space
-  const handleTimelineMouseDown = (e) => {
+  // Start marquee selection on pointer down in empty timeline space
+  const handleTimelinePointerDown = (e) => {
     // Don't start marquee if clicking on word blocks (they have their own drag handlers)
     if (e.target.closest('[data-word-block]')) return;
     // Don't start marquee if clicking on playhead
@@ -650,11 +649,11 @@ const WordTimeline = ({
     }
   };
 
-  // Marquee selection effect
+  // Marquee selection effect (pointer events for mouse + touch)
   useEffect(() => {
     if (!marqueeSelection) return;
 
-    const handleMouseMove = (e) => {
+    const handlePointerMove = (e) => {
       const rect = timelineRef.current?.getBoundingClientRect();
       if (!rect) return;
 
@@ -686,7 +685,7 @@ const WordTimeline = ({
       setSelectedWordIndices(selectedIndices);
     };
 
-    const handleMouseUp = () => {
+    const handlePointerUp = () => {
       // Only set flag if there was actual dragging (marquee had some size)
       // This allows simple clicks to pass through to the click handler for seeking
       const hasDragged = marqueeSelection && (
@@ -699,12 +698,14 @@ const WordTimeline = ({
       setMarqueeSelection(null);
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
 
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
     };
   }, [marqueeSelection, words, timeToPixels, clearSelection]);
 
@@ -1276,8 +1277,7 @@ const WordTimeline = ({
               } : {})
             }}
             onClick={handleTimelineClick}
-            onMouseDown={handleTimelineMouseDown}
-            onTouchStart={isMobile ? handleTimelineMouseDown : undefined}
+            onPointerDown={handleTimelinePointerDown}
           >
             <div data-timeline-inner style={{ ...styles.timelineInner, width: getTimelineWidth() }}>
               {/* Marquee Selection Box */}
@@ -1314,15 +1314,16 @@ const WordTimeline = ({
                   left: timeToPixels(displayTime),
                   cursor: 'ew-resize',
                   pointerEvents: 'auto',
-                  width: '12px',
-                  marginLeft: '-5px',
-                  backgroundColor: 'transparent'
+                  width: isMobile ? '44px' : '12px',
+                  marginLeft: isMobile ? '-21px' : '-5px',
+                  backgroundColor: 'transparent',
+                  touchAction: 'none'
                 }}
-                onMouseDown={handlePlayheadMouseDown}
+                onPointerDown={handlePlayheadPointerDown}
               >
                 <div style={{
                   position: 'absolute',
-                  left: '5px',
+                  left: isMobile ? '21px' : '5px',
                   top: 0,
                   bottom: 0,
                   width: '2px',
@@ -1331,7 +1332,7 @@ const WordTimeline = ({
                 {/* Playhead handle */}
                 <div style={{
                   position: 'absolute',
-                  left: '0px',
+                  left: isMobile ? '16px' : '0px',
                   top: '-4px',
                   width: '12px',
                   height: '12px',
@@ -1350,10 +1351,10 @@ const WordTimeline = ({
                     width: Math.max(isMobile ? 40 : 30, timeToPixels(word.duration || 0.5)),
                     ...(isMobile ? { height: '46px', top: '24px' } : {}),
                     ...(isWordSelected(index) ? styles.wordBlockSelected : {}),
-                    ...(currentWord?.id === word.id && !isWordSelected(index) ? styles.wordBlockCurrent : {})
+                    ...(currentWord?.id === word.id && !isWordSelected(index) ? styles.wordBlockCurrent : {}),
+                    touchAction: 'none'
                   }}
-                  onMouseDown={(e) => handleWordMouseDown(e, index, 'move')}
-                  onTouchStart={isMobile ? (e) => handleWordMouseDown(e, index, 'move') : undefined}
+                  onPointerDown={(e) => handleWordPointerDown(e, index, 'move')}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
                     startEditingWord(word.id, word.text);
@@ -1362,10 +1363,10 @@ const WordTimeline = ({
                   <div
                     style={{
                       ...styles.resizeHandle,
-                      ...(isMobile ? { width: '12px' } : {})
+                      ...(isMobile ? { width: '16px' } : {}),
+                      touchAction: 'none'
                     }}
-                    onMouseDown={(e) => handleWordMouseDown(e, index, 'resize-left')}
-                    onTouchStart={isMobile ? (e) => handleWordMouseDown(e, index, 'resize-left') : undefined}
+                    onPointerDown={(e) => handleWordPointerDown(e, index, 'resize-left')}
                   />
                   {editingWordId === word.id ? (
                     <input
@@ -1392,10 +1393,10 @@ const WordTimeline = ({
                       ...styles.resizeHandle,
                       right: 0,
                       left: 'auto',
-                      ...(isMobile ? { width: '12px' } : {})
+                      ...(isMobile ? { width: '16px' } : {}),
+                      touchAction: 'none'
                     }}
-                    onMouseDown={(e) => handleWordMouseDown(e, index, 'resize-right')}
-                    onTouchStart={isMobile ? (e) => handleWordMouseDown(e, index, 'resize-right') : undefined}
+                    onPointerDown={(e) => handleWordPointerDown(e, index, 'resize-right')}
                   />
                 </div>
               ))}
@@ -1711,7 +1712,7 @@ const styles = {
   legatoButton: { padding: '6px 12px', backgroundColor: '#1f1f2e', border: '1px solid #2d2d3d', borderRadius: '6px', fontSize: '13px', color: '#e5e7eb', cursor: 'pointer' },
   censorLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#9ca3af', cursor: 'pointer' },
   selectionIndicator: { display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', backgroundColor: 'rgba(139, 92, 246, 0.2)', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '6px', fontSize: '12px', fontWeight: '500', color: '#a78bfa' },
-  clearSelectionBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '18px', height: '18px', backgroundColor: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '4px', color: '#a78bfa', cursor: 'pointer', padding: 0 },
+  clearSelectionBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', backgroundColor: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '6px', color: '#a78bfa', cursor: 'pointer', padding: 0 },
   timelineContainer: { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px 20px', backgroundColor: '#0a0a0f' },
   playButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', backgroundColor: '#7c3aed', border: 'none', borderRadius: '50%', color: '#fff', cursor: 'pointer', flexShrink: 0 },
   timeline: { flex: 1, height: '120px', backgroundColor: '#1a1a2e', borderRadius: '8px', overflowX: 'auto', overflowY: 'hidden', position: 'relative', cursor: 'pointer' },

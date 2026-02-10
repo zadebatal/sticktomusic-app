@@ -16,7 +16,8 @@ const ArtistDashboard = ({
   const { theme } = useTheme();
   const t = theme.tw;
 
-  const socialSetsUsed = computeSocialSetsUsed(latePages.filter(p => p.artistId === artistId));
+  // latePages is pre-filtered to this artist's pages by parent
+  const socialSetsUsed = computeSocialSetsUsed(latePages);
   const tierInfo = getTierForSets(socialSetsAllowed);
   const showPayment = shouldShowPaymentUI(user);
 
@@ -26,8 +27,8 @@ const ArtistDashboard = ({
     .sort((a, b) => new Date(a.scheduledFor || a.scheduledDate) - new Date(b.scheduledFor || b.scheduledDate))
     .slice(0, 10);
 
-  // Connected platforms for this artist
-  const artistPages = latePages.filter(p => p.artistId === artistId);
+  // Connected platforms for this artist (already filtered)
+  const artistPages = latePages;
 
   return (
     <div className={`flex-1 overflow-auto p-6 ${t.bgPage}`}>
