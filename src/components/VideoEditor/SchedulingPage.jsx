@@ -8,6 +8,8 @@ import {
 import { getTemplates } from '../../services/contentTemplateService';
 import { useToast, ConfirmDialog } from '../ui';
 import { getCreatedContent } from '../../services/libraryService';
+import { renderVideo } from '../../services/videoExportService';
+import { uploadFile } from '../../services/firebaseStorage';
 import log from '../../utils/logger';
 import { useTheme } from '../../contexts/ThemeContext';
 import useIsMobile from '../../hooks/useIsMobile';
@@ -40,6 +42,10 @@ const SchedulingPage = ({
   const [expandedPostId, setExpandedPostId] = useState(null);
   const [draggedId, setDraggedId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
+
+  // Render state
+  const [renderingPostId, setRenderingPostId] = useState(null);
+  const [renderProgress, setRenderProgress] = useState(0);
 
   // UI state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -485,7 +491,42 @@ const SchedulingPage = ({
     handleUpdatePost(postId, { platforms });
   }, [posts, handleUpdatePost]);
 
-  // ── Publish a post to Late.co ──
+  // ── Auto-render a video post if it has no cloudUrl ──
+  const autoRenderPost = useCallback(async (post) => {
+    const editorState = post.editorState;
+    if (!editorState?.clips?.length) {
+      throw new Error('No video clips to render');
+    }
+
+    setRenderingPostId(post.id);
+    setRenderProgress(0);
+    try {
+      log('[Schedule] Auto-rendering video for post:', post.id);
+      const blob = await renderVideo(editorState, (progress) => {
+        setRenderProgress(progress);
+      });
+
+      log('[Schedule] Rendered, uploading...', (blob.size / 1024 / 1024).toFixed(2), 'MB');
+      setRenderProgress(95);
+      const isMP4 = blob.type === 'video/mp4';
+      const ext = isMP4 ? 'mp4' : 'webm';
+      const { url: cloudUrl } = await uploadFile(
+        new File([blob], `${post.contentId || post.id}.${ext}`, { type: blob.type }),
+        'videos'
+      );
+
+      log('[Schedule] Upload complete:', cloudUrl);
+      // Persist the cloudUrl on the scheduled post
+      await handleUpdatePost(post.id, { cloudUrl });
+      setRenderProgress(100);
+      return cloudUrl;
+    } finally {
+      setRenderingPostId(null);
+      setRenderProgress(0);
+    }
+  }, [handleUpdatePost]);
+
+  // ── Publish a post to Late.co (auto-renders if needed) ──
   const handlePublishPost = useCallback(async (postId) => {
     const post = posts.find(p => p.id === postId);
     if (!post) return;
@@ -506,21 +547,33 @@ const SchedulingPage = ({
 
     // Determine post type and media
     const isSlideshow = post.contentType === 'slideshow';
-    const videoUrl = post.cloudUrl || post.editorState?.cloudUrl;
+    let videoUrl = post.cloudUrl || post.editorState?.cloudUrl;
     const slideshowImages = isSlideshow ? (post.editorState?.slides || []).map(s => ({ url: s.backgroundImage || s.imageUrl })).filter(s => s.url) : null;
 
+    // Auto-render video if no cloudUrl
     if (!isSlideshow && !videoUrl) {
-      toastError('Video not rendered yet. Export the video before publishing.');
-      await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: 'No video URL — render/export first' });
-      return;
+      if (!post.editorState?.clips?.length) {
+        toastError('No video data to render. Edit the draft first.');
+        await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: 'No video clips to render' });
+        return;
+      }
+      try {
+        toastSuccess('Rendering video before publishing...');
+        await handleUpdatePost(postId, { status: POST_STATUS.POSTING });
+        videoUrl = await autoRenderPost(post);
+      } catch (err) {
+        log('[Schedule] Auto-render failed:', err);
+        await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: `Render failed: ${err.message}` });
+        toastError(`Render failed: ${err.message}`);
+        return;
+      }
+    } else {
+      await handleUpdatePost(postId, { status: POST_STATUS.POSTING });
     }
 
     // Build caption with hashtags
     const allHashtags = [...(post.hashtags || []), ...(alwaysOnHashtags || [])];
     const caption = [post.caption || '', allHashtags.join(' ')].filter(Boolean).join('\n\n');
-
-    // Set status to POSTING
-    await handleUpdatePost(postId, { status: POST_STATUS.POSTING });
 
     try {
       const result = await onSchedulePost({
@@ -543,7 +596,7 @@ const SchedulingPage = ({
       await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: err.message });
       toastError(`Publish failed: ${err.message}`);
     }
-  }, [posts, onSchedulePost, alwaysOnHashtags, handleUpdatePost, toastSuccess, toastError]);
+  }, [posts, onSchedulePost, alwaysOnHashtags, handleUpdatePost, autoRenderPost, toastSuccess, toastError]);
 
   // ── Bulk Publish Selected ──
   const handleBulkPublish = useCallback(async () => {
@@ -574,19 +627,30 @@ const SchedulingPage = ({
       }
 
       const isSlideshow = post.contentType === 'slideshow';
-      const videoUrl = post.cloudUrl || post.editorState?.cloudUrl;
+      let videoUrl = post.cloudUrl || post.editorState?.cloudUrl;
       const slideshowImages = isSlideshow ? (post.editorState?.slides || []).map(s => ({ url: s.backgroundImage || s.imageUrl })).filter(s => s.url) : null;
 
+      // Auto-render if no cloudUrl
       if (!isSlideshow && !videoUrl) {
-        await handleUpdatePost(post.id, { status: POST_STATUS.FAILED, errorMessage: 'No video URL — render/export first' });
-        failed++;
-        continue;
+        if (!post.editorState?.clips?.length) {
+          await handleUpdatePost(post.id, { status: POST_STATUS.FAILED, errorMessage: 'No video clips to render' });
+          failed++;
+          continue;
+        }
+        try {
+          await handleUpdatePost(post.id, { status: POST_STATUS.POSTING });
+          videoUrl = await autoRenderPost(post);
+        } catch (err) {
+          await handleUpdatePost(post.id, { status: POST_STATUS.FAILED, errorMessage: `Render failed: ${err.message}` });
+          failed++;
+          continue;
+        }
+      } else {
+        await handleUpdatePost(post.id, { status: POST_STATUS.POSTING });
       }
 
       const allHashtags = [...(post.hashtags || []), ...(alwaysOnHashtags || [])];
       const caption = [post.caption || '', allHashtags.join(' ')].filter(Boolean).join('\n\n');
-
-      await handleUpdatePost(post.id, { status: POST_STATUS.POSTING });
 
       try {
         const result = await onSchedulePost({
@@ -619,7 +683,7 @@ const SchedulingPage = ({
       toastError(`All ${failed} post${failed !== 1 ? 's' : ''} failed to publish.`);
     }
     setSelectedPostIds(new Set());
-  }, [posts, selectedPostIds, onSchedulePost, alwaysOnHashtags, handleUpdatePost, toastSuccess, toastError]);
+  }, [posts, selectedPostIds, onSchedulePost, alwaysOnHashtags, handleUpdatePost, autoRenderPost, toastSuccess, toastError]);
 
   // Count publishable posts in selection
   const publishableCount = useMemo(() => {
@@ -967,6 +1031,8 @@ const SchedulingPage = ({
                     previewTime={previewTimes[post.id] || null}
                     readOnly={readOnly}
                     isMobile={isMobile}
+                    isRendering={renderingPostId === post.id}
+                    renderProgress={renderingPostId === post.id ? renderProgress : 0}
                   />
                 ))
               )}
@@ -1029,7 +1095,9 @@ const PostRow = ({
   onDragStart, onDragOver, onDrop, onDragEnd,
   previewTime,
   readOnly = false,
-  isMobile = false
+  isMobile = false,
+  isRendering = false,
+  renderProgress = 0
 }) => {
   const { theme } = useTheme();
   const s = getS(theme);
@@ -1104,6 +1172,19 @@ const PostRow = ({
         {isPaused && post.status === POST_STATUS.SCHEDULED && (
           <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(245,158,11,0.08)', borderRadius: '0', pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ fontSize: '14px', opacity: 0.5 }}>⏸</span>
+          </div>
+        )}
+
+        {isRendering && (
+          <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(99,102,241,0.1)', pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.7)', padding: '4px 12px', borderRadius: '6px' }}>
+              <div style={{ width: '80px', height: '4px', backgroundColor: '#27272a', borderRadius: '2px', overflow: 'hidden' }}>
+                <div style={{ width: `${renderProgress}%`, height: '100%', backgroundColor: '#6366f1', borderRadius: '2px', transition: 'width 0.3s' }} />
+              </div>
+              <span style={{ color: '#a5b4fc', fontSize: '11px', fontWeight: 600 }}>
+                {renderProgress < 95 ? `Rendering ${Math.round(renderProgress)}%` : 'Uploading...'}
+              </span>
+            </div>
           </div>
         )}
 
