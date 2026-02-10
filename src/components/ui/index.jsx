@@ -80,6 +80,7 @@ export const useToast = () => {
       toast: () => console.warn('Toast provider not found'),
       success: () => console.warn('Toast provider not found'),
       error: () => console.warn('Toast provider not found'),
+      info: () => console.warn('Toast provider not found'),
     };
   }
   return context;

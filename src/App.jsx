@@ -11,7 +11,8 @@ import {
   StatusPill,
   PageHeader,
   Button as UIButton,
-  HelperText
+  HelperText,
+  ToastProvider
 } from './components/ui';
 
 // Video Studio - Flowstage-inspired workflow
@@ -2929,13 +2930,15 @@ const StickToMusic = () => {
   if (!user) {
     return (
       <ThemeProvider>
-        <LandingPage
-          onLogin={handleLandingLogin}
-          onSignup={handleLandingSignup}
-          onGoogleAuth={handleGoogleSignIn}
-          authError={authError}
-          authLoading={isLoggingIn || isSigningUp}
-        />
+        <ToastProvider>
+          <LandingPage
+            onLogin={handleLandingLogin}
+            onSignup={handleLandingSignup}
+            onGoogleAuth={handleGoogleSignIn}
+            authError={authError}
+            authLoading={isLoggingIn || isSigningUp}
+          />
+        </ToastProvider>
       </ThemeProvider>
     );
   }
@@ -3125,6 +3128,7 @@ const StickToMusic = () => {
 
     return (
       <ThemeProvider>
+        <ToastProvider>
         <AppShell
           activeTab={artistTab}
           setActiveTab={artistTabChangeHandler}
@@ -3209,6 +3213,7 @@ const StickToMusic = () => {
 
           <ToastContainer />
         </AppShell>
+        </ToastProvider>
       </ThemeProvider>
     );
   }
@@ -3484,6 +3489,7 @@ const StickToMusic = () => {
 
     return (
       <ThemeProvider>
+        <ToastProvider>
         <AppShell
           activeTab={showVideoEditor ? 'studio' : operatorTab}
           setActiveTab={handleTabChange}
@@ -6816,6 +6822,7 @@ const StickToMusic = () => {
         <ToastContainer />
         <UndoToast />
         <OnboardingTooltip />
+        </ToastProvider>
       </ThemeProvider>
     );
   }
