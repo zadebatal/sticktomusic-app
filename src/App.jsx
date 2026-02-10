@@ -457,12 +457,14 @@ const StickToMusic = () => {
       } else {
         targetPath = `/operator/${operatorTab}`;
       }
+    } else if (currentPage === 'artist-dashboard') {
+      targetPath = `/artist/${artistTab}`;
     }
     // Only update if path is different to avoid loops
     if (location.pathname !== targetPath) {
       navigate(targetPath, { replace: false });
     }
-  }, [currentPage, operatorTab, showVideoEditor]);
+  }, [currentPage, operatorTab, showVideoEditor, artistTab]);
 
   // Handle browser back/forward navigation
   useEffect(() => {
@@ -478,8 +480,15 @@ const StickToMusic = () => {
     } else if (path === '/operator') {
       if (currentPage !== 'operator') setCurrentPage('operator');
       if (showVideoEditor) setShowVideoEditor(false);
+    } else if (path.startsWith('/artist/')) {
+      const tab = path.replace('/artist/', '').split('/')[0] || 'dashboard';
+      if (currentPage !== 'artist-dashboard') setCurrentPage('artist-dashboard');
+      if (artistTab !== tab) setArtistTab(tab);
     } else if (path === '/' || path === '') {
-      if (currentPage !== 'home') setCurrentPage('home');
+      // Don't override artist-dashboard or operator pages on root path
+      if (currentPage !== 'home' && currentPage !== 'artist-dashboard' && currentPage !== 'operator') {
+        setCurrentPage('home');
+      }
     }
   }, [location.pathname]);
 
