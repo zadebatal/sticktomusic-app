@@ -653,7 +653,7 @@ const SchedulingPage = ({
               <button style={{ ...s.actionBtnSm, color: '#f87171', borderColor: '#7f1d1d' }} onClick={handleDeleteSelected}>
                 Delete ({selectedCount})
               </button>
-              <button style={{ ...s.actionBtnSm, color: '#a1a1aa', borderColor: '#3f3f46' }} onClick={clearSelection}>
+              <button style={{ ...s.actionBtnSm, color: theme.text.secondary, borderColor: theme.border.default }} onClick={clearSelection}>
                 Deselect
               </button>
             </>

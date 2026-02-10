@@ -750,7 +750,7 @@ const ContentLibrary = ({
                     <img src={slide.backgroundImage || slide.thumbnail} alt={`Slide ${i + 1}`}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
-                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563' }}>
+                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.text.muted }}>
                       Empty
                     </div>
                   )}
@@ -818,7 +818,7 @@ const ContentLibrary = ({
                 style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }}
               />
             ) : (
-              <div style={{ padding: 40, color: '#888', textAlign: 'center' }}>
+              <div style={{ padding: 40, color: theme.text.muted, textAlign: 'center' }}>
                 No preview available - video needs to be rendered first
               </div>
             )}

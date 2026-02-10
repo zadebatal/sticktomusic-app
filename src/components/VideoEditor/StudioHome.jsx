@@ -1477,7 +1477,7 @@ const StudioHome = ({
       zIndex: 10000
     },
     uploadModal: {
-      backgroundColor: '#1a1a1a',
+      backgroundColor: theme.bg.surface,
       borderRadius: '16px',
       padding: '32px 40px',
       textAlign: 'center',
@@ -1490,19 +1490,19 @@ const StudioHome = ({
     },
     uploadText: {
       fontSize: '16px',
-      color: '#ffffff',
+      color: theme.text.primary,
       marginBottom: '8px'
     },
     uploadProgress: {
       fontSize: '14px',
-      color: 'rgba(255, 255, 255, 0.5)'
+      color: theme.text.secondary
     },
     audioSidebar: {
       width: isMobile ? '100%' : '300px',
       flexShrink: 0,
-      borderLeft: isMobile ? 'none' : '1px solid rgba(255,255,255,0.1)',
-      borderTop: isMobile ? '1px solid rgba(255,255,255,0.1)' : 'none',
-      backgroundColor: '#0d0d14',
+      borderLeft: isMobile ? 'none' : `1px solid ${theme.border.subtle}`,
+      borderTop: isMobile ? `1px solid ${theme.border.subtle}` : 'none',
+      backgroundColor: theme.bg.surface,
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden'
@@ -1519,16 +1519,16 @@ const StudioHome = ({
     audioSidebarTitle: {
       fontSize: '14px',
       fontWeight: '600',
-      color: '#fff',
+      color: theme.text.primary,
       display: 'flex',
       alignItems: 'center',
       gap: '8px'
     },
     audioSidebarFilter: {
       padding: '8px 16px',
-      borderBottom: '1px solid rgba(255,255,255,0.05)',
+      borderBottom: `1px solid ${theme.border.subtle}`,
       fontSize: '11px',
-      color: 'rgba(255,255,255,0.4)',
+      color: theme.text.muted,
       flexShrink: 0
     },
     audioSidebarList: {
@@ -1550,7 +1550,7 @@ const StudioHome = ({
     audioSidebarEmpty: {
       padding: '24px 16px',
       textAlign: 'center',
-      color: 'rgba(255,255,255,0.25)',
+      color: theme.text.muted,
       fontSize: '12px'
     }
   };
@@ -1598,7 +1598,7 @@ const StudioHome = ({
                 padding: '7px 14px', borderRadius: '8px',
                 backgroundColor: 'rgba(99, 102, 241, 0.15)',
                 border: '1px solid rgba(99, 102, 241, 0.3)',
-                color: '#a5b4fc', fontSize: '13px', fontWeight: 500,
+                color: theme.accent.primary, fontSize: '13px', fontWeight: 500,
                 cursor: 'pointer', transition: 'all 0.2s'
               }}
               onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.25)'; }}
@@ -1709,7 +1709,7 @@ const StudioHome = ({
                           backgroundColor: 'rgba(99, 102, 241, 0.15)',
                           border: '1px solid rgba(99, 102, 241, 0.3)',
                           borderRadius: '6px',
-                          color: '#a5b4fc',
+                          color: theme.accent.primary,
                           cursor: 'pointer',
                           transition: 'all 0.2s'
                         }}
@@ -1866,7 +1866,7 @@ const StudioHome = ({
                   </button>
                   {onViewScheduling && (
                     <button
-                      style={{...styles.actionButton, ...styles.secondaryButton, borderColor: '#6366f1', color: '#a5b4fc'}}
+                      style={{...styles.actionButton, ...styles.secondaryButton, borderColor: theme.accent.primary, color: theme.accent.primary}}
                       onClick={onViewScheduling}
                     >
                       Scheduled Posts
@@ -2179,14 +2179,14 @@ const StudioHome = ({
                 justifyContent: 'space-between',
                 flexShrink: 0
               }}>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#fff' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: theme.text.primary }}>
                   🎵 Audio Bank
                 </span>
                 <label style={{
                   display: 'flex', alignItems: 'center', gap: '3px',
                   padding: '2px 6px', borderRadius: '4px',
                   backgroundColor: 'rgba(99,102,241,0.2)', border: 'none',
-                  color: '#a5b4fc', fontSize: '9px', fontWeight: 500,
+                  color: theme.accent.primary, fontSize: '9px', fontWeight: 500,
                   cursor: 'pointer'
                 }}>
                   ⬆ Upload
@@ -2390,7 +2390,7 @@ const StudioHome = ({
                           }}>🎵</span>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{
-                              fontSize: '10px', fontWeight: 500, color: '#fff',
+                              fontSize: '10px', fontWeight: 500, color: theme.text.primary,
                               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
                             }}>
                               {audio.name}
@@ -2546,7 +2546,7 @@ const StudioHome = ({
                   justifyContent: 'space-between',
                   flexShrink: 0
                 }}>
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#fff' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: theme.text.primary }}>
                     📝 Lyrics
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -2636,14 +2636,14 @@ const StudioHome = ({
                     borderBottom: `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}`,
                     flexShrink: 0
                   }}>
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary }}>
                       Video Text Banks
                     </span>
                   </div>
                   <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px' }}>
                     {/* Bank A */}
                     <div style={{ marginBottom: '10px' }}>
-                      <div style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>
+                      <div style={{ fontSize: '10px', fontWeight: 600, color: theme.text.muted, marginBottom: '4px' }}>
                         Bank A ({vt1.length})
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
@@ -2663,12 +2663,12 @@ const StudioHome = ({
                             {text}
                           </span>
                         ))}
-                        {vt1.length === 0 && <span style={{ fontSize: '10px', color: '#4b5563' }}>Empty</span>}
+                        {vt1.length === 0 && <span style={{ fontSize: '10px', color: theme.text.muted }}>Empty</span>}
                       </div>
                     </div>
                     {/* Bank B */}
                     <div>
-                      <div style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>
+                      <div style={{ fontSize: '10px', fontWeight: 600, color: theme.text.muted, marginBottom: '4px' }}>
                         Bank B ({vt2.length})
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
@@ -2688,7 +2688,7 @@ const StudioHome = ({
                             {text}
                           </span>
                         ))}
-                        {vt2.length === 0 && <span style={{ fontSize: '10px', color: '#4b5563' }}>Empty</span>}
+                        {vt2.length === 0 && <span style={{ fontSize: '10px', color: theme.text.muted }}>Empty</span>}
                       </div>
                     </div>
                   </div>
@@ -2707,7 +2707,7 @@ const StudioHome = ({
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
         }} onClick={() => setShowBatchModal(false)}>
           <div style={{
-            backgroundColor: '#1a1a2e',
+            backgroundColor: theme.bg.surface,
             borderRadius: isMobile ? '0' : '16px',
             padding: isMobile ? '20px 16px' : '24px',
             width: isMobile ? '100%' : '440px',
@@ -2716,20 +2716,20 @@ const StudioHome = ({
             ...(isMobile ? { position: 'fixed', inset: 0 } : {})
           }} onClick={e => e.stopPropagation()}>
             <div style={isMobile ? { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } : {}}>
-              <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: '#fff' }}>Batch Generate Slideshows</h3>
+              <h3 style={{ margin: '0 0 4px', fontSize: '18px', color: theme.text.primary }}>Batch Generate Slideshows</h3>
               {isMobile && (
                 <button
                   onClick={() => setShowBatchModal(false)}
-                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '24px', cursor: 'pointer', padding: '4px 8px', lineHeight: 1 }}
+                  style={{ background: 'none', border: 'none', color: theme.text.muted, fontSize: '24px', cursor: 'pointer', padding: '4px 8px', lineHeight: 1 }}
                 >×</button>
               )}
             </div>
-            <p style={{ margin: '0 0 20px', fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>
+            <p style={{ margin: '0 0 20px', fontSize: '13px', color: theme.text.secondary }}>
               Generate multiple slideshows from the current collection's banks
             </p>
 
             {/* Collection Info */}
-            <div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'rgba(99,102,241,0.1)', marginBottom: '16px', fontSize: '12px', color: '#a5b4fc' }}>
+            <div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'rgba(99,102,241,0.1)', marginBottom: '16px', fontSize: '12px', color: theme.accent.primary }}>
               Collection: {collections.find(c => c.id === selectedCollection)?.name || 'None selected'}
               {(() => {
                 const col = collections.find(c => c.id === selectedCollection);
@@ -2741,32 +2741,32 @@ const StudioHome = ({
 
             {/* Count */}
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px' }}>Number of Slideshows</label>
+              <label style={{ fontSize: '12px', color: theme.text.secondary, display: 'block', marginBottom: '4px' }}>Number of Slideshows</label>
               <input type="number" min="1" max="50" value={batchCount}
                 onChange={e => setBatchCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
-                style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: '#0f0f1a', color: '#fff', fontSize: '14px' }}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.input, color: theme.text.primary, fontSize: '14px' }}
               />
             </div>
 
             {/* Slides per show */}
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px' }}>Slides per Slideshow</label>
+              <label style={{ fontSize: '12px', color: theme.text.secondary, display: 'block', marginBottom: '4px' }}>Slides per Slideshow</label>
               <input type="number" min="2" max="20" value={batchSlidesPerShow}
                 onChange={e => setBatchSlidesPerShow(Math.max(2, Math.min(20, parseInt(e.target.value) || 2)))}
-                style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: '#0f0f1a', color: '#fff', fontSize: '14px' }}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.input, color: theme.text.primary, fontSize: '14px' }}
               />
             </div>
 
             {/* Audio selection */}
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '4px' }}>Audio Track (used for all)</label>
+              <label style={{ fontSize: '12px', color: theme.text.secondary, display: 'block', marginBottom: '4px' }}>Audio Track (used for all)</label>
               <select
                 value={batchAudio?.id || ''}
                 onChange={e => {
                   const audio = library.filter(item => item.type === 'audio').find(a => a.id === e.target.value);
                   setBatchAudio(audio || null);
                 }}
-                style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: '#0f0f1a', color: '#fff', fontSize: '14px' }}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.input, color: theme.text.primary, fontSize: '14px' }}
               >
                 <option value="">No audio</option>
                 {library.filter(item => item.type === 'audio').map(audio => (
@@ -2779,7 +2779,7 @@ const StudioHome = ({
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
                 onClick={() => setShowBatchModal(false)}
-                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: '13px', cursor: 'pointer' }}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${theme.border.default}`, backgroundColor: 'transparent', color: theme.text.secondary, fontSize: '13px', cursor: 'pointer' }}
               >Cancel</button>
               <button
                 onClick={handleBatchGenerate}

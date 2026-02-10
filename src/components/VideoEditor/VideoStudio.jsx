@@ -212,12 +212,13 @@ const saveSessionState = (state) => {
  */
 const DraftsView = (props) => {
   const [draftsTab, setDraftsTab] = useState('videos');
+  const { theme } = useTheme();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
       {/* Tab toggle */}
       <div style={{
-        display: 'flex', gap: '0', padding: '0 16px', backgroundColor: 'rgba(255,255,255,0.03)',
-        borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0
+        display: 'flex', gap: '0', padding: '0 16px', backgroundColor: theme.hover.bg,
+        borderBottom: `1px solid ${theme.border.subtle}`, flexShrink: 0
       }}>
         {['videos', 'slideshows'].map(tab => (
           <button
@@ -226,9 +227,9 @@ const DraftsView = (props) => {
             style={{
               padding: '10px 20px', border: 'none', cursor: 'pointer',
               backgroundColor: draftsTab === tab ? 'rgba(99,102,241,0.15)' : 'transparent',
-              color: draftsTab === tab ? '#a5b4fc' : '#6b7280',
+              color: draftsTab === tab ? theme.accent.hover : theme.text.muted,
               fontSize: '13px', fontWeight: '600',
-              borderBottom: draftsTab === tab ? '2px solid #6366f1' : '2px solid transparent',
+              borderBottom: draftsTab === tab ? `2px solid ${theme.accent.primary}` : '2px solid transparent',
               transition: 'all 0.15s'
             }}
           >
@@ -2614,29 +2615,29 @@ const getStyles = (theme) => ({
     top: '50%',
     transform: 'translateY(-50%)',
     pointerEvents: 'none',
-    color: '#9ca3af'
+    color: theme.text.secondary
   },
   singleArtistLabel: {
     marginLeft: '12px',
     paddingLeft: '12px',
-    borderLeft: '1px solid #2a2a3e',
+    borderLeft: `1px solid ${theme.border.default}`,
     fontSize: '13px',
     fontWeight: '500',
-    color: '#9ca3af'
+    color: theme.text.secondary
   },
   breadcrumb: {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
     fontSize: '13px',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: theme.hover.bg,
     padding: '6px 12px',
     borderRadius: '6px'
   },
   breadcrumbLink: {
     background: 'none',
     border: 'none',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     padding: '4px 8px',
     borderRadius: '4px',
@@ -2644,10 +2645,10 @@ const getStyles = (theme) => ({
     transition: 'color 0.2s, background-color 0.2s'
   },
   breadcrumbSep: {
-    color: '#4b5563'
+    color: theme.text.muted
   },
   breadcrumbCurrent: {
-    color: '#fff',
+    color: theme.text.primary,
     fontWeight: '500',
     cursor: 'default'
   },
@@ -2655,7 +2656,7 @@ const getStyles = (theme) => ({
   breadcrumbQuickLink: {
     background: 'none',
     border: 'none',
-    color: '#6b7280',
+    color: theme.text.muted,
     cursor: 'pointer',
     padding: '3px 8px',
     borderRadius: '4px',
@@ -2664,7 +2665,7 @@ const getStyles = (theme) => ({
     transition: 'color 0.15s, background-color 0.15s'
   },
   breadcrumbQuickLinkActive: {
-    color: '#a5b4fc',
+    color: theme.accent.hover,
     backgroundColor: 'rgba(99, 102, 241, 0.15)'
   },
   closeButton: {
@@ -2675,7 +2676,7 @@ const getStyles = (theme) => ({
     height: '36px',
     backgroundColor: 'transparent',
     border: 'none',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     borderRadius: '8px'
   },
