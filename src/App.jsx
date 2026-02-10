@@ -1211,6 +1211,12 @@ const StickToMusic = () => {
 
     if (isConductor(user)) return allArtists;
 
+    // Artists/collaborators see only their linked artist
+    if (isArtistOrCollaborator(user)) {
+      const effectiveId = getEffectiveArtistId(user);
+      return effectiveId ? allArtists.filter(a => a.id === effectiveId) : [];
+    }
+
     // Operators see ONLY artists they own (created). ownerOperatorId is the source of truth.
     const currentUserRecord = allowedUsers.find(u => u.email?.toLowerCase() === user?.email?.toLowerCase());
     const currentUserId = currentUserRecord?.id || null;
