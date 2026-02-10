@@ -98,7 +98,12 @@ const StudioHome = ({
   const [mobileSidebarTab, setMobileSidebarTab] = useState('audio'); // 'audio' | 'lyrics' | 'banks'
   const [selectedCollection, setSelectedCollection] = useState(null);
   const [selectedBanks, setSelectedBanks] = useState(new Set([0, 1])); // indices of selected banks
-  // autoCollectionSet removed — we always default to All Media now
+
+  // Reset collection selection when switching modes (video→slideshow etc.)
+  // A collection selected in video mode may have no images, causing empty/confusing state
+  useEffect(() => {
+    setSelectedCollection(null);
+  }, [studioMode]);
 
   // Library State
   const [library, setLibrary] = useState([]);
