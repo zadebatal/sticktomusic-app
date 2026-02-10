@@ -3191,9 +3191,13 @@ const StickToMusic = () => {
               <ArtistDashboard
                 user={user}
                 artistId={effectiveArtistId}
-                scheduledPosts={latePosts}
+                db={db}
                 latePages={latePages.filter(p => p.artistId === effectiveArtistId)}
                 socialSetsAllowed={user?.socialSetsAllowed || 0}
+                handleGroups={firestoreArtists.find(a => a.id === effectiveArtistId)?.handleGroups}
+                manualAccountsByArtist={manualAccountsByArtist}
+                onAddManualAccounts={handleAddManualAccounts}
+                onRemoveManualAccount={handleRemoveManualAccount}
               />
             )}
 

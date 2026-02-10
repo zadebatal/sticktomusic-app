@@ -1,9 +1,10 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useToast } from '../ui';
 import { getTierForSets, computeSocialSetsUsed, shouldShowPaymentUI } from '../../services/subscriptionService';
 import { PLATFORM_META, getProfileUrl, formatFollowers } from '../../utils/platformUtils';
+import { subscribeToScheduledPosts, POST_STATUS, PLATFORM_COLORS } from '../../services/scheduledPostsService';
 
 /**
  * ArtistDashboard — Home tab for artist and collaborator roles.
@@ -12,12 +13,14 @@ import { PLATFORM_META, getProfileUrl, formatFollowers } from '../../utils/platf
 const ArtistDashboard = ({
   user,
   artistId,
-  scheduledPosts = [],
   latePages = [],
   socialSetsAllowed = 0,
   handleGroups: handleGroupsProp = [],
   onHandleGroupsChange,
   db = null,
+  manualAccountsByArtist = {},
+  onAddManualAccounts,
+  onRemoveManualAccount,
 }) => {
   const { theme } = useTheme();
   const { toastInfo } = useToast();
@@ -28,14 +31,36 @@ const ArtistDashboard = ({
   const tierInfo = getTierForSets(socialSetsAllowed);
   const showPayment = shouldShowPaymentUI(user);
 
-  // Upcoming posts (next 10, sorted by date)
-  const upcomingPosts = scheduledPosts
-    .filter(p => p.status === 'SCHEDULED' || p.status === 'scheduled')
-    .sort((a, b) => new Date(a.scheduledFor || a.scheduledDate) - new Date(b.scheduledFor || b.scheduledDate))
+  // Local scheduler subscription
+  const [localPosts, setLocalPosts] = useState([]);
+  useEffect(() => {
+    if (!db || !artistId) return;
+    const unsub = subscribeToScheduledPosts(db, artistId, setLocalPosts);
+    return unsub;
+  }, [db, artistId]);
+
+  // Upcoming posts (next 10, sorted by date) — from local scheduler
+  const upcomingPosts = localPosts
+    .filter(p => p.status === POST_STATUS.SCHEDULED)
+    .sort((a, b) => new Date(a.scheduledTime) - new Date(b.scheduledTime))
+    .slice(0, 10);
+
+  // Recently posted (last 10, reverse chronological)
+  const postedPosts = localPosts
+    .filter(p => p.status === POST_STATUS.POSTED)
+    .sort((a, b) => new Date(b.postedAt || b.scheduledTime) - new Date(a.postedAt || a.scheduledTime))
     .slice(0, 10);
 
   // Connected platforms for this artist (already filtered)
   const artistPages = latePages;
+
+  // Manual accounts for this artist
+  const manualAccounts = manualAccountsByArtist?.[artistId] || [];
+
+  // Add account form state
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newHandle, setNewHandle] = useState('');
+  const [newPlatform, setNewPlatform] = useState('tiktok');
 
   // Merge edit mode + state
   const [editMode, setEditMode] = useState(false);
@@ -66,8 +91,20 @@ const ArtistDashboard = ({
       });
     });
 
+    // Merge Late pages + manual accounts
+    const allPages = [
+      ...artistPages,
+      ...manualAccounts.map(a => ({
+        handle: a.handle,
+        platform: a.platform,
+        name: a.handle,
+        status: 'manual',
+        isManual: true,
+      }))
+    ];
+
     const groups = {};
-    artistPages.forEach(page => {
+    allPages.forEach(page => {
       const handle = page.handle || page.name || 'unknown';
       const groupKey = handleToGroup[handle.toLowerCase()] || handle;
       if (!groups[groupKey]) {
@@ -82,7 +119,7 @@ const ArtistDashboard = ({
     });
     // Convert handle sets to arrays
     return Object.values(groups).map(g => ({ ...g, handles: [...g.handles] }));
-  }, [artistPages, handleGroups]);
+  }, [artistPages, manualAccounts, handleGroups]);
 
   // Merge checked groups
   const handleMergeSelected = useCallback(() => {
@@ -143,7 +180,7 @@ const ArtistDashboard = ({
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className={`p-5 rounded-xl border ${t.cardBorder} ${t.cardBg}`}>
             <p className={`text-sm ${t.textMuted} mb-1`}>Social Sets</p>
             <p className={`text-2xl font-bold ${t.textPrimary}`}>{socialSetsUsed}/{socialSetsAllowed || '—'}</p>
@@ -155,9 +192,14 @@ const ArtistDashboard = ({
             <p className={`text-xs ${t.textMuted} mt-1`}>upcoming posts</p>
           </div>
           <div className={`p-5 rounded-xl border ${t.cardBorder} ${t.cardBg}`}>
+            <p className={`text-sm ${t.textMuted} mb-1`}>Posted</p>
+            <p className={`text-2xl font-bold ${t.textPrimary}`}>{postedPosts.length}</p>
+            <p className={`text-xs ${t.textMuted} mt-1`}>published</p>
+          </div>
+          <div className={`p-5 rounded-xl border ${t.cardBorder} ${t.cardBg}`}>
             <p className={`text-sm ${t.textMuted} mb-1`}>Platforms</p>
-            <p className={`text-2xl font-bold ${t.textPrimary}`}>{artistPages.length}</p>
-            <p className={`text-xs ${t.textMuted} mt-1`}>connected accounts</p>
+            <p className={`text-2xl font-bold ${t.textPrimary}`}>{artistPages.length + manualAccounts.length}</p>
+            <p className={`text-xs ${t.textMuted} mt-1`}>accounts</p>
           </div>
           <div className={`p-5 rounded-xl border ${t.cardBorder} ${t.cardBg}`}>
             <p className={`text-sm ${t.textMuted} mb-1`}>Plan</p>
@@ -197,16 +239,63 @@ const ArtistDashboard = ({
           <div className={`p-5 rounded-xl border ${t.cardBorder} ${t.cardBg}`}>
             <div className="flex justify-between items-center mb-4">
               <h2 className={`text-sm font-semibold uppercase tracking-wider ${t.textMuted}`}>Connected Accounts</h2>
-              {groupedAccounts.length > 1 && (
-                <button
-                  onClick={() => { setEditMode(!editMode); setCheckedGroups(new Set()); }}
-                  className={`text-xs px-3 py-1 rounded-lg transition ${editMode ? 'bg-indigo-500/20 text-indigo-400' : `${t.textMuted}`}`}
-                  style={{ background: editMode ? undefined : 'none', border: 'none', cursor: 'pointer' }}
-                >
-                  {editMode ? 'Done' : 'Edit'}
-                </button>
-              )}
+              <div className="flex gap-2">
+                {onAddManualAccounts && (
+                  <button
+                    onClick={() => setShowAddForm(!showAddForm)}
+                    className="text-xs px-3 py-1 rounded-lg transition"
+                    style={{ backgroundColor: `${theme.accent.primary}20`, color: theme.accent.primary, border: 'none', cursor: 'pointer' }}
+                  >
+                    {showAddForm ? 'Cancel' : '+ Add'}
+                  </button>
+                )}
+                {groupedAccounts.length > 1 && (
+                  <button
+                    onClick={() => { setEditMode(!editMode); setCheckedGroups(new Set()); }}
+                    className={`text-xs px-3 py-1 rounded-lg transition ${editMode ? 'bg-indigo-500/20 text-indigo-400' : `${t.textMuted}`}`}
+                    style={{ background: editMode ? undefined : 'none', border: 'none', cursor: 'pointer' }}
+                  >
+                    {editMode ? 'Done' : 'Edit'}
+                  </button>
+                )}
+              </div>
             </div>
+            {/* Inline Add Account Form */}
+            {showAddForm && (
+              <div className="flex gap-2 mb-3 items-center flex-wrap">
+                <input
+                  type="text"
+                  placeholder="@handle"
+                  value={newHandle}
+                  onChange={(e) => setNewHandle(e.target.value)}
+                  className={`text-sm px-3 py-1.5 rounded-lg border ${t.border}`}
+                  style={{ backgroundColor: theme.bg.input, color: theme.text.primary, outline: 'none', flex: '1', minWidth: '120px' }}
+                />
+                <select
+                  value={newPlatform}
+                  onChange={(e) => setNewPlatform(e.target.value)}
+                  className={`text-sm px-3 py-1.5 rounded-lg border ${t.border}`}
+                  style={{ backgroundColor: theme.bg.input, color: theme.text.primary, outline: 'none' }}
+                >
+                  <option value="tiktok">TikTok</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="youtube">YouTube</option>
+                  <option value="facebook">Facebook</option>
+                </select>
+                <button
+                  onClick={async () => {
+                    if (!newHandle.trim()) return;
+                    await onAddManualAccounts?.(artistId, [{ handle: newHandle.trim(), platform: newPlatform }]);
+                    setNewHandle('');
+                    setShowAddForm(false);
+                  }}
+                  className="text-xs px-4 py-1.5 rounded-lg font-medium transition"
+                  style={{ backgroundColor: theme.accent.primary, color: '#fff', border: 'none', cursor: 'pointer' }}
+                >
+                  Save
+                </button>
+              </div>
+            )}
             {/* Merge actions */}
             {editMode && checkedGroups.size >= 2 && (
               <div className="flex gap-2 mb-3">
@@ -342,8 +431,8 @@ const ArtistDashboard = ({
             {upcomingPosts.length > 0 ? (
               <div className="space-y-3">
                 {upcomingPosts.slice(0, 5).map((post, i) => {
-                  const dateStr = post.scheduledFor || post.scheduledDate;
-                  const date = dateStr ? new Date(dateStr) : null;
+                  const date = post.scheduledTime ? new Date(post.scheduledTime) : null;
+                  const platformNames = Object.keys(post.platforms || {});
                   return (
                     <div key={post.id || i} className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-mono`}
@@ -352,11 +441,11 @@ const ArtistDashboard = ({
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className={`text-sm ${t.textPrimary} truncate`}>
-                          {post.caption || post.content || 'Untitled post'}
+                          {post.contentName || post.caption || 'Untitled post'}
                         </p>
                         <p className={`text-xs ${t.textMuted}`}>
                           {date ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                          {post.platforms?.map(p => p.platform || p).join(', ')}
+                          {platformNames.length > 0 && ` · ${platformNames.join(', ')}`}
                         </p>
                       </div>
                     </div>
@@ -372,6 +461,77 @@ const ArtistDashboard = ({
               <p className={`text-sm ${t.textMuted} italic`}>No upcoming posts.</p>
             )}
           </div>
+        </div>
+
+        {/* Recently Posted */}
+        <div className={`p-5 rounded-xl border ${t.cardBorder} ${t.cardBg}`}>
+          <h2 className={`text-sm font-semibold uppercase tracking-wider ${t.textMuted} mb-4`}>
+            Recently Posted{postedPosts.length > 0 && ` (${postedPosts.length})`}
+          </h2>
+          {postedPosts.length > 0 ? (
+            <div className="space-y-3">
+              {postedPosts.slice(0, 5).map((post, i) => {
+                const date = (post.postedAt || post.scheduledTime) ? new Date(post.postedAt || post.scheduledTime) : null;
+                const results = post.postResults || {};
+                return (
+                  <div key={post.id || i} className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-mono"
+                      style={{ backgroundColor: theme.bg.elevated, color: theme.text.secondary }}>
+                      {date ? `${date.getMonth() + 1}/${date.getDate()}` : '—'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm ${t.textPrimary} truncate`}>
+                        {post.contentName || post.caption || 'Untitled post'}
+                      </p>
+                      <div className="flex gap-1.5 mt-0.5 flex-wrap">
+                        {Object.entries(results).map(([platform, result]) => (
+                          result?.url ? (
+                            <a
+                              key={platform}
+                              href={result.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs px-2 py-0.5 rounded-full font-medium inline-flex items-center gap-1 hover:opacity-80 transition"
+                              style={{
+                                backgroundColor: `${PLATFORM_COLORS[platform] || '#888'}20`,
+                                color: PLATFORM_COLORS[platform] || '#888',
+                                textDecoration: 'none'
+                              }}
+                            >
+                              {platform} ↗
+                            </a>
+                          ) : (
+                            <span
+                              key={platform}
+                              className="text-xs px-2 py-0.5 rounded-full font-medium"
+                              style={{
+                                backgroundColor: `${PLATFORM_COLORS[platform] || '#888'}20`,
+                                color: PLATFORM_COLORS[platform] || '#888'
+                              }}
+                            >
+                              {platform}
+                            </span>
+                          )
+                        ))}
+                        {Object.keys(results).length === 0 && (
+                          <span className={`text-xs ${t.textMuted}`}>
+                            {date ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {postedPosts.length > 5 && (
+                <p className={`text-xs ${t.textMuted} text-center`}>
+                  +{postedPosts.length - 5} more posted
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className={`text-sm ${t.textMuted} italic`}>No posts published yet.</p>
+          )}
         </div>
 
         {/* Operator Contact Card */}
