@@ -4,6 +4,8 @@ import { useToast } from '../ui';
 import { getLateProfiles, createLateProfile, getConnectUrl } from '../../services/lateService';
 import useIsMobile from '../../hooks/useIsMobile';
 
+import { PLATFORM_META, ALL_PLATFORMS, getProfileUrl, formatFollowers } from '../../utils/platformUtils';
+
 /**
  * PagesTab — Artist-centric social media account management.
  * Shows each visible artist with their connected pages (from Late API).
@@ -11,33 +13,6 @@ import useIsMobile from '../../hooks/useIsMobile';
  * Supports in-app Late OAuth for connecting new platforms.
  * Supports manual account entry with per-platform passwords.
  */
-
-const PLATFORM_META = {
-  tiktok: { label: 'TikTok', icon: '🎵', color: '#ff2d55' },
-  instagram: { label: 'Instagram', icon: '📸', color: '#c13584' },
-  youtube: { label: 'YouTube', icon: '▶️', color: '#ff0000' },
-  facebook: { label: 'Facebook', icon: '📘', color: '#1877f2' },
-};
-
-const ALL_PLATFORMS = ['tiktok', 'instagram', 'youtube', 'facebook'];
-
-const getProfileUrl = (platform, handle) => {
-  const clean = handle.replace(/^@/, '');
-  switch (platform) {
-    case 'tiktok': return `https://www.tiktok.com/@${clean}`;
-    case 'instagram': return `https://www.instagram.com/${clean}/`;
-    case 'youtube': return `https://www.youtube.com/@${clean}`;
-    case 'facebook': return `https://www.facebook.com/${clean}`;
-    default: return null;
-  }
-};
-
-const formatFollowers = (count) => {
-  if (count == null || count === 0) return '—';
-  if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
-  if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
-  return count.toLocaleString();
-};
 
 /**
  * Auto-detect platform from a pasted URL.

@@ -6,6 +6,8 @@ import LyricBank from './LyricBank';
 import TemplatePicker from './TemplatePicker';
 import SoloClipEditor from './SoloClipEditor';
 import MultiClipEditor from './MultiClipEditor';
+import AudioClipSelector from './AudioClipSelector';
+import CloudImportButton from './CloudImportButton';
 import { saveApiKey, loadApiKey } from '../../services/storageService';
 import { ErrorPanel, EmptyState as SharedEmptyState, useToast } from '../ui';
 import {
@@ -226,6 +228,18 @@ const VideoEditorModal = ({
   // Clip drag reordering state
   const [clipDrag, setClipDrag] = useState({ dragging: false, fromIndex: -1, toIndex: -1 });
 
+  // Waveform data for inline timeline
+  const [waveformData, setWaveformData] = useState([]);
+
+  // Marquee selection state for inline timeline
+  const [marqueeState, setMarqueeState] = useState(null);
+  const justFinishedMarqueeRef = useRef(false);
+
+  // Audio upload + trim state
+  const [showAudioTrimmer, setShowAudioTrimmer] = useState(false);
+  const [audioToTrim, setAudioToTrim] = useState(null);
+  const audioFileInputRef = useRef(null);
+
   // Beat detection
   const { beats, bpm, isAnalyzing, analyzeAudio } = useBeatDetection();
 
@@ -394,6 +408,50 @@ const VideoEditorModal = ({
       }
     }
   }, [selectedAudio, analyzeAudio]);
+
+  // Generate waveform data from audio for inline timeline visualization
+  useEffect(() => {
+    if (!selectedAudio?.url && !selectedAudio?.localUrl) {
+      setWaveformData([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const source = selectedAudio.file instanceof Blob ? selectedAudio.file
+          : (selectedAudio.localUrl && !selectedAudio.localUrl.startsWith('blob:'))
+            ? selectedAudio.localUrl : selectedAudio.url;
+        if (!source) return;
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let arrayBuffer;
+        if (source instanceof Blob) {
+          arrayBuffer = await source.arrayBuffer();
+        } else {
+          const resp = await fetch(source, { mode: 'cors' });
+          arrayBuffer = await resp.arrayBuffer();
+        }
+        const buffer = await audioCtx.decodeAudioData(arrayBuffer);
+        await audioCtx.close();
+        if (cancelled) return;
+        const rawData = buffer.getChannelData(0);
+        const samples = 200;
+        const blockSize = Math.floor(rawData.length / samples);
+        const filteredData = [];
+        for (let i = 0; i < samples; i++) {
+          let sum = 0;
+          for (let j = 0; j < blockSize; j++) {
+            sum += Math.abs(rawData[(i * blockSize) + j]);
+          }
+          filteredData.push(sum / blockSize);
+        }
+        const max = Math.max(...filteredData);
+        setWaveformData(filteredData.map(d => d / max));
+      } catch (err) {
+        console.warn('Waveform generation failed:', err.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedAudio]);
 
   // Handle play/pause with trim boundary support
   useEffect(() => {
@@ -822,6 +880,53 @@ const VideoEditorModal = ({
         toast.success(`Loaded saved lyrics: "${latestLyrics.name}"`);
       }
     }
+  };
+
+  // Audio upload handler
+  const handleAudioUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const localUrl = URL.createObjectURL(file);
+    const uploadedAudio = {
+      id: `upload_${Date.now()}`,
+      name: file.name,
+      file,
+      url: localUrl,
+      localUrl
+    };
+    setAudioToTrim(uploadedAudio);
+    setShowAudioTrimmer(true);
+    // Reset file input so same file can be re-uploaded
+    if (audioFileInputRef.current) audioFileInputRef.current.value = '';
+  };
+
+  // Audio trim save handler
+  const handleAudioTrimSave = ({ startTime, endTime, duration: trimDuration, trimmedFile, trimmedName }) => {
+    if (!audioToTrim) return;
+    if (trimmedFile) {
+      const localUrl = URL.createObjectURL(trimmedFile);
+      handleAudioSelect({
+        ...audioToTrim,
+        name: trimmedName || trimmedFile.name,
+        file: trimmedFile,
+        url: localUrl,
+        localUrl,
+        startTime: 0,
+        endTime: trimDuration,
+        trimmedDuration: trimDuration,
+        duration: trimDuration
+      });
+    } else {
+      handleAudioSelect({
+        ...audioToTrim,
+        startTime,
+        endTime,
+        trimmedDuration: endTime - startTime,
+        isTrimmed: startTime > 0 || (audioToTrim.duration && Math.abs(endTime - audioToTrim.duration) > 0.1)
+      });
+    }
+    setShowAudioTrimmer(false);
+    setAudioToTrim(null);
   };
 
   // Show the beat selector modal
@@ -1489,8 +1594,12 @@ const VideoEditorModal = ({
   }, [apiKeyInput, handleAITranscribe]);
 
   const handleClipSelect = (index, e) => {
+    if (justFinishedMarqueeRef.current) {
+      justFinishedMarqueeRef.current = false;
+      return;
+    }
     if (e.shiftKey) {
-      // Multi-select
+      // Multi-select — don't move playhead
       setSelectedClips(prev =>
         prev.includes(index)
           ? prev.filter(i => i !== index)
@@ -1498,8 +1607,67 @@ const VideoEditorModal = ({
       );
     } else {
       setSelectedClips([index]);
+      // Jump playhead to clip start time
+      const clip = clips[index];
+      if (clip) {
+        handleSeek(clip.startTime);
+      }
     }
   };
+
+  // Marquee selection: pointer down on timeline background
+  const handleTimelineMarqueeDown = (e) => {
+    if (e.target.closest('[data-clip-block]')) return;
+    if (!timelineRef.current) return;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const scrollLeft = timelineRef.current.scrollLeft || 0;
+    const startX = e.clientX - rect.left + scrollLeft;
+    const startY = e.clientY - rect.top;
+    setMarqueeState({ startX, startY, currentX: startX, currentY: startY });
+    if (!e.shiftKey) setSelectedClips([]);
+  };
+
+  // Marquee selection: pointermove / pointerup effect
+  useEffect(() => {
+    if (!marqueeState) return;
+    const handlePointerMove = (e) => {
+      const rect = timelineRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const scrollLeft = timelineRef.current?.scrollLeft || 0;
+      const currentX = e.clientX - rect.left + scrollLeft;
+      const currentY = e.clientY - rect.top;
+      setMarqueeState(prev => ({ ...prev, currentX, currentY }));
+      // Calculate which clips overlap
+      const pxPerSec = 40 * timelineScale;
+      const minX = Math.min(marqueeState.startX, currentX);
+      const maxX = Math.max(marqueeState.startX, currentX);
+      const indices = [];
+      let offset = 0;
+      clips.forEach((clip, i) => {
+        const clipW = Math.max(50, (clip.duration || 1) * pxPerSec);
+        const clipRight = offset + clipW;
+        if (clipRight >= minX && offset <= maxX) indices.push(i);
+        offset = clipRight;
+      });
+      setSelectedClips(indices);
+    };
+    const handlePointerUp = () => {
+      const hasDragged = marqueeState && (
+        Math.abs(marqueeState.currentX - marqueeState.startX) > 5 ||
+        Math.abs(marqueeState.currentY - marqueeState.startY) > 5
+      );
+      if (hasDragged) justFinishedMarqueeRef.current = true;
+      setMarqueeState(null);
+    };
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+  }, [marqueeState, clips, timelineScale]);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -1662,22 +1830,40 @@ const VideoEditorModal = ({
                       <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                           <span style={{ fontSize: '11px', color: theme.text.muted }}>{visibleVideos.length} clips</span>
-                          <button
-                            style={{ fontSize: '11px', color: '#14b8a6', background: 'none', border: 'none', cursor: 'pointer' }}
-                            onClick={() => {
-                              const newClips = visibleVideos.map((v, i) => ({
-                                id: `clip_${Date.now()}_${i}`,
-                                sourceId: v.id,
-                                url: v.url || v.localUrl,
-                                localUrl: v.localUrl || v.url,
-                                thumbnail: v.thumbnailUrl || v.thumbnail,
-                                startTime: i * 2,
-                                duration: 2,
-                                locked: false
-                              }));
-                              setClips(newClips);
-                            }}
-                          >Add All</button>
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <CloudImportButton
+                              artistId={artistId}
+                              db={db}
+                              mediaType="video"
+                              compact
+                              onImportMedia={(files) => {
+                                const newVids = files.map((f, i) => ({
+                                  id: `import_${Date.now()}_${i}`,
+                                  name: f.name,
+                                  url: f.url,
+                                  localUrl: f.localUrl,
+                                  type: 'video'
+                                }));
+                                setLibraryVideos(prev => [...prev, ...newVids]);
+                              }}
+                            />
+                            <button
+                              style={{ fontSize: '11px', color: '#14b8a6', background: 'none', border: 'none', cursor: 'pointer' }}
+                              onClick={() => {
+                                const newClips = visibleVideos.map((v, i) => ({
+                                  id: `clip_${Date.now()}_${i}`,
+                                  sourceId: v.id,
+                                  url: v.url || v.localUrl,
+                                  localUrl: v.localUrl || v.url,
+                                  thumbnail: v.thumbnailUrl || v.thumbnail,
+                                  startTime: i * 2,
+                                  duration: 2,
+                                  locked: false
+                                }));
+                                setClips(newClips);
+                              }}
+                            >Add All</button>
+                          </div>
                         </div>
                         <div style={styles.sidebarClipGrid}>
                           {visibleVideos.map((video, i) => {
@@ -1736,13 +1922,67 @@ const VideoEditorModal = ({
                 {/* ── Audio tab ── */}
                 {activeBank === 'audio' && (
                   <div>
+                    {/* Hidden file input */}
+                    <input
+                      ref={audioFileInputRef}
+                      type="file"
+                      accept="audio/*"
+                      style={{ display: 'none' }}
+                      onChange={handleAudioUpload}
+                    />
+                    {/* Upload + Cloud buttons */}
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                      <button
+                        onClick={() => audioFileInputRef.current?.click()}
+                        style={{
+                          flex: 1, padding: '10px 12px', borderRadius: '8px',
+                          border: `1px dashed ${theme.border.subtle}`,
+                          background: theme.hover.bg, color: theme.text.primary,
+                          cursor: 'pointer', textAlign: 'center', fontSize: '12px'
+                        }}
+                      >
+                        📁 Upload Audio
+                      </button>
+                      <CloudImportButton
+                        artistId={artistId}
+                        db={db}
+                        mediaType="audio"
+                        compact
+                        onImportMedia={(files) => {
+                          if (files.length > 0) {
+                            const audio = files[0];
+                            handleAudioSelect({
+                              id: `cloud_${Date.now()}`,
+                              name: audio.name,
+                              file: audio.file,
+                              url: audio.url,
+                              localUrl: audio.localUrl
+                            });
+                          }
+                        }}
+                      />
+                    </div>
                     {/* Current audio indicator */}
                     {selectedAudio && (
-                      <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', marginBottom: '12px' }}>
-                        <div style={{ fontSize: '11px', color: theme.text.muted, marginBottom: '4px' }}>Now playing</div>
-                        <div style={{ fontSize: '13px', color: '#86efac', fontWeight: 500 }}>
-                          {selectedAudio.isSourceAudio ? 'Source Video Audio' : selectedAudio.name}
+                      <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div>
+                          <div style={{ fontSize: '11px', color: theme.text.muted, marginBottom: '4px' }}>Now playing</div>
+                          <div style={{ fontSize: '13px', color: '#86efac', fontWeight: 500 }}>
+                            {selectedAudio.isSourceAudio ? 'Source Video Audio' : selectedAudio.name}
+                          </div>
                         </div>
+                        {!selectedAudio.isSourceAudio && (
+                          <button
+                            onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}
+                            style={{
+                              padding: '4px 10px', borderRadius: '6px', border: 'none',
+                              background: 'rgba(34,197,94,0.2)', color: '#86efac',
+                              cursor: 'pointer', fontSize: '11px', flexShrink: 0
+                            }}
+                          >
+                            ✂️ Trim
+                          </button>
+                        )}
                       </div>
                     )}
                     {/* Source video audio option */}
@@ -1999,6 +2239,52 @@ const VideoEditorModal = ({
                   }}>
                     {currentText.text}
                   </div>
+                )}
+
+                {/* Crop Overlay */}
+                {cropMode === '4:3' && (
+                  <>
+                    <div style={{
+                      position: 'absolute', top: 0, left: 0, right: 0,
+                      height: 'calc((100% - (100% * 0.75)) / 2)',
+                      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                      borderBottom: '2px dashed rgba(255, 255, 255, 0.4)',
+                      pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 8
+                    }}>
+                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px' }}>Cropped</span>
+                    </div>
+                    <div style={{
+                      position: 'absolute', bottom: 0, left: 0, right: 0,
+                      height: 'calc((100% - (100% * 0.75)) / 2)',
+                      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                      borderTop: '2px dashed rgba(255, 255, 255, 0.4)',
+                      pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 8
+                    }}>
+                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px' }}>Cropped</span>
+                    </div>
+                  </>
+                )}
+                {cropMode === '1:1' && (
+                  <>
+                    <div style={{
+                      position: 'absolute', top: 0, left: 0, right: 0,
+                      height: 'calc((100% - (100% * 0.5625)) / 2)',
+                      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                      borderBottom: '2px dashed rgba(255, 255, 255, 0.4)',
+                      pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 8
+                    }}>
+                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px' }}>Cropped</span>
+                    </div>
+                    <div style={{
+                      position: 'absolute', bottom: 0, left: 0, right: 0,
+                      height: 'calc((100% - (100% * 0.5625)) / 2)',
+                      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                      borderTop: '2px dashed rgba(255, 255, 255, 0.4)',
+                      pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 8
+                    }}>
+                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px' }}>Cropped</span>
+                    </div>
+                  </>
                 )}
 
                 {/* Safe Zone Guides */}
@@ -2268,9 +2554,9 @@ const VideoEditorModal = ({
                         onChange={(e) => setCropMode(e.target.value)}
                         style={styles.select}
                       >
-                        <option value="9:16">9:16 (Vertical)</option>
-                        <option value="4:3">4:3 in Vertical</option>
-                        <option value="1:1">1:1 (Square)</option>
+                        <option value="9:16">9:16 (Full)</option>
+                        <option value="4:3">4:3 (Crop)</option>
+                        <option value="1:1">1:1 (Crop)</option>
                       </select>
                     </div>
 
@@ -2541,7 +2827,38 @@ const VideoEditorModal = ({
                     </div>
                   </div>
 
-                  <div style={{...styles.clipsTimeline, position: 'relative'}} ref={timelineRef}>
+                  <div style={{...styles.clipsTimeline, position: 'relative'}} ref={timelineRef} onPointerDown={handleTimelineMarqueeDown}>
+                    {/* Marquee overlay */}
+                    {marqueeState && (() => {
+                      const minX = Math.min(marqueeState.startX, marqueeState.currentX);
+                      const maxX = Math.max(marqueeState.startX, marqueeState.currentX);
+                      const minY = Math.min(marqueeState.startY, marqueeState.currentY);
+                      const maxY = Math.max(marqueeState.startY, marqueeState.currentY);
+                      return (
+                        <div style={{
+                          position: 'absolute', left: minX, top: minY,
+                          width: maxX - minX, height: maxY - minY,
+                          backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                          border: '1px solid rgba(99, 102, 241, 0.5)',
+                          pointerEvents: 'none', zIndex: 25
+                        }} />
+                      );
+                    })()}
+                    {/* Waveform background */}
+                    {waveformData.length > 0 && (
+                      <div style={{
+                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                        display: 'flex', alignItems: 'center', gap: '1px', opacity: 0.2,
+                        pointerEvents: 'none', zIndex: 1
+                      }}>
+                        {waveformData.map((amplitude, i) => (
+                          <div key={i} style={{
+                            flex: 1, minWidth: '1px', backgroundColor: '#22c55e',
+                            height: `${amplitude * 100}%`
+                          }} />
+                        ))}
+                      </div>
+                    )}
                     {/* Playhead indicator */}
                     {clips.length > 0 && (
                       <div
@@ -2584,6 +2901,7 @@ const VideoEditorModal = ({
                           return (
                           <div
                             key={clip.id}
+                            data-clip-block="true"
                             draggable={!clip.locked && !clipResize.active}
                             onDragStart={() => !clipResize.active && handleClipDragStart(index)}
                             onDragOver={(e) => { e.preventDefault(); handleClipDragOver(index); }}
@@ -2714,9 +3032,17 @@ const VideoEditorModal = ({
                     </div>
                   </div>
 
+                  {/* Selection info */}
+                  {selectedClips.length > 1 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 8px', fontSize: '12px', color: theme.accent.primary }}>
+                      <span>{selectedClips.length} clips selected</span>
+                      <button style={{ ...styles.clipAction, fontSize: '11px', padding: '2px 8px' }} onClick={() => setSelectedClips([])}>Clear</button>
+                    </div>
+                  )}
+
                   {/* Cut Actions */}
                   <div style={styles.cutActions}>
-                    <span style={styles.cutHint}>Shift + drag checkboxes to select multiple!</span>
+                    <span style={styles.cutHint}>Click-drag timeline to marquee select, or Shift-click clips</span>
                     <div style={styles.cutButtons}>
                       <button style={styles.cutButton} onClick={handleCutByWord}>Cut by word</button>
                       <button style={styles.cutButton} onClick={handleCutByBeat}>Cut by beat</button>
@@ -3220,6 +3546,22 @@ const VideoEditorModal = ({
               </div>
             </div>
           </div>
+        )}
+
+        {/* Audio Trimmer Modal */}
+        {showAudioTrimmer && audioToTrim && (
+          <AudioClipSelector
+            audioFile={audioToTrim.file}
+            audioUrl={audioToTrim.url || audioToTrim.localUrl}
+            audioName={audioToTrim.name}
+            initialStart={audioToTrim.startTime || 0}
+            initialEnd={audioToTrim.endTime || null}
+            onSave={handleAudioTrimSave}
+            onCancel={() => {
+              setShowAudioTrimmer(false);
+              setAudioToTrim(null);
+            }}
+          />
         )}
 
         {/* Close Confirmation Dialog */}

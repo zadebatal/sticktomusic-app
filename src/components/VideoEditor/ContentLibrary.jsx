@@ -14,6 +14,7 @@ import {
 } from '../../services/googleDriveService';
 import useIsMobile from '../../hooks/useIsMobile';
 import { useTheme } from '../../contexts/ThemeContext';
+import CloudImportButton from './CloudImportButton';
 
 /**
  * ContentLibrary - Shows all videos or slideshows created within a category
@@ -300,6 +301,14 @@ const ContentLibrary = ({
           ...styles.headerActions,
           ...(isMobile ? { flexDirection: 'column', width: '100%', gap: '8px' } : {})
         }}>
+          <CloudImportButton
+            artistId={artistId}
+            db={db}
+            mediaType="all"
+            onImportMedia={(files) => {
+              toastSuccess(`Imported ${files.length} file(s) from cloud`);
+            }}
+          />
           {isDraftsView ? (
             /* Drafts view: show prominent create CTAs + delete */
             <>

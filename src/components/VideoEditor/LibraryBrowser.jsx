@@ -58,6 +58,10 @@ import {
   uploadFile as driveUploadFile, ensureAppFolder, openPicker as driveOpenPicker,
   createFolder as driveCreateFolder, DRIVE_MIME_TYPES
 } from '../../services/googleDriveService';
+import {
+  authenticate as dropboxAuth, isAuthenticated as isDropboxAuth,
+  listFiles as dropboxListFiles, downloadFile as dropboxDownloadFile, detectMediaType
+} from '../../services/dropboxService';
 import { useToast } from '../ui';
 import useIsMobile from '../../hooks/useIsMobile';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -2127,7 +2131,7 @@ const LibraryBrowser = ({
                         title="Cloud Storage"
                       >
                         <span style={{ fontSize: '12px' }}>&#9729;</span>
-                        <span style={{ fontSize: '10px' }}>Drive</span>
+                        <span style={{ fontSize: '10px' }}>Cloud</span>
                       </button>
                       {showCloudMenu && (
                         <div style={{
@@ -2177,6 +2181,41 @@ const LibraryBrowser = ({
                               </>
                             );
                           })()}
+                          {/* Dropbox divider + import */}
+                          <div style={{ height: '1px', backgroundColor: theme.border.subtle, margin: '4px 0' }} />
+                          <div
+                            onClick={async () => {
+                              setShowCloudMenu(false);
+                              if (!isDropboxAuth()) {
+                                try { await dropboxAuth(); } catch { toastError('Dropbox auth failed'); return; }
+                              }
+                              try {
+                                const result = await dropboxListFiles('');
+                                const files = (result.entries || result || []).filter(f => f['.tag'] === 'file');
+                                if (!files.length) { toastSuccess('No files in Dropbox root'); return; }
+                                for (const f of files) {
+                                  const blob = await dropboxDownloadFile(f.path_lower || f.path_display);
+                                  const localUrl = URL.createObjectURL(blob);
+                                  const type = detectMediaType(f.name);
+                                  if (type && artistId) {
+                                    addToLibraryAsync(db, artistId, {
+                                      id: `dbx_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                                      name: f.name, type, url: localUrl, localUrl, source: 'dropbox'
+                                    });
+                                  }
+                                }
+                                toastSuccess(`Imported ${files.length} file(s) from Dropbox`);
+                              } catch (err) {
+                                console.error('Dropbox import:', err);
+                                toastError('Dropbox import failed');
+                              }
+                            }}
+                            style={{ padding: '10px 12px', cursor: 'pointer', fontSize: '13px', color: theme.text.primary, display: 'flex', alignItems: 'center', gap: '8px' }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.hover.bg}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                          >
+                            <span>📦</span> Import from Dropbox
+                          </div>
                         </div>
                       )}
                     </div>

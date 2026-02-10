@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
+import { doc, updateDoc } from 'firebase/firestore';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useToast } from '../ui';
 import { getTierForSets, computeSocialSetsUsed, shouldShowPaymentUI } from '../../services/subscriptionService';
+import { PLATFORM_META, getProfileUrl, formatFollowers } from '../../utils/platformUtils';
 
 /**
  * ArtistDashboard — Home tab for artist and collaborator roles.
@@ -13,6 +15,9 @@ const ArtistDashboard = ({
   scheduledPosts = [],
   latePages = [],
   socialSetsAllowed = 0,
+  handleGroups: handleGroupsProp = [],
+  onHandleGroupsChange,
+  db = null,
 }) => {
   const { theme } = useTheme();
   const { toastInfo } = useToast();
@@ -31,6 +36,98 @@ const ArtistDashboard = ({
 
   // Connected platforms for this artist (already filtered)
   const artistPages = latePages;
+
+  // Merge edit mode + state
+  const [editMode, setEditMode] = useState(false);
+  const [checkedGroups, setCheckedGroups] = useState(new Set());
+  const [dragOverGroup, setDragOverGroup] = useState(null);
+  const [handleGroups, setHandleGroups] = useState(handleGroupsProp);
+
+  // Persist handleGroups to Firestore
+  const saveHandleGroups = useCallback(async (newGroups) => {
+    setHandleGroups(newGroups);
+    onHandleGroupsChange?.(newGroups);
+    if (db && artistId) {
+      try {
+        await updateDoc(doc(db, 'artists', artistId), { handleGroups: newGroups });
+      } catch (err) {
+        console.error('Failed to save handleGroups:', err);
+      }
+    }
+  }, [db, artistId, onHandleGroupsChange]);
+
+  // Group pages by handle (respecting handleGroups merges)
+  const groupedAccounts = useMemo(() => {
+    // Build a map: handle → group display name
+    const handleToGroup = {};
+    (handleGroups || []).forEach(g => {
+      (g.handles || []).forEach(h => {
+        handleToGroup[h.toLowerCase()] = g.displayName || g.handles[0];
+      });
+    });
+
+    const groups = {};
+    artistPages.forEach(page => {
+      const handle = page.handle || page.name || 'unknown';
+      const groupKey = handleToGroup[handle.toLowerCase()] || handle;
+      if (!groups[groupKey]) {
+        groups[groupKey] = { displayName: groupKey, pages: [], totalFollowers: 0, profilePic: null, handles: new Set() };
+      }
+      groups[groupKey].pages.push(page);
+      groups[groupKey].handles.add(handle);
+      groups[groupKey].totalFollowers += (page.followers || page.follower_count || 0);
+      if (!groups[groupKey].profilePic && page.profilePicture) {
+        groups[groupKey].profilePic = page.profilePicture;
+      }
+    });
+    // Convert handle sets to arrays
+    return Object.values(groups).map(g => ({ ...g, handles: [...g.handles] }));
+  }, [artistPages, handleGroups]);
+
+  // Merge checked groups
+  const handleMergeSelected = useCallback(() => {
+    if (checkedGroups.size < 2) return;
+    const indices = [...checkedGroups];
+    const mergedHandles = [];
+    indices.forEach(i => {
+      groupedAccounts[i]?.handles?.forEach(h => mergedHandles.push(h));
+    });
+    const displayName = groupedAccounts[indices[0]]?.displayName || mergedHandles[0];
+    // Remove old groups that contain any of these handles, add new merged group
+    const newGroups = (handleGroups || []).filter(g =>
+      !g.handles.some(h => mergedHandles.map(m => m.toLowerCase()).includes(h.toLowerCase()))
+    );
+    newGroups.push({ handles: mergedHandles, displayName });
+    saveHandleGroups(newGroups);
+    setCheckedGroups(new Set());
+  }, [checkedGroups, groupedAccounts, handleGroups, saveHandleGroups]);
+
+  // Split a merged group
+  const handleSplit = useCallback((groupIndex) => {
+    const group = groupedAccounts[groupIndex];
+    if (!group || group.handles.length <= 1) return;
+    // Remove any handleGroup that contains these handles
+    const newGroups = (handleGroups || []).filter(g =>
+      !g.handles.some(h => group.handles.map(m => m.toLowerCase()).includes(h.toLowerCase()))
+    );
+    saveHandleGroups(newGroups);
+  }, [groupedAccounts, handleGroups, saveHandleGroups]);
+
+  // Drag-to-merge
+  const handleDragMerge = useCallback((fromIndex, toIndex) => {
+    if (fromIndex === toIndex) return;
+    const fromGroup = groupedAccounts[fromIndex];
+    const toGroup = groupedAccounts[toIndex];
+    if (!fromGroup || !toGroup) return;
+    const mergedHandles = [...new Set([...toGroup.handles, ...fromGroup.handles])];
+    const displayName = toGroup.displayName;
+    const newGroups = (handleGroups || []).filter(g =>
+      !g.handles.some(h => mergedHandles.map(m => m.toLowerCase()).includes(h.toLowerCase()))
+    );
+    newGroups.push({ handles: mergedHandles, displayName });
+    saveHandleGroups(newGroups);
+    setDragOverGroup(null);
+  }, [groupedAccounts, handleGroups, saveHandleGroups]);
 
   return (
     <div className={`flex-1 overflow-auto p-6 ${t.bgPage}`}>
@@ -96,26 +193,141 @@ const ArtistDashboard = ({
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Your Social Sets */}
+          {/* Your Social Sets — Grouped by Handle */}
           <div className={`p-5 rounded-xl border ${t.cardBorder} ${t.cardBg}`}>
-            <h2 className={`text-sm font-semibold uppercase tracking-wider ${t.textMuted} mb-4`}>Connected Accounts</h2>
-            {artistPages.length > 0 ? (
+            <div className="flex justify-between items-center mb-4">
+              <h2 className={`text-sm font-semibold uppercase tracking-wider ${t.textMuted}`}>Connected Accounts</h2>
+              {groupedAccounts.length > 1 && (
+                <button
+                  onClick={() => { setEditMode(!editMode); setCheckedGroups(new Set()); }}
+                  className={`text-xs px-3 py-1 rounded-lg transition ${editMode ? 'bg-indigo-500/20 text-indigo-400' : `${t.textMuted}`}`}
+                  style={{ background: editMode ? undefined : 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  {editMode ? 'Done' : 'Edit'}
+                </button>
+              )}
+            </div>
+            {/* Merge actions */}
+            {editMode && checkedGroups.size >= 2 && (
+              <div className="flex gap-2 mb-3">
+                <button
+                  onClick={handleMergeSelected}
+                  className="text-xs px-3 py-1.5 rounded-lg font-medium"
+                  style={{ backgroundColor: `${theme.accent.primary}20`, color: theme.accent.primary, border: 'none', cursor: 'pointer' }}
+                >
+                  Merge {checkedGroups.size} Selected
+                </button>
+                <button
+                  onClick={() => setCheckedGroups(new Set())}
+                  className={`text-xs px-3 py-1.5 rounded-lg ${t.textMuted}`}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+            {groupedAccounts.length > 0 ? (
               <div className="space-y-3">
-                {artistPages.map(page => (
-                  <div key={page.id} className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold`}
-                      style={{ backgroundColor: theme.bg.elevated, color: theme.text.secondary }}>
-                      {page.platform?.[0]?.toUpperCase() || '?'}
-                    </div>
+                {groupedAccounts.map((group, gi) => (
+                  <div
+                    key={gi}
+                    className="flex items-center gap-3"
+                    draggable={editMode}
+                    onDragStart={(e) => { e.dataTransfer.setData('text/plain', String(gi)); }}
+                    onDragOver={(e) => { if (editMode) { e.preventDefault(); setDragOverGroup(gi); } }}
+                    onDragLeave={() => setDragOverGroup(null)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const fromIdx = parseInt(e.dataTransfer.getData('text/plain'), 10);
+                      if (!isNaN(fromIdx)) handleDragMerge(fromIdx, gi);
+                    }}
+                    style={{
+                      padding: editMode ? '8px' : undefined,
+                      borderRadius: editMode ? '8px' : undefined,
+                      border: dragOverGroup === gi ? `2px dashed ${theme.accent.primary}` : editMode ? `1px solid ${theme.bg.elevated}` : undefined,
+                      cursor: editMode ? 'grab' : undefined,
+                      transition: 'border 0.15s'
+                    }}
+                  >
+                    {/* Checkbox in edit mode */}
+                    {editMode && (
+                      <input
+                        type="checkbox"
+                        checked={checkedGroups.has(gi)}
+                        onChange={() => {
+                          setCheckedGroups(prev => {
+                            const next = new Set(prev);
+                            if (next.has(gi)) next.delete(gi); else next.add(gi);
+                            return next;
+                          });
+                        }}
+                        className="w-4 h-4 flex-shrink-0"
+                      />
+                    )}
+                    {/* Avatar */}
+                    {group.profilePic ? (
+                      <img src={group.profilePic} alt="" className="w-9 h-9 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold"
+                        style={{ backgroundColor: theme.bg.elevated, color: theme.text.secondary }}>
+                        {group.displayName?.[0]?.toUpperCase() || '?'}
+                      </div>
+                    )}
+                    {/* Handle + platform pills */}
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-medium ${t.textPrimary} truncate`}>{page.handle}</p>
-                      <p className={`text-xs ${t.textMuted} capitalize`}>{page.platform}</p>
+                      <p className={`text-sm font-medium ${t.textPrimary} truncate`}>
+                        {group.displayName}
+                        {group.handles.length > 1 && (
+                          <span className={`text-xs ${t.textMuted} ml-1`}>(+{group.handles.length - 1})</span>
+                        )}
+                      </p>
+                      <div className="flex gap-1.5 mt-1 flex-wrap">
+                        {group.pages.map((page, pi) => {
+                          const meta = PLATFORM_META[page.platform] || { icon: '🌐', color: '#888', label: page.platform };
+                          const url = getProfileUrl(page.platform, page.handle);
+                          return (
+                            <a
+                              key={pi}
+                              href={url || '#'}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={url ? undefined : (e) => e.preventDefault()}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition hover:opacity-80"
+                              style={{
+                                backgroundColor: `${meta.color}20`,
+                                color: meta.color,
+                                textDecoration: 'none',
+                                cursor: url ? 'pointer' : 'default'
+                              }}
+                              title={`${meta.label}: ${page.handle}`}
+                            >
+                              <span>{meta.icon}</span>
+                              <span>{meta.label}</span>
+                            </a>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      page.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-zinc-500/20 text-zinc-400'
-                    }`}>
-                      {page.status}
-                    </span>
+                    {/* Followers + status + split */}
+                    <div className="text-right flex-shrink-0 flex flex-col items-end gap-1">
+                      {group.totalFollowers > 0 && (
+                        <p className={`text-sm font-semibold ${t.textPrimary}`}>{formatFollowers(group.totalFollowers)}</p>
+                      )}
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        group.pages.every(p => p.status === 'active') ? 'bg-green-500/20 text-green-400' : 'bg-zinc-500/20 text-zinc-400'
+                      }`}>
+                        {group.pages.every(p => p.status === 'active') ? 'active' : 'mixed'}
+                      </span>
+                      {editMode && group.handles.length > 1 && (
+                        <button
+                          onClick={() => handleSplit(gi)}
+                          className="text-xs px-2 py-0.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: '#ef4444', border: 'none', cursor: 'pointer' }}
+                        >
+                          Split
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

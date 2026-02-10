@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import useTimelineZoom from '../../hooks/useTimelineZoom';
 
@@ -48,6 +48,9 @@ const EnhancedTimeline = ({
   const [waveformData, setWaveformData] = useState([]);
   const [hoveredClip, setHoveredClip] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
+  const [selectedClipIndices, setSelectedClipIndices] = useState([]);
+  const [marqueeState, setMarqueeState] = useState(null);
+  const justFinishedMarqueeRef = useRef(false);
 
   // Find the active clip (the one the playhead is currently in)
   const activeClipIndex = clips.findIndex(clip =>
@@ -121,6 +124,55 @@ const EnhancedTimeline = ({
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
+  // Marquee pointer handlers
+  const handleMarqueeDown = (e) => {
+    if (e.target.closest('[data-et-clip]')) return;
+    if (!timelineRef.current) return;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const scrollLeft = timelineRef.current.scrollLeft || 0;
+    const startX = e.clientX - rect.left + scrollLeft;
+    const startY = e.clientY - rect.top;
+    setMarqueeState({ startX, startY, currentX: startX, currentY: startY });
+    if (!e.shiftKey) setSelectedClipIndices([]);
+  };
+
+  useEffect(() => {
+    if (!marqueeState) return;
+    const handlePointerMove = (e) => {
+      const rect = timelineRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const scrollLeft = timelineRef.current?.scrollLeft || 0;
+      const currentX = e.clientX - rect.left + scrollLeft;
+      const currentY = e.clientY - rect.top;
+      setMarqueeState(prev => ({ ...prev, currentX, currentY }));
+      const minX = Math.min(marqueeState.startX, currentX);
+      const maxX = Math.max(marqueeState.startX, currentX);
+      const indices = [];
+      clips.forEach((clip, i) => {
+        const clipLeft = timeToPixels(clip.startTime);
+        const clipRight = clipLeft + Math.max(timeToPixels(clip.duration), 20);
+        if (clipRight >= minX && clipLeft <= maxX) indices.push(i);
+      });
+      setSelectedClipIndices(indices);
+    };
+    const handlePointerUp = () => {
+      const hasDragged = marqueeState && (
+        Math.abs(marqueeState.currentX - marqueeState.startX) > 5 ||
+        Math.abs(marqueeState.currentY - marqueeState.startY) > 5
+      );
+      if (hasDragged) justFinishedMarqueeRef.current = true;
+      setMarqueeState(null);
+    };
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+  }, [marqueeState, clips]);
+
   const totalWidth = timeToPixels(duration);
   const styles = getStyles(theme);
 
@@ -133,6 +185,15 @@ const EnhancedTimeline = ({
           <span style={styles.clipCount}>{clips.length} clips</span>
         </div>
         <div style={styles.toolbarRight}>
+          {selectedClipIndices.length > 1 && (
+            <>
+              <span style={{ fontSize: '12px', color: theme.accent.primary }}>{selectedClipIndices.length} selected</span>
+              <button style={styles.toolbarButton} onClick={() => { selectedClipIndices.forEach(i => onClipReroll?.(i)); setSelectedClipIndices([]); }}>🎲 Reroll Sel</button>
+              <button style={styles.toolbarButton} onClick={() => { selectedClipIndices.forEach(i => onClipLock?.(i)); setSelectedClipIndices([]); }}>🔒 Lock Sel</button>
+              <button style={{ ...styles.toolbarButton, color: '#ef4444' }} onClick={() => { selectedClipIndices.sort((a, b) => b - a).forEach(i => onClipDelete?.(i)); setSelectedClipIndices([]); }}>🗑️ Delete Sel</button>
+              <button style={styles.toolbarButton} onClick={() => setSelectedClipIndices([])}>Clear</button>
+            </>
+          )}
           <button
             style={styles.toolbarButton}
             onClick={onRerollAll}
@@ -159,7 +220,24 @@ const EnhancedTimeline = ({
         ref={timelineRef}
         style={styles.timelineScroll}
         onClick={handleTimelineClick}
+        onPointerDown={handleMarqueeDown}
       >
+        {/* Marquee overlay */}
+        {marqueeState && (() => {
+          const minX = Math.min(marqueeState.startX, marqueeState.currentX);
+          const maxX = Math.max(marqueeState.startX, marqueeState.currentX);
+          const minY = Math.min(marqueeState.startY, marqueeState.currentY);
+          const maxY = Math.max(marqueeState.startY, marqueeState.currentY);
+          return (
+            <div style={{
+              position: 'absolute', left: minX, top: minY,
+              width: maxX - minX, height: maxY - minY,
+              backgroundColor: 'rgba(99, 102, 241, 0.2)',
+              border: '1px solid rgba(99, 102, 241, 0.5)',
+              pointerEvents: 'none', zIndex: 25
+            }} />
+          );
+        })()}
         <div style={{ ...styles.timelineContent, width: totalWidth }}>
           {/* Time Ruler */}
           <div style={styles.ruler}>
@@ -211,18 +289,28 @@ const EnhancedTimeline = ({
             {clips.map((clip, index) => (
               <div
                 key={clip.id}
+                data-et-clip="true"
                 style={{
                   ...styles.clip,
                   left: timeToPixels(clip.startTime),
                   width: Math.max(timeToPixels(clip.duration), 20),
-                  ...(selectedClipIndex === index ? styles.clipSelected : {}),
+                  ...(selectedClipIndex === index || selectedClipIndices.includes(index) ? styles.clipSelected : {}),
                   ...(clip.locked ? styles.clipLocked : {}),
                   ...(hoveredClip === index ? styles.clipHovered : {}),
                   ...(activeClipIndex === index && isPlaying ? styles.clipActive : {})
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onClipClick?.(index);
+                  if (justFinishedMarqueeRef.current) { justFinishedMarqueeRef.current = false; return; }
+                  if (e.shiftKey) {
+                    setSelectedClipIndices(prev =>
+                      prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+                    );
+                  } else {
+                    setSelectedClipIndices([]);
+                    onClipClick?.(index);
+                  }
+                  onTimeChange?.(clip.startTime);
                 }}
                 onContextMenu={(e) => handleClipContextMenu(e, index)}
                 onMouseEnter={() => setHoveredClip(index)}

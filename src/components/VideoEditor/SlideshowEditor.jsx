@@ -7,6 +7,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import LyricBank from './LyricBank';
 import AudioClipSelector from './AudioClipSelector';
 import LyricAnalyzer from './LyricAnalyzer';
+import CloudImportButton from './CloudImportButton';
 import log from '../../utils/logger';
 
 /**
@@ -2268,8 +2269,24 @@ const SlideshowEditor = ({
                       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverBankCol(null); }}
                       onDrop={(e) => handleDropOnBankColumn(e, idx)}
                     >
-                      <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: color.light, borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: color.bg, textAlign: 'center' }}>
+                      <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: color.light, borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: color.bg, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                         {getBankLabel(idx)} Photos
+                        <CloudImportButton
+                          artistId={artistId}
+                          db={db}
+                          mediaType="image"
+                          compact
+                          onImportMedia={(files) => {
+                            const newItems = files.map((f, i) => ({
+                              id: `cloud_${Date.now()}_${i}`,
+                              name: f.name,
+                              url: f.url,
+                              localUrl: f.localUrl,
+                              type: 'image'
+                            }));
+                            setLibraryImages(prev => [...prev, ...newItems]);
+                          }}
+                        />
                       </div>
                       <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
                         {(() => {
