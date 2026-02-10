@@ -1153,6 +1153,19 @@ const StickToMusic = () => {
     }
   }, [user, currentPage, sessionRestoreComplete]);
 
+  // Role-based URL guard: prevent artists from accessing /operator/* and vice versa
+  useEffect(() => {
+    if (!user || !authChecked) return;
+    const path = location.pathname;
+    if (isArtistOrCollaborator(user) && path.startsWith('/operator')) {
+      log('🔒 Artist on operator URL — redirecting to artist dashboard');
+      setCurrentPage('artist-dashboard');
+    } else if (!isArtistOrCollaborator(user) && path.startsWith('/artist/')) {
+      log('🔒 Operator on artist URL — redirecting to operator dashboard');
+      setCurrentPage('operator');
+    }
+  }, [user, authChecked, location.pathname]);
+
   // Save session state when navigation changes
   useEffect(() => {
     saveAppSession({ currentPage, operatorTab, showVideoEditor });

@@ -814,16 +814,16 @@ const ContentLibrary = ({
               <video
                 src={previewingVideo.cloudUrl}
                 controls
-                autoPlay
                 playsInline
+                preload="metadata"
                 style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }}
               />
             ) : previewingVideo.clips?.length > 0 ? (
               <video
                 src={previewingVideo.clips[0].url || previewingVideo.clips[0].localUrl}
                 controls
-                autoPlay
                 playsInline
+                preload="metadata"
                 style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }}
               />
             ) : (
@@ -877,25 +877,10 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
       </div>
 
       <div style={styles.videoThumb} onClick={() => !isRendering && onPreview?.(video)}>
-        {video.thumbnail ? (
-          <img src={video.thumbnail} alt="" style={styles.videoThumbImg} />
-        ) : video.cloudUrl ? (
-          <video
-            src={video.cloudUrl}
-            style={styles.videoThumbImg}
-            muted
-            playsInline
-            preload="metadata"
-          />
-        ) : video.clips?.[0]?.url ? (
-          // For unrendered recipes, show first clip as preview
-          <video
-            src={video.clips[0].url}
-            style={styles.videoThumbImg}
-            muted
-            playsInline
-            preload="metadata"
-          />
+        {(video.thumbnail || video.thumbnailUrl) ? (
+          <img src={video.thumbnail || video.thumbnailUrl} alt="" style={styles.videoThumbImg} loading="lazy" />
+        ) : video.clips?.[0]?.thumbnail || video.clips?.[0]?.thumbnailUrl ? (
+          <img src={video.clips[0].thumbnail || video.clips[0].thumbnailUrl} alt="" style={styles.videoThumbImg} loading="lazy" />
         ) : (
           <div style={styles.videoThumbPlaceholder}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">

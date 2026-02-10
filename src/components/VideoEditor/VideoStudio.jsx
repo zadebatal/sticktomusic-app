@@ -836,7 +836,7 @@ const VideoStudio = ({
         setEditingVideo(null);
         setSelectedLibraryMedia({ videos: [], audio: null, images: [], lyrics: [] });
         setPullFromCollection(null);
-        setCurrentView('library');
+        setCurrentView('drafts');
         setStudioMode('videos');
       }
       return;
@@ -877,8 +877,8 @@ const VideoStudio = ({
 
     setShowEditor(false);
     setEditingVideo(null);
-    // Navigate to content library after saving
-    setCurrentView('library');
+    // Navigate to drafts after saving
+    setCurrentView('drafts');
     setStudioMode('videos');
   }, [selectedCategory, currentArtistId, schedulerEditPostId, db]);
 
