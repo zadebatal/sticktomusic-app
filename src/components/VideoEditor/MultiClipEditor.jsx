@@ -2,12 +2,13 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   subscribeToLibrary, subscribeToCollections, getCollections, getLibrary, getLyrics,
   addToVideoTextBank, removeFromVideoTextBank, updateVideoTextBank,
-  addToLibraryAsync, MEDIA_TYPES
+  addToLibraryAsync, incrementUseCount, MEDIA_TYPES
 } from '../../services/libraryService';
 import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
 import useIsMobile from '../../hooks/useIsMobile';
 import AudioClipSelector from './AudioClipSelector';
+import CloudImportButton from './CloudImportButton';
 import EditorToolbar from './EditorToolbar';
 import LyricBank from './LyricBank';
 import LyricAnalyzer from './LyricAnalyzer';
@@ -189,8 +190,21 @@ const MultiClipEditor = ({
   const [collections, setCollections] = useState([]);
   const [libraryMedia, setLibraryMedia] = useState([]);
 
-  // Derive library audio from libraryMedia
+  // Derive library audio and video from libraryMedia
   const libraryAudio = libraryMedia.filter(i => i.type === MEDIA_TYPES.AUDIO);
+  const libraryVideos = libraryMedia.filter(i => i.type === MEDIA_TYPES.VIDEO);
+
+  // ── Collection dropdown state ──
+  const [selectedCollection, setSelectedCollection] = useState('all');
+
+  // Computed: visible videos based on selected collection (matches Montage pattern)
+  const visibleVideos = useMemo(() => {
+    if (selectedCollection === 'category') return category?.videos || [];
+    if (selectedCollection === 'all') return libraryVideos;
+    const col = collections.find(c => c.id === selectedCollection);
+    if (!col?.mediaIds?.length) return [];
+    return libraryVideos.filter(v => col.mediaIds.includes(v.id));
+  }, [selectedCollection, libraryVideos, collections, category?.videos]);
 
   // ── Text bank input state ──
   const [newTextA, setNewTextA] = useState('');
@@ -510,15 +524,16 @@ const MultiClipEditor = ({
     setEditingTextValue(newOverlay.text);
   }, [getDefaultTextStyle, setTextOverlays, currentTime, totalDuration]);
 
-  // ── Reroll: swap active clip with random from category ──
+  // ── Reroll: swap active clip with random from visible videos (collection-aware) ──
   const handleReroll = useCallback(() => {
-    if (!category?.videos?.length) {
-      toastError('No clips in bank to reroll from.');
+    const availableClips = visibleVideos.length > 0 ? visibleVideos : (category?.videos || []);
+    if (!availableClips.length) {
+      toastError('No clips available to reroll from.');
       return;
     }
     const currentClip = clips[activeClipIndex];
     const currentSourceId = currentClip?.id || currentClip?.sourceId;
-    const available = category.videos.filter(v => v.id !== currentSourceId);
+    const available = availableClips.filter(v => v.id !== currentSourceId);
     if (available.length === 0) {
       toastError('No other clips available to swap with.');
       return;
@@ -529,7 +544,7 @@ const MultiClipEditor = ({
       return { ...c, id: randomClip.id, sourceId: randomClip.id, url: randomClip.url, localUrl: randomClip.localUrl, thumbnail: randomClip.thumbnailUrl || randomClip.thumbnail };
     }));
     toastSuccess('Swapped active clip');
-  }, [category?.videos, clips, activeClipIndex, setClips, toastSuccess, toastError]);
+  }, [visibleVideos, category?.videos, clips, activeClipIndex, setClips, toastSuccess, toastError]);
 
   // ── Audio upload handler ──
   const handleAudioUpload = useCallback((e) => {
@@ -1098,42 +1113,102 @@ const MultiClipEditor = ({
           ...(isMobile ? { flexDirection: 'column', overflow: 'auto' } : {})
         }}>
 
-          {/* ── LEFT PANEL: Clips Grid + Timeline ── */}
+          {/* ── LEFT PANEL: Collection dropdown + Video grid + Timeline + Text Banks (desktop only) ── */}
           {!isMobile && <div style={styles.leftPanel}>
-            <div style={{ padding: '12px', flex: 1, overflow: 'auto' }}>
-              {/* Available Clips Grid */}
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '8px' }}>Available Clips</div>
-                <div style={{ fontSize: '11px', color: theme.text.secondary, marginBottom: '8px' }}>
-                  Click to add to timeline
-                </div>
-                <div style={styles.clipGrid}>
-                  {(category?.videos || []).map((v) => {
-                    return (
-                      <div
-                        key={v.id}
-                        onClick={() => addClipToTimeline(v)}
-                        style={styles.clipThumb}
-                        title="Click to add to timeline"
-                      >
-                        {v.thumbnailUrl || v.thumbnail ? (
-                          <img src={v.thumbnailUrl || v.thumbnail} alt="" style={styles.clipThumbImg} />
-                        ) : (
-                          <div style={styles.clipThumbPlaceholder}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                              <rect x="2" y="4" width="20" height="16" rx="2" />
-                              <path d="M10 9l5 3-5 3V9z" />
-                            </svg>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+            {/* Collection dropdown */}
+            <div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.border.subtle}` }}>
+              <select
+                value={selectedCollection}
+                onChange={(e) => setSelectedCollection(e.target.value)}
+                style={styles.sourceDropdown}
+              >
+                <option value="category">Selected Clips</option>
+                <option value="all">All Videos (Library)</option>
+                {collections.map(col => (
+                  <option key={col.id} value={col.id}>{col.name}</option>
+                ))}
+              </select>
+            </div>
 
-              {/* Timeline */}
-              <div>
+            {/* Videos + Timeline + Text Banks */}
+            <div style={styles.bankContent}>
+              {/* ── Videos section ── */}
+              {visibleVideos.length === 0 ? (
+                <div style={{ padding: '24px', textAlign: 'center', color: theme.text.muted, fontSize: '13px' }}>
+                  No videos in this collection
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '11px', color: theme.text.muted }}>{visibleVideos.length} clips</span>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <CloudImportButton
+                        artistId={artistId}
+                        db={db}
+                        mediaType="video"
+                        compact
+                        onImportMedia={(files) => {
+                          const newVids = files.map((f, i) => ({
+                            id: `import_${Date.now()}_${i}`,
+                            name: f.name,
+                            url: f.url,
+                            localUrl: f.localUrl,
+                            type: 'video'
+                          }));
+                          setLibraryMedia(prev => [...prev, ...newVids]);
+                        }}
+                      />
+                      <button
+                        style={{ fontSize: '11px', color: '#14b8a6', background: 'none', border: 'none', cursor: 'pointer' }}
+                        onClick={() => {
+                          visibleVideos.forEach(v => addClipToTimeline(v));
+                        }}
+                      >Add All</button>
+                    </div>
+                  </div>
+                  <div style={styles.sidebarClipGrid}>
+                    {visibleVideos.map((video, i) => {
+                      const isInTimeline = clips.some(clip => (clip.id === video.id) || (clip.sourceId === video.id));
+                      return (
+                        <div
+                          key={video.id || i}
+                          style={{ ...styles.sidebarClip, position: 'relative', border: isInTimeline ? '1px solid rgba(34,197,94,0.4)' : undefined }}
+                          onClick={() => {
+                            addClipToTimeline(video);
+                            if (video.id && artistId) incrementUseCount(artistId, video.id);
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.borderColor = isInTimeline ? 'rgba(34,197,94,0.6)' : 'rgba(20,184,166,0.5)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.borderColor = isInTimeline ? 'rgba(34,197,94,0.4)' : 'transparent'; }}
+                        >
+                          {isInTimeline && (
+                            <div style={{
+                              position: 'absolute', top: 3, right: 3, zIndex: 2,
+                              width: '18px', height: '18px', borderRadius: '50%',
+                              backgroundColor: '#22c55e', display: 'flex',
+                              alignItems: 'center', justifyContent: 'center',
+                              fontSize: '11px', color: '#fff', fontWeight: 'bold',
+                              boxShadow: `0 1px 4px ${theme.overlay.light}`
+                            }}>✓</div>
+                          )}
+                          <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: '4px', overflow: 'hidden', backgroundColor: theme.bg.page }}>
+                            {(video.thumbnailUrl || video.thumbnail) ? (
+                              <img src={video.thumbnailUrl || video.thumbnail} alt={video.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>🎬</div>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '10px', color: theme.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '4px' }}>
+                            {(video.name || video.metadata?.originalName || 'Clip').substring(0, 20)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {/* ── Timeline (clip ordering — unique to Multi) ── */}
+              <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${theme.border.subtle}` }}>
                 <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '8px' }}>
                   Timeline ({clips.length} clip{clips.length !== 1 ? 's' : ''})
                 </div>
@@ -1179,24 +1254,18 @@ const MultiClipEditor = ({
                             disabled={idx === 0}
                             style={{ ...styles.timelineButton, ...(idx === 0 ? { opacity: 0.3, cursor: 'not-allowed' } : {}) }}
                             title="Move up"
-                          >
-                            ▲
-                          </button>
+                          >▲</button>
                           <button
                             onClick={(e) => { e.stopPropagation(); moveClipDown(idx); }}
                             disabled={idx >= clips.length - 1}
                             style={{ ...styles.timelineButton, ...(idx >= clips.length - 1 ? { opacity: 0.3, cursor: 'not-allowed' } : {}) }}
                             title="Move down"
-                          >
-                            ▼
-                          </button>
+                          >▼</button>
                           <button
                             onClick={(e) => { e.stopPropagation(); removeClipFromTimeline(idx); }}
                             style={styles.timelineRemoveButton}
                             title="Remove"
-                          >
-                            ×
-                          </button>
+                          >×</button>
                         </div>
                       </div>
                     ))}
@@ -1204,34 +1273,76 @@ const MultiClipEditor = ({
                 )}
               </div>
 
-              {/* Generation controls */}
-              <div style={styles.generateSection}>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '6px' }}>Generate Videos</div>
-                <div style={{ fontSize: '11px', color: theme.text.secondary, marginBottom: '8px' }}>
-                  Randomize clips and text from banks
-                </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12px', color: theme.text.primary }}>Count:</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={Math.max(1, (category?.videos?.length || 1) - 1)}
-                    value={generateCount}
-                    onChange={(e) => setGenerateCount(Math.max(1, Math.min((category?.videos?.length || 1) - 1, parseInt(e.target.value) || 1)))}
-                    style={styles.generateInput}
-                  />
-                  <button
-                    onClick={executeGeneration}
-                    disabled={isGenerating || textOverlays.length === 0 || clips.length === 0}
-                    style={{
-                      ...styles.generateButton,
-                      ...(isGenerating || textOverlays.length === 0 || clips.length === 0 ? { opacity: 0.5, cursor: 'not-allowed' } : {})
-                    }}
-                  >
-                    {isGenerating ? 'Generating...' : 'Generate'}
-                  </button>
-                </div>
-              </div>
+              {/* ── Text Banks (always visible below timeline) ── */}
+              {(() => {
+                const { videoTextBank1, videoTextBank2 } = getVideoTextBanks();
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${theme.border.subtle}` }}>
+                    {/* Text Bank A */}
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#14b8a6', marginBottom: '8px' }}>Text Bank A</div>
+                      <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                        <input
+                          value={newTextA}
+                          onChange={(e) => setNewTextA(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
+                          placeholder="Add text..."
+                          style={styles.textBankInput}
+                        />
+                        <button
+                          onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
+                          style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', backgroundColor: '#14b8a6', color: '#fff', cursor: 'pointer', fontSize: '12px', flexShrink: 0 }}
+                        >+</button>
+                      </div>
+                      {videoTextBank1.map((text, idx) => (
+                        <div key={idx} style={styles.textBankItem}>
+                          <span
+                            style={{ flex: 1, fontSize: '12px', cursor: 'pointer' }}
+                            onClick={() => addTextOverlay(text)}
+                            title="Click to add as overlay"
+                          >{text}</span>
+                          <button
+                            onClick={() => handleRemoveFromVideoTextBank(1, idx)}
+                            style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '14px', padding: '0 2px' }}
+                          >×</button>
+                        </div>
+                      ))}
+                      {videoTextBank1.length === 0 && <div style={{ fontSize: '11px', color: theme.text.muted }}>No text added yet</div>}
+                    </div>
+                    {/* Text Bank B */}
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#f59e0b', marginBottom: '8px' }}>Text Bank B</div>
+                      <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                        <input
+                          value={newTextB}
+                          onChange={(e) => setNewTextB(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
+                          placeholder="Add text..."
+                          style={styles.textBankInput}
+                        />
+                        <button
+                          onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
+                          style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', backgroundColor: '#f59e0b', color: '#fff', cursor: 'pointer', fontSize: '12px', flexShrink: 0 }}
+                        >+</button>
+                      </div>
+                      {videoTextBank2.map((text, idx) => (
+                        <div key={idx} style={styles.textBankItem}>
+                          <span
+                            style={{ flex: 1, fontSize: '12px', cursor: 'pointer' }}
+                            onClick={() => addTextOverlay(text)}
+                            title="Click to add as overlay"
+                          >{text}</span>
+                          <button
+                            onClick={() => handleRemoveFromVideoTextBank(2, idx)}
+                            style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '14px', padding: '0 2px' }}
+                          >×</button>
+                        </div>
+                      ))}
+                      {videoTextBank2.length === 0 && <div style={{ fontSize: '11px', color: theme.text.muted }}>No text added yet</div>}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>}
 
@@ -1405,9 +1516,7 @@ const MultiClipEditor = ({
               }}>
                 {[
                   { id: 'clips', label: 'Clips', icon: '\uD83C\uDFAC' },
-                  { id: 'text', label: 'Text', icon: '\uD83D\uDCDD' },
-                  { id: 'audio', label: 'Audio', icon: '\uD83C\uDFB5' },
-                  { id: 'banks', label: 'Banks', icon: '\uD83D\uDCE6' }
+                  { id: 'text', label: 'Text', icon: '\uD83D\uDCDD' }
                 ].map(tab => (
                   <button
                     key={tab.id}
@@ -1448,37 +1557,56 @@ const MultiClipEditor = ({
                   {/* ── CLIPS TAB ── */}
                   {mobileToolTab === 'clips' && (
                     <div style={{ padding: '12px' }}>
-                      {/* Available Clips Grid */}
-                      <div style={{ marginBottom: '16px' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '8px' }}>Available Clips</div>
-                        <div style={{ fontSize: '11px', color: theme.text.secondary, marginBottom: '8px' }}>
-                          Tap to add to timeline
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '12px' }}>
-                          {(category?.videos || []).map((v) => (
+                      {/* Collection dropdown */}
+                      <select
+                        value={selectedCollection}
+                        onChange={(e) => setSelectedCollection(e.target.value)}
+                        style={{ ...styles.sourceDropdown, marginBottom: '10px' }}
+                      >
+                        <option value="category">Selected Clips</option>
+                        <option value="all">All Videos (Library)</option>
+                        {collections.map(col => (
+                          <option key={col.id} value={col.id}>{col.name}</option>
+                        ))}
+                      </select>
+
+                      {/* Video grid */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '11px', color: theme.text.muted }}>{visibleVideos.length} clips</span>
+                        <button
+                          style={{ fontSize: '11px', color: '#14b8a6', background: 'none', border: 'none', cursor: 'pointer' }}
+                          onClick={() => { visibleVideos.forEach(v => addClipToTimeline(v)); }}
+                        >Add All</button>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginBottom: '12px' }}>
+                        {visibleVideos.map((video, i) => {
+                          const isInTimeline = clips.some(clip => (clip.id === video.id) || (clip.sourceId === video.id));
+                          return (
                             <div
-                              key={v.id}
-                              onClick={() => addClipToTimeline(v)}
-                              style={{ ...styles.clipThumb, minHeight: '44px' }}
-                              title="Tap to add to timeline"
+                              key={video.id || i}
+                              onClick={() => {
+                                addClipToTimeline(video);
+                                if (video.id && artistId) incrementUseCount(artistId, video.id);
+                              }}
+                              style={{ position: 'relative', borderRadius: '6px', overflow: 'hidden', border: isInTimeline ? '1px solid rgba(34,197,94,0.4)' : `1px solid ${theme.border.subtle}`, cursor: 'pointer', minHeight: '44px' }}
                             >
-                              {v.thumbnailUrl || v.thumbnail ? (
-                                <img src={v.thumbnailUrl || v.thumbnail} alt="" style={styles.clipThumbImg} />
-                              ) : (
-                                <div style={styles.clipThumbPlaceholder}>
-                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                                    <rect x="2" y="4" width="20" height="16" rx="2" />
-                                    <path d="M10 9l5 3-5 3V9z" />
-                                  </svg>
-                                </div>
+                              {isInTimeline && (
+                                <div style={{ position: 'absolute', top: 2, right: 2, zIndex: 2, width: '16px', height: '16px', borderRadius: '50%', backgroundColor: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#fff', fontWeight: 'bold' }}>✓</div>
                               )}
+                              <div style={{ width: '100%', aspectRatio: '16/9', backgroundColor: theme.bg.page }}>
+                                {(video.thumbnailUrl || video.thumbnail) ? (
+                                  <img src={video.thumbnailUrl || video.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>🎬</div>
+                                )}
+                              </div>
                             </div>
-                          ))}
-                        </div>
+                          );
+                        })}
                       </div>
 
                       {/* Timeline */}
-                      <div>
+                      <div style={{ borderTop: `1px solid ${theme.border.subtle}`, paddingTop: '10px', marginBottom: '12px' }}>
                         <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '8px' }}>
                           Timeline ({clips.length} clip{clips.length !== 1 ? 's' : ''})
                         </div>
@@ -1498,9 +1626,7 @@ const MultiClipEditor = ({
                                 }}
                                 onClick={() => setActiveClipIndex(idx)}
                               >
-                                <div style={{ fontSize: '10px', color: theme.text.secondary, fontWeight: 500, minWidth: '20px' }}>
-                                  {idx + 1}.
-                                </div>
+                                <div style={{ fontSize: '10px', color: theme.text.secondary, fontWeight: 500, minWidth: '20px' }}>{idx + 1}.</div>
                                 {clip.thumbnailUrl || clip.thumbnail ? (
                                   <img src={clip.thumbnailUrl || clip.thumbnail} alt="" style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover' }} />
                                 ) : (
@@ -1512,37 +1638,13 @@ const MultiClipEditor = ({
                                   </div>
                                 )}
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: '11px', color: theme.text.primary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {clip.name || 'Clip'}
-                                  </div>
-                                  <div style={{ fontSize: '9px', color: theme.text.muted }}>
-                                    {formatTime(getClipDuration(clip.id || clip.sourceId))}
-                                  </div>
+                                  <div style={{ fontSize: '11px', color: theme.text.primary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{clip.name || 'Clip'}</div>
+                                  <div style={{ fontSize: '9px', color: theme.text.muted }}>{formatTime(getClipDuration(clip.id || clip.sourceId))}</div>
                                 </div>
                                 <div style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); moveClipUp(idx); }}
-                                    disabled={idx === 0}
-                                    style={{ ...styles.timelineButton, ...(idx === 0 ? { opacity: 0.3, cursor: 'not-allowed' } : {}), minWidth: '36px', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                    title="Move up"
-                                  >
-                                    &#9650;
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); moveClipDown(idx); }}
-                                    disabled={idx >= clips.length - 1}
-                                    style={{ ...styles.timelineButton, ...(idx >= clips.length - 1 ? { opacity: 0.3, cursor: 'not-allowed' } : {}), minWidth: '36px', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                    title="Move down"
-                                  >
-                                    &#9660;
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); removeClipFromTimeline(idx); }}
-                                    style={{ ...styles.timelineRemoveButton, minWidth: '36px', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                    title="Remove"
-                                  >
-                                    &#215;
-                                  </button>
+                                  <button onClick={(e) => { e.stopPropagation(); moveClipUp(idx); }} disabled={idx === 0} style={{ ...styles.timelineButton, ...(idx === 0 ? { opacity: 0.3, cursor: 'not-allowed' } : {}), minWidth: '36px', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Move up">▲</button>
+                                  <button onClick={(e) => { e.stopPropagation(); moveClipDown(idx); }} disabled={idx >= clips.length - 1} style={{ ...styles.timelineButton, ...(idx >= clips.length - 1 ? { opacity: 0.3, cursor: 'not-allowed' } : {}), minWidth: '36px', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Move down">▼</button>
+                                  <button onClick={(e) => { e.stopPropagation(); removeClipFromTimeline(idx); }} style={{ ...styles.timelineRemoveButton, minWidth: '36px', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Remove">×</button>
                                 </div>
                               </div>
                             ))}
@@ -1550,35 +1652,48 @@ const MultiClipEditor = ({
                         )}
                       </div>
 
-                      {/* Generation controls */}
-                      <div style={{ ...styles.generateSection, marginTop: '12px' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '6px' }}>Generate Videos</div>
-                        <div style={{ fontSize: '11px', color: theme.text.secondary, marginBottom: '8px' }}>
-                          Randomize clips and text from banks
-                        </div>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <span style={{ fontSize: '12px', color: theme.text.primary }}>Count:</span>
-                          <input
-                            type="number"
-                            min={1}
-                            max={Math.max(1, (category?.videos?.length || 1) - 1)}
-                            value={generateCount}
-                            onChange={(e) => setGenerateCount(Math.max(1, Math.min((category?.videos?.length || 1) - 1, parseInt(e.target.value) || 1)))}
-                            style={{ ...styles.generateInput, minHeight: '44px' }}
-                          />
-                          <button
-                            onClick={executeGeneration}
-                            disabled={isGenerating || textOverlays.length === 0 || clips.length === 0}
-                            style={{
-                              ...styles.generateButton,
-                              ...(isGenerating || textOverlays.length === 0 || clips.length === 0 ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
-                              minHeight: '44px', padding: '8px 16px'
-                            }}
-                          >
-                            {isGenerating ? 'Generating...' : 'Generate'}
-                          </button>
-                        </div>
-                      </div>
+                      {/* Text Banks */}
+                      {(() => {
+                        const { videoTextBank1: bankA, videoTextBank2: bankB } = getVideoTextBanks();
+                        return (
+                          <div style={{ borderTop: `1px solid ${theme.border.subtle}`, paddingTop: '10px' }}>
+                            {/* Bank A */}
+                            <div style={{ marginBottom: '12px' }}>
+                              <div style={{ fontSize: '12px', fontWeight: 600, color: '#14b8a6', marginBottom: '6px' }}>Text Bank A</div>
+                              <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                                <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} placeholder="Add text..." style={{ ...styles.textBankInput, minHeight: '44px' }} />
+                                <button onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', backgroundColor: '#14b8a6', color: '#fff', cursor: 'pointer', fontSize: '12px', flexShrink: 0, minHeight: '44px' }}>+</button>
+                              </div>
+                              {bankA.map((text, idx) => (
+                                <div key={idx} style={{ ...styles.textBankItem, minHeight: '36px' }}>
+                                  <span style={{ flex: 1, fontSize: '12px', cursor: 'pointer' }} onClick={() => addTextOverlay(text)}>
+                                    {text}
+                                  </span>
+                                  <button onClick={() => handleRemoveFromVideoTextBank(1, idx)} style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '14px', padding: '0 2px' }}>×</button>
+                                </div>
+                              ))}
+                              {bankA.length === 0 && <div style={{ fontSize: '11px', color: theme.text.muted }}>No text added yet</div>}
+                            </div>
+                            {/* Bank B */}
+                            <div>
+                              <div style={{ fontSize: '12px', fontWeight: 600, color: '#f59e0b', marginBottom: '6px' }}>Text Bank B</div>
+                              <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+                                <input value={newTextB} onChange={(e) => setNewTextB(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} placeholder="Add text..." style={{ ...styles.textBankInput, minHeight: '44px' }} />
+                                <button onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', backgroundColor: '#f59e0b', color: '#fff', cursor: 'pointer', fontSize: '12px', flexShrink: 0, minHeight: '44px' }}>+</button>
+                              </div>
+                              {bankB.map((text, idx) => (
+                                <div key={idx} style={{ ...styles.textBankItem, minHeight: '36px' }}>
+                                  <span style={{ flex: 1, fontSize: '12px', cursor: 'pointer' }} onClick={() => addTextOverlay(text)}>
+                                    {text}
+                                  </span>
+                                  <button onClick={() => handleRemoveFromVideoTextBank(2, idx)} style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '14px', padding: '0 2px' }}>×</button>
+                                </div>
+                              ))}
+                              {bankB.length === 0 && <div style={{ fontSize: '11px', color: theme.text.muted }}>No text added yet</div>}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
 
@@ -1725,205 +1840,6 @@ const MultiClipEditor = ({
                       <button onClick={() => addTextOverlay()} style={{ ...styles.addTextButton, minHeight: '44px', margin: '6px 0' }}>
                         + Add Text Overlay
                       </button>
-
-                      {/* Lyrics sub-section */}
-                      <div style={{ ...styles.divider, margin: '12px 0' }} />
-                      <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '8px' }}>Lyrics</div>
-                      <div style={{ maxHeight: '200px', overflow: 'auto' }}>
-                        <LyricBank
-                          lyrics={lyricsBank}
-                          onAddLyrics={(data) => {
-                            onAddLyrics?.(data);
-                            if (artistId) setTimeout(() => setLyricsBank(getLyrics(artistId)), 100);
-                          }}
-                          onUpdateLyrics={(id, updates) => {
-                            onUpdateLyrics?.(id, updates);
-                            if (artistId) setTimeout(() => setLyricsBank(getLyrics(artistId)), 100);
-                          }}
-                          onDeleteLyrics={(id) => {
-                            onDeleteLyrics?.(id);
-                            if (artistId) setTimeout(() => setLyricsBank(getLyrics(artistId)), 100);
-                          }}
-                          onSelectText={(text) => addTextOverlay(text)}
-                          compact={true}
-                          showAddForm={true}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── AUDIO TAB ── */}
-                  {mobileToolTab === 'audio' && (
-                    <div style={{ padding: '12px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '8px' }}>Audio</div>
-                      <div style={{
-                        padding: '10px',
-                        borderRadius: '8px',
-                        backgroundColor: theme.hover.bg,
-                        border: `1px solid ${theme.hover.bg}`,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '6px'
-                      }}>
-                        {/* Now playing indicator */}
-                        {selectedAudio && (
-                          <div style={styles.audioNowPlaying}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
-                              <span style={{ fontSize: '12px', fontWeight: 600, color: '#22c55e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {selectedAudio.isSourceVideo ? 'Source Video Audio' : (selectedAudio.name || selectedAudio.fileName || 'Audio Track')}
-                              </span>
-                            </div>
-                            <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                              {!selectedAudio.isSourceVideo && (
-                                <button
-                                  onClick={() => setShowAudioTrimmer(true)}
-                                  style={{ background: 'none', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', fontSize: '10px', cursor: 'pointer', padding: '6px 10px', borderRadius: '4px', minHeight: '44px' }}
-                                >Trim</button>
-                              )}
-                              <button
-                                onClick={() => setShowTranscriber(true)}
-                                style={{ background: 'none', border: '1px solid rgba(168,85,247,0.3)', color: '#a855f7', fontSize: '10px', cursor: 'pointer', padding: '6px 10px', borderRadius: '4px', minHeight: '44px' }}
-                              >AI</button>
-                              <button
-                                onClick={() => handleAudioSelect(null)}
-                                style={{ background: 'none', border: 'none', color: theme.text.muted, fontSize: '18px', cursor: 'pointer', padding: '0 4px', minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                              >&#215;</button>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Source Video Audio button */}
-                        {currentClip && (
-                          <button
-                            onClick={() => {
-                              const clipUrl = currentClip.localUrl || currentClip.url || currentClip.src;
-                              handleAudioSelect({ id: 'source_video', name: 'Source Video Audio', url: clipUrl, localUrl: clipUrl, isSourceVideo: true });
-                            }}
-                            style={{
-                              ...styles.audioTrackButton,
-                              ...(selectedAudio?.isSourceVideo ? styles.audioTrackButtonActive : {}),
-                              minHeight: '44px'
-                            }}
-                          >
-                            <span style={{ fontSize: '13px' }}>{'\uD83C\uDFA4'}</span>
-                            <span style={{ flex: 1, textAlign: 'left' }}>Source Video Audio</span>
-                          </button>
-                        )}
-
-                        {/* Library audio tracks */}
-                        {libraryAudio.length > 0 && (
-                          <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                            {libraryAudio.map(audio => {
-                              const isAudioSelected = selectedAudio && !selectedAudio.isSourceVideo && selectedAudio.id === audio.id;
-                              return (
-                                <button
-                                  key={audio.id}
-                                  onClick={() => handleAudioSelect(audio)}
-                                  style={{
-                                    ...styles.audioTrackButton,
-                                    ...(isAudioSelected ? styles.audioTrackButtonActive : {}),
-                                    minHeight: '44px'
-                                  }}
-                                >
-                                  <span style={{ fontSize: '13px' }}>{'\uD83C\uDFB5'}</span>
-                                  <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {audio.name || audio.fileName || 'Untitled'}
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-
-                        {/* Empty state */}
-                        {!currentClip && libraryAudio.length === 0 && (
-                          <div style={{ fontSize: '11px', color: theme.text.muted, padding: '8px 0', textAlign: 'center' }}>
-                            No audio available. Add audio to your library to use here.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── BANKS TAB ── */}
-                  {mobileToolTab === 'banks' && (
-                    <div style={{ padding: '12px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '8px' }}>Video Text Banks</div>
-                      <div style={{ fontSize: '11px', color: theme.text.muted, marginBottom: '12px', lineHeight: '1.4' }}>
-                        Tap any bank text to add it as an overlay. During generation, Overlay 1 cycles Bank A, Overlay 2 cycles Bank B.
-                      </div>
-
-                      {/* Bank A */}
-                      <div style={{ ...styles.bankContainer, margin: '0 0 10px' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#14b8a6', marginBottom: '6px' }}>
-                          Bank A ({videoTextBank1.length})
-                        </div>
-                        <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                          <input
-                            value={newTextA}
-                            onChange={(e) => setNewTextA(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
-                            placeholder="Add text..."
-                            style={{ ...styles.textBankInput, minHeight: '44px' }}
-                          />
-                          <button
-                            onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
-                            style={{ ...styles.textBankAddButton, minWidth: '44px', minHeight: '44px' }}
-                          >+</button>
-                        </div>
-                        <div style={styles.textBankList}>
-                          {videoTextBank1.map((text, i) => (
-                            <div key={i} style={{ ...styles.textBankTag, minHeight: '36px' }}>
-                              <span
-                                onClick={() => addTextOverlay(text)}
-                                style={{ cursor: 'pointer' }}
-                                title="Tap to add as overlay"
-                              >{text}</span>
-                              <button
-                                onClick={() => handleRemoveFromVideoTextBank(1, i)}
-                                style={{ ...styles.textBankRemove, minWidth: '36px', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                              >&#215;</button>
-                            </div>
-                          ))}
-                          {videoTextBank1.length === 0 && <span style={{ fontSize: '11px', color: theme.text.muted }}>Empty</span>}
-                        </div>
-                      </div>
-
-                      {/* Bank B */}
-                      <div style={{ ...styles.bankContainer, margin: '0 0 10px' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#f59e0b', marginBottom: '6px' }}>
-                          Bank B ({videoTextBank2.length})
-                        </div>
-                        <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                          <input
-                            value={newTextB}
-                            onChange={(e) => setNewTextB(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
-                            placeholder="Add text..."
-                            style={{ ...styles.textBankInput, minHeight: '44px' }}
-                          />
-                          <button
-                            onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
-                            style={{ ...styles.textBankAddButton, backgroundColor: '#f59e0b', minWidth: '44px', minHeight: '44px' }}
-                          >+</button>
-                        </div>
-                        <div style={styles.textBankList}>
-                          {videoTextBank2.map((text, i) => (
-                            <div key={i} style={{ ...styles.textBankTag, borderColor: 'rgba(245,158,11,0.3)', minHeight: '36px' }}>
-                              <span
-                                onClick={() => addTextOverlay(text)}
-                                style={{ cursor: 'pointer' }}
-                                title="Tap to add as overlay"
-                              >{text}</span>
-                              <button
-                                onClick={() => handleRemoveFromVideoTextBank(2, i)}
-                                style={{ ...styles.textBankRemove, minWidth: '36px', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                              >&#215;</button>
-                            </div>
-                          ))}
-                          {videoTextBank2.length === 0 && <span style={{ fontSize: '11px', color: theme.text.muted }}>Empty</span>}
-                        </div>
-                      </div>
                     </div>
                   )}
                 </div>
@@ -1931,7 +1847,7 @@ const MultiClipEditor = ({
             </div>
           )}
 
-          {/* ── RIGHT PANEL: Text Overlays + Style + Video Text Banks ── */}
+          {/* ── RIGHT PANEL: Text Overlays ── */}
           {!isMobile && <div style={styles.rightPanel}>
             <div style={styles.rightPanelScroll}>
 
@@ -2136,212 +2052,6 @@ const MultiClipEditor = ({
               <button onClick={() => addTextOverlay()} style={styles.addTextButton}>
                 + Add Text Overlay
               </button>
-
-              {/* ── DIVIDER ── */}
-              <div style={styles.divider} />
-
-              {/* ── AUDIO SECTION ── */}
-              <div style={styles.sectionHeader}>
-                <span>Audio</span>
-              </div>
-              <div style={styles.audioSection}>
-                {/* Now playing indicator */}
-                {selectedAudio && (
-                  <div style={styles.audioNowPlaying}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#22c55e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {selectedAudio.isSourceVideo ? 'Source Video Audio' : (selectedAudio.name || selectedAudio.fileName || 'Audio Track')}
-                      </span>
-                      {selectedAudio.duration && (
-                        <span style={{ fontSize: '10px', color: theme.text.secondary, flexShrink: 0 }}>
-                          {Math.floor(selectedAudio.duration / 60)}:{Math.floor(selectedAudio.duration % 60).toString().padStart(2, '0')}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                      {!selectedAudio.isSourceVideo && (
-                        <button
-                          onClick={() => setShowAudioTrimmer(true)}
-                          style={{ background: 'none', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', fontSize: '10px', cursor: 'pointer', padding: '2px 6px', borderRadius: '4px' }}
-                        >Trim</button>
-                      )}
-                      <button
-                        onClick={() => setShowTranscriber(true)}
-                        style={{ background: 'none', border: '1px solid rgba(168,85,247,0.3)', color: '#a855f7', fontSize: '10px', cursor: 'pointer', padding: '2px 6px', borderRadius: '4px' }}
-                      >AI</button>
-                      <button
-                        onClick={() => handleAudioSelect(null)}
-                        style={{ background: 'none', border: 'none', color: theme.text.muted, fontSize: '14px', cursor: 'pointer', padding: '0 2px' }}
-                      >×</button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Source Video Audio button */}
-                {currentClip && (
-                  <button
-                    onClick={() => {
-                      const clipUrl = currentClip.localUrl || currentClip.url || currentClip.src;
-                      handleAudioSelect({ id: 'source_video', name: 'Source Video Audio', url: clipUrl, localUrl: clipUrl, isSourceVideo: true });
-                    }}
-                    style={{
-                      ...styles.audioTrackButton,
-                      ...(selectedAudio?.isSourceVideo ? styles.audioTrackButtonActive : {})
-                    }}
-                  >
-                    <span style={{ fontSize: '13px' }}>🎤</span>
-                    <span style={{ flex: 1, textAlign: 'left' }}>Source Video Audio</span>
-                  </button>
-                )}
-
-                {/* Library audio tracks */}
-                {libraryAudio.length > 0 && (
-                  <div style={{ maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    {libraryAudio.map(audio => {
-                      const isSelected = selectedAudio && !selectedAudio.isSourceVideo && selectedAudio.id === audio.id;
-                      return (
-                        <button
-                          key={audio.id}
-                          onClick={() => handleAudioSelect(audio)}
-                          style={{
-                            ...styles.audioTrackButton,
-                            ...(isSelected ? styles.audioTrackButtonActive : {})
-                          }}
-                        >
-                          <span style={{ fontSize: '13px' }}>🎵</span>
-                          <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {audio.name || audio.fileName || 'Untitled'}
-                          </span>
-                          {audio.duration && (
-                            <span style={{ fontSize: '10px', color: theme.text.secondary, flexShrink: 0 }}>
-                              {Math.floor(audio.duration / 60)}:{Math.floor(audio.duration % 60).toString().padStart(2, '0')}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Empty state */}
-                {!currentClip && libraryAudio.length === 0 && (
-                  <div style={{ fontSize: '11px', color: theme.text.muted, padding: '8px 0', textAlign: 'center' }}>
-                    No audio available. Add audio to your library to use here.
-                  </div>
-                )}
-              </div>
-
-              {/* ── DIVIDER ── */}
-              <div style={styles.divider} />
-
-              {/* ── LYRICS SECTION ── */}
-              <div style={styles.sectionHeader}>
-                <span>Lyrics</span>
-                <span style={{ fontSize: '10px', color: theme.text.muted }}>{lyricsBank.length}</span>
-              </div>
-              <div style={{ margin: '0 4px 4px', maxHeight: '200px', overflow: 'auto' }}>
-                <LyricBank
-                  lyrics={lyricsBank}
-                  onAddLyrics={(data) => {
-                    onAddLyrics?.(data);
-                    if (artistId) setTimeout(() => setLyricsBank(getLyrics(artistId)), 100);
-                  }}
-                  onUpdateLyrics={(id, updates) => {
-                    onUpdateLyrics?.(id, updates);
-                    if (artistId) setTimeout(() => setLyricsBank(getLyrics(artistId)), 100);
-                  }}
-                  onDeleteLyrics={(id) => {
-                    onDeleteLyrics?.(id);
-                    if (artistId) setTimeout(() => setLyricsBank(getLyrics(artistId)), 100);
-                  }}
-                  onSelectText={(text) => addTextOverlay(text)}
-                  compact={true}
-                  showAddForm={true}
-                />
-              </div>
-
-              {/* ── DIVIDER ── */}
-              <div style={styles.divider} />
-
-              {/* ── VIDEO TEXT BANKS SECTION (always visible) ── */}
-              <div style={styles.sectionHeader}>
-                <span>Video Text Banks</span>
-              </div>
-              <div style={{ fontSize: '11px', color: theme.text.muted, padding: '0 12px 8px', lineHeight: '1.4' }}>
-                Click any bank text to add it as an overlay. During generation, Overlay 1 cycles Bank A, Overlay 2 cycles Bank B.
-              </div>
-
-              {/* Bank A */}
-              <div style={styles.bankContainer}>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: '#14b8a6', marginBottom: '6px' }}>
-                  Bank A ({videoTextBank1.length})
-                </div>
-                <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                  <input
-                    value={newTextA}
-                    onChange={(e) => setNewTextA(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
-                    placeholder="Add text..."
-                    style={styles.textBankInput}
-                  />
-                  <button
-                    onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
-                    style={styles.textBankAddButton}
-                  >+</button>
-                </div>
-                <div style={styles.textBankList}>
-                  {videoTextBank1.map((text, i) => (
-                    <div key={i} style={styles.textBankTag}>
-                      <span
-                        onClick={() => addTextOverlay(text)}
-                        style={{ cursor: 'pointer' }}
-                        title="Click to add as overlay"
-                      >{text}</span>
-                      <button
-                        onClick={() => handleRemoveFromVideoTextBank(1, i)}
-                        style={styles.textBankRemove}
-                      >×</button>
-                    </div>
-                  ))}
-                  {videoTextBank1.length === 0 && <span style={{ fontSize: '11px', color: theme.text.muted }}>Empty</span>}
-                </div>
-              </div>
-
-              {/* Bank B */}
-              <div style={styles.bankContainer}>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: '#f59e0b', marginBottom: '6px' }}>
-                  Bank B ({videoTextBank2.length})
-                </div>
-                <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                  <input
-                    value={newTextB}
-                    onChange={(e) => setNewTextB(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
-                    placeholder="Add text..."
-                    style={styles.textBankInput}
-                  />
-                  <button
-                    onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
-                    style={{ ...styles.textBankAddButton, backgroundColor: '#f59e0b' }}
-                  >+</button>
-                </div>
-                <div style={styles.textBankList}>
-                  {videoTextBank2.map((text, i) => (
-                    <div key={i} style={{ ...styles.textBankTag, borderColor: 'rgba(245,158,11,0.3)' }}>
-                      <span
-                        onClick={() => addTextOverlay(text)}
-                        style={{ cursor: 'pointer' }}
-                        title="Click to add as overlay"
-                      >{text}</span>
-                      <button
-                        onClick={() => handleRemoveFromVideoTextBank(2, i)}
-                        style={styles.textBankRemove}
-                      >×</button>
-                    </div>
-                  ))}
-                  {videoTextBank2.length === 0 && <span style={{ fontSize: '11px', color: theme.text.muted }}>Empty</span>}
-                </div>
-              </div>
             </div>
           </div>}
         </div>
@@ -2542,8 +2252,8 @@ const MultiClipEditor = ({
           canRedo={canRedo}
           onUndo={handleUndo}
           onRedo={handleRedo}
-          onReroll={category?.videos?.length > 1 ? handleReroll : null}
-          rerollDisabled={clips.length === 0}
+          onReroll={visibleVideos.length > 0 || category?.videos?.length > 1 ? handleReroll : null}
+          rerollDisabled={!visibleVideos.length && !category?.videos?.length}
           onAddText={() => addTextOverlay()}
           onDelete={clips.length > 1 ? () => removeClipFromTimeline(activeClipIndex) : null}
           audioTracks={libraryAudio}
@@ -2758,12 +2468,64 @@ const getStyles = (theme) => ({
 
   // ── Left Panel ──
   leftPanel: {
-    width: '260px',
+    width: '300px',
     borderRight: `1px solid ${theme.border.subtle}`,
     display: 'flex',
     flexDirection: 'column',
     flexShrink: 0,
-    overflow: 'hidden'
+    overflow: 'hidden',
+    backgroundColor: theme.bg.input
+  },
+  sourceDropdown: {
+    width: '100%',
+    padding: '8px 10px',
+    borderRadius: '6px',
+    border: `1px solid ${theme.border.subtle}`,
+    backgroundColor: theme.bg.surface,
+    color: theme.text.primary,
+    fontSize: '12px',
+    cursor: 'pointer',
+    outline: 'none'
+  },
+  bankContent: {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '12px'
+  },
+  sidebarClipGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '8px',
+    marginBottom: '8px'
+  },
+  sidebarClip: {
+    borderRadius: '6px',
+    overflow: 'hidden',
+    border: `1px solid transparent`,
+    cursor: 'pointer',
+    transition: 'border-color 0.15s',
+    padding: '4px'
+  },
+  textBankInput: {
+    flex: 1,
+    padding: '6px 8px',
+    borderRadius: '6px',
+    border: `1px solid ${theme.border.subtle}`,
+    backgroundColor: theme.bg.surface,
+    color: theme.text.primary,
+    fontSize: '12px',
+    outline: 'none'
+  },
+  textBankItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '6px 8px',
+    borderRadius: '6px',
+    backgroundColor: theme.hover.bg,
+    marginBottom: '4px',
+    fontSize: '12px',
+    color: theme.text.primary
   },
   clipGrid: {
     display: 'grid',
