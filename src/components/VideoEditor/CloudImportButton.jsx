@@ -1,8 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useToast } from '../ui';
-import googleDriveService from '../../services/googleDriveService';
-import dropboxService from '../../services/dropboxService';
+import googleDriveService, { initGoogleDrive } from '../../services/googleDriveService';
+import dropboxService, { initDropbox } from '../../services/dropboxService';
+
+const DRIVE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+const DRIVE_API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;
+const DROPBOX_APP_KEY = process.env.REACT_APP_DROPBOX_APP_KEY;
 
 /**
  * CloudImportButton — Shared cloud import for Drive + Dropbox
@@ -50,16 +54,18 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
   // ── Google Drive Import ──
   const handleDriveImport = async () => {
     setShowMenu(false);
-    if (!googleDriveService.isAuthenticated()) {
-      try {
+    if (!DRIVE_CLIENT_ID || !DRIVE_API_KEY) {
+      toast.error('Google Drive not configured. Missing API keys.');
+      return;
+    }
+    try {
+      await initGoogleDrive(DRIVE_CLIENT_ID, DRIVE_API_KEY);
+      if (!googleDriveService.isAuthenticated()) {
         await googleDriveService.authenticate();
-      } catch (err) {
-        const msg = err.message?.includes('not initialized')
-          ? 'Google Drive not configured yet. Ask your operator to set up Drive credentials.'
-          : 'Google Drive authentication failed. Please try again.';
-        toast.error(msg);
-        return;
       }
+    } catch (err) {
+      toast.error('Google Drive authentication failed: ' + err.message);
+      return;
     }
     setImporting(true);
     setProgress({ current: 0, total: 0, source: 'Drive' });
@@ -104,16 +110,18 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
   // ── Dropbox Import ──
   const handleDropboxImport = async () => {
     setShowMenu(false);
-    if (!dropboxService.isAuthenticated()) {
-      try {
+    if (!DROPBOX_APP_KEY) {
+      toast.error('Dropbox not configured. Missing app key.');
+      return;
+    }
+    try {
+      initDropbox(DROPBOX_APP_KEY);
+      if (!dropboxService.isAuthenticated()) {
         await dropboxService.authenticate();
-      } catch (err) {
-        const msg = err.message?.includes('not initialized') || err.message?.includes('No app key')
-          ? 'Dropbox not configured yet. Ask your operator to set up Dropbox credentials.'
-          : 'Dropbox authentication failed. Please try again.';
-        toast.error(msg);
-        return;
       }
+    } catch (err) {
+      toast.error('Dropbox authentication failed: ' + err.message);
+      return;
     }
     setImporting(true);
     setProgress({ current: 0, total: 0, source: 'Dropbox' });
