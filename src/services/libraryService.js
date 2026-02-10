@@ -2210,6 +2210,112 @@ export const saveCollectionToFirestore = async (db, artistId, collectionData) =>
 };
 
 /**
+ * Add media to a collection (Firestore + localStorage)
+ * @param {Object} db - Firestore instance
+ * @param {string} artistId
+ * @param {string} collectionId
+ * @param {string|string[]} mediaIds
+ * @returns {Promise<void>}
+ */
+export const addToCollectionAsync = async (db, artistId, collectionId, mediaIds) => {
+  // Write to localStorage immediately
+  addToCollection(artistId, collectionId, mediaIds);
+
+  // Sync collection to Firestore
+  if (db && artistId) {
+    const collections = getUserCollections(artistId);
+    const col = collections.find(c => c.id === collectionId);
+    if (col) {
+      await saveCollectionToFirestore(db, artistId, col);
+    }
+  }
+};
+
+/**
+ * Remove media from a collection (Firestore + localStorage)
+ * @param {Object} db - Firestore instance
+ * @param {string} artistId
+ * @param {string} collectionId
+ * @param {string|string[]} mediaIds
+ * @returns {Promise<void>}
+ */
+export const removeFromCollectionAsync = async (db, artistId, collectionId, mediaIds) => {
+  // Write to localStorage immediately
+  removeFromCollection(artistId, collectionId, mediaIds);
+
+  // Sync collection to Firestore
+  if (db && artistId) {
+    const collections = getUserCollections(artistId);
+    const col = collections.find(c => c.id === collectionId);
+    if (col) {
+      await saveCollectionToFirestore(db, artistId, col);
+    }
+  }
+};
+
+/**
+ * Assign media to a bank within a collection (Firestore + localStorage)
+ * @param {Object} db - Firestore instance
+ * @param {string} artistId
+ * @param {string} collectionId
+ * @param {string|string[]} mediaIds
+ * @param {number|string} bank - 0-based index or legacy letter
+ * @returns {Promise<void>}
+ */
+export const assignToBankAsync = async (db, artistId, collectionId, mediaIds, bank) => {
+  // Write to localStorage immediately
+  assignToBank(artistId, collectionId, mediaIds, bank);
+
+  // Sync collection to Firestore
+  if (db && artistId) {
+    const collections = getUserCollections(artistId);
+    const col = collections.find(c => c.id === collectionId);
+    if (col) {
+      await saveCollectionToFirestore(db, artistId, col);
+    }
+  }
+};
+
+/**
+ * Update a collection (Firestore + localStorage)
+ * @param {Object} db - Firestore instance
+ * @param {string} artistId
+ * @param {string} collectionId
+ * @param {Object} updates
+ * @returns {Promise<Object|null>} Updated collection
+ */
+export const updateCollectionAsync = async (db, artistId, collectionId, updates) => {
+  // Write to localStorage immediately
+  const result = updateCollection(artistId, collectionId, updates);
+
+  // Sync to Firestore
+  if (db && artistId && result) {
+    await saveCollectionToFirestore(db, artistId, result);
+  }
+
+  return result;
+};
+
+/**
+ * Delete a collection (Firestore + localStorage)
+ * @param {Object} db - Firestore instance
+ * @param {string} artistId
+ * @param {string} collectionId
+ * @returns {Promise<boolean>} Success
+ */
+export const deleteCollectionAsync = async (db, artistId, collectionId) => {
+  // Delete from localStorage
+  const result = deleteCollection(artistId, collectionId);
+
+  // Delete from Firestore
+  if (db && artistId && result) {
+    await deleteCollectionFromFirestore(db, artistId, collectionId);
+  }
+
+  return result;
+};
+
+/**
  * Delete collection from Firestore
  * @param {Object} db - Firestore instance
  * @param {string} artistId

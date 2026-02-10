@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   subscribeToLibrary, subscribeToCollections, getCollections, getLibrary, getLyrics,
   addToVideoTextBank, removeFromVideoTextBank, updateVideoTextBank,
-  addToLibrary, MEDIA_TYPES
+  addToLibraryAsync, MEDIA_TYPES
 } from '../../services/libraryService';
 import { useToast } from '../ui';
 import AudioClipSelector from './AudioClipSelector';
@@ -288,7 +288,7 @@ const SoloClipEditor = ({
   }, []);
 
   // ── Audio trim save handler ──
-  const handleAudioTrimSave = useCallback((trimResult) => {
+  const handleAudioTrimSave = useCallback(async (trimResult) => {
     // Create a local URL for the trimmed file if we have one
     if (trimResult.trimmedFile) {
       const localUrl = URL.createObjectURL(trimResult.trimmedFile);
@@ -302,7 +302,7 @@ const SoloClipEditor = ({
       };
       // Save to library
       if (artistId) {
-        addToLibrary(artistId, savedAudio);
+        await addToLibraryAsync(db, artistId, savedAudio);
         setLibraryMedia(getLibrary(artistId));
       }
       handleAudioSelect(savedAudio);
@@ -314,7 +314,7 @@ const SoloClipEditor = ({
     setShowAudioTrimmer(false);
   }, [artistId, handleAudioSelect, toastSuccess]);
 
-  const handleAudioSaveClip = useCallback((clipData) => {
+  const handleAudioSaveClip = useCallback(async (clipData) => {
     if (!selectedAudio || !artistId) return;
     const savedClip = {
       id: `audio_clip_${Date.now()}`,
@@ -326,7 +326,7 @@ const SoloClipEditor = ({
       startTime: clipData.startTime,
       endTime: clipData.endTime
     };
-    addToLibrary(artistId, savedClip);
+    await addToLibraryAsync(db, artistId, savedClip);
     setLibraryMedia(getLibrary(artistId));
     toastSuccess(`Saved clip "${clipData.name}" to library`);
   }, [selectedAudio, artistId, toastSuccess]);

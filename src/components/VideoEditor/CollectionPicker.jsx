@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  getCollections,
+  getCollectionsAsync,
   getCollectionMedia,
   COLLECTION_TYPES,
   MEDIA_TYPES
@@ -13,6 +13,7 @@ import {
 
 const CollectionPicker = ({
   artistId,
+  db = null,
   value = null, // Current collection ID
   onChange,
   mediaType = null, // Filter to specific type
@@ -31,14 +32,15 @@ const CollectionPicker = ({
   // Use live props if available, otherwise fall back to localStorage
   const collections = liveCollections || localCollections;
 
-  // Load collections from localStorage (only used when liveCollections not provided)
+  // Load collections (only used when liveCollections not provided)
   useEffect(() => {
-    if (liveCollections) return; // Skip localStorage read when live data is passed
+    if (liveCollections) return; // Skip read when live data is passed
     if (artistId) {
-      const allCollections = getCollections(artistId);
-      setLocalCollections(allCollections);
+      getCollectionsAsync(db, artistId).then(allCollections => {
+        setLocalCollections(allCollections);
+      });
     }
-  }, [artistId, liveCollections]);
+  }, [artistId, db, liveCollections]);
 
   // Compute media counts — uses live data if available, filtered by mediaType
   useEffect(() => {

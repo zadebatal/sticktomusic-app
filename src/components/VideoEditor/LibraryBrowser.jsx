@@ -44,9 +44,20 @@ import {
   saveCollectionToFirestore,
   deleteCollectionFromFirestore,
   addToLibraryAsync,
-  removeFromLibraryAsync
+  removeFromLibraryAsync,
+  addToCollectionAsync,
+  removeFromCollectionAsync,
+  assignToBankAsync,
+  updateCollectionAsync,
+  deleteCollectionAsync
 } from '../../services/libraryService';
 import { uploadFile } from '../../services/firebaseStorage';
+import {
+  initGoogleDrive, authenticate as driveAuth, isAuthenticated as isDriveAuth,
+  listFiles as driveListFiles, downloadFile as driveDownloadFile,
+  uploadFile as driveUploadFile, ensureAppFolder, openPicker as driveOpenPicker,
+  createFolder as driveCreateFolder, DRIVE_MIME_TYPES
+} from '../../services/googleDriveService';
 import { useToast } from '../ui';
 import log from '../../utils/logger';
 
@@ -218,6 +229,13 @@ const LibraryBrowser = ({
   const [selectedBankItems, setSelectedBankItems] = useState({});
   const [showTemplateEditor, setShowTemplateEditor] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState(null);
+
+  // Google Drive state
+  const [showCloudMenu, setShowCloudMenu] = useState(false);
+  const [driveImporting, setDriveImporting] = useState(false);
+  const [driveExporting, setDriveExporting] = useState(false);
+  const [driveProgress, setDriveProgress] = useState({ current: 0, total: 0 });
+  const cloudMenuRef = useRef(null);
 
   // Drag selection state
   const [isDragSelecting, setIsDragSelecting] = useState(false);
@@ -442,9 +460,8 @@ const LibraryBrowser = ({
       dragIds = [draggedItem.id];
     }
     if (dragIds.length > 0) {
-      assignToBank(artistId, activeView, dragIds, bankIndex);
+      assignToBankAsync(db, artistId, activeView, dragIds, bankIndex);
       loadData();
-      syncCollection(activeView);
       toastSuccess(`Added ${dragIds.length} item${dragIds.length > 1 ? 's' : ''} to ${getBankLabel(bankIndex)}`);
     }
     setDraggedItem(null);
@@ -774,11 +791,10 @@ const LibraryBrowser = ({
     const { mediaId, collectionId } = showDeleteModal;
 
     if (action === 'removeFromFolder') {
-      removeFromCollection(artistId, collectionId, mediaId);
+      removeFromCollectionAsync(db, artistId, collectionId, mediaId);
       loadData();
-      syncCollection(collectionId);
     } else if (action === 'deleteEverywhere') {
-      removeFromLibrary(artistId, mediaId);
+      removeFromLibraryAsync(db, artistId, mediaId);
       loadData();
     }
     setShowDeleteModal(null);
@@ -808,20 +824,18 @@ const LibraryBrowser = ({
     if (!collection) return;
 
     if (window.confirm(`Delete "${collection.name}" collection? Media will remain in your library.`)) {
-      deleteCollection(artistId, collectionId);
+      deleteCollectionAsync(db, artistId, collectionId);
       if (activeView === collectionId) {
         setActiveView('library');
       }
       loadData();
-      deleteCollectionFromFirestore(db, artistId, collectionId).catch(console.error);
     }
   };
 
   // Handle add to collection
   const handleAddToCollection = (mediaIds, collectionId) => {
-    addToCollection(artistId, collectionId, mediaIds);
+    addToCollectionAsync(db, artistId, collectionId, mediaIds);
     loadData();
-    syncCollection(collectionId);
     setContextMenu(null);
   };
 
@@ -867,13 +881,11 @@ const LibraryBrowser = ({
     }
 
     if (dragIds.length > 0) {
-      addToCollection(artistId, collectionId, dragIds);
+      addToCollectionAsync(db, artistId, collectionId, dragIds);
       loadData();
-      syncCollection(collectionId);
     } else if (draggedItem) {
-      addToCollection(artistId, collectionId, draggedItem.id);
+      addToCollectionAsync(db, artistId, collectionId, draggedItem.id);
       loadData();
-      syncCollection(collectionId);
     }
     setDraggedItem(null);
   };
@@ -1349,11 +1361,187 @@ const LibraryBrowser = ({
   // Handle collection rename
   const handleRenameCollection = (collectionId, newName) => {
     if (!newName.trim()) return;
-    updateCollection(artistId, collectionId, { name: newName.trim() });
+    updateCollectionAsync(db, artistId, collectionId, { name: newName.trim() });
     setRenamingCollectionId(null);
     setRenameText('');
     loadData();
-    syncCollection(collectionId);
+  };
+
+  // ── Google Drive Handlers ──
+
+  const DRIVE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+  const DRIVE_API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;
+  const driveConfigured = !!(DRIVE_CLIENT_ID && DRIVE_API_KEY);
+
+  // Close cloud menu on outside click
+  useEffect(() => {
+    if (!showCloudMenu) return;
+    const handler = (e) => {
+      if (cloudMenuRef.current && !cloudMenuRef.current.contains(e.target)) {
+        setShowCloudMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showCloudMenu]);
+
+  const ensureDriveAuth = async () => {
+    if (!driveConfigured) {
+      toastError('Google Drive not configured (missing API keys)');
+      return false;
+    }
+    try {
+      await initGoogleDrive(DRIVE_CLIENT_ID, DRIVE_API_KEY);
+      if (!isDriveAuth()) await driveAuth();
+      return true;
+    } catch (err) {
+      toastError('Google Drive auth failed: ' + err.message);
+      return false;
+    }
+  };
+
+  // Link a Drive folder to the current collection
+  const handleLinkDriveFolder = async () => {
+    setShowCloudMenu(false);
+    if (!(await ensureDriveAuth())) return;
+
+    try {
+      // Open picker in folder-select mode
+      const view = new window.google.picker.DocsView()
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(true)
+        .setMimeTypes('application/vnd.google-apps.folder');
+      const picker = new window.google.picker.PickerBuilder()
+        .addView(view)
+        .setOAuthToken(window.gapi?.client?.getToken?.()?.access_token || '')
+        .setDeveloperKey(DRIVE_API_KEY)
+        .setCallback((data) => {
+          if (data.action === window.google.picker.Action.PICKED && data.docs?.[0]) {
+            const folder = data.docs[0];
+            const col = collections.find(c => c.id === activeView);
+            if (col) {
+              const updated = {
+                ...col,
+                linkedDrive: {
+                  folderId: folder.id,
+                  folderName: folder.name,
+                  linkedAt: new Date().toISOString(),
+                  linkedBy: 'current_user'
+                }
+              };
+              updateCollectionAsync(db, artistId, activeView, { linkedDrive: updated.linkedDrive });
+              loadData();
+              toastSuccess(`Linked to Drive folder: ${folder.name}`);
+            }
+          }
+        })
+        .build();
+      picker.setVisible(true);
+    } catch (err) {
+      toastError('Failed to open Drive picker: ' + err.message);
+    }
+  };
+
+  // Import files from linked Drive folder into this collection
+  const handleDriveImport = async () => {
+    setShowCloudMenu(false);
+    const col = collections.find(c => c.id === activeView);
+    if (!col?.linkedDrive?.folderId) {
+      toastError('No Drive folder linked to this collection');
+      return;
+    }
+    if (!(await ensureDriveAuth())) return;
+
+    setDriveImporting(true);
+    try {
+      const result = await driveListFiles(col.linkedDrive.folderId, {
+        pageSize: 100
+      });
+      const mediaFiles = result.files.filter(f =>
+        DRIVE_MIME_TYPES.ALL_MEDIA.includes(f.mimeType)
+      );
+
+      if (mediaFiles.length === 0) {
+        toastError('No media files found in Drive folder');
+        setDriveImporting(false);
+        return;
+      }
+
+      setDriveProgress({ current: 0, total: mediaFiles.length });
+      let imported = 0;
+
+      for (const file of mediaFiles) {
+        try {
+          const blob = await driveDownloadFile(file.id);
+          const localFile = new File([blob], file.name, { type: file.mimeType });
+          const { url } = await uploadFile(localFile, 'library');
+
+          const mediaType = file.mimeType.startsWith('video/') ? 'video' :
+                           file.mimeType.startsWith('audio/') ? 'audio' : 'image';
+
+          const added = await addToLibraryAsync(db, artistId, {
+            type: mediaType,
+            name: file.name,
+            url,
+            metadata: { mimeType: file.mimeType, fileSize: file.size, driveFileId: file.id }
+          });
+
+          if (added?.id) {
+            await addToCollectionAsync(db, artistId, activeView, [added.id]);
+          }
+
+          imported++;
+          setDriveProgress({ current: imported, total: mediaFiles.length });
+        } catch (err) {
+          console.warn('[Drive] Failed to import:', file.name, err.message);
+        }
+      }
+
+      loadData();
+      toastSuccess(`Imported ${imported}/${mediaFiles.length} files from Drive`);
+    } catch (err) {
+      toastError('Drive import failed: ' + err.message);
+    }
+    setDriveImporting(false);
+  };
+
+  // Export collection media to linked Drive folder
+  const handleDriveExport = async () => {
+    setShowCloudMenu(false);
+    const col = collections.find(c => c.id === activeView);
+    if (!col?.linkedDrive?.folderId) {
+      toastError('No Drive folder linked to this collection');
+      return;
+    }
+    if (!(await ensureDriveAuth())) return;
+
+    const collectionMedia = library.filter(item =>
+      (col.mediaIds || []).includes(item.id) && item.url
+    );
+
+    if (collectionMedia.length === 0) {
+      toastError('No media to export');
+      return;
+    }
+
+    setDriveExporting(true);
+    setDriveProgress({ current: 0, total: collectionMedia.length });
+    let exported = 0;
+
+    for (const item of collectionMedia) {
+      try {
+        const resp = await fetch(item.url);
+        const blob = await resp.blob();
+        await driveUploadFile(blob, item.name, col.linkedDrive.folderId, blob.type);
+        exported++;
+        setDriveProgress({ current: exported, total: collectionMedia.length });
+      } catch (err) {
+        console.warn('[Drive] Failed to export:', item.name, err.message);
+      }
+    }
+
+    toastSuccess(`Exported ${exported}/${collectionMedia.length} files to Drive`);
+    setDriveExporting(false);
   };
 
   // Get user collections for context menu
@@ -1822,9 +2010,78 @@ const LibraryBrowser = ({
                   borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0
                 }}>
                   <span style={{ fontSize: '13px', fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>All Images</span>
-                  <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>
+                  <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', flex: 1 }}>
                     {displayedMedia.length} items — drag into banks →
                   </span>
+
+                  {/* Google Drive cloud menu */}
+                  {driveConfigured && (
+                    <div style={{ position: 'relative' }} ref={cloudMenuRef}>
+                      <button
+                        onClick={() => setShowCloudMenu(!showCloudMenu)}
+                        style={{
+                          background: 'none', border: '1px solid rgba(255,255,255,0.1)',
+                          borderRadius: '6px', padding: '3px 8px', cursor: 'pointer',
+                          color: collections.find(c => c.id === activeView)?.linkedDrive ? '#4ade80' : 'rgba(255,255,255,0.4)',
+                          fontSize: '14px', display: 'flex', alignItems: 'center', gap: '4px'
+                        }}
+                        title="Cloud Storage"
+                      >
+                        <span style={{ fontSize: '12px' }}>&#9729;</span>
+                        <span style={{ fontSize: '10px' }}>Drive</span>
+                      </button>
+                      {showCloudMenu && (
+                        <div style={{
+                          position: 'absolute', top: '100%', right: 0, marginTop: '4px',
+                          backgroundColor: '#1a1a2e', border: '1px solid rgba(255,255,255,0.15)',
+                          borderRadius: '8px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                          zIndex: 1000, minWidth: '200px', overflow: 'hidden'
+                        }}>
+                          {(() => {
+                            const col = collections.find(c => c.id === activeView);
+                            const linked = col?.linkedDrive;
+                            return (
+                              <>
+                                {linked && (
+                                  <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.1)', fontSize: '11px', color: '#4ade80' }}>
+                                    Linked: {linked.folderName}
+                                  </div>
+                                )}
+                                <div
+                                  onClick={handleLinkDriveFolder}
+                                  style={{ padding: '10px 12px', cursor: 'pointer', fontSize: '13px', color: '#e4e4e7', display: 'flex', alignItems: 'center', gap: '8px' }}
+                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'}
+                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                >
+                                  <span>&#128279;</span> {linked ? 'Change Drive Folder' : 'Link to Google Drive'}
+                                </div>
+                                {linked && (
+                                  <>
+                                    <div
+                                      onClick={driveImporting ? undefined : handleDriveImport}
+                                      style={{ padding: '10px 12px', cursor: driveImporting ? 'wait' : 'pointer', fontSize: '13px', color: driveImporting ? '#71717a' : '#e4e4e7', display: 'flex', alignItems: 'center', gap: '8px' }}
+                                      onMouseEnter={(e) => { if (!driveImporting) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'; }}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                    >
+                                      <span>&#11015;</span> {driveImporting ? `Importing ${driveProgress.current}/${driveProgress.total}...` : 'Import from Drive'}
+                                    </div>
+                                    <div
+                                      onClick={driveExporting ? undefined : handleDriveExport}
+                                      style={{ padding: '10px 12px', cursor: driveExporting ? 'wait' : 'pointer', fontSize: '13px', color: driveExporting ? '#71717a' : '#e4e4e7', display: 'flex', alignItems: 'center', gap: '8px' }}
+                                      onMouseEnter={(e) => { if (!driveExporting) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'; }}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                    >
+                                      <span>&#11014;</span> {driveExporting ? `Exporting ${driveProgress.current}/${driveProgress.total}...` : 'Export to Drive'}
+                                    </div>
+                                  </>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div
                   ref={gridRef}
@@ -2207,9 +2464,8 @@ const LibraryBrowser = ({
                           key={bankIdx}
                           style={{...styles.contextMenuItem, paddingLeft: '24px'}}
                           onClick={() => {
-                            assignToBank(artistId, collection.id, contextMenu.media.id, bankIdx);
+                            assignToBankAsync(db, artistId, collection.id, contextMenu.media.id, bankIdx);
                             loadData();
-                            syncCollection(collection.id);
                             setContextMenu(null);
                           }}
                           onMouseEnter={(e) => e.currentTarget.style.backgroundColor = `${color.primary}1a`}
@@ -2239,9 +2495,8 @@ const LibraryBrowser = ({
             <div
               style={{...styles.contextMenuItem, color: '#f59e0b'}}
               onClick={() => {
-                removeFromCollection(artistId, activeView, contextMenu.media.id);
+                removeFromCollectionAsync(db, artistId, activeView, contextMenu.media.id);
                 loadData();
-                syncCollection(activeView);
                 setContextMenu(null);
               }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(245,158,11,0.1)'}

@@ -39,7 +39,7 @@ import {
   deleteLyricsAsync,
   getOnboardingStatus,
   incrementUseCount,
-  addToCollection,
+  addToCollectionAsync,
   saveCollectionToFirestore,
   MEDIA_TYPES,
   STARTER_TEMPLATES,
@@ -562,17 +562,7 @@ const StudioHome = ({
         // Also add items to the selected collection if one is active
         if (selectedCollection && added.length > 0) {
           const addedIds = added.map(item => item.id);
-          addToCollection(artistId, selectedCollection, addedIds);
-          // Sync updated collection to Firestore
-          if (db) {
-            const cols = getCollections(artistId);
-            const col = cols.find(c => c.id === selectedCollection && c.type !== 'smart');
-            if (col) {
-              saveCollectionToFirestore(db, artistId, col).catch(err =>
-                console.warn('[StudioHome] Failed to sync collection after upload:', err)
-              );
-            }
-          }
+          addToCollectionAsync(db, artistId, selectedCollection, addedIds);
         }
 
         // Note: If using Firestore subscription, library will auto-update via onSnapshot
@@ -781,17 +771,7 @@ const StudioHome = ({
       if (selectedCollection && added) {
         const addedId = added.id || added[0]?.id;
         if (addedId) {
-          addToCollection(artistId, selectedCollection, [addedId]);
-          // Sync updated collection to Firestore
-          if (db) {
-            const cols = getCollections(artistId);
-            const col = cols.find(c => c.id === selectedCollection && c.type !== 'smart');
-            if (col) {
-              saveCollectionToFirestore(db, artistId, col).catch(err =>
-                console.warn('[StudioHome] Failed to sync collection after audio upload:', err)
-              );
-            }
-          }
+          addToCollectionAsync(db, artistId, selectedCollection, [addedId]);
         }
       }
 
@@ -1585,6 +1565,7 @@ const StudioHome = ({
           {studioMode && (
             <CollectionPicker
               artistId={artistId}
+              db={db}
               value={selectedCollection}
               onChange={setSelectedCollection}
               mediaType={
@@ -2194,15 +2175,8 @@ const StudioHome = ({
                       <div
                         key={a.id}
                         onClick={() => {
-                          addToCollection(artistId, selectedCollection, [a.id]);
-                          // Refresh React state from localStorage so sidebarAudio re-computes
+                          addToCollectionAsync(db, artistId, selectedCollection, [a.id]);
                           loadData();
-                          if (db) {
-                            // Read fresh collection from localStorage (not stale React state)
-                            const freshCols = getCollections(artistId);
-                            const col = freshCols.find(c => c.id === selectedCollection && c.type !== 'smart');
-                            if (col) saveCollectionToFirestore(db, artistId, col).catch(() => {});
-                          }
                           setLibraryRefreshTrigger(t => t + 1);
                           setShowAudioImport(false);
                         }}
@@ -2455,13 +2429,8 @@ const StudioHome = ({
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (!inCol) {
-                                        addToCollection(artistId, col.id, audio.id);
+                                        addToCollectionAsync(db, artistId, col.id, audio.id);
                                         loadData();
-                                        if (db) {
-                                          const freshCols = getCollections(artistId);
-                                          const freshCol = freshCols.find(c => c.id === col.id && c.type !== 'smart');
-                                          if (freshCol) saveCollectionToFirestore(db, artistId, freshCol).catch(() => {});
-                                        }
                                         setLibraryRefreshTrigger(t => t + 1);
                                       }
                                       setAudioDropdownId(null);

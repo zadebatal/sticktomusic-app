@@ -4,11 +4,12 @@
  */
 
 import React, { useState } from 'react';
-import { addToLibrary, getUserCollections, addToCollection, MEDIA_TYPES } from '../../services/libraryService';
+import { addToLibraryAsync, getUserCollections, addToCollectionAsync, MEDIA_TYPES } from '../../services/libraryService';
 import { uploadFile } from '../../services/firebaseStorage';
 
 const SaveToLibraryButton = ({
   artistId,
+  db = null,
   clip, // { videoId, videoUrl, startTime, endTime, duration }
   onSaved,
   isMobile = false,
@@ -46,10 +47,10 @@ const SaveToLibraryButton = ({
         mediaItem.collectionIds = [selectedCollectionId];
       }
 
-      const savedItem = addToLibrary(artistId, mediaItem);
+      const savedItem = await addToLibraryAsync(db, artistId, mediaItem);
 
       if (selectedCollectionId) {
-        addToCollection(artistId, selectedCollectionId, savedItem.id);
+        await addToCollectionAsync(db, artistId, selectedCollectionId, savedItem.id);
       }
 
       if (onSaved) {

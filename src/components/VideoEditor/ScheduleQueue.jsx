@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { generateFromCollectionBanks, generatePostContent, getBankNames } from '../../utils/captionGenerator';
-import { getCollections } from '../../services/libraryService';
+import { getCollectionsAsync } from '../../services/libraryService';
 import CollectionBankEditor from './CollectionBankEditor';
 import { useToast, useFocusTrap } from '../ui';
 import log from '../../utils/logger';
@@ -28,7 +28,8 @@ const ScheduleQueue = ({
   onRenderVideo,
   onClose,
   accounts = [],
-  lateAccountIds = {}
+  lateAccountIds = {},
+  db = null
 }) => {
   // BUG-034: Toast notifications instead of alert()
   const { success: toastSuccess } = useToast();
@@ -91,7 +92,7 @@ const ScheduleQueue = ({
 
     const loadCollections = async () => {
       try {
-        const result = await getCollections(artistId);
+        const result = await getCollectionsAsync(db, artistId);
         setCollections(result || []);
       } catch (err) {
         console.error('[ScheduleQueue] Failed to load collections:', err);
@@ -99,7 +100,7 @@ const ScheduleQueue = ({
     };
 
     loadCollections();
-  }, [artistId]);
+  }, [artistId, db]);
 
   // Initialize posts from contentItems
   useEffect(() => {
@@ -684,6 +685,8 @@ const ScheduleQueue = ({
                 <div style={styles.sidebarEditor}>
                   <CollectionBankEditor
                     collectionId={editingCollectionId}
+                    db={db}
+                    artistId={artistId}
                     compact={true}
                   />
                 </div>

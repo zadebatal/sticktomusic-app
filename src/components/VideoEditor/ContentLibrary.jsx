@@ -8,6 +8,10 @@ import { uploadFile } from '../../services/firebaseStorage';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
 import { createScheduledPost, deleteScheduledPost, getScheduledPosts, POST_STATUS } from '../../services/scheduledPostsService';
 import log from '../../utils/logger';
+import {
+  initGoogleDrive, authenticate as driveAuth, isAuthenticated as isDriveAuth,
+  uploadFile as driveUploadFile, ensureAppFolder
+} from '../../services/googleDriveService';
 
 /**
  * ContentLibrary - Shows all videos or slideshows created within a category
@@ -53,6 +57,65 @@ const ContentLibrary = ({
   // Rendering state
   const [renderingVideoId, setRenderingVideoId] = useState(null);
   const [renderProgress, setRenderProgress] = useState(0);
+
+  // Google Drive export
+  const DRIVE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+  const DRIVE_API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;
+  const driveConfigured = !!(DRIVE_CLIENT_ID && DRIVE_API_KEY);
+  const [driveExporting, setDriveExporting] = useState(null); // item id being exported
+
+  // Export a video or slideshow to Google Drive
+  const handleExportToDrive = useCallback(async (item) => {
+    if (!driveConfigured) {
+      toastError('Google Drive not configured');
+      return;
+    }
+    setDriveExporting(item.id);
+    try {
+      // Init + auth
+      await initGoogleDrive(DRIVE_CLIENT_ID, DRIVE_API_KEY);
+      if (!isDriveAuth()) await driveAuth();
+
+      // Ensure app folder exists
+      const artistName = category?.name || 'StickToMusic';
+      const appFolder = await ensureAppFolder(artistName);
+
+      if (isSlideshow) {
+        // Export slideshow slides as images to Drive
+        const slides = item.slides || [];
+        let uploaded = 0;
+        for (let i = 0; i < slides.length; i++) {
+          const slide = slides[i];
+          const imageUrl = slide.backgroundImage || slide.imageA?.url || slide.imageA?.localUrl || slide.thumbnail;
+          if (!imageUrl) continue;
+          const resp = await fetch(imageUrl);
+          const blob = await resp.blob();
+          const fileName = `${item.name || 'slideshow'}_slide${i + 1}.${blob.type.includes('png') ? 'png' : 'jpg'}`;
+          await driveUploadFile(new File([blob], fileName, { type: blob.type }), fileName, appFolder.id, blob.type);
+          uploaded++;
+        }
+        toastSuccess(`Exported ${uploaded} slide${uploaded !== 1 ? 's' : ''} to Google Drive`);
+      } else {
+        // Export video to Drive
+        const url = item.cloudUrl;
+        if (!url) {
+          toastError('Video needs to be rendered first');
+          setDriveExporting(null);
+          return;
+        }
+        const resp = await fetch(url);
+        const blob = await resp.blob();
+        const fileName = `${item.name || item.textOverlay || 'video'}_${item.id}.mp4`;
+        await driveUploadFile(new File([blob], fileName, { type: 'video/mp4' }), fileName, appFolder.id, 'video/mp4');
+        toastSuccess('Video exported to Google Drive');
+      }
+    } catch (err) {
+      console.error('[ContentLibrary] Drive export failed:', err);
+      toastError('Drive export failed: ' + (err.message || 'Unknown error'));
+    } finally {
+      setDriveExporting(null);
+    }
+  }, [driveConfigured, DRIVE_CLIENT_ID, DRIVE_API_KEY, isSlideshow, category?.name, toastSuccess, toastError]);
 
   // Scheduled posts for "Already Scheduled" section in Drafts view
   const [scheduledPosts, setScheduledPosts] = useState([]);
@@ -386,6 +449,8 @@ const ContentLibrary = ({
                     onPreview={() => setPreviewingSlideshow(item)}
                     onEdit={() => onEditSlideshow?.(item)}
                     onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
+                    onExportToDrive={driveConfigured ? () => handleExportToDrive(item) : null}
+                    isDriveExporting={driveExporting === item.id}
                     onPost={async () => {
                       if (onViewScheduling && db && artistId) {
                         // Create a scheduled post and navigate to scheduling page
@@ -423,6 +488,8 @@ const ContentLibrary = ({
                     onEdit={() => onEditVideo(item)}
                     onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
                     onApprove={() => onApproveVideo(item.id)}
+                    onExportToDrive={driveConfigured ? () => handleExportToDrive(item) : null}
+                    isDriveExporting={driveExporting === item.id}
                     onPost={async () => {
                       if (onViewScheduling && db && artistId) {
                         // Create a scheduled post and navigate to scheduling page
@@ -588,6 +655,7 @@ const ContentLibrary = ({
           }}
           accounts={accounts}
           lateAccountIds={lateAccountIds}
+          db={db}
         />
       )}
 
@@ -734,7 +802,7 @@ const ContentLibrary = ({
   );
 };
 
-const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onApprove, onPost, onRender, isRendering, renderProgress, onPreview }) => {
+const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onApprove, onPost, onRender, isRendering, renderProgress, onPreview, onExportToDrive, isDriveExporting }) => {
   const [showActions, setShowActions] = useState(false);
 
   // UI-34: Prevent action buttons from triggering selection
@@ -867,6 +935,21 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
                     Download
                   </button>
                 )}
+                {onExportToDrive && video.cloudUrl && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onExportToDrive(); }}
+                    disabled={isDriveExporting}
+                    style={{
+                      padding: '4px 8px', fontSize: 11, borderRadius: 4,
+                      border: '1px solid #60a5fa', color: isDriveExporting ? '#6b7280' : '#60a5fa',
+                      background: 'transparent', cursor: isDriveExporting ? 'wait' : 'pointer',
+                      opacity: isDriveExporting ? 0.6 : 1
+                    }}
+                    title="Export to Google Drive"
+                  >
+                    {isDriveExporting ? 'Saving...' : 'Drive'}
+                  </button>
+                )}
                 <button style={styles.actionBtnPost} onClick={(e) => handleActionClick(e, onPost)}>Post</button>
               </>
             )}
@@ -883,7 +966,7 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
   );
 };
 
-const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdit, onDelete, onPost }) => {
+const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdit, onDelete, onPost, onExportToDrive, isDriveExporting }) => {
   const [showActions, setShowActions] = useState(false);
 
   const handleActionClick = (e, action) => {
@@ -1068,6 +1151,21 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
         {showActions && (
           <div style={styles.videoActions}>
             <button style={styles.actionBtn} onClick={(e) => handleActionClick(e, onEdit)}>Edit</button>
+            {onExportToDrive && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onExportToDrive(); }}
+                disabled={isDriveExporting}
+                style={{
+                  padding: '6px 8px', fontSize: 11, borderRadius: 4,
+                  border: '1px solid #60a5fa', color: isDriveExporting ? '#6b7280' : '#60a5fa',
+                  background: 'rgba(0,0,0,0.4)', cursor: isDriveExporting ? 'wait' : 'pointer',
+                  opacity: isDriveExporting ? 0.6 : 1, backdropFilter: 'blur(4px)'
+                }}
+                title="Export to Google Drive"
+              >
+                {isDriveExporting ? 'Saving...' : 'Drive'}
+              </button>
+            )}
             <button style={styles.actionBtnPost} onClick={(e) => handleActionClick(e, onPost)}>Post</button>
             <button style={styles.actionBtnDel} onClick={(e) => handleActionClick(e, onDelete)}>✕</button>
           </div>

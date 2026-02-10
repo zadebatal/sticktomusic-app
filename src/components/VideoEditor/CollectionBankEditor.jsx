@@ -3,7 +3,8 @@ import {
   getCollectionCaptionBank,
   getCollectionHashtagBank,
   updateCollectionCaptionBank,
-  updateCollectionHashtagBank
+  updateCollectionHashtagBank,
+  saveCollectionToFirestore
 } from '../../services/libraryService';
 
 /**
@@ -13,6 +14,7 @@ import {
 const CollectionBankEditor = ({
   collection,
   artistId,
+  db = null,
   onBankChange,
   compact = false // When true, uses smaller layout for sidebar
 }) => {
@@ -29,14 +31,22 @@ const CollectionBankEditor = ({
   const saveCaptionBank = useCallback((updated) => {
     setCaptionBank(updated);
     updateCollectionCaptionBank(artistId, collection.id, updated);
+    // Sync to Firestore
+    if (db && artistId && collection) {
+      saveCollectionToFirestore(db, artistId, { ...collection, captionBank: updated });
+    }
     onBankChange?.();
-  }, [artistId, collection?.id, onBankChange]);
+  }, [artistId, db, collection, onBankChange]);
 
   const saveHashtagBank = useCallback((updated) => {
     setHashtagBank(updated);
     updateCollectionHashtagBank(artistId, collection.id, updated);
+    // Sync to Firestore
+    if (db && artistId && collection) {
+      saveCollectionToFirestore(db, artistId, { ...collection, hashtagBank: updated });
+    }
     onBankChange?.();
-  }, [artistId, collection?.id, onBankChange]);
+  }, [artistId, db, collection, onBankChange]);
 
   // Caption handlers
   const addCaptionAlways = useCallback((text) => {
