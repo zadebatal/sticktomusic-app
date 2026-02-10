@@ -21,6 +21,7 @@ import {
 } from '../../utils/timelineNormalization';
 import log from '../../utils/logger';
 import useIsMobile from '../../hooks/useIsMobile';
+import { useTheme } from '../../contexts/ThemeContext';
 
 /**
  * VideoEditorModal - Flowstage-inspired video editor modal
@@ -48,6 +49,10 @@ const VideoEditorModal = ({
   const [editorMode, setEditorMode] = useState(
     existingVideo?.editorMode || (showTemplatePicker ? null : 'montage')
   );
+
+  // Theme
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
 
   // Mobile responsive detection
   const { isMobile } = useIsMobile();
@@ -226,6 +231,10 @@ const VideoEditorModal = ({
 
   // Toast notifications
   const toast = useToast();
+
+  // Preset prompt modal state
+  const [showPresetPrompt, setShowPresetPrompt] = useState(false);
+  const [presetPromptValue, setPresetPromptValue] = useState('');
 
   // Refs
   const audioRef = useRef(null);
@@ -1252,44 +1261,36 @@ const VideoEditorModal = ({
     setShowLyricsEditor(false);
   }, [lyrics, filteredBeats, duration, selectedAudio]);
 
-  // Fetch the shared OpenAI key from server (for operators)
-  const fetchSharedOpenAIKey = useCallback(async () => {
+  // Check if server-side OpenAI key is configured
+  const checkWhisperAvailable = useCallback(async () => {
     try {
       const { getAuth } = await import('firebase/auth');
       const auth = getAuth();
       const user = auth.currentUser;
-      if (!user) return null;
+      if (!user) return false;
 
       const token = await user.getIdToken();
       const baseUrl = window.location.hostname === 'localhost'
         ? `http://localhost:${window.location.port}`
         : '';
-      const response = await fetch(`${baseUrl}/api/whisper?action=getKey`, {
+      const response = await fetch(`${baseUrl}/api/whisper?action=status`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!response.ok) return null;
+      if (!response.ok) return false;
       const data = await response.json();
-      return data.configured ? data.key : null;
+      return data.configured;
     } catch (error) {
-      console.warn('Could not fetch shared OpenAI key:', error.message);
-      return null;
+      console.warn('Could not check Whisper status:', error.message);
+      return false;
     }
   }, []);
 
-  // AI Transcription with OpenAI Whisper (much better for music/vocals)
+  // AI Transcription with OpenAI Whisper via server proxy
   const handleAITranscribe = useCallback(async () => {
-    // Check for API key: try shared key first, then personal key
-    let savedKey = loadApiKey('openai');
-    if (!savedKey) {
-      // Try fetching the shared team key from server
-      savedKey = await fetchSharedOpenAIKey();
-      if (savedKey) {
-        // Save locally so we don't re-fetch every time
-        saveApiKey('openai', savedKey);
-      }
-    }
-    if (!savedKey) {
-      setShowApiKeyModal(true);
+    // Check if server-side Whisper is available
+    const available = await checkWhisperAvailable();
+    if (!available) {
+      setTranscriptionError('Whisper transcription is not configured on the server. Contact your admin.');
       return;
     }
 
@@ -1405,18 +1406,24 @@ const VideoEditorModal = ({
         return new Blob([ab], { type: 'audio/wav' });
       }
 
-      // Send to OpenAI Whisper API with word-level timestamps
-      log('Whisper: Sending to OpenAI for transcription...');
+      // Send to server proxy (keeps API key server-side)
+      log('Whisper: Sending to server proxy for transcription...');
       const formData = new FormData();
       formData.append('file', wavBlob, 'audio.wav');
       formData.append('model', 'whisper-1');
       formData.append('response_format', 'verbose_json');
       formData.append('timestamp_granularities[]', 'word');
 
-      const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      const { getAuth: getAuthForToken } = await import('firebase/auth');
+      const authForToken = getAuthForToken();
+      const firebaseToken = await authForToken.currentUser?.getIdToken();
+      const proxyBase = window.location.hostname === 'localhost'
+        ? `http://localhost:${window.location.port}`
+        : '';
+      const whisperResponse = await fetch(`${proxyBase}/api/transcribe`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${savedKey}`
+          'Authorization': `Bearer ${firebaseToken}`
         },
         body: formData
       });
@@ -1608,7 +1615,7 @@ const VideoEditorModal = ({
           {!isMobile && (
             <div style={styles.leftPanel}>
               {/* Collection dropdown */}
-              <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.border.subtle}` }}>
                 <select
                   value={selectedCollection}
                   onChange={(e) => setSelectedCollection(e.target.value)}
@@ -1648,13 +1655,13 @@ const VideoEditorModal = ({
                 {activeBank === 'videos' && (
                   <div>
                     {visibleVideos.length === 0 ? (
-                      <div style={{ padding: '24px', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '13px' }}>
+                      <div style={{ padding: '24px', textAlign: 'center', color: theme.text.muted, fontSize: '13px' }}>
                         No videos in this collection
                       </div>
                     ) : (
                       <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>{visibleVideos.length} clips</span>
+                          <span style={{ fontSize: '11px', color: theme.text.muted }}>{visibleVideos.length} clips</span>
                           <button
                             style={{ fontSize: '11px', color: '#14b8a6', background: 'none', border: 'none', cursor: 'pointer' }}
                             onClick={() => {
@@ -1704,17 +1711,17 @@ const VideoEditorModal = ({
                                   backgroundColor: '#22c55e', display: 'flex',
                                   alignItems: 'center', justifyContent: 'center',
                                   fontSize: '11px', color: '#fff', fontWeight: 'bold',
-                                  boxShadow: '0 1px 4px rgba(0,0,0,0.4)'
+                                  boxShadow: `0 1px 4px ${theme.overlay.light}`
                                 }}>✓</div>
                               )}
-                              <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: '4px', overflow: 'hidden', backgroundColor: '#0a0a0f' }}>
+                              <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: '4px', overflow: 'hidden', backgroundColor: theme.bg.page }}>
                                 {(video.thumbnailUrl || video.thumbnail) ? (
                                   <img src={video.thumbnailUrl || video.thumbnail} alt={video.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                 ) : (
                                   <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>🎬</div>
                                 )}
                               </div>
-                              <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '4px' }}>
+                              <div style={{ fontSize: '10px', color: theme.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '4px' }}>
                                 {(video.name || video.metadata?.originalName || 'Clip').substring(0, 20)}
                               </div>
                             </div>
@@ -1732,7 +1739,7 @@ const VideoEditorModal = ({
                     {/* Current audio indicator */}
                     {selectedAudio && (
                       <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', marginBottom: '12px' }}>
-                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>Now playing</div>
+                        <div style={{ fontSize: '11px', color: theme.text.muted, marginBottom: '4px' }}>Now playing</div>
                         <div style={{ fontSize: '13px', color: '#86efac', fontWeight: 500 }}>
                           {selectedAudio.isSourceAudio ? 'Source Video Audio' : selectedAudio.name}
                         </div>
@@ -1750,9 +1757,9 @@ const VideoEditorModal = ({
                         })}
                         style={{
                           width: '100%', padding: '10px 12px', borderRadius: '8px',
-                          border: selectedAudio?.isSourceAudio ? '1px solid #22c55e' : '1px solid rgba(255,255,255,0.1)',
-                          background: selectedAudio?.isSourceAudio ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.04)',
-                          color: selectedAudio?.isSourceAudio ? '#86efac' : '#fff',
+                          border: selectedAudio?.isSourceAudio ? `1px solid ${theme.state.success}` : `1px solid ${theme.border.subtle}`,
+                          background: selectedAudio?.isSourceAudio ? 'rgba(34,197,94,0.15)' : theme.hover.bg,
+                          color: selectedAudio?.isSourceAudio ? '#86efac' : theme.text.primary,
                           cursor: 'pointer', textAlign: 'left', fontSize: '12px', marginBottom: '8px', display: 'block'
                         }}
                       >
@@ -1768,14 +1775,14 @@ const VideoEditorModal = ({
                             onClick={() => handleAudioSelect(audio)}
                             style={{
                               width: '100%', padding: '10px 12px', borderRadius: '8px',
-                              border: selectedAudio?.id === audio.id ? '1px solid #22c55e' : '1px solid rgba(255,255,255,0.08)',
-                              background: selectedAudio?.id === audio.id ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.04)',
-                              color: '#fff', cursor: 'pointer', textAlign: 'left', fontSize: '12px', display: 'block'
+                              border: selectedAudio?.id === audio.id ? `1px solid ${theme.state.success}` : `1px solid ${theme.border.subtle}`,
+                              background: selectedAudio?.id === audio.id ? 'rgba(34,197,94,0.1)' : theme.hover.bg,
+                              color: theme.text.primary, cursor: 'pointer', textAlign: 'left', fontSize: '12px', display: 'block'
                             }}
                           >
                             <div style={{ fontWeight: 500 }}>{audio.name || 'Audio Track'}</div>
                             {audio.duration && (
-                              <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', marginTop: '2px' }}>
+                              <div style={{ fontSize: '10px', color: theme.text.muted, marginTop: '2px' }}>
                                 {Math.floor(audio.duration / 60)}:{String(Math.floor(audio.duration % 60)).padStart(2, '0')}
                               </div>
                             )}
@@ -1784,7 +1791,7 @@ const VideoEditorModal = ({
                       </div>
                     )}
                     {libraryAudio.length === 0 && !clips?.length && (
-                      <div style={{ padding: '24px', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '13px' }}>
+                      <div style={{ padding: '24px', textAlign: 'center', color: theme.text.muted, fontSize: '13px' }}>
                         No audio tracks available
                       </div>
                     )}
@@ -1837,7 +1844,7 @@ const VideoEditorModal = ({
                             <span style={{ flex: 1, fontSize: '12px' }}>{text}</span>
                           </div>
                         ))}
-                        {textBank1.length === 0 && <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>No text added yet</div>}
+                        {textBank1.length === 0 && <div style={{ fontSize: '11px', color: theme.text.muted }}>No text added yet</div>}
                       </div>
                       {/* Text Bank B */}
                       <div>
@@ -1860,7 +1867,7 @@ const VideoEditorModal = ({
                             <span style={{ flex: 1, fontSize: '12px' }}>{text}</span>
                           </div>
                         ))}
-                        {textBank2.length === 0 && <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>No text added yet</div>}
+                        {textBank2.length === 0 && <div style={{ fontSize: '11px', color: theme.text.muted }}>No text added yet</div>}
                       </div>
                     </div>
                   );
@@ -1876,7 +1883,7 @@ const VideoEditorModal = ({
               width: '100%',
               padding: '12px 16px',
               borderRight: 'none',
-              borderBottom: '1px solid #1f1f2e',
+              borderBottom: `1px solid ${theme.bg.surface}`,
               flexShrink: 0,
               maxHeight: mobilePreviewExpanded ? '60vh' : '220px',
               transition: 'max-height 0.3s ease'
@@ -1948,7 +1955,7 @@ const VideoEditorModal = ({
                     {videoLoading && !videoError && (
                       <div style={styles.previewPlaceholder}>
                         <div style={{ ...styles.spinner, width: 32, height: 32 }} />
-                        <p style={{ color: '#9ca3af', marginTop: 8, fontSize: 12 }}>Loading video...</p>
+                        <p style={{ color: theme.text.secondary, marginTop: 8, fontSize: 12 }}>Loading video...</p>
                       </div>
                     )}
                     {videoError && (
@@ -1961,7 +1968,7 @@ const VideoEditorModal = ({
                         <p style={{ color: '#ef4444', marginTop: 8, fontSize: 12, textAlign: 'center', maxWidth: '90%' }}>
                           {videoError}
                         </p>
-                        <p style={{ color: '#6b7280', fontSize: 10, textAlign: 'center', maxWidth: '90%', marginTop: 4 }}>
+                        <p style={{ color: theme.text.muted, fontSize: 10, textAlign: 'center', maxWidth: '90%', marginTop: 4 }}>
                           Try re-uploading the video or check Firebase CORS settings.
                         </p>
                       </div>
@@ -1969,11 +1976,11 @@ const VideoEditorModal = ({
                   </>
                 ) : (
                   <div style={styles.previewPlaceholder}>
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={theme.text.muted} strokeWidth="1.5">
                       <rect x="2" y="4" width="20" height="16" rx="2"/>
                       <path d="M10 9l5 3-5 3V9z"/>
                     </svg>
-                    <p style={{ color: '#6b7280', marginTop: 8, fontSize: 12 }}>
+                    <p style={{ color: theme.text.muted, marginTop: 8, fontSize: 12 }}>
                       {clips.length === 0 ? 'Add clips to preview' : 'Loading...'}
                     </p>
                   </div>
@@ -2105,7 +2112,7 @@ const VideoEditorModal = ({
                       padding: '8px',
                       backgroundColor: 'transparent',
                       border: 'none',
-                      color: '#9ca3af',
+                      color: theme.text.secondary,
                       cursor: 'pointer'
                     }}
                     onClick={() => setMobilePreviewExpanded(!mobilePreviewExpanded)}
@@ -2143,12 +2150,8 @@ const VideoEditorModal = ({
 
             {!isMobile && (
               <button style={styles.makePresetButton} onClick={() => {
-                // BUG-033: Replace window.prompt with inline prompt + toast feedback
-                const name = prompt('Preset name:');
-                if (name && name.trim()) {
-                  onSavePreset({ name: name.trim(), settings: { ...textStyle, cropMode } });
-                  toast.success?.(`Preset "${name.trim()}" saved!`);
-                }
+                setPresetPromptValue('');
+                setShowPresetPrompt(true);
               }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
@@ -2333,8 +2336,8 @@ const VideoEditorModal = ({
                         <button
                           style={{
                             ...styles.editLyricsButton,
-                            background: (!selectedAudio || isTranscribing) ? '#374151' : 'linear-gradient(135deg, #8B5CF6, #6D28D9)',
-                            color: (!selectedAudio || isTranscribing) ? '#6b7280' : '#fff',
+                            background: (!selectedAudio || isTranscribing) ? theme.bg.elevated : 'linear-gradient(135deg, #8B5CF6, #6D28D9)',
+                            color: (!selectedAudio || isTranscribing) ? theme.text.muted : theme.text.primary,
                             border: 'none',
                             cursor: (!selectedAudio || isTranscribing) ? 'not-allowed' : 'pointer',
                             opacity: (!selectedAudio || isTranscribing) ? 0.6 : 1
@@ -2365,8 +2368,8 @@ const VideoEditorModal = ({
                           style={{
                             ...styles.editLyricsButton,
                             width: '100%',
-                            background: (category?.lyrics?.length || 0) === 0 ? '#374151' : 'linear-gradient(135deg, #14b8a6, #0d9488)',
-                            color: (category?.lyrics?.length || 0) === 0 ? '#6b7280' : '#fff',
+                            background: (category?.lyrics?.length || 0) === 0 ? theme.bg.elevated : 'linear-gradient(135deg, #14b8a6, #0d9488)',
+                            color: (category?.lyrics?.length || 0) === 0 ? theme.text.muted : theme.text.primary,
                             cursor: (category?.lyrics?.length || 0) === 0 ? 'not-allowed' : 'pointer',
                             opacity: (category?.lyrics?.length || 0) === 0 ? 0.6 : 1
                           }}
@@ -2385,13 +2388,13 @@ const VideoEditorModal = ({
                             left: 0,
                             right: 0,
                             marginTop: '4px',
-                            backgroundColor: '#1f1f2e',
-                            border: '1px solid #374151',
+                            backgroundColor: theme.bg.surface,
+                            border: `1px solid ${theme.bg.elevated}`,
                             borderRadius: '8px',
                             maxHeight: '200px',
                             overflowY: 'auto',
                             zIndex: 100,
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+                            boxShadow: `0 4px 12px ${theme.overlay.light}`
                           }}>
                             {category.lyrics.map(lyric => (
                               <div
@@ -2400,8 +2403,8 @@ const VideoEditorModal = ({
                                   width: '100%',
                                   padding: '10px 12px',
                                   backgroundColor: 'transparent',
-                                  borderBottom: '1px solid #2d2d3d',
-                                  color: '#e5e7eb',
+                                  borderBottom: `1px solid ${theme.bg.elevated}`,
+                                  color: theme.text.primary,
                                   textAlign: 'left',
                                   cursor: 'pointer',
                                   fontSize: '13px'
@@ -2439,11 +2442,11 @@ const VideoEditorModal = ({
                                   // Auto-open Word Timeline so user can adjust timing
                                   setShowWordTimeline(true);
                                 }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2d2d3d'}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.bg.elevated}
                                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                               >
                                 <div style={{ fontWeight: '500', marginBottom: '2px', pointerEvents: 'none' }}>{lyric.title}</div>
-                                <div style={{ fontSize: '11px', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
+                                <div style={{ fontSize: '11px', color: theme.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
                                   {lyric.content?.substring(0, 50)}...
                                 </div>
                               </div>
@@ -2452,7 +2455,7 @@ const VideoEditorModal = ({
                         )}
                       </div>
                       {!selectedAudio && !isTranscribing && (
-                        <p style={{ color: '#6b7280', fontSize: '11px', marginTop: '6px' }}>
+                        <p style={{ color: theme.text.muted, fontSize: '11px', marginTop: '6px' }}>
                           Select audio above to enable AI transcription
                         </p>
                       )}
@@ -2522,7 +2525,7 @@ const VideoEditorModal = ({
                       showAddForm={true}
                     />
                     {category?.lyrics?.length === 0 && (
-                      <p style={{ color: '#6b7280', fontSize: '12px', marginTop: '12px', textAlign: 'center' }}>
+                      <p style={{ color: theme.text.muted, fontSize: '12px', marginTop: '12px', textAlign: 'center' }}>
                         Add lyrics in your category's Aesthetic Home, or add them here for quick access.
                       </p>
                     )}
@@ -2643,14 +2646,14 @@ const VideoEditorModal = ({
                                 flex: 1,
                                 height: '100%',
                                 background: selectedClips.includes(index)
-                                  ? 'linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%)'
-                                  : 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)',
+                                  ? `linear-gradient(135deg, ${theme.accent.muted} 0%, ${theme.accent.primary} 100%)`
+                                  : `linear-gradient(135deg, ${theme.accent.muted} 0%, ${theme.accent.muted} 100%)`,
                                 display: 'flex',
                                 alignItems: 'flex-end',
                                 justifyContent: 'flex-end',
                                 padding: '4px 6px'
                               }}>
-                                <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.7)' }}>
+                                <span style={{ fontSize: '10px', color: theme.text.secondary }}>
                                   {clip.duration?.toFixed(1)}s
                                 </span>
                               </div>
@@ -2954,9 +2957,9 @@ const VideoEditorModal = ({
               ...(isMobile ? { width: '95%', maxWidth: '95%' } : {})
             }}>
               <h3 style={styles.lyricsTitle}>🔑 OpenAI API Key</h3>
-              <p style={{ color: '#9CA3AF', fontSize: '14px', marginBottom: '16px' }}>
+              <p style={{ color: theme.text.secondary, fontSize: '14px', marginBottom: '16px' }}>
                 AI transcription uses OpenAI Whisper (great for music/vocals).
-                Get a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" style={{ color: '#8B5CF6' }}>platform.openai.com</a>
+                Get a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" style={{ color: theme.accent.primary }}>platform.openai.com</a>
               </p>
               <input
                 type="password"
@@ -2977,10 +2980,10 @@ const VideoEditorModal = ({
                 style={{
                   width: '100%',
                   padding: isMobile ? '14px' : '12px',
-                  background: '#1F2937',
-                  border: '1px solid #374151',
+                  background: theme.bg.surface,
+                  border: `1px solid ${theme.bg.elevated}`,
                   borderRadius: '8px',
-                  color: '#fff',
+                  color: theme.text.primary,
                   fontSize: isMobile ? '16px' : '14px',
                   marginBottom: '16px'
                 }}
@@ -3035,19 +3038,19 @@ const VideoEditorModal = ({
           <div style={styles.lyricsOverlay}>
             <div style={{...styles.lyricsModal, maxWidth: '420px'}}>
               <h3 style={styles.lyricsTitle}>📝 Recover Unsaved Work?</h3>
-              <p style={{ color: '#9CA3AF', fontSize: '14px', marginBottom: '16px' }}>
+              <p style={{ color: theme.text.secondary, fontSize: '14px', marginBottom: '16px' }}>
                 We found an auto-saved draft from{' '}
-                <strong style={{ color: '#fff' }}>
+                <strong style={{ color: theme.text.primary }}>
                   {recoveryData.savedAt ? new Date(recoveryData.savedAt).toLocaleString() : 'recently'}
                 </strong>
               </p>
               <div style={{
-                backgroundColor: '#1f1f2e',
+                backgroundColor: theme.bg.surface,
                 padding: '12px',
                 borderRadius: '8px',
                 marginBottom: '16px',
                 fontSize: '13px',
-                color: '#9ca3af'
+                color: theme.text.secondary
               }}>
                 <div>🎵 Audio: {recoveryData.audio?.name || 'None'}</div>
                 <div>🎬 Clips: {recoveryData.clips?.length || 0}</div>
@@ -3090,20 +3093,20 @@ const VideoEditorModal = ({
               ...(isMobile ? { width: '95%', maxWidth: '95%' } : {})
             }}>
               <h3 style={styles.lyricsTitle}>💾 Save Lyrics to Song?</h3>
-              <p style={{ color: '#9CA3AF', fontSize: '14px', marginBottom: '16px' }}>
-                You've created timed lyrics for <strong style={{ color: '#fff' }}>{selectedAudio?.name || 'this song'}</strong>.
+              <p style={{ color: theme.text.secondary, fontSize: '14px', marginBottom: '16px' }}>
+                You've created timed lyrics for <strong style={{ color: theme.text.primary }}>{selectedAudio?.name || 'this song'}</strong>.
                 Save them to the song so they're automatically available next time you use it?
               </p>
               <div style={{
-                backgroundColor: '#1f1f2e',
+                backgroundColor: theme.bg.surface,
                 padding: '12px',
                 borderRadius: '8px',
                 marginBottom: '16px',
                 fontSize: '13px',
-                color: '#9ca3af'
+                color: theme.text.secondary
               }}>
                 <div>🎤 {words.length} words with timing data</div>
-                <div style={{ marginTop: '4px', fontSize: '12px', color: '#6b7280' }}>
+                <div style={{ marginTop: '4px', fontSize: '12px', color: theme.text.muted }}>
                   "{words.slice(0, 5).map(w => w.text).join(' ')}{words.length > 5 ? '...' : ''}"
                 </div>
               </div>
@@ -3143,16 +3146,16 @@ const VideoEditorModal = ({
               ...(isMobile ? { width: '95%', maxWidth: '95%' } : {})
             }}>
               <h3 style={styles.lyricsTitle}>🎬 Apply Lyric Settings to Batch?</h3>
-              <p style={{ color: '#9CA3AF', fontSize: '14px', marginBottom: '16px' }}>
+              <p style={{ color: theme.text.secondary, fontSize: '14px', marginBottom: '16px' }}>
                 You have custom lyric settings configured. Do you want to apply them to all videos in the batch?
               </p>
               <div style={{
-                backgroundColor: '#1f1f2e',
+                backgroundColor: theme.bg.surface,
                 padding: '12px',
                 borderRadius: '8px',
                 marginBottom: '16px',
                 fontSize: '13px',
-                color: '#9ca3af'
+                color: theme.text.secondary
               }}>
                 {words && words.length > 0 && (
                   <div style={{ marginBottom: '8px' }}>
@@ -3162,17 +3165,17 @@ const VideoEditorModal = ({
                 {textStyle && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                     {textStyle.outline && (
-                      <span style={{ padding: '4px 8px', backgroundColor: '#374151', borderRadius: '4px', fontSize: '12px' }}>
+                      <span style={{ padding: '4px 8px', backgroundColor: theme.bg.elevated, borderRadius: '4px', fontSize: '12px' }}>
                         {textStyle.outline ? 'Outline' : 'No outline'}
                       </span>
                     )}
                     {textStyle.textCase && textStyle.textCase !== 'default' && (
-                      <span style={{ padding: '4px 8px', backgroundColor: '#374151', borderRadius: '4px', fontSize: '12px' }}>
+                      <span style={{ padding: '4px 8px', backgroundColor: theme.bg.elevated, borderRadius: '4px', fontSize: '12px' }}>
                         {textStyle.textCase.toUpperCase()}
                       </span>
                     )}
                     {textStyle.displayMode && textStyle.displayMode !== 'word' && (
-                      <span style={{ padding: '4px 8px', backgroundColor: '#374151', borderRadius: '4px', fontSize: '12px' }}>
+                      <span style={{ padding: '4px 8px', backgroundColor: theme.bg.elevated, borderRadius: '4px', fontSize: '12px' }}>
                         {textStyle.displayMode === 'line' ? 'Build line' : textStyle.displayMode}
                       </span>
                     )}
@@ -3228,16 +3231,16 @@ const VideoEditorModal = ({
               ...(isMobile ? { width: '95%', maxWidth: '95%' } : {})
             }}>
               <h3 style={styles.lyricsTitle}>Close Editor?</h3>
-              <p style={{ color: '#9CA3AF', fontSize: '14px', marginBottom: '16px' }}>
+              <p style={{ color: theme.text.secondary, fontSize: '14px', marginBottom: '16px' }}>
                 You have unsaved work. Are you sure you want to close?
               </p>
               <div style={{
-                backgroundColor: '#1f1f2e',
+                backgroundColor: theme.bg.surface,
                 padding: '12px',
                 borderRadius: '8px',
                 marginBottom: '16px',
                 fontSize: '13px',
-                color: '#9ca3af'
+                color: theme.text.secondary
               }}>
                 {selectedAudio && <div>🎵 Audio selected</div>}
                 {clips.length > 0 && <div>🎬 {clips.length} clips</div>}
@@ -3270,16 +3273,58 @@ const VideoEditorModal = ({
             </div>
           </div>
         )}
+
+        {/* Preset name prompt modal */}
+        {showPresetPrompt && (
+          <div style={{ position: 'fixed', inset: 0, background: theme.overlay.heavy, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onClick={() => setShowPresetPrompt(false)}>
+            <div style={{ background: theme.bg.input, borderRadius: 12, padding: 24, width: 360, maxWidth: '90vw' }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ color: theme.text.primary, fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Save Preset</div>
+              <input
+                autoFocus
+                value={presetPromptValue}
+                onChange={e => setPresetPromptValue(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') setShowPresetPrompt(false);
+                  if (e.key === 'Enter' && presetPromptValue.trim()) {
+                    onSavePreset({ name: presetPromptValue.trim(), settings: { ...textStyle, cropMode } });
+                    toast.success?.(`Preset "${presetPromptValue.trim()}" saved!`);
+                    setShowPresetPrompt(false);
+                  }
+                }}
+                placeholder="Preset name..."
+                style={{ width: '100%', background: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, borderRadius: 8, padding: '10px 12px', color: theme.text.primary, fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
+              />
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+                <button onClick={() => setShowPresetPrompt(false)}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${theme.bg.elevated}`, background: 'transparent', color: theme.text.secondary, cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button onClick={() => {
+                  if (presetPromptValue.trim()) {
+                    onSavePreset({ name: presetPromptValue.trim(), settings: { ...textStyle, cropMode } });
+                    toast.success?.(`Preset "${presetPromptValue.trim()}" saved!`);
+                  }
+                  setShowPresetPrompt(false);
+                }}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: theme.accent.primary, color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-const styles = {
+const getStyles = (theme) => ({
   overlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: theme.overlay.heavy,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3290,7 +3335,7 @@ const styles = {
     width: '100%',
     maxWidth: '1100px',
     maxHeight: '90vh',
-    backgroundColor: '#111118',
+    backgroundColor: theme.bg.input,
     borderRadius: '12px',
     display: 'flex',
     flexDirection: 'column',
@@ -3301,12 +3346,12 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '16px 20px',
-    borderBottom: '1px solid #1f1f2e'
+    borderBottom: `1px solid ${theme.bg.surface}`
   },
   title: {
     fontSize: '16px',
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text.primary,
     margin: 0
   },
   studioButton: {
@@ -3316,7 +3361,7 @@ const styles = {
     padding: '8px 12px',
     backgroundColor: 'transparent',
     border: 'none',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     borderRadius: '8px',
     fontSize: '15px',
@@ -3331,7 +3376,7 @@ const styles = {
     height: '32px',
     backgroundColor: 'transparent',
     border: 'none',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     borderRadius: '6px'
   },
@@ -3343,8 +3388,8 @@ const styles = {
   // ── Left sidebar styles (matching SlideshowEditor) ──
   leftPanel: {
     width: '300px',
-    backgroundColor: '#16162a',
-    borderRight: '1px solid rgba(255,255,255,0.1)',
+    backgroundColor: theme.bg.input,
+    borderRight: `1px solid ${theme.border.subtle}`,
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden'
@@ -3352,17 +3397,17 @@ const styles = {
   sourceDropdown: {
     width: '100%',
     padding: '8px 12px',
-    backgroundColor: '#0f0f1a',
-    border: '1px solid rgba(255,255,255,0.15)',
+    backgroundColor: theme.bg.page,
+    border: `1px solid ${theme.border.subtle}`,
     borderRadius: '8px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '13px',
     outline: 'none',
     cursor: 'pointer'
   },
   bankTabs: {
     display: 'flex',
-    borderBottom: '1px solid rgba(255,255,255,0.1)'
+    borderBottom: `1px solid ${theme.border.subtle}`
   },
   bankTab: {
     flex: 1,
@@ -3370,7 +3415,7 @@ const styles = {
     border: 'none',
     borderBottom: '2px solid transparent',
     backgroundColor: 'transparent',
-    color: 'rgba(255,255,255,0.4)',
+    color: theme.text.muted,
     fontSize: '12px',
     fontWeight: 500,
     cursor: 'pointer',
@@ -3447,9 +3492,9 @@ const styles = {
     flex: 1,
     padding: '6px 10px',
     borderRadius: '6px',
-    border: '1px solid rgba(255,255,255,0.15)',
-    backgroundColor: '#0f0f1a',
-    color: '#fff',
+    border: `1px solid ${theme.border.subtle}`,
+    backgroundColor: theme.bg.page,
+    color: theme.text.primary,
     fontSize: '12px',
     outline: 'none'
   },
@@ -3458,14 +3503,14 @@ const styles = {
     alignItems: 'center',
     padding: '6px 8px',
     borderRadius: '6px',
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: theme.hover.bg,
     marginBottom: '4px',
-    color: 'rgba(255,255,255,0.7)'
+    color: theme.text.secondary
   },
   previewSection: {
     width: '320px',
     padding: '20px',
-    borderRight: '1px solid #1f1f2e',
+    borderRight: `1px solid ${theme.bg.surface}`,
     display: 'flex',
     flexDirection: 'column'
   },
@@ -3475,7 +3520,7 @@ const styles = {
   preview: {
     position: 'relative',
     aspectRatio: '9/16',
-    backgroundColor: '#0a0a0f',
+    backgroundColor: theme.bg.page,
     borderRadius: '8px',
     overflow: 'hidden'
   },
@@ -3493,7 +3538,7 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0a0a0f'
+    backgroundColor: theme.bg.page
   },
   textOverlayPreview: {
     position: 'absolute',
@@ -3514,7 +3559,7 @@ const styles = {
     left: 0,
     right: 0,
     height: '15%',
-    borderBottom: '1px dashed rgba(255,255,255,0.2)'
+    borderBottom: `1px dashed ${theme.text.muted}`
   },
   safeZoneBottom: {
     position: 'absolute',
@@ -3522,13 +3567,13 @@ const styles = {
     left: 0,
     right: 0,
     height: '15%',
-    borderTop: '1px dashed rgba(255,255,255,0.2)'
+    borderTop: `1px dashed ${theme.text.muted}`
   },
   progressBarContainer: {
     position: 'relative',
     width: '100%',
     height: '6px',
-    backgroundColor: '#1f1f2e',
+    backgroundColor: theme.bg.surface,
     borderRadius: '3px',
     marginTop: '8px',
     cursor: 'pointer'
@@ -3538,7 +3583,7 @@ const styles = {
     top: 0,
     left: 0,
     height: '100%',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     borderRadius: '3px',
     transition: 'width 0.1s linear'
   },
@@ -3548,9 +3593,9 @@ const styles = {
     transform: 'translate(-50%, -50%)',
     width: '12px',
     height: '12px',
-    backgroundColor: '#fff',
+    backgroundColor: theme.text.primary,
     borderRadius: '50%',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+    boxShadow: `0 2px 4px ${theme.overlay.light}`
   },
   playbackControls: {
     display: 'flex',
@@ -3564,10 +3609,10 @@ const styles = {
     justifyContent: 'center',
     width: '32px',
     height: '32px',
-    backgroundColor: '#1f1f2e',
+    backgroundColor: theme.bg.surface,
     border: 'none',
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer'
   },
   muteButton: {
@@ -3578,13 +3623,13 @@ const styles = {
     height: '32px',
     backgroundColor: 'transparent',
     border: 'none',
-    color: '#6b7280',
+    color: theme.text.muted,
     cursor: 'pointer'
   },
   timeDisplay: {
     flex: 1,
     fontSize: '12px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     textAlign: 'center'
   },
   fullscreenButton: {
@@ -3595,7 +3640,7 @@ const styles = {
     height: '32px',
     backgroundColor: 'transparent',
     border: 'none',
-    color: '#6b7280',
+    color: theme.text.muted,
     cursor: 'pointer'
   },
   presetSection: {
@@ -3606,15 +3651,15 @@ const styles = {
   },
   presetLabel: {
     fontSize: '13px',
-    color: '#9ca3af'
+    color: theme.text.secondary
   },
   presetSelect: {
     flex: 1,
     padding: '8px 12px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '13px',
     outline: 'none'
   },
@@ -3626,9 +3671,9 @@ const styles = {
     width: '100%',
     padding: '10px',
     backgroundColor: 'transparent',
-    border: '1px solid #2d2d3d',
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     fontSize: '13px'
   },
@@ -3650,10 +3695,10 @@ const styles = {
     alignItems: 'center',
     gap: '12px',
     padding: '12px',
-    backgroundColor: '#1f1f2e',
+    backgroundColor: theme.bg.surface,
     border: 'none',
     borderRadius: '8px',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     textAlign: 'left',
     fontSize: '13px'
@@ -3668,16 +3713,16 @@ const styles = {
     backgroundColor: 'transparent',
     border: 'none',
     borderRadius: '6px',
-    color: '#6b7280',
+    color: theme.text.muted,
     cursor: 'pointer',
     fontSize: '13px'
   },
   tabActive: {
     padding: '8px 16px',
-    backgroundColor: '#1f1f2e',
+    backgroundColor: theme.bg.surface,
     border: 'none',
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     fontSize: '13px'
   },
@@ -3692,7 +3737,7 @@ const styles = {
   },
   controlGroup: {
     display: 'flex',
-    backgroundColor: '#1f1f2e',
+    backgroundColor: theme.bg.surface,
     borderRadius: '6px',
     overflow: 'hidden'
   },
@@ -3700,89 +3745,89 @@ const styles = {
     padding: '8px 12px',
     backgroundColor: 'transparent',
     border: 'none',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     fontSize: '13px',
-    borderRight: '1px solid #2d2d3d'
+    borderRight: `1px solid ${theme.bg.elevated}`
   },
   fontSelect: {
     flex: 1,
     padding: '8px 12px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '13px',
     outline: 'none'
   },
   optionButton: {
     flex: 1,
     padding: '8px 12px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     fontSize: '13px'
   },
   optionButtonActive: {
     flex: 1,
     padding: '8px 12px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     fontSize: '13px'
   },
   controlLabel: {
     fontSize: '13px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     marginRight: '8px'
   },
   select: {
     flex: 1,
     padding: '8px 12px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '13px',
     outline: 'none'
   },
   displayMode: {
     padding: '8px 12px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     fontSize: '12px'
   },
   displayModeActive: {
     padding: '8px 12px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     fontSize: '12px'
   },
   caseButton: {
     padding: '8px 16px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     fontSize: '12px'
   },
   caseButtonActive: {
     padding: '8px 16px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     fontSize: '12px'
   },
@@ -3792,11 +3837,11 @@ const styles = {
   sectionTitle: {
     fontSize: '13px',
     fontWeight: '600',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     margin: '0 0 12px 0'
   },
   textOverlaysList: {
-    backgroundColor: '#0a0a0f',
+    backgroundColor: theme.bg.page,
     borderRadius: '6px',
     padding: '12px',
     marginBottom: '12px'
@@ -3808,14 +3853,14 @@ const styles = {
   },
   textPosition: {
     fontSize: '12px',
-    color: '#6b7280'
+    color: theme.text.muted
   },
   textContent: {
     flex: 1,
     padding: '8px 12px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     borderRadius: '4px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '12px',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -3823,7 +3868,7 @@ const styles = {
   },
   noText: {
     fontSize: '13px',
-    color: '#6b7280',
+    color: theme.text.muted,
     margin: 0
   },
   lyricsButtonRow: {
@@ -3833,10 +3878,10 @@ const styles = {
   editLyricsButton: {
     flex: 1,
     padding: '10px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     fontSize: '12px'
   },
@@ -3853,7 +3898,7 @@ const styles = {
   },
   wordCount: {
     fontSize: '11px',
-    color: '#7c3aed',
+    color: theme.accent.primary,
     marginLeft: 'auto'
   },
   colorSection: {
@@ -3866,28 +3911,28 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'space-between',
     fontSize: '13px',
-    color: '#9ca3af'
+    color: theme.text.secondary
   },
   colorInput: {
     width: '40px',
     height: '40px',
     padding: 0,
-    border: '2px solid #2d2d3d',
+    border: `2px solid ${theme.bg.elevated}`,
     borderRadius: '8px',
     cursor: 'pointer',
     backgroundColor: 'transparent'
   },
   availableClipsSection: {
-    borderTop: '1px solid #1f1f2e',
+    borderTop: `1px solid ${theme.bg.surface}`,
     paddingTop: '16px',
     marginBottom: '16px'
   },
   addAllButton: {
     padding: '6px 12px',
-    backgroundColor: '#6366f1',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '12px',
     cursor: 'pointer'
   },
@@ -3898,7 +3943,7 @@ const styles = {
     maxHeight: '150px',
     overflowY: 'auto',
     padding: '8px',
-    backgroundColor: '#0a0a0f',
+    backgroundColor: theme.bg.page,
     borderRadius: '8px'
   },
   availableClip: {
@@ -3917,11 +3962,11 @@ const styles = {
     height: '80px',
     objectFit: 'cover',
     borderRadius: '4px',
-    backgroundColor: '#1f1f2e'
+    backgroundColor: theme.bg.surface
   },
   availableClipName: {
     fontSize: '10px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     textAlign: 'center',
     maxWidth: '70px',
     overflow: 'hidden',
@@ -3931,18 +3976,18 @@ const styles = {
   noAvailableClips: {
     textAlign: 'center',
     padding: '20px',
-    color: '#6b7280',
+    color: theme.text.muted,
     fontSize: '12px'
   },
   beatsInfo: {
     fontSize: '12px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     padding: '4px 8px',
-    backgroundColor: '#1f1f2e',
+    backgroundColor: theme.bg.surface,
     borderRadius: '4px'
   },
   clipsSection: {
-    borderTop: '1px solid #1f1f2e',
+    borderTop: `1px solid ${theme.bg.surface}`,
     paddingTop: '16px'
   },
   clipsSectionHeader: {
@@ -3958,19 +4003,19 @@ const styles = {
   },
   clipsFilterLabel: {
     fontSize: '12px',
-    color: '#6b7280'
+    color: theme.text.muted
   },
   clipsFilterSelect: {
     padding: '6px 12px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '4px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '12px',
     outline: 'none'
   },
   clipsTimeline: {
-    backgroundColor: '#0a0a0f',
+    backgroundColor: theme.bg.page,
     borderRadius: '8px',
     padding: '12px',
     marginBottom: '12px',
@@ -3979,7 +4024,7 @@ const styles = {
   noClips: {
     textAlign: 'center',
     padding: '20px',
-    color: '#6b7280',
+    color: theme.text.muted,
     fontSize: '13px'
   },
   clipsRow: {
@@ -3989,7 +4034,7 @@ const styles = {
   clipItem: {
     position: 'relative',
     height: '64px',
-    backgroundColor: '#1f1f2e',
+    backgroundColor: theme.bg.surface,
     borderRadius: '4px',
     overflow: 'hidden',
     cursor: 'pointer',
@@ -3997,7 +4042,7 @@ const styles = {
     flexShrink: 0
   },
   clipItemSelected: {
-    border: '2px solid #7c3aed'
+    border: `2px solid ${theme.accent.primary}`
   },
   clipThumb: {
     width: '100%',
@@ -4009,10 +4054,10 @@ const styles = {
     bottom: '4px',
     left: '4px',
     padding: '2px 6px',
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: theme.overlay.heavy,
     borderRadius: '4px',
     fontSize: '10px',
-    color: '#fff'
+    color: theme.text.primary
   },
   clipLock: {
     position: 'absolute',
@@ -4029,10 +4074,10 @@ const styles = {
   },
   clipAction: {
     padding: '6px 12px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '4px',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     fontSize: '12px'
   },
@@ -4051,11 +4096,11 @@ const styles = {
     gap: '8px',
     marginLeft: 'auto',
     fontSize: '12px',
-    color: '#9ca3af'
+    color: theme.text.secondary
   },
   scaleSlider: {
     width: '80px',
-    accentColor: '#7c3aed'
+    accentColor: theme.accent.primary
   },
   cutActions: {
     display: 'flex',
@@ -4064,7 +4109,7 @@ const styles = {
   },
   cutHint: {
     fontSize: '11px',
-    color: '#6b7280'
+    color: theme.text.muted
   },
   cutButtons: {
     display: 'flex',
@@ -4072,10 +4117,10 @@ const styles = {
   },
   cutButton: {
     padding: '8px 16px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     fontSize: '12px'
   },
@@ -4084,7 +4129,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '16px 20px',
-    borderTop: '1px solid #1f1f2e'
+    borderTop: `1px solid ${theme.bg.surface}`
   },
   footerLeft: {
     display: 'flex',
@@ -4094,9 +4139,9 @@ const styles = {
   resetButton: {
     padding: '10px 16px',
     backgroundColor: 'transparent',
-    border: '1px solid #2d2d3d',
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     fontSize: '13px'
   },
@@ -4114,9 +4159,9 @@ const styles = {
   },
   shortcutHint: {
     fontSize: '11px',
-    color: '#6b7280',
+    color: theme.text.muted,
     padding: '4px 8px',
-    backgroundColor: '#1f1f2e',
+    backgroundColor: theme.bg.surface,
     borderRadius: '4px'
   },
   batchButton: {
@@ -4124,10 +4169,10 @@ const styles = {
     alignItems: 'center',
     gap: '6px',
     padding: '10px 16px',
-    background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+    background: `linear-gradient(135deg, ${theme.accent.primary}, ${theme.accent.muted})`,
     border: 'none',
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     fontSize: '13px',
     fontWeight: '500',
@@ -4135,19 +4180,19 @@ const styles = {
   },
   cancelButton: {
     padding: '10px 20px',
-    backgroundColor: '#1f1f2e',
+    backgroundColor: theme.bg.surface,
     border: 'none',
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     fontSize: '13px'
   },
   confirmButton: {
     padding: '10px 20px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     fontSize: '13px',
     fontWeight: '500'
@@ -4155,7 +4200,7 @@ const styles = {
   lyricsOverlay: {
     position: 'absolute',
     inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: theme.overlay.heavy,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -4163,24 +4208,24 @@ const styles = {
   },
   lyricsModal: {
     width: '400px',
-    backgroundColor: '#111118',
+    backgroundColor: theme.bg.input,
     borderRadius: '12px',
     padding: '20px'
   },
   lyricsTitle: {
     fontSize: '16px',
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text.primary,
     margin: '0 0 16px 0'
   },
   lyricsTextarea: {
     width: '100%',
     height: '200px',
     padding: '12px',
-    backgroundColor: '#0a0a0f',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.page,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '8px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '14px',
     resize: 'none',
     outline: 'none',
@@ -4192,14 +4237,14 @@ const styles = {
     gap: '8px',
     marginBottom: '16px',
     fontSize: '13px',
-    color: '#9ca3af'
+    color: theme.text.secondary
   },
   syncButton: {
     padding: '8px 12px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     fontSize: '12px'
   },
@@ -4211,22 +4256,22 @@ const styles = {
   analyzingOverlay: {
     position: 'absolute',
     inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: theme.overlay.heavy,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     gap: '16px',
-    color: '#fff'
+    color: theme.text.primary
   },
   spinner: {
     width: '40px',
     height: '40px',
-    border: '3px solid #2d2d3d',
-    borderTopColor: '#7c3aed',
+    border: `3px solid ${theme.bg.elevated}`,
+    borderTopColor: theme.accent.primary,
     borderRadius: '50%',
     animation: 'spin 1s linear infinite'
   }
-};
+});
 
 export default VideoEditorModal;

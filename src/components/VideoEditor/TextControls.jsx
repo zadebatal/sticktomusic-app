@@ -1,6 +1,9 @@
 import React from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const TextControls = ({ textStyle, onChange }) => {
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
   const handleChange = (key, value) => {
     onChange({ ...textStyle, [key]: value });
   };
@@ -64,7 +67,7 @@ const TextControls = ({ textStyle, onChange }) => {
                 style={{
                   ...styles.colorPreset,
                   backgroundColor: color,
-                  border: textStyle.color === color ? '2px solid #7c3aed' : '2px solid transparent'
+                  border: textStyle.color === color ? `2px solid ${theme.accent.primary}` : '2px solid transparent'
                 }}
               />
             ))}
@@ -110,7 +113,7 @@ const TextControls = ({ textStyle, onChange }) => {
                   style={{
                     ...styles.colorPreset,
                     backgroundColor: color,
-                    border: textStyle.outlineColor === color ? '2px solid #7c3aed' : '2px solid #334155'
+                    border: textStyle.outlineColor === color ? `2px solid ${theme.accent.primary}` : `2px solid ${theme.bg.elevated}`
                   }}
                 />
               ))}
@@ -195,20 +198,20 @@ const TextControls = ({ textStyle, onChange }) => {
   );
 };
 
-const styles = {
+const getStyles = (theme) => ({
   container: {
     display: 'flex',
     flexDirection: 'column',
     gap: '16px',
     padding: '16px',
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.bg.surface,
     borderRadius: '8px'
   },
   title: {
     margin: 0,
     fontSize: '14px',
     fontWeight: '600',
-    color: '#e2e8f0'
+    color: theme.text.primary
   },
   controlGroup: {
     display: 'flex',
@@ -217,7 +220,7 @@ const styles = {
   },
   label: {
     fontSize: '12px',
-    color: '#94a3b8',
+    color: theme.text.secondary,
     fontWeight: '500'
   },
   sizeControls: {
@@ -227,8 +230,8 @@ const styles = {
   },
   sizeButton: {
     padding: '6px 12px',
-    backgroundColor: '#334155',
-    color: 'white',
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary,
     border: 'none',
     borderRadius: '4px',
     cursor: 'pointer',
@@ -239,13 +242,13 @@ const styles = {
     minWidth: '60px',
     textAlign: 'center',
     fontSize: '14px',
-    color: '#e2e8f0'
+    color: theme.text.primary
   },
   select: {
     padding: '8px 12px',
-    backgroundColor: '#334155',
-    color: 'white',
-    border: '1px solid #475569',
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary,
+    border: `1px solid ${theme.border.subtle}`,
     borderRadius: '6px',
     cursor: 'pointer',
     fontSize: '13px'
@@ -280,8 +283,8 @@ const styles = {
   },
   toggle: {
     padding: '6px 12px',
-    backgroundColor: '#334155',
-    color: '#94a3b8',
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.secondary,
     border: 'none',
     borderRadius: '4px',
     cursor: 'pointer',
@@ -289,7 +292,7 @@ const styles = {
   },
   toggleActive: {
     padding: '6px 12px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     color: 'white',
     border: 'none',
     borderRadius: '4px',
@@ -299,13 +302,13 @@ const styles = {
   preview: {
     marginTop: '8px',
     padding: '16px',
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.bg.page,
     borderRadius: '6px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: '60px'
   }
-};
+});
 
 export default TextControls;

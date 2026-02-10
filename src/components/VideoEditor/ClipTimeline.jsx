@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const ClipTimeline = ({
   clips = [],
@@ -10,6 +11,7 @@ const ClipTimeline = ({
   onSelect,
   beats = []
 }) => {
+  const { theme } = useTheme();
   const timelineRef = useRef(null);
   const [zoom, setZoom] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
@@ -105,6 +107,8 @@ const ClipTimeline = ({
   const getClipStartTime = (index) => {
     return clips.slice(0, index).reduce((sum, c) => sum + c.duration, 0);
   };
+
+  const styles = getStyles(theme);
 
   return (
     <div style={styles.container}>
@@ -213,7 +217,7 @@ const ClipTimeline = ({
                   ...styles.clip,
                   left: clipStart * pixelsPerSecond,
                   width: clip.duration * pixelsPerSecond,
-                  borderColor: index === selectedIndex ? '#7c3aed' : '#334155'
+                  borderColor: index === selectedIndex ? theme.accent.primary : theme.bg.elevated
                 }}
                 onClick={(e) => handleClipClick(index, e)}
               >
@@ -253,7 +257,7 @@ const ClipTimeline = ({
   );
 };
 
-const styles = {
+const getStyles = (theme) => ({
   container: {
     display: 'flex',
     flexDirection: 'column',
@@ -267,7 +271,7 @@ const styles = {
   },
   label: {
     fontWeight: '600',
-    color: '#94a3b8',
+    color: theme.text.secondary,
     fontSize: '13px'
   },
   actions: {
@@ -276,9 +280,9 @@ const styles = {
   },
   actionButton: {
     padding: '4px 10px',
-    backgroundColor: '#1e293b',
-    color: '#e2e8f0',
-    border: '1px solid #334155',
+    backgroundColor: theme.bg.surface,
+    color: theme.text.primary,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '4px',
     cursor: 'pointer',
     fontSize: '12px'
@@ -289,7 +293,7 @@ const styles = {
     gap: '8px',
     marginLeft: 'auto',
     fontSize: '12px',
-    color: '#94a3b8'
+    color: theme.text.secondary
   },
   zoomSlider: {
     width: '80px',
@@ -298,7 +302,7 @@ const styles = {
   timeline: {
     position: 'relative',
     height: '100px',
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.bg.surface,
     borderRadius: '8px',
     overflow: 'auto',
     cursor: 'pointer'
@@ -308,13 +312,13 @@ const styles = {
     top: 0,
     left: 0,
     height: '20px',
-    borderBottom: '1px solid #334155'
+    borderBottom: `1px solid ${theme.bg.elevated}`
   },
   timeMarker: {
     position: 'absolute',
     top: '4px',
     fontSize: '10px',
-    color: '#64748b',
+    color: theme.text.muted,
     transform: 'translateX(-50%)'
   },
   beatMarkers: {
@@ -340,8 +344,8 @@ const styles = {
   clip: {
     position: 'absolute',
     height: '52px',
-    backgroundColor: '#334155',
-    border: '2px solid #334155',
+    backgroundColor: theme.bg.elevated,
+    border: `2px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
     overflow: 'hidden',
     cursor: 'pointer',
@@ -364,8 +368,8 @@ const styles = {
   },
   clipDuration: {
     fontSize: '10px',
-    color: 'white',
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    color: theme.text.primary,
+    backgroundColor: theme.overlay.heavy,
     padding: '1px 4px',
     borderRadius: '2px'
   },
@@ -384,6 +388,6 @@ const styles = {
     pointerEvents: 'none',
     zIndex: 10
   }
-};
+});
 
 export default ClipTimeline;

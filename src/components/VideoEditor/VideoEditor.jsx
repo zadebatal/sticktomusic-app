@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 import VideoPreview from './VideoPreview';
 import ClipTimeline from './ClipTimeline';
 import WordTimeline from './WordTimeline';
@@ -14,6 +15,8 @@ const VideoEditor = ({
   contentLibraries = [],
   onClose
 }) => {
+  const { theme } = useTheme();
+
   // Project state
   const [projectName, setProjectName] = useState(initialProject?.name || 'Untitled Project');
   const [status, setStatus] = useState(VIDEO_STATUS.DRAFT);
@@ -235,31 +238,33 @@ const VideoEditor = ({
     onExport?.(project);
   }, [projectName, videoFile, videoDuration, audioFile, audioDuration, clips, words, textStyle, onExport]);
 
+  const s = getStyles(theme);
+
   return (
-    <div className="video-editor" style={styles.container}>
+    <div className="video-editor" style={s.container}>
       {/* Header */}
-      <div style={styles.header}>
-        <div style={styles.headerLeft}>
-          <button onClick={onClose} style={styles.backButton}>← Back</button>
+      <div style={s.header}>
+        <div style={s.headerLeft}>
+          <button onClick={onClose} style={s.backButton}>← Back</button>
           <input
             type="text"
             value={projectName}
             onChange={(e) => setProjectName(e.target.value)}
-            style={styles.projectNameInput}
+            style={s.projectNameInput}
           />
         </div>
-        <div style={styles.headerRight}>
-          <span style={styles.statusBadge}>{status}</span>
-          {bpm && <span style={styles.bpmBadge}>{bpm} BPM</span>}
-          <button onClick={handleSave} style={styles.saveButton}>Save</button>
-          <button onClick={handleExport} style={styles.exportButton}>Export Video</button>
+        <div style={s.headerRight}>
+          <span style={s.statusBadge}>{status}</span>
+          {bpm && <span style={s.bpmBadge}>{bpm} BPM</span>}
+          <button onClick={handleSave} style={s.saveButton}>Save</button>
+          <button onClick={handleExport} style={s.exportButton}>Export Video</button>
         </div>
       </div>
 
       {/* Main Editor Area */}
-      <div style={styles.mainArea}>
+      <div style={s.mainArea}>
         {/* Left Panel - Preview */}
-        <div style={styles.previewPanel}>
+        <div style={s.previewPanel}>
           {videoFile ? (
             <VideoPreview
               videoSrc={videoFile}
@@ -272,12 +277,12 @@ const VideoEditor = ({
               textStyle={textStyle}
             />
           ) : (
-            <div style={styles.uploadPrompt}>
-              <div style={styles.uploadIcon}>🎬</div>
+            <div style={s.uploadPrompt}>
+              <div style={s.uploadIcon}>🎬</div>
               <p>Upload a video to get started</p>
               <button
                 onClick={() => fileInputRef.current?.click()}
-                style={styles.uploadButton}
+                style={s.uploadButton}
               >
                 Choose Video
               </button>
@@ -292,10 +297,10 @@ const VideoEditor = ({
           )}
 
           {videoFile && !audioFile && (
-            <div style={styles.audioUploadPrompt}>
+            <div style={s.audioUploadPrompt}>
               <button
                 onClick={() => audioInputRef.current?.click()}
-                style={styles.audioButton}
+                style={s.audioButton}
               >
                 🎵 Add Audio Track
               </button>
@@ -310,15 +315,15 @@ const VideoEditor = ({
           )}
 
           {isAnalyzing && (
-            <div style={styles.analyzingOverlay}>
-              <div style={styles.spinner}></div>
+            <div style={s.analyzingOverlay}>
+              <div style={s.spinner}></div>
               <p>Analyzing beats...</p>
             </div>
           )}
         </div>
 
         {/* Right Panel - Controls */}
-        <div style={styles.controlsPanel}>
+        <div style={s.controlsPanel}>
           {/* Text Style Controls */}
           <TextControls
             textStyle={textStyle}
@@ -326,21 +331,21 @@ const VideoEditor = ({
           />
 
           {/* Tab Switcher */}
-          <div style={styles.tabs}>
+          <div style={s.tabs}>
             <button
-              style={activeTab === 'clips' ? styles.activeTab : styles.tab}
+              style={activeTab === 'clips' ? s.activeTab : s.tab}
               onClick={() => setActiveTab('clips')}
             >
               Clips
             </button>
             <button
-              style={activeTab === 'words' ? styles.activeTab : styles.tab}
+              style={activeTab === 'words' ? s.activeTab : s.tab}
               onClick={() => setActiveTab('words')}
             >
               Lyrics
             </button>
             <button
-              style={activeTab === 'library' ? styles.activeTab : styles.tab}
+              style={activeTab === 'library' ? s.activeTab : s.tab}
               onClick={() => setActiveTab('library')}
             >
               Library
@@ -348,21 +353,21 @@ const VideoEditor = ({
           </div>
 
           {/* Tab Content */}
-          <div style={styles.tabContent}>
+          <div style={s.tabContent}>
             {activeTab === 'clips' && (
               <div>
-                <div style={styles.clipActions}>
+                <div style={s.clipActions}>
                   <button
                     onClick={handleCutByBeat}
                     disabled={!beats.length}
-                    style={styles.actionButton}
+                    style={s.actionButton}
                   >
                     Cut by Beat
                   </button>
                   <button
                     onClick={handleCutByWord}
                     disabled={!words.length}
-                    style={styles.actionButton}
+                    style={s.actionButton}
                   >
                     Cut by Word
                   </button>
@@ -374,7 +379,7 @@ const VideoEditor = ({
               <div>
                 <textarea
                   placeholder="Paste lyrics here..."
-                  style={styles.lyricsInput}
+                  style={s.lyricsInput}
                   onBlur={(e) => handleImportLyrics(e.target.value)}
                 />
               </div>
@@ -404,7 +409,7 @@ const VideoEditor = ({
       </div>
 
       {/* Bottom Panel - Timelines */}
-      <div style={styles.timelinePanel}>
+      <div style={s.timelinePanel}>
         {/* Clip Timeline */}
         <ClipTimeline
           clips={clips}
@@ -432,13 +437,13 @@ const VideoEditor = ({
   );
 };
 
-const styles = {
+const getStyles = (theme) => ({
   container: {
     display: 'flex',
     flexDirection: 'column',
     height: '100vh',
-    backgroundColor: '#1a1a2e',
-    color: 'white',
+    backgroundColor: theme.bg.input,
+    color: theme.text.primary,
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
   },
   header: {
@@ -446,8 +451,8 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '12px 20px',
-    backgroundColor: '#16213e',
-    borderBottom: '1px solid #0f3460'
+    backgroundColor: theme.bg.surface,
+    borderBottom: `1px solid ${theme.border.default}`
   },
   headerLeft: {
     display: 'flex',
@@ -462,44 +467,44 @@ const styles = {
   backButton: {
     padding: '8px 12px',
     backgroundColor: 'transparent',
-    color: '#94a3b8',
-    border: '1px solid #334155',
+    color: theme.text.secondary,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
     cursor: 'pointer'
   },
   projectNameInput: {
     padding: '8px 12px',
-    backgroundColor: '#1e293b',
-    color: 'white',
-    border: '1px solid #334155',
+    backgroundColor: theme.bg.input,
+    color: theme.text.primary,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
     fontSize: '16px',
     fontWeight: '600'
   },
   statusBadge: {
     padding: '4px 10px',
-    backgroundColor: '#334155',
+    backgroundColor: theme.bg.elevated,
     borderRadius: '12px',
     fontSize: '12px',
     textTransform: 'capitalize'
   },
   bpmBadge: {
     padding: '4px 10px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     borderRadius: '12px',
     fontSize: '12px'
   },
   saveButton: {
     padding: '8px 16px',
-    backgroundColor: '#334155',
-    color: 'white',
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary,
     border: 'none',
     borderRadius: '6px',
     cursor: 'pointer'
   },
   exportButton: {
     padding: '8px 16px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     color: 'white',
     border: 'none',
     borderRadius: '6px',
@@ -518,7 +523,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '20px',
-    backgroundColor: '#0f0f23',
+    backgroundColor: theme.bg.page,
     position: 'relative'
   },
   uploadPrompt: {
@@ -527,16 +532,16 @@ const styles = {
     alignItems: 'center',
     gap: '16px',
     padding: '40px',
-    border: '2px dashed #334155',
+    border: `2px dashed ${theme.bg.elevated}`,
     borderRadius: '12px',
-    color: '#94a3b8'
+    color: theme.text.secondary
   },
   uploadIcon: {
     fontSize: '48px'
   },
   uploadButton: {
     padding: '12px 24px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     color: 'white',
     border: 'none',
     borderRadius: '8px',
@@ -548,9 +553,9 @@ const styles = {
   },
   audioButton: {
     padding: '10px 20px',
-    backgroundColor: '#1e293b',
-    color: 'white',
-    border: '1px solid #334155',
+    backgroundColor: theme.bg.input,
+    color: theme.text.primary,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '8px',
     cursor: 'pointer'
   },
@@ -560,7 +565,7 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: theme.overlay.heavy,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -570,8 +575,8 @@ const styles = {
   spinner: {
     width: '40px',
     height: '40px',
-    border: '4px solid #334155',
-    borderTopColor: '#7c3aed',
+    border: `4px solid ${theme.bg.elevated}`,
+    borderTopColor: theme.accent.primary,
     borderRadius: '50%',
     animation: 'spin 1s linear infinite'
   },
@@ -580,7 +585,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     padding: '20px',
-    backgroundColor: '#16213e',
+    backgroundColor: theme.bg.surface,
     overflow: 'auto'
   },
   tabs: {
@@ -591,15 +596,15 @@ const styles = {
   },
   tab: {
     padding: '8px 16px',
-    backgroundColor: '#1e293b',
-    color: '#94a3b8',
+    backgroundColor: theme.bg.input,
+    color: theme.text.secondary,
     border: 'none',
     borderRadius: '6px',
     cursor: 'pointer'
   },
   activeTab: {
     padding: '8px 16px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     color: 'white',
     border: 'none',
     borderRadius: '6px',
@@ -616,8 +621,8 @@ const styles = {
   },
   actionButton: {
     padding: '8px 12px',
-    backgroundColor: '#334155',
-    color: 'white',
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary,
     border: 'none',
     borderRadius: '6px',
     cursor: 'pointer',
@@ -627,20 +632,20 @@ const styles = {
     width: '100%',
     height: '200px',
     padding: '12px',
-    backgroundColor: '#1e293b',
-    color: 'white',
-    border: '1px solid #334155',
+    backgroundColor: theme.bg.input,
+    color: theme.text.primary,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '8px',
     resize: 'vertical',
     fontFamily: 'monospace'
   },
   timelinePanel: {
     height: '200px',
-    backgroundColor: '#0f0f23',
-    borderTop: '1px solid #334155',
+    backgroundColor: theme.bg.page,
+    borderTop: `1px solid ${theme.bg.elevated}`,
     padding: '12px',
     overflow: 'auto'
   }
-};
+});
 
 export default VideoEditor;

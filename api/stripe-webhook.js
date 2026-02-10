@@ -191,5 +191,51 @@ export default async function handler(req, res) {
     console.log(`💰 Payment succeeded: ${paymentIntent.id}`);
   }
 
+  // Handle invoice payment failure
+  if (event.type === 'invoice.payment_failed') {
+    const invoice = event.data.object;
+    const customerEmail = invoice.customer_email;
+    console.warn(`⚠️ Invoice payment failed for ${customerEmail}: ${invoice.id}`);
+
+    if (customerEmail && db) {
+      try {
+        await db.collection('allowedUsers').doc(customerEmail.toLowerCase()).update({
+          subscriptionStatus: 'past_due',
+          updatedAt: new Date().toISOString(),
+        });
+
+        await sendNotificationEmail(
+          customerEmail,
+          'StickToMusic Payment Failed',
+          `
+            <p>Hi,</p>
+            <p>We were unable to process your payment. Please update your payment method to avoid service interruption.</p>
+            <p>Visit <a href="https://sticktomusic.com">StickToMusic</a> to update your billing info.</p>
+          `
+        );
+      } catch (err) {
+        console.warn('Could not process payment failure:', err);
+      }
+    }
+  }
+
+  // Handle charge refunded
+  if (event.type === 'charge.refunded') {
+    const charge = event.data.object;
+    const customerEmail = charge.metadata?.email || charge.billing_details?.email;
+    console.log(`💸 Charge refunded: ${charge.id} for ${customerEmail}`);
+
+    if (customerEmail && db) {
+      try {
+        await db.collection('allowedUsers').doc(customerEmail.toLowerCase()).update({
+          subscriptionStatus: 'refunded',
+          updatedAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.warn('Could not process refund:', err);
+      }
+    }
+  }
+
   res.status(200).json({ received: true });
 }

@@ -507,6 +507,11 @@ export const saveLibrary = (artistId, library) => {
  * @returns {Object} The added item with ID
  */
 export const addToLibrary = (artistId, mediaItem) => {
+  // BUG-027: Validate audio duration > 0
+  if (mediaItem.type === 'audio' && mediaItem.duration !== undefined && mediaItem.duration <= 0) {
+    console.warn('[Library] Rejected audio item with invalid duration:', mediaItem.duration);
+    return null;
+  }
   const library = getLibrary(artistId);
   const newItem = mediaItem.id ? mediaItem : createMediaItem(mediaItem);
   library.push(newItem);
@@ -2200,12 +2205,14 @@ export const subscribeToCollections = (db, artistId, callback) => {
  * @returns {Promise<void>}
  */
 export const saveCollectionToFirestore = async (db, artistId, collectionData) => {
-  if (!db || !artistId || !collectionData?.id) return;
+  if (!db || !artistId || !collectionData?.id) return false;
   try {
     const docRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', collectionData.id);
     await setDoc(docRef, { ...collectionData, updatedAt: serverTimestamp() });
+    return true;
   } catch (error) {
     console.error('[Collections] Failed to save to Firestore:', error);
+    return false;
   }
 };
 
@@ -2222,13 +2229,15 @@ export const addToCollectionAsync = async (db, artistId, collectionId, mediaIds)
   addToCollection(artistId, collectionId, mediaIds);
 
   // Sync collection to Firestore
+  let syncedToCloud = false;
   if (db && artistId) {
     const collections = getUserCollections(artistId);
     const col = collections.find(c => c.id === collectionId);
     if (col) {
-      await saveCollectionToFirestore(db, artistId, col);
+      syncedToCloud = await saveCollectionToFirestore(db, artistId, col);
     }
   }
+  return { success: true, syncedToCloud };
 };
 
 /**
@@ -2244,13 +2253,15 @@ export const removeFromCollectionAsync = async (db, artistId, collectionId, medi
   removeFromCollection(artistId, collectionId, mediaIds);
 
   // Sync collection to Firestore
+  let syncedToCloud = false;
   if (db && artistId) {
     const collections = getUserCollections(artistId);
     const col = collections.find(c => c.id === collectionId);
     if (col) {
-      await saveCollectionToFirestore(db, artistId, col);
+      syncedToCloud = await saveCollectionToFirestore(db, artistId, col);
     }
   }
+  return { success: true, syncedToCloud };
 };
 
 /**
@@ -2267,13 +2278,15 @@ export const assignToBankAsync = async (db, artistId, collectionId, mediaIds, ba
   assignToBank(artistId, collectionId, mediaIds, bank);
 
   // Sync collection to Firestore
+  let syncedToCloud = false;
   if (db && artistId) {
     const collections = getUserCollections(artistId);
     const col = collections.find(c => c.id === collectionId);
     if (col) {
-      await saveCollectionToFirestore(db, artistId, col);
+      syncedToCloud = await saveCollectionToFirestore(db, artistId, col);
     }
   }
+  return { success: true, syncedToCloud };
 };
 
 /**
@@ -2289,11 +2302,12 @@ export const updateCollectionAsync = async (db, artistId, collectionId, updates)
   const result = updateCollection(artistId, collectionId, updates);
 
   // Sync to Firestore
+  let syncedToCloud = false;
   if (db && artistId && result) {
-    await saveCollectionToFirestore(db, artistId, result);
+    syncedToCloud = await saveCollectionToFirestore(db, artistId, result);
   }
 
-  return result;
+  return { success: !!result, data: result, syncedToCloud };
 };
 
 /**
@@ -2308,11 +2322,12 @@ export const deleteCollectionAsync = async (db, artistId, collectionId) => {
   const result = deleteCollection(artistId, collectionId);
 
   // Delete from Firestore
+  let syncedToCloud = false;
   if (db && artistId && result) {
-    await deleteCollectionFromFirestore(db, artistId, collectionId);
+    syncedToCloud = await deleteCollectionFromFirestore(db, artistId, collectionId);
   }
 
-  return result;
+  return { success: !!result, syncedToCloud };
 };
 
 /**
@@ -2323,12 +2338,14 @@ export const deleteCollectionAsync = async (db, artistId, collectionId) => {
  * @returns {Promise<void>}
  */
 export const deleteCollectionFromFirestore = async (db, artistId, collectionId) => {
-  if (!db || !artistId || !collectionId) return;
+  if (!db || !artistId || !collectionId) return false;
   try {
     const docRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', collectionId);
     await deleteDoc(docRef);
+    return true;
   } catch (error) {
     console.error('[Collections] Failed to delete from Firestore:', error);
+    return false;
   }
 };
 

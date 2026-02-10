@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 
 /**
  * LyricBank - Full song lyrics storage with paragraph/line selection
@@ -18,6 +19,9 @@ const LyricBank = ({
   compact = false, // Compact mode for sidebar display
   showAddForm = true
 }) => {
+  const { theme } = useTheme();
+  const styles = useMemo(() => getStyles(theme), [theme]);
+  const compactStyles = useMemo(() => getCompactStyles(theme), [theme]);
   const [expandedLyricsId, setExpandedLyricsId] = useState(null);
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -258,7 +262,7 @@ const LyricBank = ({
                                 ...compactStyles.lyricLine,
                                 ...(line.trim() ? { cursor: 'grab' } : {}),
                                 ...(selectedLines.includes(i) && expandedLyricsId === lyric.id
-                                  ? { backgroundColor: 'rgba(124,58,237,0.3)', color: '#fff', borderRadius: '3px' }
+                                  ? { backgroundColor: `${theme.accent.primary}4d`, color: '#fff', borderRadius: '3px' }
                                   : {})
                               }}
                               onClick={() => {
@@ -274,7 +278,7 @@ const LyricBank = ({
                             </div>
                           ))}
                           {selectedLines.length > 1 && onSelectText && (
-                            <div style={{ display: 'flex', gap: '6px', padding: '6px 4px 2px', borderTop: '1px solid rgba(255,255,255,0.05)', marginTop: '4px' }}>
+                            <div style={{ display: 'flex', gap: '6px', padding: '6px 4px 2px', borderTop: `1px solid ${theme.border.subtle}`, marginTop: '4px' }}>
                               <button
                                 style={{ ...compactStyles.addBtn, flex: 1 }}
                                 onClick={() => handleUseSelected(lyric)}
@@ -507,12 +511,12 @@ const LyricBank = ({
 };
 
 // Main styles
-const styles = {
+const getStyles = (theme) => ({
   container: {
-    backgroundColor: '#111118',
+    backgroundColor: theme.bg.input,
     borderRadius: '12px',
     padding: '16px',
-    border: '1px solid #1f1f2e',
+    border: `1px solid ${theme.bg.surface}`,
     userSelect: 'none'
   },
   header: {
@@ -529,19 +533,19 @@ const styles = {
   title: {
     fontSize: '14px',
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text.primary,
     margin: 0
   },
   count: {
     fontSize: '13px',
-    color: '#6b7280'
+    color: theme.text.muted
   },
   addButton: {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
     padding: '6px 12px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '6px',
     color: '#fff',
@@ -550,7 +554,7 @@ const styles = {
     fontWeight: '500'
   },
   addForm: {
-    backgroundColor: '#0a0a0f',
+    backgroundColor: theme.bg.page,
     borderRadius: '8px',
     padding: '16px',
     marginBottom: '16px'
@@ -558,10 +562,10 @@ const styles = {
   titleInput: {
     width: '100%',
     padding: '10px 12px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '14px',
     marginBottom: '12px',
     outline: 'none'
@@ -569,10 +573,10 @@ const styles = {
   contentTextarea: {
     width: '100%',
     padding: '12px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '13px',
     fontFamily: 'monospace',
     resize: 'vertical',
@@ -588,15 +592,15 @@ const styles = {
   cancelButton: {
     padding: '8px 16px',
     backgroundColor: 'transparent',
-    border: '1px solid #2d2d3d',
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     fontSize: '13px'
   },
   saveButton: {
     padding: '8px 16px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '6px',
     color: '#fff',
@@ -615,16 +619,16 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '32px',
-    color: '#6b7280',
+    color: theme.text.muted,
     textAlign: 'center'
   },
   emptyHint: {
     fontSize: '12px',
-    color: '#4b5563',
+    color: theme.text.muted,
     marginTop: '4px'
   },
   lyricCard: {
-    backgroundColor: '#0a0a0f',
+    backgroundColor: theme.bg.page,
     borderRadius: '8px',
     overflow: 'hidden'
   },
@@ -644,7 +648,7 @@ const styles = {
   lyricTitle: {
     fontSize: '14px',
     fontWeight: '500',
-    color: '#fff'
+    color: theme.text.primary
   },
   lyricActions: {
     display: 'flex',
@@ -671,12 +675,12 @@ const styles = {
   },
   selectionHint: {
     fontSize: '11px',
-    color: '#6b7280',
+    color: theme.text.muted,
     marginBottom: '8px',
     fontStyle: 'italic'
   },
   linesContainer: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: theme.bg.input,
     borderRadius: '6px',
     padding: '8px',
     maxHeight: '300px',
@@ -693,7 +697,7 @@ const styles = {
     touchAction: 'none'
   },
   lyricLineSelected: {
-    backgroundColor: 'rgba(124, 58, 237, 0.3)',
+    backgroundColor: `${theme.accent.primary}4d`,
     color: '#fff'
   },
   lyricLineEmpty: {
@@ -701,7 +705,7 @@ const styles = {
   },
   lineNumber: {
     fontSize: '10px',
-    color: '#4b5563',
+    color: theme.text.muted,
     width: '24px',
     textAlign: 'right',
     flexShrink: 0,
@@ -709,7 +713,7 @@ const styles = {
   },
   lineText: {
     fontSize: '13px',
-    color: '#d1d5db',
+    color: theme.text.primary,
     lineHeight: '1.5',
     wordBreak: 'break-word'
   },
@@ -719,16 +723,16 @@ const styles = {
     gap: '12px',
     marginTop: '12px',
     padding: '8px 12px',
-    backgroundColor: 'rgba(124, 58, 237, 0.1)',
+    backgroundColor: `${theme.accent.primary}1a`,
     borderRadius: '6px'
   },
   selectionCount: {
     fontSize: '12px',
-    color: '#a78bfa'
+    color: theme.accent.hover
   },
   useSelectedBtn: {
     padding: '6px 12px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '4px',
     color: '#fff',
@@ -739,15 +743,15 @@ const styles = {
   clearSelectionBtn: {
     padding: '6px 12px',
     backgroundColor: 'transparent',
-    border: '1px solid #4b5563',
+    border: `1px solid ${theme.text.muted}`,
     borderRadius: '4px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     fontSize: '12px'
   },
   editForm: {
     padding: '16px',
-    borderTop: '1px solid #1f1f2e'
+    borderTop: `1px solid ${theme.bg.surface}`
   },
   editFormActions: {
     display: 'flex',
@@ -755,10 +759,10 @@ const styles = {
     gap: '8px',
     marginTop: '12px'
   }
-};
+});
 
 // Compact styles for sidebar
-const compactStyles = {
+const getCompactStyles = (theme) => ({
   container: {
     padding: '0'
   },
@@ -770,21 +774,21 @@ const compactStyles = {
   },
   count: {
     fontSize: '10px',
-    color: 'rgba(255,255,255,0.35)'
+    color: theme.text.muted
   },
   addBtn: {
     padding: '3px 8px',
-    backgroundColor: 'rgba(124,58,237,0.25)',
+    backgroundColor: `${theme.accent.primary}40`,
     border: 'none',
     borderRadius: '4px',
-    color: '#a78bfa',
+    color: theme.accent.hover,
     fontSize: '10px',
     fontWeight: 600,
     cursor: 'pointer'
   },
   empty: {
     fontSize: '11px',
-    color: 'rgba(255,255,255,0.25)',
+    color: theme.text.muted,
     textAlign: 'center',
     padding: '12px 4px'
   },
@@ -794,7 +798,7 @@ const compactStyles = {
     gap: '3px'
   },
   item: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: theme.hover.bg,
     borderRadius: '6px',
     overflow: 'hidden'
   },
@@ -809,7 +813,7 @@ const compactStyles = {
     display: 'block',
     fontSize: '11px',
     fontWeight: 500,
-    color: '#fff',
+    color: theme.text.primary,
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis'
@@ -817,7 +821,7 @@ const compactStyles = {
   itemPreview: {
     display: 'block',
     fontSize: '10px',
-    color: 'rgba(255,255,255,0.3)',
+    color: theme.text.muted,
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis'
@@ -835,12 +839,12 @@ const compactStyles = {
     padding: '4px 8px 8px',
     maxHeight: '150px',
     overflowY: 'auto',
-    borderTop: '1px solid rgba(255,255,255,0.05)',
-    backgroundColor: 'rgba(0,0,0,0.2)'
+    borderTop: `1px solid ${theme.border.subtle}`,
+    backgroundColor: theme.overlay.light
   },
   lyricLine: {
     fontSize: '10px',
-    color: 'rgba(255,255,255,0.5)',
+    color: theme.text.secondary,
     lineHeight: '1.6',
     padding: '0 4px',
     fontFamily: 'monospace'
@@ -854,10 +858,10 @@ const compactStyles = {
   editorTitle: {
     width: '100%',
     padding: '7px 10px',
-    backgroundColor: '#1a1a2e',
-    border: '1px solid rgba(255,255,255,0.1)',
+    backgroundColor: theme.bg.input,
+    border: `1px solid ${theme.border.subtle}`,
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '12px',
     fontWeight: 500,
     outline: 'none',
@@ -866,10 +870,10 @@ const compactStyles = {
   editorBody: {
     width: '100%',
     padding: '8px 10px',
-    backgroundColor: '#1a1a2e',
-    border: '1px solid rgba(255,255,255,0.1)',
+    backgroundColor: theme.bg.input,
+    border: `1px solid ${theme.border.subtle}`,
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '11px',
     fontFamily: 'monospace',
     lineHeight: '1.6',
@@ -886,15 +890,15 @@ const compactStyles = {
   editorCancel: {
     padding: '5px 10px',
     backgroundColor: 'transparent',
-    border: '1px solid rgba(255,255,255,0.1)',
+    border: `1px solid ${theme.border.subtle}`,
     borderRadius: '5px',
-    color: 'rgba(255,255,255,0.5)',
+    color: theme.text.secondary,
     fontSize: '11px',
     cursor: 'pointer'
   },
   editorSave: {
     padding: '5px 10px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '5px',
     color: '#fff',
@@ -904,7 +908,7 @@ const compactStyles = {
   },
   editorReplace: {
     padding: '5px 10px',
-    backgroundColor: '#6366f1',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '5px',
     color: '#fff',
@@ -914,14 +918,14 @@ const compactStyles = {
   },
   editorSaveNew: {
     padding: '5px 10px',
-    backgroundColor: 'rgba(124,58,237,0.25)',
+    backgroundColor: `${theme.accent.primary}40`,
     border: 'none',
     borderRadius: '5px',
-    color: '#a78bfa',
+    color: theme.accent.hover,
     fontSize: '11px',
     fontWeight: 600,
     cursor: 'pointer'
   }
-};
+});
 
 export default LyricBank;

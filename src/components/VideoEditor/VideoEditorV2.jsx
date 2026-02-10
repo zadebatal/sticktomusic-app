@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 import VideoPreview from './VideoPreview';
 import EnhancedTimeline from './EnhancedTimeline';
 import ContentBankManager from './ContentBankManager';
@@ -53,6 +54,7 @@ const VideoEditorV2 = ({
   ]
 }) => {
   // BUG-034: Toast notifications instead of alert()
+  const { theme } = useTheme();
   const { error: toastError } = useToast();
 
   // ============ DEPRECATION WARNING ============
@@ -490,23 +492,25 @@ const VideoEditorV2 = ({
 
   // ============ RENDER ============
 
+  const s = getStyles(theme);
+
   return (
-    <div style={styles.container}>
+    <div style={s.container}>
       {/* Header */}
-      <div style={styles.header}>
-        <div style={styles.headerLeft}>
-          <button onClick={onClose} style={styles.backButton}>← Back</button>
+      <div style={s.header}>
+        <div style={s.headerLeft}>
+          <button onClick={onClose} style={s.backButton}>← Back</button>
           <input
             type="text"
             value={projectName}
             onChange={(e) => setProjectName(e.target.value)}
-            style={styles.projectNameInput}
+            style={s.projectNameInput}
           />
-          {hasUnsavedChanges && <span style={styles.unsavedIndicator}>●</span>}
+          {hasUnsavedChanges && <span style={s.unsavedIndicator}>●</span>}
         </div>
-        <div style={styles.headerCenter}>
+        <div style={s.headerCenter}>
           <button
-            style={styles.templateButton}
+            style={s.templateButton}
             onClick={() => {
               setTemplateSelectorMode('project');
               setShowTemplateSelector(true);
@@ -515,36 +519,36 @@ const VideoEditorV2 = ({
             {selectedTemplate ? `📋 ${selectedTemplate.categoryName}` : '📋 Template'}
           </button>
         </div>
-        <div style={styles.headerRight}>
-          <span style={styles.statusBadge}>{status}</span>
-          {bpm && <span style={styles.bpmBadge}>{bpm} BPM</span>}
-          <button onClick={() => handleSave()} style={styles.saveButton}>
+        <div style={s.headerRight}>
+          <span style={s.statusBadge}>{status}</span>
+          {bpm && <span style={s.bpmBadge}>{bpm} BPM</span>}
+          <button onClick={() => handleSave()} style={s.saveButton}>
             Save
           </button>
-          <button onClick={() => setShowBatchExport(true)} style={styles.batchButton}>
+          <button onClick={() => setShowBatchExport(true)} style={s.batchButton}>
             📦 Batch
           </button>
-          <button onClick={handleExport} style={styles.exportButton}>
+          <button onClick={handleExport} style={s.exportButton}>
             Export
           </button>
         </div>
       </div>
 
       {/* Keyboard Shortcuts Help */}
-      <div style={styles.shortcutsBar}>
-        <span style={styles.shortcut}><kbd>Space</kbd> Play/Pause</span>
-        <span style={styles.shortcut}><kbd>R</kbd> Reroll</span>
-        <span style={styles.shortcut}><kbd>⇧R</kbd> Reroll All</span>
-        <span style={styles.shortcut}><kbd>L</kbd> Lock</span>
-        <span style={styles.shortcut}><kbd>S</kbd> Shuffle</span>
-        <span style={styles.shortcut}><kbd>G</kbd> Generate</span>
+      <div style={s.shortcutsBar}>
+        <span style={s.shortcut}><kbd>Space</kbd> Play/Pause</span>
+        <span style={s.shortcut}><kbd>R</kbd> Reroll</span>
+        <span style={s.shortcut}><kbd>⇧R</kbd> Reroll All</span>
+        <span style={s.shortcut}><kbd>L</kbd> Lock</span>
+        <span style={s.shortcut}><kbd>S</kbd> Shuffle</span>
+        <span style={s.shortcut}><kbd>G</kbd> Generate</span>
       </div>
 
       {/* Main Editor Area — Multi-Panel NLE Layout (Wave 3) */}
       <MontageEditorLayout
         headerContent={null}
         previewContent={
-          <div style={styles.previewPanel}>
+          <div style={s.previewPanel}>
             {videoFile || audioFile ? (
               <VideoPreview
                 videoSrc={videoFile}
@@ -560,19 +564,19 @@ const VideoEditorV2 = ({
                 audioRef={audioRef}
               />
             ) : (
-              <div style={styles.uploadPrompt}>
-                <div style={styles.uploadIcon}>🎬</div>
-                <p style={styles.uploadText}>Upload video or audio to get started</p>
-                <div style={styles.uploadButtons}>
+              <div style={s.uploadPrompt}>
+                <div style={s.uploadIcon}>🎬</div>
+                <p style={s.uploadText}>Upload video or audio to get started</p>
+                <div style={s.uploadButtons}>
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    style={styles.uploadButton}
+                    style={s.uploadButton}
                   >
                     🎬 Choose Video
                   </button>
                   <button
                     onClick={() => audioInputRef.current?.click()}
-                    style={styles.uploadButtonAlt}
+                    style={s.uploadButtonAlt}
                   >
                     🎵 Choose Audio
                   </button>
@@ -598,15 +602,15 @@ const VideoEditorV2 = ({
             {(videoFile || audioFile) && selectedBank?.clips?.length > 0 && beats.length > 0 && (
               <button
                 onClick={handleGenerate}
-                style={styles.generateButton}
+                style={s.generateButton}
               >
                 ⚡ Auto-Generate
               </button>
             )}
 
             {isAnalyzing && (
-              <div style={styles.analyzingOverlay}>
-                <div style={styles.spinner} />
+              <div style={s.analyzingOverlay}>
+                <div style={s.spinner} />
                 <p>Analyzing beats...</p>
               </div>
             )}
@@ -645,9 +649,9 @@ const VideoEditorV2 = ({
           />
         }
         styleContent={
-          <div style={styles.stylePanel}>
+          <div style={s.stylePanel}>
             <button
-              style={styles.styleTemplateButton}
+              style={s.styleTemplateButton}
               onClick={() => {
                 setTemplateSelectorMode('lyric');
                 setShowTemplateSelector(true);
@@ -657,8 +661,8 @@ const VideoEditorV2 = ({
             </button>
 
             {/* Manual style controls */}
-            <div style={styles.styleControls}>
-              <label style={styles.styleLabel}>
+            <div style={s.styleControls}>
+              <label style={s.styleLabel}>
                 Font Size
                 <input
                   type="range"
@@ -666,22 +670,22 @@ const VideoEditorV2 = ({
                   max="120"
                   value={textStyle.fontSize}
                   onChange={(e) => setTextStyle({...textStyle, fontSize: parseInt(e.target.value)})}
-                  style={styles.slider}
+                  style={s.slider}
                 />
                 <span>{textStyle.fontSize}px</span>
               </label>
 
-              <label style={styles.styleLabel}>
+              <label style={s.styleLabel}>
                 Color
                 <input
                   type="color"
                   value={textStyle.color}
                   onChange={(e) => setTextStyle({...textStyle, color: e.target.value})}
-                  style={styles.colorInput}
+                  style={s.colorInput}
                 />
               </label>
 
-              <label style={styles.styleLabel}>
+              <label style={s.styleLabel}>
                 Outline
                 <input
                   type="checkbox"
@@ -693,17 +697,17 @@ const VideoEditorV2 = ({
                     type="color"
                     value={textStyle.outlineColor}
                     onChange={(e) => setTextStyle({...textStyle, outlineColor: e.target.value})}
-                    style={styles.colorInput}
+                    style={s.colorInput}
                   />
                 )}
               </label>
 
-              <label style={styles.styleLabel}>
+              <label style={s.styleLabel}>
                 Case
                 <select
                   value={textStyle.textCase}
                   onChange={(e) => setTextStyle({...textStyle, textCase: e.target.value})}
-                  style={styles.select}
+                  style={s.select}
                 >
                   <option value="default">Default</option>
                   <option value="upper">UPPERCASE</option>
@@ -763,13 +767,13 @@ const VideoEditorV2 = ({
 };
 
 // ============ STYLES ============
-const styles = {
+const getStyles = (theme) => ({
   container: {
     display: 'flex',
     flexDirection: 'column',
     height: '100vh',
-    backgroundColor: '#0f172a',
-    color: 'white',
+    backgroundColor: theme.bg.page,
+    color: theme.text.primary,
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
   },
   header: {
@@ -777,8 +781,8 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '12px 20px',
-    backgroundColor: '#1e293b',
-    borderBottom: '1px solid #334155'
+    backgroundColor: theme.bg.surface,
+    borderBottom: `1px solid ${theme.border.default}`
   },
   headerLeft: {
     display: 'flex',
@@ -797,7 +801,7 @@ const styles = {
   backButton: {
     padding: '8px 12px',
     backgroundColor: 'transparent',
-    color: '#94a3b8',
+    color: theme.text.secondary,
     border: 'none',
     borderRadius: '6px',
     cursor: 'pointer',
@@ -805,10 +809,10 @@ const styles = {
   },
   projectNameInput: {
     padding: '8px 12px',
-    backgroundColor: '#0f172a',
-    border: '1px solid #334155',
+    backgroundColor: theme.bg.page,
+    border: `1px solid ${theme.border.default}`,
     borderRadius: '6px',
-    color: 'white',
+    color: theme.text.primary,
     fontSize: '14px',
     fontWeight: '600',
     width: '200px'
@@ -819,32 +823,32 @@ const styles = {
   },
   templateButton: {
     padding: '8px 16px',
-    backgroundColor: '#334155',
+    backgroundColor: theme.bg.elevated,
     border: 'none',
     borderRadius: '6px',
-    color: 'white',
+    color: theme.text.primary,
     fontSize: '13px',
     cursor: 'pointer'
   },
   statusBadge: {
     padding: '4px 10px',
-    backgroundColor: '#334155',
+    backgroundColor: theme.bg.elevated,
     borderRadius: '12px',
     fontSize: '12px',
-    color: '#94a3b8',
+    color: theme.text.secondary,
     textTransform: 'capitalize'
   },
   bpmBadge: {
     padding: '4px 10px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     borderRadius: '12px',
     fontSize: '12px',
     color: 'white'
   },
   saveButton: {
     padding: '8px 16px',
-    backgroundColor: '#334155',
-    color: 'white',
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary,
     border: 'none',
     borderRadius: '6px',
     cursor: 'pointer',
@@ -852,8 +856,8 @@ const styles = {
   },
   batchButton: {
     padding: '8px 16px',
-    backgroundColor: '#334155',
-    color: 'white',
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary,
     border: 'none',
     borderRadius: '6px',
     cursor: 'pointer',
@@ -861,7 +865,7 @@ const styles = {
   },
   exportButton: {
     padding: '8px 20px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     color: 'white',
     border: 'none',
     borderRadius: '6px',
@@ -874,10 +878,10 @@ const styles = {
     justifyContent: 'center',
     gap: '24px',
     padding: '6px 16px',
-    backgroundColor: '#1e293b',
-    borderBottom: '1px solid #334155',
+    backgroundColor: theme.bg.surface,
+    borderBottom: `1px solid ${theme.border.default}`,
     fontSize: '11px',
-    color: '#64748b'
+    color: theme.text.muted
   },
   shortcut: {
     display: 'flex',
@@ -905,7 +909,7 @@ const styles = {
     alignItems: 'center',
     gap: '16px',
     padding: '40px',
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.bg.surface,
     borderRadius: '12px',
     textAlign: 'center'
   },
@@ -913,7 +917,7 @@ const styles = {
     fontSize: '48px'
   },
   uploadText: {
-    color: '#94a3b8',
+    color: theme.text.secondary,
     fontSize: '16px',
     margin: 0
   },
@@ -923,7 +927,7 @@ const styles = {
   },
   uploadButton: {
     padding: '12px 24px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     color: 'white',
     border: 'none',
     borderRadius: '8px',
@@ -933,8 +937,8 @@ const styles = {
   },
   uploadButtonAlt: {
     padding: '12px 24px',
-    backgroundColor: '#334155',
-    color: 'white',
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary,
     border: 'none',
     borderRadius: '8px',
     cursor: 'pointer',
@@ -961,19 +965,19 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: theme.overlay.heavy,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     gap: '16px',
-    color: 'white'
+    color: theme.text.primary
   },
   spinner: {
     width: '40px',
     height: '40px',
-    border: '4px solid #334155',
-    borderTopColor: '#7c3aed',
+    border: `4px solid ${theme.bg.elevated}`,
+    borderTopColor: theme.accent.primary,
     borderRadius: '50%',
     animation: 'spin 1s linear infinite'
   },
@@ -981,19 +985,19 @@ const styles = {
     width: '350px',
     display: 'flex',
     flexDirection: 'column',
-    backgroundColor: '#1e293b',
-    borderLeft: '1px solid #334155'
+    backgroundColor: theme.bg.surface,
+    borderLeft: `1px solid ${theme.border.default}`
   },
   panelTabs: {
     display: 'flex',
-    borderBottom: '1px solid #334155'
+    borderBottom: `1px solid ${theme.border.default}`
   },
   panelTab: {
     flex: 1,
     padding: '12px',
     backgroundColor: 'transparent',
     border: 'none',
-    color: '#64748b',
+    color: theme.text.muted,
     fontSize: '12px',
     cursor: 'pointer',
     transition: 'all 0.2s'
@@ -1001,10 +1005,10 @@ const styles = {
   panelTabActive: {
     flex: 1,
     padding: '12px',
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.bg.page,
     border: 'none',
-    borderBottom: '2px solid #7c3aed',
-    color: 'white',
+    borderBottom: `2px solid ${theme.accent.primary}`,
+    color: theme.text.primary,
     fontSize: '12px',
     cursor: 'pointer',
     fontWeight: '600'
@@ -1021,7 +1025,7 @@ const styles = {
   },
   styleTemplateButton: {
     padding: '14px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '8px',
     color: 'white',
@@ -1034,7 +1038,7 @@ const styles = {
     flexDirection: 'column',
     gap: '16px',
     padding: '16px',
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.bg.page,
     borderRadius: '8px'
   },
   styleLabel: {
@@ -1042,7 +1046,7 @@ const styles = {
     alignItems: 'center',
     gap: '12px',
     fontSize: '13px',
-    color: '#e2e8f0'
+    color: theme.text.primary
   },
   slider: {
     flex: 1
@@ -1056,13 +1060,13 @@ const styles = {
   },
   select: {
     padding: '6px 12px',
-    backgroundColor: '#1e293b',
-    border: '1px solid #334155',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.border.default}`,
     borderRadius: '4px',
-    color: 'white',
+    color: theme.text.primary,
     fontSize: '13px'
   }
-};
+});
 
 // Add keyframes for spinner
 const styleSheet = document.createElement('style');

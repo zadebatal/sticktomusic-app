@@ -1754,17 +1754,7 @@ const StudioHome = ({
                   Video Clips ({libraryVideos.length})
                 </span>
                 <div style={isMobile ? { display: 'flex', gap: '8px', width: '100%' } : {}}>
-                  <label style={styles.uploadButton}>
-                    ⬆️ Upload Videos
-                    <input
-                      ref={videoInputRef}
-                      type="file"
-                      accept="video/*"
-                      multiple
-                      onChange={handleVideoUpload}
-                      style={{ display: 'none' }}
-                    />
-                  </label>
+                  {/* Upload Videos button removed — use LibraryBrowser upload instead */}
                   {isMobile && (
                     <label style={{
                       ...styles.uploadButton,

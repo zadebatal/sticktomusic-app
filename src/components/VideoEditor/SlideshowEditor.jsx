@@ -364,6 +364,13 @@ const SlideshowEditor = ({
   const [exportProgress, setExportProgress] = useState(0);
   const [exportedImages, setExportedImages] = useState(existingSlideshow?.exportedImages || []);
 
+  // Inline prompt modal state (replaces window.prompt)
+  const [showLyricsPrompt, setShowLyricsPrompt] = useState(false);
+  const [lyricsPromptValue, setLyricsPromptValue] = useState('');
+  const [showTemplatePrompt, setShowTemplatePrompt] = useState(false);
+  const [templatePromptValue, setTemplatePromptValue] = useState('');
+  const [pendingTemplateStyle, setPendingTemplateStyle] = useState(null);
+
   // Scheduling state
   const [showSchedulePanel, setShowSchedulePanel] = useState(false);
   const [selectedHandle, setSelectedHandle] = useState('');
@@ -3226,13 +3233,8 @@ const SlideshowEditor = ({
                           style={styles.lyricBankDropdownAddNew}
                           onClick={(e) => {
                             e.stopPropagation();
-                            const text = prompt('Enter lyrics to add to bank:');
-                            if (text?.trim()) {
-                              handleAddLyricsAndRefresh({
-                                title: text.split('\n')[0].slice(0, 30) || 'New Lyrics',
-                                content: text.trim()
-                              });
-                            }
+                            setLyricsPromptValue('');
+                            setShowLyricsPrompt(true);
                             setShowLyricBankPicker(false);
                           }}
                           onMouseEnter={(e) => {
@@ -3923,6 +3925,11 @@ const SlideshowEditor = ({
                 onRerollText={(overlayId, bankSource) => handleTextReroll(overlayId, bankSource)}
                 onAddLyrics={handleAddLyricsAndRefresh}
                 onSaveTemplate={handleSaveTemplate}
+                onRequestSaveTemplate={(style) => {
+                  setPendingTemplateStyle(style);
+                  setTemplatePromptValue('');
+                  setShowTemplatePrompt(true);
+                }}
                 onClose={() => setMobilePanelTab('preview')}
                 isMobile={true}
               />
@@ -4156,6 +4163,62 @@ const SlideshowEditor = ({
         )}
 
       </div>
+
+      {/* Inline Lyrics Prompt Modal */}
+      {showLyricsPrompt && (
+        <div style={{ position: 'fixed', inset: 0, background: theme.overlay.heavy, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setShowLyricsPrompt(false)}>
+          <div style={{ background: theme.bg.input, borderRadius: 12, padding: 24, width: 400, maxWidth: '90vw' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ color: theme.text.primary, fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Add Lyrics</div>
+            <textarea autoFocus value={lyricsPromptValue} onChange={e => setLyricsPromptValue(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Escape') setShowLyricsPrompt(false); }}
+              placeholder="Enter lyrics to add to bank..."
+              style={{ width: '100%', minHeight: 100, background: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, borderRadius: 8, padding: 12, color: theme.text.primary, fontSize: 14, resize: 'vertical', outline: 'none', boxSizing: 'border-box' }} />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+              <button onClick={() => setShowLyricsPrompt(false)}
+                style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${theme.bg.elevated}`, background: 'transparent', color: theme.text.secondary, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => {
+                const text = lyricsPromptValue;
+                if (text?.trim()) { handleAddLyricsAndRefresh({ title: text.split('\n')[0].slice(0, 30) || 'New Lyrics', content: text.trim() }); }
+                setShowLyricsPrompt(false);
+              }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: theme.accent.primary, color: '#fff', cursor: 'pointer', fontWeight: 600 }}>Add</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Inline Template Name Prompt Modal */}
+      {showTemplatePrompt && (
+        <div style={{ position: 'fixed', inset: 0, background: theme.overlay.heavy, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setShowTemplatePrompt(false)}>
+          <div style={{ background: theme.bg.input, borderRadius: 12, padding: 24, width: 360, maxWidth: '90vw' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ color: theme.text.primary, fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Save Template</div>
+            <input autoFocus value={templatePromptValue} onChange={e => setTemplatePromptValue(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Escape') setShowTemplatePrompt(false);
+                if (e.key === 'Enter' && templatePromptValue.trim() && pendingTemplateStyle) {
+                  handleSaveTemplate({ id: `template_${Date.now()}`, name: templatePromptValue.trim(), style: { ...pendingTemplateStyle } });
+                  setShowTemplatePrompt(false);
+                }
+              }}
+              placeholder="Template name..."
+              style={{ width: '100%', background: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, borderRadius: 8, padding: '10px 12px', color: theme.text.primary, fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+              <button onClick={() => setShowTemplatePrompt(false)}
+                style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${theme.bg.elevated}`, background: 'transparent', color: theme.text.secondary, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => {
+                if (templatePromptValue.trim() && pendingTemplateStyle) {
+                  handleSaveTemplate({ id: `template_${Date.now()}`, name: templatePromptValue.trim(), style: { ...pendingTemplateStyle } });
+                }
+                setShowTemplatePrompt(false);
+              }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: theme.accent.primary, color: '#fff', cursor: 'pointer', fontWeight: 600 }}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
@@ -4193,6 +4256,7 @@ const TextEditorPanel = ({
   onRerollText,
   onAddLyrics,
   onSaveTemplate,
+  onRequestSaveTemplate,
   onClose,
   isMobile = false
 }) => {
@@ -4431,13 +4495,8 @@ const TextEditorPanel = ({
             <button
               style={textPanelStyles.saveTemplateBtn}
               onClick={() => {
-                const name = prompt('Enter template name:');
-                if (name?.trim() && onSaveTemplate) {
-                  onSaveTemplate({
-                    id: `template_${Date.now()}`,
-                    name: name.trim(),
-                    style: { ...selectedOverlay.style }
-                  });
+                if (onRequestSaveTemplate && selectedOverlay) {
+                  onRequestSaveTemplate(selectedOverlay.style);
                 }
               }}
             >

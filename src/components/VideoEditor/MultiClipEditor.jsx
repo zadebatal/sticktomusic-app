@@ -5,6 +5,7 @@ import {
   addToLibraryAsync, MEDIA_TYPES
 } from '../../services/libraryService';
 import { useToast } from '../ui';
+import { useTheme } from '../../contexts/ThemeContext';
 import useIsMobile from '../../hooks/useIsMobile';
 import AudioClipSelector from './AudioClipSelector';
 import LyricBank from './LyricBank';
@@ -42,6 +43,8 @@ const MultiClipEditor = ({
   onDeleteLyrics
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
+  const { theme } = useTheme();
+  const styles = useMemo(() => getStyles(theme), [theme]);
 
   // ── Multi-video state (mirrors SlideshowEditor allSlideshows) ──
   const [allVideos, setAllVideos] = useState(() => {
@@ -993,7 +996,7 @@ const MultiClipEditor = ({
                 {ratio}
               </button>
             ))}
-            {!isMobile && <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />}
+            {!isMobile && <div style={{ width: '1px', height: '20px', backgroundColor: theme.border.subtle, margin: '0 4px' }} />}
             {/* Save Draft */}
             <button onClick={handleSaveDraft} style={{
               ...styles.saveDraftButton,
@@ -1034,8 +1037,8 @@ const MultiClipEditor = ({
             <div style={{ padding: '12px', flex: 1, overflow: 'auto' }}>
               {/* Available Clips Grid */}
               <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>Available Clips</div>
-                <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '8px' }}>Available Clips</div>
+                <div style={{ fontSize: '11px', color: theme.text.secondary, marginBottom: '8px' }}>
                   Click to add to timeline
                 </div>
                 <div style={styles.clipGrid}>
@@ -1065,11 +1068,11 @@ const MultiClipEditor = ({
 
               {/* Timeline */}
               <div>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '8px' }}>
                   Timeline ({clips.length} clip{clips.length !== 1 ? 's' : ''})
                 </div>
                 {clips.length === 0 ? (
-                  <div style={{ fontSize: '11px', color: '#6b7280', padding: '12px', textAlign: 'center', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}>
+                  <div style={{ fontSize: '11px', color: theme.text.muted, padding: '12px', textAlign: 'center', backgroundColor: theme.hover.bg, borderRadius: '6px' }}>
                     No clips added. Click available clips to add them.
                   </div>
                 ) : (
@@ -1083,13 +1086,13 @@ const MultiClipEditor = ({
                         }}
                         onClick={() => setActiveClipIndex(idx)}
                       >
-                        <div style={{ fontSize: '10px', color: '#9ca3af', fontWeight: 500, minWidth: '20px' }}>
+                        <div style={{ fontSize: '10px', color: theme.text.secondary, fontWeight: 500, minWidth: '20px' }}>
                           {idx + 1}.
                         </div>
                         {clip.thumbnailUrl || clip.thumbnail ? (
                           <img src={clip.thumbnailUrl || clip.thumbnail} alt="" style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover' }} />
                         ) : (
-                          <div style={{ width: '32px', height: '32px', borderRadius: '4px', backgroundColor: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <div style={{ width: '32px', height: '32px', borderRadius: '4px', backgroundColor: theme.hover.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                               <rect x="2" y="4" width="20" height="16" rx="2" />
                               <path d="M10 9l5 3-5 3V9z" />
@@ -1097,10 +1100,10 @@ const MultiClipEditor = ({
                           </div>
                         )}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: '11px', color: '#d1d5db', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <div style={{ fontSize: '11px', color: theme.text.primary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {clip.name || 'Clip'}
                           </div>
-                          <div style={{ fontSize: '9px', color: '#6b7280' }}>
+                          <div style={{ fontSize: '9px', color: theme.text.muted }}>
                             {formatTime(getClipDuration(clip.id || clip.sourceId))}
                           </div>
                         </div>
@@ -1137,12 +1140,12 @@ const MultiClipEditor = ({
 
               {/* Generation controls */}
               <div style={styles.generateSection}>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '6px' }}>Generate Videos</div>
-                <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '6px' }}>Generate Videos</div>
+                <div style={{ fontSize: '11px', color: theme.text.secondary, marginBottom: '8px' }}>
                   Randomize clips and text from banks
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12px', color: '#d1d5db' }}>Count:</span>
+                  <span style={{ fontSize: '12px', color: theme.text.primary }}>Count:</span>
                   <input
                     type="number"
                     min={1}
@@ -1212,7 +1215,7 @@ const MultiClipEditor = ({
                     <rect x="2" y="4" width="20" height="16" rx="2" />
                     <path d="M10 9l5 3-5 3V9z" />
                   </svg>
-                  <p style={{ color: '#6b7280', marginTop: 8, fontSize: 12 }}>No clips in timeline</p>
+                  <p style={{ color: theme.text.muted, marginTop: 8, fontSize: 12 }}>No clips in timeline</p>
                 </div>
               )}
 
@@ -1255,7 +1258,7 @@ const MultiClipEditor = ({
                       zIndex: 10,
                       padding: '4px 8px',
                       borderRadius: '4px',
-                      border: editingTextId === overlay.id ? '1px dashed rgba(99,102,241,0.6)' : '1px dashed transparent',
+                      border: editingTextId === overlay.id ? `1px dashed ${theme.accent.primary}99` : '1px dashed transparent',
                       transition: 'border-color 0.15s'
                     }}
                   >
@@ -1330,9 +1333,9 @@ const MultiClipEditor = ({
               {/* Mobile toolbar tabs */}
               <div style={{
                 display: 'flex',
-                borderTop: '1px solid rgba(255,255,255,0.08)',
-                borderBottom: '1px solid rgba(255,255,255,0.08)',
-                backgroundColor: '#0f0f23'
+                borderTop: `1px solid ${theme.border.subtle}`,
+                borderBottom: `1px solid ${theme.border.subtle}`,
+                backgroundColor: theme.bg.page
               }}>
                 {[
                   { id: 'clips', label: 'Clips', icon: '\uD83C\uDFAC' },
@@ -1353,13 +1356,13 @@ const MultiClipEditor = ({
                       padding: '10px 4px',
                       minHeight: '52px',
                       border: 'none',
-                      backgroundColor: mobileToolTab === tab.id ? 'rgba(99,102,241,0.15)' : 'transparent',
-                      color: mobileToolTab === tab.id ? '#a5b4fc' : '#9ca3af',
+                      backgroundColor: mobileToolTab === tab.id ? `${theme.accent.primary}26` : 'transparent',
+                      color: mobileToolTab === tab.id ? theme.accent.hover : theme.text.secondary,
                       fontSize: '10px',
                       fontWeight: mobileToolTab === tab.id ? 600 : 400,
                       cursor: 'pointer',
                       transition: 'all 0.15s',
-                      borderBottom: mobileToolTab === tab.id ? '2px solid #6366f1' : '2px solid transparent'
+                      borderBottom: mobileToolTab === tab.id ? `2px solid ${theme.accent.primary}` : '2px solid transparent'
                     }}
                   >
                     <span style={{ fontSize: '18px' }}>{tab.icon}</span>
@@ -1373,16 +1376,16 @@ const MultiClipEditor = ({
                 <div style={{
                   maxHeight: '45vh',
                   overflowY: 'auto',
-                  backgroundColor: '#1a1a2e',
-                  borderBottom: '1px solid rgba(255,255,255,0.08)'
+                  backgroundColor: theme.bg.input,
+                  borderBottom: `1px solid ${theme.border.subtle}`
                 }}>
                   {/* ── CLIPS TAB ── */}
                   {mobileToolTab === 'clips' && (
                     <div style={{ padding: '12px' }}>
                       {/* Available Clips Grid */}
                       <div style={{ marginBottom: '16px' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>Available Clips</div>
-                        <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '8px' }}>Available Clips</div>
+                        <div style={{ fontSize: '11px', color: theme.text.secondary, marginBottom: '8px' }}>
                           Tap to add to timeline
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '12px' }}>
@@ -1410,11 +1413,11 @@ const MultiClipEditor = ({
 
                       {/* Timeline */}
                       <div>
-                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '8px' }}>
                           Timeline ({clips.length} clip{clips.length !== 1 ? 's' : ''})
                         </div>
                         {clips.length === 0 ? (
-                          <div style={{ fontSize: '11px', color: '#6b7280', padding: '12px', textAlign: 'center', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}>
+                          <div style={{ fontSize: '11px', color: theme.text.muted, padding: '12px', textAlign: 'center', backgroundColor: theme.hover.bg, borderRadius: '6px' }}>
                             No clips added. Tap available clips to add them.
                           </div>
                         ) : (
@@ -1429,13 +1432,13 @@ const MultiClipEditor = ({
                                 }}
                                 onClick={() => setActiveClipIndex(idx)}
                               >
-                                <div style={{ fontSize: '10px', color: '#9ca3af', fontWeight: 500, minWidth: '20px' }}>
+                                <div style={{ fontSize: '10px', color: theme.text.secondary, fontWeight: 500, minWidth: '20px' }}>
                                   {idx + 1}.
                                 </div>
                                 {clip.thumbnailUrl || clip.thumbnail ? (
                                   <img src={clip.thumbnailUrl || clip.thumbnail} alt="" style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover' }} />
                                 ) : (
-                                  <div style={{ width: '32px', height: '32px', borderRadius: '4px', backgroundColor: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <div style={{ width: '32px', height: '32px', borderRadius: '4px', backgroundColor: theme.hover.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                       <rect x="2" y="4" width="20" height="16" rx="2" />
                                       <path d="M10 9l5 3-5 3V9z" />
@@ -1443,10 +1446,10 @@ const MultiClipEditor = ({
                                   </div>
                                 )}
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: '11px', color: '#d1d5db', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  <div style={{ fontSize: '11px', color: theme.text.primary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                     {clip.name || 'Clip'}
                                   </div>
-                                  <div style={{ fontSize: '9px', color: '#6b7280' }}>
+                                  <div style={{ fontSize: '9px', color: theme.text.muted }}>
                                     {formatTime(getClipDuration(clip.id || clip.sourceId))}
                                   </div>
                                 </div>
@@ -1483,12 +1486,12 @@ const MultiClipEditor = ({
 
                       {/* Generation controls */}
                       <div style={{ ...styles.generateSection, marginTop: '12px' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '6px' }}>Generate Videos</div>
-                        <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '6px' }}>Generate Videos</div>
+                        <div style={{ fontSize: '11px', color: theme.text.secondary, marginBottom: '8px' }}>
                           Randomize clips and text from banks
                         </div>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <span style={{ fontSize: '12px', color: '#d1d5db' }}>Count:</span>
+                          <span style={{ fontSize: '12px', color: theme.text.primary }}>Count:</span>
                           <input
                             type="number"
                             min={1}
@@ -1516,12 +1519,12 @@ const MultiClipEditor = ({
                   {/* ── TEXT TAB ── */}
                   {mobileToolTab === 'text' && (
                     <div style={{ padding: '12px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '8px' }}>
                         Text Overlays ({textOverlays.length})
                       </div>
 
                       {textOverlays.length === 0 && (
-                        <div style={{ fontSize: '12px', color: '#6b7280', textAlign: 'center', padding: '16px 12px' }}>
+                        <div style={{ fontSize: '12px', color: theme.text.muted, textAlign: 'center', padding: '16px 12px' }}>
                           No text overlays yet. Add one to start designing.
                         </div>
                       )}
@@ -1539,7 +1542,7 @@ const MultiClipEditor = ({
                             }}
                           >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                              <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 500 }}>
+                              <span style={{ fontSize: '11px', color: theme.text.secondary, fontWeight: 500 }}>
                                 Overlay {idx + 1}
                               </span>
                               <button
@@ -1557,7 +1560,7 @@ const MultiClipEditor = ({
                                 autoFocus
                               />
                             ) : (
-                              <div style={{ fontSize: '13px', color: '#e5e7eb' }}>{overlay.text}</div>
+                              <div style={{ fontSize: '13px', color: theme.text.primary }}>{overlay.text}</div>
                             )}
 
                             {isSelected && (
@@ -1584,7 +1587,7 @@ const MultiClipEditor = ({
                                       style={{ ...styles.sizeButton, minWidth: '44px', minHeight: '44px' }}
                                       onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.max(16, overlay.style.fontSize - 4) } }); }}
                                     >A-</button>
-                                    <span style={{ fontSize: '11px', color: '#d1d5db', minWidth: '26px', textAlign: 'center' }}>{overlay.style.fontSize}</span>
+                                    <span style={{ fontSize: '11px', color: theme.text.primary, minWidth: '26px', textAlign: 'center' }}>{overlay.style.fontSize}</span>
                                     <button
                                       style={{ ...styles.sizeButton, minWidth: '44px', minHeight: '44px' }}
                                       onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.min(120, overlay.style.fontSize + 4) } }); }}
@@ -1636,8 +1639,8 @@ const MultiClipEditor = ({
                                   </div>
                                 </div>
                                 {/* Save to Bank */}
-                                <div style={{ ...styles.controlRow, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '6px', marginTop: '2px' }}>
-                                  <span style={{ fontSize: '10px', color: '#9ca3af' }}>Save to:</span>
+                                <div style={{ ...styles.controlRow, borderTop: `1px solid ${theme.border.subtle}`, paddingTop: '6px', marginTop: '2px' }}>
+                                  <span style={{ fontSize: '10px', color: theme.text.secondary }}>Save to:</span>
                                   <button
                                     style={{ ...styles.toggleButton, borderColor: 'rgba(20,184,166,0.3)', color: '#14b8a6', fontSize: '10px', minHeight: '44px', padding: '6px 10px' }}
                                     onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(1, overlay.text); toastSuccess('Saved to Bank A'); }}
@@ -1659,7 +1662,7 @@ const MultiClipEditor = ({
 
                       {/* Lyrics sub-section */}
                       <div style={{ ...styles.divider, margin: '12px 0' }} />
-                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>Lyrics</div>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '8px' }}>Lyrics</div>
                       <div style={{ maxHeight: '200px', overflow: 'auto' }}>
                         <LyricBank
                           lyrics={lyricsBank}
@@ -1686,12 +1689,12 @@ const MultiClipEditor = ({
                   {/* ── AUDIO TAB ── */}
                   {mobileToolTab === 'audio' && (
                     <div style={{ padding: '12px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>Audio</div>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '8px' }}>Audio</div>
                       <div style={{
                         padding: '10px',
                         borderRadius: '8px',
-                        backgroundColor: 'rgba(255,255,255,0.02)',
-                        border: '1px solid rgba(255,255,255,0.05)',
+                        backgroundColor: theme.hover.bg,
+                        border: `1px solid ${theme.hover.bg}`,
                         display: 'flex',
                         flexDirection: 'column',
                         gap: '6px'
@@ -1717,7 +1720,7 @@ const MultiClipEditor = ({
                               >AI</button>
                               <button
                                 onClick={() => handleAudioSelect(null)}
-                                style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '18px', cursor: 'pointer', padding: '0 4px', minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                style={{ background: 'none', border: 'none', color: theme.text.muted, fontSize: '18px', cursor: 'pointer', padding: '0 4px', minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                               >&#215;</button>
                             </div>
                           </div>
@@ -1768,7 +1771,7 @@ const MultiClipEditor = ({
 
                         {/* Empty state */}
                         {!currentClip && libraryAudio.length === 0 && (
-                          <div style={{ fontSize: '11px', color: '#4b5563', padding: '8px 0', textAlign: 'center' }}>
+                          <div style={{ fontSize: '11px', color: theme.text.muted, padding: '8px 0', textAlign: 'center' }}>
                             No audio available. Add audio to your library to use here.
                           </div>
                         )}
@@ -1779,8 +1782,8 @@ const MultiClipEditor = ({
                   {/* ── BANKS TAB ── */}
                   {mobileToolTab === 'banks' && (
                     <div style={{ padding: '12px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#e5e7eb', marginBottom: '8px' }}>Video Text Banks</div>
-                      <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '12px', lineHeight: '1.4' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '8px' }}>Video Text Banks</div>
+                      <div style={{ fontSize: '11px', color: theme.text.muted, marginBottom: '12px', lineHeight: '1.4' }}>
                         Tap any bank text to add it as an overlay. During generation, Overlay 1 cycles Bank A, Overlay 2 cycles Bank B.
                       </div>
 
@@ -1816,7 +1819,7 @@ const MultiClipEditor = ({
                               >&#215;</button>
                             </div>
                           ))}
-                          {videoTextBank1.length === 0 && <span style={{ fontSize: '11px', color: '#4b5563' }}>Empty</span>}
+                          {videoTextBank1.length === 0 && <span style={{ fontSize: '11px', color: theme.text.muted }}>Empty</span>}
                         </div>
                       </div>
 
@@ -1852,7 +1855,7 @@ const MultiClipEditor = ({
                               >&#215;</button>
                             </div>
                           ))}
-                          {videoTextBank2.length === 0 && <span style={{ fontSize: '11px', color: '#4b5563' }}>Empty</span>}
+                          {videoTextBank2.length === 0 && <span style={{ fontSize: '11px', color: theme.text.muted }}>Empty</span>}
                         </div>
                       </div>
                     </div>
@@ -1869,11 +1872,11 @@ const MultiClipEditor = ({
               {/* ── TEXT OVERLAYS SECTION ── */}
               <div style={styles.sectionHeader}>
                 <span>Text Overlays</span>
-                <span style={{ fontSize: '10px', color: '#6b7280' }}>{textOverlays.length}</span>
+                <span style={{ fontSize: '10px', color: theme.text.muted }}>{textOverlays.length}</span>
               </div>
 
               {textOverlays.length === 0 && (
-                <div style={{ fontSize: '12px', color: '#6b7280', textAlign: 'center', padding: '16px 12px' }}>
+                <div style={{ fontSize: '12px', color: theme.text.muted, textAlign: 'center', padding: '16px 12px' }}>
                   No text overlays yet. Add one to start designing.
                 </div>
               )}
@@ -1891,10 +1894,10 @@ const MultiClipEditor = ({
                   >
                     {/* Overlay header */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 500 }}>
+                      <span style={{ fontSize: '11px', color: theme.text.secondary, fontWeight: 500 }}>
                         Overlay {idx + 1}
                         {overlay.startTime !== undefined && (
-                          <span style={{ marginLeft: '6px', fontSize: '9px', color: '#6b7280' }}>
+                          <span style={{ marginLeft: '6px', fontSize: '9px', color: theme.text.muted }}>
                             {overlay.startTime.toFixed(1)}s – {overlay.endTime.toFixed(1)}s
                           </span>
                         )}
@@ -1916,7 +1919,7 @@ const MultiClipEditor = ({
                         autoFocus
                       />
                     ) : (
-                      <div style={{ fontSize: '13px', color: '#e5e7eb' }}>{overlay.text}</div>
+                      <div style={{ fontSize: '13px', color: theme.text.primary }}>{overlay.text}</div>
                     )}
 
                     {/* Style controls — always shown for selected overlay */}
@@ -1945,7 +1948,7 @@ const MultiClipEditor = ({
                               style={styles.sizeButton}
                               onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.max(16, overlay.style.fontSize - 4) } }); }}
                             >A-</button>
-                            <span style={{ fontSize: '11px', color: '#d1d5db', minWidth: '26px', textAlign: 'center' }}>{overlay.style.fontSize}</span>
+                            <span style={{ fontSize: '11px', color: theme.text.primary, minWidth: '26px', textAlign: 'center' }}>{overlay.style.fontSize}</span>
                             <button
                               style={styles.sizeButton}
                               onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.min(120, overlay.style.fontSize + 4) } }); }}
@@ -2047,8 +2050,8 @@ const MultiClipEditor = ({
                         </div>
 
                         {/* Save to Bank */}
-                        <div style={{ ...styles.controlRow, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '6px', marginTop: '2px' }}>
-                          <span style={{ fontSize: '10px', color: '#9ca3af' }}>Save to:</span>
+                        <div style={{ ...styles.controlRow, borderTop: `1px solid ${theme.border.subtle}`, paddingTop: '6px', marginTop: '2px' }}>
+                          <span style={{ fontSize: '10px', color: theme.text.secondary }}>Save to:</span>
                           <button
                             style={{ ...styles.toggleButton, borderColor: 'rgba(20,184,166,0.3)', color: '#14b8a6', fontSize: '10px' }}
                             onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(1, overlay.text); toastSuccess('Saved to Bank A'); }}
@@ -2084,7 +2087,7 @@ const MultiClipEditor = ({
                         {selectedAudio.isSourceVideo ? 'Source Video Audio' : (selectedAudio.name || selectedAudio.fileName || 'Audio Track')}
                       </span>
                       {selectedAudio.duration && (
-                        <span style={{ fontSize: '10px', color: '#9ca3af', flexShrink: 0 }}>
+                        <span style={{ fontSize: '10px', color: theme.text.secondary, flexShrink: 0 }}>
                           {Math.floor(selectedAudio.duration / 60)}:{Math.floor(selectedAudio.duration % 60).toString().padStart(2, '0')}
                         </span>
                       )}
@@ -2102,7 +2105,7 @@ const MultiClipEditor = ({
                       >AI</button>
                       <button
                         onClick={() => handleAudioSelect(null)}
-                        style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '14px', cursor: 'pointer', padding: '0 2px' }}
+                        style={{ background: 'none', border: 'none', color: theme.text.muted, fontSize: '14px', cursor: 'pointer', padding: '0 2px' }}
                       >×</button>
                     </div>
                   </div>
@@ -2144,7 +2147,7 @@ const MultiClipEditor = ({
                             {audio.name || audio.fileName || 'Untitled'}
                           </span>
                           {audio.duration && (
-                            <span style={{ fontSize: '10px', color: '#9ca3af', flexShrink: 0 }}>
+                            <span style={{ fontSize: '10px', color: theme.text.secondary, flexShrink: 0 }}>
                               {Math.floor(audio.duration / 60)}:{Math.floor(audio.duration % 60).toString().padStart(2, '0')}
                             </span>
                           )}
@@ -2156,7 +2159,7 @@ const MultiClipEditor = ({
 
                 {/* Empty state */}
                 {!currentClip && libraryAudio.length === 0 && (
-                  <div style={{ fontSize: '11px', color: '#4b5563', padding: '8px 0', textAlign: 'center' }}>
+                  <div style={{ fontSize: '11px', color: theme.text.muted, padding: '8px 0', textAlign: 'center' }}>
                     No audio available. Add audio to your library to use here.
                   </div>
                 )}
@@ -2168,7 +2171,7 @@ const MultiClipEditor = ({
               {/* ── LYRICS SECTION ── */}
               <div style={styles.sectionHeader}>
                 <span>Lyrics</span>
-                <span style={{ fontSize: '10px', color: '#6b7280' }}>{lyricsBank.length}</span>
+                <span style={{ fontSize: '10px', color: theme.text.muted }}>{lyricsBank.length}</span>
               </div>
               <div style={{ margin: '0 4px 4px', maxHeight: '200px', overflow: 'auto' }}>
                 <LyricBank
@@ -2198,7 +2201,7 @@ const MultiClipEditor = ({
               <div style={styles.sectionHeader}>
                 <span>Video Text Banks</span>
               </div>
-              <div style={{ fontSize: '11px', color: '#6b7280', padding: '0 12px 8px', lineHeight: '1.4' }}>
+              <div style={{ fontSize: '11px', color: theme.text.muted, padding: '0 12px 8px', lineHeight: '1.4' }}>
                 Click any bank text to add it as an overlay. During generation, Overlay 1 cycles Bank A, Overlay 2 cycles Bank B.
               </div>
 
@@ -2234,7 +2237,7 @@ const MultiClipEditor = ({
                       >×</button>
                     </div>
                   ))}
-                  {videoTextBank1.length === 0 && <span style={{ fontSize: '11px', color: '#4b5563' }}>Empty</span>}
+                  {videoTextBank1.length === 0 && <span style={{ fontSize: '11px', color: theme.text.muted }}>Empty</span>}
                 </div>
               </div>
 
@@ -2270,7 +2273,7 @@ const MultiClipEditor = ({
                       >×</button>
                     </div>
                   ))}
-                  {videoTextBank2.length === 0 && <span style={{ fontSize: '11px', color: '#4b5563' }}>Empty</span>}
+                  {videoTextBank2.length === 0 && <span style={{ fontSize: '11px', color: theme.text.muted }}>Empty</span>}
                 </div>
               </div>
             </div>
@@ -2296,8 +2299,8 @@ const MultiClipEditor = ({
             <div style={styles.timelineRuler}>
               {timelineDuration > 0 && Array.from({ length: Math.ceil(timelineDuration) + 1 }, (_, i) => (
                 <div key={i} style={{ position: 'absolute', left: `${(i / timelineDuration) * 100}%`, top: 0, height: '100%' }}>
-                  <div style={{ width: '1px', height: i % 5 === 0 ? '10px' : '6px', backgroundColor: 'rgba(255,255,255,0.15)' }} />
-                  {i % 2 === 0 && <span style={{ fontSize: '9px', color: '#6b7280', position: 'absolute', top: '10px', transform: 'translateX(-50%)' }}>{i}s</span>}
+                  <div style={{ width: '1px', height: i % 5 === 0 ? '10px' : '6px', backgroundColor: theme.border.subtle }} />
+                  {i % 2 === 0 && <span style={{ fontSize: '9px', color: theme.text.muted, position: 'absolute', top: '10px', transform: 'translateX(-50%)' }}>{i}s</span>}
                 </div>
               ))}
             </div>
@@ -2317,7 +2320,7 @@ const MultiClipEditor = ({
                       width: `${widthPct}%`,
                       top: '2px',
                       height: '24px',
-                      backgroundColor: isSelected ? '#9333ea' : '#7c3aed',
+                      backgroundColor: isSelected ? '#9333ea' : theme.accent.primary,
                       borderRadius: '4px',
                       display: 'flex',
                       alignItems: 'center',
@@ -2386,10 +2389,10 @@ const MultiClipEditor = ({
                       width: `${widthPct}%`,
                       top: '2px',
                       height: '40px',
-                      backgroundColor: activeClipIndex === idx ? '#475569' : '#334155',
+                      backgroundColor: activeClipIndex === idx ? theme.bg.elevated : theme.bg.surface,
                       borderRadius: '4px',
                       overflow: 'hidden',
-                      border: activeClipIndex === idx ? '1px solid rgba(99,102,241,0.4)' : '1px solid rgba(255,255,255,0.08)',
+                      border: activeClipIndex === idx ? `1px solid ${theme.accent.primary}66` : `1px solid ${theme.border.subtle}`,
                       display: 'flex',
                       alignItems: 'center',
                       gap: '4px'
@@ -2402,7 +2405,7 @@ const MultiClipEditor = ({
                         style={{ width: '40px', height: '100%', objectFit: 'cover', opacity: 0.6, flexShrink: 0 }}
                       />
                     )}
-                    <span style={{ fontSize: '9px', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 4px' }}>
+                    <span style={{ fontSize: '9px', color: theme.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 4px' }}>
                       {clipItem.name || `Clip ${idx + 1}`}
                     </span>
                   </div>
@@ -2531,8 +2534,8 @@ const MultiClipEditor = ({
         {showCloseConfirm && (
           <div style={styles.confirmOverlay}>
             <div style={styles.confirmModal}>
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', color: '#fff' }}>Close editor?</h3>
-              <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#9ca3af' }}>
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', color: theme.text.primary }}>Close editor?</h3>
+              <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: theme.text.secondary }}>
                 You have unsaved work. Are you sure you want to close?
               </p>
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
@@ -2548,11 +2551,11 @@ const MultiClipEditor = ({
 };
 
 // ── Styles ──
-const styles = {
+const getStyles = (theme) => ({
   overlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    backgroundColor: theme.overlay.heavy,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2560,9 +2563,9 @@ const styles = {
     padding: '10px'
   },
   modal: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: theme.bg.input,
     borderRadius: '12px',
-    border: '1px solid rgba(255,255,255,0.08)',
+    border: `1px solid ${theme.border.subtle}`,
     width: '100%',
     maxWidth: '1400px',
     height: '92vh',
@@ -2575,23 +2578,23 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '10px 16px',
-    borderBottom: '1px solid rgba(255,255,255,0.08)',
+    borderBottom: `1px solid ${theme.border.subtle}`,
     flexShrink: 0
   },
   headerTitle: {
     margin: 0,
     fontSize: '15px',
     fontWeight: '600',
-    color: '#ffffff'
+    color: theme.text.primary
   },
   headerSubtitle: {
     fontSize: '11px',
-    color: '#9ca3af'
+    color: theme.text.secondary
   },
   backButton: {
     background: 'none',
     border: 'none',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     padding: '6px',
     borderRadius: '6px',
@@ -2601,24 +2604,24 @@ const styles = {
   ratioButton: {
     padding: '4px 10px',
     borderRadius: '6px',
-    border: '1px solid rgba(255,255,255,0.1)',
+    border: `1px solid ${theme.border.subtle}`,
     backgroundColor: 'transparent',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     fontSize: '11px',
     cursor: 'pointer',
     transition: 'all 0.15s'
   },
   ratioButtonActive: {
-    backgroundColor: 'rgba(99,102,241,0.2)',
-    borderColor: '#6366f1',
-    color: '#a5b4fc'
+    backgroundColor: `${theme.accent.primary}33`,
+    borderColor: theme.accent.primary,
+    color: theme.accent.hover
   },
   exportButton: {
     padding: '6px 14px',
     borderRadius: '8px',
-    border: '1px solid rgba(255,255,255,0.15)',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    color: '#d1d5db',
+    border: `1px solid ${theme.border.subtle}`,
+    backgroundColor: theme.hover.bg,
+    color: theme.text.primary,
     fontSize: '12px',
     fontWeight: '500',
     cursor: 'pointer',
@@ -2638,7 +2641,7 @@ const styles = {
     padding: '6px 14px',
     borderRadius: '8px',
     border: 'none',
-    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+    background: `linear-gradient(135deg, ${theme.accent.primary}, #8b5cf6)`,
     color: '#fff',
     fontSize: '12px',
     fontWeight: '600',
@@ -2647,7 +2650,7 @@ const styles = {
   closeButton: {
     background: 'none',
     border: 'none',
-    color: '#6b7280',
+    color: theme.text.muted,
     cursor: 'pointer',
     padding: '6px',
     borderRadius: '6px',
@@ -2663,7 +2666,7 @@ const styles = {
   // ── Left Panel ──
   leftPanel: {
     width: '260px',
-    borderRight: '1px solid rgba(255,255,255,0.08)',
+    borderRight: `1px solid ${theme.border.subtle}`,
     display: 'flex',
     flexDirection: 'column',
     flexShrink: 0,
@@ -2683,7 +2686,7 @@ const styles = {
     border: '2px solid transparent',
     cursor: 'pointer',
     transition: 'border-color 0.15s',
-    backgroundColor: '#111118'
+    backgroundColor: theme.bg.input
   },
   clipThumbImg: {
     width: '100%',
@@ -2696,7 +2699,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: '#4b5563'
+    color: theme.text.muted
   },
   timelineItem: {
     display: 'flex',
@@ -2704,19 +2707,19 @@ const styles = {
     gap: '6px',
     padding: '8px 8px',
     borderRadius: '6px',
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    border: '1px solid rgba(255,255,255,0.06)',
+    backgroundColor: theme.hover.bg,
+    border: `1px solid ${theme.border.subtle}`,
     cursor: 'pointer',
     transition: 'all 0.15s'
   },
   timelineItemActive: {
-    backgroundColor: 'rgba(99,102,241,0.1)',
-    borderColor: 'rgba(99,102,241,0.3)'
+    backgroundColor: `${theme.accent.primary}1a`,
+    borderColor: `${theme.accent.primary}4d`
   },
   timelineButton: {
     background: 'none',
     border: 'none',
-    color: '#6b7280',
+    color: theme.text.muted,
     fontSize: '11px',
     cursor: 'pointer',
     padding: '0 2px',
@@ -2726,7 +2729,7 @@ const styles = {
   timelineRemoveButton: {
     background: 'none',
     border: 'none',
-    color: '#6b7280',
+    color: theme.text.muted,
     fontSize: '14px',
     cursor: 'pointer',
     padding: '0 2px',
@@ -2734,18 +2737,18 @@ const styles = {
   },
   generateSection: {
     padding: '12px',
-    backgroundColor: 'rgba(99,102,241,0.08)',
+    backgroundColor: `${theme.accent.primary}14`,
     borderRadius: '8px',
-    border: '1px solid rgba(99,102,241,0.15)',
+    border: `1px solid ${theme.accent.primary}26`,
     marginTop: '12px'
   },
   generateInput: {
     width: '50px',
     padding: '4px 6px',
     borderRadius: '4px',
-    border: '1px solid rgba(255,255,255,0.15)',
-    backgroundColor: '#111118',
-    color: '#fff',
+    border: `1px solid ${theme.border.subtle}`,
+    backgroundColor: theme.bg.input,
+    color: theme.text.primary,
     fontSize: '12px',
     textAlign: 'center'
   },
@@ -2753,7 +2756,7 @@ const styles = {
     padding: '6px 14px',
     borderRadius: '6px',
     border: 'none',
-    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+    background: `linear-gradient(135deg, ${theme.accent.primary}, #8b5cf6)`,
     color: '#fff',
     fontSize: '12px',
     fontWeight: '600',
@@ -2774,7 +2777,7 @@ const styles = {
     position: 'relative',
     borderRadius: '10px',
     overflow: 'hidden',
-    backgroundColor: '#111118',
+    backgroundColor: theme.bg.input,
     flexShrink: 0
   },
   previewPlaceholder: {
@@ -2798,8 +2801,8 @@ const styles = {
     height: '32px',
     borderRadius: '50%',
     border: 'none',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    color: '#fff',
+    backgroundColor: theme.border.subtle,
+    color: theme.text.primary,
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
@@ -2810,7 +2813,7 @@ const styles = {
     flex: 1,
     height: '6px',
     borderRadius: '3px',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: theme.border.subtle,
     cursor: 'pointer',
     position: 'relative',
     overflow: 'hidden'
@@ -2818,12 +2821,12 @@ const styles = {
   progressFill: {
     height: '100%',
     borderRadius: '3px',
-    background: 'linear-gradient(90deg, #6366f1, #8b5cf6)',
+    background: `linear-gradient(90deg, ${theme.accent.primary}, #8b5cf6)`,
     transition: 'width 0.1s linear'
   },
   timeDisplay: {
     fontSize: '11px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     fontFamily: 'monospace',
     minWidth: '80px',
     textAlign: 'center',
@@ -2832,7 +2835,7 @@ const styles = {
   muteButton: {
     background: 'none',
     border: 'none',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     padding: '4px',
     display: 'flex',
@@ -2843,7 +2846,7 @@ const styles = {
   // ── Right Panel ──
   rightPanel: {
     width: '320px',
-    borderLeft: '1px solid rgba(255,255,255,0.08)',
+    borderLeft: `1px solid ${theme.border.subtle}`,
     display: 'flex',
     flexDirection: 'column',
     flexShrink: 0,
@@ -2861,12 +2864,12 @@ const styles = {
     padding: '12px 12px 6px',
     fontSize: '12px',
     fontWeight: 600,
-    color: '#e5e7eb',
+    color: theme.text.primary,
     letterSpacing: '-0.01em'
   },
   divider: {
     height: '1px',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: theme.border.subtle,
     margin: '12px 0'
   },
 
@@ -2875,19 +2878,19 @@ const styles = {
     margin: '0 8px 6px',
     padding: '10px',
     borderRadius: '8px',
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    border: '1px solid rgba(255,255,255,0.06)',
+    backgroundColor: theme.hover.bg,
+    border: `1px solid ${theme.border.subtle}`,
     cursor: 'pointer',
     transition: 'all 0.15s'
   },
   overlayCardActive: {
-    backgroundColor: 'rgba(99,102,241,0.1)',
-    borderColor: 'rgba(99,102,241,0.3)'
+    backgroundColor: `${theme.accent.primary}1a`,
+    borderColor: `${theme.accent.primary}4d`
   },
   removeOverlayButton: {
     background: 'none',
     border: 'none',
-    color: '#6b7280',
+    color: theme.text.muted,
     fontSize: '16px',
     cursor: 'pointer',
     padding: '0 4px',
@@ -2897,9 +2900,9 @@ const styles = {
     width: '100%',
     padding: '6px 8px',
     borderRadius: '4px',
-    border: '1px solid rgba(99,102,241,0.3)',
-    backgroundColor: '#111118',
-    color: '#fff',
+    border: `1px solid ${theme.accent.primary}4d`,
+    backgroundColor: theme.bg.input,
+    color: theme.text.primary,
     fontSize: '13px',
     outline: 'none',
     boxSizing: 'border-box'
@@ -2910,7 +2913,7 @@ const styles = {
     flexDirection: 'column',
     gap: '6px',
     paddingTop: '8px',
-    borderTop: '1px solid rgba(255,255,255,0.06)'
+    borderTop: `1px solid ${theme.border.subtle}`
   },
   controlRow: {
     display: 'flex',
@@ -2920,24 +2923,24 @@ const styles = {
   },
   controlLabel: {
     fontSize: '10px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     minWidth: '34px'
   },
   selectInput: {
     flex: 1,
     padding: '3px 6px',
     borderRadius: '4px',
-    border: '1px solid rgba(255,255,255,0.15)',
-    backgroundColor: '#111118',
-    color: '#fff',
+    border: `1px solid ${theme.border.subtle}`,
+    backgroundColor: theme.bg.input,
+    color: theme.text.primary,
     fontSize: '11px'
   },
   sizeButton: {
     padding: '3px 8px',
     borderRadius: '4px',
-    border: '1px solid rgba(255,255,255,0.15)',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    color: '#d1d5db',
+    border: `1px solid ${theme.border.subtle}`,
+    backgroundColor: theme.hover.bg,
+    color: theme.text.primary,
     fontSize: '11px',
     cursor: 'pointer'
   },
@@ -2945,7 +2948,7 @@ const styles = {
     width: '24px',
     height: '24px',
     borderRadius: '4px',
-    border: '1px solid rgba(255,255,255,0.15)',
+    border: `1px solid ${theme.border.subtle}`,
     cursor: 'pointer',
     backgroundColor: 'transparent',
     padding: 0
@@ -2953,25 +2956,25 @@ const styles = {
   toggleButton: {
     padding: '3px 8px',
     borderRadius: '4px',
-    border: '1px solid rgba(255,255,255,0.1)',
+    border: `1px solid ${theme.border.subtle}`,
     backgroundColor: 'transparent',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     fontSize: '10px',
     cursor: 'pointer',
     transition: 'all 0.15s'
   },
   toggleButtonActive: {
-    backgroundColor: 'rgba(99,102,241,0.2)',
-    borderColor: '#6366f1',
-    color: '#a5b4fc'
+    backgroundColor: `${theme.accent.primary}33`,
+    borderColor: theme.accent.primary,
+    color: theme.accent.hover
   },
   addTextButton: {
     margin: '6px 8px',
     padding: '10px',
     borderRadius: '8px',
-    border: '1px dashed rgba(99,102,241,0.4)',
+    border: `1px dashed ${theme.accent.primary}66`,
     backgroundColor: 'transparent',
-    color: '#a5b4fc',
+    color: theme.accent.hover,
     fontSize: '12px',
     fontWeight: '500',
     cursor: 'pointer',
@@ -2984,8 +2987,8 @@ const styles = {
     margin: '0 12px 4px',
     padding: '10px',
     borderRadius: '8px',
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    border: '1px solid rgba(255,255,255,0.05)',
+    backgroundColor: theme.hover.bg,
+    border: `1px solid ${theme.hover.bg}`,
     display: 'flex',
     flexDirection: 'column',
     gap: '6px'
@@ -2996,9 +2999,9 @@ const styles = {
     gap: '8px',
     padding: '8px 10px',
     borderRadius: '8px',
-    border: '1px solid rgba(255,255,255,0.08)',
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    color: '#d1d5db',
+    border: `1px solid ${theme.border.subtle}`,
+    backgroundColor: theme.hover.bg,
+    color: theme.text.primary,
     fontSize: '12px',
     cursor: 'pointer',
     transition: 'all 0.15s',
@@ -3018,7 +3021,7 @@ const styles = {
     borderRadius: '6px',
     backgroundColor: 'rgba(34,197,94,0.1)',
     border: '1px solid rgba(34,197,94,0.25)',
-    color: '#d1d5db',
+    color: theme.text.primary,
     fontSize: '11px'
   },
 
@@ -3027,16 +3030,16 @@ const styles = {
     margin: '0 12px 10px',
     padding: '10px',
     borderRadius: '8px',
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    border: '1px solid rgba(255,255,255,0.05)'
+    backgroundColor: theme.hover.bg,
+    border: `1px solid ${theme.hover.bg}`
   },
   textBankInput: {
     flex: 1,
     padding: '5px 8px',
     borderRadius: '6px',
-    border: '1px solid rgba(255,255,255,0.1)',
-    backgroundColor: '#111118',
-    color: '#fff',
+    border: `1px solid ${theme.border.subtle}`,
+    backgroundColor: theme.bg.input,
+    color: theme.text.primary,
     fontSize: '12px',
     outline: 'none'
   },
@@ -3064,13 +3067,13 @@ const styles = {
     borderRadius: '6px',
     backgroundColor: 'rgba(20,184,166,0.1)',
     border: '1px solid rgba(20,184,166,0.2)',
-    color: '#d1d5db',
+    color: theme.text.primary,
     fontSize: '11px'
   },
   textBankRemove: {
     background: 'none',
     border: 'none',
-    color: '#6b7280',
+    color: theme.text.muted,
     fontSize: '13px',
     cursor: 'pointer',
     padding: '0 2px',
@@ -3079,9 +3082,9 @@ const styles = {
 
   // ── Timeline ──
   timelineSection: {
-    borderTop: '1px solid rgba(255,255,255,0.08)',
+    borderTop: `1px solid ${theme.border.subtle}`,
     flexShrink: 0,
-    backgroundColor: '#0f0f23',
+    backgroundColor: theme.bg.page,
     padding: '0 8px'
   },
   timelineTrackArea: {
@@ -3095,7 +3098,7 @@ const styles = {
     left: 0,
     right: 0,
     height: '22px',
-    borderBottom: '1px solid rgba(255,255,255,0.06)'
+    borderBottom: `1px solid ${theme.border.subtle}`
   },
   textTrack: {
     position: 'absolute',
@@ -3114,9 +3117,9 @@ const styles = {
 
   // ── Tab Bar ──
   tabBar: {
-    borderTop: '1px solid rgba(255,255,255,0.08)',
+    borderTop: `1px solid ${theme.border.subtle}`,
     flexShrink: 0,
-    backgroundColor: 'rgba(0,0,0,0.2)'
+    backgroundColor: theme.overlay.light
   },
   tabScroll: {
     display: 'flex',
@@ -3130,9 +3133,9 @@ const styles = {
     gap: '6px',
     padding: '6px 12px',
     borderRadius: '6px',
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: theme.hover.bg,
     border: '1px solid transparent',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     fontSize: '11px',
     fontWeight: '500',
     cursor: 'pointer',
@@ -3141,14 +3144,14 @@ const styles = {
     flexShrink: 0
   },
   tabActive: {
-    backgroundColor: 'rgba(99,102,241,0.15)',
-    borderColor: 'rgba(99,102,241,0.3)',
-    color: '#e5e7eb'
+    backgroundColor: `${theme.accent.primary}26`,
+    borderColor: `${theme.accent.primary}4d`,
+    color: theme.text.primary
   },
   tabDeleteButton: {
     background: 'none',
     border: 'none',
-    color: '#6b7280',
+    color: theme.text.muted,
     fontSize: '14px',
     cursor: 'pointer',
     padding: '0 2px',
@@ -3160,26 +3163,26 @@ const styles = {
   confirmOverlay: {
     position: 'absolute',
     inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: theme.overlay.heavy,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 100
   },
   confirmModal: {
-    backgroundColor: '#1e1e32',
+    backgroundColor: theme.bg.elevated,
     borderRadius: '12px',
     padding: '24px',
     maxWidth: '360px',
     width: '100%',
-    border: '1px solid rgba(255,255,255,0.1)'
+    border: `1px solid ${theme.border.subtle}`
   },
   confirmKeepButton: {
     padding: '8px 16px',
     borderRadius: '8px',
-    border: '1px solid rgba(255,255,255,0.15)',
+    border: `1px solid ${theme.border.subtle}`,
     backgroundColor: 'transparent',
-    color: '#d1d5db',
+    color: theme.text.primary,
     fontSize: '13px',
     cursor: 'pointer'
   },
@@ -3192,6 +3195,6 @@ const styles = {
     fontSize: '13px',
     cursor: 'pointer'
   }
-};
+});
 
 export default MultiClipEditor;

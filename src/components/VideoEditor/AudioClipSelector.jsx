@@ -3,6 +3,7 @@ import { trimAudioToFile } from '../../utils/audioTrimmer';
 import log from '../../utils/logger';
 import useIsMobile from '../../hooks/useIsMobile';
 import usePointerDrag from '../../hooks/usePointerDrag';
+import { useTheme } from '../../contexts/ThemeContext';
 
 /**
  * AudioClipSelector - Professional dual-playhead audio region selector
@@ -28,6 +29,8 @@ const AudioClipSelector = ({
 }) => {
   // Mobile responsive detection
   const { isMobile } = useIsMobile();
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
 
   const [isLoading, setIsLoading] = useState(true);
   const [duration, setDuration] = useState(0);
@@ -979,7 +982,7 @@ const AudioClipSelector = ({
                 }}
               />
               {isTrimming && (
-                <p style={{ color: '#a78bfa', fontSize: '13px', margin: '8px 0 0', textAlign: 'center' }}>
+                <p style={{ color: theme.accent.hover, fontSize: '13px', margin: '8px 0 0', textAlign: 'center' }}>
                   {trimProgress || 'Trimming...'}
                 </p>
               )}
@@ -1026,11 +1029,11 @@ const AudioClipSelector = ({
   );
 };
 
-const styles = {
+const getStyles = (theme) => ({
   overlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.9)',
+    backgroundColor: theme.overlay.heavy,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1040,7 +1043,7 @@ const styles = {
   modal: {
     width: '100%',
     maxWidth: '780px',
-    backgroundColor: '#111118',
+    backgroundColor: theme.bg.input,
     borderRadius: '16px',
     overflow: 'hidden',
     boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
@@ -1050,7 +1053,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '20px 24px',
-    borderBottom: '1px solid #1f1f2e'
+    borderBottom: `1px solid ${theme.bg.surface}`
   },
   headerLeft: {
     display: 'flex',
@@ -1063,12 +1066,12 @@ const styles = {
   title: {
     fontSize: '18px',
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text.primary,
     margin: 0
   },
   subtitle: {
     fontSize: '13px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     margin: '4px 0 0 0'
   },
   closeButton: {
@@ -1077,10 +1080,10 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1f1f2e',
+    backgroundColor: theme.bg.surface,
     border: 'none',
     borderRadius: '8px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer'
   },
   presets: {
@@ -1088,26 +1091,26 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     padding: '12px 24px',
-    backgroundColor: '#0a0a0f',
-    borderBottom: '1px solid #1f1f2e'
+    backgroundColor: theme.bg.page,
+    borderBottom: `1px solid ${theme.bg.surface}`
   },
   presetLabel: {
     fontSize: '13px',
-    color: '#6b7280',
+    color: theme.text.muted,
     marginRight: '8px'
   },
   preset: {
     padding: '6px 14px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: '#e5e7eb',
+    color: theme.text.primary,
     fontSize: '13px',
     cursor: 'pointer'
   },
   presetFull: {
     padding: '6px 14px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '6px',
     color: '#fff',
@@ -1125,13 +1128,13 @@ const styles = {
     justifyContent: 'center',
     gap: '12px',
     padding: '60px',
-    color: '#9ca3af'
+    color: theme.text.secondary
   },
   spinner: {
     width: '32px',
     height: '32px',
-    border: '3px solid #2d2d3d',
-    borderTopColor: '#7c3aed',
+    border: `3px solid ${theme.bg.elevated}`,
+    borderTopColor: theme.accent.primary,
     borderRadius: '50%',
     animation: 'spin 1s linear infinite'
   },
@@ -1157,7 +1160,7 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     padding: '16px',
-    backgroundColor: '#0a0a0f',
+    backgroundColor: theme.bg.page,
     borderRadius: '12px'
   },
   timeLabel: {
@@ -1166,7 +1169,7 @@ const styles = {
     gap: '6px',
     fontSize: '11px',
     fontWeight: '600',
-    color: '#6b7280',
+    color: theme.text.muted,
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
     marginBottom: '8px'
@@ -1186,7 +1189,7 @@ const styles = {
   timeValue: {
     fontSize: '24px',
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text.primary,
     fontFamily: 'monospace',
     background: 'none',
     border: 'none',
@@ -1197,10 +1200,10 @@ const styles = {
   timeInput: {
     fontSize: '24px',
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text.primary,
     fontFamily: 'monospace',
-    backgroundColor: '#1f1f2e',
-    border: '2px solid #7c3aed',
+    backgroundColor: theme.bg.surface,
+    border: `2px solid ${theme.accent.primary}`,
     borderRadius: '4px',
     padding: '4px 8px',
     textAlign: 'center',
@@ -1209,7 +1212,7 @@ const styles = {
   },
   timeHint: {
     fontSize: '11px',
-    color: '#4b5563',
+    color: theme.text.muted,
     marginTop: '6px'
   },
   durationBlock: {
@@ -1219,13 +1222,13 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '16px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     borderRadius: '12px'
   },
   durationLabel: {
     fontSize: '11px',
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.7)',
+    color: theme.text.secondary,
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
     marginBottom: '4px'
@@ -1238,7 +1241,7 @@ const styles = {
   },
   durationSub: {
     fontSize: '12px',
-    color: 'rgba(255,255,255,0.6)',
+    color: theme.text.secondary,
     marginTop: '4px'
   },
   playbackRow: {
@@ -1246,8 +1249,8 @@ const styles = {
     alignItems: 'center',
     gap: '16px',
     padding: '16px 24px',
-    backgroundColor: '#0a0a0f',
-    borderTop: '1px solid #1f1f2e'
+    backgroundColor: theme.bg.page,
+    borderTop: `1px solid ${theme.bg.surface}`
   },
   playButton: {
     width: '48px',
@@ -1255,7 +1258,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '50%',
     color: '#fff',
@@ -1269,15 +1272,15 @@ const styles = {
   playbackTime: {
     fontSize: '18px',
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text.primary,
     fontFamily: 'monospace'
   },
   playbackSep: {
-    color: '#4b5563'
+    color: theme.text.muted
   },
   playbackDuration: {
     fontSize: '14px',
-    color: '#6b7280',
+    color: theme.text.muted,
     fontFamily: 'monospace'
   },
   shortcuts: {
@@ -1287,18 +1290,18 @@ const styles = {
   },
   shortcut: {
     fontSize: '11px',
-    color: '#6b7280'
+    color: theme.text.muted
   },
   footer: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '16px 24px',
-    borderTop: '1px solid #1f1f2e'
+    borderTop: `1px solid ${theme.bg.surface}`
   },
   footerInfo: {
     fontSize: '13px',
-    color: '#9ca3af'
+    color: theme.text.secondary
   },
   footerActions: {
     display: 'flex',
@@ -1306,10 +1309,10 @@ const styles = {
   },
   cancelButton: {
     padding: '10px 20px',
-    backgroundColor: '#1f1f2e',
+    backgroundColor: theme.bg.surface,
     border: 'none',
     borderRadius: '8px',
-    color: '#e5e7eb',
+    color: theme.text.primary,
     fontSize: '14px',
     cursor: 'pointer'
   },
@@ -1328,7 +1331,7 @@ const styles = {
   },
   saveClipButton: {
     padding: '10px 20px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '8px',
     color: '#fff',
@@ -1339,14 +1342,14 @@ const styles = {
   saveClipOverlay: {
     position: 'absolute',
     inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: theme.overlay.heavy,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10
   },
   saveClipModal: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: theme.bg.input,
     borderRadius: '12px',
     padding: '24px',
     width: '100%',
@@ -1355,21 +1358,21 @@ const styles = {
   saveClipTitle: {
     fontSize: '18px',
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text.primary,
     margin: '0 0 8px 0'
   },
   saveClipDesc: {
     fontSize: '13px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     margin: '0 0 16px 0'
   },
   saveClipInput: {
     width: '100%',
     padding: '12px 16px',
-    backgroundColor: '#0a0a0f',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.page,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '8px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '14px',
     marginBottom: '16px',
     outline: 'none',
@@ -1382,7 +1385,7 @@ const styles = {
   },
   // Use Clip Now Modal styles
   useClipModal: {
-    backgroundColor: '#111118',
+    backgroundColor: theme.bg.input,
     borderRadius: '16px',
     padding: '24px',
     textAlign: 'center',
@@ -1395,7 +1398,7 @@ const styles = {
   useClipTitle: {
     fontSize: '20px',
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text.primary,
     margin: '0 0 8px 0'
   },
   useClipDesc: {
@@ -1406,7 +1409,7 @@ const styles = {
   },
   useClipQuestion: {
     fontSize: '14px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     margin: '0 0 20px 0'
   },
   useClipActions: {
@@ -1416,10 +1419,10 @@ const styles = {
   },
   laterButton: {
     padding: '12px 20px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '8px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     fontSize: '14px',
     fontWeight: '500'
@@ -1436,7 +1439,7 @@ const styles = {
   },
   // Save Trimmed Modal styles
   saveTrimmedModal: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: theme.bg.input,
     borderRadius: '16px',
     padding: '28px',
     width: '100%',
@@ -1446,18 +1449,18 @@ const styles = {
   saveTrimmedTitle: {
     fontSize: '20px',
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text.primary,
     margin: '0 0 12px 0'
   },
   saveTrimmedDesc: {
     fontSize: '14px',
-    color: '#d1d5db',
+    color: theme.text.primary,
     margin: '0 0 8px 0',
     lineHeight: '1.5'
   },
   saveTrimmedNote: {
     fontSize: '12px',
-    color: '#6b7280',
+    color: theme.text.muted,
     margin: '0 0 20px 0',
     fontStyle: 'italic'
   },
@@ -1469,15 +1472,15 @@ const styles = {
   skipButton: {
     padding: '12px 20px',
     backgroundColor: 'transparent',
-    border: '1px solid #4b5563',
+    border: `1px solid ${theme.text.muted}`,
     borderRadius: '8px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     fontSize: '14px',
     fontWeight: '500',
     transition: 'all 0.15s'
   }
-};
+});
 
 // Add keyframes for spinner
 if (typeof document !== 'undefined' && !document.getElementById('audio-clip-selector-styles')) {

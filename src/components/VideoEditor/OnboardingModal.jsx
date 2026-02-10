@@ -4,9 +4,11 @@
  */
 
 import React, { useState } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 import { STARTER_TEMPLATES, completeOnboarding, skipOnboarding } from '../../services/libraryService';
 
 const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
+  const { theme } = useTheme();
   // Default to Music Artist template since this is an app for musicians
   const [selectedTemplate, setSelectedTemplate] = useState(STARTER_TEMPLATES.MUSIC_ARTIST);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -46,7 +48,7 @@ const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.85)',
+      backgroundColor: theme.overlay.heavy,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -56,17 +58,17 @@ const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
       transition: 'opacity 0.3s ease'
     },
     modal: {
-      backgroundColor: '#1a1a1a',
+      backgroundColor: theme.bg.input,
       borderRadius: '16px',
       maxWidth: '800px',
       width: '100%',
       maxHeight: '90vh',
       overflow: 'auto',
-      border: '1px solid rgba(255, 255, 255, 0.1)'
+      border: `1px solid ${theme.border.subtle}`
     },
     header: {
       padding: isMobile ? '24px 20px 16px' : '32px 32px 24px',
-      borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+      borderBottom: `1px solid ${theme.border.subtle}`,
       textAlign: 'center'
     },
     welcomeIcon: {
@@ -76,12 +78,12 @@ const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
     title: {
       fontSize: isMobile ? '24px' : '28px',
       fontWeight: '600',
-      color: '#ffffff',
+      color: theme.text.primary,
       margin: '0 0 8px 0'
     },
     subtitle: {
       fontSize: isMobile ? '14px' : '16px',
-      color: 'rgba(255, 255, 255, 0.6)',
+      color: theme.text.secondary,
       margin: 0,
       lineHeight: 1.5
     },
@@ -91,7 +93,7 @@ const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
     sectionTitle: {
       fontSize: '14px',
       fontWeight: '600',
-      color: 'rgba(255, 255, 255, 0.5)',
+      color: theme.text.secondary,
       textTransform: 'uppercase',
       letterSpacing: '1px',
       marginBottom: '16px'
@@ -103,7 +105,7 @@ const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
     },
     templateCard: {
       padding: '20px',
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+      backgroundColor: theme.hover.bg,
       borderRadius: '12px',
       border: '2px solid transparent',
       cursor: 'pointer',
@@ -112,10 +114,10 @@ const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
     },
     templateCardSelected: {
       backgroundColor: 'rgba(99, 102, 241, 0.15)',
-      borderColor: '#6366f1'
+      borderColor: theme.accent.primary
     },
     templateCardHover: {
-      backgroundColor: 'rgba(255, 255, 255, 0.08)'
+      backgroundColor: theme.border.subtle
     },
     templateIcon: {
       fontSize: '32px',
@@ -124,12 +126,12 @@ const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
     templateName: {
       fontSize: '18px',
       fontWeight: '600',
-      color: '#ffffff',
+      color: theme.text.primary,
       marginBottom: '4px'
     },
     templateDescription: {
       fontSize: '14px',
-      color: 'rgba(255, 255, 255, 0.5)',
+      color: theme.text.secondary,
       marginBottom: '12px'
     },
     templateCollections: {
@@ -140,13 +142,13 @@ const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
     collectionTag: {
       fontSize: '12px',
       padding: '4px 8px',
-      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+      backgroundColor: theme.border.subtle,
       borderRadius: '4px',
-      color: 'rgba(255, 255, 255, 0.7)'
+      color: theme.text.secondary
     },
     footer: {
       padding: isMobile ? '20px' : '24px 32px',
-      borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+      borderTop: `1px solid ${theme.border.subtle}`,
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
@@ -156,9 +158,9 @@ const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
     skipButton: {
       padding: '12px 24px',
       backgroundColor: 'transparent',
-      border: '1px solid rgba(255, 255, 255, 0.2)',
+      border: `1px solid ${theme.text.muted}`,
       borderRadius: '8px',
-      color: 'rgba(255, 255, 255, 0.6)',
+      color: theme.text.secondary,
       fontSize: '14px',
       fontWeight: '500',
       cursor: 'pointer',
@@ -168,10 +170,10 @@ const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
     },
     confirmButton: {
       padding: '12px 32px',
-      backgroundColor: selectedTemplate ? '#6366f1' : 'rgba(99, 102, 241, 0.3)',
+      backgroundColor: selectedTemplate ? theme.accent.primary : 'rgba(99, 102, 241, 0.3)',
       border: 'none',
       borderRadius: '8px',
-      color: selectedTemplate ? '#ffffff' : 'rgba(255, 255, 255, 0.5)',
+      color: selectedTemplate ? theme.text.primary : theme.text.secondary,
       fontSize: '14px',
       fontWeight: '600',
       cursor: selectedTemplate ? 'pointer' : 'not-allowed',
@@ -189,7 +191,7 @@ const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
     previewTitle: {
       fontSize: '14px',
       fontWeight: '600',
-      color: '#6366f1',
+      color: theme.accent.primary,
       marginBottom: '12px'
     },
     previewList: {
@@ -202,7 +204,7 @@ const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
       alignItems: 'center',
       gap: '8px',
       fontSize: '14px',
-      color: 'rgba(255, 255, 255, 0.8)'
+      color: theme.text.primary
     },
     previewIcon: {
       fontSize: '16px'
@@ -235,12 +237,12 @@ const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
                 onClick={() => handleSelectTemplate(template)}
                 onMouseEnter={(e) => {
                   if (selectedTemplate?.id !== template.id) {
-                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+                    e.currentTarget.style.backgroundColor = theme.border.subtle;
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (selectedTemplate?.id !== template.id) {
-                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                    e.currentTarget.style.backgroundColor = theme.hover.bg;
                   }
                 }}
               >
@@ -276,7 +278,7 @@ const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
                   <div key={idx} style={styles.previewItem}>
                     <span style={styles.previewIcon}>📁</span>
                     <strong>{col.name}</strong>
-                    <span style={{ color: 'rgba(255,255,255,0.5)' }}>— {col.description}</span>
+                    <span style={{ color: theme.text.secondary }}>— {col.description}</span>
                   </div>
                 ))}
               </div>
@@ -288,8 +290,8 @@ const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
           <button
             style={styles.skipButton}
             onClick={handleSkip}
-            onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.4)'}
-            onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)'}
+            onMouseEnter={(e) => e.currentTarget.style.borderColor = theme.text.muted}
+            onMouseLeave={(e) => e.currentTarget.style.borderColor = theme.text.muted}
           >
             Skip for now
           </button>
@@ -299,12 +301,12 @@ const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
             disabled={!selectedTemplate}
             onMouseEnter={(e) => {
               if (selectedTemplate) {
-                e.currentTarget.style.backgroundColor = '#5558e3';
+                e.currentTarget.style.backgroundColor = theme.accent.hover;
               }
             }}
             onMouseLeave={(e) => {
               if (selectedTemplate) {
-                e.currentTarget.style.backgroundColor = '#6366f1';
+                e.currentTarget.style.backgroundColor = theme.accent.primary;
               }
             }}
           >

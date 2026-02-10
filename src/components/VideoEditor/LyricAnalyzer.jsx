@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
 import { getStoredApiKey } from '../../services/whisperService';
 import { loadLyricTemplate, saveLyricTemplate } from '../../services/storageService';
@@ -9,6 +10,7 @@ import { loadLyricTemplate, saveLyricTemplate } from '../../services/storageServ
  * Supports trimming audio to a specific section before transcription
  */
 const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, onClose }) => {
+  const { theme } = useTheme();
   const [apiKey, setApiKey] = useState('');
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [cachedLyrics, setCachedLyrics] = useState(null);
@@ -239,6 +241,291 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
     setCachedLyrics(null);
   };
 
+  const styles = {
+    overlay: {
+      position: 'fixed',
+      inset: 0,
+      backgroundColor: theme.overlay.heavy,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1200
+    },
+    modal: {
+      width: '90%',
+      maxWidth: '520px',
+      backgroundColor: theme.bg.input,
+      borderRadius: '16px',
+      overflow: 'hidden',
+      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+    },
+    header: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '20px 24px',
+      borderBottom: `1px solid ${theme.bg.surface}`
+    },
+    title: {
+      margin: 0,
+      fontSize: '18px',
+      fontWeight: '600',
+      color: theme.text.primary
+    },
+    closeButton: {
+      background: 'none',
+      border: 'none',
+      fontSize: '20px',
+      cursor: 'pointer',
+      color: theme.text.muted,
+      width: '32px',
+      height: '32px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: '6px'
+    },
+    content: {
+      padding: '24px'
+    },
+    audioInfo: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      padding: '16px',
+      backgroundColor: theme.bg.page,
+      borderRadius: '12px',
+      marginBottom: '20px'
+    },
+    audioIcon: {
+      fontSize: '28px',
+      width: '48px',
+      height: '48px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.accent.primary,
+      borderRadius: '10px'
+    },
+    audioName: {
+      margin: 0,
+      fontWeight: '600',
+      color: theme.text.primary,
+      fontSize: '14px'
+    },
+    audioSize: {
+      margin: '4px 0 0',
+      fontSize: '12px',
+      color: theme.text.muted
+    },
+    cachedSection: {
+      backgroundColor: '#0f2a1f',
+      border: '1px solid #22c55e',
+      borderRadius: '12px',
+      padding: '16px',
+      marginBottom: '20px'
+    },
+    cachedHeader: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      marginBottom: '12px'
+    },
+    cachedIcon: {
+      fontSize: '24px'
+    },
+    cachedTitle: {
+      margin: 0,
+      fontSize: '15px',
+      fontWeight: '600',
+      color: '#22c55e'
+    },
+    cachedInfo: {
+      margin: '4px 0 0',
+      fontSize: '12px',
+      color: '#86efac'
+    },
+    cachedPreview: {
+      padding: '12px',
+      backgroundColor: theme.overlay.light,
+      borderRadius: '8px',
+      fontSize: '13px',
+      color: theme.text.secondary,
+      fontStyle: 'italic',
+      marginBottom: '12px',
+      maxHeight: '60px',
+      overflow: 'hidden'
+    },
+    cachedActions: {
+      display: 'flex',
+      gap: '8px'
+    },
+    useCachedButton: {
+      flex: 1,
+      padding: '12px',
+      backgroundColor: '#22c55e',
+      border: 'none',
+      borderRadius: '8px',
+      color: '#fff',
+      fontWeight: '600',
+      cursor: 'pointer',
+      fontSize: '14px'
+    },
+    reanalyzeButton: {
+      padding: '12px 16px',
+      backgroundColor: 'transparent',
+      border: `1px solid ${theme.bg.elevated}`,
+      borderRadius: '8px',
+      color: theme.text.secondary,
+      cursor: 'pointer',
+      fontSize: '13px'
+    },
+    apiKeySection: {
+      marginBottom: '20px'
+    },
+    label: {
+      display: 'block',
+      fontWeight: '600',
+      marginBottom: '8px',
+      color: theme.text.primary,
+      fontSize: '14px'
+    },
+    hint: {
+      display: 'block',
+      fontSize: '12px',
+      fontWeight: '400',
+      color: theme.text.muted,
+      marginTop: '4px'
+    },
+    link: {
+      color: theme.accent.primary
+    },
+    input: {
+      width: '100%',
+      padding: '12px 16px',
+      backgroundColor: theme.bg.page,
+      border: `1px solid ${theme.bg.elevated}`,
+      borderRadius: '8px',
+      fontSize: '14px',
+      color: theme.text.primary,
+      boxSizing: 'border-box',
+      outline: 'none'
+    },
+    cost: {
+      margin: '10px 0 0',
+      fontSize: '12px',
+      color: '#22c55e'
+    },
+    changeKeyBtn: {
+      background: 'none',
+      border: `1px solid ${theme.bg.elevated}`,
+      borderRadius: '8px',
+      color: theme.text.secondary,
+      padding: '8px 12px',
+      fontSize: '12px',
+      cursor: 'pointer',
+      marginBottom: '16px'
+    },
+    progress: {
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      gap: '16px',
+      padding: '32px'
+    },
+    spinner: {
+      width: '40px',
+      height: '40px',
+      border: `3px solid ${theme.bg.elevated}`,
+      borderTopColor: theme.accent.primary,
+      borderRadius: '50%',
+      animation: 'spin 1s linear infinite'
+    },
+    progressText: {
+      color: theme.text.secondary,
+      fontSize: '14px',
+      margin: 0
+    },
+    error: {
+      padding: '16px',
+      backgroundColor: '#2a0f0f',
+      border: '1px solid #dc2626',
+      borderRadius: '8px',
+      color: '#fca5a5',
+      textAlign: 'center',
+      fontSize: '14px'
+    },
+    info: {
+      padding: '16px',
+      backgroundColor: theme.bg.page,
+      borderRadius: '12px'
+    },
+    infoTitle: {
+      margin: '0 0 8px 0',
+      fontSize: '14px',
+      fontWeight: '600',
+      color: theme.text.primary
+    },
+    steps: {
+      margin: '0',
+      paddingLeft: '20px',
+      lineHeight: '1.8',
+      color: theme.text.secondary,
+      fontSize: '13px'
+    },
+    footer: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      gap: '12px',
+      padding: '16px 24px',
+      borderTop: `1px solid ${theme.bg.surface}`,
+      backgroundColor: theme.bg.page
+    },
+    cancelBtn: {
+      padding: '10px 20px',
+      backgroundColor: theme.bg.surface,
+      border: 'none',
+      borderRadius: '8px',
+      color: theme.text.primary,
+      cursor: 'pointer',
+      fontSize: '14px'
+    },
+    analyzeBtn: {
+      padding: '10px 24px',
+      backgroundColor: theme.accent.primary,
+      border: 'none',
+      borderRadius: '8px',
+      color: '#fff',
+      fontWeight: '600',
+      cursor: 'pointer',
+      fontSize: '14px'
+    },
+    // UI-40: Empty state styles
+    emptyState: {
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '40px 20px',
+      textAlign: 'center'
+    },
+    emptyIcon: {
+      fontSize: '48px',
+      marginBottom: '16px'
+    },
+    emptyTitle: {
+      margin: '0 0 8px 0',
+      fontSize: '16px',
+      fontWeight: '600',
+      color: theme.text.primary
+    },
+    emptyText: {
+      margin: 0,
+      fontSize: '13px',
+      color: theme.text.muted
+    }
+  };
+
   return (
     <div style={styles.overlay}>
       <div style={styles.modal}>
@@ -377,291 +664,6 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       </div>
     </div>
   );
-};
-
-const styles = {
-  overlay: {
-    position: 'fixed',
-    inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1200
-  },
-  modal: {
-    width: '90%',
-    maxWidth: '520px',
-    backgroundColor: '#111118',
-    borderRadius: '16px',
-    overflow: 'hidden',
-    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '20px 24px',
-    borderBottom: '1px solid #1f1f2e'
-  },
-  title: {
-    margin: 0,
-    fontSize: '18px',
-    fontWeight: '600',
-    color: '#fff'
-  },
-  closeButton: {
-    background: 'none',
-    border: 'none',
-    fontSize: '20px',
-    cursor: 'pointer',
-    color: '#6b7280',
-    width: '32px',
-    height: '32px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: '6px'
-  },
-  content: {
-    padding: '24px'
-  },
-  audioInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    padding: '16px',
-    backgroundColor: '#0a0a0f',
-    borderRadius: '12px',
-    marginBottom: '20px'
-  },
-  audioIcon: {
-    fontSize: '28px',
-    width: '48px',
-    height: '48px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#7c3aed',
-    borderRadius: '10px'
-  },
-  audioName: {
-    margin: 0,
-    fontWeight: '600',
-    color: '#fff',
-    fontSize: '14px'
-  },
-  audioSize: {
-    margin: '4px 0 0',
-    fontSize: '12px',
-    color: '#6b7280'
-  },
-  cachedSection: {
-    backgroundColor: '#0f2a1f',
-    border: '1px solid #22c55e',
-    borderRadius: '12px',
-    padding: '16px',
-    marginBottom: '20px'
-  },
-  cachedHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    marginBottom: '12px'
-  },
-  cachedIcon: {
-    fontSize: '24px'
-  },
-  cachedTitle: {
-    margin: 0,
-    fontSize: '15px',
-    fontWeight: '600',
-    color: '#22c55e'
-  },
-  cachedInfo: {
-    margin: '4px 0 0',
-    fontSize: '12px',
-    color: '#86efac'
-  },
-  cachedPreview: {
-    padding: '12px',
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: '8px',
-    fontSize: '13px',
-    color: '#9ca3af',
-    fontStyle: 'italic',
-    marginBottom: '12px',
-    maxHeight: '60px',
-    overflow: 'hidden'
-  },
-  cachedActions: {
-    display: 'flex',
-    gap: '8px'
-  },
-  useCachedButton: {
-    flex: 1,
-    padding: '12px',
-    backgroundColor: '#22c55e',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#fff',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontSize: '14px'
-  },
-  reanalyzeButton: {
-    padding: '12px 16px',
-    backgroundColor: 'transparent',
-    border: '1px solid #2d2d3d',
-    borderRadius: '8px',
-    color: '#9ca3af',
-    cursor: 'pointer',
-    fontSize: '13px'
-  },
-  apiKeySection: {
-    marginBottom: '20px'
-  },
-  label: {
-    display: 'block',
-    fontWeight: '600',
-    marginBottom: '8px',
-    color: '#e5e7eb',
-    fontSize: '14px'
-  },
-  hint: {
-    display: 'block',
-    fontSize: '12px',
-    fontWeight: '400',
-    color: '#6b7280',
-    marginTop: '4px'
-  },
-  link: {
-    color: '#7c3aed'
-  },
-  input: {
-    width: '100%',
-    padding: '12px 16px',
-    backgroundColor: '#0a0a0f',
-    border: '1px solid #2d2d3d',
-    borderRadius: '8px',
-    fontSize: '14px',
-    color: '#fff',
-    boxSizing: 'border-box',
-    outline: 'none'
-  },
-  cost: {
-    margin: '10px 0 0',
-    fontSize: '12px',
-    color: '#22c55e'
-  },
-  changeKeyBtn: {
-    background: 'none',
-    border: '1px solid #2d2d3d',
-    borderRadius: '8px',
-    color: '#9ca3af',
-    padding: '8px 12px',
-    fontSize: '12px',
-    cursor: 'pointer',
-    marginBottom: '16px'
-  },
-  progress: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '16px',
-    padding: '32px'
-  },
-  spinner: {
-    width: '40px',
-    height: '40px',
-    border: '3px solid #2d2d3d',
-    borderTopColor: '#7c3aed',
-    borderRadius: '50%',
-    animation: 'spin 1s linear infinite'
-  },
-  progressText: {
-    color: '#9ca3af',
-    fontSize: '14px',
-    margin: 0
-  },
-  error: {
-    padding: '16px',
-    backgroundColor: '#2a0f0f',
-    border: '1px solid #dc2626',
-    borderRadius: '8px',
-    color: '#fca5a5',
-    textAlign: 'center',
-    fontSize: '14px'
-  },
-  info: {
-    padding: '16px',
-    backgroundColor: '#0a0a0f',
-    borderRadius: '12px'
-  },
-  infoTitle: {
-    margin: '0 0 8px 0',
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#e5e7eb'
-  },
-  steps: {
-    margin: '0',
-    paddingLeft: '20px',
-    lineHeight: '1.8',
-    color: '#9ca3af',
-    fontSize: '13px'
-  },
-  footer: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '12px',
-    padding: '16px 24px',
-    borderTop: '1px solid #1f1f2e',
-    backgroundColor: '#0a0a0f'
-  },
-  cancelBtn: {
-    padding: '10px 20px',
-    backgroundColor: '#1f1f2e',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#e5e7eb',
-    cursor: 'pointer',
-    fontSize: '14px'
-  },
-  analyzeBtn: {
-    padding: '10px 24px',
-    backgroundColor: '#7c3aed',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#fff',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontSize: '14px'
-  },
-  // UI-40: Empty state styles
-  emptyState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '40px 20px',
-    textAlign: 'center'
-  },
-  emptyIcon: {
-    fontSize: '48px',
-    marginBottom: '16px'
-  },
-  emptyTitle: {
-    margin: '0 0 8px 0',
-    fontSize: '16px',
-    fontWeight: '600',
-    color: '#fff'
-  },
-  emptyText: {
-    margin: 0,
-    fontSize: '13px',
-    color: '#6b7280'
-  }
 };
 
 if (typeof document !== 'undefined' && !document.getElementById('lyric-analyzer-styles')) {

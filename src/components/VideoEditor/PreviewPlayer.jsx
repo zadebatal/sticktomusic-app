@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 import log from '../../utils/logger';
 
 /**
@@ -16,6 +17,7 @@ const PreviewPlayer = ({
   showControls = true,
   style = {}
 }) => {
+  const { theme } = useTheme();
   const containerRef = useRef(null);
   const audioRef = useRef(null);
   const videoRefs = useRef([]);
@@ -303,7 +305,7 @@ const PreviewPlayer = ({
           alignItems: 'center',
           justifyContent: 'center',
           cursor: 'pointer',
-          background: isPlaying ? 'transparent' : 'rgba(0,0,0,0.3)',
+          background: isPlaying ? 'transparent' : theme.overlay.light,
           zIndex: 5
         }}
       >
@@ -312,7 +314,7 @@ const PreviewPlayer = ({
             width: '50px',
             height: '50px',
             borderRadius: '50%',
-            background: 'rgba(139, 92, 246, 0.9)',
+            background: theme.accent.primary,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -334,7 +336,7 @@ const PreviewPlayer = ({
             left: 0,
             right: 0,
             padding: '8px',
-            background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
+            background: `linear-gradient(transparent, ${theme.overlay.heavy})`,
             zIndex: 6
           }}
           onClick={e => e.stopPropagation()}
@@ -344,7 +346,7 @@ const PreviewPlayer = ({
             onClick={handleSeek}
             style={{
               height: '4px',
-              background: 'rgba(255,255,255,0.3)',
+              background: theme.text.muted,
               borderRadius: '2px',
               cursor: 'pointer',
               marginBottom: '6px'
@@ -353,7 +355,7 @@ const PreviewPlayer = ({
             <div style={{
               width: `${progress}%`,
               height: '100%',
-              background: '#8b5cf6',
+              background: theme.accent.primary,
               borderRadius: '2px'
             }} />
           </div>
@@ -363,7 +365,7 @@ const PreviewPlayer = ({
             display: 'flex',
             justifyContent: 'space-between',
             fontSize: '10px',
-            color: 'rgba(255,255,255,0.7)'
+            color: theme.text.secondary
           }}>
             <span>{formatTime(currentTime)}</span>
             <span>Clip {currentClipIndex + 1}/{clips.length}</span>
@@ -380,7 +382,7 @@ const PreviewPlayer = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#71717a',
+          color: theme.text.muted,
           fontSize: '14px'
         }}>
           No clips to preview

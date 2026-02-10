@@ -115,20 +115,13 @@ export default async function handler(req, res) {
 
   switch (action) {
     case 'getKey':
-      // Return the shared OpenAI API key
-      const openaiKey = process.env.OPENAI_API_KEY;
-      if (!openaiKey) {
-        return res.status(200).json({ configured: false, key: null });
-      }
-      return res.status(200).json({ configured: true, key: openaiKey });
-
     case 'status':
-      // Check if OpenAI key is configured (without exposing it)
+      // Check if OpenAI key is configured (never expose the key itself)
       return res.status(200).json({
         configured: !!process.env.OPENAI_API_KEY
       });
 
     default:
-      return res.status(400).json({ error: 'Invalid action. Use: getKey, status' });
+      return res.status(400).json({ error: 'Invalid action. Use: status' });
   }
 }

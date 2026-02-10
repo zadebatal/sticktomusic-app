@@ -590,6 +590,11 @@ const StickToMusic = () => {
       return;
     }
 
+    // Wait for allowedUsers to load before subscribing — otherwise we can't
+    // determine the user's role and may issue a collection query that fails
+    // for artist/collaborator roles.
+    if (!firestoreLoaded) return;
+
     log('📥 Loading artists from Firestore...');
 
     // Determine if current user is a conductor (super-admin)
@@ -615,7 +620,7 @@ const StickToMusic = () => {
     const userRole = userRecord?.role;
     const isUserConductor = userRole === 'conductor' || isCond;
     const isArtistOrCollab = userRole === 'artist' || userRole === 'collaborator';
-    const linkedArtistId = userRecord?.linkedArtistId;
+    const linkedArtistId = userRecord?.linkedArtistId || userRecord?.artistId;
 
     // For artist/collaborator roles: subscribe to just their linked artist document
     // For conductor/operator roles: subscribe to all artists
@@ -1577,10 +1582,10 @@ const StickToMusic = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
 
   const [contentView, setContentView] = useState(() => {
-    try { return sessionStorage.getItem('stm_contentView') || 'list'; } catch { return 'list'; }
-  }); // 'list', 'calendar', or 'month' — persisted in session
+    try { return localStorage.getItem('stm_contentView') || 'list'; } catch { return 'list'; }
+  }); // 'list', 'calendar', or 'month' — persisted across sessions
   useEffect(() => {
-    try { sessionStorage.setItem('stm_contentView', contentView); } catch {}
+    try { localStorage.setItem('stm_contentView', contentView); } catch {}
   }, [contentView]);
   const [deletingPostId, setDeletingPostId] = useState(null);
   const [lastSynced, setLastSynced] = useState(null);
@@ -2207,42 +2212,47 @@ const StickToMusic = () => {
     return { hashtags: finalHashtags, caption };
   };
 
-  const contentQueue = [
-    // Boon - Jan 31 posts
-    { id: 1, artist: "Boon", page: "@sarahs.ipodnano", platform: "tiktok", type: "Video", song: "Late", caption: "4:3, winter mood ✨", scheduledFor: "2026-01-31 14:00", status: "scheduled" },
-    { id: 2, artist: "Boon", page: "@sarahs.ipodnano", platform: "instagram", type: "Reel", song: "Late", caption: "4:3, winter mood ✨", scheduledFor: "2026-01-31 14:00", status: "scheduled" },
-    { id: 3, artist: "Boon", page: "@margiela.mommy", platform: "tiktok", type: "Video", song: "Late", caption: "we're forever.", scheduledFor: "2026-01-31 15:00", status: "scheduled" },
-    { id: 4, artist: "Boon", page: "@margiela.mommy", platform: "instagram", type: "Reel", song: "Late", caption: "we're forever.", scheduledFor: "2026-01-31 15:00", status: "scheduled" },
-    { id: 5, artist: "Boon", page: "@yumabestfriend", platform: "tiktok", type: "Video", song: "Late", caption: "wub 🖤", scheduledFor: "2026-01-31 16:00", status: "scheduled" },
-    { id: 6, artist: "Boon", page: "@yumabestfriend", platform: "instagram", type: "Reel", song: "Late", caption: "wub 🖤", scheduledFor: "2026-01-31 16:00", status: "scheduled" },
-    { id: 7, artist: "Boon", page: "@hedislimanerickowens", platform: "tiktok", type: "Video", song: "Late", caption: "electroclash clean girl", scheduledFor: "2026-01-31 17:00", status: "scheduled" },
-    { id: 8, artist: "Boon", page: "@hedislimanerickowens", platform: "instagram", type: "Reel", song: "Late", caption: "electroclash clean girl", scheduledFor: "2026-01-31 17:00", status: "scheduled" },
-    { id: 9, artist: "Boon", page: "@princessvamp2016", platform: "tiktok", type: "Video", song: "Late", caption: "mood", scheduledFor: "2026-01-31 18:00", status: "scheduled" },
-    { id: 10, artist: "Boon", page: "@princessvamp2016", platform: "instagram", type: "Reel", song: "Late", caption: "mood", scheduledFor: "2026-01-31 18:00", status: "scheduled" },
-    { id: 11, artist: "Boon", page: "@2016iscalling", platform: "tiktok", type: "Video", song: "Late", caption: "archive", scheduledFor: "2026-01-31 19:00", status: "scheduled" },
-    { id: 12, artist: "Boon", page: "@2016iscalling", platform: "instagram", type: "Reel", song: "Late", caption: "archive", scheduledFor: "2026-01-31 19:00", status: "scheduled" },
-    { id: 13, artist: "Boon", page: "@xxshadowskiesxx", platform: "tiktok", type: "Video", song: "Late", caption: "dancedancedance <3", scheduledFor: "2026-01-31 20:00", status: "scheduled" },
-    { id: 14, artist: "Boon", page: "@xxshadowskiesxx", platform: "instagram", type: "Reel", song: "Late", caption: "dancedancedance <3", scheduledFor: "2026-01-31 20:00", status: "scheduled" },
-    { id: 15, artist: "Boon", page: "@neonphoebe", platform: "tiktok", type: "Video", song: "Late", caption: "vibe ✨", scheduledFor: "2026-01-31 21:00", status: "scheduled" },
-    { id: 16, artist: "Boon", page: "@neonphoebe", platform: "instagram", type: "Reel", song: "Late", caption: "vibe ✨", scheduledFor: "2026-01-31 21:00", status: "scheduled" },
-    // Feb 1 posts
-    { id: 17, artist: "Boon", page: "@sarahs.ipodnano", platform: "tiktok", type: "Video", song: "Late", caption: "aesthetic", scheduledFor: "2026-02-01 14:00", status: "scheduled" },
-    { id: 18, artist: "Boon", page: "@sarahs.ipodnano", platform: "instagram", type: "Reel", song: "Late", caption: "aesthetic", scheduledFor: "2026-02-01 14:00", status: "scheduled" },
-    { id: 19, artist: "Boon", page: "@margiela.mommy", platform: "tiktok", type: "Video", song: "Late", caption: "forever", scheduledFor: "2026-02-01 15:00", status: "scheduled" },
-    { id: 20, artist: "Boon", page: "@margiela.mommy", platform: "instagram", type: "Reel", song: "Late", caption: "forever", scheduledFor: "2026-02-01 15:00", status: "scheduled" },
-    { id: 21, artist: "Boon", page: "@yumabestfriend", platform: "tiktok", type: "Video", song: "Late", caption: "wub wub", scheduledFor: "2026-02-01 16:00", status: "scheduled" },
-    { id: 22, artist: "Boon", page: "@yumabestfriend", platform: "instagram", type: "Reel", song: "Late", caption: "wub wub", scheduledFor: "2026-02-01 16:00", status: "scheduled" },
-    { id: 23, artist: "Boon", page: "@hedislimanerickowens", platform: "tiktok", type: "Video", song: "Late", caption: "pretty", scheduledFor: "2026-02-01 17:00", status: "scheduled" },
-    { id: 24, artist: "Boon", page: "@hedislimanerickowens", platform: "instagram", type: "Reel", song: "Late", caption: "pretty", scheduledFor: "2026-02-01 17:00", status: "scheduled" },
-    { id: 25, artist: "Boon", page: "@princessvamp2016", platform: "tiktok", type: "Video", song: "Late", caption: "dreaming", scheduledFor: "2026-02-01 18:00", status: "scheduled" },
-    { id: 26, artist: "Boon", page: "@princessvamp2016", platform: "instagram", type: "Reel", song: "Late", caption: "dreaming", scheduledFor: "2026-02-01 18:00", status: "scheduled" },
-    { id: 27, artist: "Boon", page: "@2016iscalling", platform: "tiktok", type: "Video", song: "Late", caption: "core", scheduledFor: "2026-02-01 19:00", status: "scheduled" },
-    { id: 28, artist: "Boon", page: "@2016iscalling", platform: "instagram", type: "Reel", song: "Late", caption: "core", scheduledFor: "2026-02-01 19:00", status: "scheduled" },
-    { id: 29, artist: "Boon", page: "@xxshadowskiesxx", platform: "tiktok", type: "Video", song: "Late", caption: "<3", scheduledFor: "2026-02-01 20:00", status: "scheduled" },
-    { id: 30, artist: "Boon", page: "@xxshadowskiesxx", platform: "instagram", type: "Reel", song: "Late", caption: "<3", scheduledFor: "2026-02-01 20:00", status: "scheduled" },
-    { id: 31, artist: "Boon", page: "@neonphoebe", platform: "tiktok", type: "Video", song: "Late", caption: "inspo", scheduledFor: "2026-02-01 21:00", status: "scheduled" },
-    { id: 32, artist: "Boon", page: "@neonphoebe", platform: "instagram", type: "Reel", song: "Late", caption: "inspo", scheduledFor: "2026-02-01 21:00", status: "scheduled" },
-  ];
+  const contentQueue = useMemo(() => {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const fmt = (d, h) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${h}`;
+    const d1 = today, d2 = tomorrow;
+    return [
+      { id: 1, artist: "Boon", page: "@sarahs.ipodnano", platform: "tiktok", type: "Video", song: "Late", caption: "4:3, winter mood", scheduledFor: fmt(d1,"14:00"), status: "scheduled" },
+      { id: 2, artist: "Boon", page: "@sarahs.ipodnano", platform: "instagram", type: "Reel", song: "Late", caption: "4:3, winter mood", scheduledFor: fmt(d1,"14:00"), status: "scheduled" },
+      { id: 3, artist: "Boon", page: "@margiela.mommy", platform: "tiktok", type: "Video", song: "Late", caption: "we're forever.", scheduledFor: fmt(d1,"15:00"), status: "scheduled" },
+      { id: 4, artist: "Boon", page: "@margiela.mommy", platform: "instagram", type: "Reel", song: "Late", caption: "we're forever.", scheduledFor: fmt(d1,"15:00"), status: "scheduled" },
+      { id: 5, artist: "Boon", page: "@yumabestfriend", platform: "tiktok", type: "Video", song: "Late", caption: "wub", scheduledFor: fmt(d1,"16:00"), status: "scheduled" },
+      { id: 6, artist: "Boon", page: "@yumabestfriend", platform: "instagram", type: "Reel", song: "Late", caption: "wub", scheduledFor: fmt(d1,"16:00"), status: "scheduled" },
+      { id: 7, artist: "Boon", page: "@hedislimanerickowens", platform: "tiktok", type: "Video", song: "Late", caption: "electroclash clean girl", scheduledFor: fmt(d1,"17:00"), status: "scheduled" },
+      { id: 8, artist: "Boon", page: "@hedislimanerickowens", platform: "instagram", type: "Reel", song: "Late", caption: "electroclash clean girl", scheduledFor: fmt(d1,"17:00"), status: "scheduled" },
+      { id: 9, artist: "Boon", page: "@princessvamp2016", platform: "tiktok", type: "Video", song: "Late", caption: "mood", scheduledFor: fmt(d1,"18:00"), status: "scheduled" },
+      { id: 10, artist: "Boon", page: "@princessvamp2016", platform: "instagram", type: "Reel", song: "Late", caption: "mood", scheduledFor: fmt(d1,"18:00"), status: "scheduled" },
+      { id: 11, artist: "Boon", page: "@2016iscalling", platform: "tiktok", type: "Video", song: "Late", caption: "archive", scheduledFor: fmt(d1,"19:00"), status: "scheduled" },
+      { id: 12, artist: "Boon", page: "@2016iscalling", platform: "instagram", type: "Reel", song: "Late", caption: "archive", scheduledFor: fmt(d1,"19:00"), status: "scheduled" },
+      { id: 13, artist: "Boon", page: "@xxshadowskiesxx", platform: "tiktok", type: "Video", song: "Late", caption: "dancedancedance", scheduledFor: fmt(d1,"20:00"), status: "scheduled" },
+      { id: 14, artist: "Boon", page: "@xxshadowskiesxx", platform: "instagram", type: "Reel", song: "Late", caption: "dancedancedance", scheduledFor: fmt(d1,"20:00"), status: "scheduled" },
+      { id: 15, artist: "Boon", page: "@neonphoebe", platform: "tiktok", type: "Video", song: "Late", caption: "vibe", scheduledFor: fmt(d1,"21:00"), status: "scheduled" },
+      { id: 16, artist: "Boon", page: "@neonphoebe", platform: "instagram", type: "Reel", song: "Late", caption: "vibe", scheduledFor: fmt(d1,"21:00"), status: "scheduled" },
+      { id: 17, artist: "Boon", page: "@sarahs.ipodnano", platform: "tiktok", type: "Video", song: "Late", caption: "aesthetic", scheduledFor: fmt(d2,"14:00"), status: "scheduled" },
+      { id: 18, artist: "Boon", page: "@sarahs.ipodnano", platform: "instagram", type: "Reel", song: "Late", caption: "aesthetic", scheduledFor: fmt(d2,"14:00"), status: "scheduled" },
+      { id: 19, artist: "Boon", page: "@margiela.mommy", platform: "tiktok", type: "Video", song: "Late", caption: "forever", scheduledFor: fmt(d2,"15:00"), status: "scheduled" },
+      { id: 20, artist: "Boon", page: "@margiela.mommy", platform: "instagram", type: "Reel", song: "Late", caption: "forever", scheduledFor: fmt(d2,"15:00"), status: "scheduled" },
+      { id: 21, artist: "Boon", page: "@yumabestfriend", platform: "tiktok", type: "Video", song: "Late", caption: "wub wub", scheduledFor: fmt(d2,"16:00"), status: "scheduled" },
+      { id: 22, artist: "Boon", page: "@yumabestfriend", platform: "instagram", type: "Reel", song: "Late", caption: "wub wub", scheduledFor: fmt(d2,"16:00"), status: "scheduled" },
+      { id: 23, artist: "Boon", page: "@hedislimanerickowens", platform: "tiktok", type: "Video", song: "Late", caption: "pretty", scheduledFor: fmt(d2,"17:00"), status: "scheduled" },
+      { id: 24, artist: "Boon", page: "@hedislimanerickowens", platform: "instagram", type: "Reel", song: "Late", caption: "pretty", scheduledFor: fmt(d2,"17:00"), status: "scheduled" },
+      { id: 25, artist: "Boon", page: "@princessvamp2016", platform: "tiktok", type: "Video", song: "Late", caption: "dreaming", scheduledFor: fmt(d2,"18:00"), status: "scheduled" },
+      { id: 26, artist: "Boon", page: "@princessvamp2016", platform: "instagram", type: "Reel", song: "Late", caption: "dreaming", scheduledFor: fmt(d2,"18:00"), status: "scheduled" },
+      { id: 27, artist: "Boon", page: "@2016iscalling", platform: "tiktok", type: "Video", song: "Late", caption: "core", scheduledFor: fmt(d2,"19:00"), status: "scheduled" },
+      { id: 28, artist: "Boon", page: "@2016iscalling", platform: "instagram", type: "Reel", song: "Late", caption: "core", scheduledFor: fmt(d2,"19:00"), status: "scheduled" },
+      { id: 29, artist: "Boon", page: "@xxshadowskiesxx", platform: "tiktok", type: "Video", song: "Late", caption: "<3", scheduledFor: fmt(d2,"20:00"), status: "scheduled" },
+      { id: 30, artist: "Boon", page: "@xxshadowskiesxx", platform: "instagram", type: "Reel", song: "Late", caption: "<3", scheduledFor: fmt(d2,"20:00"), status: "scheduled" },
+      { id: 31, artist: "Boon", page: "@neonphoebe", platform: "tiktok", type: "Video", song: "Late", caption: "inspo", scheduledFor: fmt(d2,"21:00"), status: "scheduled" },
+      { id: 32, artist: "Boon", page: "@neonphoebe", platform: "instagram", type: "Reel", song: "Late", caption: "inspo", scheduledFor: fmt(d2,"21:00"), status: "scheduled" },
+    ];
+  }, []);
 
   // Applications state - stores intake form submissions (starts empty)
   const [applications, setApplications] = useState([]);
@@ -3884,7 +3894,7 @@ const StickToMusic = () => {
                     caption: fullCaption,
                     videoUrl: post.videoUrl,
                     scheduledFor,
-                    artistId: currentArtistId
+                    artistId: schedulingArtistId
                   });
 
                   if (result.success) {
@@ -3928,7 +3938,7 @@ const StickToMusic = () => {
                   caption: fullCaption,
                   videoUrl: post.videoUrl,
                   scheduledFor,
-                  artistId: currentArtistId
+                  artistId: schedulingArtistId
                 });
 
                 if (result.success) {

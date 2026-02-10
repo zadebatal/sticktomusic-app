@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 import { LYRIC_TEMPLATES, getAllTemplates, DISPLAY_MODES } from './LyricTemplates';
 import { PROJECT_TEMPLATES, getTemplatesForArtist } from './ProjectTemplates';
 
@@ -12,27 +13,29 @@ const TemplateSelector = ({
   onSelectTemplate,
   onClose
 }) => {
+  const { theme } = useTheme();
+  const s = getStyles(theme);
   const templates = mode === 'project'
     ? (selectedArtist ? getTemplatesForArtist(selectedArtist.id) : Object.values(PROJECT_TEMPLATES))
     : getAllTemplates();
 
   return (
-    <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.modal} onClick={e => e.stopPropagation()}>
-        <div style={styles.header}>
-          <h2 style={styles.title}>
+    <div style={s.overlay} onClick={onClose}>
+      <div style={s.modal} onClick={e => e.stopPropagation()}>
+        <div style={s.header}>
+          <h2 style={s.title}>
             {mode === 'project' ? 'Choose Template' : 'Choose Lyric Style'}
           </h2>
-          <button style={styles.closeButton} onClick={onClose}>×</button>
+          <button style={s.closeButton} onClick={onClose}>×</button>
         </div>
 
-        <div style={styles.content}>
+        <div style={s.content}>
           {mode === 'project' && selectedArtist && (
-            <div style={styles.artistSection}>
-              <h3 style={styles.sectionTitle}>
+            <div style={s.artistSection}>
+              <h3 style={s.sectionTitle}>
                 Templates for {selectedArtist.name}
               </h3>
-              <div style={styles.templateGrid}>
+              <div style={s.templateGrid}>
                 {templates
                   .filter(t => t.artistId === selectedArtist.id)
                   .map(template => (
@@ -49,11 +52,11 @@ const TemplateSelector = ({
             </div>
           )}
 
-          <div style={styles.genericSection}>
-            <h3 style={styles.sectionTitle}>
+          <div style={s.genericSection}>
+            <h3 style={s.sectionTitle}>
               {mode === 'project' ? 'Generic Templates' : 'Lyric Styles'}
             </h3>
-            <div style={styles.templateGrid}>
+            <div style={s.templateGrid}>
               {(mode === 'project'
                 ? templates.filter(t => !t.artistId)
                 : templates
@@ -78,21 +81,23 @@ const TemplateSelector = ({
  * Individual Template Card
  */
 const TemplateCard = ({ template, isSelected, onClick, mode }) => {
+  const { theme } = useTheme();
+  const s = getStyles(theme);
   const textStyle = mode === 'project' ? template.textStyle : template.textStyle;
 
   return (
     <div
       style={{
-        ...styles.card,
-        ...(isSelected ? styles.cardSelected : {})
+        ...s.card,
+        ...(isSelected ? s.cardSelected : {})
       }}
       onClick={onClick}
     >
       {/* Preview */}
-      <div style={styles.preview}>
+      <div style={s.preview}>
         <div
           style={{
-            ...styles.previewText,
+            ...s.previewText,
             fontFamily: textStyle?.fontFamily || 'sans-serif',
             fontSize: '18px',
             fontWeight: textStyle?.fontWeight || '400',
@@ -110,17 +115,17 @@ const TemplateCard = ({ template, isSelected, onClick, mode }) => {
       </div>
 
       {/* Info */}
-      <div style={styles.cardInfo}>
-        <div style={styles.cardHeader}>
-          {template.icon && <span style={styles.cardIcon}>{template.icon}</span>}
-          <span style={styles.cardName}>
+      <div style={s.cardInfo}>
+        <div style={s.cardHeader}>
+          {template.icon && <span style={s.cardIcon}>{template.icon}</span>}
+          <span style={s.cardName}>
             {mode === 'project' ? template.categoryName : template.name}
           </span>
         </div>
-        <p style={styles.cardDescription}>{template.description}</p>
+        <p style={s.cardDescription}>{template.description}</p>
 
         {mode === 'project' && template.settings && (
-          <div style={styles.cardMeta}>
+          <div style={s.cardMeta}>
             <span>Cut: {template.settings.beatsPerCut} beats</span>
             <span>•</span>
             <span>{template.settings.aspectRatio}</span>
@@ -129,7 +134,7 @@ const TemplateCard = ({ template, isSelected, onClick, mode }) => {
       </div>
 
       {isSelected && (
-        <div style={styles.selectedBadge}>✓</div>
+        <div style={s.selectedBadge}>✓</div>
       )}
     </div>
   );
@@ -139,16 +144,18 @@ const TemplateCard = ({ template, isSelected, onClick, mode }) => {
  * Display Mode Selector - For switching between word/line/karaoke display
  */
 export const DisplayModeSelector = ({ selectedMode, onChange }) => {
+  const { theme } = useTheme();
+  const s = getStyles(theme);
   return (
-    <div style={styles.displayModeContainer}>
-      <span style={styles.displayModeLabel}>Display:</span>
-      <div style={styles.displayModeButtons}>
+    <div style={s.displayModeContainer}>
+      <span style={s.displayModeLabel}>Display:</span>
+      <div style={s.displayModeButtons}>
         {Object.values(DISPLAY_MODES).map(mode => (
           <button
             key={mode.id}
             style={{
-              ...styles.displayModeButton,
-              ...(selectedMode === mode.id ? styles.displayModeButtonActive : {})
+              ...s.displayModeButton,
+              ...(selectedMode === mode.id ? s.displayModeButtonActive : {})
             }}
             onClick={() => onChange(mode.id)}
             title={mode.description}
@@ -161,14 +168,14 @@ export const DisplayModeSelector = ({ selectedMode, onChange }) => {
   );
 };
 
-const styles = {
+const getStyles = (theme) => ({
   overlay: {
     position: 'fixed',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: theme.overlay.heavy,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -178,7 +185,7 @@ const styles = {
     width: '90%',
     maxWidth: '800px',
     maxHeight: '80vh',
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.bg.surface,
     borderRadius: '12px',
     overflow: 'hidden',
     display: 'flex',
@@ -189,13 +196,13 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '16px 20px',
-    borderBottom: '1px solid #334155'
+    borderBottom: `1px solid ${theme.border.default}`
   },
   title: {
     margin: 0,
     fontSize: '18px',
     fontWeight: '600',
-    color: 'white'
+    color: theme.text.primary
   },
   closeButton: {
     width: '32px',
@@ -206,7 +213,7 @@ const styles = {
     backgroundColor: 'transparent',
     border: 'none',
     borderRadius: '6px',
-    color: '#94a3b8',
+    color: theme.text.secondary,
     fontSize: '24px',
     cursor: 'pointer'
   },
@@ -223,7 +230,7 @@ const styles = {
     margin: '0 0 16px 0',
     fontSize: '14px',
     fontWeight: '600',
-    color: '#94a3b8',
+    color: theme.text.secondary,
     textTransform: 'uppercase',
     letterSpacing: '0.05em'
   },
@@ -234,7 +241,7 @@ const styles = {
   },
   card: {
     position: 'relative',
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.bg.page,
     borderRadius: '8px',
     overflow: 'hidden',
     cursor: 'pointer',
@@ -242,8 +249,8 @@ const styles = {
     transition: 'all 0.2s'
   },
   cardSelected: {
-    borderColor: '#7c3aed',
-    boxShadow: '0 0 0 2px rgba(124, 58, 237, 0.3)'
+    borderColor: theme.accent.primary,
+    boxShadow: `0 0 0 2px ${theme.accent.muted}`
   },
   preview: {
     height: '80px',
@@ -271,12 +278,12 @@ const styles = {
   cardName: {
     fontSize: '14px',
     fontWeight: '600',
-    color: 'white'
+    color: theme.text.primary
   },
   cardDescription: {
     margin: 0,
     fontSize: '12px',
-    color: '#94a3b8',
+    color: theme.text.secondary,
     lineHeight: '1.4'
   },
   cardMeta: {
@@ -284,7 +291,7 @@ const styles = {
     display: 'flex',
     gap: '8px',
     fontSize: '11px',
-    color: '#64748b'
+    color: theme.text.muted
   },
   selectedBadge: {
     position: 'absolute',
@@ -292,7 +299,7 @@ const styles = {
     right: '8px',
     width: '24px',
     height: '24px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     borderRadius: '50%',
     display: 'flex',
     alignItems: 'center',
@@ -308,7 +315,7 @@ const styles = {
   },
   displayModeLabel: {
     fontSize: '12px',
-    color: '#94a3b8'
+    color: theme.text.secondary
   },
   displayModeButtons: {
     display: 'flex',
@@ -316,18 +323,18 @@ const styles = {
   },
   displayModeButton: {
     padding: '4px 8px',
-    backgroundColor: '#334155',
+    backgroundColor: theme.bg.elevated,
     border: 'none',
     borderRadius: '4px',
-    color: '#94a3b8',
+    color: theme.text.secondary,
     fontSize: '11px',
     cursor: 'pointer',
     transition: 'all 0.2s'
   },
   displayModeButtonActive: {
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     color: 'white'
   }
-};
+});
 
 export default TemplateSelector;

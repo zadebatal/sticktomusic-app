@@ -13,6 +13,10 @@ const THEMES = {
     text: { primary: '#f4f4f5', secondary: '#a1a1aa', muted: '#71717a' },
     accent: { primary: '#6366f1', hover: '#818cf8', muted: '#312e81' },
     border: { default: '#27272a', subtle: '#1e1e22' },
+    state: { success: '#22c55e', error: '#ef4444', warning: '#f59e0b', info: '#3b82f6' },
+    overlay: { light: 'rgba(0,0,0,0.4)', heavy: 'rgba(0,0,0,0.7)' },
+    hover: { bg: 'rgba(255,255,255,0.05)' },
+    shadow: '0 4px 20px rgba(0,0,0,0.3)',
     // Tailwind class strings (for LandingPage, AppShell, tabs)
     tw: {
       bgPage: 'bg-zinc-950', bgSurface: 'bg-zinc-900', bgElevated: 'bg-zinc-800', bgInput: 'bg-zinc-900',
@@ -35,6 +39,10 @@ const THEMES = {
     text: { primary: '#18181b', secondary: '#52525b', muted: '#a1a1aa' },
     accent: { primary: '#4f46e5', hover: '#6366f1', muted: '#e0e7ff' },
     border: { default: '#d4d4d8', subtle: '#e4e4e7' },
+    state: { success: '#16a34a', error: '#dc2626', warning: '#d97706', info: '#2563eb' },
+    overlay: { light: 'rgba(0,0,0,0.3)', heavy: 'rgba(0,0,0,0.5)' },
+    hover: { bg: 'rgba(0,0,0,0.04)' },
+    shadow: '0 4px 20px rgba(0,0,0,0.15)',
     tw: {
       bgPage: 'bg-white', bgSurface: 'bg-gray-100', bgElevated: 'bg-gray-200', bgInput: 'bg-white',
       textPrimary: 'text-gray-900', textSecondary: 'text-gray-600', textMuted: 'text-gray-400',

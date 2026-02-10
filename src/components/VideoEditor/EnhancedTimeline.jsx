@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 
 /**
  * Enhanced Timeline - Clip timeline with thumbnails, waveform, beat markers, and quick actions
@@ -30,6 +31,7 @@ const EnhancedTimeline = ({
   audioBuffer, // For waveform
   isPlaying = false // New prop to know if video is playing
 }) => {
+  const { theme } = useTheme();
   const timelineRef = useRef(null);
   const [waveformData, setWaveformData] = useState([]);
   const [hoveredClip, setHoveredClip] = useState(null);
@@ -108,6 +110,7 @@ const EnhancedTimeline = ({
   }, []);
 
   const totalWidth = timeToPixels(duration);
+  const styles = getStyles(theme);
 
   return (
     <div style={styles.container}>
@@ -331,12 +334,12 @@ const EnhancedTimeline = ({
   );
 };
 
-const styles = {
+const getStyles = (theme) => ({
   container: {
     display: 'flex',
     flexDirection: 'column',
-    backgroundColor: '#0f0f23',
-    borderTop: '1px solid #1e293b',
+    backgroundColor: theme.bg.page,
+    borderTop: `1px solid ${theme.bg.surface}`,
     height: '220px'
   },
   toolbar: {
@@ -344,8 +347,8 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '8px 12px',
-    backgroundColor: '#1e293b',
-    borderBottom: '1px solid #334155'
+    backgroundColor: theme.bg.surface,
+    borderBottom: `1px solid ${theme.bg.elevated}`
   },
   toolbarLeft: {
     display: 'flex',
@@ -360,18 +363,18 @@ const styles = {
   label: {
     fontSize: '13px',
     fontWeight: '600',
-    color: '#e2e8f0'
+    color: theme.text.primary
   },
   clipCount: {
     fontSize: '12px',
-    color: '#64748b'
+    color: theme.text.muted
   },
   toolbarButton: {
     padding: '6px 12px',
-    backgroundColor: '#334155',
+    backgroundColor: theme.bg.elevated,
     border: 'none',
     borderRadius: '6px',
-    color: 'white',
+    color: theme.text.primary,
     fontSize: '12px',
     cursor: 'pointer',
     transition: 'background 0.2s'
@@ -384,11 +387,11 @@ const styles = {
   },
   zoomLabel: {
     fontSize: '12px',
-    color: '#94a3b8'
+    color: theme.text.secondary
   },
   zoomValue: {
     fontSize: '12px',
-    color: '#e2e8f0',
+    color: theme.text.primary,
     fontWeight: '500'
   },
   timelineScroll: {
@@ -407,7 +410,7 @@ const styles = {
     left: 0,
     right: 0,
     height: '24px',
-    backgroundColor: '#1e293b'
+    backgroundColor: theme.bg.surface
   },
   rulerMark: {
     position: 'absolute',
@@ -418,11 +421,11 @@ const styles = {
   rulerLine: {
     width: '1px',
     height: '8px',
-    backgroundColor: '#475569'
+    backgroundColor: theme.border.default
   },
   rulerTime: {
     fontSize: '10px',
-    color: '#64748b',
+    color: theme.text.muted,
     marginTop: '2px'
   },
   beatTrack: {
@@ -436,7 +439,7 @@ const styles = {
     position: 'absolute',
     width: '2px',
     height: '100%',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     opacity: 0.5
   },
   waveform: {
@@ -465,7 +468,7 @@ const styles = {
   clip: {
     position: 'absolute',
     height: '100%',
-    backgroundColor: '#334155',
+    backgroundColor: theme.bg.elevated,
     borderRadius: '4px',
     overflow: 'hidden',
     cursor: 'pointer',
@@ -473,7 +476,7 @@ const styles = {
     border: '2px solid transparent'
   },
   clipSelected: {
-    borderColor: '#7c3aed',
+    borderColor: theme.accent.primary,
     boxShadow: '0 0 0 2px rgba(124, 58, 237, 0.3)'
   },
   clipLocked: {
@@ -502,7 +505,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '20px',
-    backgroundColor: '#1e293b'
+    backgroundColor: theme.bg.surface
   },
   lockIndicator: {
     position: 'absolute',
@@ -516,8 +519,8 @@ const styles = {
     left: '4px',
     fontSize: '10px',
     fontWeight: 'bold',
-    color: 'white',
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    color: theme.text.primary,
+    backgroundColor: theme.overlay.heavy,
     padding: '2px 4px',
     borderRadius: '2px'
   },
@@ -531,7 +534,7 @@ const styles = {
   },
   hoverAction: {
     padding: '4px 8px',
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: theme.overlay.heavy,
     border: 'none',
     borderRadius: '4px',
     cursor: 'pointer',
@@ -549,13 +552,13 @@ const styles = {
     height: '100%',
     backgroundColor: 'rgba(124, 58, 237, 0.3)',
     borderRadius: '4px',
-    borderLeft: '2px solid #7c3aed',
+    borderLeft: `2px solid ${theme.accent.primary}`,
     padding: '2px 4px',
     overflow: 'hidden'
   },
   wordText: {
     fontSize: '10px',
-    color: '#e2e8f0',
+    color: theme.text.primary,
     whiteSpace: 'nowrap'
   },
   playhead: {
@@ -581,12 +584,12 @@ const styles = {
   },
   contextMenu: {
     position: 'fixed',
-    backgroundColor: '#1e293b',
-    border: '1px solid #334155',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '8px',
     padding: '4px',
     zIndex: 100,
-    boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+    boxShadow: theme.shadow
   },
   contextMenuItem: {
     display: 'block',
@@ -595,16 +598,16 @@ const styles = {
     backgroundColor: 'transparent',
     border: 'none',
     borderRadius: '4px',
-    color: 'white',
+    color: theme.text.primary,
     fontSize: '13px',
     textAlign: 'left',
     cursor: 'pointer'
   },
   contextMenuDivider: {
     height: '1px',
-    backgroundColor: '#334155',
+    backgroundColor: theme.bg.elevated,
     margin: '4px 0'
   }
-};
+});
 
 export default EnhancedTimeline;

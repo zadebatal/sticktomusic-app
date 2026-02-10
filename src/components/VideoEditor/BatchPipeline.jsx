@@ -5,6 +5,7 @@ import { isValidBankName, generateBatchPostContent, getBankNames } from '../../u
 import { VIDEO_STATUS } from '../../utils/status';
 import PreviewPlayer from './PreviewPlayer';
 import useIsMobile from '../../hooks/useIsMobile';
+import { useTheme } from '../../contexts/ThemeContext';
 import log from '../../utils/logger';
 
 /**
@@ -41,6 +42,7 @@ const BEAT_PATTERNS = [
  * Uses autoplay+pause trick to force first frame render in modal context
  */
 const ClipThumbnail = ({ clip, style }) => {
+  const { theme } = useTheme();
   const videoRef = useRef(null);
 
   // Prefer cloud URL over blob URLs (blob URLs expire between sessions)
@@ -86,7 +88,7 @@ const ClipThumbnail = ({ clip, style }) => {
       <video
         ref={videoRef}
         src={videoUrl}
-        style={{ ...style, objectFit: 'cover', background: '#27272a' }}
+        style={{ ...style, objectFit: 'cover', background: theme.bg.elevated }}
         muted
         playsInline
         preload="auto"
@@ -106,11 +108,11 @@ const ClipThumbnail = ({ clip, style }) => {
   return (
     <div style={{
       ...style,
-      background: 'linear-gradient(135deg, #3f3f46 0%, #27272a 100%)',
+      background: `linear-gradient(135deg, ${theme.bg.elevated} 0%, ${theme.bg.surface} 100%)`,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      color: '#71717a',
+      color: theme.text.muted,
       fontSize: '24px'
     }}>
       🎬
@@ -132,6 +134,7 @@ const BatchPipeline = ({
 }) => {
   // Mobile responsive detection
   const { isMobile } = useIsMobile();
+  const { theme } = useTheme();
 
   // Stage management
   const [stage, setStage] = useState(STAGES.OPTIONS);
@@ -612,7 +615,7 @@ const BatchPipeline = ({
     overlay: {
       position: 'fixed',
       inset: 0,
-      background: 'rgba(0,0,0,0.9)',
+      background: theme.overlay.heavy,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -620,7 +623,7 @@ const BatchPipeline = ({
       padding: isMobile ? 0 : '20px'
     },
     modal: {
-      background: '#18181b',
+      background: theme.bg.surface,
       borderRadius: isMobile ? 0 : '16px',
       width: '100%',
       maxWidth: isMobile ? '100%' : '900px',
@@ -632,7 +635,7 @@ const BatchPipeline = ({
     },
     header: {
       padding: isMobile ? '16px' : '20px 24px',
-      borderBottom: '1px solid #27272a',
+      borderBottom: `1px solid ${theme.bg.elevated}`,
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center'
@@ -641,12 +644,12 @@ const BatchPipeline = ({
       margin: 0,
       fontSize: isMobile ? '18px' : '20px',
       fontWeight: '600',
-      color: 'white'
+      color: theme.text.primary
     },
     closeBtn: {
       background: 'none',
       border: 'none',
-      color: '#71717a',
+      color: theme.text.muted,
       fontSize: isMobile ? '28px' : '24px',
       cursor: 'pointer',
       padding: isMobile ? '8px' : 0
@@ -669,16 +672,16 @@ const BatchPipeline = ({
     sectionTitle: {
       fontSize: '14px',
       fontWeight: '600',
-      color: '#a1a1aa',
+      color: theme.text.secondary,
       textTransform: 'uppercase',
       letterSpacing: '0.05em'
     },
     selectAllBtn: {
       padding: isMobile ? '10px 14px' : '6px 12px',
-      background: '#27272a',
-      border: '1px solid #3f3f46',
+      background: theme.bg.elevated,
+      border: `1px solid ${theme.border.subtle}`,
       borderRadius: '6px',
-      color: '#e4e4e7',
+      color: theme.text.primary,
       fontSize: isMobile ? '14px' : '12px',
       cursor: 'pointer'
     },
@@ -693,7 +696,7 @@ const BatchPipeline = ({
       borderRadius: '8px',
       overflow: 'hidden',
       cursor: 'pointer',
-      border: selected ? '3px solid #8b5cf6' : '2px solid #3f3f46',
+      border: selected ? `3px solid ${theme.accent.primary}` : `2px solid ${theme.border.subtle}`,
       opacity: selected ? 1 : 0.7,
       transition: 'all 0.15s'
     }),
@@ -709,7 +712,7 @@ const BatchPipeline = ({
       right: '4px',
       width: '20px',
       height: '20px',
-      background: '#8b5cf6',
+      background: theme.accent.primary,
       borderRadius: '50%',
       display: 'flex',
       alignItems: 'center',
@@ -719,7 +722,7 @@ const BatchPipeline = ({
     },
     audioCard: (selected) => ({
       padding: '12px',
-      background: selected ? '#8b5cf6' : '#27272a',
+      background: selected ? theme.accent.primary : theme.bg.elevated,
       borderRadius: '8px',
       cursor: 'pointer',
       marginBottom: '8px',
@@ -728,19 +731,19 @@ const BatchPipeline = ({
     input: {
       width: '100%',
       padding: '10px 12px',
-      background: '#27272a',
-      border: '1px solid #3f3f46',
+      background: theme.bg.elevated,
+      border: `1px solid ${theme.border.subtle}`,
       borderRadius: '8px',
-      color: 'white',
+      color: theme.text.primary,
       fontSize: '14px',
       boxSizing: 'border-box'
     },
     select: {
       padding: '10px 12px',
-      background: '#27272a',
-      border: '1px solid #3f3f46',
+      background: theme.bg.elevated,
+      border: `1px solid ${theme.border.subtle}`,
       borderRadius: '8px',
-      color: 'white',
+      color: theme.text.primary,
       fontSize: '14px',
       cursor: 'pointer',
       minWidth: '150px'
@@ -758,7 +761,7 @@ const BatchPipeline = ({
     label: {
       display: 'block',
       fontSize: '13px',
-      color: '#a1a1aa',
+      color: theme.text.secondary,
       marginBottom: '6px'
     },
     btn: {
@@ -771,26 +774,26 @@ const BatchPipeline = ({
       transition: 'all 0.15s'
     },
     primaryBtn: {
-      background: '#8b5cf6',
+      background: theme.accent.primary,
       color: 'white'
     },
     primaryBtnDisabled: {
       background: '#4c4c54',
-      color: '#71717a',
+      color: theme.text.muted,
       cursor: 'not-allowed'
     },
     secondaryBtn: {
-      background: '#27272a',
-      color: 'white'
+      background: theme.bg.elevated,
+      color: theme.text.primary
     },
     secondaryBtnDisabled: {
-      background: '#1f1f23',
+      background: theme.bg.surface,
       color: '#52525b',
       cursor: 'not-allowed'
     },
     footer: {
       padding: isMobile ? '16px' : '16px 24px',
-      borderTop: '1px solid #27272a',
+      borderTop: `1px solid ${theme.bg.elevated}`,
       display: 'flex',
       flexDirection: isMobile ? 'column' : 'row',
       gap: isMobile ? '12px' : 0,
@@ -811,7 +814,7 @@ const BatchPipeline = ({
     progressBar: {
       width: '100%',
       height: '8px',
-      background: '#27272a',
+      background: theme.bg.elevated,
       borderRadius: '4px',
       overflow: 'hidden',
       marginTop: '16px'
@@ -819,7 +822,7 @@ const BatchPipeline = ({
     progressFill: (percent) => ({
       width: `${percent}%`,
       height: '100%',
-      background: '#8b5cf6',
+      background: theme.accent.primary,
       transition: 'width 0.3s'
     }),
     accountBadge: {
@@ -827,7 +830,7 @@ const BatchPipeline = ({
       alignItems: 'center',
       gap: '8px',
       padding: '8px 16px',
-      background: '#27272a',
+      background: theme.bg.elevated,
       borderRadius: '8px',
       marginBottom: '16px'
     },
@@ -837,7 +840,7 @@ const BatchPipeline = ({
       gap: '8px',
       cursor: 'pointer',
       padding: '8px 12px',
-      background: '#27272a',
+      background: theme.bg.elevated,
       borderRadius: '6px'
     },
     beatPatternGrid: {
@@ -848,20 +851,20 @@ const BatchPipeline = ({
     },
     beatPatternBtn: (selected) => ({
       padding: isMobile ? '12px' : '10px 12px',
-      background: selected ? '#8b5cf6' : '#27272a',
-      border: selected ? '2px solid #a78bfa' : '1px solid #3f3f46',
+      background: selected ? theme.accent.primary : theme.bg.elevated,
+      border: selected ? `2px solid ${theme.accent.hover}` : `1px solid ${theme.border.subtle}`,
       borderRadius: '8px',
       cursor: 'pointer',
       textAlign: 'left'
     }),
     beatPatternLabel: {
-      color: 'white',
+      color: theme.text.primary,
       fontSize: '13px',
       fontWeight: '500',
       display: 'block'
     },
     beatPatternDesc: {
-      color: '#71717a',
+      color: theme.text.muted,
       fontSize: '11px',
       marginTop: '2px'
     },
@@ -875,7 +878,7 @@ const BatchPipeline = ({
       flexDirection: isMobile ? 'column' : 'row',
       gap: isMobile ? '8px' : '12px',
       padding: isMobile ? '10px' : '12px',
-      background: '#27272a',
+      background: theme.bg.elevated,
       borderRadius: '8px',
       alignItems: isMobile ? 'stretch' : 'center'
     },
@@ -883,7 +886,7 @@ const BatchPipeline = ({
       width: '60px',
       height: '80px',
       borderRadius: '4px',
-      background: '#3f3f46',
+      background: theme.border.subtle,
       overflow: 'hidden'
     },
     videoInfo: {
@@ -908,7 +911,7 @@ const BatchPipeline = ({
       alignItems: 'center',
       gap: '4px',
       padding: '4px 8px',
-      background: '#7c3aed',
+      background: theme.accent.primary,
       borderRadius: '4px',
       fontSize: '11px',
       color: 'white',
@@ -933,8 +936,8 @@ const BatchPipeline = ({
 
             {/* Account Badge */}
             <div style={styles.accountBadge}>
-              <span style={{ color: '#a1a1aa' }}>Posting to:</span>
-              <span style={{ color: 'white', fontWeight: '600' }}>
+              <span style={{ color: theme.text.secondary }}>Posting to:</span>
+              <span style={{ color: theme.text.primary, fontWeight: '600' }}>
                 {accountHandle || 'No account linked'}
               </span>
               {accountMapping && (
@@ -949,7 +952,7 @@ const BatchPipeline = ({
             <div style={styles.section}>
               <div style={styles.sectionTitle}>1. Select Audio Track</div>
               {availableAudio.length === 0 ? (
-                <p style={{ color: '#71717a' }}>No audio uploaded. Upload audio first.</p>
+                <p style={{ color: theme.text.muted }}>No audio uploaded. Upload audio first.</p>
               ) : (
                 availableAudio.map(audio => (
                   <div
@@ -964,13 +967,13 @@ const BatchPipeline = ({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div style={{ color: 'white', fontWeight: '500' }}>{audio.name}</div>
-                        <div style={{ color: selectedAudio?.id === audio.id ? 'rgba(255,255,255,0.7)' : '#71717a', fontSize: '12px' }}>
+                        <div style={{ color: selectedAudio?.id === audio.id ? theme.text.secondary : theme.text.muted, fontSize: '12px' }}>
                           {audio.duration ? `${Math.round(audio.duration)}s` : 'Unknown duration'}
                           {audio.savedLyrics?.length > 0 && ` • ${audio.savedLyrics.length} lyrics saved`}
                         </div>
                       </div>
                       {isAnalyzing && selectedAudio?.id === audio.id && (
-                        <span style={{ color: '#a1a1aa', fontSize: '12px' }}>Analyzing beats...</span>
+                        <span style={{ color: theme.text.secondary, fontSize: '12px' }}>Analyzing beats...</span>
                       )}
                       {!isAnalyzing && selectedAudio?.id === audio.id && bpm > 0 && (
                         <span style={styles.bpmBadge}>🎵 {Math.round(bpm)} BPM</span>
@@ -994,7 +997,7 @@ const BatchPipeline = ({
                 )}
               </div>
               {availableClips.length === 0 ? (
-                <p style={{ color: '#71717a' }}>No clips uploaded. Upload videos first.</p>
+                <p style={{ color: theme.text.muted }}>No clips uploaded. Upload videos first.</p>
               ) : (
                 <div style={styles.grid}>
                   {availableClips.map(clip => {
@@ -1079,7 +1082,7 @@ const BatchPipeline = ({
                       }
                     }}
                   />
-                  <span style={{ color: 'white' }}>Add text overlay (lyrics)</span>
+                  <span style={{ color: theme.text.primary }}>Add text overlay (lyrics)</span>
                 </label>
               </div>
 
@@ -1095,10 +1098,10 @@ const BatchPipeline = ({
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                     <div>
-                      <div style={{ color: '#a78bfa', fontSize: '13px', fontWeight: '500', marginBottom: '4px' }}>
+                      <div style={{ color: theme.accent.hover, fontSize: '13px', fontWeight: '500', marginBottom: '4px' }}>
                         ✨ Using lyrics from editor
                       </div>
-                      <div style={{ color: '#9ca3af', fontSize: '12px' }}>
+                      <div style={{ color: theme.text.secondary, fontSize: '12px' }}>
                         {initialWords.length} words with timing • {initialTextStyle?.outline ? 'Outline' : 'No outline'}
                         {initialTextStyle?.textCase && initialTextStyle.textCase !== 'default' ? ` • ${initialTextStyle.textCase.toUpperCase()}` : ''}
                       </div>
@@ -1110,10 +1113,10 @@ const BatchPipeline = ({
                       }}
                       style={{
                         padding: '6px 12px',
-                        backgroundColor: 'rgba(255,255,255,0.1)',
+                        backgroundColor: theme.border.subtle,
                         border: 'none',
                         borderRadius: '6px',
-                        color: '#9ca3af',
+                        color: theme.text.secondary,
                         fontSize: '12px',
                         cursor: 'pointer'
                       }}
@@ -1201,7 +1204,7 @@ const BatchPipeline = ({
                 style={styles.previewVideo}
               />
             )}
-            <p style={{ color: '#a1a1aa', textAlign: 'center', marginTop: '16px' }}>
+            <p style={{ color: theme.text.secondary, textAlign: 'center', marginTop: '16px' }}>
               This is a preview of how your videos will look. The full batch will render at higher quality.
             </p>
           </div>
@@ -1239,10 +1242,10 @@ const BatchPipeline = ({
           <div style={styles.content}>
             <div style={styles.progress}>
               <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎬</div>
-              <div style={{ fontSize: '24px', color: 'white', marginBottom: '8px' }}>
+              <div style={{ fontSize: '24px', color: theme.text.primary, marginBottom: '8px' }}>
                 {generationProgress.current} / {generationProgress.total}
               </div>
-              <div style={{ color: '#a1a1aa' }}>{generationProgress.status}</div>
+              <div style={{ color: theme.text.secondary }}>{generationProgress.status}</div>
               <div style={styles.progressBar}>
                 <div style={styles.progressFill(percent)} />
               </div>
@@ -1313,7 +1316,7 @@ const BatchPipeline = ({
               </div>
             </div>
 
-            <p style={{ color: '#a1a1aa', marginBottom: '20px' }}>
+            <p style={{ color: theme.text.secondary, marginBottom: '20px' }}>
               Preview your video recipes below. Click "Edit" to open in full editor, or save as drafts to render later.
             </p>
 
@@ -1327,10 +1330,10 @@ const BatchPipeline = ({
                 <div
                   key={video.id}
                   style={{
-                    background: '#27272a',
+                    background: theme.bg.elevated,
                     borderRadius: '12px',
                     overflow: 'hidden',
-                    border: playingVideoId === video.id ? '2px solid #8b5cf6' : '2px solid transparent'
+                    border: playingVideoId === video.id ? `2px solid ${theme.accent.primary}` : '2px solid transparent'
                   }}
                 >
                   {/* Video Preview using PreviewPlayer */}
@@ -1346,7 +1349,7 @@ const BatchPipeline = ({
                       position: 'absolute',
                       top: '8px',
                       left: '8px',
-                      background: '#8b5cf6',
+                      background: theme.accent.primary,
                       color: 'white',
                       padding: '4px 8px',
                       borderRadius: '4px',
@@ -1362,7 +1365,7 @@ const BatchPipeline = ({
                         position: 'absolute',
                         top: '8px',
                         right: '8px',
-                        background: 'rgba(0,0,0,0.7)',
+                        background: theme.overlay.heavy,
                         color: '#fbbf24',
                         padding: '4px 8px',
                         borderRadius: '4px',
@@ -1377,10 +1380,10 @@ const BatchPipeline = ({
 
                   {/* Video Info */}
                   <div style={{ padding: '12px' }}>
-                    <div style={{ color: 'white', fontWeight: '500', marginBottom: '4px' }}>
+                    <div style={{ color: theme.text.primary, fontWeight: '500', marginBottom: '4px' }}>
                       {video.title}
                     </div>
-                    <div style={{ color: '#71717a', fontSize: '12px', marginBottom: '8px' }}>
+                    <div style={{ color: theme.text.muted, fontSize: '12px', marginBottom: '8px' }}>
                       {video.clips?.length || 0} clips • {Math.round(video.duration || 0)}s
                     </div>
 
@@ -1400,7 +1403,7 @@ const BatchPipeline = ({
                           style={{
                             flex: 1,
                             padding: '6px',
-                            background: '#8b5cf6',
+                            background: theme.accent.primary,
                             border: 'none',
                             borderRadius: '6px',
                             color: 'white',
@@ -1417,10 +1420,10 @@ const BatchPipeline = ({
                         style={{
                           flex: 1,
                           padding: '6px',
-                          background: '#3f3f46',
+                          background: theme.border.subtle,
                           border: 'none',
                           borderRadius: '6px',
-                          color: 'white',
+                          color: theme.text.primary,
                           fontSize: '11px',
                           cursor: 'pointer'
                         }}
@@ -1439,7 +1442,7 @@ const BatchPipeline = ({
             </div>
 
             {generatedVideos.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#71717a' }}>
+              <div style={{ textAlign: 'center', padding: '40px', color: theme.text.muted }}>
                 No videos in bank. Generate some videos first.
               </div>
             )}

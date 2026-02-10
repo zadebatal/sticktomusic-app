@@ -6,6 +6,7 @@ import {
   isValidBankName
 } from '../../utils/captionGenerator';
 import { useToast, useFocusTrap } from '../ui';
+import { useTheme } from '../../contexts/ThemeContext';
 import log from '../../utils/logger';
 
 /**
@@ -31,6 +32,8 @@ const PostingModule = ({
 }) => {
   // BUG-034: Toast notifications instead of alert()
   const { success: toastSuccess } = useToast();
+  const { theme } = useTheme();
+  const styles = useMemo(() => getStyles(theme), [theme]);
   // BUG-030: Focus trap for modal accessibility
   const trapRef = useFocusTrap(true);
 
@@ -119,6 +122,9 @@ const PostingModule = ({
     const dateStr = today.toISOString().split('T')[0];
     setScheduleDate(dateStr);
   }, []);
+
+  // Platform caption limits
+  const CAPTION_LIMITS = { tiktok: 150, instagram: 2200, youtube: 5000 };
 
   // Update caption for a specific post
   const handleCaptionChange = useCallback((postId, newCaption) => {
@@ -526,6 +532,8 @@ const PostCard = ({
   onRandomize,
   onRemove
 }) => {
+  const { theme } = useTheme();
+  const styles = useMemo(() => getStyles(theme), [theme]);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [generatedThumb, setGeneratedThumb] = useState(null);
   const captionInputRef = React.useRef(null);
@@ -623,15 +631,28 @@ const PostCard = ({
         <div style={styles.fieldGroup}>
           <label style={styles.fieldLabel}>Caption</label>
           {post.isEditing ? (
-            <input
-              ref={captionInputRef}
-              type="text"
-              value={post.caption}
-              onChange={(e) => onCaptionChange(post.id, e.target.value)}
-              onKeyDown={handleInputKeyDown}
-              style={styles.captionInput}
-              placeholder="Enter caption..."
-            />
+            <div>
+              <input
+                ref={captionInputRef}
+                type="text"
+                value={post.caption}
+                onChange={(e) => onCaptionChange(post.id, e.target.value)}
+                onKeyDown={handleInputKeyDown}
+                style={styles.captionInput}
+                placeholder="Enter caption..."
+              />
+              {(() => {
+                const platform = post.platform || 'instagram';
+                const limit = CAPTION_LIMITS[platform] || 2200;
+                const len = (post.caption || '').length;
+                const overLimit = len > limit;
+                return (
+                  <span style={{ fontSize: 11, color: overLimit ? '#ef4444' : theme.text.muted, marginTop: 2, display: 'block' }}>
+                    {len}/{limit} {overLimit ? `(over ${platform} limit)` : ''}
+                  </span>
+                );
+              })()}
+            </div>
           ) : (
             <p
               style={{
@@ -714,11 +735,11 @@ const PostCard = ({
   );
 };
 
-const styles = {
+const getStyles = (theme) => ({
   overlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: theme.overlay.heavy,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -726,7 +747,7 @@ const styles = {
     padding: '20px'
   },
   modal: {
-    backgroundColor: '#18181b',
+    backgroundColor: theme.bg.surface,
     borderRadius: '16px',
     width: '100%',
     maxWidth: '900px',
@@ -740,23 +761,23 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     padding: '20px 24px',
-    borderBottom: '1px solid #27272a'
+    borderBottom: `1px solid ${theme.bg.elevated}`
   },
   title: {
     margin: 0,
     fontSize: '20px',
     fontWeight: '600',
-    color: '#fff'
+    color: theme.text.primary
   },
   subtitle: {
     margin: '4px 0 0 0',
     fontSize: '14px',
-    color: '#71717a'
+    color: theme.text.muted
   },
   renderingBar: {
-    backgroundColor: '#1f1f23',
+    backgroundColor: theme.bg.surface,
     padding: '12px 24px',
-    borderBottom: '1px solid #27272a'
+    borderBottom: `1px solid ${theme.bg.elevated}`
   },
   renderingText: {
     fontSize: '14px',
@@ -765,7 +786,7 @@ const styles = {
   },
   progressBarContainer: {
     height: '4px',
-    backgroundColor: '#27272a',
+    backgroundColor: theme.bg.elevated,
     borderRadius: '2px',
     overflow: 'hidden'
   },
@@ -777,7 +798,7 @@ const styles = {
   closeButton: {
     background: 'none',
     border: 'none',
-    color: '#71717a',
+    color: theme.text.muted,
     fontSize: '24px',
     cursor: 'pointer',
     padding: '4px 8px',
@@ -787,7 +808,7 @@ const styles = {
     display: 'flex',
     gap: '16px',
     padding: '16px 24px',
-    borderBottom: '1px solid #27272a',
+    borderBottom: `1px solid ${theme.bg.elevated}`,
     flexWrap: 'wrap',
     alignItems: 'flex-end'
   },
@@ -795,8 +816,8 @@ const styles = {
     display: 'flex',
     gap: '16px',
     padding: '12px 24px',
-    borderBottom: '1px solid #27272a',
-    backgroundColor: '#0f0f11',
+    borderBottom: `1px solid ${theme.bg.elevated}`,
+    backgroundColor: theme.bg.page,
     flexWrap: 'wrap',
     alignItems: 'flex-end'
   },
@@ -808,16 +829,16 @@ const styles = {
   label: {
     fontSize: '12px',
     fontWeight: '500',
-    color: '#a1a1aa',
+    color: theme.text.secondary,
     textTransform: 'uppercase',
     letterSpacing: '0.5px'
   },
   select: {
     padding: '8px 12px',
     borderRadius: '8px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#27272a',
-    color: '#fff',
+    border: `1px solid ${theme.border.subtle}`,
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary,
     fontSize: '14px',
     minWidth: '150px',
     cursor: 'pointer'
@@ -825,17 +846,17 @@ const styles = {
   dateInput: {
     padding: '8px 12px',
     borderRadius: '8px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#27272a',
-    color: '#fff',
+    border: `1px solid ${theme.border.subtle}`,
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary,
     fontSize: '14px'
   },
   timeInput: {
     padding: '8px 12px',
     borderRadius: '8px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#27272a',
-    color: '#fff',
+    border: `1px solid ${theme.border.subtle}`,
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary,
     fontSize: '14px'
   },
   platformToggles: {
@@ -847,14 +868,14 @@ const styles = {
     alignItems: 'center',
     gap: '6px',
     fontSize: '14px',
-    color: '#e4e4e7',
+    color: theme.text.primary,
     cursor: 'pointer'
   },
   randomizeAllBtn: {
     padding: '8px 16px',
     borderRadius: '8px',
     border: 'none',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     color: '#fff',
     fontSize: '14px',
     fontWeight: '500',
@@ -885,18 +906,18 @@ const styles = {
   emptyState: {
     textAlign: 'center',
     padding: '48px 24px',
-    color: '#71717a'
+    color: theme.text.muted
   },
   emptyHint: {
     fontSize: '14px',
     marginTop: '8px',
-    color: '#52525b'
+    color: theme.text.muted
   },
   postCard: {
     display: 'flex',
     gap: '16px',
     padding: '16px',
-    backgroundColor: '#27272a',
+    backgroundColor: theme.bg.elevated,
     borderRadius: '12px',
     marginBottom: '12px'
   },
@@ -906,7 +927,7 @@ const styles = {
     height: '120px',
     borderRadius: '8px',
     overflow: 'hidden',
-    backgroundColor: '#18181b',
+    backgroundColor: theme.bg.surface,
     flexShrink: 0
   },
   thumbnailImg: {
@@ -926,7 +947,7 @@ const styles = {
     position: 'absolute',
     top: '4px',
     left: '4px',
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: theme.overlay.heavy,
     color: '#fff',
     fontSize: '11px',
     padding: '2px 6px',
@@ -944,49 +965,49 @@ const styles = {
   },
   postTitle: {
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '14px'
   },
   postTime: {
     fontSize: '12px',
-    color: '#a1a1aa'
+    color: theme.text.secondary
   },
   fieldGroup: {
     marginBottom: '8px'
   },
   fieldLabel: {
     fontSize: '11px',
-    color: '#71717a',
+    color: theme.text.muted,
     marginBottom: '2px',
     display: 'block'
   },
   captionText: {
     margin: 0,
     fontSize: '14px',
-    color: '#e4e4e7'
+    color: theme.text.primary
   },
   captionInput: {
     width: '100%',
     padding: '6px 10px',
     borderRadius: '6px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#18181b',
-    color: '#fff',
+    border: `1px solid ${theme.border.subtle}`,
+    backgroundColor: theme.bg.surface,
+    color: theme.text.primary,
     fontSize: '14px'
   },
   hashtagText: {
     margin: 0,
     fontSize: '13px',
-    color: '#a78bfa',
+    color: theme.accent.hover,
     wordBreak: 'break-all'
   },
   hashtagInput: {
     width: '100%',
     padding: '6px 10px',
     borderRadius: '6px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#18181b',
-    color: '#a78bfa',
+    border: `1px solid ${theme.border.subtle}`,
+    backgroundColor: theme.bg.surface,
+    color: theme.accent.hover,
     fontSize: '13px'
   },
   postActions: {
@@ -998,8 +1019,8 @@ const styles = {
     padding: '6px 10px',
     borderRadius: '6px',
     border: 'none',
-    backgroundColor: '#3f3f46',
-    color: '#fff',
+    backgroundColor: theme.border.subtle,
+    color: theme.text.primary,
     fontSize: '14px',
     cursor: 'pointer'
   },
@@ -1017,14 +1038,14 @@ const styles = {
     justifyContent: 'flex-end',
     gap: '12px',
     padding: '16px 24px',
-    borderTop: '1px solid #27272a'
+    borderTop: `1px solid ${theme.bg.elevated}`
   },
   cancelBtn: {
     padding: '10px 20px',
     borderRadius: '8px',
-    border: '1px solid #3f3f46',
+    border: `1px solid ${theme.border.subtle}`,
     backgroundColor: 'transparent',
-    color: '#a1a1aa',
+    color: theme.text.secondary,
     fontSize: '14px',
     fontWeight: '500',
     cursor: 'pointer'
@@ -1039,6 +1060,6 @@ const styles = {
     fontWeight: '600',
     cursor: 'pointer'
   }
-};
+});
 
 export default PostingModule;

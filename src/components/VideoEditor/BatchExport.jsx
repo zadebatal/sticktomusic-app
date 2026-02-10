@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { rerollAllClips } from './AutoRemixEngine';
 import { useToast, useFocusTrap } from '../ui';
+import { useTheme } from '../../contexts/ThemeContext';
 
 /**
  * Batch Export - Generate multiple variations and export them all
@@ -14,6 +15,7 @@ const BatchExport = ({
 }) => {
   // BUG-034: Toast notifications instead of alert()
   const { success: toastSuccess, error: toastError } = useToast();
+  const { theme } = useTheme();
   // BUG-030: Focus trap for modal accessibility
   const trapRef = useFocusTrap(true);
 
@@ -133,6 +135,7 @@ const BatchExport = ({
   };
 
   const selectedCount = variations.filter(v => v.selected).length;
+  const styles = getStyles(theme);
 
   return (
     <div style={styles.overlay} onClick={onClose}>
@@ -276,14 +279,14 @@ const BatchExport = ({
   );
 };
 
-const styles = {
+const getStyles = (theme) => ({
   overlay: {
     position: 'fixed',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: theme.overlay.heavy,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -293,7 +296,7 @@ const styles = {
     width: '90%',
     maxWidth: '700px',
     maxHeight: '80vh',
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.bg.surface,
     borderRadius: '12px',
     overflow: 'hidden',
     display: 'flex',
@@ -304,13 +307,13 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '16px 20px',
-    borderBottom: '1px solid #334155'
+    borderBottom: `1px solid ${theme.bg.elevated}`
   },
   title: {
     margin: 0,
     fontSize: '18px',
     fontWeight: '600',
-    color: 'white'
+    color: theme.text.primary
   },
   closeButton: {
     width: '32px',
@@ -321,7 +324,7 @@ const styles = {
     backgroundColor: 'transparent',
     border: 'none',
     borderRadius: '6px',
-    color: '#94a3b8',
+    color: theme.text.secondary,
     fontSize: '24px',
     cursor: 'pointer'
   },
@@ -336,19 +339,19 @@ const styles = {
     gap: '12px',
     marginBottom: '20px',
     padding: '12px',
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.bg.page,
     borderRadius: '8px'
   },
   quickGenerateLabel: {
     fontSize: '13px',
-    color: '#94a3b8'
+    color: theme.text.secondary
   },
   quickButton: {
     padding: '8px 16px',
-    backgroundColor: '#334155',
+    backgroundColor: theme.bg.elevated,
     border: 'none',
     borderRadius: '6px',
-    color: 'white',
+    color: theme.text.primary,
     fontSize: '13px',
     cursor: 'pointer',
     transition: 'background 0.2s'
@@ -364,13 +367,13 @@ const styles = {
     alignItems: 'center',
     gap: '12px',
     padding: '12px',
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.bg.page,
     borderRadius: '8px',
     border: '2px solid transparent',
     transition: 'border-color 0.2s'
   },
   variationCardSelected: {
-    borderColor: '#7c3aed'
+    borderColor: theme.accent.primary
   },
   variationCheckbox: {
     flexShrink: 0
@@ -384,7 +387,7 @@ const styles = {
     position: 'relative',
     width: '80px',
     height: '45px',
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.bg.surface,
     borderRadius: '4px',
     overflow: 'hidden',
     flexShrink: 0
@@ -407,10 +410,10 @@ const styles = {
     bottom: '2px',
     right: '2px',
     padding: '2px 4px',
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: theme.overlay.heavy,
     borderRadius: '2px',
     fontSize: '9px',
-    color: 'white'
+    color: theme.text.primary
   },
   variationInfo: {
     flex: 1,
@@ -420,16 +423,16 @@ const styles = {
   },
   variationNameInput: {
     padding: '6px 10px',
-    backgroundColor: '#1e293b',
-    border: '1px solid #334155',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '4px',
-    color: 'white',
+    color: theme.text.primary,
     fontSize: '14px',
     fontWeight: '500'
   },
   variationMeta: {
     fontSize: '12px',
-    color: '#64748b'
+    color: theme.text.muted
   },
   variationActions: {
     flexShrink: 0
@@ -447,10 +450,10 @@ const styles = {
   addButton: {
     width: '100%',
     padding: '12px',
-    backgroundColor: '#334155',
-    border: '2px dashed #475569',
+    backgroundColor: theme.bg.elevated,
+    border: `2px dashed ${theme.border.default}`,
     borderRadius: '8px',
-    color: '#94a3b8',
+    color: theme.text.secondary,
     fontSize: '14px',
     cursor: 'pointer',
     transition: 'all 0.2s'
@@ -460,13 +463,13 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '16px 20px',
-    borderTop: '1px solid #334155',
-    backgroundColor: '#0f172a'
+    borderTop: `1px solid ${theme.bg.elevated}`,
+    backgroundColor: theme.bg.page
   },
   footerInfo: {},
   selectedCount: {
     fontSize: '14px',
-    color: '#94a3b8'
+    color: theme.text.secondary
   },
   exportProgress: {
     display: 'flex',
@@ -479,30 +482,30 @@ const styles = {
   progressBar: {
     width: '200px',
     height: '8px',
-    backgroundColor: '#334155',
+    backgroundColor: theme.bg.elevated,
     borderRadius: '4px',
     overflow: 'hidden'
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     transition: 'width 0.3s'
   },
   progressText: {
     fontSize: '12px',
-    color: '#94a3b8'
+    color: theme.text.secondary
   },
   exportButton: {
     padding: '12px 32px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '8px',
-    color: 'white',
+    color: theme.text.primary,
     fontSize: '15px',
     fontWeight: '600',
     cursor: 'pointer',
     transition: 'background 0.2s'
   }
-};
+});
 
 export default BatchExport;

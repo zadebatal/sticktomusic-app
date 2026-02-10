@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 import { parseLyrics, parseLyricsIntoLines } from './AutoRemixEngine';
 import { DisplayModeSelector } from './TemplateSelector';
 import { useToast } from '../ui';
@@ -24,6 +25,7 @@ const LyricEditor = ({
   audioUrl = null
 }) => {
   // BUG-034: Toast notifications instead of alert()
+  const { theme } = useTheme();
   const { error: toastError } = useToast();
 
   const [mode, setMode] = useState('edit'); // edit, tapSync, manual
@@ -199,7 +201,7 @@ const LyricEditor = ({
     ctx.clearRect(0, 0, width, height);
 
     // Background
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = theme.bg.page;
     ctx.fillRect(0, 0, width, height);
 
     // Calculate playhead position
@@ -217,12 +219,12 @@ const LyricEditor = ({
       const barTime = (index / waveformData.length) * audioDuration;
       const isPast = barTime <= localPlayheadTime;
 
-      ctx.fillStyle = isPast ? '#7c3aed' : '#334155';
+      ctx.fillStyle = isPast ? theme.accent.primary : theme.bg.elevated;
       ctx.fillRect(x + barGap / 2, y, barWidth - barGap, barHeight);
     });
 
     // Draw time markers
-    ctx.fillStyle = '#64748b';
+    ctx.fillStyle = theme.text.muted;
     ctx.font = '10px monospace';
     const markerInterval = Math.max(5, Math.floor(audioDuration / 8));
     for (let t = 0; t <= audioDuration; t += markerInterval) {
@@ -232,7 +234,7 @@ const LyricEditor = ({
     }
 
     // Draw playhead (white line)
-    ctx.strokeStyle = '#ffffff';
+    ctx.strokeStyle = theme.text.primary;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(playheadX, 0);
@@ -240,7 +242,7 @@ const LyricEditor = ({
     ctx.stroke();
 
     // Playhead head (small triangle)
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = theme.text.primary;
     ctx.beginPath();
     ctx.moveTo(playheadX - 6, 0);
     ctx.lineTo(playheadX + 6, 0);
@@ -248,7 +250,7 @@ const LyricEditor = ({
     ctx.closePath();
     ctx.fill();
 
-  }, [waveformData, localPlayheadTime, audioDuration]);
+  }, [waveformData, localPlayheadTime, audioDuration, theme]);
 
   // Handle waveform click to seek
   const handleWaveformClick = useCallback((e) => {
@@ -301,6 +303,268 @@ const LyricEditor = ({
   };
 
   const currentWord = getCurrentWord();
+
+  const styles = {
+    container: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '12px',
+      outline: 'none'
+    },
+    header: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center'
+    },
+    title: {
+      margin: 0,
+      fontSize: '14px',
+      fontWeight: '600',
+      color: theme.text.primary
+    },
+    // Waveform styles
+    waveformSection: {
+      backgroundColor: theme.bg.page,
+      borderRadius: '8px',
+      padding: '12px',
+      border: `1px solid ${theme.bg.surface}`
+    },
+    waveformHeader: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: '8px'
+    },
+    waveformLabel: {
+      fontSize: '11px',
+      fontWeight: '600',
+      color: theme.text.muted,
+      textTransform: 'uppercase',
+      letterSpacing: '0.05em'
+    },
+    waveformTime: {
+      fontSize: '12px',
+      fontFamily: 'monospace',
+      color: theme.text.secondary
+    },
+    waveformContainer: {
+      cursor: 'crosshair',
+      borderRadius: '4px',
+      overflow: 'hidden',
+      backgroundColor: theme.bg.page
+    },
+    waveformCanvas: {
+      display: 'block',
+      width: '100%',
+      height: '60px'
+    },
+    waveformControls: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      marginTop: '8px'
+    },
+    waveformPlayButton: {
+      width: '32px',
+      height: '32px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.accent.primary,
+      border: 'none',
+      borderRadius: '50%',
+      color: 'white',
+      fontSize: '14px',
+      cursor: 'pointer'
+    },
+    waveformHint: {
+      fontSize: '11px',
+      color: theme.text.muted
+    },
+    lyricsInput: {
+      width: '100%',
+      minHeight: '120px',
+      padding: '12px',
+      backgroundColor: theme.bg.page,
+      border: `1px solid ${theme.bg.elevated}`,
+      borderRadius: '8px',
+      color: theme.text.primary,
+      fontSize: '13px',
+      fontFamily: 'monospace',
+      resize: 'vertical',
+      lineHeight: '1.6'
+    },
+    syncActions: {
+      display: 'flex',
+      gap: '8px'
+    },
+    syncButton: {
+      flex: 1,
+      padding: '10px',
+      backgroundColor: theme.bg.elevated,
+      border: 'none',
+      borderRadius: '6px',
+      color: theme.text.primary,
+      fontSize: '13px',
+      fontWeight: '500',
+      cursor: 'pointer',
+      transition: 'background 0.2s'
+    },
+    wordsPreview: {
+      backgroundColor: theme.bg.page,
+      borderRadius: '8px',
+      overflow: 'hidden'
+    },
+    wordsPreviewHeader: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: '8px 12px',
+      backgroundColor: theme.bg.surface,
+      fontSize: '12px',
+      color: theme.text.secondary
+    },
+    clearButton: {
+      padding: '4px 8px',
+      backgroundColor: 'transparent',
+      border: `1px solid ${theme.text.muted}`,
+      borderRadius: '4px',
+      color: theme.text.secondary,
+      fontSize: '11px',
+      cursor: 'pointer'
+    },
+    wordsList: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: '4px',
+      padding: '12px',
+      maxHeight: '150px',
+      overflow: 'auto'
+    },
+    wordItem: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px',
+      padding: '4px 8px',
+      backgroundColor: theme.bg.surface,
+      borderRadius: '4px',
+      fontSize: '12px'
+    },
+    wordItemActive: {
+      backgroundColor: theme.accent.primary,
+      color: 'white'
+    },
+    wordTime: {
+      color: theme.text.muted,
+      fontSize: '10px',
+      fontFamily: 'monospace'
+    },
+    wordText: {
+      color: theme.text.primary
+    },
+    tapSyncContainer: {
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      gap: '20px',
+      padding: '24px',
+      backgroundColor: theme.bg.page,
+      borderRadius: '8px',
+      textAlign: 'center'
+    },
+    tapSyncHeader: {},
+    tapSyncTitle: {
+      margin: '0 0 8px 0',
+      fontSize: '18px',
+      fontWeight: '600',
+      color: theme.text.primary
+    },
+    tapSyncInstructions: {
+      margin: 0,
+      fontSize: '13px',
+      color: theme.text.secondary
+    },
+    kbd: {
+      display: 'inline-block',
+      padding: '2px 6px',
+      backgroundColor: theme.bg.elevated,
+      borderRadius: '4px',
+      fontSize: '12px',
+      fontFamily: 'monospace'
+    },
+    tapSyncProgress: {
+      width: '100%',
+      height: '8px',
+      backgroundColor: theme.bg.elevated,
+      borderRadius: '4px',
+      overflow: 'hidden'
+    },
+    tapSyncProgressBar: {
+      height: '100%',
+      backgroundColor: theme.accent.primary,
+      transition: 'width 0.2s'
+    },
+    tapSyncCount: {
+      fontSize: '14px',
+      color: theme.text.secondary
+    },
+    tapSyncWordDisplay: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '16px',
+      minHeight: '80px'
+    },
+    tapSyncPrevWord: {
+      fontSize: '18px',
+      color: theme.text.muted
+    },
+    tapSyncCurrentWord: {
+      fontSize: '36px',
+      fontWeight: 'bold',
+      color: theme.accent.primary,
+      padding: '8px 24px',
+      backgroundColor: 'rgba(124, 58, 237, 0.1)',
+      borderRadius: '8px'
+    },
+    tapSyncNextWord: {
+      fontSize: '18px',
+      color: theme.text.muted
+    },
+    tapSyncComplete: {
+      fontSize: '24px',
+      color: '#22c55e'
+    },
+    tapSyncControls: {
+      display: 'flex',
+      gap: '12px'
+    },
+    tapSyncTapButton: {
+      padding: '16px 48px',
+      backgroundColor: theme.accent.primary,
+      border: 'none',
+      borderRadius: '8px',
+      color: 'white',
+      fontSize: '18px',
+      fontWeight: '600',
+      cursor: 'pointer',
+      transition: 'transform 0.1s'
+    },
+    tapSyncCancelButton: {
+      padding: '16px 24px',
+      backgroundColor: theme.text.muted,
+      border: 'none',
+      borderRadius: '8px',
+      color: 'white',
+      fontSize: '14px',
+      cursor: 'pointer'
+    },
+    tapSyncHint: {
+      fontSize: '13px',
+      color: theme.text.muted,
+      fontStyle: 'italic'
+    }
+  };
 
   return (
     <div
@@ -480,268 +744,6 @@ const LyricEditor = ({
       )}
     </div>
   );
-};
-
-const styles = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-    outline: 'none'
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  title: {
-    margin: 0,
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#e2e8f0'
-  },
-  // Waveform styles
-  waveformSection: {
-    backgroundColor: '#0f172a',
-    borderRadius: '8px',
-    padding: '12px',
-    border: '1px solid #1e293b'
-  },
-  waveformHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '8px'
-  },
-  waveformLabel: {
-    fontSize: '11px',
-    fontWeight: '600',
-    color: '#64748b',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em'
-  },
-  waveformTime: {
-    fontSize: '12px',
-    fontFamily: 'monospace',
-    color: '#94a3b8'
-  },
-  waveformContainer: {
-    cursor: 'crosshair',
-    borderRadius: '4px',
-    overflow: 'hidden',
-    backgroundColor: '#0f172a'
-  },
-  waveformCanvas: {
-    display: 'block',
-    width: '100%',
-    height: '60px'
-  },
-  waveformControls: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    marginTop: '8px'
-  },
-  waveformPlayButton: {
-    width: '32px',
-    height: '32px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#7c3aed',
-    border: 'none',
-    borderRadius: '50%',
-    color: 'white',
-    fontSize: '14px',
-    cursor: 'pointer'
-  },
-  waveformHint: {
-    fontSize: '11px',
-    color: '#64748b'
-  },
-  lyricsInput: {
-    width: '100%',
-    minHeight: '120px',
-    padding: '12px',
-    backgroundColor: '#0f172a',
-    border: '1px solid #334155',
-    borderRadius: '8px',
-    color: 'white',
-    fontSize: '13px',
-    fontFamily: 'monospace',
-    resize: 'vertical',
-    lineHeight: '1.6'
-  },
-  syncActions: {
-    display: 'flex',
-    gap: '8px'
-  },
-  syncButton: {
-    flex: 1,
-    padding: '10px',
-    backgroundColor: '#334155',
-    border: 'none',
-    borderRadius: '6px',
-    color: 'white',
-    fontSize: '13px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    transition: 'background 0.2s'
-  },
-  wordsPreview: {
-    backgroundColor: '#0f172a',
-    borderRadius: '8px',
-    overflow: 'hidden'
-  },
-  wordsPreviewHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '8px 12px',
-    backgroundColor: '#1e293b',
-    fontSize: '12px',
-    color: '#94a3b8'
-  },
-  clearButton: {
-    padding: '4px 8px',
-    backgroundColor: 'transparent',
-    border: '1px solid #475569',
-    borderRadius: '4px',
-    color: '#94a3b8',
-    fontSize: '11px',
-    cursor: 'pointer'
-  },
-  wordsList: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '4px',
-    padding: '12px',
-    maxHeight: '150px',
-    overflow: 'auto'
-  },
-  wordItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: '4px 8px',
-    backgroundColor: '#1e293b',
-    borderRadius: '4px',
-    fontSize: '12px'
-  },
-  wordItemActive: {
-    backgroundColor: '#7c3aed',
-    color: 'white'
-  },
-  wordTime: {
-    color: '#64748b',
-    fontSize: '10px',
-    fontFamily: 'monospace'
-  },
-  wordText: {
-    color: '#e2e8f0'
-  },
-  tapSyncContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '20px',
-    padding: '24px',
-    backgroundColor: '#0f172a',
-    borderRadius: '8px',
-    textAlign: 'center'
-  },
-  tapSyncHeader: {},
-  tapSyncTitle: {
-    margin: '0 0 8px 0',
-    fontSize: '18px',
-    fontWeight: '600',
-    color: 'white'
-  },
-  tapSyncInstructions: {
-    margin: 0,
-    fontSize: '13px',
-    color: '#94a3b8'
-  },
-  kbd: {
-    display: 'inline-block',
-    padding: '2px 6px',
-    backgroundColor: '#334155',
-    borderRadius: '4px',
-    fontSize: '12px',
-    fontFamily: 'monospace'
-  },
-  tapSyncProgress: {
-    width: '100%',
-    height: '8px',
-    backgroundColor: '#334155',
-    borderRadius: '4px',
-    overflow: 'hidden'
-  },
-  tapSyncProgressBar: {
-    height: '100%',
-    backgroundColor: '#7c3aed',
-    transition: 'width 0.2s'
-  },
-  tapSyncCount: {
-    fontSize: '14px',
-    color: '#94a3b8'
-  },
-  tapSyncWordDisplay: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '16px',
-    minHeight: '80px'
-  },
-  tapSyncPrevWord: {
-    fontSize: '18px',
-    color: '#475569'
-  },
-  tapSyncCurrentWord: {
-    fontSize: '36px',
-    fontWeight: 'bold',
-    color: '#7c3aed',
-    padding: '8px 24px',
-    backgroundColor: 'rgba(124, 58, 237, 0.1)',
-    borderRadius: '8px'
-  },
-  tapSyncNextWord: {
-    fontSize: '18px',
-    color: '#64748b'
-  },
-  tapSyncComplete: {
-    fontSize: '24px',
-    color: '#22c55e'
-  },
-  tapSyncControls: {
-    display: 'flex',
-    gap: '12px'
-  },
-  tapSyncTapButton: {
-    padding: '16px 48px',
-    backgroundColor: '#7c3aed',
-    border: 'none',
-    borderRadius: '8px',
-    color: 'white',
-    fontSize: '18px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'transform 0.1s'
-  },
-  tapSyncCancelButton: {
-    padding: '16px 24px',
-    backgroundColor: '#475569',
-    border: 'none',
-    borderRadius: '8px',
-    color: 'white',
-    fontSize: '14px',
-    cursor: 'pointer'
-  },
-  tapSyncHint: {
-    fontSize: '13px',
-    color: '#64748b',
-    fontStyle: 'italic'
-  }
 };
 
 export default LyricEditor;

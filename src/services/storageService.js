@@ -36,10 +36,18 @@ function saveToStorage(key, data) {
     localStorage.setItem(key, JSON.stringify(data));
     return true;
   } catch (error) {
-    console.error(`Failed to save ${key}:`, error);
     if (error.name === 'QuotaExceededError') {
-      console.warn('Storage quota exceeded');
+      console.warn('Storage quota exceeded — running cleanup and retrying...');
+      cleanupStorage();
+      try {
+        localStorage.setItem(key, JSON.stringify(data));
+        return true;
+      } catch (retryError) {
+        console.error(`Storage quota still exceeded after cleanup for ${key}:`, retryError);
+        return false;
+      }
     }
+    console.error(`Failed to save ${key}:`, error);
     return false;
   }
 }

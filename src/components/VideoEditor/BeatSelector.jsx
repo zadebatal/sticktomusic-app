@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 
 /**
  * BeatSelector - Select which beats to cut on
@@ -11,6 +12,8 @@ const BeatSelector = ({
   onApply,
   onCancel
 }) => {
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
   const [selectedBeats, setSelectedBeats] = useState(new Set());
 
   // Organize beats into measures (assuming 4/4 time)
@@ -205,11 +208,11 @@ const BeatSelector = ({
   );
 };
 
-const styles = {
+const getStyles = (theme) => ({
   overlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.85)',
+    backgroundColor: theme.overlay.heavy,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -220,7 +223,7 @@ const styles = {
     width: '100%',
     maxWidth: '600px',
     maxHeight: '80vh',
-    backgroundColor: '#111118',
+    backgroundColor: theme.bg.input,
     borderRadius: '16px',
     display: 'flex',
     flexDirection: 'column',
@@ -231,7 +234,7 @@ const styles = {
     alignItems: 'flex-start',
     gap: '12px',
     padding: '20px 20px 16px',
-    borderBottom: '1px solid #2d2d3d'
+    borderBottom: `1px solid ${theme.bg.elevated}`
   },
   headerIcon: {
     fontSize: '24px'
@@ -239,12 +242,12 @@ const styles = {
   title: {
     fontSize: '18px',
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text.primary,
     margin: '0 0 4px 0'
   },
   subtitle: {
     fontSize: '14px',
-    color: '#6b7280',
+    color: theme.text.muted,
     margin: 0,
     maxWidth: '400px'
   },
@@ -255,10 +258,10 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1f1f2e',
+    backgroundColor: theme.bg.surface,
     border: 'none',
     borderRadius: '8px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer'
   },
   presets: {
@@ -266,14 +269,14 @@ const styles = {
     flexWrap: 'wrap',
     gap: '8px',
     padding: '16px 20px',
-    borderBottom: '1px solid #2d2d3d'
+    borderBottom: `1px solid ${theme.bg.elevated}`
   },
   preset: {
     padding: '8px 16px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '20px',
-    color: '#e5e7eb',
+    color: theme.text.primary,
     fontSize: '13px',
     fontWeight: '500',
     cursor: 'pointer',
@@ -281,8 +284,8 @@ const styles = {
   },
   presetActive: {
     padding: '8px 16px',
-    backgroundColor: '#7c3aed',
-    border: '1px solid #7c3aed',
+    backgroundColor: theme.accent.primary,
+    border: `1px solid ${theme.accent.primary}`,
     borderRadius: '20px',
     color: '#fff',
     fontSize: '13px',
@@ -297,7 +300,7 @@ const styles = {
   noBeats: {
     textAlign: 'center',
     padding: '40px',
-    color: '#6b7280'
+    color: theme.text.muted
   },
   measure: {
     marginBottom: '16px'
@@ -305,7 +308,7 @@ const styles = {
   measureLabel: {
     fontSize: '12px',
     fontWeight: '600',
-    color: '#6b7280',
+    color: theme.text.muted,
     marginBottom: '8px',
     textTransform: 'uppercase',
     letterSpacing: '0.5px'
@@ -320,17 +323,17 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     padding: '10px 16px',
-    backgroundColor: '#1f1f2e',
-    border: '2px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `2px solid ${theme.bg.elevated}`,
     borderRadius: '8px',
     cursor: 'pointer',
     transition: 'all 0.15s',
     minWidth: '80px',
-    color: '#e5e7eb'
+    color: theme.text.primary
   },
   beatSelected: {
-    backgroundColor: '#7c3aed',
-    borderColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
+    borderColor: theme.accent.primary,
     color: '#fff'
   },
   beatNumber: {
@@ -346,12 +349,12 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '16px 20px',
-    borderTop: '1px solid #2d2d3d',
-    backgroundColor: '#0f0f17'
+    borderTop: `1px solid ${theme.bg.elevated}`,
+    backgroundColor: theme.bg.page
   },
   beatCount: {
     fontSize: '13px',
-    color: '#6b7280'
+    color: theme.text.muted
   },
   footerActions: {
     display: 'flex',
@@ -360,9 +363,9 @@ const styles = {
   cancelButton: {
     padding: '10px 20px',
     backgroundColor: 'transparent',
-    border: '1px solid #374151',
+    border: `1px solid ${theme.border.subtle}`,
     borderRadius: '8px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     fontSize: '14px',
     fontWeight: '500',
     cursor: 'pointer'
@@ -372,7 +375,7 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     padding: '10px 20px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '8px',
     color: '#fff',
@@ -380,6 +383,6 @@ const styles = {
     fontWeight: '500',
     cursor: 'pointer'
   }
-};
+});
 
 export default BeatSelector;

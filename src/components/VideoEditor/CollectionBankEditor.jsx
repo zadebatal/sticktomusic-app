@@ -6,6 +6,7 @@ import {
   updateCollectionHashtagBank,
   saveCollectionToFirestore
 } from '../../services/libraryService';
+import { useTheme } from '../../contexts/ThemeContext';
 
 /**
  * CollectionBankEditor - Edit caption and hashtag banks for a collection
@@ -18,8 +19,11 @@ const CollectionBankEditor = ({
   onBankChange,
   compact = false // When true, uses smaller layout for sidebar
 }) => {
+  const { theme } = useTheme();
   const [captionBank, setCaptionBank] = useState(() => getCollectionCaptionBank(collection));
   const [hashtagBank, setHashtagBank] = useState(() => getCollectionHashtagBank(collection));
+
+  const styles = getStyles(theme);
 
   // Sync when collection changes
   useEffect(() => {
@@ -234,7 +238,7 @@ const CollectionBankEditor = ({
   );
 };
 
-const styles = {
+const getStyles = (theme) => ({
   container: {
     padding: '20px'
   },
@@ -248,12 +252,12 @@ const styles = {
     margin: 0,
     fontSize: '18px',
     fontWeight: '600',
-    color: '#fff'
+    color: theme.text.primary
   },
   subtitle: {
     margin: '6px 0 0 0',
     fontSize: '13px',
-    color: '#71717a'
+    color: theme.text.muted
   },
   sections: {
     display: 'grid',
@@ -266,16 +270,16 @@ const styles = {
     gap: '16px'
   },
   section: {
-    backgroundColor: '#1f1f23',
+    backgroundColor: theme.bg.surface,
     borderRadius: '12px',
     padding: '16px',
-    border: '1px solid #27272a'
+    border: `1px solid ${theme.bg.elevated}`
   },
   sectionTitle: {
     margin: '0 0 16px 0',
     fontSize: '14px',
     fontWeight: '600',
-    color: '#e4e4e7'
+    color: theme.text.primary
   },
   bankGroup: {
     marginBottom: '16px'
@@ -284,7 +288,7 @@ const styles = {
     display: 'block',
     fontSize: '11px',
     fontWeight: '500',
-    color: '#a1a1aa',
+    color: theme.text.secondary,
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
     marginBottom: '8px'
@@ -292,7 +296,7 @@ const styles = {
   bankHint: {
     textTransform: 'none',
     letterSpacing: '0',
-    color: '#52525b',
+    color: theme.text.muted,
     fontWeight: '400'
   },
   tagList: {
@@ -326,8 +330,8 @@ const styles = {
     display: 'inline-flex',
     alignItems: 'center',
     padding: '4px 10px',
-    backgroundColor: '#27272a',
-    color: '#a1a1aa',
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.secondary,
     borderRadius: '6px',
     fontSize: '12px',
     fontFamily: 'monospace'
@@ -335,7 +339,7 @@ const styles = {
   tagRemovePool: {
     background: 'none',
     border: 'none',
-    color: '#52525b',
+    color: theme.text.muted,
     cursor: 'pointer',
     marginLeft: '6px',
     padding: '0 2px',
@@ -345,17 +349,17 @@ const styles = {
   input: {
     width: '100%',
     padding: '8px 12px',
-    backgroundColor: '#18181b',
-    border: '1px solid #3f3f46',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.border.default}`,
     borderRadius: '8px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '13px',
     outline: 'none',
     boxSizing: 'border-box'
   },
   emptyHint: {
     fontSize: '12px',
-    color: '#3f3f46',
+    color: theme.text.muted,
     fontStyle: 'italic'
   },
   empty: {
@@ -363,9 +367,9 @@ const styles = {
     textAlign: 'center'
   },
   emptyText: {
-    color: '#52525b',
+    color: theme.text.muted,
     fontSize: '14px'
   }
-};
+});
 
 export default CollectionBankEditor;

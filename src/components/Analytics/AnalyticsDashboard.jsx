@@ -92,6 +92,7 @@ const AnalyticsDashboard = ({
 
   // Load analytics data
   const loadAnalytics = useCallback(() => {
+    const capturedArtistId = currentArtistId;
     const stored = getStoredAnalytics();
 
     // If no data, add mock data for demo
@@ -114,12 +115,12 @@ const AnalyticsDashboard = ({
       setTimeSeriesData(getTimeSeriesData(chartPeriod, 30));
     }
 
-    // Load Spotify attribution data
+    // Load Spotify attribution data — verify artistId hasn't changed
     try {
-      if (currentArtistId) {
-        computeAttribution(currentArtistId);
-        setVideoAttributions(getVideoAttributionSummary(currentArtistId));
-        setSongAttributions(getSongAttributionSummary(currentArtistId));
+      if (capturedArtistId && capturedArtistId === currentArtistId) {
+        computeAttribution(capturedArtistId);
+        setVideoAttributions(getVideoAttributionSummary(capturedArtistId));
+        setSongAttributions(getSongAttributionSummary(capturedArtistId));
       }
     } catch (error) {
       console.error('Error loading attribution data:', error);

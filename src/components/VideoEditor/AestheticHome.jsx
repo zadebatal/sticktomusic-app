@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import useIsMobile from '../../hooks/useIsMobile';
+import { useTheme } from '../../contexts/ThemeContext';
 import AudioClipSelector from './AudioClipSelector';
 import LyricBank from './LyricBank';
 import { ConfirmDialog } from '../ui';
@@ -51,6 +52,7 @@ const AestheticHome = ({
 }) => {
   // Use the lifted studioMode setter
   const setStudioMode = onSetStudioMode || (() => {});
+  const { theme } = useTheme();
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryDesc, setNewCategoryDesc] = useState('');
@@ -72,6 +74,10 @@ const AestheticHome = ({
   const imageAInputRef = useRef(null);
   const imageBInputRef = useRef(null);
 
+  // Lyrics prompt modal state (replaces window.prompt)
+  const [showLyricsPrompt, setShowLyricsPrompt] = useState(false);
+  const [lyricsPromptValue, setLyricsPromptValue] = useState('');
+
   // Delete confirmation dialogs
   const [deleteVideoConfirm, setDeleteVideoConfirm] = useState({ isOpen: false, videoId: null, videoName: '' });
   const [deleteAudioConfirm, setDeleteAudioConfirm] = useState({ isOpen: false, audioId: null, audioName: '' });
@@ -81,9 +87,10 @@ const AestheticHome = ({
   // Note: Library views now use onViewContent to navigate to full content library page
 
   const handleCreateCategory = () => {
-    if (newCategoryName.trim()) {
+    const trimmed = newCategoryName.trim();
+    if (trimmed && trimmed.length <= 50) {
       onCreateCategory({
-        name: newCategoryName.trim(),
+        name: trimmed,
         description: newCategoryDesc.trim()
       });
       setNewCategoryName('');
@@ -180,6 +187,8 @@ const AestheticHome = ({
   // Get counts for mode cards
   const videoCount = selectedCategory?.createdVideos?.length || 0;
   const slideshowCount = selectedCategory?.slideshows?.length || 0;
+
+  const styles = getStyles(theme);
 
   return (
     <div style={styles.container}>
@@ -459,13 +468,8 @@ const AestheticHome = ({
                           ...(isMobile ? { padding: '10px 16px', fontSize: '14px', minHeight: '44px' } : {})
                         }}
                         onClick={() => {
-                          const text = prompt('Enter lyrics to add to bank:');
-                          if (text?.trim()) {
-                            onAddLyrics?.({
-                              title: text.split('\n')[0].slice(0, 30) || 'New Lyrics',
-                              content: text.trim()
-                            });
-                          }
+                          setLyricsPromptValue('');
+                          setShowLyricsPrompt(true);
                         }}
                       >
                         <svg width={isMobile ? 16 : 12} height={isMobile ? 16 : 12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -699,13 +703,8 @@ const AestheticHome = ({
                           ...(isMobile ? { padding: '10px 16px', fontSize: '14px', minHeight: '44px' } : {})
                         }}
                         onClick={() => {
-                          const text = prompt('Enter lyrics to add to bank:');
-                          if (text?.trim()) {
-                            onAddLyrics?.({
-                              title: text.split('\n')[0].slice(0, 30) || 'New Lyrics',
-                              content: text.trim()
-                            });
-                          }
+                          setLyricsPromptValue('');
+                          setShowLyricsPrompt(true);
                         }}
                       >
                         <svg width={isMobile ? 16 : 12} height={isMobile ? 16 : 12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -954,6 +953,41 @@ const AestheticHome = ({
         onCancel={() => setDeleteSlideshowConfirm({ isOpen: false, slideshowId: null, slideshowName: '' })}
       />
 
+      {/* Lyrics Prompt Modal (replaces window.prompt) */}
+      {showLyricsPrompt && (
+        <div style={{ position: 'fixed', inset: 0, background: theme.overlay.heavy, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setShowLyricsPrompt(false)}>
+          <div style={{ background: theme.bg.input, borderRadius: 12, padding: 24, width: 400, maxWidth: '90vw' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ color: theme.text.primary, fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Add Lyrics</div>
+            <textarea
+              autoFocus
+              value={lyricsPromptValue}
+              onChange={e => setLyricsPromptValue(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Escape') setShowLyricsPrompt(false); }}
+              placeholder="Enter lyrics to add to bank..."
+              style={{ width: '100%', minHeight: 100, background: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, borderRadius: 8, padding: 12, color: theme.text.primary, fontSize: 14, resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}
+            />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+              <button onClick={() => setShowLyricsPrompt(false)}
+                style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${theme.bg.elevated}`, background: 'transparent', color: theme.text.secondary, cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button onClick={() => {
+                const text = lyricsPromptValue;
+                if (text?.trim()) {
+                  onAddLyrics?.({ title: text.split('\n')[0].slice(0, 30) || 'New Lyrics', content: text.trim() });
+                }
+                setShowLyricsPrompt(false);
+              }}
+                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: theme.accent.primary, color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
@@ -963,6 +997,8 @@ const AestheticHome = ({
 // ============================================
 
 const VideoCard = ({ video, onDelete, onRename, isMobile = false }) => {
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
   const [showActions, setShowActions] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(video.name || '');
@@ -1001,6 +1037,8 @@ const VideoCard = ({ video, onDelete, onRename, isMobile = false }) => {
 };
 
 const AudioItem = ({ audio, onEdit, onDelete, onRename }) => {
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
   const [showActions, setShowActions] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(audio.name || '');
@@ -1029,7 +1067,7 @@ const AudioItem = ({ audio, onEdit, onDelete, onRename }) => {
         <div style={styles.audioActions}>
           <button style={styles.audioActionBtn} onClick={onEdit} title="Edit trim">✂️</button>
           <button style={styles.audioActionBtn} onClick={(e) => { e.stopPropagation(); setIsEditing(true); }} title="Rename">✎</button>
-          <button style={{...styles.audioActionBtn, color: '#ef4444'}} onClick={onDelete} title="Delete">✕</button>
+          <button style={{...styles.audioActionBtn, color: theme.state.error}} onClick={onDelete} title="Delete">✕</button>
         </div>
       )}
     </div>
@@ -1037,6 +1075,8 @@ const AudioItem = ({ audio, onEdit, onDelete, onRename }) => {
 };
 
 const ImageCard = ({ image, onDelete, isMobile = false }) => {
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
   const [showActions, setShowActions] = useState(false);
   const actionsVisible = isMobile || showActions;
 
@@ -1054,8 +1094,8 @@ const ImageCard = ({ image, onDelete, isMobile = false }) => {
 // Styles
 // ============================================
 
-const styles = {
-  container: { display: 'flex', height: '100%', backgroundColor: '#0a0a0f', position: 'relative' },
+const getStyles = (theme) => ({
+  container: { display: 'flex', height: '100%', backgroundColor: theme.bg.page, position: 'relative' },
 
   // Mobile sidebar toggle button
   mobileSidebarToggle: {
@@ -1066,7 +1106,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     padding: '12px 16px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '12px',
     color: '#fff',
@@ -1078,7 +1118,7 @@ const styles = {
   mobileSidebarOverlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: theme.overlay.heavy,
     zIndex: 199
   },
 
@@ -1092,15 +1132,15 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: theme.border.subtle,
     border: 'none',
     borderRadius: '8px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer'
   },
 
   // Sidebar
-  sidebar: { width: '220px', borderRight: '1px solid #1f1f2e', padding: '16px', overflowY: 'auto', flexShrink: 0 },
+  sidebar: { width: '220px', borderRight: `1px solid ${theme.bg.surface}`, padding: '16px', overflowY: 'auto', flexShrink: 0 },
 
   // Mobile sidebar styles
   sidebarMobile: {
@@ -1111,7 +1151,7 @@ const styles = {
     width: '280px',
     maxWidth: '85vw',
     zIndex: 200,
-    backgroundColor: '#0a0a0f',
+    backgroundColor: theme.bg.page,
     transition: 'transform 0.3s ease',
     boxShadow: '4px 0 24px rgba(0, 0, 0, 0.5)'
   },
@@ -1123,147 +1163,147 @@ const styles = {
   },
   sidebarSection: { marginBottom: '20px' },
   sidebarHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' },
-  sidebarTitle: { fontSize: '12px', fontWeight: '600', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 },
-  categoryCount: { fontSize: '11px', color: '#6b7280', backgroundColor: '#1f1f2e', padding: '2px 6px', borderRadius: '10px' },
+  sidebarTitle: { fontSize: '12px', fontWeight: '600', color: theme.text.secondary, textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 },
+  categoryCount: { fontSize: '11px', color: theme.text.muted, backgroundColor: theme.bg.surface, padding: '2px 6px', borderRadius: '10px' },
   categoryList: { display: 'flex', flexDirection: 'column', gap: '4px' },
-  categoryItem: { display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer', textAlign: 'left', color: '#e5e7eb', transition: 'background-color 0.2s' },
-  categoryItemActive: { backgroundColor: '#1f1f2e' },
+  categoryItem: { display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer', textAlign: 'left', color: theme.text.primary, transition: 'background-color 0.2s' },
+  categoryItemActive: { backgroundColor: theme.bg.surface },
   categoryThumb: { width: '32px', height: '32px', borderRadius: '6px', overflow: 'hidden', flexShrink: 0 },
   categoryThumbImg: { width: '100%', height: '100%', objectFit: 'cover' },
-  categoryThumbPlaceholder: { width: '100%', height: '100%', backgroundColor: '#374151', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: '600' },
+  categoryThumbPlaceholder: { width: '100%', height: '100%', backgroundColor: theme.bg.elevated, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: '600' },
   categoryName: { fontSize: '13px', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  addCategoryButton: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', backgroundColor: 'transparent', border: '1px dashed #374151', borderRadius: '8px', cursor: 'pointer', color: '#6b7280', fontSize: '13px', marginTop: '8px' },
-  newCategoryForm: { padding: '12px', backgroundColor: '#1f1f2e', borderRadius: '8px' },
-  newCategoryInput: { width: '100%', padding: '8px', backgroundColor: '#0a0a0f', border: '1px solid #374151', borderRadius: '6px', color: '#fff', fontSize: '13px', marginBottom: '8px' },
+  addCategoryButton: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', backgroundColor: 'transparent', border: `1px dashed ${theme.border.default}`, borderRadius: '8px', cursor: 'pointer', color: theme.text.muted, fontSize: '13px', marginTop: '8px' },
+  newCategoryForm: { padding: '12px', backgroundColor: theme.bg.surface, borderRadius: '8px' },
+  newCategoryInput: { width: '100%', padding: '8px', backgroundColor: theme.bg.page, border: `1px solid ${theme.border.default}`, borderRadius: '6px', color: theme.text.primary, fontSize: '13px', marginBottom: '8px' },
   newCategoryActions: { display: 'flex', gap: '8px' },
-  newCategoryCancel: { flex: 1, padding: '6px', backgroundColor: 'transparent', border: '1px solid #374151', borderRadius: '6px', color: '#9ca3af', cursor: 'pointer', fontSize: '12px' },
-  newCategoryCreate: { flex: 1, padding: '6px', backgroundColor: '#7c3aed', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '12px' },
+  newCategoryCancel: { flex: 1, padding: '6px', backgroundColor: 'transparent', border: `1px solid ${theme.border.default}`, borderRadius: '6px', color: theme.text.secondary, cursor: 'pointer', fontSize: '12px' },
+  newCategoryCreate: { flex: 1, padding: '6px', backgroundColor: theme.accent.primary, border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '12px' },
 
   // Main content
   main: { flex: 1, overflow: 'auto', padding: '24px' },
 
   // Category Header
   categoryHeader: { marginBottom: '24px' },
-  backButton: { display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', backgroundColor: 'transparent', border: '1px solid #374151', borderRadius: '6px', color: '#9ca3af', cursor: 'pointer', fontSize: '13px', marginBottom: '16px' },
+  backButton: { display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', backgroundColor: 'transparent', border: `1px solid ${theme.border.default}`, borderRadius: '6px', color: theme.text.secondary, cursor: 'pointer', fontSize: '13px', marginBottom: '16px' },
   categoryInfo: { display: 'flex', alignItems: 'center', gap: '16px' },
-  categoryIcon: { width: '48px', height: '48px', backgroundColor: '#1f1f2e', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: '600' },
-  categoryTitle: { fontSize: '24px', fontWeight: '700', color: '#fff', margin: 0 },
-  modeBadge: { fontSize: '16px', fontWeight: '500', color: '#9ca3af' },
-  categoryDescription: { fontSize: '14px', color: '#6b7280', margin: '4px 0 0 0' },
+  categoryIcon: { width: '48px', height: '48px', backgroundColor: theme.bg.surface, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: '600' },
+  categoryTitle: { fontSize: '24px', fontWeight: '700', color: theme.text.primary, margin: 0 },
+  modeBadge: { fontSize: '16px', fontWeight: '500', color: theme.text.secondary },
+  categoryDescription: { fontSize: '14px', color: theme.text.muted, margin: '4px 0 0 0' },
 
   // Mode Selection
   modeSelection: { textAlign: 'center', paddingTop: '40px' },
-  modeTitle: { fontSize: '20px', fontWeight: '600', color: '#fff', marginBottom: '32px' },
+  modeTitle: { fontSize: '20px', fontWeight: '600', color: theme.text.primary, marginBottom: '32px' },
   modeCards: { display: 'flex', justifyContent: 'center', gap: '24px', marginBottom: '48px' },
-  modeCard: { width: '200px', backgroundColor: '#111118', border: '2px solid #1f1f2e', borderRadius: '16px', transition: 'all 0.2s', textAlign: 'center', overflow: 'hidden' },
+  modeCard: { width: '200px', backgroundColor: theme.bg.input, border: `2px solid ${theme.bg.surface}`, borderRadius: '16px', transition: 'all 0.2s', textAlign: 'center', overflow: 'hidden' },
   modeCardMain: { width: '100%', padding: '32px 24px', backgroundColor: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'center' },
-  modeCardIcon: { color: '#9ca3af', marginBottom: '16px' },
-  modeCardTitle: { fontSize: '18px', fontWeight: '700', color: '#fff', margin: '0 0 8px 0' },
-  modeCardCount: { fontSize: '14px', color: '#6b7280', margin: 0 },
-  modeCardViewBtn: { width: '100%', padding: '12px', backgroundColor: '#1f1f2e', border: 'none', borderTop: '1px solid #2d2d3d', color: '#9ca3af', fontSize: '13px', cursor: 'pointer', transition: 'background-color 0.2s' },
-  sharedSection: { borderTop: '1px solid #1f1f2e', paddingTop: '24px', maxWidth: '500px', margin: '0 auto' },
+  modeCardIcon: { color: theme.text.secondary, marginBottom: '16px' },
+  modeCardTitle: { fontSize: '18px', fontWeight: '700', color: theme.text.primary, margin: '0 0 8px 0' },
+  modeCardCount: { fontSize: '14px', color: theme.text.muted, margin: 0 },
+  modeCardViewBtn: { width: '100%', padding: '12px', backgroundColor: theme.bg.surface, border: 'none', borderTop: `1px solid ${theme.bg.elevated}`, color: theme.text.secondary, fontSize: '13px', cursor: 'pointer', transition: 'background-color 0.2s' },
+  sharedSection: { borderTop: `1px solid ${theme.bg.surface}`, paddingTop: '24px', maxWidth: '500px', margin: '0 auto' },
   sharedLyricBankHeader: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' },
-  sharedLabel: { fontSize: '14px', color: '#9ca3af' },
-  sharedNote: { fontSize: '12px', color: '#6b7280', fontStyle: 'italic' },
+  sharedLabel: { fontSize: '14px', color: theme.text.secondary },
+  sharedNote: { fontSize: '12px', color: theme.text.muted, fontStyle: 'italic' },
 
   // Mode View (Banks + Actions layout)
   modeView: {},
-  banksAndActions: { display: 'flex', gap: '40px', marginBottom: '32px', padding: '24px', backgroundColor: '#111118', borderRadius: '12px', border: '1px solid #1f1f2e' },
+  banksAndActions: { display: 'flex', gap: '40px', marginBottom: '32px', padding: '24px', backgroundColor: theme.bg.input, borderRadius: '12px', border: `1px solid ${theme.bg.surface}` },
   banksColumn: { flex: 1 },
   actionsColumn: { flex: 1 },
-  columnTitle: { fontSize: '11px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '16px' },
-  bankItem: { display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: '#0a0a0f', borderRadius: '8px', marginBottom: '8px' },
+  columnTitle: { fontSize: '11px', fontWeight: '600', color: theme.text.muted, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '16px' },
+  bankItem: { display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: theme.bg.page, borderRadius: '8px', marginBottom: '8px' },
   bankHeader: { display: 'flex', alignItems: 'center', gap: '8px', flex: 1 },
   bankIcon: { fontSize: '16px' },
-  bankName: { fontSize: '14px', color: '#e5e7eb' },
-  bankAddButton: { padding: '4px 10px', backgroundColor: 'transparent', border: '1px solid #374151', borderRadius: '4px', color: '#9ca3af', cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' },
-  actionButton: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '14px 16px', backgroundColor: '#1f1f2e', border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '500', marginBottom: '10px' },
+  bankName: { fontSize: '14px', color: theme.text.primary },
+  bankAddButton: { padding: '4px 10px', backgroundColor: 'transparent', border: `1px solid ${theme.border.default}`, borderRadius: '4px', color: theme.text.secondary, cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' },
+  actionButton: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '14px 16px', backgroundColor: theme.bg.surface, border: 'none', borderRadius: '8px', color: theme.text.primary, cursor: 'pointer', fontSize: '14px', fontWeight: '500', marginBottom: '10px' },
   actionButtonGreen: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '14px 16px', backgroundColor: '#065f46', border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '500', marginBottom: '10px' },
   actionButtonPurple: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '14px 16px', backgroundColor: '#5b21b6', border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '500', marginBottom: '10px' },
   actionIcon: { fontSize: '16px' },
 
   // Expanded Banks
   expandedBanks: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' },
-  expandedBank: { backgroundColor: '#111118', borderRadius: '12px', padding: '16px', border: '1px solid #1f1f2e' },
-  expandedBankTitle: { fontSize: '14px', fontWeight: '600', color: '#9ca3af', marginBottom: '12px' },
+  expandedBank: { backgroundColor: theme.bg.input, borderRadius: '12px', padding: '16px', border: `1px solid ${theme.bg.surface}` },
+  expandedBankTitle: { fontSize: '14px', fontWeight: '600', color: theme.text.secondary, marginBottom: '12px' },
   assetGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '12px' },
   imageGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px' },
   audioGrid: { display: 'flex', flexDirection: 'column', gap: '8px' },
   audioCard: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', backgroundColor: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', borderRadius: '8px' },
   audioCardIcon: { fontSize: '20px' },
   audioCardInfo: { flex: 1, minWidth: 0 },
-  audioCardName: { fontSize: '13px', fontWeight: '500', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  audioCardName: { fontSize: '13px', fontWeight: '500', color: theme.text.primary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
   audioCardDuration: { fontSize: '11px', color: '#86efac' },
   audioDeleteBtn: { padding: '6px', backgroundColor: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '4px', color: '#f87171', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   audioList: { display: 'flex', flexDirection: 'column', gap: '8px' },
-  emptyState: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px', border: '2px dashed #374151', borderRadius: '8px', cursor: 'pointer', color: '#6b7280', fontSize: '13px' },
-  emptyStateSmall: { padding: '16px', border: '1px dashed #374151', borderRadius: '6px', textAlign: 'center', cursor: 'pointer', color: '#6b7280', fontSize: '12px' },
+  emptyState: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px', border: `2px dashed ${theme.border.default}`, borderRadius: '8px', cursor: 'pointer', color: theme.text.muted, fontSize: '13px' },
+  emptyStateSmall: { padding: '16px', border: `1px dashed ${theme.border.default}`, borderRadius: '6px', textAlign: 'center', cursor: 'pointer', color: theme.text.muted, fontSize: '12px' },
 
   // Video Card
-  videoCard: { position: 'relative', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#1f1f2e', cursor: 'pointer' },
-  videoThumb: { aspectRatio: '16/9', backgroundColor: '#0a0a0f' },
+  videoCard: { position: 'relative', borderRadius: '8px', overflow: 'hidden', backgroundColor: theme.bg.surface, cursor: 'pointer' },
+  videoThumb: { aspectRatio: '16/9', backgroundColor: theme.bg.page },
   videoThumbImg: { width: '100%', height: '100%', objectFit: 'cover' },
   videoThumbVideo: { width: '100%', height: '100%', objectFit: 'cover' },
-  videoNameContainer: { padding: '8px', backgroundColor: '#1f1f2e' },
-  videoName: { fontSize: '11px', color: '#9ca3af', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  videoNameInput: { width: '100%', padding: '2px 4px', backgroundColor: '#0a0a0f', border: '1px solid #7c3aed', borderRadius: '4px', color: '#fff', fontSize: '11px' },
-  videoDuration: { position: 'absolute', bottom: '32px', right: '6px', padding: '2px 6px', backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: '4px', fontSize: '10px', color: '#fff' },
+  videoNameContainer: { padding: '8px', backgroundColor: theme.bg.surface },
+  videoName: { fontSize: '11px', color: theme.text.secondary, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  videoNameInput: { width: '100%', padding: '2px 4px', backgroundColor: theme.bg.page, border: `1px solid ${theme.accent.primary}`, borderRadius: '4px', color: theme.text.primary, fontSize: '11px' },
+  videoDuration: { position: 'absolute', bottom: '32px', right: '6px', padding: '2px 6px', backgroundColor: theme.overlay.heavy, borderRadius: '4px', fontSize: '10px', color: '#fff' },
   videoActionBtns: { position: 'absolute', top: '6px', right: '6px', display: 'flex', gap: '4px' },
-  renameVideoBtn: { padding: '4px 6px', backgroundColor: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: '4px', color: '#fff', cursor: 'pointer', fontSize: '12px' },
+  renameVideoBtn: { padding: '4px 6px', backgroundColor: theme.overlay.heavy, border: 'none', borderRadius: '4px', color: '#fff', cursor: 'pointer', fontSize: '12px' },
   deleteVideoBtn: { padding: '4px 6px', backgroundColor: 'rgba(239,68,68,0.8)', border: 'none', borderRadius: '4px', color: '#fff', cursor: 'pointer', fontSize: '12px' },
 
   // Audio Item
-  audioItem: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', backgroundColor: '#1f1f2e', borderRadius: '8px', color: '#9ca3af' },
-  audioItemClip: { borderLeft: '3px solid #7c3aed' },
+  audioItem: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', backgroundColor: theme.bg.surface, borderRadius: '8px', color: theme.text.secondary },
+  audioItemClip: { borderLeft: `3px solid ${theme.accent.primary}` },
   clipIcon: { fontSize: '14px' },
   audioInfo: { flex: 1, minWidth: 0 },
-  audioName: { display: 'block', fontSize: '13px', color: '#e5e7eb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' },
-  audioNameInput: { width: '100%', padding: '2px 4px', backgroundColor: '#0a0a0f', border: '1px solid #7c3aed', borderRadius: '4px', color: '#fff', fontSize: '12px' },
-  audioDuration: { fontSize: '11px', color: '#6b7280' },
+  audioName: { display: 'block', fontSize: '13px', color: theme.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' },
+  audioNameInput: { width: '100%', padding: '2px 4px', backgroundColor: theme.bg.page, border: `1px solid ${theme.accent.primary}`, borderRadius: '4px', color: theme.text.primary, fontSize: '12px' },
+  audioDuration: { fontSize: '11px', color: theme.text.muted },
   audioActions: { display: 'flex', gap: '4px' },
-  audioActionBtn: { padding: '4px 6px', backgroundColor: '#0a0a0f', border: 'none', borderRadius: '4px', color: '#9ca3af', cursor: 'pointer', fontSize: '12px' },
+  audioActionBtn: { padding: '4px 6px', backgroundColor: theme.bg.page, border: 'none', borderRadius: '4px', color: theme.text.secondary, cursor: 'pointer', fontSize: '12px' },
 
   // Image Card
-  imageCard: { position: 'relative', borderRadius: '6px', overflow: 'hidden', aspectRatio: '1', backgroundColor: '#1f1f2e' },
+  imageCard: { position: 'relative', borderRadius: '6px', overflow: 'hidden', aspectRatio: '1', backgroundColor: theme.bg.surface },
   imageThumb: { width: '100%', height: '100%', objectFit: 'cover' },
   imageDeleteBtn: { position: 'absolute', top: '4px', right: '4px', padding: '4px 6px', backgroundColor: 'rgba(239,68,68,0.9)', border: 'none', borderRadius: '4px', color: '#fff', cursor: 'pointer', fontSize: '10px' },
 
   // Category Cards Grid
   categoriesGrid: { textAlign: 'center', paddingTop: '60px' },
-  gridTitle: { fontSize: '24px', fontWeight: '600', color: '#fff', marginBottom: '8px' },
-  gridSubtitle: { fontSize: '14px', color: '#6b7280', marginBottom: '40px' },
+  gridTitle: { fontSize: '24px', fontWeight: '600', color: theme.text.primary, marginBottom: '8px' },
+  gridSubtitle: { fontSize: '14px', color: theme.text.muted, marginBottom: '40px' },
   categoryCards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px', maxWidth: '800px', margin: '0 auto' },
-  categoryCard: { padding: '20px', backgroundColor: '#111118', border: '1px solid #1f1f2e', borderRadius: '12px', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.2s' },
-  categoryCardThumb: { width: '100%', aspectRatio: '16/9', borderRadius: '8px', overflow: 'hidden', marginBottom: '12px', backgroundColor: '#1f1f2e' },
+  categoryCard: { padding: '20px', backgroundColor: theme.bg.input, border: `1px solid ${theme.bg.surface}`, borderRadius: '12px', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.2s' },
+  categoryCardThumb: { width: '100%', aspectRatio: '16/9', borderRadius: '8px', overflow: 'hidden', marginBottom: '12px', backgroundColor: theme.bg.surface },
   categoryCardThumbImg: { width: '100%', height: '100%', objectFit: 'cover' },
-  categoryCardThumbPlaceholder: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: '600', color: '#6b7280' },
+  categoryCardThumbPlaceholder: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: '600', color: theme.text.muted },
   categoryCardInfo: {},
-  categoryCardName: { fontSize: '16px', fontWeight: '600', color: '#fff', margin: '0 0 4px 0' },
-  categoryCardMeta: { fontSize: '12px', color: '#6b7280', margin: 0 },
-  addCategoryCard: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '40px 20px', backgroundColor: 'transparent', border: '2px dashed #374151', borderRadius: '12px', cursor: 'pointer', color: '#6b7280', fontSize: '14px' },
+  categoryCardName: { fontSize: '16px', fontWeight: '600', color: theme.text.primary, margin: '0 0 4px 0' },
+  categoryCardMeta: { fontSize: '12px', color: theme.text.muted, margin: 0 },
+  addCategoryCard: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '40px 20px', backgroundColor: 'transparent', border: `2px dashed ${theme.border.default}`, borderRadius: '12px', cursor: 'pointer', color: theme.text.muted, fontSize: '14px' },
 
   // Slideshow Library Modal
-  slideshowLibraryOverlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' },
-  slideshowLibraryModal: { width: '100%', maxWidth: '900px', maxHeight: '80vh', backgroundColor: '#0f0f1a', borderRadius: '16px', overflow: 'hidden', display: 'flex', flexDirection: 'column' },
-  slideshowLibraryHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #1f1f2e' },
-  slideshowLibraryTitle: { fontSize: '20px', fontWeight: '600', color: '#fff', margin: 0 },
-  slideshowLibraryClose: { padding: '8px 12px', backgroundColor: 'transparent', border: '1px solid #374151', borderRadius: '6px', color: '#9ca3af', cursor: 'pointer', fontSize: '16px' },
+  slideshowLibraryOverlay: { position: 'fixed', inset: 0, backgroundColor: theme.overlay.heavy, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' },
+  slideshowLibraryModal: { width: '100%', maxWidth: '900px', maxHeight: '80vh', backgroundColor: theme.bg.page, borderRadius: '16px', overflow: 'hidden', display: 'flex', flexDirection: 'column' },
+  slideshowLibraryHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: `1px solid ${theme.bg.surface}` },
+  slideshowLibraryTitle: { fontSize: '20px', fontWeight: '600', color: theme.text.primary, margin: 0 },
+  slideshowLibraryClose: { padding: '8px 12px', backgroundColor: 'transparent', border: `1px solid ${theme.border.default}`, borderRadius: '6px', color: theme.text.secondary, cursor: 'pointer', fontSize: '16px' },
   slideshowLibraryContent: { flex: 1, overflow: 'auto', padding: '24px' },
-  slideshowLibraryEmpty: { textAlign: 'center', padding: '60px 20px', color: '#9ca3af' },
+  slideshowLibraryEmpty: { textAlign: 'center', padding: '60px 20px', color: theme.text.secondary },
   slideshowLibraryGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' },
-  slideshowCard: { backgroundColor: '#111118', borderRadius: '12px', overflow: 'hidden', border: '1px solid #1f1f2e' },
-  slideshowCardPreview: { position: 'relative', aspectRatio: '9/16', backgroundColor: '#0a0a0f', maxHeight: '180px' },
-  videoLibraryPreview: { position: 'relative', aspectRatio: '16/9', backgroundColor: '#0a0a0f', maxHeight: '120px' },
+  slideshowCard: { backgroundColor: theme.bg.input, borderRadius: '12px', overflow: 'hidden', border: `1px solid ${theme.bg.surface}` },
+  slideshowCardPreview: { position: 'relative', aspectRatio: '9/16', backgroundColor: theme.bg.page, maxHeight: '180px' },
+  videoLibraryPreview: { position: 'relative', aspectRatio: '16/9', backgroundColor: theme.bg.page, maxHeight: '120px' },
   slideshowCardImg: { width: '100%', height: '100%', objectFit: 'cover' },
-  slideshowCardPlaceholder: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', color: '#4b5563' },
-  slideshowCardBadge: { position: 'absolute', bottom: '8px', right: '8px', padding: '4px 8px', backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: '4px', fontSize: '11px', color: '#fff' },
+  slideshowCardPlaceholder: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', color: theme.text.muted },
+  slideshowCardBadge: { position: 'absolute', bottom: '8px', right: '8px', padding: '4px 8px', backgroundColor: theme.overlay.heavy, borderRadius: '4px', fontSize: '11px', color: '#fff' },
   slideshowCardInfo: { padding: '12px' },
-  slideshowCardName: { fontSize: '14px', fontWeight: '500', color: '#fff', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  slideshowCardStatus: { fontSize: '12px', color: '#6b7280' },
+  slideshowCardName: { fontSize: '14px', fontWeight: '500', color: theme.text.primary, marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  slideshowCardStatus: { fontSize: '12px', color: theme.text.muted },
   slideshowCardActions: { display: 'flex', gap: '8px', padding: '0 12px 12px 12px' },
-  slideshowCardEditBtn: { flex: 1, padding: '8px 12px', backgroundColor: '#3b82f6', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
+  slideshowCardEditBtn: { flex: 1, padding: '8px 12px', backgroundColor: theme.state.info, border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
   slideshowCardDeleteBtn: { padding: '8px 12px', backgroundColor: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', color: '#f87171', cursor: 'pointer', fontSize: '13px' }
-};
+});
 
 export default AestheticHome;
 // Force rebuild Thu Feb  5 08:59:53 UTC 2026

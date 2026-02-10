@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const VideoPreview = ({
   videoSrc,
@@ -10,6 +11,8 @@ const VideoPreview = ({
   visibleWords = [],
   textStyle = {}
 }) => {
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
   const videoRef = useRef(null);
   const audioRef = useRef(null);
   const canvasRef = useRef(null);
@@ -228,7 +231,7 @@ const VideoPreview = ({
   );
 };
 
-const styles = {
+const getStyles = (theme) => ({
   container: {
     display: 'flex',
     flexDirection: 'column',
@@ -261,7 +264,7 @@ const styles = {
     gap: '12px',
     width: '100%',
     padding: '8px',
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.bg.surface,
     borderRadius: '8px'
   },
   playButton: {
@@ -274,20 +277,20 @@ const styles = {
   progressContainer: {
     flex: 1,
     height: '6px',
-    backgroundColor: '#334155',
+    backgroundColor: theme.bg.elevated,
     borderRadius: '3px',
     cursor: 'pointer',
     overflow: 'hidden'
   },
   progressBar: {
     height: '100%',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     borderRadius: '3px',
     transition: 'width 0.1s'
   },
   timeDisplay: {
     fontSize: '12px',
-    color: '#94a3b8',
+    color: theme.text.secondary,
     minWidth: '80px',
     textAlign: 'center'
   },
@@ -298,6 +301,6 @@ const styles = {
     fontSize: '16px',
     cursor: 'pointer'
   }
-};
+});
 
 export default VideoPreview;

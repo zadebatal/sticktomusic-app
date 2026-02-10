@@ -10,6 +10,7 @@ import {
   COLLECTION_TYPES,
   MEDIA_TYPES
 } from '../../services/libraryService';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const CollectionPicker = ({
   artistId,
@@ -24,6 +25,7 @@ const CollectionPicker = ({
   liveCollections = null,
   liveLibrary = null
 }) => {
+  const { theme } = useTheme();
   const [localCollections, setLocalCollections] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [mediaCount, setMediaCount] = useState({});
@@ -100,17 +102,17 @@ const CollectionPicker = ({
       alignItems: 'center',
       gap: '8px',
       padding: '8px 12px',
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-      border: '1px solid rgba(255, 255, 255, 0.15)',
+      backgroundColor: theme.hover.bg,
+      border: `1px solid ${theme.border.subtle}`,
       borderRadius: '8px',
-      color: '#ffffff',
+      color: theme.text.primary,
       fontSize: '14px',
       cursor: 'pointer',
       minWidth: '160px',
       transition: 'all 0.2s'
     },
     buttonOpen: {
-      borderColor: '#6366f1',
+      borderColor: theme.accent.primary,
       backgroundColor: 'rgba(99, 102, 241, 0.1)'
     },
     buttonIcon: {
@@ -125,7 +127,7 @@ const CollectionPicker = ({
     },
     buttonArrow: {
       fontSize: '10px',
-      color: 'rgba(255, 255, 255, 0.5)',
+      color: theme.text.secondary,
       transition: 'transform 0.2s'
     },
     dropdown: {
@@ -134,10 +136,10 @@ const CollectionPicker = ({
       left: 0,
       right: 0,
       marginTop: '4px',
-      backgroundColor: '#1a1a1a',
-      border: '1px solid rgba(255, 255, 255, 0.1)',
+      backgroundColor: theme.bg.input,
+      border: `1px solid ${theme.border.subtle}`,
       borderRadius: '8px',
-      boxShadow: '0 10px 40px rgba(0, 0, 0, 0.5)',
+      boxShadow: theme.shadow,
       zIndex: 1000,
       maxHeight: '300px',
       overflowY: 'auto',
@@ -150,13 +152,13 @@ const CollectionPicker = ({
       padding: '4px 12px',
       fontSize: '11px',
       fontWeight: '600',
-      color: 'rgba(255, 255, 255, 0.4)',
+      color: theme.text.muted,
       textTransform: 'uppercase',
       letterSpacing: '0.5px'
     },
     sectionDivider: {
       height: '1px',
-      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+      backgroundColor: theme.border.subtle,
       margin: '4px 0'
     },
     item: {
@@ -178,12 +180,12 @@ const CollectionPicker = ({
     itemName: {
       flex: 1,
       fontSize: '14px',
-      color: '#ffffff'
+      color: theme.text.primary
     },
     itemCount: {
       fontSize: '12px',
-      color: 'rgba(255, 255, 255, 0.4)',
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+      color: theme.text.muted,
+      backgroundColor: theme.hover.bg,
       padding: '2px 6px',
       borderRadius: '4px'
     }
@@ -203,10 +205,10 @@ const CollectionPicker = ({
         }}
         onClick={() => setIsOpen(!isOpen)}
         onMouseEnter={(e) => {
-          if (!isOpen) e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+          if (!isOpen) e.currentTarget.style.borderColor = theme.text.muted;
         }}
         onMouseLeave={(e) => {
-          if (!isOpen) e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+          if (!isOpen) e.currentTarget.style.borderColor = theme.border.subtle;
         }}
       >
         <span style={styles.buttonIcon}>
@@ -233,7 +235,7 @@ const CollectionPicker = ({
                 ...(!value ? styles.itemSelected : {})
               }}
               onClick={() => handleSelect(null)}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.hover.bg}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = !value ? 'rgba(99, 102, 241, 0.15)' : 'transparent'}
             >
               <span style={styles.itemIcon}>📚</span>
@@ -256,7 +258,7 @@ const CollectionPicker = ({
                       ...(value === collection.id ? styles.itemSelected : {})
                     }}
                     onClick={() => handleSelect(collection.id)}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.hover.bg}
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = value === collection.id ? 'rgba(99, 102, 241, 0.15)' : 'transparent'}
                   >
                     <span style={styles.itemIcon}>📁</span>
@@ -283,7 +285,7 @@ const CollectionPicker = ({
                   ...(value === collection.id ? styles.itemSelected : {})
                 }}
                 onClick={() => handleSelect(collection.id)}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.hover.bg}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = value === collection.id ? 'rgba(99, 102, 241, 0.15)' : 'transparent'}
               >
                 <span style={styles.itemIcon}>{collection.icon}</span>

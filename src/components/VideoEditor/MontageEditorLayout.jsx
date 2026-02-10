@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 
 /**
  * MontageEditorLayout — NLE-style multi-panel layout for montage editor (Wave 3)
@@ -22,6 +23,7 @@ const MontageEditorLayout = ({
   // Layout config
   initialPanelStates = { library: true, lyrics: true, style: false }
 }) => {
+  const { theme } = useTheme();
   // Panel collapse states
   const [panels, setPanels] = useState(initialPanelStates);
 
@@ -39,37 +41,114 @@ const MontageEditorLayout = ({
 
   const openCount = Object.values(panels).filter(Boolean).length;
 
+  const layoutStyles = {
+    container: {
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      backgroundColor: theme.bg.page,
+      color: theme.text.primary,
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      overflow: 'hidden'
+    },
+    header: {
+      flexShrink: 0
+    },
+    mainArea: {
+      display: 'flex',
+      flex: 1,
+      overflow: 'hidden',
+      minHeight: 0
+    },
+    previewColumn: {
+      flex: 1,
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+      borderRight: `1px solid ${theme.bg.elevated}`
+    },
+    panelsColumn: {
+      width: '380px',
+      flexShrink: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+      backgroundColor: theme.bg.input
+    },
+    panelControls: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: '8px 12px',
+      borderBottom: `1px solid ${theme.border.subtle}`,
+      backgroundColor: theme.bg.surface,
+      flexShrink: 0
+    },
+    panelControlsLabel: {
+      fontSize: '11px',
+      fontWeight: '600',
+      color: theme.text.muted,
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px'
+    },
+    panelControlsBtns: {
+      display: 'flex',
+      gap: '6px'
+    },
+    panelControlBtn: {
+      padding: '3px 8px',
+      borderRadius: '4px',
+      border: `1px solid ${theme.text.muted}`,
+      backgroundColor: 'transparent',
+      color: theme.text.muted,
+      fontSize: '10px',
+      cursor: 'pointer'
+    },
+    panelsScroll: {
+      flex: 1,
+      overflowY: 'auto',
+      padding: '4px'
+    },
+    timelineArea: {
+      height: '200px',
+      flexShrink: 0,
+      borderTop: `2px solid ${theme.bg.elevated}`,
+      backgroundColor: theme.bg.page,
+      overflow: 'hidden'
+    }
+  };
+
   return (
-    <div style={layout.container}>
+    <div style={layoutStyles.container}>
       {/* Header */}
       {headerContent && (
-        <div style={layout.header}>
+        <div style={layoutStyles.header}>
           {headerContent}
         </div>
       )}
 
       {/* Main Area: Preview (left) + Panels (right) */}
-      <div style={layout.mainArea}>
+      <div style={layoutStyles.mainArea}>
         {/* Left: Video Preview */}
-        <div style={layout.previewColumn}>
+        <div style={layoutStyles.previewColumn}>
           {previewContent}
         </div>
 
         {/* Right: Stacked Panels */}
-        <div style={layout.panelsColumn}>
+        <div style={layoutStyles.panelsColumn}>
           {/* Panel controls bar */}
-          <div style={layout.panelControls}>
-            <span style={layout.panelControlsLabel}>Panels</span>
-            <div style={layout.panelControlsBtns}>
+          <div style={layoutStyles.panelControls}>
+            <span style={layoutStyles.panelControlsLabel}>Panels</span>
+            <div style={layoutStyles.panelControlsBtns}>
               <button
-                style={layout.panelControlBtn}
+                style={layoutStyles.panelControlBtn}
                 onClick={expandAll}
                 title="Expand all panels"
               >
                 Expand All
               </button>
               <button
-                style={layout.panelControlBtn}
+                style={layoutStyles.panelControlBtn}
                 onClick={collapseAll}
                 title="Collapse all panels"
               >
@@ -79,7 +158,7 @@ const MontageEditorLayout = ({
           </div>
 
           {/* Scrollable panels stack */}
-          <div style={layout.panelsScroll}>
+          <div style={layoutStyles.panelsScroll}>
             {/* Library Panel */}
             <CollapsiblePanel
               title="Library"
@@ -117,7 +196,7 @@ const MontageEditorLayout = ({
       </div>
 
       {/* Bottom: Full-width Timeline */}
-      <div style={layout.timelineArea}>
+      <div style={layoutStyles.timelineArea}>
         {timelineContent}
       </div>
     </div>
@@ -128,176 +207,82 @@ const MontageEditorLayout = ({
  * CollapsiblePanel — Individual panel with header toggle
  */
 const CollapsiblePanel = ({ title, icon, isOpen, onToggle, accentColor, children }) => {
+  const { theme } = useTheme();
+
+  const panelStyles = {
+    container: {
+      marginBottom: '4px',
+      borderRadius: '8px',
+      backgroundColor: theme.bg.input,
+      overflow: 'hidden',
+      borderLeft: `3px solid ${isOpen ? accentColor : theme.bg.elevated}`,
+      transition: 'border-left-color 0.2s'
+    },
+    header: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      width: '100%',
+      padding: '10px 12px',
+      border: 'none',
+      backgroundColor: 'transparent',
+      cursor: 'pointer',
+      textAlign: 'left'
+    },
+    headerLeft: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px'
+    },
+    icon: {
+      fontSize: '14px'
+    },
+    title: {
+      fontSize: '13px',
+      fontWeight: '600',
+      color: isOpen ? theme.text.primary : theme.text.muted,
+      transition: 'color 0.15s'
+    },
+    chevron: {
+      fontSize: '10px',
+      color: theme.text.muted,
+      transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+      transition: 'transform 0.2s ease'
+    },
+    content: {
+      padding: '0 12px 12px 12px',
+      maxHeight: '300px',
+      overflowY: 'auto'
+    }
+  };
+
   return (
-    <div style={{
-      ...panel.container,
-      borderLeftColor: isOpen ? accentColor : '#27272a'
-    }}>
+    <div style={panelStyles.container}>
       {/* Panel Header (always visible) */}
       <button
-        style={panel.header}
+        style={panelStyles.header}
         onClick={onToggle}
         aria-expanded={isOpen}
       >
-        <div style={panel.headerLeft}>
-          <span style={panel.icon}>{icon}</span>
-          <span style={{
-            ...panel.title,
-            color: isOpen ? '#fff' : '#71717a'
-          }}>
+        <div style={panelStyles.headerLeft}>
+          <span style={panelStyles.icon}>{icon}</span>
+          <span style={panelStyles.title}>
             {title}
           </span>
         </div>
-        <span style={{
-          ...panel.chevron,
-          transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)'
-        }}>
+        <span style={panelStyles.chevron}>
           {'\u25BC'}
         </span>
       </button>
 
       {/* Panel Content (collapsible) */}
       {isOpen && (
-        <div style={panel.content}>
+        <div style={panelStyles.content}>
           {children}
         </div>
       )}
     </div>
   );
-};
-
-// ═══════════════════════════════════════════════════
-// Layout Styles
-// ═══════════════════════════════════════════════════
-
-const layout = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100%',
-    backgroundColor: '#0a0a0f',
-    color: '#fff',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    overflow: 'hidden'
-  },
-  header: {
-    flexShrink: 0
-  },
-
-  // Main area: preview + panels side by side
-  mainArea: {
-    display: 'flex',
-    flex: 1,
-    overflow: 'hidden',
-    minHeight: 0
-  },
-
-  // Left column: video preview
-  previewColumn: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    borderRight: '1px solid #27272a'
-  },
-
-  // Right column: stacked panels
-  panelsColumn: {
-    width: '380px',
-    flexShrink: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    backgroundColor: '#111114'
-  },
-  panelControls: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '8px 12px',
-    borderBottom: '1px solid #1e1e22',
-    backgroundColor: '#18181b',
-    flexShrink: 0
-  },
-  panelControlsLabel: {
-    fontSize: '11px',
-    fontWeight: '600',
-    color: '#52525b',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px'
-  },
-  panelControlsBtns: {
-    display: 'flex',
-    gap: '6px'
-  },
-  panelControlBtn: {
-    padding: '3px 8px',
-    borderRadius: '4px',
-    border: '1px solid #3f3f46',
-    backgroundColor: 'transparent',
-    color: '#71717a',
-    fontSize: '10px',
-    cursor: 'pointer'
-  },
-  panelsScroll: {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '4px'
-  },
-
-  // Bottom: timeline
-  timelineArea: {
-    height: '200px',
-    flexShrink: 0,
-    borderTop: '2px solid #27272a',
-    backgroundColor: '#0f0f13',
-    overflow: 'hidden'
-  }
-};
-
-const panel = {
-  container: {
-    marginBottom: '4px',
-    borderRadius: '8px',
-    backgroundColor: '#1a1a1e',
-    overflow: 'hidden',
-    borderLeft: '3px solid #27272a',
-    transition: 'border-left-color 0.2s'
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-    padding: '10px 12px',
-    border: 'none',
-    backgroundColor: 'transparent',
-    cursor: 'pointer',
-    textAlign: 'left'
-  },
-  headerLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px'
-  },
-  icon: {
-    fontSize: '14px'
-  },
-  title: {
-    fontSize: '13px',
-    fontWeight: '600',
-    transition: 'color 0.15s'
-  },
-  chevron: {
-    fontSize: '10px',
-    color: '#52525b',
-    transition: 'transform 0.2s ease'
-  },
-  content: {
-    padding: '0 12px 12px 12px',
-    maxHeight: '300px',
-    overflowY: 'auto'
-  }
 };
 
 export default MontageEditorLayout;

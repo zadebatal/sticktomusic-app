@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { addToLibraryAsync, getUserCollections, addToCollectionAsync, MEDIA_TYPES } from '../../services/libraryService';
 import { uploadFile } from '../../services/firebaseStorage';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const SaveToLibraryButton = ({
   artistId,
@@ -19,6 +20,7 @@ const SaveToLibraryButton = ({
   const [showCollectionPicker, setShowCollectionPicker] = useState(false);
   const [selectedCollectionId, setSelectedCollectionId] = useState(null);
   const [clipName, setClipName] = useState('');
+  const { theme } = useTheme();
 
   const collections = getUserCollections(artistId);
 
@@ -77,7 +79,7 @@ const SaveToLibraryButton = ({
       backgroundColor: 'rgba(99, 102, 241, 0.2)',
       border: '1px solid rgba(99, 102, 241, 0.3)',
       borderRadius: '6px',
-      color: '#a5b4fc',
+      color: theme.accent.hover,
       fontSize: '12px',
       cursor: 'pointer',
       transition: 'all 0.2s',
@@ -89,14 +91,14 @@ const SaveToLibraryButton = ({
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.8)',
+      backgroundColor: theme.overlay.heavy,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 10000
     },
     modalContent: {
-      backgroundColor: '#1a1a1a',
+      backgroundColor: theme.bg.input,
       borderRadius: '12px',
       padding: '24px',
       width: '90%',
@@ -105,7 +107,7 @@ const SaveToLibraryButton = ({
     modalTitle: {
       fontSize: '18px',
       fontWeight: '600',
-      color: '#ffffff',
+      color: theme.text.primary,
       marginBottom: '16px'
     },
     inputGroup: {
@@ -114,16 +116,16 @@ const SaveToLibraryButton = ({
     label: {
       display: 'block',
       fontSize: '13px',
-      color: 'rgba(255, 255, 255, 0.6)',
+      color: theme.text.secondary,
       marginBottom: '6px'
     },
     input: {
       width: '100%',
       padding: '10px 12px',
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-      border: '1px solid rgba(255, 255, 255, 0.1)',
+      backgroundColor: theme.hover.bg,
+      border: `1px solid ${theme.border.subtle}`,
       borderRadius: '8px',
-      color: '#ffffff',
+      color: theme.text.primary,
       fontSize: '14px',
       outline: 'none',
       boxSizing: 'border-box'
@@ -131,10 +133,10 @@ const SaveToLibraryButton = ({
     select: {
       width: '100%',
       padding: '10px 12px',
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-      border: '1px solid rgba(255, 255, 255, 0.1)',
+      backgroundColor: theme.hover.bg,
+      border: `1px solid ${theme.border.subtle}`,
       borderRadius: '8px',
-      color: '#ffffff',
+      color: theme.text.primary,
       fontSize: '14px',
       outline: 'none',
       boxSizing: 'border-box',
@@ -149,32 +151,32 @@ const SaveToLibraryButton = ({
       flex: 1,
       padding: '10px 16px',
       backgroundColor: 'transparent',
-      border: '1px solid rgba(255, 255, 255, 0.2)',
+      border: `1px solid ${theme.text.muted}`,
       borderRadius: '8px',
-      color: 'rgba(255, 255, 255, 0.6)',
+      color: theme.text.secondary,
       fontSize: '14px',
       cursor: 'pointer'
     },
     saveButton: {
       flex: 1,
       padding: '10px 16px',
-      backgroundColor: '#6366f1',
+      backgroundColor: theme.accent.primary,
       border: 'none',
       borderRadius: '8px',
-      color: '#ffffff',
+      color: theme.text.primary,
       fontSize: '14px',
       fontWeight: '500',
       cursor: 'pointer'
     },
     clipInfo: {
       padding: '12px',
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+      backgroundColor: theme.hover.bg,
       borderRadius: '8px',
       marginBottom: '16px'
     },
     clipInfoText: {
       fontSize: '13px',
-      color: 'rgba(255, 255, 255, 0.7)'
+      color: theme.text.secondary
     }
   };
 

@@ -3,6 +3,7 @@ import { generateFromCollectionBanks, generatePostContent, getBankNames } from '
 import { getCollectionsAsync } from '../../services/libraryService';
 import CollectionBankEditor from './CollectionBankEditor';
 import { useToast, useFocusTrap } from '../ui';
+import { useTheme } from '../../contexts/ThemeContext';
 import log from '../../utils/logger';
 
 /**
@@ -33,8 +34,11 @@ const ScheduleQueue = ({
 }) => {
   // BUG-034: Toast notifications instead of alert()
   const { success: toastSuccess } = useToast();
+  const { theme } = useTheme();
   // BUG-030: Focus trap for modal accessibility
   const trapRef = useFocusTrap(true);
+
+  const styles = getStyles(theme);
 
   // Posts state
   const [posts, setPosts] = useState([]);
@@ -625,6 +629,7 @@ const ScheduleQueue = ({
                     key={post.id}
                     post={post}
                     index={index}
+                    theme={theme}
                     scheduleDate={scheduleDate}
                     scheduleTime={scheduleTime}
                     intervalType={intervalType}
@@ -669,7 +674,7 @@ const ScheduleQueue = ({
                       key={collection.id}
                       style={{
                         ...styles.collectionBtn,
-                        backgroundColor: editingCollectionId === collection.id ? '#6366f1' : '#27272a'
+                        backgroundColor: editingCollectionId === collection.id ? theme.accent.primary : theme.bg.elevated
                       }}
                       onClick={() => setEditingCollectionId(
                         editingCollectionId === collection.id ? null : collection.id
@@ -722,6 +727,7 @@ const ScheduleQueue = ({
 const ScheduleQueueCard = ({
   post,
   index,
+  theme,
   scheduleDate,
   scheduleTime,
   intervalType,
@@ -743,6 +749,8 @@ const ScheduleQueueCard = ({
   const [generatedThumb, setGeneratedThumb] = useState(null);
   const captionInputRef = React.useRef(null);
   const hashtagInputRef = React.useRef(null);
+
+  const styles = getStyles(theme);
 
   // Generate thumbnail for videos
   React.useEffect(() => {
@@ -882,7 +890,7 @@ const ScheduleQueueCard = ({
                 transition: 'border-color 0.2s'
               }}
               onClick={() => onToggleEdit(post.id)}
-              onMouseEnter={(e) => e.target.style.borderBottomColor = '#52525b'}
+              onMouseEnter={(e) => e.target.style.borderBottomColor = theme.text.muted}
               onMouseLeave={(e) => e.target.style.borderBottomColor = 'transparent'}
               title="Click to edit"
             >
@@ -913,7 +921,7 @@ const ScheduleQueueCard = ({
                 transition: 'border-color 0.2s'
               }}
               onClick={() => onToggleEdit(post.id)}
-              onMouseEnter={(e) => e.target.style.borderBottomColor = '#52525b'}
+              onMouseEnter={(e) => e.target.style.borderBottomColor = theme.text.muted}
               onMouseLeave={(e) => e.target.style.borderBottomColor = 'transparent'}
               title="Click to edit"
             >
@@ -959,12 +967,12 @@ const ScheduleQueueCard = ({
   );
 };
 
-// Inline styles object
-const styles = {
+// Themed styles factory
+const getStyles = (theme) => ({
   overlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: theme.overlay.heavy,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -972,7 +980,7 @@ const styles = {
     padding: '20px'
   },
   modal: {
-    backgroundColor: '#18181b',
+    backgroundColor: theme.bg.surface,
     borderRadius: '16px',
     width: '100%',
     maxWidth: '1200px',
@@ -986,32 +994,32 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     padding: '20px 24px',
-    borderBottom: '1px solid #27272a'
+    borderBottom: `1px solid ${theme.bg.elevated}`
   },
   title: {
     margin: 0,
     fontSize: '20px',
     fontWeight: '600',
-    color: '#fff'
+    color: theme.text.primary
   },
   subtitle: {
     margin: '4px 0 0 0',
     fontSize: '14px',
-    color: '#71717a'
+    color: theme.text.muted
   },
   closeButton: {
     background: 'none',
     border: 'none',
-    color: '#71717a',
+    color: theme.text.muted,
     fontSize: '24px',
     cursor: 'pointer',
     padding: '4px 8px',
     borderRadius: '4px'
   },
   renderingBar: {
-    backgroundColor: '#1f1f23',
+    backgroundColor: theme.bg.surface,
     padding: '12px 24px',
-    borderBottom: '1px solid #27272a'
+    borderBottom: `1px solid ${theme.bg.elevated}`
   },
   renderingText: {
     fontSize: '14px',
@@ -1020,7 +1028,7 @@ const styles = {
   },
   progressBarContainer: {
     height: '4px',
-    backgroundColor: '#27272a',
+    backgroundColor: theme.bg.elevated,
     borderRadius: '2px',
     overflow: 'hidden'
   },
@@ -1044,7 +1052,7 @@ const styles = {
     display: 'flex',
     gap: '16px',
     padding: '16px 24px',
-    borderBottom: '1px solid #27272a',
+    borderBottom: `1px solid ${theme.bg.elevated}`,
     flexWrap: 'wrap',
     alignItems: 'flex-end'
   },
@@ -1052,8 +1060,8 @@ const styles = {
     display: 'flex',
     gap: '16px',
     padding: '12px 24px',
-    borderBottom: '1px solid #27272a',
-    backgroundColor: '#0f0f11',
+    borderBottom: `1px solid ${theme.bg.elevated}`,
+    backgroundColor: theme.bg.page,
     flexWrap: 'wrap',
     alignItems: 'flex-end'
   },
@@ -1065,16 +1073,16 @@ const styles = {
   label: {
     fontSize: '12px',
     fontWeight: '500',
-    color: '#a1a1aa',
+    color: theme.text.secondary,
     textTransform: 'uppercase',
     letterSpacing: '0.5px'
   },
   select: {
     padding: '8px 12px',
     borderRadius: '8px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#27272a',
-    color: '#fff',
+    border: `1px solid ${theme.border.default}`,
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary,
     fontSize: '14px',
     minWidth: '150px',
     cursor: 'pointer'
@@ -1082,25 +1090,25 @@ const styles = {
   dateInput: {
     padding: '8px 12px',
     borderRadius: '8px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#27272a',
-    color: '#fff',
+    border: `1px solid ${theme.border.default}`,
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary,
     fontSize: '14px'
   },
   timeInput: {
     padding: '8px 12px',
     borderRadius: '8px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#27272a',
-    color: '#fff',
+    border: `1px solid ${theme.border.default}`,
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary,
     fontSize: '14px'
   },
   numberInput: {
     padding: '8px 12px',
     borderRadius: '8px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#27272a',
-    color: '#fff',
+    border: `1px solid ${theme.border.default}`,
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary,
     fontSize: '14px',
     width: '100px'
   },
@@ -1113,15 +1121,15 @@ const styles = {
     alignItems: 'center',
     gap: '6px',
     fontSize: '14px',
-    color: '#e4e4e7',
+    color: theme.text.primary,
     cursor: 'pointer'
   },
   shuffleBtn: {
     padding: '8px 16px',
     borderRadius: '8px',
     border: 'none',
-    backgroundColor: '#6366f1',
-    color: '#fff',
+    backgroundColor: theme.accent.primary,
+    color: theme.text.primary,
     fontSize: '14px',
     fontWeight: '500',
     cursor: 'pointer'
@@ -1129,9 +1137,9 @@ const styles = {
   banksToggleBtn: {
     padding: '8px 16px',
     borderRadius: '8px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#3f3f46',
-    color: '#fff',
+    border: `1px solid ${theme.border.default}`,
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary,
     fontSize: '14px',
     fontWeight: '500',
     cursor: 'pointer'
@@ -1160,18 +1168,18 @@ const styles = {
   emptyState: {
     textAlign: 'center',
     padding: '48px 24px',
-    color: '#71717a'
+    color: theme.text.muted
   },
   emptyHint: {
     fontSize: '14px',
     marginTop: '8px',
-    color: '#52525b'
+    color: theme.text.muted
   },
   postCard: {
     display: 'flex',
     gap: '16px',
     padding: '16px',
-    backgroundColor: '#27272a',
+    backgroundColor: theme.bg.elevated,
     borderRadius: '12px',
     marginBottom: '12px',
     transition: 'opacity 0.2s'
@@ -1182,7 +1190,7 @@ const styles = {
     height: '120px',
     borderRadius: '8px',
     overflow: 'hidden',
-    backgroundColor: '#18181b',
+    backgroundColor: theme.bg.surface,
     flexShrink: 0
   },
   thumbnailImg: {
@@ -1202,8 +1210,8 @@ const styles = {
     position: 'absolute',
     top: '4px',
     left: '4px',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    color: '#fff',
+    backgroundColor: theme.overlay.heavy,
+    color: theme.text.primary,
     fontSize: '11px',
     padding: '2px 6px',
     borderRadius: '4px'
@@ -1221,14 +1229,14 @@ const styles = {
   },
   postTitle: {
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '14px'
   },
   badge: {
     display: 'inline-block',
     marginLeft: '8px',
     backgroundColor: '#f59e0b',
-    color: '#18181b',
+    color: theme.bg.surface,
     fontSize: '10px',
     padding: '2px 6px',
     borderRadius: '4px',
@@ -1238,7 +1246,7 @@ const styles = {
     display: 'inline-block',
     marginLeft: '4px',
     backgroundColor: '#a78bfa',
-    color: '#18181b',
+    color: theme.bg.surface,
     fontSize: '10px',
     padding: '2px 6px',
     borderRadius: '4px',
@@ -1246,7 +1254,7 @@ const styles = {
   },
   postTime: {
     fontSize: '12px',
-    color: '#a1a1aa',
+    color: theme.text.secondary,
     whiteSpace: 'nowrap'
   },
   fieldGroup: {
@@ -1254,22 +1262,22 @@ const styles = {
   },
   fieldLabel: {
     fontSize: '11px',
-    color: '#71717a',
+    color: theme.text.muted,
     marginBottom: '2px',
     display: 'block'
   },
   captionText: {
     margin: 0,
     fontSize: '14px',
-    color: '#e4e4e7'
+    color: theme.text.primary
   },
   captionInput: {
     width: '100%',
     padding: '6px 10px',
     borderRadius: '6px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#18181b',
-    color: '#fff',
+    border: `1px solid ${theme.border.default}`,
+    backgroundColor: theme.bg.surface,
+    color: theme.text.primary,
     fontSize: '14px'
   },
   hashtagText: {
@@ -1282,8 +1290,8 @@ const styles = {
     width: '100%',
     padding: '6px 10px',
     borderRadius: '6px',
-    border: '1px solid #3f3f46',
-    backgroundColor: '#18181b',
+    border: `1px solid ${theme.border.default}`,
+    backgroundColor: theme.bg.surface,
     color: '#a78bfa',
     fontSize: '13px'
   },
@@ -1296,8 +1304,8 @@ const styles = {
     padding: '6px 10px',
     borderRadius: '6px',
     border: 'none',
-    backgroundColor: '#3f3f46',
-    color: '#fff',
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary,
     fontSize: '14px',
     cursor: 'pointer'
   },
@@ -1312,8 +1320,8 @@ const styles = {
   },
   sidebar: {
     width: '300px',
-    borderLeft: '1px solid #27272a',
-    backgroundColor: '#18181b',
+    borderLeft: `1px solid ${theme.bg.elevated}`,
+    backgroundColor: theme.bg.surface,
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden'
@@ -1323,18 +1331,18 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '16px 20px',
-    borderBottom: '1px solid #27272a'
+    borderBottom: `1px solid ${theme.bg.elevated}`
   },
   sidebarTitle: {
     margin: 0,
     fontSize: '14px',
     fontWeight: '600',
-    color: '#fff'
+    color: theme.text.primary
   },
   sidebarClose: {
     background: 'none',
     border: 'none',
-    color: '#71717a',
+    color: theme.text.muted,
     fontSize: '20px',
     cursor: 'pointer'
   },
@@ -1348,7 +1356,7 @@ const styles = {
   },
   sidebarEmpty: {
     fontSize: '13px',
-    color: '#71717a',
+    color: theme.text.muted,
     textAlign: 'center',
     padding: '24px 16px'
   },
@@ -1356,15 +1364,15 @@ const styles = {
     padding: '10px 12px',
     borderRadius: '6px',
     border: 'none',
-    backgroundColor: '#27272a',
-    color: '#e4e4e7',
+    backgroundColor: theme.bg.elevated,
+    color: theme.text.primary,
     fontSize: '13px',
     cursor: 'pointer',
     transition: 'background-color 0.2s',
     textAlign: 'left'
   },
   sidebarEditor: {
-    borderTop: '1px solid #27272a',
+    borderTop: `1px solid ${theme.bg.elevated}`,
     maxHeight: '50%',
     overflowY: 'auto'
   },
@@ -1373,14 +1381,14 @@ const styles = {
     justifyContent: 'flex-end',
     gap: '12px',
     padding: '16px 24px',
-    borderTop: '1px solid #27272a'
+    borderTop: `1px solid ${theme.bg.elevated}`
   },
   cancelBtn: {
     padding: '10px 20px',
     borderRadius: '8px',
-    border: '1px solid #3f3f46',
+    border: `1px solid ${theme.border.default}`,
     backgroundColor: 'transparent',
-    color: '#a1a1aa',
+    color: theme.text.secondary,
     fontSize: '14px',
     fontWeight: '500',
     cursor: 'pointer'
@@ -1395,6 +1403,6 @@ const styles = {
     fontWeight: '600',
     cursor: 'pointer'
   }
-};
+});
 
 export default ScheduleQueue;

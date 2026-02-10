@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useToast, ConfirmDialog } from '../ui';
+import { useTheme } from '../../contexts/ThemeContext';
 
 /**
  * Content Bank Manager - Manages artist-specific content libraries
@@ -18,6 +19,7 @@ const ContentBankManager = ({
   onSelectClipForPreview
 }) => {
   const { error: toastError } = useToast();
+  const { theme } = useTheme();
   const [deleteClipConfirm, setDeleteClipConfirm] = useState({ isOpen: false, clipId: null });
   const [isCreating, setIsCreating] = useState(false);
   const [newBankName, setNewBankName] = useState('');
@@ -132,6 +134,8 @@ const ContentBankManager = ({
     setNewBankName('');
     setIsCreating(false);
   };
+
+  const styles = getStyles(theme);
 
   return (
     <div style={styles.container}>
@@ -371,7 +375,7 @@ const ContentBankManager = ({
   );
 };
 
-const styles = {
+const getStyles = (theme) => ({
   container: {
     display: 'flex',
     flexDirection: 'column',
@@ -381,7 +385,7 @@ const styles = {
   },
   section: {
     padding: '12px',
-    backgroundColor: '#1e293b',
+    backgroundColor: theme.bg.surface,
     borderRadius: '8px'
   },
   sectionHeader: {
@@ -394,7 +398,7 @@ const styles = {
     margin: 0,
     fontSize: '14px',
     fontWeight: '600',
-    color: '#e2e8f0',
+    color: theme.text.primary,
     marginBottom: '12px'
   },
   artistGrid: {
@@ -407,30 +411,30 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     padding: '8px 12px',
-    backgroundColor: '#334155',
+    backgroundColor: theme.bg.elevated,
     border: '2px solid transparent',
     borderRadius: '8px',
     cursor: 'pointer',
     transition: 'all 0.2s'
   },
   artistButtonActive: {
-    backgroundColor: '#7c3aed',
-    borderColor: '#a78bfa'
+    backgroundColor: theme.accent.primary,
+    borderColor: theme.accent.hover
   },
   artistAvatar: {
     width: '28px',
     height: '28px',
     borderRadius: '50%',
-    backgroundColor: '#475569',
+    backgroundColor: theme.border.default,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '12px',
     fontWeight: 'bold',
-    color: 'white'
+    color: theme.text.primary
   },
   artistName: {
-    color: 'white',
+    color: theme.text.primary,
     fontSize: '13px',
     fontWeight: '500'
   },
@@ -450,15 +454,15 @@ const styles = {
     gap: '8px',
     marginBottom: '12px',
     padding: '12px',
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.bg.page,
     borderRadius: '6px'
   },
   input: {
     padding: '8px 12px',
-    backgroundColor: '#1e293b',
-    border: '1px solid #334155',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: 'white',
+    color: theme.text.primary,
     fontSize: '13px'
   },
   createActions: {
@@ -478,8 +482,8 @@ const styles = {
   cancelButton: {
     flex: 1,
     padding: '8px',
-    backgroundColor: '#475569',
-    color: 'white',
+    backgroundColor: theme.border.default,
+    color: theme.text.primary,
     border: 'none',
     borderRadius: '6px',
     cursor: 'pointer'
@@ -494,7 +498,7 @@ const styles = {
     alignItems: 'center',
     gap: '10px',
     padding: '12px',
-    backgroundColor: '#334155',
+    backgroundColor: theme.bg.elevated,
     border: '2px solid transparent',
     borderRadius: '8px',
     cursor: 'pointer',
@@ -502,26 +506,26 @@ const styles = {
     textAlign: 'left'
   },
   bankButtonActive: {
-    backgroundColor: '#7c3aed',
-    borderColor: '#a78bfa'
+    backgroundColor: theme.accent.primary,
+    borderColor: theme.accent.hover
   },
   bankIcon: {
     fontSize: '20px'
   },
   bankName: {
     flex: 1,
-    color: 'white',
+    color: theme.text.primary,
     fontSize: '14px',
     fontWeight: '500'
   },
   bankCount: {
-    color: '#94a3b8',
+    color: theme.text.secondary,
     fontSize: '12px'
   },
   clipCount: {
     marginLeft: '8px',
     fontWeight: '400',
-    color: '#94a3b8'
+    color: theme.text.secondary
   },
   uploadArea: {
     display: 'flex',
@@ -530,25 +534,25 @@ const styles = {
     justifyContent: 'center',
     gap: '8px',
     padding: '24px',
-    backgroundColor: '#0f172a',
-    border: '2px dashed #334155',
+    backgroundColor: theme.bg.page,
+    border: `2px dashed ${theme.bg.elevated}`,
     borderRadius: '8px',
     cursor: 'pointer',
     transition: 'all 0.2s',
-    color: '#94a3b8',
+    color: theme.text.secondary,
     fontSize: '14px',
     marginBottom: '16px'
   },
   uploadAreaDragOver: {
-    borderColor: '#7c3aed',
-    backgroundColor: '#1e1b4b'
+    borderColor: theme.accent.primary,
+    backgroundColor: theme.accent.muted
   },
   uploadIcon: {
     fontSize: '32px'
   },
   uploadHint: {
     fontSize: '12px',
-    color: '#64748b'
+    color: theme.text.muted
   },
   uploadProgress: {
     display: 'flex',
@@ -560,13 +564,13 @@ const styles = {
   progressBar: {
     width: '100%',
     height: '8px',
-    backgroundColor: '#334155',
+    backgroundColor: theme.bg.elevated,
     borderRadius: '4px',
     overflow: 'hidden'
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     transition: 'width 0.3s'
   },
   clipsGrid: {
@@ -578,7 +582,7 @@ const styles = {
     position: 'relative',
     borderRadius: '8px',
     overflow: 'hidden',
-    backgroundColor: '#0f172a',
+    backgroundColor: theme.bg.page,
     transition: 'transform 0.2s',
     cursor: 'pointer'
   },
@@ -588,7 +592,7 @@ const styles = {
   clipThumbnail: {
     position: 'relative',
     aspectRatio: '16/9',
-    backgroundColor: '#1e293b'
+    backgroundColor: theme.bg.surface
   },
   thumbnailImg: {
     width: '100%',
@@ -619,7 +623,7 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: theme.overlay.heavy,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -631,7 +635,7 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-around',
     padding: '6px',
-    backgroundColor: '#1e293b'
+    backgroundColor: theme.bg.surface
   },
   clipAction: {
     padding: '4px 8px',
@@ -658,18 +662,18 @@ const styles = {
     transition: 'opacity 0.2s'
   },
   emptyText: {
-    color: '#64748b',
+    color: theme.text.muted,
     fontSize: '13px',
     textAlign: 'center',
     padding: '12px'
   },
   emptyClipsText: {
-    color: '#64748b',
+    color: theme.text.muted,
     fontSize: '14px',
     textAlign: 'center',
     padding: '24px'
   }
-};
+});
 
 // Add hover effect for video preview
 const styleSheet = document.createElement('style');

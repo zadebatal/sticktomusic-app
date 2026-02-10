@@ -13,6 +13,7 @@ import {
   uploadFile as driveUploadFile, ensureAppFolder
 } from '../../services/googleDriveService';
 import useIsMobile from '../../hooks/useIsMobile';
+import { useTheme } from '../../contexts/ThemeContext';
 
 /**
  * ContentLibrary - Shows all videos or slideshows created within a category
@@ -45,6 +46,7 @@ const ContentLibrary = ({
 }) => {
   // BUG-034: Toast notifications instead of alert()
   const { success: toastSuccess, error: toastError } = useToast();
+  const { theme } = useTheme();
   const { isMobile } = useIsMobile();
 
   const isSlideshow = contentType === 'slideshows';
@@ -269,6 +271,8 @@ const ContentLibrary = ({
   // Backwards compat alias
   const filteredVideos = isSlideshow ? [] : filteredItems;
 
+  const styles = getStyles(theme);
+
   return (
     <div style={styles.container}>
       {/* Header */}
@@ -300,13 +304,13 @@ const ContentLibrary = ({
             /* Drafts view: show prominent create CTAs + delete */
             <>
               <button
-                style={{ ...styles.primaryButton, backgroundColor: '#7c3aed', ...(isMobile ? { width: '100%', justifyContent: 'center' } : {}) }}
+                style={{ ...styles.primaryButton, ...(isMobile ? { width: '100%', justifyContent: 'center' } : {}) }}
                 onClick={() => onMakeVideo?.()}
               >
                 🎥 New Video Draft
               </button>
               <button
-                style={{ ...styles.primaryButton, backgroundColor: '#6366f1', ...(isMobile ? { width: '100%', justifyContent: 'center' } : {}) }}
+                style={{ ...styles.primaryButton, backgroundColor: theme.accent.hover, ...(isMobile ? { width: '100%', justifyContent: 'center' } : {}) }}
                 onClick={() => onMakeSlideshow?.()}
               >
                 🖼️ New Slideshow Draft
@@ -381,10 +385,10 @@ const ContentLibrary = ({
 
       {/* Already Scheduled section (Drafts view only) */}
       {isDraftsView && scheduledPosts.length > 0 && (
-        <div style={{ padding: '0 24px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <div style={{ padding: '0 24px', borderBottom: `1px solid ${theme.border.subtle}` }}>
           <button
             onClick={() => setShowScheduled(!showScheduled)}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 0', background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '13px', fontWeight: '600', width: '100%' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 0', background: 'none', border: 'none', color: theme.text.secondary, cursor: 'pointer', fontSize: '13px', fontWeight: '600', width: '100%' }}
           >
             <span style={{ transform: showScheduled ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', fontSize: '10px' }}>▶</span>
             Already Scheduled ({scheduledPosts.length})
@@ -392,10 +396,10 @@ const ContentLibrary = ({
           {showScheduled && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingBottom: '12px' }}>
               {scheduledPosts.map(post => (
-                <div key={post.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', backgroundColor: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: '8px', fontSize: '11px', color: '#a5b4fc' }}>
+                <div key={post.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', backgroundColor: `${theme.accent.primary}1a`, border: `1px solid ${theme.accent.primary}33`, borderRadius: '8px', fontSize: '11px', color: theme.accent.hover }}>
                   <span>{post.contentType === 'slideshow' ? '🖼️' : '🎥'}</span>
                   <span style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.contentName}</span>
-                  <span style={{ color: '#6b7280', fontSize: '10px' }}>
+                  <span style={{ color: theme.text.muted, fontSize: '10px' }}>
                     {post.status === 'scheduled' && post.scheduledTime ? new Date(post.scheduledTime).toLocaleDateString() : post.status}
                   </span>
                   <button
@@ -695,7 +699,7 @@ const ContentLibrary = ({
       {previewingSlideshow && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 10000,
+          backgroundColor: theme.overlay.heavy, zIndex: 10000,
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column'
         }} onClick={() => setPreviewingSlideshow(null)}>
           <div style={{
@@ -704,26 +708,26 @@ const ContentLibrary = ({
               ? { width: '100%', height: '100%', maxWidth: '100vw', maxHeight: '100vh', minWidth: 'unset', borderRadius: 0 }
               : { maxWidth: '90vw', maxHeight: '85vh', width: 'fit-content', minWidth: '320px', borderRadius: 16 }
             ),
-            backgroundColor: '#1a1a2e', overflow: 'hidden',
-            boxShadow: '0 25px 60px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column'
+            backgroundColor: theme.bg.input, overflow: 'hidden',
+            boxShadow: theme.shadow, display: 'flex', flexDirection: 'column'
           }} onClick={e => e.stopPropagation()}>
             {/* Header */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+            <div style={{ padding: '16px 20px', borderBottom: `1px solid ${theme.border.subtle}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
               <div>
-                <div style={{ color: '#fff', fontSize: 16, fontWeight: 600 }}>
+                <div style={{ color: theme.text.primary, fontSize: 16, fontWeight: 600 }}>
                   {previewingSlideshow.name || 'Untitled Slideshow'}
                 </div>
-                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 2 }}>
+                <div style={{ color: theme.text.muted, fontSize: 12, marginTop: 2 }}>
                   {previewingSlideshow.slides?.length || 0} slides · {previewingSlideshow.status || 'draft'}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                 <button onClick={() => { setPreviewingSlideshow(null); onEditSlideshow?.(previewingSlideshow); }} style={{
-                  padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(99,102,241,0.5)',
-                  background: 'rgba(99,102,241,0.2)', color: '#a5b4fc', fontSize: 13, cursor: 'pointer', fontWeight: 500
+                  padding: '6px 14px', borderRadius: 8, border: `1px solid ${theme.accent.primary}80`,
+                  background: `${theme.accent.primary}33`, color: theme.accent.hover, fontSize: 13, cursor: 'pointer', fontWeight: 500
                 }}>Edit</button>
                 <button onClick={() => setPreviewingSlideshow(null)} style={{
-                  background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white',
+                  background: theme.hover.bg, border: 'none', color: theme.text.primary,
                   borderRadius: '50%', width: isMobile ? 44 : 32, height: isMobile ? 44 : 32, cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isMobile ? 22 : 18
                 }}>×</button>
@@ -739,8 +743,8 @@ const ContentLibrary = ({
                 <div key={slide.id || i} style={{
                   width: isMobile ? '120px' : '180px', flexShrink: 0,
                   aspectRatio: '9/16', borderRadius: 10, overflow: 'hidden',
-                  backgroundColor: '#000', position: 'relative',
-                  border: '1px solid rgba(255,255,255,0.1)'
+                  backgroundColor: theme.bg.page, position: 'relative',
+                  border: `1px solid ${theme.border.subtle}`
                 }}>
                   {(slide.backgroundImage || slide.thumbnail) ? (
                     <img src={slide.backgroundImage || slide.thumbnail} alt={`Slide ${i + 1}`}
@@ -752,8 +756,8 @@ const ContentLibrary = ({
                   )}
                   <div style={{
                     position: 'absolute', bottom: 0, left: 0, right: 0,
-                    padding: '4px 8px', background: 'rgba(0,0,0,0.6)',
-                    color: '#fff', fontSize: 11, textAlign: 'center'
+                    padding: '4px 8px', background: theme.overlay.light,
+                    color: theme.text.primary, fontSize: 11, textAlign: 'center'
                   }}>Slide {i + 1}</div>
                   {/* Show text overlays */}
                   {(slide.textOverlays || []).map((overlay, oi) => (
@@ -778,7 +782,7 @@ const ContentLibrary = ({
       {previewingVideo && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 10000,
+          backgroundColor: theme.overlay.heavy, zIndex: 10000,
           display: 'flex', alignItems: 'center', justifyContent: 'center'
         }} onClick={() => setPreviewingVideo(null)}>
           <div style={{
@@ -787,12 +791,12 @@ const ContentLibrary = ({
               ? { width: '100%', height: '100%', maxHeight: '100vh', borderRadius: 0 }
               : { width: 'min(320px, 80vh * 9 / 16)', maxHeight: '85vh', aspectRatio: '9 / 16', borderRadius: 16 }
             ),
-            backgroundColor: '#000', overflow: 'hidden',
-            boxShadow: '0 25px 60px rgba(0,0,0,0.5)'
+            backgroundColor: theme.bg.page, overflow: 'hidden',
+            boxShadow: theme.shadow
           }} onClick={e => e.stopPropagation()}>
             <button onClick={() => setPreviewingVideo(null)} style={{
               position: 'absolute', top: 10, right: 10, zIndex: 10,
-              background: 'rgba(0,0,0,0.6)', border: 'none', color: 'white',
+              background: theme.overlay.light, border: 'none', color: theme.text.primary,
               borderRadius: '50%', width: isMobile ? 44 : 32, height: isMobile ? 44 : 32, cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isMobile ? 22 : 18,
               backdropFilter: 'blur(4px)'
@@ -821,12 +825,12 @@ const ContentLibrary = ({
             <div style={{
               position: 'absolute', bottom: 0, left: 0, right: 0,
               padding: '24px 16px 16px',
-              background: 'linear-gradient(transparent, rgba(0,0,0,0.8))'
+              background: `linear-gradient(transparent, ${theme.overlay.heavy})`
             }}>
-              <div style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>
+              <div style={{ color: theme.text.primary, fontSize: 14, fontWeight: 600 }}>
                 {previewingVideo.name || previewingVideo.textOverlay || 'Untitled Video'}
               </div>
-              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 4 }}>
+              <div style={{ color: theme.text.secondary, fontSize: 12, marginTop: 4 }}>
                 {previewingVideo.status} · {previewingVideo.clips?.length || 0} clips
                 {previewingVideo.cloudUrl && ' · Rendered'}
               </div>
@@ -839,6 +843,7 @@ const ContentLibrary = ({
 };
 
 const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onApprove, onPost, onRender, isRendering, renderProgress, onPreview, onExportToDrive, isDriveExporting, isMobile = false }) => {
+  const { theme } = useTheme();
   const [showActions, setShowActions] = useState(false);
   const actionsVisible = isMobile || showActions;
 
@@ -849,6 +854,8 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
   };
 
   const needsRendering = video.isRendered === false;
+
+  const styles = getStyles(theme);
 
   return (
     <div
@@ -912,18 +919,18 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: 'rgba(0,0,0,0.8)',
+            background: theme.overlay.heavy,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'white'
+            color: theme.text.primary
           }}>
             <div style={{ fontSize: '12px', marginBottom: '8px' }}>Rendering...</div>
             <div style={{
               width: '80%',
               height: '4px',
-              background: 'rgba(255,255,255,0.2)',
+              background: theme.border.subtle,
               borderRadius: '2px'
             }}>
               <div style={{
@@ -941,7 +948,7 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
         {actionsVisible && !isRendering && (
           <div style={{
             ...styles.videoActions,
-            ...(isMobile ? { position: 'absolute', bottom: '8px', left: '8px', right: '8px', top: 'auto', justifyContent: 'center', flexWrap: 'wrap', background: 'rgba(0,0,0,0.6)', borderRadius: '6px', padding: '4px' } : {})
+            ...(isMobile ? { position: 'absolute', bottom: '8px', left: '8px', right: '8px', top: 'auto', justifyContent: 'center', flexWrap: 'wrap', background: theme.overlay.light, borderRadius: '6px', padding: '4px' } : {})
           }}>
             <button style={styles.actionBtn} onClick={(e) => handleActionClick(e, onEdit)}>Edit</button>
             {needsRendering ? (
@@ -981,7 +988,7 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
                     disabled={isDriveExporting}
                     style={{
                       padding: '4px 8px', fontSize: 11, borderRadius: 4,
-                      border: '1px solid #60a5fa', color: isDriveExporting ? '#6b7280' : '#60a5fa',
+                      border: '1px solid #60a5fa', color: isDriveExporting ? theme.text.muted : '#60a5fa',
                       background: 'transparent', cursor: isDriveExporting ? 'wait' : 'pointer',
                       opacity: isDriveExporting ? 0.6 : 1
                     }}
@@ -1007,6 +1014,7 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
 };
 
 const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdit, onDelete, onPost, onExportToDrive, isDriveExporting, isMobile = false }) => {
+  const { theme } = useTheme();
   const [showActions, setShowActions] = useState(false);
   const actionsVisible = isMobile || showActions;
 
@@ -1041,7 +1049,7 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
         position: 'relative',
         width: '100%',
         aspectRatio: '9/16',
-        backgroundColor: '#0a0a0f',
+        backgroundColor: theme.bg.page,
         borderRadius: idx === 0 ? '10px 0 0 0' : idx === slideCount - 1 ? '0 10px 0 0' : '0',
         overflow: 'hidden',
         flexShrink: 0,
@@ -1049,8 +1057,8 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
         {thumb ? (
           <img src={thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
-          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #1a1a2e, #16213e)' }}>
-            <span style={{ color: '#4b5563', fontSize: '10px' }}>{idx + 1}</span>
+          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${theme.bg.input}, ${theme.bg.surface})` }}>
+            <span style={{ color: theme.text.muted, fontSize: '10px' }}>{idx + 1}</span>
           </div>
         )}
         {/* Text overlays rendered exactly as in editor */}
@@ -1085,6 +1093,8 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
     );
   };
 
+  const styles = getStyles(theme);
+
   return (
     <div
       style={{...styles.videoCard, ...(isSelected ? styles.videoCardSelected : {})}}
@@ -1102,7 +1112,7 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
             width: '100%',
             height: '100%',
             gap: '1px',
-            backgroundColor: '#0a0a0f',
+            backgroundColor: theme.bg.page,
           }}>
             {/* Show up to 4 slides as filmstrip, with overflow indicator */}
             {slides.slice(0, 4).map((slide, idx) => (
@@ -1117,10 +1127,10 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
+                background: `linear-gradient(135deg, ${theme.bg.input}, ${theme.bg.surface})`,
                 borderRadius: '0 10px 0 0',
               }}>
-                <span style={{ color: '#9ca3af', fontSize: '11px', fontWeight: '600' }}>+{slideCount - 4}</span>
+                <span style={{ color: theme.text.secondary, fontSize: '11px', fontWeight: '600' }}>+{slideCount - 4}</span>
               </div>
             )}
           </div>
@@ -1192,7 +1202,7 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
         {actionsVisible && (
           <div style={{
             ...styles.videoActions,
-            ...(isMobile ? { position: 'absolute', bottom: '8px', left: '8px', right: '8px', top: 'auto', justifyContent: 'center', flexWrap: 'wrap', background: 'rgba(0,0,0,0.6)', borderRadius: '6px', padding: '4px' } : {})
+            ...(isMobile ? { position: 'absolute', bottom: '8px', left: '8px', right: '8px', top: 'auto', justifyContent: 'center', flexWrap: 'wrap', background: theme.overlay.light, borderRadius: '6px', padding: '4px' } : {})
           }}>
             <button style={styles.actionBtn} onClick={(e) => handleActionClick(e, onEdit)}>Edit</button>
             {onExportToDrive && (
@@ -1201,8 +1211,8 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
                 disabled={isDriveExporting}
                 style={{
                   padding: '6px 8px', fontSize: 11, borderRadius: 4,
-                  border: '1px solid #60a5fa', color: isDriveExporting ? '#6b7280' : '#60a5fa',
-                  background: 'rgba(0,0,0,0.4)', cursor: isDriveExporting ? 'wait' : 'pointer',
+                  border: '1px solid #60a5fa', color: isDriveExporting ? theme.text.muted : '#60a5fa',
+                  background: theme.overlay.light, cursor: isDriveExporting ? 'wait' : 'pointer',
                   opacity: isDriveExporting ? 0.6 : 1, backdropFilter: 'blur(4px)'
                 }}
                 title="Export to Google Drive"
@@ -1223,7 +1233,7 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
             padding: '4px 12px 0',
             fontSize: '11px',
             fontWeight: '500',
-            color: '#d1d5db',
+            color: theme.text.secondary,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
@@ -1242,6 +1252,7 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
  */
 const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onClose }) => {
   const { success: toastSuccess, error: toastError } = useToast();
+  const { theme } = useTheme();
   const [selectedHandle, setSelectedHandle] = useState('');
   const [scheduleDate, setScheduleDate] = useState(new Date().toISOString().split('T')[0]);
   const [scheduleTime, setScheduleTime] = useState('14:00');
@@ -1388,6 +1399,8 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
   // Total slides across all slideshows (will be exported to Firebase before posting)
   const totalSlides = slideshows.reduce((sum, s) => sum + (s.slides?.length || 0), 0);
   const allExported = slideshows.every(s => s.exportedImages?.length > 0);
+
+  const slideshowPostingStyles = getSlideshowPostingStyles(theme);
 
   return (
     <div style={slideshowPostingStyles.overlay}>
@@ -1540,28 +1553,28 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
   );
 };
 
-const slideshowPostingStyles = {
+const getSlideshowPostingStyles = (theme) => ({
   overlay: {
     position: 'fixed',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: theme.overlay.heavy,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000
   },
   modal: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: theme.bg.input,
     borderRadius: '16px',
     padding: '24px',
     maxWidth: '480px',
     width: '90%',
     maxHeight: '90vh',
     overflow: 'auto',
-    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+    boxShadow: theme.shadow
   },
   header: {
     display: 'flex',
@@ -1576,7 +1589,7 @@ const slideshowPostingStyles = {
     margin: 0,
     fontSize: '18px',
     fontWeight: '600',
-    color: '#fff'
+    color: theme.text.primary
   },
   closeBtn: {
     padding: '8px',
@@ -1587,12 +1600,12 @@ const slideshowPostingStyles = {
     justifyContent: 'center',
     backgroundColor: 'transparent',
     border: 'none',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     borderRadius: '8px'
   },
   preview: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: theme.hover.bg,
     borderRadius: '12px',
     padding: '16px',
     marginBottom: '20px'
@@ -1611,17 +1624,17 @@ const slideshowPostingStyles = {
   previewMore: {
     width: '60px',
     height: '80px',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: theme.border.subtle,
     borderRadius: '8px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '14px',
-    color: '#9ca3af'
+    color: theme.text.secondary
   },
   previewText: {
     fontSize: '13px',
-    color: '#9ca3af'
+    color: theme.text.secondary
   },
   field: {
     marginBottom: '16px'
@@ -1635,27 +1648,27 @@ const slideshowPostingStyles = {
     display: 'block',
     fontSize: '12px',
     fontWeight: '500',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     textTransform: 'uppercase',
     marginBottom: '6px'
   },
   select: {
     width: '100%',
     padding: '10px 12px',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    backgroundColor: theme.hover.bg,
+    border: `1px solid ${theme.border.subtle}`,
     borderRadius: '8px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '14px',
     cursor: 'pointer'
   },
   input: {
     width: '100%',
     padding: '10px 12px',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    backgroundColor: theme.hover.bg,
+    border: `1px solid ${theme.border.subtle}`,
     borderRadius: '8px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '14px',
     boxSizing: 'border-box'
   },
@@ -1668,16 +1681,16 @@ const slideshowPostingStyles = {
     alignItems: 'center',
     gap: '8px',
     fontSize: '14px',
-    color: '#e4e4e7',
+    color: theme.text.primary,
     cursor: 'pointer'
   },
   textarea: {
     width: '100%',
     padding: '10px 12px',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    backgroundColor: theme.hover.bg,
+    border: `1px solid ${theme.border.subtle}`,
     borderRadius: '8px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '14px',
     resize: 'none',
     boxSizing: 'border-box'
@@ -1685,10 +1698,10 @@ const slideshowPostingStyles = {
   hashtagInput: {
     width: '100%',
     padding: '10px 12px',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    backgroundColor: theme.hover.bg,
+    border: `1px solid ${theme.border.subtle}`,
     borderRadius: '8px',
-    color: '#a78bfa',
+    color: theme.accent.hover,
     fontSize: '14px',
     boxSizing: 'border-box'
   },
@@ -1701,9 +1714,9 @@ const slideshowPostingStyles = {
     flex: 1,
     padding: '12px',
     backgroundColor: 'transparent',
-    border: '1px solid rgba(255, 255, 255, 0.2)',
+    border: `1px solid ${theme.text.muted}`,
     borderRadius: '8px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     fontSize: '14px',
     cursor: 'pointer'
   },
@@ -1718,60 +1731,60 @@ const slideshowPostingStyles = {
     fontWeight: '500',
     cursor: 'pointer'
   }
-};
+});
 
-const styles = {
+const getStyles = (theme) => ({
   container: { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' },
-  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #1f1f2e' },
+  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: `1px solid ${theme.bg.surface}` },
   headerLeft: { display: 'flex', alignItems: 'center', gap: '16px' },
-  backButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '36px', backgroundColor: '#1f1f2e', border: 'none', borderRadius: '8px', color: '#9ca3af', cursor: 'pointer' },
+  backButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '36px', backgroundColor: theme.bg.surface, border: 'none', borderRadius: '8px', color: theme.text.secondary, cursor: 'pointer' },
   titleSection: { display: 'flex', alignItems: 'center', gap: '12px' },
-  categoryIcon: { width: '40px', height: '40px', backgroundColor: '#2d2d3d', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: '600', color: '#9ca3af' },
-  title: { fontSize: '18px', fontWeight: '600', color: '#fff', margin: 0 },
-  subtitle: { fontSize: '13px', color: '#6b7280', margin: 0 },
+  categoryIcon: { width: '40px', height: '40px', backgroundColor: theme.bg.elevated, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: '600', color: theme.text.secondary },
+  title: { fontSize: '18px', fontWeight: '600', color: theme.text.primary, margin: 0 },
+  subtitle: { fontSize: '13px', color: theme.text.muted, margin: 0 },
   headerActions: { display: 'flex', alignItems: 'center', gap: '8px' },
-  primaryButton: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', backgroundColor: '#7c3aed', border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
-  secondaryButton: { padding: '10px 16px', backgroundColor: '#1f1f2e', border: '1px solid #2d2d3d', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '13px' },
-  filters: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 24px', borderBottom: '1px solid #1f1f2e' },
+  primaryButton: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', backgroundColor: theme.accent.primary, border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
+  secondaryButton: { padding: '10px 16px', backgroundColor: theme.bg.surface, border: `1px solid ${theme.bg.elevated}`, borderRadius: '8px', color: theme.text.primary, cursor: 'pointer', fontSize: '13px' },
+  filters: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 24px', borderBottom: `1px solid ${theme.bg.surface}` },
   filterGroup: { display: 'flex', alignItems: 'center', gap: '4px' },
   filterRight: { display: 'flex', alignItems: 'center', gap: '16px' },
-  dateFilter: { padding: '6px 12px', backgroundColor: 'transparent', border: 'none', borderRadius: '6px', color: '#9ca3af', cursor: 'pointer', fontSize: '13px' },
-  dateFilterActive: { padding: '6px 12px', backgroundColor: '#1f1f2e', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px' },
-  selectAllLabel: { display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af', fontSize: '13px', cursor: 'pointer' },
-  statusFilter: { padding: '8px 12px', backgroundColor: '#1f1f2e', border: '1px solid #2d2d3d', borderRadius: '6px', color: '#fff', fontSize: '13px', cursor: 'pointer' },
+  dateFilter: { padding: '6px 12px', backgroundColor: 'transparent', border: 'none', borderRadius: '6px', color: theme.text.secondary, cursor: 'pointer', fontSize: '13px' },
+  dateFilterActive: { padding: '6px 12px', backgroundColor: theme.bg.surface, border: 'none', borderRadius: '6px', color: theme.text.primary, cursor: 'pointer', fontSize: '13px' },
+  selectAllLabel: { display: 'flex', alignItems: 'center', gap: '8px', color: theme.text.secondary, fontSize: '13px', cursor: 'pointer' },
+  statusFilter: { padding: '8px 12px', backgroundColor: theme.bg.surface, border: `1px solid ${theme.bg.elevated}`, borderRadius: '6px', color: theme.text.primary, fontSize: '13px', cursor: 'pointer' },
   contentArea: { flex: 1, overflow: 'auto', padding: '24px' },
   emptyState: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' },
-  emptyTitle: { fontSize: '18px', fontWeight: '600', color: '#fff', margin: '16px 0 8px 0' },
-  emptyText: { fontSize: '14px', color: '#6b7280', margin: '0 0 24px 0' },
-  emptyButton: { padding: '12px 24px', backgroundColor: '#7c3aed', border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '500' },
+  emptyTitle: { fontSize: '18px', fontWeight: '600', color: theme.text.primary, margin: '16px 0 8px 0' },
+  emptyText: { fontSize: '14px', color: theme.text.muted, margin: '0 0 24px 0' },
+  emptyButton: { padding: '12px 24px', backgroundColor: theme.accent.primary, border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '500' },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' },
-  videoCard: { position: 'relative', backgroundColor: '#111118', borderRadius: '12px', overflow: 'hidden', border: '2px solid transparent' },
-  videoCardSelected: { border: '2px solid #7c3aed', boxShadow: '0 0 0 2px rgba(124, 58, 237, 0.3)' },
+  videoCard: { position: 'relative', backgroundColor: theme.bg.input, borderRadius: '12px', overflow: 'hidden', border: '2px solid transparent' },
+  videoCardSelected: { border: `2px solid ${theme.accent.primary}`, boxShadow: `0 0 0 2px ${theme.accent.primary}4d` },
   videoCheckbox: { position: 'absolute', top: '8px', left: '8px', zIndex: 10, minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  checkbox: { width: '20px', height: '20px', accentColor: '#7c3aed', cursor: 'pointer' },
-  videoThumb: { position: 'relative', aspectRatio: '9/16', backgroundColor: '#0a0a0f', userSelect: 'none' },
+  checkbox: { width: '20px', height: '20px', accentColor: theme.accent.primary, cursor: 'pointer' },
+  videoThumb: { position: 'relative', aspectRatio: '9/16', backgroundColor: theme.bg.page, userSelect: 'none' },
   videoThumbImg: { width: '100%', height: '100%', objectFit: 'cover' },
   videoThumbPlaceholder: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  textOverlay: { position: 'absolute', bottom: '40%', left: '50%', transform: 'translateX(-50%)', padding: '8px 16px', backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: '4px', color: '#fff', fontSize: '12px', fontWeight: '500' },
+  textOverlay: { position: 'absolute', bottom: '40%', left: '50%', transform: 'translateX(-50%)', padding: '8px 16px', backgroundColor: theme.overlay.light, borderRadius: '4px', color: theme.text.primary, fontSize: '12px', fontWeight: '500' },
   videoActions: { position: 'absolute', top: '8px', right: '8px', display: 'flex', gap: '6px' },
-  actionBtn: { padding: '8px 12px', minHeight: '36px', backgroundColor: '#1f1f2e', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
-  actionBtnPost: { padding: '8px 14px', minHeight: '36px', backgroundColor: '#7c3aed', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: '600' },
+  actionBtn: { padding: '8px 12px', minHeight: '36px', backgroundColor: theme.bg.surface, border: 'none', borderRadius: '6px', color: theme.text.primary, cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
+  actionBtnPost: { padding: '8px 14px', minHeight: '36px', backgroundColor: theme.accent.primary, border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: '600' },
   actionBtnDel: { padding: '8px 12px', minHeight: '36px', backgroundColor: '#dc2626', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '12px' },
   statusBadge: { padding: '10px 12px', fontSize: '12px', fontWeight: '500', textAlign: 'center' },
-  statusDraft: { backgroundColor: '#1f1f2e', color: '#9ca3af' },
+  statusDraft: { backgroundColor: theme.bg.surface, color: theme.text.secondary },
   statusApproved: { backgroundColor: '#065f46', color: '#34d399' },
-  batchBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', backgroundColor: '#7c3aed', margin: '0 24px 16px', borderRadius: '12px', boxShadow: '0 4px 20px rgba(124, 58, 237, 0.5)' },
+  batchBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', backgroundColor: theme.accent.primary, margin: '0 24px 16px', borderRadius: '12px', boxShadow: `0 4px 20px ${theme.accent.primary}80` },
   batchLeft: { display: 'flex', alignItems: 'center', gap: '12px' },
   batchText: { color: '#fff', fontSize: '14px', fontWeight: '500' },
   batchRight: { display: 'flex', alignItems: 'center', gap: '8px' },
   batchBtnClear: { padding: '8px 16px', backgroundColor: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px' },
   batchBtnDelete: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', backgroundColor: '#dc2626', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
   batchBtnExport: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', backgroundColor: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
-  batchBtnPost: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: '#fff', border: 'none', borderRadius: '6px', color: '#7c3aed', cursor: 'pointer', fontSize: '14px', fontWeight: '600' },
-  footer: { display: 'flex', justifyContent: 'center', gap: '16px', padding: '16px 24px', borderTop: '1px solid #1f1f2e' },
-  footerButton: { padding: '10px 16px', backgroundColor: 'transparent', border: '1px solid #2d2d3d', borderRadius: '8px', color: '#9ca3af', cursor: 'pointer', fontSize: '13px' },
+  batchBtnPost: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: '#fff', border: 'none', borderRadius: '6px', color: theme.accent.primary, cursor: 'pointer', fontSize: '14px', fontWeight: '600' },
+  footer: { display: 'flex', justifyContent: 'center', gap: '16px', padding: '16px 24px', borderTop: `1px solid ${theme.bg.surface}` },
+  footerButton: { padding: '10px 16px', backgroundColor: 'transparent', border: `1px solid ${theme.bg.elevated}`, borderRadius: '8px', color: theme.text.secondary, cursor: 'pointer', fontSize: '13px' },
   // UI-31: Container for StatusPill at bottom of video card
-  statusBadgeContainer: { padding: '10px 12px', backgroundColor: '#1f1f2e', display: 'flex', alignItems: 'center', justifyContent: 'center' }
-};
+  statusBadgeContainer: { padding: '10px 12px', backgroundColor: theme.bg.surface, display: 'flex', alignItems: 'center', justifyContent: 'center' }
+});
 
 export default ContentLibrary;

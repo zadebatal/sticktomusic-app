@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 
 /**
  * TemplatePicker - First screen when opening the video editor
@@ -85,6 +86,8 @@ const ICON_MAP = {
 
 const TemplatePicker = ({ onSelect, onClose, clipCount = 0 }) => {
   const [hoveredId, setHoveredId] = useState(null);
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
 
   return (
     <div style={styles.overlay}>
@@ -158,11 +161,11 @@ const TemplatePicker = ({ onSelect, onClose, clipCount = 0 }) => {
   );
 };
 
-const styles = {
+const getStyles = (theme) => ({
   overlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    backgroundColor: theme.overlay.heavy,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -170,9 +173,9 @@ const styles = {
     padding: '20px'
   },
   container: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: theme.bg.input,
     borderRadius: '16px',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    border: `1px solid ${theme.border.subtle}`,
     padding: '32px',
     maxWidth: '960px',
     width: '100%',
@@ -189,18 +192,18 @@ const styles = {
     margin: 0,
     fontSize: '22px',
     fontWeight: '600',
-    color: '#ffffff',
+    color: theme.text.primary,
     letterSpacing: '-0.01em'
   },
   subtitle: {
     margin: '6px 0 0 0',
     fontSize: '13px',
-    color: '#9ca3af'
+    color: theme.text.secondary
   },
   closeButton: {
     background: 'none',
     border: 'none',
-    color: '#6b7280',
+    color: theme.text.muted,
     cursor: 'pointer',
     padding: '4px',
     borderRadius: '6px',
@@ -215,8 +218,8 @@ const styles = {
     gap: '16px'
   },
   card: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    backgroundColor: theme.hover.bg,
+    border: `1px solid ${theme.border.subtle}`,
     borderRadius: '12px',
     padding: '24px',
     cursor: 'pointer',
@@ -235,28 +238,28 @@ const styles = {
     width: '80px',
     height: '80px',
     borderRadius: '16px',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: theme.hover.bg,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: '16px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     transition: 'all 0.2s ease'
   },
   iconContainerHover: {
     backgroundColor: 'rgba(99, 102, 241, 0.15)',
-    color: '#a5b4fc'
+    color: theme.accent.hover
   },
   cardTitle: {
     margin: '0 0 6px 0',
     fontSize: '17px',
     fontWeight: '600',
-    color: '#ffffff'
+    color: theme.text.primary
   },
   cardDescription: {
     margin: '0 0 16px 0',
     fontSize: '13px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     lineHeight: '1.4'
   },
   featureList: {
@@ -271,7 +274,7 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     fontSize: '12px',
-    color: '#d1d5db',
+    color: theme.text.primary,
     justifyContent: 'flex-start',
     paddingLeft: '20px'
   },
@@ -280,17 +283,17 @@ const styles = {
     padding: '10px 24px',
     borderRadius: '8px',
     backgroundColor: 'rgba(99, 102, 241, 0.15)',
-    color: '#a5b4fc',
+    color: theme.accent.hover,
     fontSize: '13px',
     fontWeight: '500',
     transition: 'all 0.2s ease',
     border: '1px solid rgba(99, 102, 241, 0.2)'
   },
   selectButtonHover: {
-    backgroundColor: '#6366f1',
-    color: '#ffffff',
-    borderColor: '#6366f1'
+    backgroundColor: theme.accent.primary,
+    color: theme.text.primary,
+    borderColor: theme.accent.primary
   }
-};
+});
 
 export default TemplatePicker;

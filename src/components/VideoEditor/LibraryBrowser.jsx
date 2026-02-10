@@ -60,10 +60,12 @@ import {
 } from '../../services/googleDriveService';
 import { useToast } from '../ui';
 import useIsMobile from '../../hooks/useIsMobile';
+import { useTheme } from '../../contexts/ThemeContext';
 import log from '../../utils/logger';
 
 // Extracted outside LibraryBrowser so React doesn't recreate on parent re-render
 const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate }) => {
+  const { theme } = useTheme();
   const [newText, setNewText] = useState('');
   const [editingIndex, setEditingIndex] = useState(null);
   const [editText, setEditText] = useState('');
@@ -71,12 +73,12 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
   return (
     <div style={{
       flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)',
+      borderRadius: '10px', border: `1px solid ${theme.border.subtle}`,
       minHeight: 0
     }}>
       <div style={{
         padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0
+        borderBottom: `1px solid ${theme.border.subtle}`, flexShrink: 0
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{
@@ -85,20 +87,20 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
             fontSize: '10px', fontWeight: 700, color: '#000'
           }}>{bankNum}</span>
           <span style={{ fontSize: '13px', fontWeight: 600, color }}>{label}</span>
-          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>{texts.length}</span>
+          <span style={{ fontSize: '11px', color: theme.text.muted }}>{texts.length}</span>
         </div>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
         {texts.length === 0 ? (
-          <div style={{ padding: '12px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
+          <div style={{ padding: '12px', textAlign: 'center', color: theme.text.muted, fontSize: '11px' }}>
             No text lines yet. Add some below.
           </div>
         ) : texts.map((text, i) => (
           <div key={i} style={{
             display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px',
             borderRadius: '6px', marginBottom: '4px',
-            backgroundColor: 'rgba(255,255,255,0.03)',
-            fontSize: '12px', color: 'rgba(255,255,255,0.8)'
+            backgroundColor: theme.hover.bg,
+            fontSize: '12px', color: theme.text.secondary
           }}>
             {editingIndex === i ? (
               <input
@@ -121,8 +123,8 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
                 }}
                 autoFocus
                 style={{
-                  flex: 1, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(99,102,241,0.4)',
-                  borderRadius: '4px', padding: '2px 6px', color: '#fff', fontSize: '12px'
+                  flex: 1, background: theme.bg.page, border: `1px solid ${theme.accent.primary}66`,
+                  borderRadius: '4px', padding: '2px 6px', color: theme.text.primary, fontSize: '12px'
                 }}
               />
             ) : (
@@ -137,7 +139,7 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
             <button
               onClick={() => onRemove(i)}
               style={{
-                background: 'none', border: 'none', color: 'rgba(255,255,255,0.2)',
+                background: 'none', border: 'none', color: theme.text.muted,
                 cursor: 'pointer', fontSize: '16px', padding: '4px 8px', flexShrink: 0, minWidth: '32px', minHeight: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}
               title="Remove"
@@ -147,7 +149,7 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
       </div>
       {/* Add new text input */}
       <div style={{
-        padding: '8px', borderTop: '1px solid rgba(255,255,255,0.06)',
+        padding: '8px', borderTop: `1px solid ${theme.border.subtle}`,
         display: 'flex', gap: '6px', flexShrink: 0
       }}>
         <input
@@ -162,8 +164,8 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
           placeholder={`Add ${label.toLowerCase()} line...`}
           style={{
             flex: 1, padding: '6px 10px', borderRadius: '6px',
-            border: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(0,0,0,0.2)',
-            color: '#fff', fontSize: '12px'
+            border: `1px solid ${theme.border.subtle}`, backgroundColor: theme.bg.page,
+            color: theme.text.primary, fontSize: '12px'
           }}
         />
         <button
@@ -171,8 +173,8 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
           disabled={!newText.trim()}
           style={{
             padding: '6px 12px', borderRadius: '6px', border: 'none',
-            backgroundColor: newText.trim() ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.05)',
-            color: newText.trim() ? '#a5b4fc' : 'rgba(255,255,255,0.2)',
+            backgroundColor: newText.trim() ? `${theme.accent.primary}4d` : theme.hover.bg,
+            color: newText.trim() ? theme.accent.hover : theme.text.muted,
             fontSize: '12px', cursor: newText.trim() ? 'pointer' : 'default'
           }}
         >+</button>
@@ -199,6 +201,7 @@ const LibraryBrowser = ({
   refreshTrigger = 0 // Increment to force refresh
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
+  const { theme } = useTheme();
   const { isMobile: isMobileHook } = useIsMobile();
   const isMobile = isMobileHook || isMobileProp;
 
@@ -919,13 +922,13 @@ const LibraryBrowser = ({
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
-      backgroundColor: '#0a0a0a',
-      color: '#ffffff',
+      backgroundColor: theme.bg.page,
+      color: theme.text.primary,
       overflow: 'hidden'
     },
     header: {
       padding: compact ? '12px 16px' : '16px 20px',
-      borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+      borderBottom: `1px solid ${theme.border.subtle}`,
       display: 'flex',
       flexDirection: isMobile ? 'column' : 'row',
       gap: '12px',
@@ -936,7 +939,7 @@ const LibraryBrowser = ({
       display: 'flex',
       alignItems: 'center',
       gap: '8px',
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+      backgroundColor: theme.hover.bg,
       borderRadius: '8px',
       padding: '8px 12px'
     },
@@ -944,7 +947,7 @@ const LibraryBrowser = ({
       flex: 1,
       backgroundColor: 'transparent',
       border: 'none',
-      color: '#ffffff',
+      color: theme.text.primary,
       fontSize: '14px',
       outline: 'none'
     },
@@ -955,10 +958,10 @@ const LibraryBrowser = ({
       ...(isMobile ? { flexWrap: 'wrap', justifyContent: 'flex-end' } : {})
     },
     select: {
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-      border: '1px solid rgba(255, 255, 255, 0.1)',
+      backgroundColor: theme.hover.bg,
+      border: `1px solid ${theme.border.subtle}`,
       borderRadius: '6px',
-      color: '#ffffff',
+      color: theme.text.primary,
       padding: '8px 12px',
       fontSize: '13px',
       cursor: 'pointer',
@@ -969,7 +972,7 @@ const LibraryBrowser = ({
       alignItems: 'center',
       gap: '6px',
       padding: '8px 16px',
-      backgroundColor: '#6366f1',
+      backgroundColor: theme.accent.primary,
       border: 'none',
       borderRadius: '6px',
       color: '#ffffff',
@@ -986,7 +989,7 @@ const LibraryBrowser = ({
     },
     sidebar: isMobile ? {
       width: '100%',
-      borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+      borderBottom: `1px solid ${theme.border.subtle}`,
       padding: '8px 12px',
       overflowX: 'auto',
       overflowY: 'hidden',
@@ -1000,7 +1003,7 @@ const LibraryBrowser = ({
       scrollbarWidth: 'none'
     } : {
       width: '200px',
-      borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+      borderRight: `1px solid ${theme.border.subtle}`,
       padding: '12px',
       overflowY: 'auto',
       display: 'block'
@@ -1019,7 +1022,7 @@ const LibraryBrowser = ({
     } : {
       fontSize: '11px',
       fontWeight: '600',
-      color: 'rgba(255, 255, 255, 0.4)',
+      color: theme.text.muted,
       textTransform: 'uppercase',
       letterSpacing: '1px',
       marginBottom: '8px',
@@ -1033,10 +1036,10 @@ const LibraryBrowser = ({
       borderRadius: '20px',
       cursor: 'pointer',
       fontSize: '13px',
-      color: 'rgba(255, 255, 255, 0.8)',
+      color: theme.text.secondary,
       whiteSpace: 'nowrap',
       flexShrink: 0,
-      border: '1px solid rgba(255, 255, 255, 0.1)',
+      border: `1px solid ${theme.border.subtle}`,
       minHeight: '36px',
       transition: 'all 0.2s'
     } : {
@@ -1047,16 +1050,16 @@ const LibraryBrowser = ({
       borderRadius: '6px',
       cursor: 'pointer',
       fontSize: '14px',
-      color: 'rgba(255, 255, 255, 0.8)',
+      color: theme.text.secondary,
       transition: 'all 0.2s'
     },
     sidebarItemActive: isMobile ? {
-      backgroundColor: 'rgba(99, 102, 241, 0.3)',
-      color: '#ffffff',
-      borderColor: 'rgba(99, 102, 241, 0.6)'
+      backgroundColor: `${theme.accent.primary}4d`,
+      color: theme.text.primary,
+      borderColor: `${theme.accent.primary}99`
     } : {
-      backgroundColor: 'rgba(99, 102, 241, 0.2)',
-      color: '#ffffff'
+      backgroundColor: `${theme.accent.primary}33`,
+      color: theme.text.primary
     },
     sidebarItemIcon: {
       fontSize: isMobile ? '14px' : '16px'
@@ -1066,11 +1069,11 @@ const LibraryBrowser = ({
       alignItems: 'center',
       gap: '4px',
       padding: '6px 12px',
-      color: 'rgba(255, 255, 255, 0.5)',
+      color: theme.text.muted,
       fontSize: '12px',
       cursor: 'pointer',
       borderRadius: '20px',
-      border: '1px dashed rgba(255, 255, 255, 0.2)',
+      border: `1px dashed ${theme.text.muted}`,
       whiteSpace: 'nowrap',
       flexShrink: 0,
       minHeight: '36px',
@@ -1080,7 +1083,7 @@ const LibraryBrowser = ({
       alignItems: 'center',
       gap: '6px',
       padding: '8px 12px',
-      color: 'rgba(255, 255, 255, 0.5)',
+      color: theme.text.muted,
       fontSize: '13px',
       cursor: 'pointer',
       borderRadius: '6px',
@@ -1109,7 +1112,7 @@ const LibraryBrowser = ({
       height: 0,
       minHeight: isMobile ? '44px' : undefined,
       minWidth: isMobile ? '44px' : undefined,
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+      backgroundColor: theme.hover.bg,
       borderRadius: isMobile ? '6px' : '8px',
       overflow: 'hidden',
       cursor: 'pointer',
@@ -1134,28 +1137,28 @@ const LibraryBrowser = ({
       left: 0,
       right: 0,
       padding: '8px',
-      background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
+      background: `linear-gradient(transparent, ${theme.overlay.heavy})`,
       display: 'flex',
       flexDirection: 'column',
       gap: '4px'
     },
     mediaName: {
       fontSize: '11px',
-      color: '#ffffff',
+      color: theme.text.primary,
       overflow: 'hidden',
       textOverflow: 'ellipsis',
       whiteSpace: 'nowrap'
     },
     mediaMeta: {
       fontSize: '10px',
-      color: 'rgba(255, 255, 255, 0.5)'
+      color: theme.text.muted
     },
     mediaTypeIcon: {
       position: 'absolute',
       top: '8px',
       left: '8px',
       fontSize: '16px',
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      backgroundColor: theme.overlay.light,
       borderRadius: '4px',
       padding: '4px'
     },
@@ -1165,7 +1168,7 @@ const LibraryBrowser = ({
       right: '8px',
       fontSize: '16px',
       cursor: 'pointer',
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      backgroundColor: theme.overlay.light,
       borderRadius: '4px',
       padding: '4px',
       border: 'none',
@@ -1178,7 +1181,7 @@ const LibraryBrowser = ({
       justifyContent: 'center',
       height: '100%',
       gap: '16px',
-      color: 'rgba(255, 255, 255, 0.5)'
+      color: theme.text.muted
     },
     emptyIcon: {
       fontSize: '48px'
@@ -1193,7 +1196,7 @@ const LibraryBrowser = ({
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.8)',
+      backgroundColor: theme.overlay.heavy,
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
@@ -1204,13 +1207,13 @@ const LibraryBrowser = ({
     progressBar: {
       width: '240px',
       height: '6px',
-      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+      backgroundColor: theme.border.subtle,
       borderRadius: '3px',
       overflow: 'hidden'
     },
     progressFill: {
       height: '100%',
-      background: 'linear-gradient(90deg, #6366f1, #818cf8)',
+      background: `linear-gradient(90deg, ${theme.accent.primary}, ${theme.accent.hover})`,
       borderRadius: '3px',
       transition: 'width 0.3s ease'
     },
@@ -1219,8 +1222,8 @@ const LibraryBrowser = ({
       left: '50%',
       top: '50%',
       transform: 'translate(-50%, -50%)',
-      backgroundColor: '#1a1a1a',
-      border: '1px solid rgba(255, 255, 255, 0.1)',
+      backgroundColor: theme.bg.surface,
+      border: `1px solid ${theme.border.subtle}`,
       borderRadius: '12px',
       padding: '8px 0',
       width: '85vw',
@@ -1228,21 +1231,21 @@ const LibraryBrowser = ({
       maxHeight: '70vh',
       overflowY: 'auto',
       zIndex: 10000,
-      boxShadow: '0 10px 40px rgba(0, 0, 0, 0.7)'
+      boxShadow: theme.shadow
     } : {
       position: 'fixed',
-      backgroundColor: '#1a1a1a',
-      border: '1px solid rgba(255, 255, 255, 0.1)',
+      backgroundColor: theme.bg.surface,
+      border: `1px solid ${theme.border.subtle}`,
       borderRadius: '8px',
       padding: '8px 0',
       minWidth: '180px',
       zIndex: 10000,
-      boxShadow: '0 10px 40px rgba(0, 0, 0, 0.5)'
+      boxShadow: theme.shadow
     },
     contextMenuItem: {
       padding: isMobile ? '14px 16px' : '10px 16px',
       fontSize: '14px',
-      color: 'rgba(255, 255, 255, 0.8)',
+      color: theme.text.secondary,
       cursor: 'pointer',
       display: 'flex',
       alignItems: 'center',
@@ -1252,7 +1255,7 @@ const LibraryBrowser = ({
     },
     contextMenuDivider: {
       height: '1px',
-      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+      backgroundColor: theme.border.subtle,
       margin: '8px 0'
     },
     modal: {
@@ -1261,14 +1264,14 @@ const LibraryBrowser = ({
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.8)',
+      backgroundColor: theme.overlay.heavy,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 10001
     },
     modalContent: {
-      backgroundColor: '#1a1a1a',
+      backgroundColor: theme.bg.surface,
       borderRadius: '12px',
       padding: '24px',
       width: '90%',
@@ -1282,10 +1285,10 @@ const LibraryBrowser = ({
     modalInput: {
       width: '100%',
       padding: '12px',
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-      border: '1px solid rgba(255, 255, 255, 0.1)',
+      backgroundColor: theme.hover.bg,
+      border: `1px solid ${theme.border.subtle}`,
       borderRadius: '8px',
-      color: '#ffffff',
+      color: theme.text.primary,
       fontSize: '14px',
       outline: 'none',
       marginBottom: '16px'
@@ -1309,7 +1312,7 @@ const LibraryBrowser = ({
       justifyContent: 'center',
       width: '100%',
       height: '100%',
-      background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+      background: `linear-gradient(135deg, ${theme.bg.input} 0%, ${theme.bg.surface} 100%)`,
       fontSize: '32px'
     },
     videoPlaceholder: {
@@ -1321,7 +1324,7 @@ const LibraryBrowser = ({
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'linear-gradient(135deg, #1a1a2e 0%, #0f172a 100%)',
+      background: `linear-gradient(135deg, ${theme.bg.input} 0%, ${theme.bg.page} 100%)`,
       fontSize: '28px',
       pointerEvents: 'none'
     }
@@ -1643,7 +1646,7 @@ const LibraryBrowser = ({
           width: `${bankCardSize}px`,
           height: `${bankCardSize}px`,
           flexShrink: 0,
-          backgroundColor: 'rgba(255, 255, 255, 0.05)',
+          backgroundColor: theme.hover.bg,
           borderRadius: '8px',
           overflow: 'hidden',
           cursor: 'pointer',
@@ -1665,12 +1668,12 @@ const LibraryBrowser = ({
         }}
         onMouseEnter={(e) => {
           if (!isSelected) {
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+            e.currentTarget.style.backgroundColor = theme.border.subtle;
           }
         }}
         onMouseLeave={(e) => {
           if (!isSelected) {
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+            e.currentTarget.style.backgroundColor = theme.hover.bg;
           }
         }}
       >
@@ -1749,7 +1752,7 @@ const LibraryBrowser = ({
       data-media-id={media.id}
       style={{
         ...styles.mediaCard,
-        ...(isSelected ? { border: '1px solid rgba(99, 102, 241, 0.5)' } : {})
+        ...(isSelected ? { border: `1px solid ${theme.accent.primary}80` } : {})
       }}
       onClick={(e) => handleMediaClick(media, e)}
       onContextMenu={(e) => handleContextMenu(e, media)}
@@ -1757,25 +1760,25 @@ const LibraryBrowser = ({
       onDragStart={(e) => handleDragStart(e, media)}
       onMouseEnter={(e) => {
         if (!isSelected) {
-          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+          e.currentTarget.style.backgroundColor = theme.border.subtle;
         }
       }}
       onMouseLeave={(e) => {
         if (!isSelected) {
-          e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+          e.currentTarget.style.backgroundColor = theme.hover.bg;
         }
       }}
     >
       {isSelected && (
         <div style={{
           position: 'absolute', inset: 0,
-          backgroundColor: 'rgba(99, 102, 241, 0.2)',
+          backgroundColor: `${theme.accent.primary}33`,
           zIndex: 1, pointerEvents: 'none', borderRadius: '7px'
         }}>
           <div style={{
             position: 'absolute', bottom: '6px', right: '6px',
             width: '18px', height: '18px',
-            backgroundColor: '#6366f1', borderRadius: '50%',
+            backgroundColor: theme.accent.primary, borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: '11px', color: '#fff', fontWeight: 'bold'
           }}>✓</div>
@@ -1810,14 +1813,14 @@ const LibraryBrowser = ({
           top: '6px',
           left: '50%',
           transform: 'translateX(-50%)',
-          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          backgroundColor: theme.overlay.light,
           backdropFilter: 'blur(4px)',
           WebkitBackdropFilter: 'blur(4px)',
           borderRadius: '10px',
           padding: '2px 7px',
           fontSize: '9px',
           fontWeight: 500,
-          color: 'rgba(255, 255, 255, 0.6)',
+          color: theme.text.secondary,
           whiteSpace: 'nowrap',
           pointerEvents: 'none',
           zIndex: 2,
@@ -1829,7 +1832,7 @@ const LibraryBrowser = ({
       <button
         style={{
           ...styles.favoriteButton,
-          color: media.isFavorite ? '#fbbf24' : 'rgba(255,255,255,0.5)'
+          color: media.isFavorite ? '#fbbf24' : theme.text.muted
         }}
         onClick={(e) => handleToggleFavorite(media.id, e)}
       >
@@ -1948,8 +1951,8 @@ const LibraryBrowser = ({
                       ...styles.sidebarItem,
                       ...(activeView === collection.id ? styles.sidebarItemActive : {}),
                       ...(dragOverCollection === collection.id ? {
-                        backgroundColor: 'rgba(99, 102, 241, 0.25)',
-                        border: '1px dashed rgba(99, 102, 241, 0.6)',
+                        backgroundColor: `${theme.accent.primary}40`,
+                        border: `1px dashed ${theme.accent.primary}99`,
                         transform: 'scale(1.02)',
                         transition: 'all 0.15s ease'
                       } : {})
@@ -1968,7 +1971,7 @@ const LibraryBrowser = ({
                     onDrop={(e) => handleDropOnCollection(e, collection.id)}
                     onMouseEnter={(e) => {
                       if (renamingCollectionId !== collection.id && dragOverCollection !== collection.id) {
-                        e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.1)';
+                        e.currentTarget.style.backgroundColor = `${theme.accent.primary}1a`;
                       }
                     }}
                     onMouseLeave={(e) => {
@@ -2003,10 +2006,10 @@ const LibraryBrowser = ({
                         onClick={(e) => e.stopPropagation()}
                         style={{
                           flex: 1,
-                          backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                          border: '1px solid rgba(99, 102, 241, 0.5)',
+                          backgroundColor: theme.border.subtle,
+                          border: `1px solid ${theme.accent.primary}80`,
                           borderRadius: '4px',
-                          color: '#ffffff',
+                          color: theme.text.primary,
                           padding: '4px 8px',
                           fontSize: '14px',
                           outline: 'none'
@@ -2049,7 +2052,7 @@ const LibraryBrowser = ({
               <div
                 style={styles.addCollectionButton}
                 onClick={() => setShowNewCollectionModal(true)}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.hover.bg}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
               >
                 <span>+</span>
@@ -2103,10 +2106,10 @@ const LibraryBrowser = ({
               }}>
                 <div style={{
                   padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '8px',
-                  borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0
+                  borderBottom: `1px solid ${theme.border.subtle}`, flexShrink: 0
                 }}>
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>All Images</span>
-                  <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', flex: 1 }}>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: theme.text.secondary }}>All Images</span>
+                  <span style={{ fontSize: '11px', color: theme.text.muted, flex: 1 }}>
                     {displayedMedia.length} items{isMobile ? '' : ' — drag into banks →'}
                   </span>
 
@@ -2116,9 +2119,9 @@ const LibraryBrowser = ({
                       <button
                         onClick={() => setShowCloudMenu(!showCloudMenu)}
                         style={{
-                          background: 'none', border: '1px solid rgba(255,255,255,0.1)',
+                          background: 'none', border: `1px solid ${theme.border.subtle}`,
                           borderRadius: '6px', padding: '3px 8px', cursor: 'pointer',
-                          color: collections.find(c => c.id === activeView)?.linkedDrive ? '#4ade80' : 'rgba(255,255,255,0.4)',
+                          color: collections.find(c => c.id === activeView)?.linkedDrive ? '#4ade80' : theme.text.muted,
                           fontSize: '14px', display: 'flex', alignItems: 'center', gap: '4px'
                         }}
                         title="Cloud Storage"
@@ -2129,8 +2132,8 @@ const LibraryBrowser = ({
                       {showCloudMenu && (
                         <div style={{
                           position: 'absolute', top: '100%', right: 0, marginTop: '4px',
-                          backgroundColor: '#1a1a2e', border: '1px solid rgba(255,255,255,0.15)',
-                          borderRadius: '8px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                          backgroundColor: theme.bg.input, border: `1px solid ${theme.border.subtle}`,
+                          borderRadius: '8px', boxShadow: theme.shadow,
                           zIndex: 1000, minWidth: '200px', overflow: 'hidden'
                         }}>
                           {(() => {
@@ -2139,14 +2142,14 @@ const LibraryBrowser = ({
                             return (
                               <>
                                 {linked && (
-                                  <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.1)', fontSize: '11px', color: '#4ade80' }}>
+                                  <div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.border.subtle}`, fontSize: '11px', color: '#4ade80' }}>
                                     Linked: {linked.folderName}
                                   </div>
                                 )}
                                 <div
                                   onClick={handleLinkDriveFolder}
-                                  style={{ padding: '10px 12px', cursor: 'pointer', fontSize: '13px', color: '#e4e4e7', display: 'flex', alignItems: 'center', gap: '8px' }}
-                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'}
+                                  style={{ padding: '10px 12px', cursor: 'pointer', fontSize: '13px', color: theme.text.primary, display: 'flex', alignItems: 'center', gap: '8px' }}
+                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.hover.bg}
                                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                 >
                                   <span>&#128279;</span> {linked ? 'Change Drive Folder' : 'Link to Google Drive'}
@@ -2155,16 +2158,16 @@ const LibraryBrowser = ({
                                   <>
                                     <div
                                       onClick={driveImporting ? undefined : handleDriveImport}
-                                      style={{ padding: '10px 12px', cursor: driveImporting ? 'wait' : 'pointer', fontSize: '13px', color: driveImporting ? '#71717a' : '#e4e4e7', display: 'flex', alignItems: 'center', gap: '8px' }}
-                                      onMouseEnter={(e) => { if (!driveImporting) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'; }}
+                                      style={{ padding: '10px 12px', cursor: driveImporting ? 'wait' : 'pointer', fontSize: '13px', color: driveImporting ? theme.text.muted : theme.text.primary, display: 'flex', alignItems: 'center', gap: '8px' }}
+                                      onMouseEnter={(e) => { if (!driveImporting) e.currentTarget.style.backgroundColor = theme.hover.bg; }}
                                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                     >
                                       <span>&#11015;</span> {driveImporting ? `Importing ${driveProgress.current}/${driveProgress.total}...` : 'Import from Drive'}
                                     </div>
                                     <div
                                       onClick={driveExporting ? undefined : handleDriveExport}
-                                      style={{ padding: '10px 12px', cursor: driveExporting ? 'wait' : 'pointer', fontSize: '13px', color: driveExporting ? '#71717a' : '#e4e4e7', display: 'flex', alignItems: 'center', gap: '8px' }}
-                                      onMouseEnter={(e) => { if (!driveExporting) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'; }}
+                                      style={{ padding: '10px 12px', cursor: driveExporting ? 'wait' : 'pointer', fontSize: '13px', color: driveExporting ? theme.text.muted : theme.text.primary, display: 'flex', alignItems: 'center', gap: '8px' }}
+                                      onMouseEnter={(e) => { if (!driveExporting) e.currentTarget.style.backgroundColor = theme.hover.bg; }}
                                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                     >
                                       <span>&#11014;</span> {driveExporting ? `Exporting ${driveProgress.current}/${driveProgress.total}...` : 'Export to Drive'}
@@ -2193,7 +2196,7 @@ const LibraryBrowser = ({
                   onMouseDown={handleGridMouseDown}
                 >
                   {displayedMedia.length === 0 ? (
-                    <div style={{ gridColumn: '1 / -1', padding: '32px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '13px' }}>
+                    <div style={{ gridColumn: '1 / -1', padding: '32px', textAlign: 'center', color: theme.text.muted, fontSize: '13px' }}>
                       This collection is empty. Drag items here to add them.
                     </div>
                   ) : displayedMedia.map(media => renderMediaCard(media, selectedMediaIds.includes(media.id)))}
@@ -2211,14 +2214,14 @@ const LibraryBrowser = ({
                 ...(isMobile ? { width: '100%' } : {})
               }}>
                 {/* Tab bar */}
-                <div style={{ display: 'flex', gap: '2px', padding: '4px', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: '8px', marginBottom: '8px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: '2px', padding: '4px', backgroundColor: theme.hover.bg, borderRadius: '8px', marginBottom: '8px', flexShrink: 0 }}>
                   <button
                     onClick={() => setBankTab('images')}
                     style={{
                       flex: 1, padding: '6px 12px', borderRadius: '6px', border: 'none',
                       fontSize: '12px', fontWeight: 600, cursor: 'pointer',
-                      backgroundColor: bankTab === 'images' ? 'rgba(99,102,241,0.2)' : 'transparent',
-                      color: bankTab === 'images' ? '#a5b4fc' : 'rgba(255,255,255,0.4)'
+                      backgroundColor: bankTab === 'images' ? `${theme.accent.primary}33` : 'transparent',
+                      color: bankTab === 'images' ? theme.accent.hover : theme.text.muted
                     }}
                   >
                     Image Banks
@@ -2228,8 +2231,8 @@ const LibraryBrowser = ({
                     style={{
                       flex: 1, padding: '6px 12px', borderRadius: '6px', border: 'none',
                       fontSize: '12px', fontWeight: 600, cursor: 'pointer',
-                      backgroundColor: bankTab === 'text' ? 'rgba(99,102,241,0.2)' : 'transparent',
-                      color: bankTab === 'text' ? '#a5b4fc' : 'rgba(255,255,255,0.4)'
+                      backgroundColor: bankTab === 'text' ? `${theme.accent.primary}33` : 'transparent',
+                      color: bankTab === 'text' ? theme.accent.hover : theme.text.muted
                     }}
                   >
                     Text Banks
@@ -2263,7 +2266,7 @@ const LibraryBrowser = ({
                             minWidth: isMobile ? '200px' : undefined,
                             flexShrink: isMobile ? 0 : undefined,
                             borderRadius: '10px',
-                            border: dragOverBank === idx ? `2px dashed ${color.border}` : '1px solid rgba(255,255,255,0.08)',
+                            border: dragOverBank === idx ? `2px dashed ${color.border}` : `1px solid ${theme.border.subtle}`,
                             backgroundColor: dragOverBank === idx ? color.bg : 'transparent',
                             transition: 'all 0.15s ease'
                           }}
@@ -2273,7 +2276,7 @@ const LibraryBrowser = ({
                         >
                           <div style={{
                             padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px',
-                            borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0,
+                            borderBottom: `1px solid ${theme.border.subtle}`, flexShrink: 0,
                             background: `linear-gradient(135deg, ${color.bg}, transparent)`
                           }}>
                             <div style={{
@@ -2283,7 +2286,7 @@ const LibraryBrowser = ({
                               fontSize: '10px', fontWeight: 700, color: '#fff'
                             }}>{idx + 1}</div>
                             <span style={{ fontSize: '13px', fontWeight: 600, color: color.light }}>{getBankLabel(idx)}</span>
-                            <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>{bankMedia.length}</span>
+                            <span style={{ fontSize: '11px', color: theme.text.muted }}>{bankMedia.length}</span>
                             {bankMedia.length > 0 && (
                               <>
                                 <button
@@ -2320,7 +2323,7 @@ const LibraryBrowser = ({
                             display: 'flex', flexWrap: 'wrap', gap: '8px', alignContent: 'start'
                           }}>
                             {bankMedia.length === 0 ? (
-                              <div style={{ width: '100%', padding: '16px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>
+                              <div style={{ width: '100%', padding: '16px', textAlign: 'center', color: theme.text.muted, fontSize: '11px' }}>
                                 Drag images here for {getBankLabel(idx)}
                               </div>
                             ) : bankMedia.map(media => renderBankMediaCard(media, idx))}
@@ -2334,13 +2337,13 @@ const LibraryBrowser = ({
                         onClick={() => { addBankToCollection(artistId, activeView); loadData(); syncCollection(activeView); }}
                         style={{
                           padding: '10px', borderRadius: '10px',
-                          border: '1px dashed rgba(255,255,255,0.15)',
-                          backgroundColor: 'transparent', color: 'rgba(255,255,255,0.4)',
+                          border: `1px dashed ${theme.text.muted}`,
+                          backgroundColor: 'transparent', color: theme.text.muted,
                           fontSize: '12px', cursor: 'pointer', textAlign: 'center',
                           transition: 'all 0.15s ease', flexShrink: 0
                         }}
-                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(99,102,241,0.5)'; e.currentTarget.style.color = '#a5b4fc'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = 'rgba(255,255,255,0.4)'; }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = `${theme.accent.primary}80`; e.currentTarget.style.color = theme.accent.hover; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = theme.text.muted; e.currentTarget.style.color = theme.text.muted; }}
                       >
                         + Add Slide Bank
                       </button>
@@ -2422,8 +2425,8 @@ const LibraryBrowser = ({
                           setShowTemplateEditor(true);
                         }}
                         style={{
-                          width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px dashed rgba(255,255,255,0.15)',
-                          backgroundColor: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: '12px',
+                          width: '100%', padding: '8px 12px', borderRadius: '8px', border: `1px dashed ${theme.text.muted}`,
+                          backgroundColor: 'transparent', color: theme.text.muted, fontSize: '12px',
                           cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
                         }}
                       >
@@ -2468,7 +2471,7 @@ const LibraryBrowser = ({
                     padding: gi === 0 ? '0 4px 6px' : '14px 4px 6px',
                     fontSize: '11px',
                     fontWeight: 600,
-                    color: 'rgba(255, 255, 255, 0.35)',
+                    color: theme.text.muted,
                     letterSpacing: '0.3px',
                     display: 'flex',
                     alignItems: 'center',
@@ -2477,9 +2480,9 @@ const LibraryBrowser = ({
                     <span>{group.label}</span>
                     <span style={{
                       flex: 1, height: '1px',
-                      background: 'linear-gradient(to right, rgba(255,255,255,0.08), transparent)'
+                      background: `linear-gradient(to right, ${theme.border.subtle}, transparent)`
                     }} />
-                    <span style={{ fontSize: '10px', fontWeight: 400, color: 'rgba(255,255,255,0.2)' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 400, color: theme.text.muted }}>
                       {group.items.length}
                     </span>
                   </div>
@@ -2504,8 +2507,8 @@ const LibraryBrowser = ({
           top: Math.min(dragStart.y, dragEnd.y),
           width: Math.abs(dragEnd.x - dragStart.x),
           height: Math.abs(dragEnd.y - dragStart.y),
-          backgroundColor: 'rgba(99, 102, 241, 0.15)',
-          border: '1px solid rgba(99, 102, 241, 0.5)',
+          backgroundColor: `${theme.accent.primary}26`,
+          border: `1px solid ${theme.accent.primary}80`,
           pointerEvents: 'none',
           zIndex: 9999
         }} />
@@ -2515,11 +2518,11 @@ const LibraryBrowser = ({
       {isUploading && (
         <div style={styles.uploadOverlay}>
           <div style={{ fontSize: '24px', marginBottom: '8px' }}>⬆️</div>
-          <div style={{ fontSize: '14px', color: '#fff', marginBottom: '12px' }}>Uploading...</div>
+          <div style={{ fontSize: '14px', color: theme.text.primary, marginBottom: '12px' }}>Uploading...</div>
           <div style={styles.progressBar}>
             <div style={{ ...styles.progressFill, width: `${uploadProgress}%` }} />
           </div>
-          <div style={{ fontSize: '18px', fontWeight: '600', color: '#fff', marginTop: '8px' }}>
+          <div style={{ fontSize: '18px', fontWeight: '600', color: theme.text.primary, marginTop: '8px' }}>
             {Math.round(uploadProgress)}%
           </div>
         </div>
@@ -2532,7 +2535,7 @@ const LibraryBrowser = ({
           <div
             style={{
               position: 'fixed', inset: 0,
-              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              backgroundColor: theme.overlay.light,
               zIndex: 9999
             }}
             onClick={() => setContextMenu(null)}
@@ -2548,7 +2551,7 @@ const LibraryBrowser = ({
           <div
             style={styles.contextMenuItem}
             onClick={() => handleToggleFavorite(contextMenu.media.id, { stopPropagation: () => {} })}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.hover.bg}
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <span>{contextMenu.media.isFavorite ? '★' : '☆'}</span>
@@ -2558,7 +2561,7 @@ const LibraryBrowser = ({
           {userCollections.length > 0 && (
             <>
               <div style={styles.contextMenuDivider} />
-              <div style={{ padding: '8px 16px', fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>
+              <div style={{ padding: '8px 16px', fontSize: '12px', color: theme.text.muted }}>
                 Add to Collection
               </div>
               {userCollections.map(collection => (
@@ -2566,7 +2569,7 @@ const LibraryBrowser = ({
                   key={collection.id}
                   style={styles.contextMenuItem}
                   onClick={() => handleAddToCollection([contextMenu.media.id], collection.id)}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.hover.bg}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 >
                   <span>📁</span>
@@ -2580,12 +2583,12 @@ const LibraryBrowser = ({
           {userCollections.length > 0 && (contextMenu.media?.type === MEDIA_TYPES.IMAGE) && (
             <>
               <div style={styles.contextMenuDivider} />
-              <div style={{ padding: '8px 16px', fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>
+              <div style={{ padding: '8px 16px', fontSize: '12px', color: theme.text.muted }}>
                 Assign to Bank
               </div>
               {userCollections.map(collection => (
                 <React.Fragment key={`bank-${collection.id}`}>
-                  <div style={{ padding: '4px 16px 2px', fontSize: '11px', color: 'rgba(255,255,255,0.25)' }}>
+                  <div style={{ padding: '4px 16px 2px', fontSize: '11px', color: theme.text.muted }}>
                     {collection.name}
                   </div>
                   {(() => {
@@ -2661,14 +2664,14 @@ const LibraryBrowser = ({
         <div style={styles.modal} onClick={() => setShowDeleteModal(null)}>
           <div style={{...styles.modalContent, maxWidth: '380px'}} onClick={(e) => e.stopPropagation()}>
             <div style={styles.modalTitle}>Delete Item</div>
-            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '14px', margin: '8px 0 20px', lineHeight: '1.5' }}>
+            <p style={{ color: theme.text.secondary, fontSize: '14px', margin: '8px 0 20px', lineHeight: '1.5' }}>
               This item is in a collection. What would you like to do?
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <button
                 style={{
-                  padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(99, 102, 241, 0.3)',
-                  backgroundColor: 'rgba(99, 102, 241, 0.1)', color: '#c4b5fd', cursor: 'pointer',
+                  padding: '12px 16px', borderRadius: '10px', border: `1px solid ${theme.accent.primary}4d`,
+                  backgroundColor: `${theme.accent.primary}1a`, color: theme.accent.hover, cursor: 'pointer',
                   fontSize: '13px', fontWeight: '500', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '10px'
                 }}
                 onClick={() => handleSmartDelete('removeFromFolder')}
@@ -2676,7 +2679,7 @@ const LibraryBrowser = ({
                 <span style={{ fontSize: '18px' }}>📁</span>
                 <div>
                   <div style={{ fontWeight: 600 }}>Remove from this folder</div>
-                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>Stays in your library and other folders</div>
+                  <div style={{ fontSize: '11px', color: theme.text.muted, marginTop: '2px' }}>Stays in your library and other folders</div>
                 </div>
               </button>
               <button
@@ -2690,14 +2693,14 @@ const LibraryBrowser = ({
                 <span style={{ fontSize: '18px' }}>🗑️</span>
                 <div>
                   <div style={{ fontWeight: 600 }}>Delete from library</div>
-                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>Permanently remove from everywhere</div>
+                  <div style={{ fontSize: '11px', color: theme.text.muted, marginTop: '2px' }}>Permanently remove from everywhere</div>
                 </div>
               </button>
             </div>
             <button
               style={{
                 marginTop: '16px', padding: '8px', borderRadius: '8px', border: 'none',
-                backgroundColor: 'transparent', color: 'rgba(255,255,255,0.4)', cursor: 'pointer',
+                backgroundColor: 'transparent', color: theme.text.muted, cursor: 'pointer',
                 fontSize: '12px', width: '100%', textAlign: 'center'
               }}
               onClick={() => setShowDeleteModal(null)}
@@ -2727,8 +2730,8 @@ const LibraryBrowser = ({
                 style={{
                   ...styles.modalButton,
                   backgroundColor: 'transparent',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  color: 'rgba(255,255,255,0.6)'
+                  border: `1px solid ${theme.text.muted}`,
+                  color: theme.text.secondary
                 }}
                 onClick={() => setShowNewCollectionModal(false)}
               >
@@ -2737,7 +2740,7 @@ const LibraryBrowser = ({
               <button
                 style={{
                   ...styles.modalButton,
-                  backgroundColor: '#6366f1',
+                  backgroundColor: theme.accent.primary,
                   border: 'none',
                   color: '#ffffff'
                 }}
@@ -2753,33 +2756,33 @@ const LibraryBrowser = ({
       {/* Text Template Editor Modal */}
       {showTemplateEditor && editingTemplate && (
         <div style={{
-          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)',
+          position: 'fixed', inset: 0, backgroundColor: theme.overlay.heavy,
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
         }} onClick={() => setShowTemplateEditor(false)}>
           <div style={{
-            backgroundColor: '#1a1a2e', borderRadius: '16px', padding: '24px',
+            backgroundColor: theme.bg.input, borderRadius: '16px', padding: '24px',
             width: '720px', maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto',
             display: 'flex', gap: '20px'
           }} onClick={e => e.stopPropagation()}>
             {/* Left: Controls */}
             <div style={{ flex: 1, minWidth: 0 }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: '16px', color: '#fff' }}>Text Style Template</h3>
+            <h3 style={{ margin: '0 0 16px', fontSize: '16px', color: theme.text.primary }}>Text Style Template</h3>
 
             {[1, 2].map(num => {
               const key = `text${num}Style`;
               const style = editingTemplate[key];
               const labelColor = num === 1 ? '#c4b5fd' : '#86efac';
               return (
-                <div key={num} style={{ marginBottom: '16px', padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(255,255,255,0.03)' }}>
+                <div key={num} style={{ marginBottom: '16px', padding: '12px', borderRadius: '10px', backgroundColor: theme.hover.bg }}>
                   <div style={{ fontSize: '13px', fontWeight: 600, color: labelColor, marginBottom: '10px' }}>Text {num} Style</div>
 
                   {/* Font Family */}
                   <div style={{ marginBottom: '8px' }}>
-                    <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '2px' }}>Font</label>
+                    <label style={{ fontSize: '11px', color: theme.text.muted, display: 'block', marginBottom: '2px' }}>Font</label>
                     <select
                       value={style.fontFamily}
                       onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], fontFamily: e.target.value } }))}
-                      style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: '#0f0f1a', color: '#fff', fontSize: '13px' }}
+                      style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: `1px solid ${theme.border.subtle}`, backgroundColor: theme.bg.page, color: theme.text.primary, fontSize: '13px' }}
                     >
                       {['Inter, sans-serif', 'Georgia, serif', 'Courier New, monospace', 'Impact, sans-serif', 'Arial Black, sans-serif', 'Playfair Display, serif', 'Oswald, sans-serif', 'Bebas Neue, sans-serif'].map(f => (
                         <option key={f} value={f} style={{ fontFamily: f }}>{f.split(',')[0]}</option>
@@ -2789,7 +2792,7 @@ const LibraryBrowser = ({
 
                   {/* Font Size */}
                   <div style={{ marginBottom: '8px' }}>
-                    <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '2px' }}>Size: {style.fontSize}px</label>
+                    <label style={{ fontSize: '11px', color: theme.text.muted, display: 'block', marginBottom: '2px' }}>Size: {style.fontSize}px</label>
                     <input type="range" min="16" max="96" value={style.fontSize}
                       onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], fontSize: parseInt(e.target.value) } }))}
                       style={{ width: '100%' }}
@@ -2798,11 +2801,11 @@ const LibraryBrowser = ({
 
                   {/* Font Weight */}
                   <div style={{ marginBottom: '8px' }}>
-                    <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '2px' }}>Weight</label>
+                    <label style={{ fontSize: '11px', color: theme.text.muted, display: 'block', marginBottom: '2px' }}>Weight</label>
                     <select
                       value={style.fontWeight}
                       onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], fontWeight: e.target.value } }))}
-                      style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: '#0f0f1a', color: '#fff', fontSize: '13px' }}
+                      style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: `1px solid ${theme.border.subtle}`, backgroundColor: theme.bg.page, color: theme.text.primary, fontSize: '13px' }}
                     >
                       {['300', '400', '500', '600', '700', '800', '900'].map(w => (
                         <option key={w} value={w}>{w === '300' ? 'Light' : w === '400' ? 'Regular' : w === '500' ? 'Medium' : w === '600' ? 'Semibold' : w === '700' ? 'Bold' : w === '800' ? 'Extra Bold' : 'Black'}</option>
@@ -2812,7 +2815,7 @@ const LibraryBrowser = ({
 
                   {/* Color */}
                   <div style={{ marginBottom: '8px' }}>
-                    <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '2px' }}>Color</label>
+                    <label style={{ fontSize: '11px', color: theme.text.muted, display: 'block', marginBottom: '2px' }}>Color</label>
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                       <input type="color" value={style.color}
                         onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], color: e.target.value } }))}
@@ -2820,14 +2823,14 @@ const LibraryBrowser = ({
                       />
                       <input type="text" value={style.color}
                         onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], color: e.target.value } }))}
-                        style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: '#0f0f1a', color: '#fff', fontSize: '13px' }}
+                        style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', border: `1px solid ${theme.border.subtle}`, backgroundColor: theme.bg.page, color: theme.text.primary, fontSize: '13px' }}
                       />
                     </div>
                   </div>
 
                   {/* Position */}
                   <div style={{ marginBottom: '8px' }}>
-                    <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: '2px' }}>Position</label>
+                    <label style={{ fontSize: '11px', color: theme.text.muted, display: 'block', marginBottom: '2px' }}>Position</label>
                     <div style={{ display: 'flex', gap: '6px' }}>
                       {[
                         { label: 'Top', pos: { x: 50, y: 20 } },
@@ -2838,8 +2841,8 @@ const LibraryBrowser = ({
                           onClick={() => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], position: p.pos } }))}
                           style={{
                             flex: 1, padding: '6px', borderRadius: '6px', border: 'none', fontSize: '11px', cursor: 'pointer',
-                            backgroundColor: style.position.y === p.pos.y ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.05)',
-                            color: style.position.y === p.pos.y ? '#a5b4fc' : 'rgba(255,255,255,0.4)'
+                            backgroundColor: style.position.y === p.pos.y ? `${theme.accent.primary}4d` : theme.hover.bg,
+                            color: style.position.y === p.pos.y ? theme.accent.hover : theme.text.muted
                           }}
                         >{p.label}</button>
                       ))}
@@ -2848,7 +2851,7 @@ const LibraryBrowser = ({
 
                   {/* Outline */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>
+                    <label style={{ fontSize: '11px', color: theme.text.muted }}>
                       <input type="checkbox" checked={style.outline}
                         onChange={e => setEditingTemplate(prev => ({ ...prev, [key]: { ...prev[key], outline: e.target.checked } }))}
                       /> Text outline
@@ -2867,7 +2870,7 @@ const LibraryBrowser = ({
             <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
               <button
                 onClick={() => setShowTemplateEditor(false)}
-                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: '13px', cursor: 'pointer' }}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${theme.border.subtle}`, backgroundColor: 'transparent', color: theme.text.muted, fontSize: '13px', cursor: 'pointer' }}
               >Cancel</button>
               <button
                 onClick={() => {
@@ -2876,18 +2879,18 @@ const LibraryBrowser = ({
                   syncCollection(activeView);
                   setShowTemplateEditor(false);
                 }}
-                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: '#6366f1', color: '#fff', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: theme.accent.primary, color: '#fff', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
               >Save Template</button>
             </div>
             </div>
 
             {/* Right: Live Preview */}
             <div style={{ width: '200px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', textAlign: 'center' }}>Preview</div>
+              <div style={{ fontSize: '11px', color: theme.text.muted, textAlign: 'center' }}>Preview</div>
               <div style={{
                 aspectRatio: '9/16', borderRadius: '12px', overflow: 'hidden',
-                backgroundColor: '#111', position: 'relative',
-                border: '1px solid rgba(255,255,255,0.1)'
+                backgroundColor: theme.bg.page, position: 'relative',
+                border: `1px solid ${theme.border.subtle}`
               }}>
                 {/* Text 1 preview */}
                 {(() => {
@@ -2934,7 +2937,7 @@ const LibraryBrowser = ({
                   );
                 })()}
               </div>
-              <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', textAlign: 'center' }}>
+              <div style={{ fontSize: '10px', color: theme.text.muted, textAlign: 'center' }}>
                 Shows first text from each bank
               </div>
             </div>

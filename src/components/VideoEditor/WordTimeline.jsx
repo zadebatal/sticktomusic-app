@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import log from '../../utils/logger';
 import useIsMobile from '../../hooks/useIsMobile';
+import { useTheme } from '../../contexts/ThemeContext';
 
 /**
  * WordTimeline - Flowstage-inspired word timing editor
@@ -33,6 +34,8 @@ const WordTimeline = ({
 }) => {
   // Mobile responsive detection
   const { isMobile } = useIsMobile();
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
 
   const [zoom, setZoom] = useState(() => {
     try {
@@ -56,6 +59,9 @@ const WordTimeline = ({
   const [editText, setEditText] = useState(''); // Text being edited
   const [deleteConfirm, setDeleteConfirm] = useState({ show: false, index: -1, text: '' }); // Delete confirmation
   const [saveToBankPrompt, setSaveToBankPrompt] = useState({ show: false, name: '' }); // Save to bank prompt
+  const [showWordPrompt, setShowWordPrompt] = useState(false);
+  const [wordPromptValue, setWordPromptValue] = useState('');
+  const [wordPromptTime, setWordPromptTime] = useState(0);
   const timelineRef = useRef(null);
   const animationRef = useRef(null);
   const editInputRef = useRef(null);
@@ -710,15 +716,21 @@ const WordTimeline = ({
   }, [marqueeSelection, words, timeToPixels, clearSelection]);
 
   const handleAddWord = () => {
-    const text = prompt('Enter word text:');
-    if (!text) return;
+    setWordPromptValue('');
+    setWordPromptTime(displayTime);
+    setShowWordPrompt(true);
+  };
+
+  const confirmAddWord = () => {
+    if (!wordPromptValue.trim()) return;
     const newWord = {
       id: `word_${Date.now()}`,
-      text,
-      startTime: displayTime,
+      text: wordPromptValue.trim(),
+      startTime: wordPromptTime,
       duration: 0.5
     };
     setWords(prev => [...prev, newWord].sort((a, b) => a.startTime - b.startTime));
+    setShowWordPrompt(false);
   };
 
   const handleDeleteWord = () => {
@@ -1622,10 +1634,10 @@ const WordTimeline = ({
               style={{
                 width: '100%',
                 padding: isMobile ? '14px' : '10px 12px',
-                backgroundColor: '#1f1f2e',
-                border: '1px solid #374151',
+                backgroundColor: theme.bg.surface,
+                border: `1px solid ${theme.bg.elevated}`,
                 borderRadius: '6px',
-                color: '#fff',
+                color: theme.text.primary,
                 fontSize: isMobile ? '16px' : '14px',
                 marginBottom: '16px',
                 outline: 'none'
@@ -1687,80 +1699,105 @@ const WordTimeline = ({
           </div>
         </div>
       )}
+
+      {showWordPrompt && (
+        <div style={{ position: 'fixed', inset: 0, background: theme.overlay.heavy, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setShowWordPrompt(false)}>
+          <div style={{ background: theme.bg.input, borderRadius: 12, padding: 24, width: 360, maxWidth: '90vw' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ color: theme.text.primary, fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Add Word</div>
+            <input autoFocus value={wordPromptValue} onChange={e => setWordPromptValue(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Escape') setShowWordPrompt(false);
+                if (e.key === 'Enter' && wordPromptValue.trim()) {
+                  confirmAddWord();
+                }
+              }}
+              placeholder="Enter word text..."
+              style={{ width: '100%', background: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, borderRadius: 8, padding: '10px 12px', color: theme.text.primary, fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+              <button onClick={() => setShowWordPrompt(false)}
+                style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${theme.bg.elevated}`, background: 'transparent', color: theme.text.secondary, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={confirmAddWord}
+                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: theme.accent.primary, color: '#fff', cursor: 'pointer', fontWeight: 600 }}>Add</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-const styles = {
-  overlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 },
-  modal: { width: '95%', maxWidth: '1200px', maxHeight: '90vh', backgroundColor: '#111118', borderRadius: '16px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' },
-  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #1f1f2e' },
-  title: { margin: 0, fontSize: '18px', fontWeight: '600', color: '#fff' },
-  closeButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', backgroundColor: '#1f1f2e', border: 'none', borderRadius: '6px', color: '#9ca3af', cursor: 'pointer' },
-  toolbar: { display: 'flex', flexDirection: 'column', gap: '12px', padding: '12px 20px', borderBottom: '1px solid #1f1f2e', backgroundColor: '#0a0a0f' },
+const getStyles = (theme) => ({
+  overlay: { position: 'fixed', inset: 0, backgroundColor: theme.overlay.heavy, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 },
+  modal: { width: '95%', maxWidth: '1200px', maxHeight: '90vh', backgroundColor: theme.bg.input, borderRadius: '16px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' },
+  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: `1px solid ${theme.bg.surface}` },
+  title: { margin: 0, fontSize: '18px', fontWeight: '600', color: theme.text.primary },
+  closeButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', backgroundColor: theme.bg.surface, border: 'none', borderRadius: '6px', color: theme.text.secondary, cursor: 'pointer' },
+  toolbar: { display: 'flex', flexDirection: 'column', gap: '12px', padding: '12px 20px', borderBottom: `1px solid ${theme.bg.surface}`, backgroundColor: theme.bg.page },
   timeDisplay: { display: 'flex', alignItems: 'baseline', gap: '4px' },
-  currentTimeText: { fontSize: '20px', fontWeight: '600', color: '#fff', fontFamily: 'monospace' },
-  totalTime: { fontSize: '16px', color: '#6b7280', fontFamily: 'monospace' },
-  originalTime: { fontSize: '12px', color: '#4b5563', marginLeft: '8px' },
+  currentTimeText: { fontSize: '20px', fontWeight: '600', color: theme.text.primary, fontFamily: 'monospace' },
+  totalTime: { fontSize: '16px', color: theme.text.muted, fontFamily: 'monospace' },
+  originalTime: { fontSize: '12px', color: theme.text.muted, marginLeft: '8px' },
   toolbarButtons: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' },
-  toolButton: { padding: '6px 12px', backgroundColor: '#1f1f2e', border: '1px solid #2d2d3d', borderRadius: '6px', fontSize: '13px', color: '#e5e7eb', cursor: 'pointer' },
-  toolButtonPrimary: { padding: '6px 12px', backgroundColor: '#7c3aed', border: 'none', borderRadius: '6px', fontSize: '13px', color: '#fff', cursor: 'pointer' },
-  zoomControl: { display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '8px', fontSize: '13px', color: '#9ca3af' },
-  zoomSlider: { width: '80px', accentColor: '#7c3aed' },
-  caseButtons: { display: 'flex', border: '1px solid #2d2d3d', borderRadius: '6px', overflow: 'hidden' },
-  caseButton: { padding: '6px 10px', backgroundColor: '#1f1f2e', border: 'none', borderRight: '1px solid #2d2d3d', fontSize: '13px', color: '#e5e7eb', cursor: 'pointer' },
-  legatoButton: { padding: '6px 12px', backgroundColor: '#1f1f2e', border: '1px solid #2d2d3d', borderRadius: '6px', fontSize: '13px', color: '#e5e7eb', cursor: 'pointer' },
-  censorLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#9ca3af', cursor: 'pointer' },
-  selectionIndicator: { display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', backgroundColor: 'rgba(139, 92, 246, 0.2)', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '6px', fontSize: '12px', fontWeight: '500', color: '#a78bfa' },
-  clearSelectionBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', backgroundColor: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '6px', color: '#a78bfa', cursor: 'pointer', padding: 0 },
-  timelineContainer: { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px 20px', backgroundColor: '#0a0a0f' },
-  playButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', backgroundColor: '#7c3aed', border: 'none', borderRadius: '50%', color: '#fff', cursor: 'pointer', flexShrink: 0 },
-  timeline: { flex: 1, height: '120px', backgroundColor: '#1a1a2e', borderRadius: '8px', overflowX: 'auto', overflowY: 'hidden', position: 'relative', cursor: 'pointer' },
+  toolButton: { padding: '6px 12px', backgroundColor: theme.bg.surface, border: `1px solid ${theme.bg.elevated}`, borderRadius: '6px', fontSize: '13px', color: theme.text.primary, cursor: 'pointer' },
+  toolButtonPrimary: { padding: '6px 12px', backgroundColor: theme.accent.primary, border: 'none', borderRadius: '6px', fontSize: '13px', color: '#fff', cursor: 'pointer' },
+  zoomControl: { display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '8px', fontSize: '13px', color: theme.text.secondary },
+  zoomSlider: { width: '80px', accentColor: theme.accent.primary },
+  caseButtons: { display: 'flex', border: `1px solid ${theme.bg.elevated}`, borderRadius: '6px', overflow: 'hidden' },
+  caseButton: { padding: '6px 10px', backgroundColor: theme.bg.surface, border: 'none', borderRight: `1px solid ${theme.bg.elevated}`, fontSize: '13px', color: theme.text.primary, cursor: 'pointer' },
+  legatoButton: { padding: '6px 12px', backgroundColor: theme.bg.surface, border: `1px solid ${theme.bg.elevated}`, borderRadius: '6px', fontSize: '13px', color: theme.text.primary, cursor: 'pointer' },
+  censorLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: theme.text.secondary, cursor: 'pointer' },
+  selectionIndicator: { display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', backgroundColor: 'rgba(139, 92, 246, 0.2)', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '6px', fontSize: '12px', fontWeight: '500', color: theme.accent.hover },
+  clearSelectionBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', backgroundColor: theme.border.subtle, border: 'none', borderRadius: '6px', color: theme.accent.hover, cursor: 'pointer', padding: 0 },
+  timelineContainer: { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px 20px', backgroundColor: theme.bg.page },
+  playButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', backgroundColor: theme.accent.primary, border: 'none', borderRadius: '50%', color: '#fff', cursor: 'pointer', flexShrink: 0 },
+  timeline: { flex: 1, height: '120px', backgroundColor: theme.bg.input, borderRadius: '8px', overflowX: 'auto', overflowY: 'hidden', position: 'relative', cursor: 'pointer' },
   timelineInner: { position: 'relative', height: '100%', minWidth: '100%' },
   marqueeBox: { position: 'absolute', backgroundColor: 'rgba(139, 92, 246, 0.2)', border: '1px solid rgba(139, 92, 246, 0.5)', borderRadius: '2px', pointerEvents: 'none', zIndex: 100 },
   timeRuler: { position: 'absolute', top: 0, left: 0, right: 0, height: '20px', cursor: 'pointer' },
   timeMarker: { position: 'absolute', top: 0, height: '100%' },
-  timeMarkerLine: { width: '1px', height: '8px', backgroundColor: 'rgba(255,255,255,0.2)' },
-  timeMarkerLabel: { position: 'absolute', top: '8px', left: '-8px', fontSize: '9px', color: '#6b7280', fontFamily: 'monospace' },
+  timeMarkerLine: { width: '1px', height: '8px', backgroundColor: theme.text.muted },
+  timeMarkerLabel: { position: 'absolute', top: '8px', left: '-8px', fontSize: '9px', color: theme.text.muted, fontFamily: 'monospace' },
   waveformCanvas: { position: 'absolute', top: '65px', left: 0, height: '50px', pointerEvents: 'none', opacity: 0.9 },
   playhead: { position: 'absolute', top: 0, bottom: 0, zIndex: 20 },
-  wordBlock: { position: 'absolute', top: '22px', height: '38px', backgroundColor: '#7c3aed', border: '1px solid #9333ea', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', userSelect: 'none', overflow: 'hidden', transition: 'background-color 0.1s, box-shadow 0.1s', zIndex: 5 },
+  wordBlock: { position: 'absolute', top: '22px', height: '38px', backgroundColor: theme.accent.primary, border: '1px solid #9333ea', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', userSelect: 'none', overflow: 'hidden', transition: 'background-color 0.1s, box-shadow 0.1s', zIndex: 5 },
   wordBlockSelected: { backgroundColor: '#9333ea', border: '2px solid #a855f7', boxShadow: '0 2px 8px rgba(168, 85, 247, 0.5)' },
   wordBlockCurrent: { backgroundColor: '#22c55e', border: '2px solid #4ade80' },
   resizeHandle: { position: 'absolute', left: 0, top: 0, bottom: 0, width: '6px', cursor: 'ew-resize', backgroundColor: 'transparent' },
   wordText: { fontSize: '11px', fontWeight: '600', color: '#fff', padding: '0 8px', whiteSpace: 'nowrap' },
-  inlineEditInput: { width: '100%', height: '100%', padding: '0 4px', backgroundColor: '#1f1f2e', border: 'none', borderRadius: '2px', fontSize: '11px', fontWeight: '600', color: '#fff', textAlign: 'center', outline: 'none' },
-  bottomSections: { display: 'grid', gridTemplateColumns: '1fr 300px', gap: '1px', backgroundColor: '#1f1f2e', flex: 1, overflow: 'hidden', minHeight: '200px' },
-  linePreviewSection: { backgroundColor: '#111118', padding: '16px 20px', overflow: 'auto' },
-  sectionTitle: { margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#e5e7eb' },
+  inlineEditInput: { width: '100%', height: '100%', padding: '0 4px', backgroundColor: theme.bg.surface, border: 'none', borderRadius: '2px', fontSize: '11px', fontWeight: '600', color: theme.text.primary, textAlign: 'center', outline: 'none' },
+  bottomSections: { display: 'grid', gridTemplateColumns: '1fr 300px', gap: '1px', backgroundColor: theme.bg.surface, flex: 1, overflow: 'hidden', minHeight: '200px' },
+  linePreviewSection: { backgroundColor: theme.bg.input, padding: '16px 20px', overflow: 'auto' },
+  sectionTitle: { margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: theme.text.primary },
   linesContainer: { display: 'flex', flexDirection: 'column', gap: '8px' },
   lineRow: { display: 'flex', flexWrap: 'wrap', gap: '6px' },
-  wordChip: { display: 'inline-block', padding: '6px 10px', backgroundColor: '#1f1f2e', borderRadius: '4px', fontSize: '13px', fontWeight: '500', color: '#e5e7eb', transition: 'all 0.1s', border: '1px solid #2d2d3d' },
+  wordChip: { display: 'inline-block', padding: '6px 10px', backgroundColor: theme.bg.surface, borderRadius: '4px', fontSize: '13px', fontWeight: '500', color: theme.text.primary, transition: 'all 0.1s', border: `1px solid ${theme.bg.elevated}` },
   wordChipActive: { backgroundColor: '#22c55e', color: '#fff', border: '1px solid #4ade80', boxShadow: '0 0 0 2px rgba(34, 197, 94, 0.3)' },
   wordChipSelected: { border: '2px solid #a855f7', boxShadow: '0 0 0 2px rgba(168, 85, 247, 0.3)' },
-  chipEditInput: { width: '60px', padding: '0', backgroundColor: 'transparent', border: 'none', fontSize: '13px', fontWeight: '500', color: '#fff', textAlign: 'center', outline: 'none' },
-  noWords: { color: '#6b7280', fontSize: '13px', fontStyle: 'italic' },
-  wordEditorSection: { backgroundColor: '#111118', padding: '16px 20px', borderLeft: '1px solid #1f1f2e', display: 'flex', flexDirection: 'column' },
+  chipEditInput: { width: '60px', padding: '0', backgroundColor: 'transparent', border: 'none', fontSize: '13px', fontWeight: '500', color: theme.text.primary, textAlign: 'center', outline: 'none' },
+  noWords: { color: theme.text.muted, fontSize: '13px', fontStyle: 'italic' },
+  wordEditorSection: { backgroundColor: theme.bg.input, padding: '16px 20px', borderLeft: `1px solid ${theme.bg.surface}`, display: 'flex', flexDirection: 'column' },
   wordEditorContent: { flex: 1, display: 'flex', flexDirection: 'column' },
-  livePreview: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80px', marginBottom: '16px', backgroundColor: '#0a0a0f', borderRadius: '12px' },
-  livePreviewText: { fontSize: '32px', fontWeight: '600', color: '#fff', textAlign: 'center' },
-  livePreviewInput: { fontSize: '32px', fontWeight: '600', color: '#fff', textAlign: 'center', backgroundColor: 'transparent', border: '2px solid #7c3aed', borderRadius: '8px', padding: '8px 16px', outline: 'none', width: '80%' },
-  noActiveWord: { color: '#6b7280', fontSize: '14px', textAlign: 'center', padding: '40px 0' },
-  multiSelectInfo: { padding: '8px 12px', backgroundColor: 'rgba(139, 92, 246, 0.2)', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '6px', fontSize: '12px', fontWeight: '500', color: '#a78bfa', marginBottom: '8px', textAlign: 'center' },
-  wordEditForm: { display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid #1f1f2e', paddingTop: '12px' },
+  livePreview: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80px', marginBottom: '16px', backgroundColor: theme.bg.page, borderRadius: '12px' },
+  livePreviewText: { fontSize: '32px', fontWeight: '600', color: theme.text.primary, textAlign: 'center' },
+  livePreviewInput: { fontSize: '32px', fontWeight: '600', color: theme.text.primary, textAlign: 'center', backgroundColor: 'transparent', border: `2px solid ${theme.accent.primary}`, borderRadius: '8px', padding: '8px 16px', outline: 'none', width: '80%' },
+  noActiveWord: { color: theme.text.muted, fontSize: '14px', textAlign: 'center', padding: '40px 0' },
+  multiSelectInfo: { padding: '8px 12px', backgroundColor: 'rgba(139, 92, 246, 0.2)', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '6px', fontSize: '12px', fontWeight: '500', color: theme.accent.hover, marginBottom: '8px', textAlign: 'center' },
+  wordEditForm: { display: 'flex', flexDirection: 'column', gap: '8px', borderTop: `1px solid ${theme.bg.surface}`, paddingTop: '12px' },
   wordEditRow: { display: 'flex', alignItems: 'center', gap: '8px' },
-  wordEditLabel: { width: '60px', fontSize: '12px', color: '#9ca3af' },
-  wordEditInput: { flex: 1, padding: '6px 10px', backgroundColor: '#0a0a0f', border: '1px solid #2d2d3d', borderRadius: '6px', fontSize: '12px', color: '#fff', outline: 'none' },
-  footer: { display: 'flex', justifyContent: 'flex-end', padding: '16px 20px', borderTop: '1px solid #1f1f2e', backgroundColor: '#0a0a0f' },
-  saveButton: { padding: '10px 20px', backgroundColor: '#7c3aed', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', color: '#fff', cursor: 'pointer' },
+  wordEditLabel: { width: '60px', fontSize: '12px', color: theme.text.secondary },
+  wordEditInput: { flex: 1, padding: '6px 10px', backgroundColor: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, borderRadius: '6px', fontSize: '12px', color: theme.text.primary, outline: 'none' },
+  footer: { display: 'flex', justifyContent: 'flex-end', padding: '16px 20px', borderTop: `1px solid ${theme.bg.surface}`, backgroundColor: theme.bg.page },
+  saveButton: { padding: '10px 20px', backgroundColor: theme.accent.primary, border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', color: '#fff', cursor: 'pointer' },
   // Delete confirmation dialog
-  confirmOverlay: { position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200 },
-  confirmDialog: { backgroundColor: '#1a1a2e', borderRadius: '12px', padding: '24px', maxWidth: '320px', textAlign: 'center' },
-  confirmTitle: { margin: '0 0 12px 0', fontSize: '16px', fontWeight: '600', color: '#fff' },
-  confirmMessage: { margin: '0 0 20px 0', fontSize: '14px', color: '#9ca3af' },
+  confirmOverlay: { position: 'absolute', inset: 0, backgroundColor: theme.overlay.heavy, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200 },
+  confirmDialog: { backgroundColor: theme.bg.input, borderRadius: '12px', padding: '24px', maxWidth: '320px', textAlign: 'center' },
+  confirmTitle: { margin: '0 0 12px 0', fontSize: '16px', fontWeight: '600', color: theme.text.primary },
+  confirmMessage: { margin: '0 0 20px 0', fontSize: '14px', color: theme.text.secondary },
   confirmButtons: { display: 'flex', gap: '12px', justifyContent: 'center' },
-  confirmCancel: { padding: '8px 16px', backgroundColor: '#2d2d3d', border: 'none', borderRadius: '6px', fontSize: '13px', color: '#e5e7eb', cursor: 'pointer' },
+  confirmCancel: { padding: '8px 16px', backgroundColor: theme.bg.elevated, border: 'none', borderRadius: '6px', fontSize: '13px', color: theme.text.primary, cursor: 'pointer' },
   confirmDelete: { padding: '8px 16px', backgroundColor: '#ef4444', border: 'none', borderRadius: '6px', fontSize: '13px', color: '#fff', cursor: 'pointer' }
-};
+});
 
 export default WordTimeline;

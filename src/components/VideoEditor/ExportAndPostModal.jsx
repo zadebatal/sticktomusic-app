@@ -3,6 +3,7 @@ import { renderVideo, exportAsPreview } from '../../services/videoExportService'
 import { uploadVideo } from '../../services/firebaseStorage';
 import { EXPORT_STAGE } from '../../utils/status';
 import { useFocusTrap } from '../ui';
+import { useTheme } from '../../contexts/ThemeContext';
 
 /**
  * ExportAndPostModal - Modal for exporting and posting videos
@@ -15,6 +16,8 @@ const ExportAndPostModal = ({
   onClose,
   onSchedulePost // Function to call Late API: (videoUrl, caption) => Promise
 }) => {
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
   // BUG-030: Focus trap for modal accessibility
   const trapRef = useFocusTrap(true);
 
@@ -159,7 +162,7 @@ const ExportAndPostModal = ({
               <div style={styles.stepperStep}>
                 <div style={{
                   ...styles.stepperDot,
-                  backgroundColor: stage === EXPORT_STAGE.OPTIONS ? '#7c3aed' : (stage === EXPORT_STAGE.RENDERING || stage === EXPORT_STAGE.UPLOADING || stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING) ? '#22c55e' : '#3f3f46'
+                  backgroundColor: stage === EXPORT_STAGE.OPTIONS ? theme.accent.primary : (stage === EXPORT_STAGE.RENDERING || stage === EXPORT_STAGE.UPLOADING || stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING) ? '#22c55e' : theme.bg.elevated
                 }}>
                   {(stage === EXPORT_STAGE.RENDERING || stage === EXPORT_STAGE.UPLOADING || stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING) ? '✓' : '1'}
                 </div>
@@ -167,12 +170,13 @@ const ExportAndPostModal = ({
               </div>
               <div style={{
                 ...styles.stepperLine,
-                backgroundColor: (stage === EXPORT_STAGE.UPLOADING || stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING) ? '#22c55e' : '#3f3f46'
+                backgroundColor: (stage === EXPORT_STAGE.UPLOADING || stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING) ? '#22c55e' : theme.bg.elevated
+
               }} />
               <div style={styles.stepperStep}>
                 <div style={{
                   ...styles.stepperDot,
-                  backgroundColor: (stage === EXPORT_STAGE.UPLOADING) ? '#7c3aed' : (stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING) ? '#22c55e' : '#3f3f46'
+                  backgroundColor: (stage === EXPORT_STAGE.UPLOADING) ? theme.accent.primary : (stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING) ? '#22c55e' : theme.bg.elevated
                 }}>
                   {(stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING) ? '✓' : '2'}
                 </div>
@@ -180,12 +184,12 @@ const ExportAndPostModal = ({
               </div>
               <div style={{
                 ...styles.stepperLine,
-                backgroundColor: stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING ? '#22c55e' : '#3f3f46'
+                backgroundColor: stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING ? '#22c55e' : theme.bg.elevated
               }} />
               <div style={styles.stepperStep}>
                 <div style={{
                   ...styles.stepperDot,
-                  backgroundColor: stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING ? '#7c3aed' : '#3f3f46'
+                  backgroundColor: stage === EXPORT_STAGE.READY || stage === EXPORT_STAGE.POSTING ? theme.accent.primary : theme.bg.elevated
                 }}>
                   3
                 </div>
@@ -293,7 +297,7 @@ const ExportAndPostModal = ({
                     cy="50"
                     r="45"
                     fill="none"
-                    stroke="#1f1f2e"
+                    stroke={theme.bg.surface}
                     strokeWidth="8"
                   />
                   <circle
@@ -301,7 +305,7 @@ const ExportAndPostModal = ({
                     cy="50"
                     r="45"
                     fill="none"
-                    stroke="#7c3aed"
+                    stroke={theme.accent.primary}
                     strokeWidth="8"
                     strokeLinecap="round"
                     strokeDasharray={`${progress * 2.83} 283`}
@@ -352,14 +356,14 @@ const ExportAndPostModal = ({
                   placeholder="Add a caption for your post..."
                   style={styles.captionInput}
                 />
-                <div style={{ display: 'flex', gap: '12px', marginTop: '4px', fontSize: '11px', color: '#94a3b8' }}>
-                  <span style={{ color: caption.length > 150 ? '#f87171' : caption.length > 120 ? '#fbbf24' : '#94a3b8' }}>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '4px', fontSize: '11px', color: theme.text.secondary }}>
+                  <span style={{ color: caption.length > 150 ? '#f87171' : caption.length > 120 ? '#fbbf24' : theme.text.secondary }}>
                     TikTok: {caption.length}/150
                   </span>
-                  <span style={{ color: caption.length > 2200 ? '#f87171' : caption.length > 2000 ? '#fbbf24' : '#94a3b8' }}>
+                  <span style={{ color: caption.length > 2200 ? '#f87171' : caption.length > 2000 ? '#fbbf24' : theme.text.secondary }}>
                     IG: {caption.length}/2200
                   </span>
-                  <span style={{ color: caption.length > 5000 ? '#f87171' : '#94a3b8' }}>
+                  <span style={{ color: caption.length > 5000 ? '#f87171' : theme.text.secondary }}>
                     YT: {caption.length}/5000
                   </span>
                 </div>
@@ -443,11 +447,11 @@ const ExportAndPostModal = ({
   );
 };
 
-const styles = {
+const getStyles = (theme) => ({
   overlay: {
     position: 'fixed',
     inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: theme.overlay.heavy,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -457,7 +461,7 @@ const styles = {
   modal: {
     width: '100%',
     maxWidth: '480px',
-    backgroundColor: '#111118',
+    backgroundColor: theme.bg.input,
     borderRadius: '12px',
     overflow: 'hidden'
   },
@@ -466,12 +470,12 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '16px 20px',
-    borderBottom: '1px solid #1f1f2e'
+    borderBottom: `1px solid ${theme.bg.surface}`
   },
   title: {
     fontSize: '16px',
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text.primary,
     margin: 0
   },
   closeButton: {
@@ -482,7 +486,7 @@ const styles = {
     height: '32px',
     backgroundColor: 'transparent',
     border: 'none',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     cursor: 'pointer',
     borderRadius: '6px'
   },
@@ -492,7 +496,7 @@ const styles = {
   previewSection: {
     aspectRatio: '9/16',
     maxHeight: '200px',
-    backgroundColor: '#0a0a0f',
+    backgroundColor: theme.bg.page,
     borderRadius: '8px',
     overflow: 'hidden',
     marginBottom: '16px'
@@ -514,7 +518,7 @@ const styles = {
     gap: '16px',
     marginBottom: '20px',
     padding: '12px',
-    backgroundColor: '#0a0a0f',
+    backgroundColor: theme.bg.page,
     borderRadius: '8px'
   },
   infoRow: {
@@ -524,12 +528,12 @@ const styles = {
   },
   infoLabel: {
     fontSize: '11px',
-    color: '#6b7280',
+    color: theme.text.muted,
     textTransform: 'uppercase'
   },
   infoValue: {
     fontSize: '14px',
-    color: '#fff',
+    color: theme.text.primary,
     fontWeight: '600'
   },
   optionsSection: {
@@ -544,7 +548,7 @@ const styles = {
     gap: '8px',
     width: '100%',
     padding: '14px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '8px',
     color: '#fff',
@@ -559,10 +563,10 @@ const styles = {
     gap: '8px',
     width: '100%',
     padding: '14px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '8px',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     fontSize: '14px',
     fontWeight: '500',
@@ -570,7 +574,7 @@ const styles = {
   },
   optionDesc: {
     fontSize: '12px',
-    color: '#6b7280',
+    color: theme.text.muted,
     margin: '4px 0 12px 0',
     textAlign: 'center'
   },
@@ -597,12 +601,12 @@ const styles = {
     transform: 'translate(-50%, -50%)',
     fontSize: '24px',
     fontWeight: '700',
-    color: '#fff'
+    color: theme.text.primary
   },
   progressLabel: {
     marginTop: '16px',
     fontSize: '14px',
-    color: '#9ca3af'
+    color: theme.text.secondary
   },
   successIcon: {
     display: 'flex',
@@ -611,7 +615,7 @@ const styles = {
   },
   successText: {
     fontSize: '14px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     textAlign: 'center',
     marginBottom: '20px'
   },
@@ -623,19 +627,19 @@ const styles = {
   urlInput: {
     flex: 1,
     padding: '10px 12px',
-    backgroundColor: '#0a0a0f',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.page,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '12px',
     outline: 'none'
   },
   copyButton: {
     padding: '10px 16px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     fontSize: '13px'
   },
@@ -645,17 +649,17 @@ const styles = {
   captionLabel: {
     display: 'block',
     fontSize: '13px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     marginBottom: '8px'
   },
   captionInput: {
     width: '100%',
     minHeight: '80px',
     padding: '12px',
-    backgroundColor: '#0a0a0f',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.page,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '14px',
     resize: 'vertical',
     outline: 'none'
@@ -672,7 +676,7 @@ const styles = {
     gap: '8px',
     width: '100%',
     padding: '14px',
-    backgroundColor: '#7c3aed',
+    backgroundColor: theme.accent.primary,
     border: 'none',
     borderRadius: '8px',
     color: '#fff',
@@ -683,10 +687,10 @@ const styles = {
   doneButton: {
     width: '100%',
     padding: '14px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '8px',
-    color: '#fff',
+    color: theme.text.primary,
     cursor: 'pointer',
     fontSize: '14px',
     fontWeight: '500'
@@ -694,19 +698,19 @@ const styles = {
   doneTitle: {
     fontSize: '20px',
     fontWeight: '600',
-    color: '#fff',
+    color: theme.text.primary,
     textAlign: 'center',
     margin: '0 0 8px 0'
   },
   doneText: {
     fontSize: '14px',
-    color: '#9ca3af',
+    color: theme.text.secondary,
     textAlign: 'center',
     margin: '0 0 24px 0'
   },
   helpText: {
     fontSize: '13px',
-    color: '#6b7280',
+    color: theme.text.muted,
     textAlign: 'center',
     margin: '0 0 16px 0',
     lineHeight: '1.5'
@@ -741,10 +745,10 @@ const styles = {
   },
   retryButton: {
     padding: '8px 16px',
-    backgroundColor: '#3f3f46',
+    backgroundColor: theme.bg.elevated,
     border: 'none',
     borderRadius: '6px',
-    color: '#fff',
+    color: theme.text.primary,
     fontSize: '12px',
     cursor: 'pointer'
   },
@@ -785,13 +789,13 @@ const styles = {
   },
   stepperLabel: {
     fontSize: '11px',
-    color: '#9ca3af'
+    color: theme.text.secondary
   },
   stepperLine: {
     width: '40px',
     height: '2px',
     margin: '0 8px 20px'
   }
-};
+});
 
 export default ExportAndPostModal;

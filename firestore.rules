@@ -42,7 +42,8 @@ service cloud.firestore {
     function isLinkedToArtist(artistId) {
       return isAuthenticated() &&
         exists(/databases/$(database)/documents/allowedUsers/$(request.auth.token.email)) &&
-        get(/databases/$(database)/documents/allowedUsers/$(request.auth.token.email)).data.linkedArtistId == artistId;
+        (get(/databases/$(database)/documents/allowedUsers/$(request.auth.token.email)).data.linkedArtistId == artistId ||
+         get(/databases/$(database)/documents/allowedUsers/$(request.auth.token.email)).data.artistId == artistId);
     }
 
     // Check if user is the owner of the document (by email)
