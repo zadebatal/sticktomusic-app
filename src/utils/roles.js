@@ -23,9 +23,27 @@ const OPERATOR_EMAILS = Object.freeze(
  * Role constants
  */
 export const ROLES = Object.freeze({
+  CONDUCTOR: 'conductor',
   OPERATOR: 'operator',
   ARTIST: 'artist',
+  COLLABORATOR: 'collaborator',
 });
+
+/**
+ * Check if user role is artist or collaborator
+ */
+export function isArtistOrCollaborator(user) {
+  return user?.role === ROLES.ARTIST || user?.role === ROLES.COLLABORATOR;
+}
+
+/**
+ * Get effective artistId (collaborators use linkedArtistId)
+ */
+export function getEffectiveArtistId(user) {
+  if (user?.role === ROLES.COLLABORATOR) return user.linkedArtistId;
+  if (user?.role === ROLES.ARTIST) return user.artistId;
+  return null;
+}
 
 /**
  * Check if email belongs to an operator
@@ -86,9 +104,13 @@ export function assertOperator(user, operation = 'this operation') {
  */
 export function canAccessArtist(user, artistId) {
   if (!user) return false;
+  if (user.role === ROLES.CONDUCTOR) return true;
   if (isUserOperator(user)) return true;
   // Artists can only access their own content
-  return user.artistId === artistId || user.id === artistId;
+  if (user.artistId === artistId || user.id === artistId) return true;
+  // Collaborators can access their linked artist
+  if (user.role === ROLES.COLLABORATOR && user.linkedArtistId === artistId) return true;
+  return false;
 }
 
 /**
@@ -156,6 +178,8 @@ export default {
   ROLES,
   isOperator,
   isUserOperator,
+  isArtistOrCollaborator,
+  getEffectiveArtistId,
   getRoleForEmail,
   assertOperator,
   canAccessArtist,

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
-import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, getLyrics, MEDIA_TYPES, addToTextBank, removeFromTextBank, assignToBank, saveCollectionToFirestore, migrateCollectionBanks, getBankColor, getBankLabel, BANK_COLORS, MAX_BANKS, addBankToCollection } from '../../services/libraryService';
+import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, getLyrics, MEDIA_TYPES, addToTextBank, removeFromTextBank, assignToBank, saveCollectionToFirestore, migrateCollectionBanks, getBankColor, getBankLabel, BANK_COLORS, MAX_BANKS, addBankToCollection, updateLibraryItem } from '../../services/libraryService';
 import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
 import LyricBank from './LyricBank';
@@ -82,10 +82,17 @@ const SlideshowEditor = ({
       const copy = [...prev];
       const current = copy[activeSlideshowIndex];
       if (!current) return prev;
-      copy[activeSlideshowIndex] = {
-        ...current,
-        slides: typeof updater === 'function' ? updater(current.slides) : updater
-      };
+      const newSlides = typeof updater === 'function' ? updater(current.slides) : updater;
+      // Safety: ensure slide images are never silently stripped
+      const safeSlides = (newSlides || []).map((slide, i) => {
+        const orig = current.slides[i];
+        if (orig && orig.backgroundImage && !slide.backgroundImage) {
+          console.warn('[SlideshowEditor] Prevented image loss on slide', i, slide.id);
+          return { ...slide, backgroundImage: orig.backgroundImage, thumbnail: orig.thumbnail };
+        }
+        return slide;
+      });
+      copy[activeSlideshowIndex] = { ...current, slides: safeSlides };
       return copy;
     });
   }, [activeSlideshowIndex]);
@@ -116,7 +123,7 @@ const SlideshowEditor = ({
   // Other slideshow state
   const [aspectRatio, setAspectRatio] = useState(existingSlideshow?.aspectRatio || '9:16');
   const [selectedSlideIndex, setSelectedSlideIndex] = useState(0);
-  const [activeBank, setActiveBank] = useState('imageA'); // 'imageA' | 'imageB' | 'audio' | 'lyrics'
+  const [activeBank, setActiveBank] = useState('image0'); // 'image0' | 'image1' | ... | 'audio' | 'lyrics'
   const [libraryImages, setLibraryImages] = useState([]);
   const [libraryAudio, setLibraryAudio] = useState([]);
   const [collections, setCollections] = useState([]);
@@ -176,6 +183,8 @@ const SlideshowEditor = ({
 
   // AI Transcription state
   const [showLyricAnalyzer, setShowLyricAnalyzer] = useState(false);
+  // Linked lyrics highlight (auto-loaded when audio with linkedLyricsId is selected)
+  const [linkedLyricId, setLinkedLyricId] = useState(null);
 
   // Audio picker dropdown state
   const [showAudioPicker, setShowAudioPicker] = useState(false);
@@ -211,6 +220,8 @@ const SlideshowEditor = ({
   // Image import refs for banks
   const importImageARef = useRef(null);
   const importImageBRef = useRef(null);
+  const importImageGenericRef = useRef(null);
+  const importBankIndexRef = useRef(0); // tracks which bank index the generic import is for
 
   // Handle importing images to bank from within editor
   const handleImportImages = useCallback((e, bank) => {
@@ -416,31 +427,30 @@ const SlideshowEditor = ({
 
   // Audio tracks: pull from library audio filtered by active collection, fallback to category.audio
   const audioTracks = (() => {
-    // Try to get collection-based audio from library system
+    // Map trim metadata to startTime/endTime so the editor can use them
+    const mapTrimFields = (items) => items.map(a => ({
+      ...a,
+      startTime: a.startTime ?? a.trimStart ?? a.metadata?.trimStart ?? 0,
+      endTime: a.endTime ?? a.trimEnd ?? a.metadata?.trimEnd ?? null
+    }));
+
+    // Always show ALL library audio — audio isn't bank-specific like images
     if (libraryAudio.length > 0) {
-      // Extract collection ID from selectedSource (format: "collectionId:bank_0")
-      let colId = null;
-      if (selectedSource && selectedSource.includes(':bank_')) {
-        colId = selectedSource.split(':')[0];
-      } else if (selectedSource && !selectedSource.match(/^bank_\d+$/)) {
-        colId = selectedSource;
-      }
-      if (colId) {
-        const col = collections.find(c => c.id === colId);
-        if (col) {
-          return libraryAudio.filter(a =>
-            (col.mediaIds || []).includes(a.id) || (a.collectionIds || []).includes(colId)
-          );
-        }
-      }
-      // No specific collection — return all library audio
-      return libraryAudio;
+      return mapTrimFields(libraryAudio);
     }
     // Fallback to category-based audio (legacy)
-    return category?.audio || [];
+    return mapTrimFields(category?.audio || []);
   })();
 
-  const activeContent = activeBank === 'imageA' ? (categoryBankImages[0] || []) : activeBank === 'imageB' ? (categoryBankImages[1] || []) : activeBank === 'audio' ? audioTracks : [];
+  const activeContent = (() => {
+    if (activeBank === 'audio') return audioTracks;
+    // Support dynamic bank indices: 'image0', 'image1', 'image2', etc. (also legacy 'imageA'/'imageB')
+    const bankMatch = activeBank.match(/^image(\d+)$/);
+    if (bankMatch) return categoryBankImages[parseInt(bankMatch[1], 10)] || [];
+    if (activeBank === 'imageA') return categoryBankImages[0] || [];
+    if (activeBank === 'imageB') return categoryBankImages[1] || [];
+    return [];
+  })();
 
   // Load library images and collections when db/artistId available
   // Strategy: instant load from localStorage, then Firestore subscription merges in background
@@ -618,19 +628,18 @@ const SlideshowEditor = ({
           index: i,
           backgroundImage: img.url || img.localUrl,
           thumbnail: img.url || img.localUrl,
-          sourceBank: i === 0 ? 'imageA' : 'imageB',
+          sourceBank: `image${i}`,
           sourceImageId: img.id,
           textOverlays: [],
           duration: 3,
           imageTransform: { scale: 1, offsetX: 0, offsetY: 0 }
         }));
         setSlides(initSlides);
-      } else if (batchMode && ((categoryBankImages[0] || []).length > 0 || (categoryBankImages[1] || []).length > 0)) {
-        // Batch mode: Generate 10 slides randomly from A/B banks
-        const allImages = [
-          ...(categoryBankImages[0] || []).map(img => ({ ...img, sourceBank: 'imageA' })),
-          ...(categoryBankImages[1] || []).map(img => ({ ...img, sourceBank: 'imageB' }))
-        ];
+      } else if (batchMode && categoryBankImages.some(bank => (bank || []).length > 0)) {
+        // Batch mode: Generate 10 slides randomly from ALL banks
+        const allImages = categoryBankImages.flatMap((bank, idx) =>
+          (bank || []).map(img => ({ ...img, sourceBank: `image${idx}` }))
+        );
 
         if (allImages.length > 0) {
           const batchSlides = [];
@@ -670,20 +679,25 @@ const SlideshowEditor = ({
     const isDefaultEmpty = slides.length <= 1 && !slides[0]?.backgroundImage;
     if (!isDefaultEmpty) return;
 
-    // Determine which banks to pull from (default: both)
-    const useBankA = initialSelectedBanks ? initialSelectedBanks.bankA : true;
-    const useBankB = initialSelectedBanks ? initialSelectedBanks.bankB : true;
-    if (!useBankA && !useBankB) { setAutoStartAttempted(true); return; }
+    // Determine which banks to pull from
+    // initialSelectedBanks can be a Set of indices, an object with bankA/bankB, or null (use all)
+    const isBankSelected = (idx) => {
+      if (!initialSelectedBanks) return true; // null = use all
+      if (initialSelectedBanks instanceof Set) return initialSelectedBanks.has(idx);
+      // Legacy object format: { bankA: true, bankB: false }
+      const legacyKey = idx === 0 ? 'bankA' : idx === 1 ? 'bankB' : `bank${idx}`;
+      return initialSelectedBanks[legacyKey] !== false;
+    };
 
     // Find collection with populated banks
     for (const col of collections) {
       const migrated = migrateCollectionBanks(col);
       const newSlides = [];
       let defaultBankIdx = -1;
+      const numBanks = (migrated.banks || []).length;
 
-      for (let idx = 0; idx < Math.min((migrated.banks || []).length, 2); idx++) {
-        const useBank = idx === 0 ? useBankA : useBankB;
-        if (!useBank) continue;
+      for (let idx = 0; idx < numBanks; idx++) {
+        if (!isBankSelected(idx)) continue;
 
         const bankIds = (migrated.banks || [])[idx] || [];
         const bankImages = bankIds.length > 0 ? libraryImages.filter(img => bankIds.includes(img.id)) : [];
@@ -741,6 +755,8 @@ const SlideshowEditor = ({
   // Keyboard Delete/Backspace to remove current slide
   useEffect(() => {
     const handleKeyDown = (e) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
       if ((e.key === 'Delete' || e.key === 'Backspace') && !editingTextId && slides.length > 1) {
         e.preventDefault();
         removeSlide(slides[selectedSlideIndex]?.id);
@@ -791,26 +807,28 @@ const SlideshowEditor = ({
   const getRerollBank = useCallback(() => {
     if (!currentSlide?.sourceBank) return [];
 
+    // Parse bank index from sourceBank format: 'image0', 'image1', etc. (also legacy 'imageA'/'imageB')
+    const bankMatch = currentSlide.sourceBank.match(/^image(\d+)$/);
+    const bankIdx = bankMatch ? parseInt(bankMatch[1], 10)
+      : currentSlide.sourceBank === 'imageA' ? 0
+      : currentSlide.sourceBank === 'imageB' ? 1
+      : null;
+
     // First try category-level banks
-    let bank = currentSlide.sourceBank === 'imageA' ? (categoryBankImages[0] || []) : currentSlide.sourceBank === 'imageB' ? (categoryBankImages[1] || []) : [];
+    let bank = bankIdx !== null ? (categoryBankImages[bankIdx] || []) : [];
 
     // If category banks are empty, try collection-level banks
-    if (bank.length === 0 && collections?.length > 0) {
-      const isA = currentSlide.sourceBank === 'imageA';
-      const isB = currentSlide.sourceBank === 'imageB';
-      if (isA || isB) {
-        const idx = isA ? 0 : 1;
-        const allBankIds = [];
-        collections.forEach(col => {
-          const migrated = migrateCollectionBanks(col);
-          const bankIds = (migrated.banks || [])[idx] || [];
-          if (bankIds.length > 0) {
-            allBankIds.push(...bankIds);
-          }
-        });
-        if (allBankIds.length > 0) {
-          bank = libraryImages.filter(img => allBankIds.includes(img.id));
+    if (bank.length === 0 && bankIdx !== null && collections?.length > 0) {
+      const allBankIds = [];
+      collections.forEach(col => {
+        const migrated = migrateCollectionBanks(col);
+        const bankIds = (migrated.banks || [])[bankIdx] || [];
+        if (bankIds.length > 0) {
+          allBankIds.push(...bankIds);
         }
+      });
+      if (allBankIds.length > 0) {
+        bank = libraryImages.filter(img => allBankIds.includes(img.id));
       }
     }
 
@@ -926,6 +944,21 @@ const SlideshowEditor = ({
     }
   }, [audioToTrim, db, artistId]);
 
+  // When audio with linkedLyricsId is selected, surface linked lyrics
+  const prevAudioIdRef = useRef(null);
+  useEffect(() => {
+    const audioId = selectedAudio?.id;
+    if (audioId === prevAudioIdRef.current) return; // only on audio change
+    prevAudioIdRef.current = audioId;
+    const lyricLink = selectedAudio?.linkedLyricsId;
+    if (lyricLink && lyrics.some(l => l.id === lyricLink)) {
+      setLinkedLyricId(lyricLink);
+      toastSuccess('Linked lyrics loaded with audio');
+    } else {
+      setLinkedLyricId(null);
+    }
+  }, [selectedAudio?.id, selectedAudio?.linkedLyricsId, lyrics]);
+
   // Use a ref for slides to avoid stale closures in the animation loop
   const slidesRef = useRef(slides);
   useEffect(() => { slidesRef.current = slides; }, [slides]);
@@ -1038,7 +1071,17 @@ const SlideshowEditor = ({
   isPlayingRef.current = isPlaying; // Always keep playing ref current for closures
 
   const selectedAudioId = selectedAudio?.id || null;
-  const selectedAudioUrl = selectedAudio?.url || selectedAudio?.localUrl || null;
+  // Recover blob URLs that expired on page reload — look up real URL from library
+  const selectedAudioUrl = (() => {
+    const url = selectedAudio?.url || selectedAudio?.localUrl || null;
+    if (!url) return null;
+    // If it's a blob URL, check if it's still valid by trying to find the audio in library
+    if (url.startsWith('blob:') && selectedAudioId && libraryAudio.length > 0) {
+      const libItem = libraryAudio.find(a => a.id === selectedAudioId);
+      if (libItem?.url && !libItem.url.startsWith('blob:')) return libItem.url;
+    }
+    return url;
+  })();
   const selectedAudioStart = selectedAudio?.startTime || 0;
   const selectedAudioEnd = selectedAudio?.endTime || null;
 
@@ -1125,7 +1168,7 @@ const SlideshowEditor = ({
 
     // Safety fallback: if readyState is already sufficient (e.g. cached audio),
     // events may have fired before React committed this effect. Check immediately.
-    setTimeout(() => {
+    const quickCheck = setTimeout(() => {
       if (el.readyState >= 2 && el.duration > 0) {
         log('[Audio] Fallback: already loaded, readyState:', el.readyState);
         onLoadedMetadata();
@@ -1134,7 +1177,22 @@ const SlideshowEditor = ({
       }
     }, 100);
 
+    // Timeout fallback: if audio hasn't loaded after 10s, mark as ready anyway
+    // (prevents infinite "Loading..." state for slow/unreachable URLs)
+    const loadTimeout = setTimeout(() => {
+      if (!audioRef.current) return;
+      if (audioRef.current.readyState >= 1) {
+        log('[Audio] Timeout fallback: marking ready at readyState', audioRef.current.readyState);
+        setAudioReady(true);
+      } else {
+        log('[Audio] Timeout: audio failed to load within 10s');
+        setAudioError('Audio took too long to load');
+      }
+    }, 10000);
+
     return () => {
+      clearTimeout(quickCheck);
+      clearTimeout(loadTimeout);
       el.removeEventListener('loadedmetadata', onLoadedMetadata);
       el.removeEventListener('canplaythrough', onCanPlayThrough);
       el.removeEventListener('canplay', onCanPlay);
@@ -1511,14 +1569,21 @@ const SlideshowEditor = ({
 
       // Auto-save transcribed lyrics to lyric bank (no popup)
       setTranscribedLyrics(result.text);
+      const lyricId = `lyric_${Date.now()}`;
       if (onAddLyrics) {
         const title = selectedAudio?.name || 'Transcribed Lyrics';
         handleAddLyricsAndRefresh({
-          id: `lyric_${Date.now()}`,
+          id: lyricId,
           title: title.replace(/\.[^/.]+$/, ''),
           content: result.text,
           createdAt: new Date().toISOString()
         });
+      }
+      // Link the lyric to the audio so lyrics travel with audio
+      if (selectedAudio?.id && artistId) {
+        updateLibraryItem(artistId, selectedAudio.id, { linkedLyricsId: lyricId });
+        // Update the in-memory audio object so the link persists this session
+        setSelectedAudio({ ...selectedAudio, linkedLyricsId: lyricId });
       }
     }
     setShowLyricAnalyzer(false);
@@ -1668,25 +1733,33 @@ const SlideshowEditor = ({
     setIsGenerating(true);
 
     try {
-      // Gather image banks
-      let allImgA = categoryBankImages[0] || [];
-      let allImgB = categoryBankImages[1] || [];
-      if (collections.length > 0) {
-        for (const col of collections) {
+      // Gather image banks — respect selectedSource dropdown
+      // If a specific collection is selected, only pull from that collection's banks
+      const sourceColId = selectedSource.includes(':') ? selectedSource.split(':')[0] : null;
+      const sourceCollections = sourceColId
+        ? collections.filter(c => c.id === sourceColId)
+        : collections;
+
+      // Start with category banks
+      const numBanks = Math.max(categoryBankImages.length, 2);
+      const allBankImages = Array.from({ length: numBanks }, (_, idx) => [...(categoryBankImages[idx] || [])]);
+      if (sourceCollections.length > 0) {
+        for (const col of sourceCollections) {
           const migrated = migrateCollectionBanks(col);
-          const bankA = (migrated.banks || [])[0] || [];
-          const bankB = (migrated.banks || [])[1] || [];
-          if (bankA?.length > 0) {
-            allImgA = [...allImgA, ...libraryImages.filter(img => bankA.includes(img.id))];
-          }
-          if (bankB?.length > 0) {
-            allImgB = [...allImgB, ...libraryImages.filter(img => bankB.includes(img.id))];
+          const banks = migrated.banks || [];
+          for (let idx = 0; idx < banks.length; idx++) {
+            const bankIds = banks[idx] || [];
+            if (bankIds.length > 0) {
+              while (allBankImages.length <= idx) allBankImages.push([]);
+              allBankImages[idx] = [...allBankImages[idx], ...libraryImages.filter(img => bankIds.includes(img.id))];
+            }
           }
         }
       }
 
-      if (allImgA.length === 0 && allImgB.length === 0) {
-        toastError('No images in banks. Add images to Slide 1 and Slide 2 photos first.');
+      const hasAnyImages = allBankImages.some(bank => bank.length > 0);
+      if (!hasAnyImages) {
+        toastError('No images in banks. Add images to your slide banks first.');
         return;
       }
 
@@ -1705,9 +1778,9 @@ const SlideshowEditor = ({
         for (let s = 0; s < templateSS.slides.length; s++) {
           const templateSlide = templateSS.slides[s];
 
-          // Pick random image from alternating banks
-          const useA = s % 2 === 0;
-          const bank = useA ? allImgA : allImgB;
+          // Pick random image from the bank matching this slide's position (cycles through available banks)
+          const bankIdx = s % allBankImages.length;
+          const bank = allBankImages[bankIdx] || [];
           const randomImg = bank.length > 0 ? bank[Math.floor(Math.random() * bank.length)] : null;
 
           // Copy text overlays from template — keep styling + position, cycle text content
@@ -1720,9 +1793,12 @@ const SlideshowEditor = ({
           const slideTBank = textBanks[s] || textBanks[0] || [];
           const isSlideA = s % 2 === 0;  // even slides = A, odd = B
           const shouldKeepText =
-            keepTemplateText === 'both' ||
-            (keepTemplateText === 'slideA' && isSlideA) ||
-            (keepTemplateText === 'slideB' && !isSlideA);
+            templateSlide.keepText === true ||
+            keepTemplateText === 'all' ||
+            keepTemplateText === 'both' || // legacy compat
+            keepTemplateText === `slide_${s}` ||
+            (keepTemplateText === 'slideA' && s === 0) || // legacy compat
+            (keepTemplateText === 'slideB' && s === 1); // legacy compat
           if (i === 0 && s === 0) {
             log('[SlideshowGen] Template slide 0 has', templateOverlays.length, 'text overlays, textBank has', slideTBank.length, 'entries, keepText:', keepTemplateText);
           }
@@ -1747,7 +1823,7 @@ const SlideshowEditor = ({
             index: s,
             backgroundImage: randomImg?.url || randomImg?.localUrl || null,
             thumbnail: randomImg?.url || randomImg?.localUrl || null,
-            sourceBank: useA ? 'imageA' : 'imageB',
+            sourceBank: `image${bankIdx}`,
             sourceImageId: randomImg?.id || null,
             textOverlays: newTextOverlays,
             duration: templateSlide.duration || 3,
@@ -2145,20 +2221,23 @@ const SlideshowEditor = ({
                   cursor: 'pointer'
                 }}
               >
-                {(categoryBankImages.length > 0 ? categoryBankImages : [[], []]).map((_, idx) => (
-                  <option key={`bank_${idx}`} value={`bank_${idx}`}>{getBankLabel(idx)} Bank (Category)</option>
-                ))}
                 {collections.filter(c => c.type !== 'smart').map(c => {
                   const migrated = migrateCollectionBanks(c);
-                  if (!(migrated.banks || []).some(b => b?.length > 0)) return null;
+                  const populatedBanks = (migrated.banks || []).filter(b => b?.length > 0);
+                  if (populatedBanks.length === 0) return null;
+                  const totalImages = populatedBanks.reduce((sum, b) => sum + b.length, 0);
                   return (
                     <React.Fragment key={c.id}>
+                      <option value={`${c.id}:bank_0`}>{c.name} — All Banks ({totalImages})</option>
                       {(migrated.banks || []).map((bank, idx) => (
-                        bank?.length > 0 && <option key={`${c.id}:bank_${idx}`} value={`${c.id}:bank_${idx}`}>{c.name} → {getBankLabel(idx)} ({bank.length})</option>
+                        bank?.length > 0 && <option key={`${c.id}:bank_${idx}`} value={`${c.id}:bank_${idx}`}>&nbsp;&nbsp;{c.name} → {getBankLabel(idx)} ({bank.length})</option>
                       ))}
                     </React.Fragment>
                   );
                 })}
+                {categoryBankImages.some(b => (b || []).length > 0) && (categoryBankImages.length > 0 ? categoryBankImages : [[], []]).map((bank, idx) => (
+                  (bank || []).length > 0 && <option key={`bank_${idx}`} value={`bank_${idx}`}>{getBankLabel(idx)} Bank (Category)</option>
+                ))}
               </select>
             </div>
 
@@ -2166,7 +2245,12 @@ const SlideshowEditor = ({
             <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
               {/* Dynamic image bank columns */}
               {(() => {
-                const numBanks = Math.max((categoryBankImages || []).length, 2);
+                // Count banks from both category and collections to show all available bank columns
+                const collectionMaxBanks = collections.reduce((max, col) => {
+                  const migrated = migrateCollectionBanks(col);
+                  return Math.max(max, (migrated.banks || []).length);
+                }, 0);
+                const numBanks = Math.max((categoryBankImages || []).length, collectionMaxBanks, 2);
                 return Array.from({ length: numBanks }).map((_, idx) => {
                   const color = getBankColor(idx);
                   return (
@@ -2188,13 +2272,26 @@ const SlideshowEditor = ({
                       <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
                         {(() => {
                           const bankImages = (() => {
-                            const col = collections.find(c => c.id === (typeof selectedSource === 'string' && selectedSource.includes(':') ? selectedSource.split(':')[0] : null));
-                            if (col) {
-                              const migrated = migrateCollectionBanks(col);
-                              const ids = (migrated.banks || [])[idx] || [];
-                              if (ids.length > 0) return libraryImages.filter(item => ids.includes(item.id));
+                            // If selectedSource points to a specific collection, use that
+                            const colId = typeof selectedSource === 'string' && selectedSource.includes(':') ? selectedSource.split(':')[0] : null;
+                            if (colId) {
+                              const col = collections.find(c => c.id === colId);
+                              if (col) {
+                                const migrated = migrateCollectionBanks(col);
+                                const ids = (migrated.banks || [])[idx] || [];
+                                if (ids.length > 0) return libraryImages.filter(item => ids.includes(item.id));
+                              }
                             }
-                            return categoryBankImages[idx] || [];
+                            // Try category banks
+                            if ((categoryBankImages[idx] || []).length > 0) return categoryBankImages[idx];
+                            // Aggregate from all collections
+                            const allIds = new Set();
+                            collections.forEach(col => {
+                              const migrated = migrateCollectionBanks(col);
+                              ((migrated.banks || [])[idx] || []).forEach(id => allIds.add(id));
+                            });
+                            if (allIds.size > 0) return libraryImages.filter(item => allIds.has(item.id));
+                            return [];
                           })();
                           return bankImages.length === 0 ? (
                             <div style={{ fontSize: '11px', color: '#6b7280', padding: '16px 8px', textAlign: 'center' }}>
@@ -2232,34 +2329,34 @@ const SlideshowEditor = ({
               })()}
 
               {/* Text Banks Column */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: '#f9a8d4', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(236,72,153,0.08)', textAlign: 'center' }}>
+              <div style={{ flex: 1.2, minWidth: '160px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <div style={{ padding: '4px 8px', fontSize: '10px', fontWeight: '600', color: '#f9a8d4', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(236,72,153,0.08)', textAlign: 'center' }}>
                   Text Banks
                 </div>
-                <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '4px 6px' }}>
                   {getTextBanks().map((textBank, idx) => {
                     const color = getBankColor(idx);
                     const inputVal = newTextInputs[idx] || '';
                     return (
                       <React.Fragment key={`tb-${idx}`}>
-                        {idx > 0 && <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: '12px' }} />}
-                        <div style={{ marginBottom: '12px' }}
+                        {idx > 0 && <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.06)', marginBottom: '4px' }} />}
+                        <div style={{ marginBottom: '4px' }}
                           onDragOver={(e) => { if (e.dataTransfer.types.includes('text/lyric')) { e.preventDefault(); e.currentTarget.style.outline = `1px dashed ${color.light}`; } }}
                           onDragLeave={(e) => { e.currentTarget.style.outline = 'none'; }}
                           onDrop={(e) => { e.preventDefault(); e.currentTarget.style.outline = 'none'; const text = e.dataTransfer.getData('text/lyric'); if (text) handleAddToTextBank(idx + 1, text); }}
                         >
-                          <div style={{ fontSize: '11px', fontWeight: '600', color: color.light, marginBottom: '6px' }}>
+                          <div style={{ fontSize: '10px', fontWeight: '600', color: color.light, marginBottom: '3px' }}>
                             {getBankLabel(idx)} Text
                           </div>
-                          <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
+                          <div style={{ display: 'flex', gap: '3px', marginBottom: '2px' }}>
                             <input type="text" value={inputVal} onChange={(e) => setNewTextInputs(prev => ({ ...prev, [idx]: e.target.value }))}
                               onKeyDown={(e) => { if (e.key === 'Enter' && inputVal.trim()) { handleAddToTextBank(idx + 1, inputVal); setNewTextInputs(prev => ({ ...prev, [idx]: '' })); } }}
-                              placeholder="Add text..." style={{ flex: 1, padding: '5px 7px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '11px', outline: 'none' }} />
+                              placeholder="Add text..." style={{ flex: 1, padding: '3px 6px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '10px', outline: 'none' }} />
                             <button onClick={() => { if (inputVal.trim()) { handleAddToTextBank(idx + 1, inputVal); setNewTextInputs(prev => ({ ...prev, [idx]: '' })); } }} disabled={!inputVal.trim()}
-                              style={{ padding: '5px 8px', borderRadius: '5px', border: 'none', backgroundColor: inputVal.trim() ? `${color.primary}4d` : 'rgba(255,255,255,0.05)', color: inputVal.trim() ? color.light : '#4b5563', fontSize: '11px', cursor: inputVal.trim() ? 'pointer' : 'default' }}>+</button>
+                              style={{ padding: '3px 6px', borderRadius: '4px', border: 'none', backgroundColor: inputVal.trim() ? `${color.primary}4d` : 'rgba(255,255,255,0.05)', color: inputVal.trim() ? color.light : '#4b5563', fontSize: '10px', cursor: inputVal.trim() ? 'pointer' : 'default' }}>+</button>
                           </div>
                           {textBank.length > 0 ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                               {textBank.map((text, i) => (
                                 <div key={i} style={{ display: 'flex', alignItems: 'stretch', gap: '2px' }}>
                                   <div onClick={() => {
@@ -2268,13 +2365,13 @@ const SlideshowEditor = ({
                                       setSlides(prev => prev.map((slide, si) => si === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
                                       setEditingTextId(newOverlay.id);
                                     }
-                                  }} style={{ flex: 1, padding: '6px 8px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px 0 0 5px', color: '#d1d5db', fontSize: '11px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word' }} title="Click to add as overlay">{text}</div>
+                                  }} style={{ flex: 1, padding: '4px 6px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '4px 0 0 4px', color: '#d1d5db', fontSize: '10px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word' }} title="Click to add as overlay">{text}</div>
                                   <button onClick={(e) => { e.stopPropagation(); handleRemoveFromTextBank(idx + 1, i); }}
-                                    style={{ padding: '0 6px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.2)', borderLeft: 'none', borderRadius: '0 5px 5px 0', color: '#ef4444', fontSize: '10px', cursor: 'pointer', flexShrink: 0 }} title="Remove">×</button>
+                                    style={{ padding: '0 5px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.2)', borderLeft: 'none', borderRadius: '0 4px 4px 0', color: '#ef4444', fontSize: '9px', cursor: 'pointer', flexShrink: 0 }} title="Remove">×</button>
                                 </div>
                               ))}
                             </div>
-                          ) : <div style={{ fontSize: '10px', color: '#6b7280', padding: '6px', textAlign: 'center' }}>No text yet</div>}
+                          ) : <div style={{ fontSize: '9px', color: '#6b7280', padding: '2px', textAlign: 'center' }}>No text yet</div>}
                         </div>
                       </React.Fragment>
                     );
@@ -2392,13 +2489,19 @@ const SlideshowEditor = ({
                 )
               ) : (() => {
                 // Always use activeImages which respects the selectedSource dropdown
-                const displayImages = (activeBank === 'imageA' || activeBank === 'imageB') ? activeImages : activeContent;
-                const sourceName = selectedSource === 'bankA' ? 'Image A' : selectedSource === 'bankB' ? 'Image B' : selectedSource === 'all' ? 'Library' : collections.find(c => selectedSource.startsWith(c.id))?.name || 'Collection';
+                const isImageBank = activeBank.startsWith('image');
+                const displayImages = isImageBank ? activeImages : activeContent;
+                const sourceName = (() => {
+                  const bankMatch = selectedSource.match(/^bank_(\d+)$/);
+                  if (bankMatch) return getBankLabel(parseInt(bankMatch[1], 10));
+                  if (selectedSource === 'all') return 'Library';
+                  return collections.find(c => selectedSource.startsWith(c.id))?.name || 'Collection';
+                })();
                 return displayImages.length === 0 ? (
                   <div style={styles.emptyBank}>
                     <p>No images in {sourceName}</p>
                     <p style={styles.emptySubtext}>Upload images in the Aesthetic Home</p>
-                    {onImportToBank && (activeBank === 'imageA' || activeBank === 'imageB') && (
+                    {onImportToBank && isImageBank && (
                       <button
                         style={{
                           marginTop: '8px', padding: '8px 16px', borderRadius: '8px',
@@ -2406,7 +2509,7 @@ const SlideshowEditor = ({
                           color: '#a5b4fc', fontSize: '12px', cursor: 'pointer',
                           display: 'flex', alignItems: 'center', gap: '6px'
                         }}
-                        onClick={() => (activeBank === 'imageA' ? importImageARef : importImageBRef).current?.click()}
+                        onClick={() => { const m = activeBank.match(/^image(\d+)$/); importBankIndexRef.current = m ? parseInt(m[1], 10) : 0; importImageGenericRef.current?.click(); }}
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="M12 5v14M5 12h14"/>
@@ -2487,11 +2590,10 @@ const SlideshowEditor = ({
                             ...image,
                             url: image.url || image.localUrl,
                             thumbnail: image.url || image.localUrl,
-                            sourceBank: selectedSource === 'bankA' ? 'imageA'
-                              : selectedSource === 'bankB' ? 'imageB'
-                              : selectedSource.includes(':bankA') ? 'imageA'
-                              : selectedSource.includes(':bankB') ? 'imageB'
-                              : selectedSource
+                            sourceBank: (() => {
+                      const m = selectedSource.match(/(?:.*:)?bank_(\d+)$/);
+                      return m ? `image${m[1]}` : selectedSource;
+                    })()
                           }));
                         }}
                         onMouseEnter={(e) => {
@@ -2538,7 +2640,7 @@ const SlideshowEditor = ({
                     })}
                   </div>
                   {/* Import button at bottom of image grid */}
-                  {onImportToBank && (activeBank === 'imageA' || activeBank === 'imageB') && (
+                  {onImportToBank && activeBank.startsWith('image') && (
                     <button
                       style={{
                         marginTop: '8px', padding: '6px 12px', borderRadius: '6px',
@@ -2546,7 +2648,7 @@ const SlideshowEditor = ({
                         color: '#9ca3af', fontSize: '11px', cursor: 'pointer', width: '100%',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
                       }}
-                      onClick={() => (activeBank === 'imageA' ? importImageARef : importImageBRef).current?.click()}
+                      onClick={() => { const m = activeBank.match(/^image(\d+)$/); importBankIndexRef.current = m ? parseInt(m[1], 10) : 0; importImageGenericRef.current?.click(); }}
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M12 5v14M5 12h14"/>
@@ -2571,6 +2673,9 @@ const SlideshowEditor = ({
             } : {})
           }}>
 
+            {/* Scrollable area: canvas + audio */}
+            <div style={{ flex: 1, overflow: 'auto', padding: '12px 24px 4px', minHeight: 0 }}>
+
             {/* Canvas Preview */}
             <div
               style={{
@@ -2588,7 +2693,8 @@ const SlideshowEditor = ({
                   ...styles.canvas,
                   width: isMobile ? Math.min(window.innerWidth - 32, previewDimensions.width) : previewDimensions.width,
                   height: isMobile ? Math.min((window.innerWidth - 32) * (baseDimensions.height / baseDimensions.width), previewDimensions.height) : previewDimensions.height,
-                  aspectRatio: '9/16'
+                  maxHeight: 'calc(95vh - 340px)',
+                  aspectRatio: `${baseDimensions.width}/${baseDimensions.height}`
                 }}
               >
                 {/* Background Image - Draggable and resizable */}
@@ -2834,6 +2940,14 @@ const SlideshowEditor = ({
                 onChange={(e) => handleImportImages(e, 'B')}
                 style={{ display: 'none' }}
               />
+              <input
+                ref={importImageGenericRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(e) => handleImportImages(e, importBankIndexRef.current)}
+                style={{ display: 'none' }}
+              />
 
               {/* Hidden audio input for slideshow */}
               <input
@@ -2844,15 +2958,17 @@ const SlideshowEditor = ({
                 style={{ display: 'none' }}
               />
 
-              {/* Canvas Actions */}
-              <div style={styles.canvasActions}>
+            </div>{/* end scrollable area */}
+
+              {/* Canvas Actions — sticky bottom toolbar */}
+              <div style={{ ...styles.canvasActions, padding: '4px 12px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
                 {/* Undo / Redo */}
                 <button
                   style={{ ...styles.rerollButton, opacity: canUndo ? 1 : 0.35, pointerEvents: canUndo ? 'auto' : 'none' }}
                   onClick={handleUndo}
                   title="Undo (⌘Z)"
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M3 10h10a5 5 0 015 5v0a5 5 0 01-5 5H3"/>
                     <path d="M7 6l-4 4 4 4"/>
                   </svg>
@@ -2863,7 +2979,7 @@ const SlideshowEditor = ({
                   onClick={handleRedo}
                   title="Redo (⌘⇧Z)"
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M21 10H11a5 5 0 00-5 5v0a5 5 0 005 5h10"/>
                     <path d="M17 6l4 4-4 4"/>
                   </svg>
@@ -2878,7 +2994,7 @@ const SlideshowEditor = ({
                     title="Replace with random image from same bank"
                     disabled={getRerollBank().filter(img => img.id !== currentSlide?.sourceImageId).length === 0}
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M23 4v6h-6"/>
                       <path d="M1 20v-6h6"/>
                       <path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/>
@@ -2890,15 +3006,15 @@ const SlideshowEditor = ({
 
                 {/* Re-roll Text Button (only show when slide has text overlays) */}
                 {currentSlide?.textOverlays?.length > 0 && (() => {
-                  const { textBank1, textBank2 } = getTextBanks();
-                  const hasTextBanks = textBank1.length > 0 || textBank2.length > 0;
+                  const tBanks = getTextBanks();
+                  const hasTextBanks = tBanks.some(b => b?.length > 0);
                   return hasTextBanks ? (
                     <button
                       style={styles.rerollButton}
                       onClick={() => handleTextReroll()}
                       title="Replace text with random text from banks"
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M4 7V4h16v3M9 20h6M12 4v16"/>
                       </svg>
                       Reroll Text
@@ -2907,8 +3023,8 @@ const SlideshowEditor = ({
                 })()}
 
                 {/* Add Text Button */}
-                <button style={styles.addTextButton} onClick={() => { addTextOverlay(); }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <button style={styles.addTextButton} onClick={() => { addTextOverlay(); }} title="Add text overlay">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M12 5v14M5 12h14"/>
                   </svg>
                   Add Text
@@ -2921,26 +3037,25 @@ const SlideshowEditor = ({
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '6px',
-                      padding: '6px 12px',
+                      gap: '4px',
+                      padding: '4px 8px',
                       borderRadius: '6px',
                       border: '1px solid rgba(239, 68, 68, 0.3)',
                       background: 'rgba(239, 68, 68, 0.1)',
                       color: '#f87171',
                       cursor: 'pointer',
-                      fontSize: '12px',
-                      fontWeight: '500',
+                      fontSize: '11px',
                       transition: 'all 0.15s'
                     }}
                     onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)'; e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'; }}
                     title="Delete current slide (Delete key)"
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <polyline points="3 6 5 6 21 6"/>
                       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                     </svg>
-                    Delete Slide
+                    Delete
                   </button>
                 )}
 
@@ -2951,13 +3066,13 @@ const SlideshowEditor = ({
                     onClick={() => setShowAudioPicker(!showAudioPicker)}
                     title="Add audio to slideshow"
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M9 18V5l12-2v13"/>
                       <circle cx="6" cy="18" r="3"/>
                       <circle cx="18" cy="16" r="3"/>
                     </svg>
-                    Add Audio
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: '4px' }}>
+                    Audio
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <polyline points="6 9 12 15 18 9"/>
                     </svg>
                   </button>
@@ -3022,13 +3137,13 @@ const SlideshowEditor = ({
                     onClick={() => setShowLyricAnalyzer(true)}
                     title="AI transcribe audio to add lyrics"
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
                       <path d="M19 10v2a7 7 0 01-14 0v-2"/>
                       <line x1="12" y1="19" x2="12" y2="23"/>
                       <line x1="8" y1="23" x2="16" y2="23"/>
                     </svg>
-                    AI Transcribe
+                    Transcribe
                   </button>
                 )}
 
@@ -3040,12 +3155,12 @@ const SlideshowEditor = ({
                       onClick={() => setShowLyricBankPicker(!showLyricBankPicker)}
                       title="Add lyrics to your bank"
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
                         <path d="M14 2v6h6"/>
                       </svg>
-                      + Lyric Bank
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: '4px', transform: showLyricBankPicker ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                      Lyrics
+                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <polyline points="6 9 12 15 18 9"/>
                       </svg>
                     </button>
@@ -3068,7 +3183,10 @@ const SlideshowEditor = ({
                                   e.dataTransfer.setData('text/lyric', lyric.content || lyric.title || '');
                                   e.dataTransfer.effectAllowed = 'copy';
                                 }}
-                                style={styles.lyricBankDropdownItem}
+                                style={{
+                                  ...styles.lyricBankDropdownItem,
+                                  ...(linkedLyricId === lyric.id ? { border: '1px solid #6366f1', backgroundColor: 'rgba(99,102,241,0.15)' } : {})
+                                }}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   // Add lyric as text overlay to current slide
@@ -3103,6 +3221,7 @@ const SlideshowEditor = ({
                                 </svg>
                                 <span style={{ pointerEvents: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                   {lyric.title || lyric.content?.slice(0, 30) || 'Untitled'}
+                                  {linkedLyricId === lyric.id && <span style={{ marginLeft: '4px', fontSize: '8px', color: '#6366f1', fontWeight: 700 }}>LINKED</span>}
                                 </span>
                               </div>
                             ))
@@ -3317,6 +3436,20 @@ const SlideshowEditor = ({
                       title="ALL CAPS"
                     >AA</button>
 
+                    {/* all lowercase toggle */}
+                    <button
+                      onClick={() => updateTextOverlay(selOverlay.id, {
+                        style: { ...selOverlay.style, textTransform: selOverlay.style.textTransform === 'lowercase' ? 'none' : 'lowercase' }
+                      })}
+                      style={{
+                        padding: '4px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
+                        backgroundColor: selOverlay.style.textTransform === 'lowercase' ? 'rgba(99,102,241,0.3)' : 'transparent',
+                        color: selOverlay.style.textTransform === 'lowercase' ? '#a5b4fc' : '#6b7280',
+                        fontSize: '10px', fontWeight: '700', letterSpacing: '1px'
+                      }}
+                      title="all lowercase"
+                    >aa</button>
+
                     {/* Outline toggle */}
                     <button
                       onClick={() => updateTextOverlay(selOverlay.id, {
@@ -3331,10 +3464,10 @@ const SlideshowEditor = ({
                       title="Text shadow/outline"
                     >Sh</button>
 
-                    {/* Text stroke/border toggle */}
+                    {/* Text stroke toggle — on/off */}
                     <button
                       onClick={() => updateTextOverlay(selOverlay.id, {
-                        style: { ...selOverlay.style, textStroke: selOverlay.style.textStroke ? '' : '1px black' }
+                        style: { ...selOverlay.style, textStroke: selOverlay.style.textStroke ? '' : '2px black' }
                       })}
                       style={{
                         padding: '4px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
@@ -3342,12 +3475,13 @@ const SlideshowEditor = ({
                         color: selOverlay.style.textStroke ? '#a5b4fc' : '#6b7280',
                         fontSize: '11px', fontWeight: '600'
                       }}
-                      title="Text border/stroke"
+                      title={selOverlay.style.textStroke ? 'Remove text stroke' : 'Add text stroke'}
                     >St</button>
                   </div>
                 </div>
               );
             })()}
+
 
             {/* Slide Filmstrip — drop zone for bank images */}
             <div style={styles.filmstrip}>
@@ -3382,6 +3516,33 @@ const SlideshowEditor = ({
                           <span>{index + 1}</span>
                         </div>
                       )}
+                      {/* Per-slide keep-text toggle */}
+                      <button
+                        style={{
+                          position: 'absolute',
+                          bottom: '2px',
+                          left: '2px',
+                          width: '18px',
+                          height: '18px',
+                          borderRadius: '3px',
+                          background: slide.keepText ? 'rgba(99,102,241,0.85)' : 'rgba(0,0,0,0.5)',
+                          border: slide.keepText ? '1px solid rgba(99,102,241,0.9)' : '1px solid rgba(255,255,255,0.15)',
+                          color: slide.keepText ? '#fff' : 'rgba(255,255,255,0.5)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: 0,
+                          zIndex: 2,
+                          fontSize: '9px',
+                          fontWeight: 700
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSlides(prev => prev.map((s, i) => i === index ? { ...s, keepText: !s.keepText } : s));
+                        }}
+                        title={slide.keepText ? 'Keep text on generate (click to disable)' : 'Click to keep this slide\'s text on generate'}
+                      >T</button>
                       {slides.length > 1 && (
                       <button
                         style={{
@@ -3435,11 +3596,11 @@ const SlideshowEditor = ({
                 </button>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
-                <div style={styles.slideCount}>
-                  {slides.length} / 10 slides
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 0' }}>
+                <div style={{ ...styles.slideCount, fontSize: '10px' }}>
+                  {slides.length}/10
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   {schedulerEditMode ? (
                     <span style={{ fontSize: '11px', color: '#6b7280' }}>Editing scheduled post</span>
                   ) : <>
@@ -3447,12 +3608,12 @@ const SlideshowEditor = ({
                   <button
                     onClick={() => switchToSlideshow(0)}
                     style={{
-                      padding: '5px 10px',
+                      padding: '4px 8px',
                       borderRadius: '6px',
                       border: '1px solid ' + (activeSlideshowIndex === 0 ? '#818cf8' : 'rgba(255,255,255,0.1)'),
                       backgroundColor: activeSlideshowIndex === 0 ? '#6366f1' : 'rgba(255,255,255,0.06)',
                       color: activeSlideshowIndex === 0 ? '#fff' : '#9ca3af',
-                      fontSize: '11px',
+                      fontSize: '10px',
                       fontWeight: '600',
                       cursor: 'pointer',
                       display: 'flex',
@@ -3490,25 +3651,24 @@ const SlideshowEditor = ({
                     title="Number of slideshows to generate"
                   />
                   {/* Keep template text toggle */}
-                  <span style={{ fontSize: '9px', color: '#9ca3af', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase', marginRight: '2px' }}>Keep Text:</span>
+                  <span style={{ fontSize: '9px', color: '#9ca3af', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Keep Text:</span>
                   <div style={{
-                    display: 'flex', alignItems: 'center', gap: '2px',
+                    display: 'flex', alignItems: 'center', gap: '1px',
                     backgroundColor: 'rgba(255,255,255,0.04)',
-                    borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: '5px', border: '1px solid rgba(255,255,255,0.08)',
                     padding: '1px'
-                  }} title="Keep exact text from template: Randomize = pull from text banks, Slide 1/2 = keep that slide's text, Both = keep all text">
+                  }} title="Keep exact text from template: Randomize = pull from text banks, per-slide = keep that slide's text, All = keep all text">
                     {[
-                      { value: 'none', label: 'Randomize' },
-                      { value: 'slideA', label: 'Slide 1' },
-                      { value: 'slideB', label: 'Slide 2' },
-                      { value: 'both', label: 'Both' }
+                      ...slides.map((_, i) => ({ value: `slide_${i}`, label: `S${i + 1}` })),
+                      { value: 'all', label: 'All' },
+                      { value: 'none', label: 'Random' }
                     ].map(opt => (
                       <button
                         key={opt.value}
                         onClick={() => setKeepTemplateText(opt.value)}
                         style={{
-                          padding: '3px 6px',
-                          borderRadius: '5px',
+                          padding: '2px 5px',
+                          borderRadius: '4px',
                           border: 'none',
                           backgroundColor: keepTemplateText === opt.value ? 'rgba(99,102,241,0.6)' : 'transparent',
                           color: keepTemplateText === opt.value ? '#fff' : '#9ca3af',
@@ -3531,12 +3691,12 @@ const SlideshowEditor = ({
                       display: 'flex',
                       alignItems: 'center',
                       gap: '5px',
-                      padding: '5px 12px',
+                      padding: '4px 10px',
                       borderRadius: '6px',
                       border: 'none',
                       background: isGenerating ? 'rgba(99,102,241,0.4)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
                       color: '#fff',
-                      fontSize: '12px',
+                      fontSize: '11px',
                       fontWeight: '600',
                       cursor: isGenerating ? 'not-allowed' : 'pointer',
                       transition: 'all 0.2s',
@@ -3606,16 +3766,16 @@ const SlideshowEditor = ({
             {/* ─── Timeline Switcher ─── */}
             <div style={{
               borderTop: '1px solid rgba(255,255,255,0.08)',
-              padding: '12px 16px',
+              padding: '6px 16px',
               backgroundColor: 'rgba(0,0,0,0.15)',
               flexShrink: 0
             }}>
               {/* Scrollable row of timeline tabs */}
               <div style={{
                 display: 'flex',
-                gap: '8px',
+                gap: '6px',
                 overflowX: 'auto',
-                paddingBottom: '8px',
+                paddingBottom: '4px',
                 scrollbarWidth: 'thin',
                 scrollbarColor: 'rgba(255,255,255,0.15) transparent'
               }}>
@@ -3627,13 +3787,13 @@ const SlideshowEditor = ({
                       flexShrink: 0,
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '6px',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
+                      gap: '4px',
+                      padding: '5px 10px',
+                      borderRadius: '6px',
                       backgroundColor: idx === activeSlideshowIndex ? '#6366f1' : 'rgba(255,255,255,0.06)',
                       border: '1px solid ' + (idx === activeSlideshowIndex ? '#818cf8' : 'rgba(255,255,255,0.08)'),
                       color: idx === activeSlideshowIndex ? '#fff' : '#9ca3af',
-                      fontSize: '12px',
+                      fontSize: '11px',
                       fontWeight: idx === activeSlideshowIndex ? '600' : '400',
                       cursor: 'pointer',
                       transition: 'all 0.15s ease',
@@ -3694,8 +3854,8 @@ const SlideshowEditor = ({
                 editingTextId={editingTextId}
                 lyrics={lyrics}
                 templates={textTemplates}
-                textBank1={getTextBanks().textBank1}
-                textBank2={getTextBanks().textBank2}
+                textBank1={getTextBanks()[0] || []}
+                textBank2={getTextBanks()[1] || []}
                 onSelectText={(text) => {
                   const newOverlay = {
                     id: `text_${Date.now()}`,
@@ -4379,8 +4539,14 @@ const TextEditorPanel = ({
               <div style={textPanelStyles.noLyrics}>No lyrics in bank</div>
             ) : (
               lyrics.map(lyric => (
-                <div key={lyric.id} style={textPanelStyles.lyricItem}>
-                  <div style={textPanelStyles.lyricTitle}>{lyric.title}</div>
+                <div key={lyric.id} style={{
+                  ...textPanelStyles.lyricItem,
+                  ...(linkedLyricId === lyric.id ? { border: '1px solid #6366f1', backgroundColor: 'rgba(99,102,241,0.15)' } : {})
+                }}>
+                  <div style={textPanelStyles.lyricTitle}>
+                    {lyric.title}
+                    {linkedLyricId === lyric.id && <span style={{ marginLeft: '6px', fontSize: '9px', color: '#6366f1' }}>LINKED</span>}
+                  </div>
                   <div style={textPanelStyles.lyricPreview}>
                     {lyric.content.split('\n').slice(0, 2).join(' / ')}
                   </div>
@@ -4666,9 +4832,9 @@ const getStyles = (theme) => ({
     flex: 1,
     display: 'flex',
     flexDirection: 'column',
-    padding: '24px',
-    gap: '16px',
-    overflow: 'auto',
+    padding: '0',
+    gap: '0',
+    overflow: 'hidden',
     minHeight: 0
   },
   canvasContainer: {
@@ -4676,7 +4842,7 @@ const getStyles = (theme) => ({
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '12px',
+    gap: '8px',
     flexShrink: 0
   },
   canvas: {
@@ -4709,33 +4875,34 @@ const getStyles = (theme) => ({
   },
   canvasActions: {
     display: 'flex',
-    gap: '8px',
+    gap: '4px',
     flexWrap: 'wrap',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    alignItems: 'center'
   },
   addTextButton: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '8px 16px',
+    gap: '4px',
+    padding: '4px 8px',
     backgroundColor: `${theme.accent.primary}26`,
     border: `1px solid ${theme.accent.primary}66`,
-    borderRadius: '8px',
+    borderRadius: '6px',
     color: theme.accent.hover,
     cursor: 'pointer',
-    fontSize: '13px'
+    fontSize: '11px'
   },
   addAudioButton: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '8px 16px',
+    gap: '4px',
+    padding: '4px 8px',
     backgroundColor: 'rgba(251, 146, 60, 0.2)',
     border: '1px solid rgba(251, 146, 60, 0.5)',
-    borderRadius: '8px',
+    borderRadius: '6px',
     color: '#fdba74',
     cursor: 'pointer',
-    fontSize: '13px'
+    fontSize: '11px'
   },
   audioPickerDropdown: {
     position: 'absolute',
@@ -4811,26 +4978,26 @@ const getStyles = (theme) => ({
   rerollButton: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '8px 16px',
+    gap: '4px',
+    padding: '4px 8px',
     backgroundColor: 'rgba(16, 185, 129, 0.2)',
     border: '1px solid rgba(16, 185, 129, 0.5)',
-    borderRadius: '8px',
+    borderRadius: '6px',
     color: '#6ee7b7',
     cursor: 'pointer',
-    fontSize: '13px'
+    fontSize: '11px'
   },
   addToLyricBankButton: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '8px 16px',
+    gap: '4px',
+    padding: '4px 8px',
     backgroundColor: 'rgba(139, 92, 246, 0.2)',
     border: '1px solid rgba(139, 92, 246, 0.5)',
-    borderRadius: '8px',
+    borderRadius: '6px',
     color: '#c4b5fd',
     cursor: 'pointer',
-    fontSize: '13px'
+    fontSize: '11px'
   },
   lyricBankDropdown: {
     position: 'absolute',
@@ -4892,14 +5059,14 @@ const getStyles = (theme) => ({
   aiTranscribeButton: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '8px 16px',
+    gap: '4px',
+    padding: '4px 8px',
     backgroundColor: 'rgba(251, 191, 36, 0.2)',
     border: '1px solid rgba(251, 191, 36, 0.5)',
-    borderRadius: '8px',
+    borderRadius: '6px',
     color: '#fcd34d',
     cursor: 'pointer',
-    fontSize: '13px'
+    fontSize: '11px'
   },
   uploadAudioBtn: {
     display: 'flex',
@@ -4918,20 +5085,20 @@ const getStyles = (theme) => ({
   filmstrip: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
+    gap: '2px',
     borderTop: '1px solid rgba(255,255,255,0.1)',
-    paddingTop: '16px',
+    padding: '4px 16px 2px',
     flexShrink: 0
   },
   filmstripScroll: {
     display: 'flex',
-    gap: '8px',
+    gap: '4px',
     overflowX: 'auto',
-    paddingBottom: '8px'
+    paddingBottom: '2px'
   },
   filmstripSlide: {
-    width: '80px',
-    height: '120px',
+    width: '48px',
+    height: '72px',
     backgroundColor: '#1a1a2e',
     borderRadius: '8px',
     overflow: 'hidden',
@@ -4986,8 +5153,8 @@ const getStyles = (theme) => ({
     transition: 'opacity 0.2s'
   },
   addSlideButton: {
-    width: '80px',
-    height: '120px',
+    width: '48px',
+    height: '72px',
     backgroundColor: 'transparent',
     border: '2px dashed rgba(255,255,255,0.2)',
     borderRadius: '8px',

@@ -3,7 +3,7 @@ import {
   POST_STATUS, PLATFORMS, PLATFORM_LABELS, PLATFORM_COLORS,
   createScheduledPost, updateScheduledPost, deleteScheduledPost,
   getScheduledPosts, subscribeToScheduledPosts, reorderPosts,
-  addManyScheduledPosts, assignScheduleTimes, assignRandomScheduleTimes
+  addManyScheduledPosts
 } from '../../services/scheduledPostsService';
 import { getTemplates } from '../../services/contentTemplateService';
 import { useToast, ConfirmDialog } from '../ui';
@@ -26,7 +26,7 @@ const SchedulingPage = ({
   onEditDraft,
   onSchedulePost,
   onBack,
-  onRenderVideo
+  readOnly = false
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
@@ -469,6 +469,126 @@ const SchedulingPage = ({
     handleUpdatePost(postId, { platforms });
   }, [posts, handleUpdatePost]);
 
+  // ── Publish a post to Late.co ──
+  const handlePublishPost = useCallback(async (postId) => {
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+    if (!onSchedulePost) {
+      toastError('Scheduling not available. Late API not connected.');
+      return;
+    }
+
+    // Collect account IDs from assigned platforms
+    const accountIds = Object.values(post.platforms || {})
+      .map(p => p.accountId)
+      .filter(Boolean);
+
+    if (accountIds.length === 0) {
+      toastError('No platform accounts assigned. Select accounts before publishing.');
+      return;
+    }
+
+    // Build caption with hashtags
+    const allHashtags = [...(post.hashtags || []), ...(alwaysOnHashtags || [])];
+    const caption = [post.caption || '', allHashtags.join(' ')].filter(Boolean).join('\n\n');
+
+    // Set status to POSTING
+    await handleUpdatePost(postId, { status: POST_STATUS.POSTING });
+
+    try {
+      const result = await onSchedulePost({
+        videoUrl: post.cloudUrl || post.editorState?.cloudUrl,
+        caption,
+        accountIds,
+        scheduledTime: post.scheduledTime || new Date().toISOString()
+      });
+
+      if (result?.success === false) {
+        await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: result.error || 'Unknown error' });
+        toastError(`Failed to publish: ${result.error || 'Unknown error'}`);
+      } else {
+        await handleUpdatePost(postId, { status: POST_STATUS.POSTED, postedAt: new Date().toISOString() });
+        toastSuccess('Published successfully!');
+      }
+    } catch (err) {
+      log('[Schedule] Publish error:', err);
+      await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: err.message });
+      toastError(`Publish failed: ${err.message}`);
+    }
+  }, [posts, onSchedulePost, alwaysOnHashtags, handleUpdatePost, toastSuccess, toastError]);
+
+  // ── Bulk Publish Selected ──
+  const handleBulkPublish = useCallback(async () => {
+    const publishable = posts.filter(p =>
+      selectedPostIds.has(p.id) && (p.status === POST_STATUS.SCHEDULED || p.status === POST_STATUS.FAILED)
+    );
+    if (publishable.length === 0) {
+      toastError('No scheduled posts selected. Schedule posts before publishing.');
+      return;
+    }
+    if (!onSchedulePost) {
+      toastError('Late API not connected. Cannot publish.');
+      return;
+    }
+
+    let succeeded = 0;
+    let failed = 0;
+
+    for (const post of publishable) {
+      const accountIds = Object.values(post.platforms || {})
+        .map(p => p.accountId)
+        .filter(Boolean);
+
+      if (accountIds.length === 0) {
+        await handleUpdatePost(post.id, { status: POST_STATUS.FAILED, errorMessage: 'No platform accounts assigned' });
+        failed++;
+        continue;
+      }
+
+      const allHashtags = [...(post.hashtags || []), ...(alwaysOnHashtags || [])];
+      const caption = [post.caption || '', allHashtags.join(' ')].filter(Boolean).join('\n\n');
+
+      await handleUpdatePost(post.id, { status: POST_STATUS.POSTING });
+
+      try {
+        const result = await onSchedulePost({
+          videoUrl: post.cloudUrl || post.editorState?.cloudUrl,
+          caption,
+          accountIds,
+          scheduledTime: post.scheduledTime || new Date().toISOString()
+        });
+
+        if (result?.success === false) {
+          await handleUpdatePost(post.id, { status: POST_STATUS.FAILED, errorMessage: result.error || 'Unknown error' });
+          failed++;
+        } else {
+          await handleUpdatePost(post.id, { status: POST_STATUS.POSTED, postedAt: new Date().toISOString() });
+          succeeded++;
+        }
+      } catch (err) {
+        log('[Schedule] Bulk publish error for', post.id, ':', err);
+        await handleUpdatePost(post.id, { status: POST_STATUS.FAILED, errorMessage: err.message });
+        failed++;
+      }
+    }
+
+    if (succeeded > 0 && failed === 0) {
+      toastSuccess(`Published ${succeeded} post${succeeded !== 1 ? 's' : ''}!`);
+    } else if (succeeded > 0 && failed > 0) {
+      toastSuccess(`Published ${succeeded}, failed ${failed}`);
+    } else {
+      toastError(`All ${failed} post${failed !== 1 ? 's' : ''} failed to publish.`);
+    }
+    setSelectedPostIds(new Set());
+  }, [posts, selectedPostIds, onSchedulePost, alwaysOnHashtags, handleUpdatePost, toastSuccess, toastError]);
+
+  // Count publishable posts in selection
+  const publishableCount = useMemo(() => {
+    return posts.filter(p =>
+      selectedPostIds.has(p.id) && (p.status === POST_STATUS.SCHEDULED || p.status === POST_STATUS.FAILED)
+    ).length;
+  }, [posts, selectedPostIds]);
+
   // ── Add from drafts handler ──
   const handleAddFromDrafts = useCallback(async (selectedItems) => {
     try {
@@ -668,11 +788,19 @@ const SchedulingPage = ({
             )}
           </div>
 
-          {/* Schedule button */}
+          {/* Schedule + Publish buttons */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px', gap: '8px' }}>
             <button style={s.applyBtn} onClick={handleBatchScheduleSelected}>
               Schedule {selectedCount} Post{selectedCount !== 1 ? 's' : ''}
             </button>
+            {publishableCount > 0 && (
+              <button
+                style={{ ...s.applyBtn, backgroundColor: '#059669', borderColor: '#10b981' }}
+                onClick={handleBulkPublish}
+              >
+                Publish {publishableCount} Now
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -703,18 +831,22 @@ const SchedulingPage = ({
       {/* ═══ TOOLBAR — between filters and list ═══ */}
       <div style={s.toolbarRow}>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <button style={s.toolbarBtn} onClick={() => setShowAddModal(true)}>
-            <span style={{ fontSize: '15px', lineHeight: 1 }}>+</span> Add Drafts
-          </button>
-          <button style={s.toolbarBtn} onClick={handleRandomizeOrder}>
-            <span style={{ fontSize: '14px', lineHeight: 1 }}>🔀</span> Shuffle
-          </button>
-          <button
-            style={{ ...s.toolbarBtn, ...(queuePaused ? { backgroundColor: '#78350f', borderColor: '#f59e0b', color: '#fbbf24' } : {}) }}
-            onClick={() => setQueuePaused(!queuePaused)}
-          >
-            <span style={{ fontSize: '14px', lineHeight: 1 }}>{queuePaused ? '▶' : '⏸'}</span> {queuePaused ? 'Resume' : 'Pause'}
-          </button>
+          {!readOnly && (
+            <>
+              <button style={s.toolbarBtn} onClick={() => setShowAddModal(true)}>
+                <span style={{ fontSize: '15px', lineHeight: 1 }}>+</span> Add Drafts
+              </button>
+              <button style={s.toolbarBtn} onClick={handleRandomizeOrder}>
+                <span style={{ fontSize: '14px', lineHeight: 1 }}>🔀</span> Shuffle
+              </button>
+              <button
+                style={{ ...s.toolbarBtn, ...(queuePaused ? { backgroundColor: '#78350f', borderColor: '#f59e0b', color: '#fbbf24' } : {}) }}
+                onClick={() => setQueuePaused(!queuePaused)}
+              >
+                <span style={{ fontSize: '14px', lineHeight: 1 }}>{queuePaused ? '▶' : '⏸'}</span> {queuePaused ? 'Resume' : 'Pause'}
+              </button>
+            </>
+          )}
         </div>
         <div style={{ display: 'flex', gap: '2px', alignItems: 'center', backgroundColor: theme.bg.surface, borderRadius: '8px', padding: '3px', border: `1px solid ${theme.border.default}` }}>
           <button
@@ -788,11 +920,13 @@ const SchedulingPage = ({
                     onSetPlatformAccount={(platform, accountId, handle) => setPlatformAccount(post.id, platform, accountId, handle)}
                     onDelete={() => handleDeletePost(post.id)}
                     onEditDraft={onEditDraft}
+                    onPublish={() => handlePublishPost(post.id)}
                     onDragStart={(e) => handleDragStart(e, post.id)}
                     onDragOver={(e) => handleDragOver(e, post.id)}
                     onDrop={(e) => handleDrop(e, post.id)}
                     onDragEnd={handleDragEnd}
                     previewTime={previewTimes[post.id] || null}
+                    readOnly={readOnly}
                   />
                 ))
               )}
@@ -850,9 +984,10 @@ const PostRow = ({
   post, index, isExpanded, isSelected, isDragging, isDragOver, isPaused,
   accounts, lateAccountIds, alwaysOnHashtags,
   onToggleSelect, onToggleExpand, onUpdate, onTogglePlatform, onSetPlatformAccount,
-  onDelete, onEditDraft,
+  onDelete, onEditDraft, onPublish,
   onDragStart, onDragOver, onDrop, onDragEnd,
-  previewTime
+  previewTime,
+  readOnly = false
 }) => {
   const { theme } = useTheme();
   const s = getS(theme);
@@ -1016,7 +1151,7 @@ const PostRow = ({
           <button style={s.rowIconBtn} onClick={onToggleExpand} title="Expand details">
             <span style={{ fontSize: '12px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.15s' }}>▼</span>
           </button>
-          <button style={{ ...s.rowIconBtn, color: '#ef4444' }} onClick={(e) => { e.stopPropagation(); onDelete(); }} title="Remove">×</button>
+          {!readOnly && <button style={{ ...s.rowIconBtn, color: '#ef4444' }} onClick={(e) => { e.stopPropagation(); onDelete(); }} title="Remove">×</button>}
         </div>
       </div>
 
@@ -1027,10 +1162,12 @@ const PostRow = ({
           accounts={accounts}
           lateAccountIds={lateAccountIds}
           alwaysOnHashtags={alwaysOnHashtags}
-          onUpdate={onUpdate}
-          onTogglePlatform={onTogglePlatform}
-          onSetPlatformAccount={onSetPlatformAccount}
-          onEditDraft={onEditDraft}
+          onUpdate={readOnly ? () => {} : onUpdate}
+          onTogglePlatform={readOnly ? () => {} : onTogglePlatform}
+          onSetPlatformAccount={readOnly ? () => {} : onSetPlatformAccount}
+          onEditDraft={readOnly ? null : onEditDraft}
+          onPublish={readOnly ? null : onPublish}
+          readOnly={readOnly}
         />
       )}
     </div>
@@ -1041,7 +1178,7 @@ const PostRow = ({
 // ExpandedDrawer — Full details with tiered hashtags
 // ═══════════════════════════════════════════════════
 
-const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [], onUpdate, onTogglePlatform, onSetPlatformAccount, onEditDraft }) => {
+const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [], onUpdate, onTogglePlatform, onSetPlatformAccount, onEditDraft, onPublish, readOnly = false }) => {
   const { theme } = useTheme();
   const s = getS(theme);
   const [hashtags, setHashtags] = useState((post.hashtags || []).join(' '));
@@ -1112,17 +1249,17 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
             )}
           </div>
           <div style={s.drawerActions}>
-            {post.editorState && onEditDraft && (
+            {!readOnly && post.editorState && onEditDraft && (
               <button style={s.drawerBtn} onClick={() => onEditDraft(post)}>Edit in Studio</button>
             )}
-            {post.status === POST_STATUS.DRAFT && post.scheduledTime && (
+            {!readOnly && post.status === POST_STATUS.DRAFT && post.scheduledTime && (
               <button style={{ ...s.drawerBtn, backgroundColor: '#312e81', color: '#a5b4fc', borderColor: '#6366f1' }} onClick={() => onUpdate({ status: POST_STATUS.SCHEDULED })}>
                 Confirm Schedule
               </button>
             )}
-            {post.status === POST_STATUS.SCHEDULED && (
+            {!readOnly && post.status === POST_STATUS.SCHEDULED && (
               <>
-                <button style={{ ...s.drawerBtn, backgroundColor: '#064e3b', color: '#6ee7b7', borderColor: '#10b981' }} onClick={() => onUpdate({ status: POST_STATUS.POSTING })}>
+                <button style={{ ...s.drawerBtn, backgroundColor: '#064e3b', color: '#6ee7b7', borderColor: '#10b981' }} onClick={onPublish}>
                   Publish Now
                 </button>
                 <button style={s.drawerBtn} onClick={() => onUpdate({ status: POST_STATUS.DRAFT, scheduledTime: null })}>
@@ -1130,12 +1267,12 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
                 </button>
               </>
             )}
-            {post.status === POST_STATUS.FAILED && (
-              <button style={{ ...s.drawerBtn, backgroundColor: '#78350f', color: '#fbbf24', borderColor: '#f59e0b' }} onClick={() => onUpdate({ status: POST_STATUS.SCHEDULED })}>
+            {!readOnly && post.status === POST_STATUS.FAILED && (
+              <button style={{ ...s.drawerBtn, backgroundColor: '#78350f', color: '#fbbf24', borderColor: '#f59e0b' }} onClick={onPublish}>
                 Retry
               </button>
             )}
-            {(post.status === POST_STATUS.POSTING || post.status === POST_STATUS.FAILED) && (
+            {!readOnly && (post.status === POST_STATUS.POSTING || post.status === POST_STATUS.FAILED) && (
               <button style={s.drawerBtn} onClick={() => onUpdate({ status: POST_STATUS.DRAFT, scheduledTime: null })}>
                 Revert to Draft
               </button>

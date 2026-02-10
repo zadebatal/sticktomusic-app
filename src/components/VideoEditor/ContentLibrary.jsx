@@ -261,9 +261,11 @@ const ContentLibrary = ({
                 </svg>
                 {isSlideshow ? 'Make a slideshow' : 'Make a video'}
               </button>
-              <button style={styles.secondaryButton} onClick={onShowBatchPipeline}>
-                Make up to 10 at once
-              </button>
+              {!isSlideshow && (
+                <button style={styles.secondaryButton} onClick={onShowBatchPipeline}>
+                  Make up to 10 at once
+                </button>
+              )}
             </>
           )}
         </div>
@@ -1097,6 +1099,7 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
  * SlideshowPostingModal - Modal for scheduling carousel posts
  */
 const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onClose }) => {
+  const { success: toastSuccess, error: toastError } = useToast();
   const [selectedHandle, setSelectedHandle] = useState('');
   const [scheduleDate, setScheduleDate] = useState(new Date().toISOString().split('T')[0]);
   const [scheduleTime, setScheduleTime] = useState('14:00');
@@ -1571,7 +1574,7 @@ const slideshowPostingStyles = {
 };
 
 const styles = {
-  container: { display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' },
+  container: { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid #1f1f2e' },
   headerLeft: { display: 'flex', alignItems: 'center', gap: '16px' },
   backButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '36px', backgroundColor: '#1f1f2e', border: 'none', borderRadius: '8px', color: '#9ca3af', cursor: 'pointer' },
@@ -1595,11 +1598,11 @@ const styles = {
   emptyText: { fontSize: '14px', color: '#6b7280', margin: '0 0 24px 0' },
   emptyButton: { padding: '12px 24px', backgroundColor: '#7c3aed', border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '500' },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' },
-  videoCard: { position: 'relative', backgroundColor: '#111118', borderRadius: '12px', overflow: 'hidden', border: '2px solid transparent', userSelect: 'none' },
+  videoCard: { position: 'relative', backgroundColor: '#111118', borderRadius: '12px', overflow: 'hidden', border: '2px solid transparent' },
   videoCardSelected: { border: '2px solid #7c3aed', boxShadow: '0 0 0 2px rgba(124, 58, 237, 0.3)' },
   videoCheckbox: { position: 'absolute', top: '12px', left: '12px', zIndex: 10 },
   checkbox: { width: '18px', height: '18px', accentColor: '#7c3aed', cursor: 'pointer' },
-  videoThumb: { position: 'relative', aspectRatio: '9/16', backgroundColor: '#0a0a0f' },
+  videoThumb: { position: 'relative', aspectRatio: '9/16', backgroundColor: '#0a0a0f', userSelect: 'none' },
   videoThumbImg: { width: '100%', height: '100%', objectFit: 'cover' },
   videoThumbPlaceholder: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   textOverlay: { position: 'absolute', bottom: '40%', left: '50%', transform: 'translateX(-50%)', padding: '8px 16px', backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: '4px', color: '#fff', fontSize: '12px', fontWeight: '500' },

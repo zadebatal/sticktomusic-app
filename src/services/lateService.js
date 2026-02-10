@@ -260,6 +260,63 @@ export function disconnectLate() {
   return { success: true };
 }
 
+// ============================================
+// LATE OAUTH CONNECT (profile + account linking)
+// ============================================
+
+/**
+ * List Late profiles for an artist
+ * @param {string} artistId - Artist ID
+ * @returns {Promise<{profiles: Array}>}
+ */
+export async function getLateProfiles(artistId) {
+  if (!artistId) throw new Error('artistId required');
+  return proxyRequest('profiles', 'GET', null, artistId);
+}
+
+/**
+ * Create a Late profile for an artist
+ * @param {string} artistId - Artist ID
+ * @param {string} name - Profile name
+ * @returns {Promise<{profile: Object}>}
+ */
+export async function createLateProfile(artistId, name) {
+  if (!artistId) throw new Error('artistId required');
+  return proxyRequest('createProfile', 'POST', { name }, artistId);
+}
+
+/**
+ * Get OAuth connect URL for a platform
+ * Opens in new tab — Late handles the OAuth flow and redirects back
+ * @param {string} artistId - Artist ID
+ * @param {string} platform - Platform (tiktok, instagram, facebook, youtube)
+ * @param {string} profileId - Late profile ID
+ * @param {string} redirectUrl - URL to redirect to after OAuth completes
+ * @returns {Promise<{authUrl: string, state: string}>}
+ */
+export async function getConnectUrl(artistId, platform, profileId, redirectUrl) {
+  if (!artistId || !platform || !profileId) throw new Error('artistId, platform, and profileId required');
+
+  const token = await getFirebaseToken();
+  const url = new URL(LATE_PROXY, window.location.origin);
+  url.searchParams.set('action', 'connectUrl');
+  url.searchParams.set('artistId', artistId);
+  url.searchParams.set('platform', platform);
+  url.searchParams.set('profileId', profileId);
+  if (redirectUrl) url.searchParams.set('redirectUrl', redirectUrl);
+
+  const response = await fetch(url.toString(), {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(error.error || `Failed to get connect URL: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 export async function schedulePost({ videoUrl, caption, accountIds, scheduledTime, user, artistId }) {
   // Operator check at API boundary (defense-in-depth)
   assertLateAccess(user, 'schedulePost');

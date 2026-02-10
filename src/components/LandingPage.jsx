@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
+import { TIERS, calculateOperatorPrice } from '../services/subscriptionService';
 
 /**
  * LandingPage — Marketing page shown when user is NOT logged in.
- * Replaces old home/how/pricing pages. Includes auth modal.
+ * Two signup paths: Artist (tier-based) and Operator (flexible pricing).
  */
 const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }) => {
   const { theme } = useTheme();
@@ -13,6 +14,14 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [selectedTier, setSelectedTier] = useState(null); // Pre-selected tier from pricing click
+  const [pricingTab, setPricingTab] = useState('artist'); // 'artist' | 'operator'
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState(null);
+
+  // Operator calculator state
+  const [opArtists, setOpArtists] = useState(3);
+  const [opSetsPerArtist, setOpSetsPerArtist] = useState(5);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -20,9 +29,57 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
     else onSignup?.(email, password, name);
   };
 
+  const handleTierClick = (tier) => {
+    setSelectedTier(tier);
+    setAuthMode('signup');
+    setShowAuth(true);
+  };
+
+  const [applicationSubmitted, setApplicationSubmitted] = useState(false);
+
+  const handleApply = async (tierSets, tierName, role = 'artist') => {
+    if (!email) {
+      setCheckoutError('Please enter your email first');
+      return;
+    }
+    setCheckoutLoading(true);
+    setCheckoutError(null);
+    try {
+      const response = await fetch('/api/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.toLowerCase(),
+          name: name || email.split('@')[0],
+          tier: tierName,
+          sets: tierSets,
+          role,
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setApplicationSubmitted(true);
+      } else {
+        setCheckoutError(data.error || 'Failed to submit application');
+      }
+    } catch (err) {
+      setCheckoutError('Could not submit application. Please try again.');
+    }
+    setCheckoutLoading(false);
+  };
+
+  const tierCards = [
+    { name: 'Starter', price: '$500', sets: 5, features: ['5 Social Sets', '20 platform accounts', 'Unlimited posting', 'Studio access', 'Basic analytics'] },
+    { name: 'Growth', price: '$1,000', sets: 10, features: ['10 Social Sets', '40 platform accounts', 'Unlimited posting', 'Studio access', 'Full analytics'], popular: true },
+    { name: 'Scale', price: '$2,500', sets: 25, features: ['25 Social Sets', '100 platform accounts', 'Unlimited posting', 'Studio access', 'Advanced analytics'] },
+    { name: 'Sensation', price: '$5,000', sets: 50, features: ['50 Social Sets', '200 platform accounts', 'Unlimited posting', 'Studio access', 'Advanced analytics'] },
+  ];
+
+  const operatorPrice = calculateOperatorPrice(opArtists, opSetsPerArtist);
+
   return (
     <div className={`min-h-screen ${t.bgPage} ${t.textPrimary} font-sans`}>
-      {/* ═══ NAV ═══ */}
+      {/* NAV */}
       <nav className={`fixed top-0 left-0 right-0 z-50 ${t.bgPage}/90 backdrop-blur-md border-b ${t.borderSubtle}`}>
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <span className={`text-lg font-bold tracking-tight ${t.textPrimary}`}>StickToMusic</span>
@@ -37,7 +94,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
         </div>
       </nav>
 
-      {/* ═══ HERO ═══ */}
+      {/* HERO */}
       <section className="min-h-screen flex flex-col justify-center items-center text-center px-6 pt-16">
         <div className="max-w-3xl">
           <h1 className={`text-5xl md:text-7xl font-bold leading-tight mb-6 ${t.textPrimary}`}>
@@ -57,7 +114,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
         </div>
       </section>
 
-      {/* ═══ FEATURES ═══ */}
+      {/* FEATURES */}
       <section id="features" className="py-24 px-6">
         <div className="max-w-5xl mx-auto">
           <h2 className={`text-3xl md:text-4xl font-bold text-center mb-4 ${t.textPrimary}`}>Everything you need</h2>
@@ -78,7 +135,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
         </div>
       </section>
 
-      {/* ═══ HOW IT WORKS ═══ */}
+      {/* HOW IT WORKS */}
       <section className={`py-24 px-6 ${t.bgSurface}`}>
         <div className="max-w-4xl mx-auto">
           <h2 className={`text-3xl md:text-4xl font-bold text-center mb-16 ${t.textPrimary}`}>How it works</h2>
@@ -100,64 +157,142 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
         </div>
       </section>
 
-      {/* ═══ PRICING ═══ */}
-      <section className="py-24 px-6">
+      {/* PRICING */}
+      <section id="pricing" className="py-24 px-6">
         <div className="max-w-6xl mx-auto">
           <h2 className={`text-3xl md:text-4xl font-bold text-center mb-4 ${t.textPrimary}`}>Simple pricing</h2>
-          <p className={`text-center ${t.textSecondary} mb-16`}>Scale your content creation from day one.</p>
-          <div className="grid md:grid-cols-4 gap-6">
-            {[
-              { name: 'Starter', price: '$500', accounts: '5 accounts', features: ['5 connected accounts', 'Unlimited posting', 'Studio access', 'Basic analytics'] },
-              { name: 'Growth', price: '$1,000', accounts: '10 accounts', features: ['10 connected accounts', 'Unlimited posting', 'Studio access', 'Full analytics'], popular: true },
-              { name: 'Scale', price: '$2,500', accounts: '25 accounts', features: ['25 connected accounts', 'Unlimited posting', 'Studio access', 'Advanced analytics'] },
-              { name: 'Enterprise', price: '$5,000', accounts: '50 accounts', features: ['50 connected accounts', 'Unlimited posting', 'Studio access', 'Advanced analytics'] }
-            ].map((tier, i) => (
-              <div key={i} className={`p-8 rounded-2xl border ${tier.popular ? 'border-indigo-500' : t.cardBorder} ${t.cardBg} relative`}>
-                {tier.popular && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-indigo-600 text-white text-xs font-semibold rounded-full">
-                    Popular
-                  </span>
-                )}
-                <h3 className={`text-lg font-semibold ${t.textPrimary}`}>{tier.name}</h3>
-                <p className={`text-xs ${t.textSecondary} mb-4`}>{tier.accounts}</p>
-                <div className="mb-6">
-                  <span className={`text-4xl font-bold ${t.textPrimary}`}>{tier.price}</span>
-                  <span className={`${t.textMuted}`}>/mo</span>
-                </div>
-                <ul className="space-y-2 mb-8">
-                  {tier.features.map((f, j) => (
-                    <li key={j} className={`text-sm ${t.textSecondary} flex items-center gap-2`}>
-                      <span className={`${t.accentText}`}>✓</span> {f}
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  onClick={() => { setAuthMode('signup'); setShowAuth(true); }}
-                  className={`w-full py-3 rounded-xl text-sm font-semibold transition ${tier.popular ? t.btnPrimary : t.btnSecondary}`}
-                >
-                  Get Started
-                </button>
-              </div>
-            ))}
+          <p className={`text-center ${t.textSecondary} mb-8`}>
+            1 Social Set = Facebook + TikTok + Twitter + Instagram. Scale as you grow.
+          </p>
+
+          {/* Tab toggle: Artist / Operator */}
+          <div className="flex justify-center mb-10">
+            <div className={`inline-flex rounded-xl p-1 border ${t.cardBorder}`} style={{ backgroundColor: theme.bg.elevated }}>
+              <button
+                onClick={() => setPricingTab('artist')}
+                className={`px-6 py-2 rounded-lg text-sm font-semibold transition ${
+                  pricingTab === 'artist' ? t.btnPrimary : `${t.textSecondary}`
+                }`}
+              >
+                I'm an Artist
+              </button>
+              <button
+                onClick={() => setPricingTab('operator')}
+                className={`px-6 py-2 rounded-lg text-sm font-semibold transition ${
+                  pricingTab === 'operator' ? t.btnPrimary : `${t.textSecondary}`
+                }`}
+              >
+                I manage artists
+              </button>
+            </div>
           </div>
+
+          {/* Artist Tier Cards */}
+          {pricingTab === 'artist' && (
+            <div className="grid md:grid-cols-4 gap-6">
+              {tierCards.map((tier, i) => (
+                <div key={i} className={`p-8 rounded-2xl border ${tier.popular ? 'border-indigo-500' : t.cardBorder} ${t.cardBg} relative`}>
+                  {tier.popular && (
+                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-indigo-600 text-white text-xs font-semibold rounded-full">
+                      Popular
+                    </span>
+                  )}
+                  <h3 className={`text-lg font-semibold ${t.textPrimary}`}>{tier.name}</h3>
+                  <p className={`text-xs ${t.textSecondary} mb-4`}>{tier.sets} Social Sets</p>
+                  <div className="mb-6">
+                    <span className={`text-4xl font-bold ${t.textPrimary}`}>{tier.price}</span>
+                    <span className={`${t.textMuted}`}>/mo</span>
+                  </div>
+                  <ul className="space-y-2 mb-8">
+                    {tier.features.map((f, j) => (
+                      <li key={j} className={`text-sm ${t.textSecondary} flex items-center gap-2`}>
+                        <span className={`${t.accentText}`}>✓</span> {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    onClick={() => handleTierClick(tier)}
+                    className={`w-full py-3 rounded-xl text-sm font-semibold transition ${tier.popular ? t.btnPrimary : t.btnSecondary}`}
+                  >
+                    Get Started
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Operator Pricing Calculator */}
+          {pricingTab === 'operator' && (
+            <div className="max-w-lg mx-auto">
+              <div className={`p-8 rounded-2xl border ${t.cardBorder} ${t.cardBg}`}>
+                <h3 className={`text-xl font-semibold ${t.textPrimary} mb-6`}>Operator Plan</h3>
+                <p className={`${t.textSecondary} text-sm mb-6`}>
+                  Managing multiple artists? Pay for exactly what you need — adjust artists and sets anytime.
+                </p>
+                <div className="space-y-5">
+                  <div>
+                    <label className={`block text-sm font-medium ${t.textSecondary} mb-2`}>Number of artists</label>
+                    <input
+                      type="range" min="1" max="20" value={opArtists}
+                      onChange={e => setOpArtists(parseInt(e.target.value))}
+                      className="w-full accent-indigo-500"
+                    />
+                    <div className="flex justify-between text-xs mt-1">
+                      <span className={t.textMuted}>1</span>
+                      <span className={`font-semibold ${t.textPrimary}`}>{opArtists} artists</span>
+                      <span className={t.textMuted}>20</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-medium ${t.textSecondary} mb-2`}>Social Sets per artist</label>
+                    <select
+                      value={opSetsPerArtist}
+                      onChange={e => setOpSetsPerArtist(parseInt(e.target.value))}
+                      className={`w-full px-4 py-3 rounded-xl border ${t.inputBorder} text-sm`}
+                      style={{ backgroundColor: theme.bg.input, color: theme.text.primary }}
+                    >
+                      <option value={5}>5 Social Sets (Starter)</option>
+                      <option value={10}>10 Social Sets (Growth)</option>
+                      <option value={25}>25 Social Sets (Scale)</option>
+                      <option value={50}>50 Social Sets (Sensation)</option>
+                    </select>
+                  </div>
+                  <div className={`p-5 rounded-xl border ${t.cardBorder} text-center`} style={{ backgroundColor: theme.bg.elevated }}>
+                    <p className={`text-sm ${t.textMuted} mb-1`}>
+                      {opArtists} artists × {opSetsPerArtist} sets × $100/set
+                    </p>
+                    <p className={`text-4xl font-bold ${t.textPrimary}`}>
+                      ${operatorPrice.toLocaleString()}<span className={`text-lg font-normal ${t.textMuted}`}>/mo</span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => { setAuthMode('signup'); setShowAuth(true); }}
+                    className={`w-full py-3 rounded-xl text-sm font-semibold transition ${t.btnPrimary}`}
+                  >
+                    Get Started as Operator
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
-      {/* ═══ FOOTER CTA ═══ */}
+      {/* FOOTER CTA */}
       <section className={`py-20 px-6 ${t.bgSurface} text-center`}>
         <h2 className={`text-3xl md:text-4xl font-bold mb-4 ${t.textPrimary}`}>Ready to create?</h2>
         <p className={`${t.textSecondary} mb-8 max-w-md mx-auto`}>Join creators who are scaling their content with StickToMusic.</p>
         <button onClick={() => { setAuthMode('signup'); setShowAuth(true); }} className={`px-8 py-4 rounded-full text-lg font-semibold transition ${t.btnPrimary}`}>
-          Start Free →
+          Get Started →
         </button>
       </section>
 
-      {/* ═══ FOOTER ═══ */}
+      {/* FOOTER */}
       <footer className={`py-8 px-6 border-t ${t.border} text-center`}>
         <p className={`text-sm ${t.textMuted}`}>© 2026 StickToMusic. All rights reserved.</p>
       </footer>
 
-      {/* ═══ AUTH MODAL ═══ */}
+      {/* AUTH MODAL */}
       {showAuth && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center"
@@ -166,19 +301,33 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
         >
           <div className={`w-full max-w-md mx-4 p-8 rounded-2xl border ${t.cardBorder}`} style={{ backgroundColor: theme.bg.surface }}>
             <div className="flex justify-between items-center mb-6">
-              <h2 className={`text-xl font-bold ${t.textPrimary}`}>
-                {authMode === 'login' ? 'Welcome back' : 'Create your account'}
-              </h2>
-              <button onClick={() => setShowAuth(false)} className={`${t.textMuted} ${t.hoverText} text-xl`}>×</button>
+              <div>
+                <h2 className={`text-xl font-bold ${t.textPrimary}`}>
+                  {authMode === 'login' ? 'Welcome back' : 'Create your account'}
+                </h2>
+                {selectedTier && authMode === 'signup' && (
+                  <p className={`text-sm ${t.textSecondary} mt-1`}>
+                    {selectedTier.name} plan — {selectedTier.sets} Social Sets — {selectedTier.price}/mo
+                  </p>
+                )}
+              </div>
+              <button onClick={() => { setShowAuth(false); setSelectedTier(null); setCheckoutError(null); }} className={`${t.textMuted} ${t.hoverText} text-xl`}>×</button>
             </div>
 
-            {authError && (
-              <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
-                {authError}
+            {applicationSubmitted && (
+              <div className="mb-4 p-4 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 text-sm text-center">
+                <p className="font-semibold mb-1">Application submitted!</p>
+                <p>We'll review your application and get back to you shortly. You'll receive an email once approved.</p>
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            {(authError || checkoutError) && !applicationSubmitted && (
+              <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                {authError || checkoutError}
+              </div>
+            )}
+
+            {!applicationSubmitted && <form onSubmit={handleSubmit} className="space-y-4">
               {authMode === 'signup' && (
                 <input
                   type="text" placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)}
@@ -197,36 +346,40 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
                 style={{ backgroundColor: theme.bg.input, color: theme.text.primary }}
               />
               <button
-                type="submit" disabled={authLoading}
+                type="submit" disabled={authLoading || checkoutLoading}
                 className={`w-full py-3 rounded-xl text-sm font-semibold transition ${t.btnPrimary} disabled:opacity-50`}
               >
                 {authLoading ? 'Loading...' : authMode === 'login' ? 'Log In' : 'Sign Up'}
               </button>
-            </form>
+            </form>}
 
-            <div className="my-4 flex items-center gap-3">
-              <div className={`flex-1 h-px ${t.bgElevated}`} />
-              <span className={`text-xs ${t.textMuted}`}>or</span>
-              <div className={`flex-1 h-px ${t.bgElevated}`} />
-            </div>
+            {!applicationSubmitted && (
+              <>
+                <div className="my-4 flex items-center gap-3">
+                  <div className={`flex-1 h-px ${t.bgElevated}`} />
+                  <span className={`text-xs ${t.textMuted}`}>or</span>
+                  <div className={`flex-1 h-px ${t.bgElevated}`} />
+                </div>
 
-            <button
-              onClick={onGoogleAuth}
-              className={`w-full py-3 rounded-xl text-sm font-semibold transition ${t.btnSecondary} flex items-center justify-center gap-2`}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-              Continue with Google
-            </button>
+                <button
+                  onClick={onGoogleAuth}
+                  className={`w-full py-3 rounded-xl text-sm font-semibold transition ${t.btnSecondary} flex items-center justify-center gap-2`}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                  Continue with Google
+                </button>
 
-            <p className={`text-center text-sm mt-4 ${t.textSecondary}`}>
-              {authMode === 'login' ? "Don't have an account?" : 'Already have an account?'}
-              <button
-                onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
-                className={`ml-1 font-semibold ${t.accentText} ${t.hoverText}`}
-              >
-                {authMode === 'login' ? 'Sign up' : 'Log in'}
-              </button>
-            </p>
+                <p className={`text-center text-sm mt-4 ${t.textSecondary}`}>
+                  {authMode === 'login' ? "Don't have an account?" : 'Already have an account?'}
+                  <button
+                    onClick={() => { setAuthMode(authMode === 'login' ? 'signup' : 'login'); setCheckoutError(null); }}
+                    className={`ml-1 font-semibold ${t.accentText} ${t.hoverText}`}
+                  >
+                    {authMode === 'login' ? 'Sign up' : 'Log in'}
+                  </button>
+                </p>
+              </>
+            )}
           </div>
         </div>
       )}

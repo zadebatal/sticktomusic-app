@@ -115,11 +115,19 @@ async function canUserAccessArtist(userEmail, artistId) {
     const userData = userDoc.data();
     // Conductors can access all artists
     if (userData.role === 'conductor') return true;
-    // Operators can only access assigned artists
+    // Operators: check ownerOperatorId on the artist doc (primary) or legacy assignedArtistIds
     if (userData.role === 'operator') {
+      // Primary check: artist's ownerOperatorId matches this operator's doc ID
+      const artistDoc = await db.collection('artists').doc(artistId).get();
+      if (artistDoc.exists && artistDoc.data().ownerOperatorId === userDoc.id) return true;
+      // Legacy fallback: check assignedArtistIds on the user record
       const assignedArtists = userData.assignedArtistIds || [];
       return assignedArtists.includes(artistId);
     }
+    // Artists can access their own data
+    if (userData.role === 'artist' && userData.artistId === artistId) return true;
+    // Collaborators can access their linked artist
+    if (userData.role === 'collaborator' && userData.linkedArtistId === artistId) return true;
     return false;
   } catch (error) {
     console.error('Error checking artist access:', error.message);
@@ -341,8 +349,80 @@ export default async function handler(req, res) {
         });
         break;
 
+      // ============================================
+      // LATE OAUTH CONNECT (profile + account linking)
+      // ============================================
+
+      case 'profiles': {
+        // GET /profiles - List Late profiles for this artist
+        if (!artistId) {
+          return res.status(400).json({ error: 'artistId required' });
+        }
+        const canListProfiles = await canUserAccessArtist(userEmail, artistId);
+        if (!canListProfiles) {
+          return res.status(403).json({ error: 'No access to this artist' });
+        }
+        const profilesKey = await getArtistLateKey(artistId);
+        if (!profilesKey) {
+          return res.status(400).json({ error: 'No Late API key configured for this artist' });
+        }
+        response = await fetch(`${LATE_API_BASE}/profiles`, {
+          headers: { 'Authorization': `Bearer ${profilesKey}` }
+        });
+        break;
+      }
+
+      case 'createProfile': {
+        // POST /profiles - Create a Late profile for this artist
+        if (req.method !== 'POST') {
+          return res.status(405).json({ error: 'POST required for createProfile' });
+        }
+        if (!artistId) {
+          return res.status(400).json({ error: 'artistId required' });
+        }
+        const canCreateProfile = await canUserAccessArtist(userEmail, artistId);
+        if (!canCreateProfile) {
+          return res.status(403).json({ error: 'No access to this artist' });
+        }
+        const createProfileKey = await getArtistLateKey(artistId);
+        if (!createProfileKey) {
+          return res.status(400).json({ error: 'No Late API key configured for this artist' });
+        }
+        response = await fetch(`${LATE_API_BASE}/profiles`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${createProfileKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ name: body.name || 'Default', description: body.description || '' })
+        });
+        break;
+      }
+
+      case 'connectUrl': {
+        // GET - Generate OAuth connect URL for a platform
+        const { platform: connectPlatform, profileId, redirectUrl } = req.query;
+        if (!artistId || !connectPlatform || !profileId) {
+          return res.status(400).json({ error: 'artistId, platform, and profileId required' });
+        }
+        const canConnect = await canUserAccessArtist(userEmail, artistId);
+        if (!canConnect) {
+          return res.status(403).json({ error: 'No access to this artist' });
+        }
+        const connectKey = await getArtistLateKey(artistId);
+        if (!connectKey) {
+          return res.status(400).json({ error: 'No Late API key configured for this artist' });
+        }
+        const connectParams = new URLSearchParams({ profileId });
+        if (redirectUrl) connectParams.set('redirect_url', redirectUrl);
+        response = await fetch(`${LATE_API_BASE}/connect/${connectPlatform}?${connectParams}`, {
+          headers: { 'Authorization': `Bearer ${connectKey}` }
+        });
+        break;
+      }
+
       default:
-        return res.status(400).json({ error: 'Invalid action. Use: accounts, posts, delete, setKey, removeKey, keyStatus' });
+        return res.status(400).json({ error: 'Invalid action. Use: accounts, posts, delete, setKey, removeKey, keyStatus, profiles, createProfile, connectUrl' });
     }
 
     if (!response.ok) {

@@ -4,31 +4,50 @@ import ThemeSwitcher from './ThemeSwitcher';
 
 /**
  * AppShell — Post-login wrapper with top navigation tabs.
- * Renders: Logo | Pages | Studio | Schedule | Analytics | [Artists | Campaigns] | Settings | Profile
- * Conductor users get additional Artists & Campaigns tabs.
+ * Tabs vary by userRole: conductor, operator, artist, collaborator.
  */
 
-const BASE_TABS = [
-  { id: 'pages', label: 'Pages', icon: '📱' },
-  { id: 'studio', label: 'Studio', icon: '🎬' },
-  { id: 'schedule', label: 'Schedule', icon: '📅' },
-  { id: 'analytics', label: 'Analytics', icon: '📊' },
-];
+const TABS_BY_ROLE = {
+  conductor: [
+    { id: 'pages', label: 'Pages', icon: '📱' },
+    { id: 'studio', label: 'Studio', icon: '🎬' },
+    { id: 'schedule', label: 'Schedule', icon: '📅' },
+    { id: 'analytics', label: 'Analytics', icon: '📊' },
+    { id: 'artists', label: 'Artists', icon: '🎵' },
+    { id: 'campaigns', label: 'Campaigns', icon: '📣' },
+    { id: 'settings', label: 'Settings', icon: '⚙️' },
+  ],
+  operator: [
+    { id: 'pages', label: 'Pages', icon: '📱' },
+    { id: 'studio', label: 'Studio', icon: '🎬' },
+    { id: 'schedule', label: 'Schedule', icon: '📅' },
+    { id: 'analytics', label: 'Analytics', icon: '📊' },
+    { id: 'artists', label: 'Artists', icon: '🎵' },
+    { id: 'settings', label: 'Settings', icon: '⚙️' },
+  ],
+  artist: [
+    { id: 'dashboard', label: 'Dashboard', icon: '🏠' },
+    { id: 'schedule', label: 'Schedule', icon: '📅' },
+    { id: 'analytics', label: 'Analytics', icon: '📊' },
+    { id: 'settings', label: 'Settings', icon: '⚙️' },
+  ],
+  collaborator: [
+    { id: 'dashboard', label: 'Dashboard', icon: '🏠' },
+    { id: 'schedule', label: 'Schedule', icon: '📅' },
+    { id: 'analytics', label: 'Analytics', icon: '📊' },
+    { id: 'settings', label: 'Settings', icon: '⚙️' },
+  ],
+};
 
-const CONDUCTOR_TABS = [
-  { id: 'artists', label: 'Artists', icon: '🎵' },
-  { id: 'campaigns', label: 'Campaigns', icon: '📣' },
-];
-
-const SETTINGS_TAB = { id: 'settings', label: 'Settings', icon: '⚙️' };
-
-const AppShell = ({ activeTab, setActiveTab, user, onLogout, children, isConductor = false }) => {
+const AppShell = ({ activeTab, setActiveTab, user, onLogout, children, userRole = 'operator' }) => {
   const { theme } = useTheme();
   const t = theme.tw;
 
+  const tabs = TABS_BY_ROLE[userRole] || TABS_BY_ROLE.operator;
+
   return (
     <div className={`min-h-screen flex flex-col ${t.bgPage} ${t.textPrimary} font-sans`}>
-      {/* ═══ TOP NAV ═══ */}
+      {/* TOP NAV */}
       <header
         className={`shrink-0 border-b ${t.border}`}
         style={{ backgroundColor: theme.bg.surface }}
@@ -39,9 +58,9 @@ const AppShell = ({ activeTab, setActiveTab, user, onLogout, children, isConduct
             StickToMusic
           </span>
 
-          {/* Tab Nav — centered */}
+          {/* Tab Nav */}
           <nav className="flex gap-1 overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-            {[...BASE_TABS, ...(isConductor ? CONDUCTOR_TABS : []), SETTINGS_TAB].map(tab => (
+            {tabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
@@ -74,12 +93,12 @@ const AppShell = ({ activeTab, setActiveTab, user, onLogout, children, isConduct
         </div>
       </header>
 
-      {/* ═══ MAIN CONTENT ═══ */}
+      {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col overflow-hidden">
         {children}
       </main>
 
-      {/* ═══ THEME SWITCHER ═══ */}
+      {/* THEME SWITCHER */}
       <ThemeSwitcher />
     </div>
   );

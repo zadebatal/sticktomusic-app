@@ -759,8 +759,8 @@ const StudioHome = ({
         storagePath: path,
         duration: calculatedDuration,
         metadata: {
-          startTime: clipData.startTime,
-          endTime: clipData.endTime,
+          trimStart: clipData.startTime,
+          trimEnd: clipData.endTime,
           fullDuration: clipData.fullDuration || clipData.endTime,
           originalName: pendingAudio.name,
           originalMediaId: null // Will be set if this is based on an existing library item
@@ -847,8 +847,8 @@ const StudioHome = ({
         storagePath: path,
         duration: clipData.duration || (clipData.endTime - clipData.startTime),
         metadata: {
-          startTime: 0,
-          endTime: clipData.duration,
+          trimStart: clipData.startTime || 0,
+          trimEnd: clipData.endTime || clipData.duration,
           originalName: trimmingAudio.name,
           originalMediaId: trimmingAudio.id
         }
@@ -1307,6 +1307,12 @@ const StudioHome = ({
       fontWeight: '600',
       margin: 0
     },
+    headerCenter: {
+      flex: 1,
+      display: 'flex',
+      justifyContent: 'center',
+      gap: '8px'
+    },
     headerRight: {
       display: 'flex',
       alignItems: 'center',
@@ -1593,8 +1599,8 @@ const StudioHome = ({
           )}
         </div>
 
-        <div style={styles.headerRight}>
-          {/* View Drafts button — shown when in video or slideshow mode and drafts exist */}
+        <div style={styles.headerCenter}>
+          {/* View Drafts buttons — centered, shown when drafts exist */}
           {(studioMode === 'videos' && draftVideos.length > 0) && (
             <button
               onClick={() => onViewContent?.({ type: 'videos' })}
@@ -1629,6 +1635,9 @@ const StudioHome = ({
               📝 Drafts ({draftSlideshows.length})
             </button>
           )}
+        </div>
+
+        <div style={styles.headerRight}>
         </div>
       </div>
 
@@ -2095,7 +2104,7 @@ const StudioHome = ({
 
         </div>
 
-        {/* Right Panel — Audio Bank always, Lyrics + Captions only when collection selected */}
+        {/* Right Panel — Audio Bank always, Lyrics only when collection selected */}
         {(studioMode === 'videos' || studioMode === 'slideshows') && (
           <div style={{
             display: 'flex',
@@ -2103,7 +2112,7 @@ const StudioHome = ({
             flexShrink: 0,
             borderLeft: `1px solid ${theme?.border?.default || 'rgba(255,255,255,0.1)'}`,
             backgroundColor: theme?.bg?.surface || '#0d0d14',
-            overflow: 'hidden',
+            overflow: 'visible',
             transition: 'width 0.2s ease'
           }}>
 
@@ -2749,6 +2758,8 @@ const StudioHome = ({
         <AudioClipSelector
           audioUrl={trimmingAudio.url || trimmingAudio.localUrl}
           audioName={trimmingAudio.name}
+          initialStart={trimmingAudio.trimStart || trimmingAudio.startTime || 0}
+          initialEnd={trimmingAudio.trimEnd || trimmingAudio.endTime || null}
           onSave={handleRetrimSave}
           onCancel={() => setTrimmingAudio(null)}
         />

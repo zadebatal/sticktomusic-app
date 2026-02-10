@@ -1,12 +1,11 @@
 // Vercel Serverless Function: Stripe Webhook Handler
-// Place this file in your project's /api folder
-// URL will be: https://sticktomusic.com/api/stripe-webhook
+// URL: https://sticktomusic.com/api/stripe-webhook
 
 import Stripe from 'stripe';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
 // Initialize Firebase Admin (only once)
 if (!getApps().length) {
@@ -35,9 +34,25 @@ async function buffer(readable) {
   return Buffer.concat(chunks);
 }
 
+async function sendNotificationEmail(to, subject, body) {
+  try {
+    await db.collection('mail').add({
+      to,
+      message: { subject, html: body },
+      createdAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Failed to queue email:', err);
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  if (!stripe) {
+    return res.status(503).json({ error: 'Stripe not configured' });
   }
 
   const buf = await buffer(req);
@@ -53,105 +68,124 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: `Webhook Error: ${err.message}` });
   }
 
-  // Handle the checkout.session.completed event
+  // Handle checkout.session.completed — user paid after approval
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
-
-    const customerEmail = session.customer_details?.email || session.customer_email;
-    const customerName = session.customer_details?.name || 'New User';
+    const metadata = session.metadata || {};
+    const customerEmail = (metadata.email || session.customer_details?.email || session.customer_email || '').toLowerCase();
+    const customerName = metadata.name || session.customer_details?.name || 'New User';
 
     if (customerEmail) {
       try {
-        // Look up the application to get full artist data
-        const applicationQuery = await db
-          .collection('applications')
-          .where('email', '==', customerEmail.toLowerCase())
-          .where('status', '==', 'pending_payment')
-          .get();
-
-        let applicationData = null;
-        let applicationDoc = null;
-
-        if (!applicationQuery.empty) {
-          applicationDoc = applicationQuery.docs[0];
-          applicationData = applicationDoc.data();
-          console.log(`📋 Found application for: ${customerEmail}`);
-        }
-
-        // Check if user already exists in allowedUsers
-        const existingUser = await db
-          .collection('allowedUsers')
-          .where('email', '==', customerEmail.toLowerCase())
-          .get();
-
-        // Build the artist profile with all application data
-        const artistProfile = {
-          email: customerEmail.toLowerCase(),
-          name: applicationData?.name || customerName,
-          role: 'artist',
-          artistId: (applicationData?.name || customerName).toLowerCase().replace(/\s+/g, '-'),
+        // Build user profile with Social Sets data
+        const userProfile = {
+          email: customerEmail,
+          name: customerName,
+          role: metadata.role || 'artist',
           status: 'active',
+          socialSetsAllowed: parseInt(metadata.sets) || 5,
+          tier: metadata.tier || 'starter',
+          subscriptionId: session.subscription || null,
+          subscriptionStatus: 'active',
+          stripeCustomerId: session.customer || null,
           stripeSessionId: session.id,
-          stripeCustomerId: session.customer,
-          amountPaid: session.amount_total,
+          onboardingComplete: false,
+          updatedAt: new Date().toISOString(),
         };
 
-        // Add all application data to the profile if available
-        if (applicationData) {
-          artistProfile.genre = applicationData.genre || '';
-          artistProfile.vibes = applicationData.vibes || [];
-          artistProfile.phone = applicationData.phone || '';
-          artistProfile.managerContact = applicationData.managerContact || '';
-          artistProfile.spotify = applicationData.spotify || '';
-          artistProfile.instagram = applicationData.instagram || '';
-          artistProfile.tiktok = applicationData.tiktok || '';
-          artistProfile.youtube = applicationData.youtube || '';
-          artistProfile.tier = applicationData.tier || '';
-          artistProfile.projectType = applicationData.projectType || '';
-          artistProfile.projectDescription = applicationData.projectDescription || '';
-          artistProfile.releaseDate = applicationData.releaseDate || '';
-          artistProfile.aestheticWords = applicationData.aestheticWords || '';
-          artistProfile.adjacentArtists = applicationData.adjacentArtists || '';
-          artistProfile.ageRanges = applicationData.ageRanges || [];
-          artistProfile.idealListener = applicationData.idealListener || '';
-          artistProfile.contentTypes = applicationData.contentTypes || [];
-          artistProfile.cdTier = applicationData.cdTier || '';
-          artistProfile.duration = applicationData.duration || '';
-          artistProfile.referral = applicationData.referral || '';
-          artistProfile.applicationId = applicationDoc.id;
-        }
+        // Check if user already exists
+        const existingDoc = await db.collection('allowedUsers').doc(customerEmail).get();
 
-        if (existingUser.empty) {
-          // Add new user to allowedUsers with email as document ID
-          // (Firestore security rules look up allowedUsers by email as doc ID)
-          artistProfile.createdAt = new Date().toISOString();
-          await db.collection('allowedUsers').doc(customerEmail.toLowerCase()).set(artistProfile);
-          console.log(`✅ Added new user with full profile: ${customerEmail}`);
+        if (existingDoc.exists) {
+          // Update existing record
+          await db.collection('allowedUsers').doc(customerEmail).update(userProfile);
+          console.log(`✅ Updated user with subscription: ${customerEmail}`);
         } else {
-          // Update existing user status to active
-          const userDoc = existingUser.docs[0];
-          artistProfile.updatedAt = new Date().toISOString();
-          await userDoc.ref.update(artistProfile);
-          console.log(`✅ Updated existing user: ${customerEmail}`);
+          // Create new record
+          userProfile.createdAt = new Date().toISOString();
+          await db.collection('allowedUsers').doc(customerEmail).set(userProfile);
+          console.log(`✅ Created new user with subscription: ${customerEmail}`);
         }
 
-        // Update the application status to approved
-        if (applicationDoc) {
-          await applicationDoc.ref.update({
-            status: 'approved',
-            approvedAt: new Date().toISOString(),
-            stripeSessionId: session.id,
-          });
-          console.log(`✅ Updated application status to approved`);
+        // Update the application status if there's an applicationId
+        if (metadata.applicationId) {
+          const appRef = db.collection('applications').doc(metadata.applicationId);
+          const appDoc = await appRef.get();
+          if (appDoc.exists) {
+            await appRef.update({
+              status: 'approved',
+              paidAt: new Date().toISOString(),
+              stripeSessionId: session.id,
+            });
+            console.log(`✅ Updated application to approved+paid: ${metadata.applicationId}`);
+          }
         }
+
+        // Send welcome email
+        await sendNotificationEmail(
+          customerEmail,
+          'Welcome to StickToMusic!',
+          `
+            <h2>Welcome aboard, ${customerName}!</h2>
+            <p>Your payment is confirmed. You now have access to ${userProfile.socialSetsAllowed} Social Sets on the ${userProfile.tier} plan.</p>
+            <p>Sign in at <a href="https://sticktomusic.com">StickToMusic</a> to get started.</p>
+          `
+        );
       } catch (error) {
-        console.error('Error adding user to Firestore:', error);
-        return res.status(500).json({ error: 'Failed to add user' });
+        console.error('Error processing checkout:', error);
+        return res.status(500).json({ error: 'Failed to process checkout' });
       }
     }
   }
 
-  // Handle payment_intent.succeeded (alternative event)
+  // Handle subscription updates (upgrade/downgrade)
+  if (event.type === 'customer.subscription.updated') {
+    const subscription = event.data.object;
+    const customerEmail = subscription.metadata?.email;
+
+    if (customerEmail) {
+      try {
+        await db.collection('allowedUsers').doc(customerEmail.toLowerCase()).update({
+          subscriptionStatus: subscription.status,
+          updatedAt: new Date().toISOString(),
+        });
+        console.log(`✅ Updated subscription status for ${customerEmail}: ${subscription.status}`);
+      } catch (err) {
+        console.warn('Could not update subscription status:', err);
+      }
+    }
+  }
+
+  // Handle subscription cancellation
+  if (event.type === 'customer.subscription.deleted') {
+    const subscription = event.data.object;
+    const customerEmail = subscription.metadata?.email;
+
+    if (customerEmail) {
+      try {
+        await db.collection('allowedUsers').doc(customerEmail.toLowerCase()).update({
+          subscriptionStatus: 'cancelled',
+          socialSetsAllowed: 0,
+          updatedAt: new Date().toISOString(),
+        });
+        console.log(`✅ Cancelled subscription for ${customerEmail}`);
+
+        await sendNotificationEmail(
+          customerEmail,
+          'StickToMusic Subscription Cancelled',
+          `
+            <p>Hi,</p>
+            <p>Your StickToMusic subscription has been cancelled. Your access will remain active until the end of your current billing period.</p>
+            <p>If you'd like to resubscribe, visit <a href="https://sticktomusic.com">StickToMusic</a>.</p>
+          `
+        );
+      } catch (err) {
+        console.warn('Could not process cancellation:', err);
+      }
+    }
+  }
+
+  // Handle payment_intent.succeeded (informational)
   if (event.type === 'payment_intent.succeeded') {
     const paymentIntent = event.data.object;
     console.log(`💰 Payment succeeded: ${paymentIntent.id}`);

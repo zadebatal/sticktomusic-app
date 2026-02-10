@@ -347,6 +347,9 @@ const AudioClipSelector = ({
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (editingTime) return; // Don't capture when editing time
+      // Don't capture when any text input is focused (rename, search, etc.)
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
 
       switch (e.key.toLowerCase()) {
         case 'i':

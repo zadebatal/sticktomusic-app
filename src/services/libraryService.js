@@ -164,6 +164,13 @@ export const createMediaItem = ({
     hasEmbeddedAudio, // For video clips
     thumbnail: null, // Never persist base64 thumbnails
 
+    // Audio trim points (for audio type)
+    trimStart: metadata.trimStart ?? null,
+    trimEnd: metadata.trimEnd ?? null,
+
+    // Linked lyrics (for audio type)
+    linkedLyricsId: metadata.linkedLyricsId ?? null,
+
     // Organization
     collectionIds: [], // Which collections this belongs to
     tags: [], // User-defined tags

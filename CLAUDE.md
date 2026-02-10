@@ -6,38 +6,49 @@
 - **Role**: Conductor (super admin)
 
 ## Tech Stack
-- **Frontend**: React (Create React App)
+- **Frontend**: React 18.2 (Create React App), inline styles throughout (dark theme)
 - **Database**: Firebase Firestore
 - **Auth**: Firebase Auth (Google sign-in)
 - **Hosting**: Vercel (auto-deploys on git push)
-- **Storage**: Namespaced localStorage + Firestore
+- **Storage**: Namespaced localStorage + Firestore dual-layer
 - **APIs**: Late.co (social posting), Stripe (payments)
 
 ## Architecture
 
 ### Multi-Artist System
-Each artist has isolated data stored in Firestore (`artists` collection) with namespaced localStorage for categories/presets (`stm_categories_{artistId}`, `stm_presets_{artistId}`).
+Each artist has isolated data stored in Firestore (`artists` collection) with namespaced localStorage.
 
-### Permission Hierarchy
-- **Conductor** (Zade): Sees ALL artists, can onboard operators, full Settings access
-- **Operators** (sub-admins): Only see their `assignedArtistIds`, no Settings, cannot onboard anyone
-- **Artists**: Access only their own portal
+### Key Components
+- **App.jsx** (~3000 lines) — Auth, routing, artist data loading, theme provider
+- **VideoStudio.jsx** — Main studio shell, video editor, cascade delete on draft removal
+- **SlideshowEditor.jsx** — Multi-generation slideshow editor with timeline, text overlays, audio, dynamic banks, apply-template-to-all
+- **LibraryBrowser.jsx** — Media library + collection management with drag-drop bank columns
+- **StudioHome.jsx** — Studio landing, batch generation, bank selector ("Pull From")
+- **SchedulingPage.jsx** — Post scheduler with ghost draft detection (orphan badges), lock/unlock
+- **ContentLibrary.jsx** — Drafts view with CTAs, "Already Scheduled" section, reverse-chrono sort
+- **LandingPage.jsx** — Marketing page (hero, features, pricing, auth modal)
+- **AppShell.jsx** — Post-login nav with 5 tabs (Pages, Studio, Schedule, Analytics, Settings)
 
-### Key Collections (Firestore)
-- `artists` - Artist profiles with `ownerOperatorId` for operator assignment
-- `allowedUsers` - User access control with `role` and `assignedArtistIds`
-- `applications` - Artist signup applications
+### Key Services
+- `libraryService.js` — localStorage + Firestore dual-layer for media, collections, banks
+- `scheduledPostsService.js` — CRUD for scheduled posts, cascade delete by contentId
+- `slideshowExportService.js` — Canvas-based export with textTransform + textStroke
+- `lateService.js` — Social media API integration
+- `whisperService.js` — AI transcription (fully implemented)
 
-## Key Files
-- `/src/App.jsx` - Main app with routing, auth, dashboards
-- `/src/services/artistService.js` - Firestore CRUD for artists
-- `/src/services/storageService.js` - Namespaced localStorage helpers
-- `/src/services/firebaseStorage.js` - Firebase config and exports
-- `/src/services/lateService.js` - Late.co API integration (via proxy)
-- `/src/components/VideoEditor/VideoStudio.jsx` - Video/content editor
-- `/api/late.js` - Serverless proxy for Late API (auth required)
-- `/api/stripe-webhook.js` - Stripe payment webhook handler
-- `/firestore.rules` - Firestore security rules
+## Dynamic Bank System (CURRENT)
+Banks are dynamic arrays, NOT hardcoded A/B/C/D:
+- `collection.banks = [[], [], ...]` — array of media ID arrays, one per slide position
+- `collection.textBanks = [[], [], ...]` — text strings per slide position
+- Minimum 2 banks, users add more via "+ Add Slide Bank" (max 10)
+- `migrateCollectionBanks(collection)` auto-converts old bankA/B/C/D format on load
+- `getBankColor(index)` — rotating 6-color palette (indigo, green, purple, rose, amber, cyan)
+- `getBankLabel(index)` — returns "Slide 1", "Slide 2", etc.
+- `assignToBank(artistId, colId, mediaIds, bankIndex)` — 0-based numeric index
+- `selectedSource` in SlideshowEditor uses format `'bank_0'`, `'bank_1'`, `'colId:bank_0'`
+
+## Theme System
+Three themes via ThemeContext: `dark`, `bright`, `saintLaurent`. Persisted to localStorage. Components use `theme.bg.*`, `theme.text.*`, `theme.accent.*` for inline styles.
 
 ## Environment Variables
 
@@ -52,36 +63,25 @@ Each artist has isolated data stored in Firestore (`artists` collection) with na
 - `REACT_APP_CONDUCTOR_EMAILS`
 
 ### Server-side ONLY (set in Vercel, NEVER in code)
-- `FIREBASE_PROJECT_ID`
-- `FIREBASE_CLIENT_EMAIL`
-- `FIREBASE_PRIVATE_KEY`
-- `STRIPE_SECRET_KEY`
-- `STRIPE_WEBHOOK_SECRET`
+- `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
 - `LATE_API_KEY`
 
-## Security Notes
-- All API keys loaded from environment variables (never hardcoded)
-- Late API calls go through authenticated serverless proxy
-- Firestore rules enforce role-based access control
-- File uploads validated for type and size (500MB max)
-- CORS restricted to sticktomusic.com domains only
-
-## Deployment
-Push to GitHub → Vercel auto-deploys → All users see updates
-
+## Build & Deploy
 ```bash
-git add .
-git commit -m "message"
-git push
+npm start                # Dev server (port 3000)
+PORT=3001 npm start      # Test build on alternate port
+npx react-scripts build  # Production build
+git push                 # Auto-deploys to Vercel
 ```
 
-## Features Built
-- Multi-artist management system
-- Conductor/Operator role hierarchy
-- Video Studio with slideshow editor
-- Content banks (lyrics, hooks, captions)
-- Analytics dashboard
-- Late API integration (authenticated proxy)
-- Artist portal
-- Campaign management
-- Stripe payment integration
+## Recent Work (9 sessions)
+1. Theme system + ThemeContext (dark/bright/saintLaurent)
+2. Landing page + AppShell with 5-tab navigation
+3. Artist data isolation fixes
+4. 25+ bug fixes across 5 waves
+5. 31-ticket feature batch: scheduler integrity, audio/lyric workflow, slideshow UX (ALL CAPS, text stroke, resize handles), drafts flow, multi-generation
+6. Dynamic bank refactor: A/B/C/D → unlimited numbered slide banks
+
+## Prime Directive
+Don't break anything that works. Read before editing. Build-verify after each batch of changes.

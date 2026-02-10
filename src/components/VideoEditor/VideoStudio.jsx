@@ -236,7 +236,7 @@ const DraftsView = (props) => {
         ))}
       </div>
       {/* Content */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <ContentLibrary
           category={props.category}
           contentType={draftsTab}
@@ -1809,33 +1809,7 @@ const VideoStudio = ({
             {!isMobile && <span style={styles.logoText}>Studio</span>}
           </button>
 
-          {/* Artist Selector - only show if multiple artists */}
-          {artists.length > 1 && (
-            <div style={{
-              ...styles.artistSelector,
-              ...(isMobile ? { marginLeft: '8px', paddingLeft: '8px' } : {})
-            }}>
-              <select
-                value={currentArtistId || ''}
-                onChange={(e) => handleArtistIdChange(e.target.value)}
-                style={{
-                  ...styles.artistSelect,
-                  ...(isMobile ? { maxWidth: '100px', fontSize: '12px', padding: '6px 24px 6px 8px' } : {})
-                }}
-              >
-                {artists.map(artist => (
-                  <option key={artist.id} value={artist.id}>
-                    {artist.name}
-                  </option>
-                ))}
-              </select>
-              <svg style={styles.artistSelectIcon} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="6,9 12,15 18,9" />
-              </svg>
-            </div>
-          )}
-
-          {/* Single artist indicator - hide on mobile */}
+          {/* Single artist indicator - hide on mobile (only when 1 artist) */}
           {!isMobile && artists.length === 1 && currentArtistId && (
             <span style={styles.singleArtistLabel}>
               {artists[0]?.name}
@@ -1977,10 +1951,10 @@ const VideoStudio = ({
                 <button
                   style={{
                     ...styles.breadcrumbLink,
-                    ...((currentView === 'library' && !showEditor) || (showEditor && studioMode !== 'slideshows') ? styles.breadcrumbCurrent : {})
+                    ...((currentView === 'home' && studioMode === 'videos') || (showEditor && studioMode !== 'slideshows') ? styles.breadcrumbCurrent : {})
                   }}
                   onClick={() => navigateWithDraftCheck(() => {
-                    setCurrentView('library');
+                    setCurrentView('home');
                     setStudioMode('videos');
                     setShowEditor(false);
                     setShowSlideshowEditor(false);
@@ -1994,10 +1968,10 @@ const VideoStudio = ({
                 <button
                   style={{
                     ...styles.breadcrumbLink,
-                    ...((currentView === 'slideshows' && !showSlideshowEditor) || showSlideshowEditor ? styles.breadcrumbCurrent : {})
+                    ...((currentView === 'home' && studioMode === 'slideshows') || showSlideshowEditor ? styles.breadcrumbCurrent : {})
                   }}
                   onClick={() => navigateWithDraftCheck(() => {
-                    setCurrentView('slideshows');
+                    setCurrentView('home');
                     setStudioMode('slideshows');
                     setShowEditor(false);
                     setShowSlideshowEditor(false);
@@ -2050,6 +2024,7 @@ const VideoStudio = ({
               </>
             )}
           </div>
+
         </div>
 
         <div style={{
@@ -2097,7 +2072,43 @@ const VideoStudio = ({
         </div>
       </header>
 
-      {/* Onboarding removed - Music Artist template auto-applied */}
+      {/* Artist Selector Bar — centered between header and content */}
+      {artists.length > 1 && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          padding: '6px 16px',
+          borderBottom: '1px solid rgba(255,255,255,0.06)'
+        }}>
+          <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+            <select
+              value={currentArtistId || ''}
+              onChange={(e) => handleArtistIdChange(e.target.value)}
+              style={{
+                appearance: 'none',
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '8px',
+                color: '#e4e4e7',
+                fontSize: '14px',
+                fontWeight: '600',
+                padding: '6px 32px 6px 14px',
+                cursor: 'pointer',
+                outline: 'none'
+              }}
+            >
+              {artists.map(artist => (
+                <option key={artist.id} value={artist.id} style={{ background: '#18181b' }}>
+                  {artist.name}
+                </option>
+              ))}
+            </select>
+            <svg style={{ position: 'absolute', right: '10px', pointerEvents: 'none', color: '#71717a' }} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="6,9 12,15 18,9" />
+            </svg>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <main style={styles.main}>
@@ -2186,10 +2197,10 @@ const VideoStudio = ({
             onCreateContent={handleCreateContent}
             onMakeVideo={handleMakeVideo}
             onShowBatchPipeline={() => setShowBatchPipeline(true)}
-            onViewContent={(options) => {
-              const isSlideshows = options?.type === 'slideshows';
-              setCurrentView(isSlideshows ? 'slideshows' : 'library');
-              setStudioMode(isSlideshows ? 'slideshows' : 'videos');
+            onViewContent={() => {
+              setCurrentView('drafts');
+              setShowEditor(false);
+              setShowSlideshowEditor(false);
             }}
             onMakeSlideshow={handleMakeSlideshow}
             onEditSlideshow={(slideshow) => handleMakeSlideshow(slideshow)}
@@ -2267,7 +2278,6 @@ const VideoStudio = ({
             accounts={accounts}
             lateAccountIds={lateAccountIds}
             onSchedulePost={onSchedulePost}
-            onRenderVideo={null}
             onEditDraft={(post) => {
               if (post.editorState) {
                 setSchedulerEditPostId(post.id); // Track which scheduledPost we're editing
@@ -2467,7 +2477,8 @@ const getStyles = (theme) => ({
   },
   headerLeft: {
     display: 'flex',
-    alignItems: 'center'
+    alignItems: 'center',
+    minWidth: '180px'
   },
   headerCenter: {
     flex: 1,
@@ -2476,7 +2487,9 @@ const getStyles = (theme) => ({
   },
   headerRight: {
     display: 'flex',
-    alignItems: 'center'
+    alignItems: 'center',
+    minWidth: '180px',
+    justifyContent: 'flex-end'
   },
   logoButton: {
     display: 'flex',
@@ -2584,7 +2597,9 @@ const getStyles = (theme) => ({
   },
   main: {
     flex: 1,
-    overflow: 'hidden'
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
   },
   // UI-20: Upload progress overlay styles
   uploadOverlay: {

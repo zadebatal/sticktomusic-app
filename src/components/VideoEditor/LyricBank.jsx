@@ -197,7 +197,13 @@ const LyricBank = ({
                 {lyrics.map(lyric => {
                   const isExpanded = expandedLyricsId === lyric.id;
                   return (
-                    <div key={lyric.id} style={compactStyles.item}>
+                    <div key={lyric.id} style={compactStyles.item}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('text/lyric', lyric.content || lyric.title || '');
+                        e.dataTransfer.effectAllowed = 'copy';
+                      }}
+                    >
                       <div
                         style={compactStyles.itemHeader}
                         onClick={() => setExpandedLyricsId(isExpanded ? null : lyric.id)}
@@ -231,9 +237,22 @@ const LyricBank = ({
                           {lyric.content.split('\n').map((line, i) => (
                             <div
                               key={i}
+                              draggable={!!line.trim()}
+                              onDragStart={(e) => {
+                                if (!line.trim()) return;
+                                // If multiple lines selected, drag all selected text
+                                if (selectedLines.length > 1 && selectedLines.includes(i)) {
+                                  const allLines = lyric.content.split('\n');
+                                  const selectedText = selectedLines.sort((a, b) => a - b).map(idx => allLines[idx]).filter(Boolean).join('\n');
+                                  e.dataTransfer.setData('text/lyric', selectedText);
+                                } else {
+                                  e.dataTransfer.setData('text/lyric', line.trim());
+                                }
+                                e.dataTransfer.effectAllowed = 'copy';
+                              }}
                               style={{
                                 ...compactStyles.lyricLine,
-                                ...(line.trim() ? { cursor: 'pointer' } : {}),
+                                ...(line.trim() ? { cursor: 'grab' } : {}),
                                 ...(selectedLines.includes(i) && expandedLyricsId === lyric.id
                                   ? { backgroundColor: 'rgba(124,58,237,0.3)', color: '#fff', borderRadius: '3px' }
                                   : {})
@@ -245,7 +264,7 @@ const LyricBank = ({
                               }}
                               onMouseDown={() => { if (line.trim()) handleLineMouseDown(lyric.id, i); }}
                               onMouseEnter={() => handleLineMouseEnter(i)}
-                              title={line.trim() ? 'Click to add as text overlay' : ''}
+                              title={line.trim() ? 'Drag to text bank or click to add as overlay' : ''}
                             >
                               {line || '\u00A0'}
                             </div>

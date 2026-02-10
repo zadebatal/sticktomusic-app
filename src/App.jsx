@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 // Shared UI Components
@@ -28,9 +28,15 @@ import LandingPage from './components/LandingPage';
 import AppShell from './components/AppShell';
 import PagesTab from './components/tabs/PagesTab';
 import SettingsTab from './components/tabs/SettingsTab';
+import ArtistDashboard from './components/tabs/ArtistDashboard';
+import ArtistSettingsTab from './components/tabs/ArtistSettingsTab';
+import OnboardingWizard from './components/OnboardingWizard';
 
 // Domain enforcement utilities
-import { isUserOperator } from './utils/roles';
+import { isUserOperator, isArtistOrCollaborator, getEffectiveArtistId, ROLES } from './utils/roles';
+
+// Subscription service
+import { computeSocialSetsUsed, canAddSocialSet, shouldShowPaymentUI } from './services/subscriptionService';
 
 // Artist Service for multi-artist management
 import {
@@ -118,7 +124,7 @@ const STRIPE_PUBLISHABLE_KEY = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY;
 // Can be overridden via REACT_APP_CONDUCTOR_EMAILS environment variable (comma-separated)
 // Conductors can see ALL artists and onboard operators
 // Operators (added via allowedUsers) can only see their assigned artists
-const CONDUCTOR_EMAILS = (process.env.REACT_APP_CONDUCTOR_EMAILS || process.env.REACT_APP_CONDUCTOR_EMAILS || 'zade@sticktomusic.com,zadebatal@gmail.com,mcclain@livetwocreate.com')
+const CONDUCTOR_EMAILS = (process.env.REACT_APP_CONDUCTOR_EMAILS || 'zade@sticktomusic.com,zadebatal@gmail.com')
   .split(',')
   .map(email => email.trim().toLowerCase())
   .filter(Boolean);
@@ -196,17 +202,6 @@ const getPlatformUrl = (platform, username) => {
 
 const getPlatformKeys = () => Object.keys(PLATFORMS);
 
-// Late Account ID Mapping (handle -> { tiktok: id, instagram: id })
-const LATE_ACCOUNT_IDS = {
-  '@sarahs.ipodnano': { tiktok: '697b3cac77637c5c857cc26b', instagram: '697b3d2477637c5c857cc272' },
-  '@margiela.mommy': { tiktok: '697b3dbb77637c5c857cc279', instagram: '697b3e2a77637c5c857cc284' },
-  '@yumabestfriend': { tiktok: '697b3ea177637c5c857cc2c0', instagram: '697b448877637c5c857cc458' },
-  '@hedislimanerickowens': { tiktok: '697b3f8f77637c5c857cc332', instagram: '697b400977637c5c857cc35d' },
-  '@princessvamp2016': { tiktok: '697b40e677637c5c857cc37a', instagram: '697b413c77637c5c857cc384' },
-  '@2016iscalling': { tiktok: '697b41dc77637c5c857cc38a', instagram: '697b421c77637c5c857cc38b' },
-  '@xxshadowskiesxx': { tiktok: '697b42b377637c5c857cc3ad', instagram: '697b42f277637c5c857cc3c9' },
-  '@neonphoebe': { tiktok: '697b43be77637c5c857cc41c', instagram: '697b442777637c5c857cc447' }
-};
 
 // Helper to get Firebase auth token for API requests
 async function getFirebaseToken() {
@@ -389,7 +384,7 @@ const loadAppSession = () => {
 const saveAppSession = (state) => {
   try {
     // Only save authenticated pages (not landing/marketing pages)
-    if (['operator', 'artist-portal', 'dashboard'].includes(state.currentPage)) {
+    if (['operator', 'artist-portal', 'artist-dashboard', 'dashboard'].includes(state.currentPage)) {
       localStorage.setItem(APP_SESSION_KEY, JSON.stringify({ ...state, savedAt: Date.now() }));
       log('[App Session] Saved:', state);
     }
@@ -402,6 +397,18 @@ const StickToMusic = () => {
   // React Router hooks for URL-based navigation
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Detect checkout success from Stripe redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('checkout') === 'success') {
+      // Clean up URL
+      const url = new URL(window.location);
+      url.searchParams.delete('checkout');
+      url.searchParams.delete('session_id');
+      window.history.replaceState({}, '', url.pathname);
+    }
+  }, []);
 
   // Parse initial state from URL
   const getInitialStateFromUrl = () => {
@@ -428,6 +435,7 @@ const StickToMusic = () => {
   const [sessionRestoreComplete, setSessionRestoreComplete] = useState(!savedAppSession); // Skip if no saved session
   const [operatorTab, setOperatorTab] = useState(initialState.tab); // Moved up for restore effect
   const [showVideoEditor, setShowVideoEditor] = useState(initialState.showStudio); // Moved up for restore effect
+  const [artistTab, setArtistTab] = useState('dashboard'); // Tab for artist-dashboard view
   const [openFaq, setOpenFaq] = useState(null);
 
   // ═══ Theme bridge: since ThemeProvider wraps return JSX, we listen for changes via custom event ═══
@@ -488,7 +496,7 @@ const StickToMusic = () => {
 
   // Add Artist modal
   const [showAddArtistModal, setShowAddArtistModal] = useState(false);
-  const [addArtistForm, setAddArtistForm] = useState({ name: '', tier: 'Scale', cdTier: 'CD Lite', assignedOperatorId: '', error: null, isLoading: false });
+  const [addArtistForm, setAddArtistForm] = useState({ name: '', tier: 'Scale', cdTier: 'CD Lite', assignedOperatorId: '', artistEmail: '', socialSetsForArtist: 5, error: null, isLoading: false });
   const [deleteArtistConfirm, setDeleteArtistConfirm] = useState({ show: false, artist: null, isDeleting: false });
   const [reassignArtist, setReassignArtist] = useState({ show: false, artist: null });
   const [editArtistModal, setEditArtistModal] = useState({ show: false, artist: null, tier: '', cdTier: '', activeSince: '', isSaving: false });
@@ -616,13 +624,15 @@ const StickToMusic = () => {
         // Check BOTH allowedUsers collection AND CONDUCTOR_EMAILS for conductor status
         const userRole = allowedUsers.find(u => u.email?.toLowerCase() === currentAuthUser?.email?.toLowerCase());
         const isUserConductor = userRole?.role === 'conductor' || CONDUCTOR_EMAILS.includes(currentAuthUser?.email?.toLowerCase());
-        const assignedIds = userRole?.assignedArtistIds || [];
-        const visibleArtists = isUserConductor ? artists : artists.filter(a => assignedIds.includes(a.id));
+        const userId = userRole?.id || null;
+        const visibleArtists = isUserConductor ? artists : artists.filter(a =>
+          userId && a.ownerOperatorId === userId
+        );
 
         log('🔐 Artist isolation check:', {
           email: currentAuthUser?.email,
           isUserConductor,
-          assignedIds,
+          userId,
           visibleCount: visibleArtists.length,
           currentArtistId
         });
@@ -718,6 +728,13 @@ const StickToMusic = () => {
     }
   }, [currentArtistId, authChecked, currentAuthUser]);
 
+  // Load Late pages on startup once artists are loaded (populates derivedLateAccountIds)
+  useEffect(() => {
+    if (artistsLoaded && authChecked && currentAuthUser && firestoreArtists.length > 0) {
+      loadLatePages();
+    }
+  }, [artistsLoaded, authChecked, currentAuthUser]);
+
   // Load Late pages (connected accounts) for all artists with Late configured
   const loadLatePages = async () => {
     // Only load pages for artists this user can see
@@ -777,6 +794,62 @@ const StickToMusic = () => {
     }
   };
 
+  // ═══ Manual Account Entry ═══
+  // Save manual accounts to Firestore artist doc, returns status array for UI feedback
+  const handleAddManualAccounts = async (artistId, accounts) => {
+    if (!db || !artistId || !accounts.length) return [];
+
+    const artist = firestoreArtists.find(a => a.id === artistId);
+    const existing = artist?.manualAccounts || [];
+
+    // Dedup: skip if same handle+platform already exists
+    const newAccounts = accounts.filter(acc =>
+      !existing.some(e =>
+        e.handle?.replace('@', '').toLowerCase() === acc.handle?.replace('@', '').toLowerCase() &&
+        e.platform === acc.platform
+      )
+    ).map(acc => ({
+      ...acc,
+      addedAt: new Date().toISOString(),
+      addedBy: user?.email || 'unknown',
+    }));
+
+    if (newAccounts.length === 0) {
+      showToast('All accounts already exist', 'info');
+      return accounts.map(a => ({ ...a, status: 'duplicate' }));
+    }
+
+    const merged = [...existing, ...newAccounts];
+
+    try {
+      await updateArtist(db, artistId, { manualAccounts: merged });
+      log('✅ Added', newAccounts.length, 'manual accounts for artist', artistId);
+      showToast(`Added ${newAccounts.length} account${newAccounts.length !== 1 ? 's' : ''}`, 'success');
+      return newAccounts.map(a => ({ ...a, status: 'saved' }));
+    } catch (err) {
+      console.error('Failed to save manual accounts:', err);
+      showToast('Failed to save accounts', 'error');
+      return accounts.map(a => ({ ...a, status: 'error' }));
+    }
+  };
+
+  // Remove a single manual account by index
+  const handleRemoveManualAccount = async (artistId, index) => {
+    if (!db || !artistId) return;
+    const artist = firestoreArtists.find(a => a.id === artistId);
+    const existing = [...(artist?.manualAccounts || [])];
+    if (index >= 0 && index < existing.length) {
+      existing.splice(index, 1);
+      try {
+        await updateArtist(db, artistId, { manualAccounts: existing });
+        showToast('Account removed', 'success');
+      } catch (err) {
+        console.error('Failed to remove manual account:', err);
+        showToast('Failed to remove account', 'error');
+      }
+    }
+  };
+
   // Handle adding a new artist
   const handleAddArtist = async (e) => {
     e.preventDefault();
@@ -818,13 +891,36 @@ const StickToMusic = () => {
         }
       }
 
+      // If artist email provided, create allowedUsers record so the artist can log in
+      if (addArtistForm.artistEmail?.trim()) {
+        const artistEmail = addArtistForm.artistEmail.trim().toLowerCase();
+        try {
+          await setDoc(doc(db, 'allowedUsers', artistEmail), {
+            email: artistEmail,
+            name: addArtistForm.name.trim(),
+            role: 'artist',
+            artistId: newArtist.id,
+            socialSetsAllocated: addArtistForm.socialSetsForArtist || 5,
+            socialSetsAllowed: addArtistForm.socialSetsForArtist || 5,
+            status: 'active',
+            ownerOperatorId: assignToOperatorId,
+            onboardingComplete: false,
+            createdAt: new Date().toISOString(),
+            invitedBy: user?.email || 'unknown',
+          });
+          log('✅ Created allowedUsers record for artist:', artistEmail);
+        } catch (err) {
+          console.warn('Could not create allowedUsers record:', err);
+        }
+      }
+
       // Select the new artist
       setCurrentArtistId(newArtist.id);
       setLastArtistId(newArtist.id);
 
       // Close modal and reset form
       setShowAddArtistModal(false);
-      setAddArtistForm({ name: '', tier: 'Scale', cdTier: 'CD Lite', assignedOperatorId: '', error: null, isLoading: false });
+      setAddArtistForm({ name: '', tier: 'Scale', cdTier: 'CD Lite', assignedOperatorId: '', artistEmail: '', socialSetsForArtist: 5, error: null, isLoading: false });
     } catch (error) {
       console.error('Failed to create artist:', error);
       setAddArtistForm(prev => ({ ...prev, error: error.message || 'Failed to create artist', isLoading: false }));
@@ -938,12 +1034,16 @@ const StickToMusic = () => {
 
       // Check if user is a conductor (super-admin with full access)
       if (CONDUCTOR_EMAILS.includes(email?.toLowerCase())) {
+        const condUserData = allowedUsers.find(u => u.email?.toLowerCase() === email?.toLowerCase());
         const newUser = {
           email: email,
           role: 'conductor',
           name: currentAuthUser.displayName || email.split('@')[0],
           photoURL: currentAuthUser.photoURL || null,
-          artistId: null
+          artistId: null,
+          paymentExempt: true,
+          socialSetsAllowed: 999,
+          onboardingComplete: true,
         };
         log('👑 Setting conductor user:', newUser);
         setUser(newUser);
@@ -951,11 +1051,20 @@ const StickToMusic = () => {
         const userData = allowedUsers.find(u => u.email?.toLowerCase() === email?.toLowerCase());
         const newUser = {
           email: email,
-          role: userData?.role || 'artist', // 'operator' or 'artist'
+          role: userData?.role || 'artist',
           name: userData?.name || currentAuthUser.displayName || email.split('@')[0],
           photoURL: currentAuthUser.photoURL || null,
           artistId: userData?.artistId || null,
-          assignedArtistIds: userData?.assignedArtistIds || [] // Artists this operator can manage
+          assignedArtistIds: userData?.assignedArtistIds || [],
+          // Subscription & paywall fields
+          linkedArtistId: userData?.linkedArtistId || null,
+          socialSetsAllowed: userData?.socialSetsAllowed || 0,
+          paymentExempt: userData?.paymentExempt || false,
+          onboardingComplete: userData?.onboardingComplete || false,
+          subscriptionId: userData?.subscriptionId || null,
+          subscriptionStatus: userData?.subscriptionStatus || null,
+          ownerOperatorId: userData?.ownerOperatorId || null,
+          invitedBy: userData?.invitedBy || null,
         };
         log('🎨 Setting allowed user:', newUser);
         setUser(newUser);
@@ -972,26 +1081,24 @@ const StickToMusic = () => {
   useEffect(() => {
     if (user && pendingPage) {
       // Verify user has access to the pending page
-      if (pendingPage === 'operator' && user.role === 'operator') {
+      if (pendingPage === 'operator' && (user.role === 'operator' || user.role === 'conductor')) {
         log('[App Session] Restoring operator page, tab:', pendingOperatorTab, 'editor:', pendingShowVideoEditor);
         setCurrentPage('operator');
-        // Restore operator tab if saved
         if (pendingOperatorTab) {
           setOperatorTab(pendingOperatorTab);
           setPendingOperatorTab(null);
         }
-        // Restore video editor if it was open
         if (pendingShowVideoEditor) {
           setShowVideoEditor(true);
           setPendingShowVideoEditor(false);
         }
-      } else if (pendingPage === 'artist-portal' && user.role === 'artist') {
-        log('[App Session] Restoring artist-portal page');
-        setCurrentPage('artist-portal');
-      } else if (pendingPage === 'operator' || pendingPage === 'artist-portal') {
+      } else if ((pendingPage === 'artist-dashboard' || pendingPage === 'artist-portal') && isArtistOrCollaborator(user)) {
+        log('[App Session] Restoring artist-dashboard page');
+        setCurrentPage('artist-dashboard');
+      } else if (pendingPage === 'operator' || pendingPage === 'artist-portal' || pendingPage === 'artist-dashboard') {
         // User is authenticated but role doesn't match - go to their correct dashboard
         log('[App Session] Role mismatch, going to correct dashboard');
-        setCurrentPage(user.role === 'artist' ? 'artist-portal' : 'operator');
+        setCurrentPage(isArtistOrCollaborator(user) ? 'artist-dashboard' : 'operator');
       }
       setPendingPage(null); // Clear pending page after restore
       setSessionRestoreComplete(true);
@@ -1011,7 +1118,8 @@ const StickToMusic = () => {
   useEffect(() => {
     if (user && currentPage === 'home' && sessionRestoreComplete) {
       log('🏠 Redirecting logged-in user from home to dashboard');
-      setCurrentPage('operator');
+      const target = isArtistOrCollaborator(user) ? 'artist-dashboard' : 'operator';
+      setCurrentPage(target);
     }
   }, [user, currentPage, sessionRestoreComplete]);
 
@@ -1078,16 +1186,18 @@ const StickToMusic = () => {
     return userObj?.role === 'conductor';
   };
 
-  // Helper to get visible artists — filters by assigned artists for non-conductors
+  // Helper to get visible artists — operators only see artists they own (ownerOperatorId)
   const getVisibleArtists = () => {
-    const allArtists = firestoreArtists.length > 0
-      ? firestoreArtists.map(a => ({ id: a.id, name: a.name }))
-      : operatorArtists.map(a => ({ id: String(a.id), name: a.name }));
+    const allArtists = firestoreArtists.map(a => ({ id: a.id, name: a.name, ownerOperatorId: a.ownerOperatorId || null }));
 
     if (isConductor(user)) return allArtists;
 
-    const assignedIds = user?.assignedArtistIds || [];
-    return allArtists.filter(a => assignedIds.includes(a.id));
+    // Operators see ONLY artists they own (created). ownerOperatorId is the source of truth.
+    const currentUserRecord = allowedUsers.find(u => u.email?.toLowerCase() === user?.email?.toLowerCase());
+    const currentUserId = currentUserRecord?.id || null;
+
+    if (!currentUserId) return [];
+    return allArtists.filter(a => a.ownerOperatorId === currentUserId);
   };
 
   // Helper to get artist info from Firestore
@@ -1436,6 +1546,26 @@ const StickToMusic = () => {
   const [lateApiKeyInput, setLateApiKeyInput] = useState('');
   const [connectingLate, setConnectingLate] = useState(false);
 
+  // Derive lateAccountIds mapping from live latePages data (replaces old hardcoded constant)
+  // Shape: { '@handle': { tiktok: 'accountId', instagram: 'accountId', ... } }
+  const derivedLateAccountIds = useMemo(() => {
+    const mapping = {};
+    latePages.forEach(page => {
+      if (!mapping[page.handle]) mapping[page.handle] = {};
+      mapping[page.handle][page.platform] = page.lateAccountId;
+    });
+    return mapping;
+  }, [latePages]);
+
+  // Derive manual accounts from artist docs (auto-updates via onSnapshot)
+  const manualAccountsByArtist = useMemo(() => {
+    const map = {};
+    firestoreArtists.forEach(a => {
+      if (a.manualAccounts?.length) map[a.id] = a.manualAccounts;
+    });
+    return map;
+  }, [firestoreArtists]);
+
   // Account linking state - scoped per artist to prevent cross-contamination
   const [accountLinkingArtistId, setAccountLinkingArtistId] = useState(null); // null = off, artistId = linking for that artist
   const [selectedAccountsToLink, setSelectedAccountsToLink] = useState([]);
@@ -1615,7 +1745,10 @@ const StickToMusic = () => {
       setShowLoginModal(false);
       setLoginForm({ email: '', password: '', error: null });
       showToast(`Welcome back!`, 'success');
-      setCurrentPage('operator');
+      // Role-aware redirect
+      const loginUserData = users.find(u => u.email?.toLowerCase() === userEmail);
+      const loginRole = loginUserData?.role || (isCond ? 'conductor' : 'artist');
+      setCurrentPage((loginRole === 'artist' || loginRole === 'collaborator') ? 'artist-dashboard' : 'operator');
     } catch (error) {
       let errorMessage = 'Invalid email or password';
       if (error.code === 'auth/user-not-found') {
@@ -1651,7 +1784,9 @@ const StickToMusic = () => {
         return;
       }
       // User is allowed — reactive effects will set full user state
-      setCurrentPage('operator');
+      const googleUserData = users.find(u => u.email?.toLowerCase() === userEmail);
+      const googleRole = googleUserData?.role || (isCond ? 'conductor' : 'artist');
+      setCurrentPage((googleRole === 'artist' || googleRole === 'collaborator') ? 'artist-dashboard' : 'operator');
       showToast(`Welcome, ${result.user.displayName || 'there'}!`, 'success');
     } catch (error) {
       console.error('Google sign-in error:', error);
@@ -1698,11 +1833,7 @@ const StickToMusic = () => {
       setSignupForm({ email: '', password: '', name: '', role: 'artist', error: null });
       showToast(`Welcome to StickToMusic, ${artistInfo?.name || signupForm.name}!`, 'success');
 
-      if (role === 'artist') {
-        setCurrentPage('operator');
-      } else {
-        setCurrentPage('operator');
-      }
+      setCurrentPage((role === 'artist' || role === 'collaborator') ? 'artist-dashboard' : 'operator');
     } catch (error) {
       let errorMessage = 'Signup failed';
       if (error.code === 'auth/email-already-in-use') {
@@ -1752,7 +1883,9 @@ const StickToMusic = () => {
       }
       // User is allowed — the onAuthStateChanged + allowedUsers subscription
       // will handle setting the full user state reactively. Just navigate.
-      setCurrentPage('operator');
+      const landingUserData = users.find(u => u.email?.toLowerCase() === userEmail);
+      const landingRole = landingUserData?.role || (isCond ? 'conductor' : 'artist');
+      setCurrentPage((landingRole === 'artist' || landingRole === 'collaborator') ? 'artist-dashboard' : 'operator');
       showToast('Welcome back!', 'success');
     } catch (error) {
       let msg = 'Invalid email or password';
@@ -1784,7 +1917,7 @@ const StickToMusic = () => {
         photoURL: userCredential.user.photoURL || null,
         artistId: artistInfo?.artistId || null
       });
-      setCurrentPage('operator');
+      setCurrentPage((role === 'artist' || role === 'collaborator') ? 'artist-dashboard' : 'operator');
       showToast(`Welcome, ${artistInfo?.name || name}!`, 'success');
     } catch (error) {
       let msg = 'Signup failed';
@@ -2155,9 +2288,50 @@ const StickToMusic = () => {
   const STRIPE_PAYMENT_LINK_BASE = 'https://buy.stripe.com/'; // Add your payment link here
 
   // Handle application approval - shows payment modal
-  const handleApproveApplication = (app) => {
-    setSelectedApplication(app);
-    setShowPaymentModal(true);
+  const handleApproveApplication = async (app) => {
+    // Use new approve-application API that handles Stripe checkout + emails
+    try {
+      const token = await getFirebaseToken();
+      const response = await fetch('/api/approve-application', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ applicationId: app.id, action: 'approve' }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        if (data.paymentSkipped) {
+          showToast(`Approved ${app.name} — access granted (no Stripe configured)`, 'success');
+        } else {
+          showToast(`Approved ${app.name} — payment link sent to ${app.email}`, 'success');
+        }
+      } else {
+        showToast(data.error || 'Failed to approve', 'error');
+      }
+    } catch (err) {
+      console.error('Approve error:', err);
+      showToast('Failed to approve application', 'error');
+    }
+  };
+
+  const handleDenyApplication = async (app) => {
+    if (!window.confirm(`Deny application from ${app.name} (${app.email})? They will be notified by email.`)) return;
+    try {
+      const token = await getFirebaseToken();
+      const response = await fetch('/api/approve-application', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ applicationId: app.id, action: 'deny' }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        showToast(`Denied application from ${app.name}`, 'info');
+      } else {
+        showToast(data.error || 'Failed to deny', 'error');
+      }
+    } catch (err) {
+      console.error('Deny error:', err);
+      showToast('Failed to deny application', 'error');
+    }
   };
 
   // Send payment link and update application status
@@ -2336,7 +2510,7 @@ const StickToMusic = () => {
 
       // Priority 4: Fallback to our local account ID mapping (legacy support)
       const accountIdStr = typeof p.accountId === 'string' ? p.accountId : p.accountId?._id;
-      const handleEntry = Object.entries(LATE_ACCOUNT_IDS).find(([handle, ids]) =>
+      const handleEntry = Object.entries(derivedLateAccountIds).find(([handle, ids]) =>
         Object.values(ids).includes(accountIdStr)
       );
       if (handleEntry) {
@@ -2965,8 +3139,100 @@ const StickToMusic = () => {
     );
   }
 
-  // ARTIST PORTAL PAGE
+  // ═══ ARTIST DASHBOARD (artists + collaborators) ═══
+  if (currentPage === 'artist-dashboard') {
+    const effectiveArtistId = getEffectiveArtistId(user) || currentArtistId;
+    const artistTabChangeHandler = (tab) => {
+      setArtistTab(tab);
+    };
+
+    return (
+      <ThemeProvider>
+        <AppShell
+          activeTab={artistTab}
+          setActiveTab={artistTabChangeHandler}
+          user={user}
+          onLogout={handleLogout}
+          userRole={user?.role || 'artist'}
+        >
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-8">
+            {/* Dashboard Tab */}
+            {artistTab === 'dashboard' && (
+              <ArtistDashboard
+                user={user}
+                artistId={effectiveArtistId}
+                scheduledPosts={latePosts}
+                latePages={latePages}
+                socialSetsAllowed={user?.socialSetsAllowed || 0}
+                campaigns={campaigns}
+              />
+            )}
+
+            {/* Schedule Tab (read-only) */}
+            {artistTab === 'schedule' && (
+              <SchedulingPage
+                db={db}
+                artistId={effectiveArtistId}
+                accounts={latePages}
+                lateAccountIds={derivedLateAccountIds}
+                onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: effectiveArtistId })}
+                onEditDraft={() => {}}
+                onBack={() => setArtistTab('dashboard')}
+                readOnly={isArtistOrCollaborator(user)}
+              />
+            )}
+
+            {/* Analytics Tab */}
+            {artistTab === 'analytics' && (
+              <AnalyticsDashboard />
+            )}
+
+            {/* Settings Tab */}
+            {artistTab === 'settings' && (
+              <ArtistSettingsTab
+                user={user}
+                onLogout={handleLogout}
+                db={db}
+                artistId={effectiveArtistId}
+                latePages={latePages}
+                socialSetsAllowed={user?.socialSetsAllowed || 0}
+              />
+            )}
+          </div>
+
+          {/* Onboarding Wizard (first-run) */}
+          {user && !user.onboardingComplete && (
+            <OnboardingWizard
+              user={user}
+              socialSetsAllowed={user?.socialSetsAllowed || 0}
+              onComplete={async () => {
+                // Mark onboarding complete in Firestore
+                try {
+                  const userRef = doc(db, 'allowedUsers', user.email.toLowerCase());
+                  await updateDoc(userRef, { onboardingComplete: true });
+                } catch (err) {
+                  console.warn('Could not update onboarding status:', err);
+                }
+                setUser(prev => prev ? { ...prev, onboardingComplete: true } : prev);
+              }}
+            />
+          )}
+
+          <ToastContainer />
+        </AppShell>
+      </ThemeProvider>
+    );
+  }
+
+  // ARTIST PORTAL PAGE (legacy — redirect to artist-dashboard)
   if (currentPage === 'artist-portal') {
+    // Redirect legacy artist-portal to new artist-dashboard
+    setCurrentPage('artist-dashboard');
+    return null;
+  }
+
+  // LEGACY ARTIST PORTAL (kept for reference, should not be reached)
+  if (currentPage === '__legacy-artist-portal') {
     const artistCampaigns = campaigns.filter(c => c.artistId === user?.artistId || c.artistId === 'boon');
     const activeCampaign = artistCampaigns.find(c => c.status === 'active') || artistCampaigns[0];
 
@@ -3235,17 +3501,23 @@ const StickToMusic = () => {
           setActiveTab={handleTabChange}
           user={user}
           onLogout={handleLogout}
-          isConductor={isConductor(user)}
+          userRole={user?.role || 'operator'}
         >
         <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-8">
           {/* ═══ Pages Tab (new) ═══ */}
           {operatorTab === 'pages' && (
             <PagesTab
               latePages={latePages}
-              lateAccountIds={LATE_ACCOUNT_IDS}
+              visibleArtists={getVisibleArtists()}
+              unconfiguredLateArtists={unconfiguredLateArtists}
               loadingLatePages={loadingLatePages}
               onLoadLatePages={loadLatePages}
-              onConfigureLate={() => { setOperatorTab('settings'); showToast('Configure Late API connection in Settings', 'info'); }}
+              onConfigureLate={(artistId) => { setOperatorTab('settings'); showToast('Configure Late API connection in Settings', 'info'); }}
+              user={user}
+              socialSetsAllowed={user?.socialSetsAllowed || 0}
+              manualAccountsByArtist={manualAccountsByArtist}
+              onAddManualAccounts={handleAddManualAccounts}
+              onRemoveManualAccount={handleRemoveManualAccount}
             />
           )}
 
@@ -3265,9 +3537,8 @@ const StickToMusic = () => {
               db={db}
               artistId={currentArtistId}
               accounts={latePages}
-              lateAccountIds={LATE_ACCOUNT_IDS}
+              lateAccountIds={derivedLateAccountIds}
               onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: currentArtistId })}
-              onRenderVideo={null}
               onEditDraft={(post) => {
                 if (post.editorState) {
                   setShowVideoEditor(true);
@@ -3279,15 +3550,14 @@ const StickToMusic = () => {
 
           {/* Artists Tab */}
           {operatorTab === 'artists' && (() => {
-            // Use Firestore artists if available, fallback to static list
-            let displayArtists = firestoreArtists.length > 0 ? firestoreArtists : operatorArtists;
+            let displayArtists = firestoreArtists;
 
-            // Filter artists for operators (non-conductors) - they only see their assigned artists
-            // If operator has no assigned artists, they see none (not all)
+            // Filter artists for operators (non-conductors) - they only see artists they own
             if (!isConductor(user)) {
-              const assignedIds = user?.assignedArtistIds || [];
+              const currentUserRecord = allowedUsers.find(u => u.email?.toLowerCase() === user?.email?.toLowerCase());
+              const currentUserId = currentUserRecord?.id || null;
               displayArtists = displayArtists.filter(artist =>
-                assignedIds.includes(artist.id)
+                currentUserId && artist.ownerOperatorId === currentUserId
               );
             }
 
@@ -3615,8 +3885,8 @@ const StickToMusic = () => {
                 // Get account IDs from latePages (dynamically loaded from Late API)
                 const handlePages = latePages.filter(p => p.handle === post.handle);
                 if (handlePages.length === 0) {
-                  // Fallback to legacy LATE_ACCOUNT_IDS for backward compatibility
-                  const legacyAccountIds = LATE_ACCOUNT_IDS[post.handle];
+                  // Fallback to derived account mapping
+                  const legacyAccountIds = derivedLateAccountIds[post.handle];
                   if (!legacyAccountIds) {
                     console.error(`No Late account mapping for ${post.handle}`);
                     failCount++;
@@ -3771,8 +4041,7 @@ const StickToMusic = () => {
             };
 
             // Get current artist name for display
-            const currentArtist = firestoreArtists.find(a => a.id === currentArtistId) ||
-                                  operatorArtists.find(a => String(a.id) === currentArtistId);
+            const currentArtist = firestoreArtists.find(a => a.id === currentArtistId);
             const artistName = currentArtist?.name || 'this artist';
 
             return (
@@ -3877,7 +4146,7 @@ const StickToMusic = () => {
                                   onChange={(e) => setBatchForm(prev => ({ ...prev, artist: e.target.value }))}
                                   className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-zinc-500"
                                 >
-                                  {(firestoreArtists.length > 0 ? firestoreArtists : operatorArtists).map(a => (
+                                  {getVisibleArtists().map(a => (
                                     <option key={a.id} value={a.name}>{a.name}</option>
                                   ))}
                                 </select>
@@ -4148,7 +4417,7 @@ const StickToMusic = () => {
                       <label className="text-xs text-zinc-500 uppercase tracking-wider mb-1 block">Artist</label>
                       <div className="flex gap-1">
                         <button onClick={() => setContentArtist('all')} className={`px-3 py-1.5 rounded-lg text-sm transition ${contentArtist === 'all' ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>All</button>
-                        {operatorArtists.map(a => (
+                        {getVisibleArtists().map(a => (
                           <button key={a.id} onClick={() => setContentArtist(a.name)} className={`px-3 py-1.5 rounded-lg text-sm transition ${contentArtist === a.name ? 'bg-zinc-800 text-zinc-300' : 'text-zinc-500 hover:bg-zinc-800'}`}>{a.name}</button>
                         ))}
                       </div>
@@ -4241,27 +4510,40 @@ const StickToMusic = () => {
                         <button onClick={() => setShowLateAccounts(false)} className="text-zinc-500 hover:text-white">✕</button>
                       </div>
                       <div className="p-6 overflow-y-auto max-h-[60vh]">
-                        <p className="text-sm text-zinc-500 mb-4">8 accounts synced:</p>
-                        <div className="space-y-3">
-                          {Object.entries(LATE_ACCOUNT_IDS).map(([handle, ids]) => (
-                            <div key={handle} className="bg-zinc-800 rounded-lg p-4">
-                              <p className="font-medium text-white mb-2">{handle}</p>
-                              <div className="grid grid-cols-2 gap-2 text-xs">
-                                <div className="flex items-center gap-2">
-                                  <span className="px-2 py-0.5 bg-pink-500/20 text-pink-400 rounded">TikTok</span>
-                                  <code className="text-zinc-400 truncate">{ids.tiktok}</code>
+                        {Object.keys(derivedLateAccountIds).length === 0 ? (
+                          <div className="text-center py-8">
+                            <p className="text-zinc-400 mb-2">No accounts connected yet</p>
+                            <button onClick={() => { setShowLateAccounts(false); setOperatorTab('pages'); }} className="text-sm text-blue-400 hover:text-blue-300">Go to Pages</button>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="text-sm text-zinc-500 mb-4">{latePages.length} account{latePages.length !== 1 ? 's' : ''} synced:</p>
+                            <div className="space-y-3">
+                              {Object.entries(derivedLateAccountIds).map(([handle, ids]) => (
+                                <div key={handle} className="bg-zinc-800 rounded-lg p-4">
+                                  <p className="font-medium text-white mb-2">{handle}</p>
+                                  <div className="flex flex-wrap gap-2 text-xs">
+                                    {Object.entries(ids).map(([platform, accountId]) => (
+                                      <div key={platform} className="flex items-center gap-2">
+                                        <span className={`px-2 py-0.5 rounded ${
+                                          platform === 'tiktok' ? 'bg-pink-500/20 text-pink-400' :
+                                          platform === 'instagram' ? 'bg-purple-500/20 text-purple-400' :
+                                          platform === 'youtube' ? 'bg-red-500/20 text-red-400' :
+                                          platform === 'facebook' ? 'bg-blue-500/20 text-blue-400' :
+                                          'bg-zinc-500/20 text-zinc-400'
+                                        }`}>{platform}</span>
+                                        <code className="text-zinc-400 truncate max-w-[120px]">{accountId}</code>
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded">Instagram</span>
-                                  <code className="text-zinc-400 truncate">{ids.instagram}</code>
-                                </div>
-                              </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                        <div className="mt-4 pt-4 border-t border-zinc-700">
-                          <p className="text-xs text-zinc-500">Total: 16 platform connections (8 TikTok + 8 Instagram)</p>
-                        </div>
+                            <div className="mt-4 pt-4 border-t border-zinc-700">
+                              <p className="text-xs text-zinc-500">Total: {latePages.length} platform connection{latePages.length !== 1 ? 's' : ''} across {Object.keys(derivedLateAccountIds).length} handle{Object.keys(derivedLateAccountIds).length !== 1 ? 's' : ''}</p>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -5392,11 +5674,13 @@ const StickToMusic = () => {
                               <h3 className="text-lg font-semibold">{app.name}</h3>
                               <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                                 app.status === 'approved' ? 'bg-green-500/20 text-green-400' :
-                                app.status === 'declined' ? 'bg-red-500/20 text-red-400' :
+                                app.status === 'declined' || app.status === 'denied' ? 'bg-red-500/20 text-red-400' :
                                 app.status === 'pending_payment' ? 'bg-blue-500/20 text-blue-400' :
                                 'bg-yellow-500/20 text-yellow-400'
                               }`}>
-                                {app.status === 'pending_payment' ? 'Awaiting Payment' : app.status}
+                                {app.status === 'pending_payment' ? 'Awaiting Payment' :
+                                 app.status === 'pending_review' ? 'Pending Review' :
+                                 app.status}
                               </span>
                             </div>
                             <p className={`${t.textSecondary} text-sm mb-3`}>{app.email}</p>
@@ -5413,35 +5697,19 @@ const StickToMusic = () => {
                               {app.adjacentArtists && <span className="ml-3">• Provided adjacent artists</span>}
                             </div>
                           </div>
-                          {app.status === 'pending' && (
+                          {(app.status === 'pending' || app.status === 'pending_review') && (
                             <div className="flex items-start gap-2">
                               <button
                                 onClick={() => handleApproveApplication(app)}
                                 className="px-4 py-2 bg-green-500/20 text-green-400 rounded-lg text-sm font-medium hover:bg-green-500/30 transition"
                               >
-                                ✓ Approve & Send Payment
+                                ✓ Approve
                               </button>
                               <button
-                                onClick={async () => {
-                                  try {
-                                    const appRef = doc(db, 'applications', app.id);
-                                    await updateDoc(appRef, {
-                                      status: 'declined',
-                                      declinedAt: new Date().toISOString()
-                                    });
-                                    showToast(`${app.name} declined`, 'info');
-                                  } catch (error) {
-                                    console.error('Error declining application:', error);
-                                    // Fallback to local update
-                                    setApplications(prev => prev.map(a =>
-                                      a.id === app.id ? { ...a, status: 'declined' } : a
-                                    ));
-                                    showToast(`${app.name} declined`, 'info');
-                                  }
-                                }}
+                                onClick={() => handleDenyApplication(app)}
                                 className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm font-medium hover:bg-red-500/30 transition"
                               >
-                                ✕ Decline
+                                ✕ Deny
                               </button>
                             </div>
                           )}
@@ -5820,7 +6088,7 @@ const StickToMusic = () => {
             artists={getVisibleArtists()}
             artistId={currentArtistId}
             onArtistChange={handleArtistChange}
-            lateAccountIds={LATE_ACCOUNT_IDS}
+            lateAccountIds={derivedLateAccountIds}
             onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: currentArtistId })}
           />
         )}
@@ -5862,6 +6130,31 @@ const StickToMusic = () => {
                     <option value="Growth">Growth</option>
                     <option value="Starter">Starter</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">Artist Email (optional)</label>
+                  <input
+                    type="email"
+                    value={addArtistForm.artistEmail}
+                    onChange={e => setAddArtistForm(prev => ({ ...prev, artistEmail: e.target.value }))}
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
+                    placeholder="artist@email.com"
+                  />
+                  <p className="text-xs text-zinc-500 mt-1">If provided, the artist can sign in and see their dashboard</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">Social Sets for this artist</label>
+                  <select
+                    value={addArtistForm.socialSetsForArtist}
+                    onChange={e => setAddArtistForm(prev => ({ ...prev, socialSetsForArtist: parseInt(e.target.value) }))}
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white focus:outline-none focus:border-violet-500"
+                  >
+                    <option value={5}>5 Social Sets (Starter)</option>
+                    <option value={10}>10 Social Sets (Growth)</option>
+                    <option value={25}>25 Social Sets (Scale)</option>
+                    <option value={50}>50 Social Sets (Sensation)</option>
+                  </select>
+                  <p className="text-xs text-zinc-500 mt-1">Each Social Set = 4 platform slots (FB + TikTok + Twitter + IG)</p>
                 </div>
                 {/* Only show operator assignment for conductors - operators auto-assign to themselves */}
                 {isConductor(user) ? (

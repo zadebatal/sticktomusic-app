@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 import { useTheme, THEMES } from '../../contexts/ThemeContext';
+import { shouldShowPaymentUI } from '../../services/subscriptionService';
 
 /**
  * SettingsTab — Profile, team management, theme picker, logout.
@@ -9,13 +12,73 @@ const SettingsTab = ({ user, onLogout, db, artistId }) => {
   const { theme, themeId, setTheme } = useTheme();
   const t = theme.tw;
   const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteStatus, setInviteStatus] = useState(null); // 'sending' | 'success' | 'error'
+  const [inviteMessage, setInviteMessage] = useState('');
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelMessage, setCancelMessage] = useState('');
 
-  const handleInvite = (e) => {
+  const canCancel = shouldShowPaymentUI(user) && user?.subscriptionId && user?.subscriptionStatus === 'active';
+
+  const handleCancelSubscription = async () => {
+    if (!window.confirm('Are you sure you want to cancel your subscription? Your access will continue until the end of the billing period.')) return;
+    setCancelLoading(true);
+    setCancelMessage('');
+    try {
+      const auth = getAuth();
+      const token = await auth.currentUser?.getIdToken();
+      const response = await fetch('/api/cancel-subscription', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+      const data = await response.json();
+      if (data.success) {
+        setCancelMessage(data.message || 'Subscription cancelled.');
+      } else {
+        setCancelMessage(data.error || 'Failed to cancel.');
+      }
+    } catch (err) {
+      setCancelMessage('Failed to cancel subscription.');
+    }
+    setCancelLoading(false);
+  };
+
+  const handleInvite = async (e) => {
     e.preventDefault();
-    if (!inviteEmail.trim()) return;
-    // TODO: Write to Firestore allowedUsers collection
-    console.log('[Settings] Invite operator:', inviteEmail, 'for artist:', artistId);
-    setInviteEmail('');
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email || !db) return;
+
+    setInviteStatus('sending');
+    setInviteMessage('');
+
+    try {
+      // Check if user already exists
+      const userRef = doc(db, 'allowedUsers', email);
+      const existing = await getDoc(userRef);
+      if (existing.exists()) {
+        setInviteStatus('error');
+        setInviteMessage('This email is already an allowed user.');
+        return;
+      }
+
+      // Create operator record in allowedUsers
+      await setDoc(userRef, {
+        email,
+        name: email.split('@')[0],
+        role: 'operator',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        invitedBy: user?.email || 'unknown'
+      });
+
+      setInviteEmail('');
+      setInviteStatus('success');
+      setInviteMessage(`Invited ${email} as operator.`);
+      setTimeout(() => { setInviteStatus(null); setInviteMessage(''); }, 4000);
+    } catch (err) {
+      console.error('[Settings] Invite failed:', err);
+      setInviteStatus('error');
+      setInviteMessage('Failed to send invite. Please try again.');
+    }
   };
 
   const themeOptions = [
@@ -62,13 +125,20 @@ const SettingsTab = ({ user, onLogout, db, artistId }) => {
               className={`flex-1 px-4 py-2.5 rounded-xl border ${t.inputBorder} ${t.inputFocus} outline-none text-sm transition`}
               style={{ backgroundColor: theme.bg.input, color: theme.text.primary }}
             />
-            <button type="submit" className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition ${t.btnPrimary} shrink-0`}>
-              Invite
+            <button type="submit" disabled={inviteStatus === 'sending'} className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition ${t.btnPrimary} shrink-0`}>
+              {inviteStatus === 'sending' ? 'Inviting...' : 'Invite'}
             </button>
           </form>
-          <div className={`text-sm ${t.textMuted} italic`}>
-            No team members yet. Invite someone to get started.
-          </div>
+          {inviteMessage && (
+            <div className={`text-sm ${inviteStatus === 'success' ? 'text-green-400' : 'text-red-400'} mb-2`}>
+              {inviteMessage}
+            </div>
+          )}
+          {!inviteMessage && (
+            <div className={`text-sm ${t.textMuted} italic`}>
+              Invite someone to get started.
+            </div>
+          )}
         </section>
 
         {/* ═══ THEME ═══ */}
@@ -98,6 +168,28 @@ const SettingsTab = ({ user, onLogout, db, artistId }) => {
             ))}
           </div>
         </section>
+
+        {/* ═══ SUBSCRIPTION (cancel) ═══ */}
+        {canCancel && (
+          <section className={`p-6 rounded-2xl border ${t.cardBorder} ${t.cardBg}`}>
+            <h2 className={`text-sm font-semibold uppercase tracking-wider ${t.textMuted} mb-4`}>Subscription</h2>
+            <p className={`text-sm ${t.textSecondary} mb-3`}>
+              Your subscription is active. Cancelling will take effect at the end of your current billing period.
+            </p>
+            {cancelMessage && (
+              <div className={`text-sm mb-3 ${cancelMessage.includes('Failed') ? 'text-red-400' : 'text-green-400'}`}>
+                {cancelMessage}
+              </div>
+            )}
+            <button
+              onClick={handleCancelSubscription}
+              disabled={cancelLoading}
+              className={`px-5 py-2 rounded-xl text-sm font-semibold transition border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-50`}
+            >
+              {cancelLoading ? 'Cancelling...' : 'Cancel Subscription'}
+            </button>
+          </section>
+        )}
 
         {/* ═══ LOGOUT ═══ */}
         <section className={`p-6 rounded-2xl border border-red-500/20 ${t.cardBg}`}>
