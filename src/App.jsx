@@ -39,6 +39,14 @@ import { isUserOperator, isArtistOrCollaborator, getEffectiveArtistId, ROLES } f
 // Subscription service
 import { computeSocialSetsUsed, canAddSocialSet, shouldShowPaymentUI } from './services/subscriptionService';
 
+// Cloud services
+import { initDropbox } from './services/dropboxService';
+
+// Initialize Dropbox if app key is configured
+if (process.env.REACT_APP_DROPBOX_APP_KEY) {
+  initDropbox(process.env.REACT_APP_DROPBOX_APP_KEY);
+}
+
 // Artist Service for multi-artist management
 import {
   subscribeToArtists,
