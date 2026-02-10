@@ -101,7 +101,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
             Your music,<br />everywhere.
           </h1>
           <p className={`text-xl md:text-2xl ${t.textSecondary} max-w-xl mx-auto mb-10`}>
-            Create videos in seconds, schedule posts, and grow your audience across every platform — all in one place.
+            Create videos in seconds, schedule posts across every platform, and grow your audience systematically — all in one place.
           </p>
           <div className="flex gap-4 flex-wrap justify-center">
             <button onClick={() => { setAuthMode('signup'); setShowAuth(true); }} className={`px-8 py-4 rounded-full text-lg font-semibold transition ${t.btnPrimary}`}>
