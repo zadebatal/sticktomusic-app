@@ -57,10 +57,15 @@ const ArtistDashboard = ({
   // Manual accounts for this artist
   const manualAccounts = manualAccountsByArtist?.[artistId] || [];
 
-  // Add account form state
+  // Per-group "add platform" picker state (null or group index)
+  const [addingPlatformFor, setAddingPlatformFor] = useState(null);
+
+  // Add new handle form state
   const [showAddForm, setShowAddForm] = useState(false);
   const [newHandle, setNewHandle] = useState('');
   const [newPlatform, setNewPlatform] = useState('tiktok');
+
+  const ALL_PLATFORMS = ['tiktok', 'instagram', 'youtube', 'facebook'];
 
   // Merge edit mode + state
   const [editMode, setEditMode] = useState(false);
@@ -246,7 +251,7 @@ const ArtistDashboard = ({
                     className="text-xs px-3 py-1 rounded-lg transition"
                     style={{ backgroundColor: `${theme.accent.primary}20`, color: theme.accent.primary, border: 'none', cursor: 'pointer' }}
                   >
-                    {showAddForm ? 'Cancel' : '+ Add'}
+                    {showAddForm ? 'Cancel' : '+ New Handle'}
                   </button>
                 )}
                 {groupedAccounts.length > 1 && (
@@ -370,7 +375,7 @@ const ArtistDashboard = ({
                           <span className={`text-xs ${t.textMuted} ml-1`}>(+{group.handles.length - 1})</span>
                         )}
                       </p>
-                      <div className="flex gap-1.5 mt-1 flex-wrap">
+                      <div className="flex gap-1.5 mt-1 flex-wrap items-center">
                         {group.pages.map((page, pi) => {
                           const meta = PLATFORM_META[page.platform] || { icon: '🌐', color: '#888', label: page.platform };
                           const url = getProfileUrl(page.platform, page.handle);
@@ -395,6 +400,62 @@ const ArtistDashboard = ({
                             </a>
                           );
                         })}
+                        {/* Add platform "+" button */}
+                        {onAddManualAccounts && (() => {
+                          const connectedPlatforms = group.pages.map(p => p.platform);
+                          const available = ALL_PLATFORMS.filter(p => !connectedPlatforms.includes(p));
+                          if (available.length === 0) return null;
+                          return addingPlatformFor === gi ? (
+                            <div className="flex gap-1 items-center">
+                              {available.map(platform => {
+                                const meta = PLATFORM_META[platform] || { icon: '🌐', color: '#888', label: platform };
+                                return (
+                                  <button
+                                    key={platform}
+                                    onClick={async () => {
+                                      const handle = group.handles[0] || group.displayName;
+                                      await onAddManualAccounts(artistId, [{ handle, platform }]);
+                                      setAddingPlatformFor(null);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition hover:opacity-80"
+                                    style={{
+                                      backgroundColor: `${meta.color}15`,
+                                      color: meta.color,
+                                      border: `1px dashed ${meta.color}60`,
+                                      cursor: 'pointer',
+                                    }}
+                                    title={`Add ${meta.label}`}
+                                  >
+                                    <span>{meta.icon}</span>
+                                    <span>{meta.label}</span>
+                                  </button>
+                                );
+                              })}
+                              <button
+                                onClick={() => setAddingPlatformFor(null)}
+                                className={`text-xs ${t.textMuted} ml-1`}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                              >
+                                &times;
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setAddingPlatformFor(gi)}
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold transition hover:opacity-80"
+                              style={{
+                                backgroundColor: `${theme.accent.primary}15`,
+                                color: theme.accent.primary,
+                                border: `1px dashed ${theme.accent.primary}60`,
+                                cursor: 'pointer',
+                                lineHeight: 1,
+                              }}
+                              title="Add platform"
+                            >
+                              +
+                            </button>
+                          );
+                        })()}
                       </div>
                     </div>
                     {/* Followers + status + split */}
