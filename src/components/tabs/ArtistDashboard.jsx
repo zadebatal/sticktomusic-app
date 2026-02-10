@@ -1,10 +1,11 @@
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useToast } from '../ui';
 import { getTierForSets, computeSocialSetsUsed, shouldShowPaymentUI } from '../../services/subscriptionService';
 import { PLATFORM_META, getProfileUrl, formatFollowers } from '../../utils/platformUtils';
 import { subscribeToScheduledPosts, POST_STATUS, PLATFORM_COLORS } from '../../services/scheduledPostsService';
+import { getLateProfiles, createLateProfile, getConnectUrl } from '../../services/lateService';
 
 /**
  * ArtistDashboard — Home tab for artist and collaborator roles.
@@ -21,9 +22,10 @@ const ArtistDashboard = ({
   manualAccountsByArtist = {},
   onAddManualAccounts,
   onRemoveManualAccount,
+  onLoadLatePages,
 }) => {
   const { theme } = useTheme();
-  const { toastInfo } = useToast();
+  const { toastInfo, toastError, toastSuccess } = useToast();
   const t = theme.tw;
 
   // latePages is pre-filtered to this artist's pages by parent
@@ -66,6 +68,63 @@ const ArtistDashboard = ({
   const [newPlatform, setNewPlatform] = useState('tiktok');
 
   const ALL_PLATFORMS = ['tiktok', 'instagram', 'youtube', 'facebook'];
+
+  // Late OAuth connect flow
+  const oauthPendingRef = useRef(false);
+  const [connectingPlatform, setConnectingPlatform] = useState(null);
+
+  const handleConnectPlatform = useCallback(async (platform) => {
+    if (!artistId) return;
+    setConnectingPlatform(platform);
+    try {
+      // Get or create Late profile for this artist
+      let profiles = [];
+      try {
+        const result = await getLateProfiles(artistId);
+        profiles = result.profiles || [];
+      } catch { /* No profiles yet */ }
+
+      let profileId;
+      if (profiles.length > 0) {
+        profileId = profiles[0]._id;
+      } else {
+        const created = await createLateProfile(artistId, 'Default');
+        profileId = created.profile?._id;
+      }
+
+      if (!profileId) throw new Error('Could not create or find a Late profile');
+
+      // Get OAuth URL and open in new tab
+      const redirectUrl = window.location.origin + '/artist/dashboard';
+      const { authUrl } = await getConnectUrl(artistId, platform, profileId, redirectUrl);
+
+      if (authUrl) {
+        oauthPendingRef.current = true;
+        window.open(authUrl, '_blank', 'noopener,noreferrer');
+        toastSuccess(`Connecting ${platform} — complete auth in the new tab`);
+      } else {
+        throw new Error('No auth URL returned from Late');
+      }
+    } catch (error) {
+      console.error('Failed to start connect flow:', error);
+      toastError(`Failed to connect ${platform}: ${error.message}`);
+    } finally {
+      setConnectingPlatform(null);
+      setAddingPlatformFor(null);
+    }
+  }, [artistId, toastSuccess, toastError]);
+
+  // Auto-refresh Late pages when returning from OAuth tab
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && oauthPendingRef.current) {
+        oauthPendingRef.current = false;
+        onLoadLatePages?.();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [onLoadLatePages]);
 
   // Merge edit mode + state
   const [editMode, setEditMode] = useState(false);
@@ -400,8 +459,8 @@ const ArtistDashboard = ({
                             </a>
                           );
                         })}
-                        {/* Add platform "+" button */}
-                        {onAddManualAccounts && (() => {
+                        {/* Add platform "+" button — triggers Late OAuth */}
+                        {(() => {
                           const connectedPlatforms = group.pages.map(p => p.platform);
                           const available = ALL_PLATFORMS.filter(p => !connectedPlatforms.includes(p));
                           if (available.length === 0) return null;
@@ -409,25 +468,24 @@ const ArtistDashboard = ({
                             <div className="flex gap-1 items-center">
                               {available.map(platform => {
                                 const meta = PLATFORM_META[platform] || { icon: '🌐', color: '#888', label: platform };
+                                const isConnecting = connectingPlatform === platform;
                                 return (
                                   <button
                                     key={platform}
-                                    onClick={async () => {
-                                      const handle = group.handles[0] || group.displayName;
-                                      await onAddManualAccounts(artistId, [{ handle, platform }]);
-                                      setAddingPlatformFor(null);
-                                    }}
+                                    disabled={isConnecting}
+                                    onClick={() => handleConnectPlatform(platform)}
                                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition hover:opacity-80"
                                     style={{
                                       backgroundColor: `${meta.color}15`,
                                       color: meta.color,
                                       border: `1px dashed ${meta.color}60`,
-                                      cursor: 'pointer',
+                                      cursor: isConnecting ? 'wait' : 'pointer',
+                                      opacity: isConnecting ? 0.5 : 1,
                                     }}
-                                    title={`Add ${meta.label}`}
+                                    title={`Connect ${meta.label} via Late`}
                                   >
                                     <span>{meta.icon}</span>
-                                    <span>{meta.label}</span>
+                                    <span>{isConnecting ? '...' : meta.label}</span>
                                   </button>
                                 );
                               })}

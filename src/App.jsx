@@ -3198,6 +3198,7 @@ const StickToMusic = () => {
                 manualAccountsByArtist={manualAccountsByArtist}
                 onAddManualAccounts={handleAddManualAccounts}
                 onRemoveManualAccount={handleRemoveManualAccount}
+                onLoadLatePages={loadLatePages}
               />
             )}
 
