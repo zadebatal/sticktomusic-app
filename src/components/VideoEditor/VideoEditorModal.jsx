@@ -1285,7 +1285,9 @@ const VideoEditorModal = ({
   }, [words, category?.videos, toast]);
 
   const handleReroll = useCallback(() => {
-    if (!category?.videos?.length) {
+    // Pull from visible collection (respects dropdown selection), fall back to category
+    const availableClips = visibleVideos.length > 0 ? visibleVideos : (category?.videos || []);
+    if (!availableClips.length) {
       toast.error('No clips in bank. Upload videos first.');
       return;
     }
@@ -1293,8 +1295,6 @@ const VideoEditorModal = ({
       toast.error('No clips to reroll. Cut by beat or word first.');
       return;
     }
-
-    const availableClips = category.videos;
 
     // Get indices to reroll: selected clips, or clip at playhead, or all clips
     let indicesToReroll;
@@ -1323,12 +1323,12 @@ const VideoEditorModal = ({
         ...clip,
         sourceId: randomClip.id,
         url: randomClip.url,
-        localUrl: randomClip.localUrl, // Include localUrl for CORS fallback
-        thumbnail: randomClip.thumbnail
+        localUrl: randomClip.localUrl,
+        thumbnail: randomClip.thumbnailUrl || randomClip.thumbnail
       };
     }));
     toast.success(`Rerolled ${rerollCount} clip${rerollCount !== 1 ? 's' : ''}`);
-  }, [clips, selectedClips, category?.videos, currentTime, toast]);
+  }, [clips, selectedClips, visibleVideos, category?.videos, currentTime, toast]);
 
   const handleRearrange = useCallback(() => {
     if (!clips.length) {
@@ -2077,30 +2077,10 @@ const VideoEditorModal = ({
                 </select>
               </div>
 
-              {/* Tab bar */}
-              <div style={styles.bankTabs}>
-                <button
-                  style={activeBank === 'videos' ? styles.bankTabActiveTeal : styles.bankTab}
-                  onClick={() => setActiveBank('videos')}
-                >Videos</button>
-                <button
-                  style={activeBank === 'audio' ? styles.bankTabActiveGreen : styles.bankTab}
-                  onClick={() => setActiveBank('audio')}
-                >Audio</button>
-                <button
-                  style={activeBank === 'lyrics' ? styles.bankTabActivePurple : styles.bankTab}
-                  onClick={() => setActiveBank('lyrics')}
-                >Lyrics</button>
-                <button
-                  style={activeBank === 'textBank' ? styles.bankTabActivePink : styles.bankTab}
-                  onClick={() => setActiveBank('textBank')}
-                >Text</button>
-              </div>
-
-              {/* Tab content */}
+              {/* Videos + Text shown together (no tabs — Audio/Lyrics moved to toolbar) */}
               <div style={styles.bankContent}>
-                {/* ── Videos tab ── */}
-                {activeBank === 'videos' && (
+                {/* ── Videos section ── */}
+                {(
                   <div>
                     {visibleVideos.length === 0 ? (
                       <div style={{ padding: '24px', textAlign: 'center', color: theme.text.muted, fontSize: '13px' }}>
@@ -2201,150 +2181,11 @@ const VideoEditorModal = ({
                   </div>
                 )}
 
-                {/* ── Audio tab ── */}
-                {activeBank === 'audio' && (
-                  <div>
-                    {/* Hidden file input */}
-                    <input
-                      ref={audioFileInputRef}
-                      type="file"
-                      accept="audio/*"
-                      style={{ display: 'none' }}
-                      onChange={handleAudioUpload}
-                    />
-                    {/* Upload + Cloud buttons */}
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-                      <button
-                        onClick={() => audioFileInputRef.current?.click()}
-                        style={{
-                          flex: 1, padding: '10px 12px', borderRadius: '8px',
-                          border: `1px dashed ${theme.border.subtle}`,
-                          background: theme.hover.bg, color: theme.text.primary,
-                          cursor: 'pointer', textAlign: 'center', fontSize: '12px'
-                        }}
-                      >
-                        📁 Upload Audio
-                      </button>
-                      <CloudImportButton
-                        artistId={artistId}
-                        db={db}
-                        mediaType="audio"
-                        compact
-                        onImportMedia={(files) => {
-                          if (files.length > 0) {
-                            const audio = files[0];
-                            handleAudioSelect({
-                              id: `cloud_${Date.now()}`,
-                              name: audio.name,
-                              file: audio.file,
-                              url: audio.url,
-                              localUrl: audio.localUrl
-                            });
-                          }
-                        }}
-                      />
-                    </div>
-                    {/* Current audio indicator */}
-                    {selectedAudio && (
-                      <div style={{ padding: '10px', borderRadius: '8px', backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div>
-                          <div style={{ fontSize: '11px', color: theme.text.muted, marginBottom: '4px' }}>Now playing</div>
-                          <div style={{ fontSize: '13px', color: '#86efac', fontWeight: 500 }}>
-                            {selectedAudio.isSourceAudio ? 'Source Video Audio' : selectedAudio.name}
-                          </div>
-                        </div>
-                        {!selectedAudio.isSourceAudio && (
-                          <button
-                            onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}
-                            style={{
-                              padding: '4px 10px', borderRadius: '6px', border: 'none',
-                              background: 'rgba(34,197,94,0.2)', color: '#86efac',
-                              cursor: 'pointer', fontSize: '11px', flexShrink: 0
-                            }}
-                          >
-                            ✂️ Trim
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {/* Source video audio option */}
-                    {clips?.length > 0 && clips[0]?.url && (
-                      <button
-                        onClick={() => handleAudioSelect({
-                          id: '__source_video__',
-                          name: 'Source Video Audio',
-                          url: clips[0].url || clips[0].localUrl,
-                          localUrl: clips[0].localUrl || clips[0].url,
-                          isSourceAudio: true
-                        })}
-                        style={{
-                          width: '100%', padding: '10px 12px', borderRadius: '8px',
-                          border: selectedAudio?.isSourceAudio ? `1px solid ${theme.state.success}` : `1px solid ${theme.border.subtle}`,
-                          background: selectedAudio?.isSourceAudio ? 'rgba(34,197,94,0.15)' : theme.hover.bg,
-                          color: selectedAudio?.isSourceAudio ? '#86efac' : theme.text.primary,
-                          cursor: 'pointer', textAlign: 'left', fontSize: '12px', marginBottom: '8px', display: 'block'
-                        }}
-                      >
-                        🎤 Source Video Audio
-                      </button>
-                    )}
-                    {/* Audio tracks from library */}
-                    {libraryAudio.length > 0 && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        {libraryAudio.map((audio) => (
-                          <button
-                            key={audio.id}
-                            onClick={() => handleAudioSelect(audio)}
-                            style={{
-                              width: '100%', padding: '10px 12px', borderRadius: '8px',
-                              border: selectedAudio?.id === audio.id ? `1px solid ${theme.state.success}` : `1px solid ${theme.border.subtle}`,
-                              background: selectedAudio?.id === audio.id ? 'rgba(34,197,94,0.1)' : theme.hover.bg,
-                              color: theme.text.primary, cursor: 'pointer', textAlign: 'left', fontSize: '12px', display: 'block'
-                            }}
-                          >
-                            <div style={{ fontWeight: 500 }}>{audio.name || 'Audio Track'}</div>
-                            {audio.duration && (
-                              <div style={{ fontSize: '10px', color: theme.text.muted, marginTop: '2px' }}>
-                                {Math.floor(audio.duration / 60)}:{String(Math.floor(audio.duration % 60)).padStart(2, '0')}
-                              </div>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {libraryAudio.length === 0 && !clips?.length && (
-                      <div style={{ padding: '24px', textAlign: 'center', color: theme.text.muted, fontSize: '13px' }}>
-                        No audio tracks available
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* ── Lyrics tab ── */}
-                {activeBank === 'lyrics' && (
-                  <LyricBank
-                    lyrics={artistId ? getLyrics(artistId) : (category?.lyrics || [])}
-                    onAddLyrics={onAddLyrics}
-                    onUpdateLyrics={onUpdateLyrics}
-                    onDeleteLyrics={onDeleteLyrics}
-                    onSelectText={(text) => {
-                      if (text.words?.length > 0) {
-                        setWords(text.words);
-                        setLyrics(text.words.map(w => w.text).join(' '));
-                      } else if (text.content) {
-                        setLyrics(text.content);
-                      }
-                    }}
-                    compact={true}
-                    showAddForm={true}
-                  />
-                )}
-
-                {/* ── Text tab ── */}
-                {activeBank === 'textBank' && (() => {
+                {/* ── Text Banks (always visible below videos) ── */}
+                {(() => {
                   const { textBank1, textBank2 } = getTextBanks();
                   return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${theme.border.subtle}` }}>
                       {/* Text Bank A */}
                       <div>
                         <div style={{ fontSize: '12px', fontWeight: 600, color: '#14b8a6', marginBottom: '8px' }}>Text Bank A</div>
@@ -3439,6 +3280,15 @@ const VideoEditorModal = ({
           </div>
         </div>
 
+        {/* Hidden audio file input (used by toolbar Audio button) */}
+        <input
+          ref={audioFileInputRef}
+          type="file"
+          accept="audio/*"
+          style={{ display: 'none' }}
+          onChange={handleAudioUpload}
+        />
+
         {/* ── Editor Toolbar ── */}
         <EditorToolbar
           canUndo={canUndo}
@@ -3446,8 +3296,8 @@ const VideoEditorModal = ({
           onUndo={handleUndo}
           onRedo={handleRedo}
           onReroll={clips.length > 0 ? handleReroll : null}
-          rerollDisabled={!category?.videos?.length}
-          onAddText={() => setActiveBank('textBank')}
+          rerollDisabled={!visibleVideos.length && !category?.videos?.length}
+          onAddText={null}
           onDelete={clips.length > 1 ? handleRemoveClips : null}
           audioTracks={libraryAudio}
           onSelectAudio={(audio) => {
