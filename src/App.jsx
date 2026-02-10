@@ -596,6 +596,10 @@ const StickToMusic = () => {
     // for artist/collaborator roles.
     if (!firestoreLoaded) return;
 
+    // Reset so loadLatePages effect re-fires when real data arrives
+    // (artistsLoaded may already be true from the unauthenticated early-return)
+    setArtistsLoaded(false);
+
     log('📥 Loading artists from Firestore...');
 
     // Determine if current user is a conductor (super-admin)
