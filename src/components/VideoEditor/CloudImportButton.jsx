@@ -54,7 +54,10 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
       try {
         await googleDriveService.authenticate();
       } catch (err) {
-        toast.error('Google Drive authentication failed');
+        const msg = err.message?.includes('not initialized')
+          ? 'Google Drive not configured yet. Ask your operator to set up Drive credentials.'
+          : 'Google Drive authentication failed. Please try again.';
+        toast.error(msg);
         return;
       }
     }
@@ -105,7 +108,10 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
       try {
         await dropboxService.authenticate();
       } catch (err) {
-        toast.error('Dropbox authentication failed');
+        const msg = err.message?.includes('not initialized') || err.message?.includes('No app key')
+          ? 'Dropbox not configured yet. Ask your operator to set up Dropbox credentials.'
+          : 'Dropbox authentication failed. Please try again.';
+        toast.error(msg);
         return;
       }
     }

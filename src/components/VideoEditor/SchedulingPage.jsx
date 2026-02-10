@@ -379,6 +379,108 @@ const SchedulingPage = ({
     });
   }, [selectedPostIds, selectedCount, db, artistId, expandedPostId, toastSuccess]);
 
+  // ── Auto-render a video post if it has no cloudUrl ──
+  const autoRenderPost = useCallback(async (post) => {
+    const editorState = post.editorState;
+    if (!editorState?.clips?.length) {
+      throw new Error('No video clips to render');
+    }
+
+    setRenderingPostId(post.id);
+    setRenderProgress(0);
+    try {
+      log('[Schedule] Auto-rendering video for post:', post.id);
+      const blob = await renderVideo(editorState, (progress) => {
+        setRenderProgress(progress);
+      });
+
+      log('[Schedule] Rendered, uploading...', (blob.size / 1024 / 1024).toFixed(2), 'MB');
+      setRenderProgress(95);
+      const isMP4 = blob.type === 'video/mp4';
+      const ext = isMP4 ? 'mp4' : 'webm';
+      const { url: cloudUrl } = await uploadFile(
+        new File([blob], `${post.contentId || post.id}.${ext}`, { type: blob.type }),
+        'videos'
+      );
+
+      log('[Schedule] Upload complete:', cloudUrl);
+      await handleUpdatePost(post.id, { cloudUrl });
+      setRenderProgress(100);
+      return cloudUrl;
+    } finally {
+      setRenderingPostId(null);
+      setRenderProgress(0);
+    }
+  }, [handleUpdatePost]);
+
+  // ── Publish / push a post to Late.co (auto-renders if needed) ──
+  const handlePublishPost = useCallback(async (postId) => {
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+    if (!onSchedulePost) {
+      toastError('Scheduling not available. Late API not connected.');
+      return;
+    }
+
+    const platformEntries = Object.entries(post.platforms || {})
+      .filter(([, v]) => v?.accountId)
+      .map(([platform, v]) => ({ platform, accountId: v.accountId }));
+
+    if (platformEntries.length === 0) {
+      toastError('No platform accounts assigned. Select accounts before publishing.');
+      return;
+    }
+
+    const isSlideshow = post.contentType === 'slideshow';
+    let videoUrl = post.cloudUrl || post.editorState?.cloudUrl;
+    const slideshowImages = isSlideshow ? (post.editorState?.slides || []).map(s => ({ url: s.backgroundImage || s.imageUrl })).filter(s => s.url) : null;
+
+    if (!isSlideshow && !videoUrl) {
+      if (!post.editorState?.clips?.length) {
+        toastError('No video data to render. Edit the draft first.');
+        await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: 'No video clips to render' });
+        return;
+      }
+      try {
+        toastSuccess('Rendering video before publishing...');
+        await handleUpdatePost(postId, { status: POST_STATUS.POSTING });
+        videoUrl = await autoRenderPost(post);
+      } catch (err) {
+        log('[Schedule] Auto-render failed:', err);
+        await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: `Render failed: ${err.message}` });
+        toastError(`Render failed: ${err.message}`);
+        return;
+      }
+    } else {
+      await handleUpdatePost(postId, { status: POST_STATUS.POSTING });
+    }
+
+    const allHashtags = [...(post.hashtags || []), ...(alwaysOnHashtags || [])];
+    const caption = [post.caption || '', allHashtags.join(' ')].filter(Boolean).join('\n\n');
+
+    try {
+      const result = await onSchedulePost({
+        videoUrl,
+        caption,
+        platforms: platformEntries,
+        scheduledFor: post.scheduledTime || new Date().toISOString(),
+        ...(isSlideshow ? { type: 'carousel', images: slideshowImages } : {})
+      });
+
+      if (result?.success === false) {
+        await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: result.error || 'Unknown error' });
+        toastError(`Failed to publish: ${result.error || 'Unknown error'}`);
+      } else {
+        await handleUpdatePost(postId, { status: POST_STATUS.POSTED, postedAt: new Date().toISOString() });
+        toastSuccess('Published successfully!');
+      }
+    } catch (err) {
+      log('[Schedule] Publish error:', err);
+      await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: err.message });
+      toastError(`Publish failed: ${err.message}`);
+    }
+  }, [posts, onSchedulePost, alwaysOnHashtags, handleUpdatePost, autoRenderPost, toastSuccess, toastError]);
+
   // ── Batch Schedule Selected ──
   const handleBatchScheduleSelected = useCallback(async () => {
     if (!batchStartDate || selectedCount === 0) return;
@@ -464,11 +566,22 @@ const SchedulingPage = ({
       await updateScheduledPost(db, artistId, post.id, updates);
     }
 
-    toastSuccess(`Scheduled ${scheduled.length} post${scheduled.length !== 1 ? 's' : ''}`);
+    toastSuccess(`Scheduled ${scheduled.length} post${scheduled.length !== 1 ? 's' : ''}. Rendering & pushing to Late...`);
     setSelectedPostIds(new Set());
+
+    // Auto-render and push each scheduled post to Late in sequence
+    if (onSchedulePost) {
+      for (const post of scheduled) {
+        try {
+          await handlePublishPost(post.id);
+        } catch (err) {
+          log('[Schedule] Failed to push post', post.id, 'to Late:', err.message);
+        }
+      }
+    }
   }, [batchStartDate, batchStartTime, postsPerDay, spacingMode, spacingMinutes, batchRandomMin, batchRandomMax,
     selectedPostIds, selectedCount, posts, db, artistId, batchAccount, batchPlatforms, lateAccountIds,
-    alwaysOnHashtags, toastSuccess]);
+    alwaysOnHashtags, toastSuccess, onSchedulePost, handlePublishPost]);
 
   // ── Platform Toggle ──
   const togglePlatform = useCallback((postId, platform) => {
@@ -491,112 +604,6 @@ const SchedulingPage = ({
     handleUpdatePost(postId, { platforms });
   }, [posts, handleUpdatePost]);
 
-  // ── Auto-render a video post if it has no cloudUrl ──
-  const autoRenderPost = useCallback(async (post) => {
-    const editorState = post.editorState;
-    if (!editorState?.clips?.length) {
-      throw new Error('No video clips to render');
-    }
-
-    setRenderingPostId(post.id);
-    setRenderProgress(0);
-    try {
-      log('[Schedule] Auto-rendering video for post:', post.id);
-      const blob = await renderVideo(editorState, (progress) => {
-        setRenderProgress(progress);
-      });
-
-      log('[Schedule] Rendered, uploading...', (blob.size / 1024 / 1024).toFixed(2), 'MB');
-      setRenderProgress(95);
-      const isMP4 = blob.type === 'video/mp4';
-      const ext = isMP4 ? 'mp4' : 'webm';
-      const { url: cloudUrl } = await uploadFile(
-        new File([blob], `${post.contentId || post.id}.${ext}`, { type: blob.type }),
-        'videos'
-      );
-
-      log('[Schedule] Upload complete:', cloudUrl);
-      // Persist the cloudUrl on the scheduled post
-      await handleUpdatePost(post.id, { cloudUrl });
-      setRenderProgress(100);
-      return cloudUrl;
-    } finally {
-      setRenderingPostId(null);
-      setRenderProgress(0);
-    }
-  }, [handleUpdatePost]);
-
-  // ── Publish a post to Late.co (auto-renders if needed) ──
-  const handlePublishPost = useCallback(async (postId) => {
-    const post = posts.find(p => p.id === postId);
-    if (!post) return;
-    if (!onSchedulePost) {
-      toastError('Scheduling not available. Late API not connected.');
-      return;
-    }
-
-    // Collect platforms array for Late API: [{ platform, accountId }]
-    const platformEntries = Object.entries(post.platforms || {})
-      .filter(([, v]) => v?.accountId)
-      .map(([platform, v]) => ({ platform, accountId: v.accountId }));
-
-    if (platformEntries.length === 0) {
-      toastError('No platform accounts assigned. Select accounts before publishing.');
-      return;
-    }
-
-    // Determine post type and media
-    const isSlideshow = post.contentType === 'slideshow';
-    let videoUrl = post.cloudUrl || post.editorState?.cloudUrl;
-    const slideshowImages = isSlideshow ? (post.editorState?.slides || []).map(s => ({ url: s.backgroundImage || s.imageUrl })).filter(s => s.url) : null;
-
-    // Auto-render video if no cloudUrl
-    if (!isSlideshow && !videoUrl) {
-      if (!post.editorState?.clips?.length) {
-        toastError('No video data to render. Edit the draft first.');
-        await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: 'No video clips to render' });
-        return;
-      }
-      try {
-        toastSuccess('Rendering video before publishing...');
-        await handleUpdatePost(postId, { status: POST_STATUS.POSTING });
-        videoUrl = await autoRenderPost(post);
-      } catch (err) {
-        log('[Schedule] Auto-render failed:', err);
-        await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: `Render failed: ${err.message}` });
-        toastError(`Render failed: ${err.message}`);
-        return;
-      }
-    } else {
-      await handleUpdatePost(postId, { status: POST_STATUS.POSTING });
-    }
-
-    // Build caption with hashtags
-    const allHashtags = [...(post.hashtags || []), ...(alwaysOnHashtags || [])];
-    const caption = [post.caption || '', allHashtags.join(' ')].filter(Boolean).join('\n\n');
-
-    try {
-      const result = await onSchedulePost({
-        videoUrl,
-        caption,
-        platforms: platformEntries,
-        scheduledFor: post.scheduledTime || new Date().toISOString(),
-        ...(isSlideshow ? { type: 'carousel', images: slideshowImages } : {})
-      });
-
-      if (result?.success === false) {
-        await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: result.error || 'Unknown error' });
-        toastError(`Failed to publish: ${result.error || 'Unknown error'}`);
-      } else {
-        await handleUpdatePost(postId, { status: POST_STATUS.POSTED, postedAt: new Date().toISOString() });
-        toastSuccess('Published successfully!');
-      }
-    } catch (err) {
-      log('[Schedule] Publish error:', err);
-      await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: err.message });
-      toastError(`Publish failed: ${err.message}`);
-    }
-  }, [posts, onSchedulePost, alwaysOnHashtags, handleUpdatePost, autoRenderPost, toastSuccess, toastError]);
 
   // ── Bulk Publish Selected ──
   const handleBulkPublish = useCallback(async () => {
@@ -1402,8 +1409,8 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
               <button style={s.drawerBtn} onClick={() => onEditDraft(post)}>Edit in Studio</button>
             )}
             {!readOnly && post.status === POST_STATUS.DRAFT && post.scheduledTime && (
-              <button style={{ ...s.drawerBtn, backgroundColor: '#312e81', color: '#a5b4fc', borderColor: '#6366f1' }} onClick={() => onUpdate({ status: POST_STATUS.SCHEDULED })}>
-                Confirm Schedule
+              <button style={{ ...s.drawerBtn, backgroundColor: '#312e81', color: '#a5b4fc', borderColor: '#6366f1' }} onClick={onPublish}>
+                Confirm & Push to Late
               </button>
             )}
             {!readOnly && post.status === POST_STATUS.SCHEDULED && (

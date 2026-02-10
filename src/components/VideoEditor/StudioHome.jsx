@@ -1643,6 +1643,11 @@ const StudioHome = ({
                   source: f.source
                 }));
                 addManyToLibraryAsync(db, artistId, newItems).then(() => {
+                  // Also assign to current collection if one is selected
+                  if (selectedCollection && newItems.length > 0) {
+                    const addedIds = newItems.map(a => a.id);
+                    addToCollectionAsync(db, artistId, selectedCollection, addedIds);
+                  }
                   setLibraryRefreshTrigger(prev => prev + 1);
                 }).catch(err => console.warn('[StudioHome] Cloud import save failed:', err));
               }}
