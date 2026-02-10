@@ -14,7 +14,6 @@ const TABS_BY_ROLE = {
     { id: 'schedule', label: 'Schedule', icon: '📅' },
     { id: 'analytics', label: 'Analytics', icon: '📊' },
     { id: 'artists', label: 'Artists', icon: '🎵' },
-    { id: 'campaigns', label: 'Campaigns', icon: '📣' },
     { id: 'settings', label: 'Settings', icon: '⚙️' },
   ],
   operator: [

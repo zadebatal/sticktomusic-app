@@ -12,7 +12,6 @@ const ArtistDashboard = ({
   scheduledPosts = [],
   latePages = [],
   socialSetsAllowed = 0,
-  campaigns = [],
 }) => {
   const { theme } = useTheme();
   const t = theme.tw;
@@ -26,9 +25,6 @@ const ArtistDashboard = ({
     .filter(p => p.status === 'SCHEDULED' || p.status === 'scheduled')
     .sort((a, b) => new Date(a.scheduledFor || a.scheduledDate) - new Date(b.scheduledFor || b.scheduledDate))
     .slice(0, 10);
-
-  const artistCampaigns = campaigns.filter(c => c.artistId === artistId);
-  const activeCampaign = artistCampaigns.find(c => c.status === 'active');
 
   // Connected platforms for this artist
   const artistPages = latePages.filter(p => p.artistId === artistId);
@@ -162,22 +158,6 @@ const ArtistDashboard = ({
             )}
           </div>
         </div>
-
-        {/* Active Campaign */}
-        {activeCampaign && (
-          <div className={`p-5 rounded-xl border ${t.cardBorder} ${t.cardBg}`}>
-            <h2 className={`text-sm font-semibold uppercase tracking-wider ${t.textMuted} mb-3`}>Active Campaign</h2>
-            <div className="flex justify-between items-start">
-              <div>
-                <p className={`font-semibold ${t.textPrimary}`}>{activeCampaign.name}</p>
-                <p className={`text-sm ${t.textSecondary}`}>
-                  {new Date(activeCampaign.startDate).toLocaleDateString()} - {new Date(activeCampaign.endDate).toLocaleDateString()}
-                </p>
-              </div>
-              <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs">Active</span>
-            </div>
-          </div>
-        )}
 
         {/* Operator Contact Card */}
         {user?.ownerOperatorId && (

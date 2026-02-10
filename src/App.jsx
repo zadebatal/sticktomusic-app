@@ -361,9 +361,6 @@ const lateApi = {
   }
 };
 
-// Campaign data structure - starts empty, campaigns are created via the UI
-const CAMPAIGNS_DATA = [];
-
 // App-level session persistence
 const APP_SESSION_KEY = 'stm_app_session';
 
@@ -499,7 +496,7 @@ const StickToMusic = () => {
   const [addArtistForm, setAddArtistForm] = useState({ name: '', tier: 'Scale', cdTier: 'CD Lite', assignedOperatorId: '', artistEmail: '', socialSetsForArtist: 5, error: null, isLoading: false });
   const [deleteArtistConfirm, setDeleteArtistConfirm] = useState({ show: false, artist: null, isDeleting: false });
   const [reassignArtist, setReassignArtist] = useState({ show: false, artist: null });
-  const [editArtistModal, setEditArtistModal] = useState({ show: false, artist: null, tier: '', cdTier: '', activeSince: '', isSaving: false });
+  const [editArtistModal, setEditArtistModal] = useState({ show: false, artist: null, activeSince: '', isSaving: false });
 
   // Firestore data - allowed users loaded from database
   const [allowedUsers, setAllowedUsers] = useState([]);
@@ -920,7 +917,7 @@ const StickToMusic = () => {
 
       // Close modal and reset form
       setShowAddArtistModal(false);
-      setAddArtistForm({ name: '', tier: 'Scale', cdTier: 'CD Lite', assignedOperatorId: '', artistEmail: '', socialSetsForArtist: 5, error: null, isLoading: false });
+      setAddArtistForm({ name: '', assignedOperatorId: '', artistEmail: '', socialSetsForArtist: 5, error: null, isLoading: false });
     } catch (error) {
       console.error('Failed to create artist:', error);
       setAddArtistForm(prev => ({ ...prev, error: error.message || 'Failed to create artist', isLoading: false }));
@@ -999,14 +996,12 @@ const StickToMusic = () => {
     setReassignArtist({ show: false, artist: null });
   };
 
-  // Handle saving edits to artist tier, cdTier, activeSince
+  // Handle saving edits to artist activeSince
   const handleSaveArtistEdit = async () => {
     if (!editArtistModal.artist) return;
     setEditArtistModal(prev => ({ ...prev, isSaving: true }));
     try {
       await updateArtist(db, editArtistModal.artist.id, {
-        tier: editArtistModal.tier,
-        cdTier: editArtistModal.cdTier,
         activeSince: editArtistModal.activeSince
       });
       log('Updated artist details:', editArtistModal.artist.id);
@@ -1014,7 +1009,7 @@ const StickToMusic = () => {
       console.error('Failed to update artist:', error);
       showToast('Failed to save: ' + error.message, 'error');
     }
-    setEditArtistModal({ show: false, artist: null, tier: '', cdTier: '', activeSince: '', isSaving: false });
+    setEditArtistModal({ show: false, artist: null, activeSince: '', isSaving: false });
   };
 
   // Set the app-level user state based on currentAuthUser and allowedUsers
@@ -1211,20 +1206,6 @@ const StickToMusic = () => {
     }
     return null;
   };
-
-  // Campaign management state
-  const [campaigns, setCampaigns] = useState(CAMPAIGNS_DATA);
-  const [selectedCampaign, setSelectedCampaign] = useState(null);
-  const [showCampaignModal, setShowCampaignModal] = useState(false);
-  const [campaignForm, setCampaignForm] = useState({
-    name: '',
-    startDate: '',
-    endDate: '',
-    budget: '',
-    categories: [],
-    goalViews: '',
-    goalFollowers: ''
-  });
 
   // Calendar navigation state
   const [calendarMonth, setCalendarMonth] = useState(new Date());
@@ -1424,7 +1405,7 @@ const StickToMusic = () => {
     },
     {
       title: 'Artists Tab',
-      description: 'View and manage all your artists here. See their stats, pages, and campaign progress.',
+      description: 'View and manage all your artists here. See their stats and pages.',
       target: 'artists'
     },
     {
@@ -1684,8 +1665,6 @@ const StickToMusic = () => {
   const [isSigningUp, setIsSigningUp] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [isCreatingCampaign, setIsCreatingCampaign] = useState(false);
-
   // Delete confirmation modal
   const [deleteConfirmModal, setDeleteConfirmModal] = useState({ show: false, postId: null, caption: '' });
 
@@ -1928,36 +1907,6 @@ const StickToMusic = () => {
     setIsSigningUp(false);
   };
 
-  // Campaign functions
-  const handleCreateCampaign = async (e) => {
-    e.preventDefault();
-    setIsCreatingCampaign(true);
-    await new Promise(resolve => setTimeout(resolve, 600));
-    const newCampaign = {
-      id: `camp-${Date.now()}`,
-      artistId: user?.artistId || 'boon',
-      name: campaignForm.name,
-      status: 'planning',
-      startDate: campaignForm.startDate,
-      endDate: campaignForm.endDate,
-      budget: parseFloat(campaignForm.budget) || 0,
-      spent: 0,
-      postsScheduled: 0,
-      postsPublished: 0,
-      categories: campaignForm.categories,
-      goals: {
-        views: parseInt(campaignForm.goalViews) || 0,
-        followers: parseInt(campaignForm.goalFollowers) || 0
-      },
-      achieved: { views: 0, followers: 0 }
-    };
-    setCampaigns(prev => [...prev, newCampaign]);
-    setShowCampaignModal(false);
-    setCampaignForm({ name: '', startDate: '', endDate: '', budget: '', categories: [], goalViews: '', goalFollowers: '' });
-    showToast('Campaign created successfully!', 'success');
-    setIsCreatingCampaign(false);
-  };
-
   // Export to CSV function
   const exportToCSV = async () => {
     if (latePosts.length === 0) return;
@@ -2066,7 +2015,7 @@ const StickToMusic = () => {
       pages: 5,
       price: 800,
       description: "Testing the waters",
-      detail: "Perfect for indie artists or anyone wanting to test the world page approach before committing to a larger campaign.",
+      detail: "Perfect for indie artists or anyone wanting to test the world page approach.",
       features: ["5 world pages", "TikTok, Instagram, Facebook, YouTube", "Monthly performance report"]
     },
     {
@@ -2081,7 +2030,7 @@ const StickToMusic = () => {
       name: "Scale",
       pages: 30,
       price: 2500,
-      description: "Major campaigns",
+      description: "Full scale",
       detail: "Album rollouts, tour promotion, or artists who want comprehensive coverage. Serious infrastructure.",
       features: ["30 world pages", "TikTok, Instagram, Facebook, YouTube", "Monthly performance report"]
     },
@@ -2108,7 +2057,7 @@ const StickToMusic = () => {
       description: "Full creative direction",
       features: [
         "Everything in CD Lite",
-        "Rollout planning & campaign calendar",
+        "Rollout planning & content calendar",
         "Visual direction & mood boards",
         "Asset briefs (covers, visuals, videos)",
         "Social content templates",
@@ -2164,7 +2113,7 @@ const StickToMusic = () => {
   const monthlyReports = [
     { month: "January 2025", status: "current", highlights: "Best performing month yet" },
     { month: "December 2024", status: "available", highlights: "Holiday content surge" },
-    { month: "November 2024", status: "available", highlights: "Campaign launch" }
+    { month: "November 2024", status: "available", highlights: "Content launch" }
   ];
 
   // Operator dashboard data - artists with their Late connection status
@@ -3104,7 +3053,7 @@ const StickToMusic = () => {
                 <ul className="space-y-2 text-sm text-zinc-400">
                   <li className="flex items-center gap-2"><span className="text-green-400">✓</span> Monthly listener growth tracking</li>
                   <li className="flex items-center gap-2"><span className="text-green-400">✓</span> Playlist add notifications</li>
-                  <li className="flex items-center gap-2"><span className="text-green-400">✓</span> Stream count correlation with campaigns</li>
+                  <li className="flex items-center gap-2"><span className="text-green-400">✓</span> Stream count correlation with posts</li>
                   <li className="flex items-center gap-2"><span className="text-green-400">✓</span> Listener demographics & top cities</li>
                 </ul>
               </div>
@@ -3123,7 +3072,7 @@ const StickToMusic = () => {
             <div>
               <h2 className="text-2xl font-bold mb-2">Timeline</h2>
               <p className="text-zinc-400 mb-8">How long are you thinking?</p>
-              <RadioGroup label="Campaign duration" field="duration" required options={[
+              <RadioGroup label="Service duration" field="duration" required options={[
                 { value: '1month', label: '1 month', desc: 'Minimum' },
                 { value: '3months', label: '3 months', desc: '' },
                 { value: '6months', label: '6 months', desc: '' },
@@ -3164,7 +3113,6 @@ const StickToMusic = () => {
                 scheduledPosts={latePosts}
                 latePages={latePages}
                 socialSetsAllowed={user?.socialSetsAllowed || 0}
-                campaigns={campaigns}
               />
             )}
 
@@ -3231,10 +3179,9 @@ const StickToMusic = () => {
     return null;
   }
 
-  // LEGACY ARTIST PORTAL (kept for reference, should not be reached)
+  // LEGACY ARTIST PORTAL — removed, redirect to dashboard
   if (currentPage === '__legacy-artist-portal') {
-    const artistCampaigns = campaigns.filter(c => c.artistId === user?.artistId || c.artistId === 'boon');
-    const activeCampaign = artistCampaigns.find(c => c.status === 'active') || artistCampaigns[0];
+    const activeCampaign = null; // Legacy stub
 
     return (
       <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -3621,10 +3568,7 @@ const StickToMusic = () => {
                         )}
                       </div>
                       <div className={`flex flex-wrap gap-x-2 gap-y-1 text-xs sm:text-sm ${t.textSecondary}`}>
-                        <span>{artist.tier}</span>
-                        {artist.cdTier && <><span className="hidden sm:inline">•</span><span>{artist.cdTier}</span></>}
-                        <span>•</span>
-                        <span>Since {artist.activeSince}</span>
+                        <span>Since {artist.activeSince || 'Feb 2026'}</span>
                       </div>
                     </div>
                   </div>
@@ -3648,7 +3592,7 @@ const StickToMusic = () => {
                     {isConductor(user) && (
                       <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
-                          onClick={(e) => { e.stopPropagation(); setEditArtistModal({ show: true, artist, tier: artist.tier || 'Scale', cdTier: artist.cdTier || 'CD Lite', activeSince: artist.activeSince || '', isSaving: false }); }}
+                          onClick={(e) => { e.stopPropagation(); setEditArtistModal({ show: true, artist, activeSince: artist.activeSince || 'Feb 2026', isSaving: false }); }}
                           className={`p-1.5 rounded-lg ${t.hoverBg} ${t.textSecondary} ${t.hoverText} transition`}
                           title="Edit artist details"
                         >
@@ -5115,8 +5059,8 @@ const StickToMusic = () => {
             );
           })()}
 
-          {/* Campaigns Tab */}
-          {operatorTab === 'campaigns' && (
+          {/* Campaigns Tab — REMOVED */}
+          {false && operatorTab === 'campaigns' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div>
@@ -6288,40 +6232,14 @@ const StickToMusic = () => {
 
         {/* EDIT ARTIST MODAL */}
         {editArtistModal.show && editArtistModal.artist && (
-          <div className="fixed inset-0 bg-black/80 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={() => setEditArtistModal({ show: false, artist: null, tier: '', cdTier: '', activeSince: '', isSaving: false })}>
+          <div className="fixed inset-0 bg-black/80 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={() => setEditArtistModal({ show: false, artist: null, activeSince: '', isSaving: false })}>
             <div className="bg-zinc-900 border border-zinc-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md" onClick={e => e.stopPropagation()}>
               <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
                 <h2 className="text-xl font-bold">Edit Artist</h2>
-                <button onClick={() => setEditArtistModal({ show: false, artist: null, tier: '', cdTier: '', activeSince: '', isSaving: false })} className="text-zinc-500 hover:text-white">✕</button>
+                <button onClick={() => setEditArtistModal({ show: false, artist: null, activeSince: '', isSaving: false })} className="text-zinc-500 hover:text-white">✕</button>
               </div>
               <div className="p-6 space-y-4">
                 <p className="text-zinc-400 text-sm">Editing <strong className="text-white">{editArtistModal.artist.name}</strong></p>
-
-                <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-1.5">Tier</label>
-                  <select
-                    value={editArtistModal.tier}
-                    onChange={(e) => setEditArtistModal(prev => ({ ...prev, tier: e.target.value }))}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500"
-                  >
-                    <option value="Scale">Scale</option>
-                    <option value="Growth">Growth</option>
-                    <option value="Starter">Starter</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-1.5">CD Tier</label>
-                  <select
-                    value={editArtistModal.cdTier}
-                    onChange={(e) => setEditArtistModal(prev => ({ ...prev, cdTier: e.target.value }))}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500"
-                  >
-                    <option value="CD Lite">CD Lite</option>
-                    <option value="CD Pro">CD Pro</option>
-                    <option value="CD Elite">CD Elite</option>
-                  </select>
-                </div>
 
                 <div>
                   <label className="block text-sm font-medium text-zinc-400 mb-1.5">Active Since</label>
@@ -6337,7 +6255,7 @@ const StickToMusic = () => {
 
                 <div className="flex gap-3 pt-2">
                   <button
-                    onClick={() => setEditArtistModal({ show: false, artist: null, tier: '', cdTier: '', activeSince: '', isSaving: false })}
+                    onClick={() => setEditArtistModal({ show: false, artist: null, activeSince: '', isSaving: false })}
                     className="flex-1 px-4 py-2.5 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition text-sm"
                   >Cancel</button>
                   <button
@@ -6897,7 +6815,7 @@ const StickToMusic = () => {
             <div>
               <h1 className="text-3xl font-bold mb-1">Welcome back, {artistData.name}</h1>
               <p className="text-zinc-400">
-                {artistData.tier} plan • {artistData.totalPages} world pages active • Since {artistData.activeSince}
+                {artistData.totalPages} world pages active • Since {artistData.activeSince || 'Feb 2026'}
               </p>
             </div>
             <div className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-xl p-2">
@@ -7256,7 +7174,7 @@ const StickToMusic = () => {
                     { feature: 'Dedicated Manager', starter: false, standard: true, scale: true, sensation: true },
                     { feature: 'Priority Support', starter: false, standard: false, scale: true, sensation: true },
                     { feature: 'Custom Strategy Call', starter: false, standard: false, scale: true, sensation: true },
-                    { feature: 'Campaign Reports', starter: 'Monthly', standard: 'Bi-weekly', scale: 'Weekly', sensation: 'Daily' },
+                    { feature: 'Performance Reports', starter: 'Monthly', standard: 'Bi-weekly', scale: 'Weekly', sensation: 'Daily' },
                     { feature: 'Adjacent Artist Mix', starter: '70/30', standard: '70/30', scale: '60/40', sensation: 'Custom' },
                   ].map((row, i) => (
                     <tr key={i} className="border-b border-zinc-800/50">
@@ -7470,7 +7388,7 @@ const StickToMusic = () => {
                     className={`p-3 rounded-xl border transition ${signupForm.role === 'artist' ? 'border-purple-500 bg-purple-500/20' : 'border-zinc-700 bg-zinc-800'}`}
                   >
                     <span className="block font-medium">Artist</span>
-                    <span className="text-xs text-zinc-500">View your campaigns</span>
+                    <span className="text-xs text-zinc-500">View your dashboard</span>
                   </button>
                   <button
                     type="button"
@@ -7623,9 +7541,7 @@ const StickToMusic = () => {
                 { label: 'Artists Tab', action: () => { setOperatorTab('artists'); setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '👥', category: 'Operator' },
                 { label: 'Pages Tab', action: () => { setOperatorTab('pages'); setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '📱', category: 'Operator' },
                 { label: 'Content / Schedule', action: () => { setOperatorTab('content'); setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '📅', category: 'Operator' },
-                { label: 'Campaigns', action: () => { setOperatorTab('campaigns'); setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '🎯', category: 'Operator' },
                 { label: 'Applications', action: () => { setOperatorTab('applications'); setCurrentPage('operator'); setShowQuickSearch(false); }, icon: '📋', category: 'Operator' },
-                { label: 'New Campaign', action: () => { setShowCampaignModal(true); setCurrentPage('operator'); setOperatorTab('campaigns'); setShowQuickSearch(false); }, icon: '➕', category: 'Actions' },
                 { label: 'New Schedule', action: () => { setShowScheduleModal(true); setCurrentPage('operator'); setOperatorTab('content'); setShowQuickSearch(false); }, icon: '➕', category: 'Actions' },
                 { label: 'Login', action: () => { setShowLoginModal(true); setShowQuickSearch(false); }, icon: '🔑', category: 'Actions' },
               ].filter(item =>
