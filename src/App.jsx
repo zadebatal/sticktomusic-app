@@ -245,7 +245,7 @@ const lateApi = {
         throw new Error('No platforms selected for posting. Please select TikTok or Instagram.');
       }
       if (type !== 'carousel' && !videoUrl) {
-        throw new Error('No video URL provided');
+        throw new Error('No video URL provided. The video must be rendered/exported before posting.');
       }
       if (type === 'carousel' && (!images || images.length === 0)) {
         throw new Error('No carousel images provided');
@@ -259,26 +259,24 @@ const lateApi = {
         ? images.map(img => ({ type: 'image', url: img.url }))
         : [{ type: 'video', url: videoUrl }];
 
-      // Format matches Late's expected structure - both platforms in one call
+      // Late API payload — only include fields Late expects (platform + accountId)
       const payload = {
-        action: 'posts',
         content: caption || '',
         mediaItems,
         platforms: platforms.map(p => ({
           platform: p.platform,
-          accountId: p.accountId,
-          customContent: caption || '',
-          scheduledFor
+          accountId: p.accountId
         })),
         scheduledFor,
-        timezone: 'America/Los_Angeles'
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles'
       };
 
       log('Sending to Late:', JSON.stringify(payload, null, 2));
 
+      // Use action=posts in query string (consistent with other endpoints)
       const url = artistId
-        ? `${LATE_API_PROXY}?artistId=${artistId}`
-        : LATE_API_PROXY;
+        ? `${LATE_API_PROXY}?action=posts&artistId=${artistId}`
+        : `${LATE_API_PROXY}?action=posts`;
       const response = await fetch(url, {
         method: 'POST',
         headers: {

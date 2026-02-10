@@ -18,6 +18,7 @@ import LibraryBrowser from './LibraryBrowser';
 import CollectionPicker from './CollectionPicker';
 import AudioClipSelector from './AudioClipSelector';
 import LyricBank from './LyricBank';
+import CloudImportButton from './CloudImportButton';
 import { useToast, ConfirmDialog } from '../ui';
 import {
   getLibrary,
@@ -1627,6 +1628,26 @@ const StudioHome = ({
         </div>
 
         <div style={styles.headerRight}>
+          {studioMode && studioMode !== 'audio' && (
+            <CloudImportButton
+              artistId={artistId}
+              db={db}
+              mediaType={studioMode === 'videos' ? 'video' : 'image'}
+              onImportMedia={(files) => {
+                const newItems = files.map((f, i) => ({
+                  id: `cloud_${Date.now()}_${i}`,
+                  name: f.name,
+                  url: f.url || f.localUrl,
+                  localUrl: f.localUrl,
+                  type: f.type || (studioMode === 'videos' ? 'video' : 'image'),
+                  source: f.source
+                }));
+                addManyToLibraryAsync(db, artistId, newItems).then(() => {
+                  setLibraryRefreshTrigger(prev => prev + 1);
+                }).catch(err => console.warn('[StudioHome] Cloud import save failed:', err));
+              }}
+            />
+          )}
         </div>
       </div>
 

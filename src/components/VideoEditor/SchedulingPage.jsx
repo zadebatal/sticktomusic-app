@@ -504,6 +504,17 @@ const SchedulingPage = ({
       return;
     }
 
+    // Determine post type and media
+    const isSlideshow = post.contentType === 'slideshow';
+    const videoUrl = post.cloudUrl || post.editorState?.cloudUrl;
+    const slideshowImages = isSlideshow ? (post.editorState?.slides || []).map(s => ({ url: s.backgroundImage || s.imageUrl })).filter(s => s.url) : null;
+
+    if (!isSlideshow && !videoUrl) {
+      toastError('Video not rendered yet. Export the video before publishing.');
+      await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: 'No video URL — render/export first' });
+      return;
+    }
+
     // Build caption with hashtags
     const allHashtags = [...(post.hashtags || []), ...(alwaysOnHashtags || [])];
     const caption = [post.caption || '', allHashtags.join(' ')].filter(Boolean).join('\n\n');
@@ -513,10 +524,11 @@ const SchedulingPage = ({
 
     try {
       const result = await onSchedulePost({
-        videoUrl: post.cloudUrl || post.editorState?.cloudUrl,
+        videoUrl,
         caption,
         platforms: platformEntries,
-        scheduledFor: post.scheduledTime || new Date().toISOString()
+        scheduledFor: post.scheduledTime || new Date().toISOString(),
+        ...(isSlideshow ? { type: 'carousel', images: slideshowImages } : {})
       });
 
       if (result?.success === false) {
@@ -561,6 +573,16 @@ const SchedulingPage = ({
         continue;
       }
 
+      const isSlideshow = post.contentType === 'slideshow';
+      const videoUrl = post.cloudUrl || post.editorState?.cloudUrl;
+      const slideshowImages = isSlideshow ? (post.editorState?.slides || []).map(s => ({ url: s.backgroundImage || s.imageUrl })).filter(s => s.url) : null;
+
+      if (!isSlideshow && !videoUrl) {
+        await handleUpdatePost(post.id, { status: POST_STATUS.FAILED, errorMessage: 'No video URL — render/export first' });
+        failed++;
+        continue;
+      }
+
       const allHashtags = [...(post.hashtags || []), ...(alwaysOnHashtags || [])];
       const caption = [post.caption || '', allHashtags.join(' ')].filter(Boolean).join('\n\n');
 
@@ -568,10 +590,11 @@ const SchedulingPage = ({
 
       try {
         const result = await onSchedulePost({
-          videoUrl: post.cloudUrl || post.editorState?.cloudUrl,
+          videoUrl,
           caption,
           platforms: platformEntries,
-          scheduledFor: post.scheduledTime || new Date().toISOString()
+          scheduledFor: post.scheduledTime || new Date().toISOString(),
+          ...(isSlideshow ? { type: 'carousel', images: slideshowImages } : {})
         });
 
         if (result?.success === false) {
