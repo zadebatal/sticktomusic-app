@@ -25,6 +25,13 @@ import log from '../../utils/logger';
 import useIsMobile from '../../hooks/useIsMobile';
 import { useTheme } from '../../contexts/ThemeContext';
 
+// Default text style used for template initialization and recovery fallback
+const DEFAULT_TEXT_STYLE = {
+  fontSize: 48, fontFamily: 'Inter, sans-serif', fontWeight: '600',
+  color: '#ffffff', outline: true, outlineColor: '#000000',
+  textCase: 'default', displayMode: 'word'
+};
+
 /**
  * VideoEditorModal - Flowstage-inspired video editor modal
  * Clean UI with preview, controls, and clip timeline
@@ -60,13 +67,108 @@ const VideoEditorModal = ({
   const { isMobile } = useIsMobile();
   const [mobilePreviewExpanded, setMobilePreviewExpanded] = useState(false);
 
-  // Media state
-  const [selectedAudio, setSelectedAudio] = useState(existingVideo?.audio || null);
-  const [clips, setClips] = useState(existingVideo?.clips || []);
+  // ── Multi-video state (template + generated variations) ──
+  // DEFAULT_TEXT_STYLE defined outside component for stable reference
+  const [allVideos, setAllVideos] = useState([{
+    id: 'template',
+    name: existingVideo?.name || 'Template',
+    clips: existingVideo?.clips || [],
+    audio: existingVideo?.audio || null,
+    words: existingVideo?.words || [],
+    lyrics: existingVideo?.lyrics || '',
+    textStyle: existingVideo?.textStyle || { ...DEFAULT_TEXT_STYLE },
+    cropMode: '9:16',
+    duration: existingVideo?.duration || 30,
+    isTemplate: true
+  }]);
+  const [activeVideoIndex, setActiveVideoIndex] = useState(0);
+  const [generateCount, setGenerateCount] = useState(10);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  // Derived reads from active video
+  const selectedAudio = allVideos[activeVideoIndex]?.audio || null;
+  const clips = allVideos[activeVideoIndex]?.clips || [];
+  const duration = allVideos[activeVideoIndex]?.duration || 30;
+  const lyrics = allVideos[activeVideoIndex]?.lyrics || '';
+  const words = allVideos[activeVideoIndex]?.words || [];
+  const textStyle = allVideos[activeVideoIndex]?.textStyle || { ...DEFAULT_TEXT_STYLE };
+  const cropMode = allVideos[activeVideoIndex]?.cropMode || '9:16';
+
+  // Wrapper setters that route through allVideos
+  const setSelectedAudio = useCallback((updater) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const cur = copy[activeVideoIndex];
+      if (!cur) return prev;
+      copy[activeVideoIndex] = { ...cur, audio: typeof updater === 'function' ? updater(cur.audio) : updater };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
+  const setClips = useCallback((updater) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const cur = copy[activeVideoIndex];
+      if (!cur) return prev;
+      copy[activeVideoIndex] = { ...cur, clips: typeof updater === 'function' ? updater(cur.clips) : updater };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
+  const setDuration = useCallback((updater) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const cur = copy[activeVideoIndex];
+      if (!cur) return prev;
+      copy[activeVideoIndex] = { ...cur, duration: typeof updater === 'function' ? updater(cur.duration) : updater };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
+  const setLyrics = useCallback((updater) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const cur = copy[activeVideoIndex];
+      if (!cur) return prev;
+      copy[activeVideoIndex] = { ...cur, lyrics: typeof updater === 'function' ? updater(cur.lyrics) : updater };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
+  const setWords = useCallback((updater) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const cur = copy[activeVideoIndex];
+      if (!cur) return prev;
+      copy[activeVideoIndex] = { ...cur, words: typeof updater === 'function' ? updater(cur.words) : updater };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
+  const setTextStyle = useCallback((updater) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const cur = copy[activeVideoIndex];
+      if (!cur) return prev;
+      copy[activeVideoIndex] = { ...cur, textStyle: typeof updater === 'function' ? updater(cur.textStyle) : updater };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
+  const setCropMode = useCallback((updater) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const cur = copy[activeVideoIndex];
+      if (!cur) return prev;
+      copy[activeVideoIndex] = { ...cur, cropMode: typeof updater === 'function' ? updater(cur.cropMode) : updater };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
+  // Playback state (shared across all videos)
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [duration, setDuration] = useState(existingVideo?.duration || 30);
 
   // Auto-select source video audio when clips exist — skip the audio picker screen
   useEffect(() => {
@@ -162,23 +264,12 @@ const VideoEditorModal = ({
     ));
   }, [artistId, sidebarCollections]);
 
-  // Text state
-  const [lyrics, setLyrics] = useState(existingVideo?.lyrics || '');
-  const [words, setWords] = useState(existingVideo?.words || []);
+  // Text state (lyrics/words derived from allVideos above)
 
   // Lyrics saving state
   const [showSaveLyricsPrompt, setShowSaveLyricsPrompt] = useState(false);
   const [pendingSaveData, setPendingSaveData] = useState(null);
-  const [textStyle, setTextStyle] = useState(existingVideo?.textStyle || {
-    fontSize: 48,
-    fontFamily: 'Inter, sans-serif',
-    fontWeight: '600',
-    color: '#ffffff',
-    outline: true,
-    outlineColor: '#000000',
-    textCase: 'default',
-    displayMode: 'word'
-  });
+  // textStyle derived from allVideos above
 
   // Editor state - restore tab from session
   const [activeTab, setActiveTab] = useState(() => {
@@ -186,7 +277,7 @@ const VideoEditorModal = ({
       return localStorage.getItem('stm_editor_tab') || 'caption';
     } catch { return 'caption'; }
   });
-  const [cropMode, setCropMode] = useState('9:16');
+  // cropMode derived from allVideos above
   const [selectedPreset, setSelectedPreset] = useState(null);
   const [showLyricsEditor, setShowLyricsEditor] = useState(false);
   const [showWordTimeline, setShowWordTimeline] = useState(false);
@@ -214,8 +305,7 @@ const VideoEditorModal = ({
   // Close confirmation state
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
-  // Batch lyric settings prompt state
-  const [showBatchLyricPrompt, setShowBatchLyricPrompt] = useState(false);
+  // Batch generation now uses in-editor allVideos pattern (no separate prompt)
 
   // Lyric bank picker state
   const [showLyricBankPicker, setShowLyricBankPicker] = useState(false);
@@ -805,30 +895,26 @@ const VideoEditorModal = ({
     }
   }, [autoSaveKey, existingVideo]);
 
-  // Auto-save every 30 seconds
+  // Auto-save every 30 seconds (saves full allVideos state)
   useEffect(() => {
-    let failedOnce = false; // Track if we already warned user
+    let failedOnce = false;
 
     const autoSave = () => {
       // Don't auto-save if there's nothing to save
-      if (!selectedAudio && clips.length === 0 && words.length === 0) return;
+      const template = allVideos[0];
+      if (!template?.audio && (!template?.clips?.length) && (!template?.words?.length)) return;
 
       try {
         const draftData = {
-          audio: selectedAudio,
-          clips,
-          words,
-          lyrics,
-          textStyle,
-          cropMode,
+          allVideos,
+          activeVideoIndex,
           savedAt: new Date().toISOString()
         };
         localStorage.setItem(autoSaveKey, JSON.stringify(draftData));
         setLastSaved(new Date());
-        failedOnce = false; // Reset on success
+        failedOnce = false;
       } catch (e) {
         console.error('Auto-save failed:', e);
-        // Only warn once per session to avoid spamming
         if (!failedOnce) {
           toast.error('Auto-save failed. Save your work manually.');
           failedOnce = true;
@@ -836,19 +922,35 @@ const VideoEditorModal = ({
       }
     };
 
-    const interval = setInterval(autoSave, 30000); // 30 seconds
+    const interval = setInterval(autoSave, 30000);
     return () => clearInterval(interval);
-  }, [autoSaveKey, selectedAudio, clips, words, lyrics, textStyle, cropMode, toast]);
+  }, [autoSaveKey, allVideos, activeVideoIndex, toast]);
 
-  // Restore from auto-saved draft
+  // Restore from auto-saved draft (handles both new allVideos format and legacy flat format)
   const handleRestoreDraft = useCallback(() => {
     if (recoveryData) {
-      if (recoveryData.audio) setSelectedAudio(recoveryData.audio);
-      if (recoveryData.clips) setClips(recoveryData.clips);
-      if (recoveryData.words) setWords(recoveryData.words);
-      if (recoveryData.lyrics) setLyrics(recoveryData.lyrics);
-      if (recoveryData.textStyle) setTextStyle(recoveryData.textStyle);
-      if (recoveryData.cropMode) setCropMode(recoveryData.cropMode);
+      if (recoveryData.allVideos) {
+        // New multi-video format
+        setAllVideos(recoveryData.allVideos);
+        if (recoveryData.activeVideoIndex != null) {
+          setActiveVideoIndex(recoveryData.activeVideoIndex);
+        }
+      } else {
+        // Legacy flat format — wrap into template
+        setAllVideos([{
+          id: 'template',
+          name: 'Template',
+          clips: recoveryData.clips || [],
+          audio: recoveryData.audio || null,
+          words: recoveryData.words || [],
+          lyrics: recoveryData.lyrics || '',
+          textStyle: recoveryData.textStyle || { ...DEFAULT_TEXT_STYLE },
+          cropMode: recoveryData.cropMode || '9:16',
+          duration: recoveryData.duration || 30,
+          isTemplate: true
+        }]);
+        setActiveVideoIndex(0);
+      }
     }
     setShowRecoveryPrompt(false);
     setRecoveryData(null);
@@ -860,6 +962,156 @@ const VideoEditorModal = ({
     setShowRecoveryPrompt(false);
     setRecoveryData(null);
   }, [clearAutoSave]);
+
+  // ── Multi-video switching ──
+  const switchToVideo = useCallback((index) => {
+    if (index === activeVideoIndex || index < 0 || index >= allVideos.length) return;
+    // Stop playback, reset UI state
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setSelectedClips([]);
+    setShowWordTimeline(false);
+    setShowBeatSelector(false);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    setActiveVideoIndex(index);
+  }, [activeVideoIndex, allVideos.length]);
+
+  const handleDeleteVideo = useCallback((index) => {
+    if (index === 0) return; // Can't delete template
+    setAllVideos(prev => {
+      const next = prev.filter((_, i) => i !== index);
+      return next;
+    });
+    // Adjust activeVideoIndex if needed
+    setActiveVideoIndex(prev => {
+      if (prev === index) return 0; // Go to template
+      if (prev > index) return prev - 1; // Shift left
+      return prev;
+    });
+    toast.success('Variation deleted');
+  }, [toast]);
+
+  // ── Generate variations from template ──
+  const executeGeneration = useCallback(() => {
+    const template = allVideos[0];
+    if (!template?.clips?.length) {
+      toast.error('Add clips to template before generating');
+      return;
+    }
+    setIsGenerating(true);
+
+    // Fisher-Yates shuffle
+    const shuffle = (arr) => {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    };
+
+    // Get extra clips from library for substitution
+    const extraClips = libraryVideos
+      .filter(v => !template.clips.some(c => c.sourceId === v.id))
+      .map((v, i) => ({
+        id: `clip_gen_${Date.now()}_${i}`,
+        sourceId: v.id,
+        url: v.url || v.localUrl || v.src,
+        localUrl: v.localUrl || v.url || v.src,
+        thumbnail: v.thumbnailUrl || v.thumbnail,
+        startTime: 0,
+        duration: 2,
+        locked: false
+      }));
+
+    // Get text banks for cycling
+    const { textBank1, textBank2 } = getTextBanks();
+
+    const newVideos = [];
+    for (let g = 0; g < generateCount; g++) {
+      // Shuffle clip order
+      let genClips = shuffle(template.clips);
+
+      // Randomly substitute some clips if extras available
+      if (extraClips.length > 0) {
+        const subCount = Math.min(
+          Math.floor(Math.random() * 3), // 0-2 substitutions
+          extraClips.length
+        );
+        for (let s = 0; s < subCount; s++) {
+          const replaceIdx = Math.floor(Math.random() * genClips.length);
+          const extraIdx = Math.floor(Math.random() * extraClips.length);
+          genClips = [...genClips];
+          genClips[replaceIdx] = {
+            ...extraClips[extraIdx],
+            id: `clip_gen_${Date.now()}_${g}_${s}`,
+            startTime: genClips[replaceIdx].startTime,
+            duration: genClips[replaceIdx].duration
+          };
+        }
+      }
+
+      // Recalculate startTimes for sequential playback
+      let runningTime = 0;
+      genClips = genClips.map(c => {
+        const clip = { ...c, id: `clip_${Date.now()}_${g}_${Math.random().toString(36).slice(2)}`, startTime: runningTime };
+        runningTime += clip.duration;
+        return clip;
+      });
+
+      // Cycle text from banks if available
+      let genWords = [...template.words];
+      if (textBank1.length > 0 && genWords.length > 0) {
+        const bankText = textBank1[g % textBank1.length];
+        if (bankText) {
+          // Replace first word with cycled text
+          genWords = genWords.map((w, i) => i === 0 ? { ...w, text: bankText } : w);
+        }
+      }
+
+      newVideos.push({
+        id: `gen_${Date.now()}_${g}`,
+        name: `#${allVideos.length + g}`,
+        clips: genClips,
+        audio: template.audio,
+        words: genWords,
+        lyrics: template.lyrics,
+        textStyle: { ...template.textStyle },
+        cropMode: template.cropMode,
+        duration: template.duration,
+        isTemplate: false
+      });
+    }
+
+    setAllVideos(prev => [...prev, ...newVideos]);
+    setIsGenerating(false);
+    toast.success(`Generated ${generateCount} variations`);
+  }, [allVideos, generateCount, libraryVideos, getTextBanks, toast]);
+
+  // ── Save all videos ──
+  const handleSaveAllAndClose = useCallback(() => {
+    allVideos.forEach(video => {
+      const videoData = {
+        id: video.isTemplate ? existingVideo?.id : undefined,
+        audio: video.audio,
+        clips: video.clips,
+        words: video.words,
+        lyrics: video.lyrics,
+        textStyle: video.textStyle,
+        cropMode: video.cropMode,
+        duration: video.duration,
+        bpm,
+        thumbnail: video.clips[0]?.thumbnail || null,
+        textOverlay: video.words[0]?.text || video.lyrics.split('\n')[0] || ''
+      };
+      onSave(videoData);
+    });
+    clearAutoSave();
+    toast.success(`Saved ${allVideos.length} video${allVideos.length > 1 ? 's' : ''}`);
+  }, [allVideos, existingVideo, bpm, onSave, clearAutoSave, toast]);
 
   // Get current visible text
   const currentText = words.find(w =>
@@ -3055,6 +3307,110 @@ const VideoEditorModal = ({
           </div>
         </div>
 
+        {/* ── Video Variation Tabs + Generate ── */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          padding: isMobile ? '8px 12px' : '6px 16px',
+          borderTop: `1px solid ${theme.border.default}`,
+          backgroundColor: theme.bg.surface,
+          overflowX: 'auto',
+          flexShrink: 0
+        }}>
+          {/* Variation tabs */}
+          <div style={{ display: 'flex', gap: '4px', flex: 1, overflowX: 'auto', minWidth: 0 }}>
+            {allVideos.map((video, idx) => (
+              <button
+                key={video.id}
+                onClick={() => switchToVideo(idx)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: isMobile ? '6px 10px' : '4px 10px',
+                  borderRadius: '6px',
+                  border: `1px solid ${idx === activeVideoIndex ? theme.accent.primary : theme.border.default}`,
+                  backgroundColor: idx === activeVideoIndex ? theme.accent.primary + '22' : theme.bg.input,
+                  color: idx === activeVideoIndex ? theme.accent.primary : theme.text.secondary,
+                  fontSize: '12px',
+                  fontWeight: idx === activeVideoIndex ? '600' : '400',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  minHeight: isMobile ? '36px' : undefined
+                }}
+              >
+                {video.isTemplate ? (
+                  <>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="3" width="7" height="7" rx="1"/>
+                      <rect x="14" y="3" width="7" height="7" rx="1"/>
+                      <rect x="3" y="14" width="7" height="7" rx="1"/>
+                      <rect x="14" y="14" width="7" height="7" rx="1"/>
+                    </svg>
+                    Template
+                  </>
+                ) : (
+                  <>
+                    {video.name}
+                    <span
+                      onClick={(e) => { e.stopPropagation(); handleDeleteVideo(idx); }}
+                      style={{ marginLeft: '2px', opacity: 0.5, cursor: 'pointer', fontSize: '10px' }}
+                    >
+                      x
+                    </span>
+                  </>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Generate controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={generateCount}
+              onChange={(e) => setGenerateCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
+              style={{
+                width: '48px',
+                padding: '4px 6px',
+                borderRadius: '6px',
+                border: `1px solid ${theme.border.default}`,
+                backgroundColor: theme.bg.input,
+                color: theme.text.primary,
+                fontSize: '12px',
+                textAlign: 'center'
+              }}
+            />
+            <button
+              onClick={executeGeneration}
+              disabled={isGenerating || clips.length === 0}
+              style={{
+                padding: isMobile ? '6px 12px' : '4px 12px',
+                borderRadius: '6px',
+                border: 'none',
+                background: isGenerating ? theme.bg.elevated : 'linear-gradient(135deg, #8B5CF6, #7C3AED)',
+                color: '#fff',
+                fontSize: '12px',
+                fontWeight: '600',
+                cursor: isGenerating || clips.length === 0 ? 'not-allowed' : 'pointer',
+                opacity: clips.length === 0 ? 0.5 : 1,
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {isGenerating ? 'Generating...' : `Generate ${generateCount}`}
+            </button>
+            {allVideos.length > 1 && (
+              <span style={{ fontSize: '11px', color: theme.text.muted, whiteSpace: 'nowrap' }}>
+                {allVideos.length} total
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* Footer */}
         <div style={{
           ...styles.footer,
@@ -3098,47 +3454,6 @@ const VideoEditorModal = ({
               gap: '8px'
             } : {})
           }}>
-            {onShowBatchPipeline && (
-              <button
-                style={{
-                  ...styles.batchButton,
-                  ...(isMobile ? {
-                    padding: '12px 16px',
-                    fontSize: '14px',
-                    flex: isMobile ? '1 1 calc(50% - 4px)' : undefined,
-                    marginRight: 0
-                  } : {})
-                }}
-                onClick={() => {
-                  // Check if there are word timings or custom text styles to carry over
-                  const hasWordTimings = words && words.length > 0;
-                  const hasCustomTextStyle = textStyle && (
-                    textStyle.outline !== undefined ||
-                    textStyle.fontSize !== 48 ||
-                    textStyle.fontFamily !== 'Inter, sans-serif' ||
-                    textStyle.textCase !== 'default'
-                  );
-
-                  if (hasWordTimings || hasCustomTextStyle) {
-                    // Show prompt asking if they want to apply these to batch
-                    setShowBatchLyricPrompt(true);
-                  } else {
-                    // No custom settings, proceed directly
-                    onClose();
-                    onShowBatchPipeline();
-                  }
-                }}
-                title="Generate up to 10 videos at once"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="7" height="7" rx="1"/>
-                  <rect x="14" y="3" width="7" height="7" rx="1"/>
-                  <rect x="3" y="14" width="7" height="7" rx="1"/>
-                  <rect x="14" y="14" width="7" height="7" rx="1"/>
-                </svg>
-                {isMobile ? 'Batch' : 'Make 10 at once'}
-              </button>
-            )}
             {!isMobile && <span style={styles.shortcutHint}>⌘S to save</span>}
             <button
               style={{
@@ -3146,13 +3461,29 @@ const VideoEditorModal = ({
                 ...(isMobile ? {
                   padding: '12px 20px',
                   fontSize: '14px',
-                  flex: onShowBatchPipeline ? '1 1 calc(50% - 4px)' : '1'
+                  flex: '1'
                 } : {})
               }}
               onClick={onClose}
             >
               Cancel
             </button>
+            {allVideos.length > 1 && (
+              <button
+                style={{
+                  ...styles.confirmButton,
+                  background: 'linear-gradient(135deg, #8B5CF6, #7C3AED)',
+                  ...(isMobile ? {
+                    padding: '12px 20px',
+                    fontSize: '14px',
+                    flex: '1'
+                  } : {})
+                }}
+                onClick={handleSaveAllAndClose}
+              >
+                Save All ({allVideos.length})
+              </button>
+            )}
             <button
               style={{
                 ...styles.confirmButton,
@@ -3160,12 +3491,12 @@ const VideoEditorModal = ({
                   padding: '12px 20px',
                   fontSize: '14px',
                   flex: '1',
-                  width: '100%'
+                  width: allVideos.length > 1 ? undefined : '100%'
                 } : {})
               }}
               onClick={handleSave}
             >
-              {schedulerEditMode ? 'Save' : 'Confirm'}
+              {schedulerEditMode ? 'Save' : allVideos.length > 1 ? 'Save Current' : 'Confirm'}
             </button>
           </div>
         </div>
@@ -3459,91 +3790,6 @@ const VideoEditorModal = ({
                   onClick={() => handleLyricsPromptResponse(true)}
                 >
                   Yes, Save to Song
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Batch Lyric Settings Prompt */}
-        {showBatchLyricPrompt && (
-          <div style={styles.lyricsOverlay}>
-            <div style={{
-              ...styles.lyricsModal,
-              maxWidth: '480px',
-              ...(isMobile ? { width: '95%', maxWidth: '95%' } : {})
-            }}>
-              <h3 style={styles.lyricsTitle}>🎬 Apply Lyric Settings to Batch?</h3>
-              <p style={{ color: theme.text.secondary, fontSize: '14px', marginBottom: '16px' }}>
-                You have custom lyric settings configured. Do you want to apply them to all videos in the batch?
-              </p>
-              <div style={{
-                backgroundColor: theme.bg.surface,
-                padding: '12px',
-                borderRadius: '8px',
-                marginBottom: '16px',
-                fontSize: '13px',
-                color: theme.text.secondary
-              }}>
-                {words && words.length > 0 && (
-                  <div style={{ marginBottom: '8px' }}>
-                    <span style={{ color: '#8B5CF6' }}>✓</span> Word timings: {words.length} words synced
-                  </div>
-                )}
-                {textStyle && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                    {textStyle.outline && (
-                      <span style={{ padding: '4px 8px', backgroundColor: theme.bg.elevated, borderRadius: '4px', fontSize: '12px' }}>
-                        {textStyle.outline ? 'Outline' : 'No outline'}
-                      </span>
-                    )}
-                    {textStyle.textCase && textStyle.textCase !== 'default' && (
-                      <span style={{ padding: '4px 8px', backgroundColor: theme.bg.elevated, borderRadius: '4px', fontSize: '12px' }}>
-                        {textStyle.textCase.toUpperCase()}
-                      </span>
-                    )}
-                    {textStyle.displayMode && textStyle.displayMode !== 'word' && (
-                      <span style={{ padding: '4px 8px', backgroundColor: theme.bg.elevated, borderRadius: '4px', fontSize: '12px' }}>
-                        {textStyle.displayMode === 'line' ? 'Build line' : textStyle.displayMode}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div style={{
-                ...styles.lyricsActions,
-                ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
-              }}>
-                <button
-                  style={{
-                    ...styles.cancelButton,
-                    ...(isMobile ? { width: '100%', padding: '14px' } : {})
-                  }}
-                  onClick={() => {
-                    setShowBatchLyricPrompt(false);
-                    onClose();
-                    onShowBatchPipeline(); // Proceed without lyric settings
-                  }}
-                >
-                  No, Fresh Start
-                </button>
-                <button
-                  style={{
-                    ...styles.confirmButton,
-                    background: 'linear-gradient(135deg, #8B5CF6, #7C3AED)',
-                    ...(isMobile ? { width: '100%', padding: '14px' } : {})
-                  }}
-                  onClick={() => {
-                    setShowBatchLyricPrompt(false);
-                    onClose();
-                    // Pass words and textStyle to batch pipeline
-                    onShowBatchPipeline({
-                      words: words,
-                      textStyle: textStyle
-                    });
-                  }}
-                >
-                  ✨ Apply to All Videos
                 </button>
               </div>
             </div>

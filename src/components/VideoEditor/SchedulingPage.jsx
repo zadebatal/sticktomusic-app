@@ -94,6 +94,20 @@ const SchedulingPage = ({
     return Array.from(handles);
   }, [accounts]);
 
+  // Enriched handles with platform context for dropdown labels
+  const enrichedHandles = useMemo(() => {
+    return availableHandles.map(handle => {
+      const mapping = lateAccountIds[handle] || {};
+      const platforms = Object.keys(mapping).filter(p => mapping[p]);
+      const platformNames = platforms.map(p => PLATFORM_LABELS[p] || p).join(', ');
+      return {
+        handle,
+        platforms,
+        label: platformNames ? `@${handle} (${platformNames})` : `@${handle}`
+      };
+    });
+  }, [availableHandles, lateAccountIds]);
+
   // Linked platforms for the currently selected batch account
   const linkedPlatforms = useMemo(() => {
     if (!batchAccount) return [];
@@ -679,8 +693,8 @@ const SchedulingPage = ({
                 style={s.bulkSelect}
               >
                 <option value="">Choose account...</option>
-                {availableHandles.map(handle => (
-                  <option key={handle} value={handle}>@{handle}</option>
+                {enrichedHandles.map(({ handle, label }) => (
+                  <option key={handle} value={handle}>{label}</option>
                 ))}
               </select>
             </div>
