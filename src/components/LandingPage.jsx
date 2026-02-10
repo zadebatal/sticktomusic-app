@@ -98,10 +98,10 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
       <section className="min-h-screen flex flex-col justify-center items-center text-center px-6 pt-16">
         <div className="max-w-3xl">
           <h1 className={`text-5xl md:text-7xl font-bold leading-tight mb-6 ${t.textPrimary}`}>
-            Content at<br />lightning speed.
+            Your music,<br />everywhere.
           </h1>
           <p className={`text-xl md:text-2xl ${t.textSecondary} max-w-xl mx-auto mb-10`}>
-            Create, schedule, and analyze content across TikTok, Instagram, YouTube, and Facebook — all from one studio.
+            Create videos in seconds, schedule posts, and grow your audience across every platform — all in one place.
           </p>
           <div className="flex gap-4 flex-wrap justify-center">
             <button onClick={() => { setAuthMode('signup'); setShowAuth(true); }} className={`px-8 py-4 rounded-full text-lg font-semibold transition ${t.btnPrimary}`}>
