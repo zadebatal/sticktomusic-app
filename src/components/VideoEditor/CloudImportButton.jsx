@@ -64,7 +64,7 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
         await googleDriveService.authenticate();
       }
     } catch (err) {
-      toast.error('Google Drive authentication failed: ' + err.message);
+      toast.error('Google Drive authentication failed: ' + (err?.message || err?.error || String(err)));
       return;
     }
     setImporting(true);
@@ -120,7 +120,7 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
         await dropboxService.authenticate();
       }
     } catch (err) {
-      toast.error('Dropbox authentication failed: ' + err.message);
+      toast.error('Dropbox authentication failed: ' + (err?.message || err?.error || String(err)));
       return;
     }
     setImporting(true);

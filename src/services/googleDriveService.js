@@ -50,7 +50,7 @@ export async function initGoogleDrive(clientId, apiKey) {
     const script = document.createElement('script');
     script.src = 'https://apis.google.com/js/api.js';
     script.onload = resolve;
-    script.onerror = reject;
+    script.onerror = () => reject(new Error('Failed to load Google API script'));
     document.body.appendChild(script);
   });
 
@@ -58,10 +58,16 @@ export async function initGoogleDrive(clientId, apiKey) {
     window.gapi.load('client:picker', resolve);
   });
 
-  await window.gapi.client.init({
-    apiKey,
-    discoveryDocs: [DISCOVERY_DOC]
-  });
+  try {
+    await window.gapi.client.init({
+      apiKey,
+      discoveryDocs: [DISCOVERY_DOC]
+    });
+  } catch (err) {
+    console.error('[GoogleDrive] gapi.client.init failed:', err);
+    const msg = err?.result?.error?.message || err?.error?.message || err?.message || err?.error || JSON.stringify(err);
+    throw new Error('Drive API init failed: ' + msg);
+  }
 
   gapiLoaded = true;
   log('[GoogleDrive] GAPI loaded');
@@ -75,7 +81,7 @@ export async function initGoogleDrive(clientId, apiKey) {
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
     script.onload = resolve;
-    script.onerror = reject;
+    script.onerror = () => reject(new Error('Failed to load Google Identity Services script'));
     document.body.appendChild(script);
   });
 
@@ -104,7 +110,8 @@ export function authenticate() {
 
     tokenClient.callback = async (response) => {
       if (response.error) {
-        reject(new Error(response.error));
+        console.error('[GoogleDrive] Auth error:', response);
+        reject(new Error(response.error_description || response.error));
         return;
       }
       accessToken = response.access_token;
