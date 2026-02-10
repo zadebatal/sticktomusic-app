@@ -47,7 +47,8 @@ const AnalyticsDashboard = ({
   artists = [],
   onArtistChange = null,
   onSyncLate = null,
-  latePosts = []
+  latePosts = [],
+  lateConnected = false
 }) => {
   // Mobile responsive detection
   const { isMobile } = useIsMobile();
@@ -278,6 +279,36 @@ const AnalyticsDashboard = ({
         <div style={styles.loadingContainer}>
           <div style={styles.spinner} />
           <p>Loading analytics...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Gate: require Late connection
+  if (!lateConnected) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '400px',
+        padding: '32px'
+      }}>
+        <div style={{
+          background: theme.bg.surface,
+          border: `1px solid ${theme.border.subtle}`,
+          borderRadius: '12px',
+          padding: '48px',
+          textAlign: 'center',
+          maxWidth: '420px'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
+          <h2 style={{ color: theme.text.primary, margin: '0 0 12px', fontSize: '20px' }}>
+            Connect Late to View Analytics
+          </h2>
+          <p style={{ color: theme.text.secondary, margin: 0, lineHeight: '1.5' }}>
+            Analytics require a Late.co connection. Contact your operator to get set up.
+          </p>
         </div>
       </div>
     );

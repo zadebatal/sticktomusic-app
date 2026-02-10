@@ -3227,7 +3227,18 @@ const StickToMusic = () => {
 
             {/* Analytics Tab */}
             {artistTab === 'analytics' && (
-              <AnalyticsDashboard />
+              <AnalyticsDashboard
+                artistId={effectiveArtistId}
+                artists={[firestoreArtists.find(a => a.id === effectiveArtistId)].filter(Boolean)}
+                lateConnected={artistLateConnected}
+                onSyncLate={async () => {
+                  const result = await lateApi.fetchScheduledPosts(1, effectiveArtistId);
+                  if (result.success) {
+                    return { success: true, posts: result.posts || [] };
+                  }
+                  return result;
+                }}
+              />
             )}
 
             {/* Settings Tab */}
@@ -5641,6 +5652,7 @@ const StickToMusic = () => {
             <AnalyticsDashboard
               artistId={currentArtistId}
               artists={getVisibleArtists()}
+              lateConnected={artistLateConnected}
               onArtistChange={handleArtistChange}
               onSyncLate={async () => {
                 const result = await lateApi.fetchScheduledPosts(1, currentArtistId);
