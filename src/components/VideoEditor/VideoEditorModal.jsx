@@ -1873,17 +1873,19 @@ const VideoEditorModal = ({
                               key={video.id || i}
                               style={{ ...styles.sidebarClip, position: 'relative', border: isInTimeline ? '1px solid rgba(34,197,94,0.4)' : undefined }}
                               onClick={() => {
-                                const newClip = {
-                                  id: `clip_${Date.now()}_${i}`,
-                                  sourceId: video.id,
-                                  url: video.url || video.localUrl,
-                                  localUrl: video.localUrl || video.url,
-                                  thumbnail: video.thumbnailUrl || video.thumbnail,
-                                  startTime: clips.length * 2,
-                                  duration: 2,
-                                  locked: false
-                                };
-                                setClips(prev => [...prev, newClip]);
+                                setClips(prev => {
+                                  const newClip = {
+                                    id: `clip_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                                    sourceId: video.id,
+                                    url: video.url || video.localUrl,
+                                    localUrl: video.localUrl || video.url,
+                                    thumbnail: video.thumbnailUrl || video.thumbnail,
+                                    startTime: prev.length * 2,
+                                    duration: 2,
+                                    locked: false
+                                  };
+                                  return [...prev, newClip];
+                                });
                                 if (video.id && category?.artistId) incrementUseCount(category.artistId, video.id);
                               }}
                               onMouseEnter={(e) => { e.currentTarget.style.borderColor = isInTimeline ? 'rgba(34,197,94,0.6)' : 'rgba(20,184,166,0.5)'; }}

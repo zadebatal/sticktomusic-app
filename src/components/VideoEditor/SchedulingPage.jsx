@@ -480,12 +480,12 @@ const SchedulingPage = ({
       return;
     }
 
-    // Collect account IDs from assigned platforms
-    const accountIds = Object.values(post.platforms || {})
-      .map(p => p.accountId)
-      .filter(Boolean);
+    // Collect platforms array for Late API: [{ platform, accountId }]
+    const platformEntries = Object.entries(post.platforms || {})
+      .filter(([, v]) => v?.accountId)
+      .map(([platform, v]) => ({ platform, accountId: v.accountId }));
 
-    if (accountIds.length === 0) {
+    if (platformEntries.length === 0) {
       toastError('No platform accounts assigned. Select accounts before publishing.');
       return;
     }
@@ -501,8 +501,8 @@ const SchedulingPage = ({
       const result = await onSchedulePost({
         videoUrl: post.cloudUrl || post.editorState?.cloudUrl,
         caption,
-        accountIds,
-        scheduledTime: post.scheduledTime || new Date().toISOString()
+        platforms: platformEntries,
+        scheduledFor: post.scheduledTime || new Date().toISOString()
       });
 
       if (result?.success === false) {
@@ -537,11 +537,11 @@ const SchedulingPage = ({
     let failed = 0;
 
     for (const post of publishable) {
-      const accountIds = Object.values(post.platforms || {})
-        .map(p => p.accountId)
-        .filter(Boolean);
+      const platformEntries = Object.entries(post.platforms || {})
+        .filter(([, v]) => v?.accountId)
+        .map(([platform, v]) => ({ platform, accountId: v.accountId }));
 
-      if (accountIds.length === 0) {
+      if (platformEntries.length === 0) {
         await handleUpdatePost(post.id, { status: POST_STATUS.FAILED, errorMessage: 'No platform accounts assigned' });
         failed++;
         continue;
@@ -556,8 +556,8 @@ const SchedulingPage = ({
         const result = await onSchedulePost({
           videoUrl: post.cloudUrl || post.editorState?.cloudUrl,
           caption,
-          accountIds,
-          scheduledTime: post.scheduledTime || new Date().toISOString()
+          platforms: platformEntries,
+          scheduledFor: post.scheduledTime || new Date().toISOString()
         });
 
         if (result?.success === false) {
