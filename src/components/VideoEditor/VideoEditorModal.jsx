@@ -8,6 +8,8 @@ import SoloClipEditor from './SoloClipEditor';
 import MultiClipEditor from './MultiClipEditor';
 import AudioClipSelector from './AudioClipSelector';
 import CloudImportButton from './CloudImportButton';
+import EditorToolbar from './EditorToolbar';
+import useEditorHistory from '../../hooks/useEditorHistory';
 import { saveApiKey, loadApiKey } from '../../services/storageService';
 import { ErrorPanel, EmptyState as SharedEmptyState, useToast } from '../ui';
 import {
@@ -164,6 +166,32 @@ const VideoEditorModal = ({
       return copy;
     });
   }, [activeVideoIndex]);
+
+  // ── Undo/Redo history ──
+  const getHistorySnapshot = useCallback(() => {
+    const v = allVideos[activeVideoIndex];
+    return v ? { clips: v.clips, audio: v.audio, words: v.words, lyrics: v.lyrics, textStyle: v.textStyle, cropMode: v.cropMode, duration: v.duration } : null;
+  }, [allVideos, activeVideoIndex]);
+
+  const restoreHistorySnapshot = useCallback((snapshot) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const cur = copy[activeVideoIndex];
+      if (!cur) return prev;
+      copy[activeVideoIndex] = { ...cur, ...snapshot };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
+  const { canUndo, canRedo, handleUndo, handleRedo, resetHistory } = useEditorHistory({
+    getSnapshot: getHistorySnapshot,
+    restoreSnapshot: restoreHistorySnapshot,
+    deps: [clips, words, textStyle, selectedAudio],
+    isEditingText: false
+  });
+
+  // Reset history when switching video variations
+  useEffect(() => { resetHistory(); }, [activeVideoIndex, resetHistory]);
 
   // Playback state (shared across all videos)
   const [currentTime, setCurrentTime] = useState(0);
@@ -3410,6 +3438,37 @@ const VideoEditorModal = ({
             )}
           </div>
         </div>
+
+        {/* ── Editor Toolbar ── */}
+        <EditorToolbar
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onReroll={clips.length > 0 ? handleReroll : null}
+          rerollDisabled={!category?.videos?.length}
+          onAddText={() => setActiveBank('textBank')}
+          onDelete={clips.length > 1 ? handleRemoveClips : null}
+          audioTracks={libraryAudio}
+          onSelectAudio={(audio) => {
+            setAudioToTrim(audio);
+            setShowAudioTrimmer(true);
+          }}
+          onUploadAudio={() => audioFileInputRef.current?.click()}
+          lyrics={artistId ? getLyrics(artistId) : (category?.lyrics || [])}
+          onSelectLyric={(lyric) => {
+            if (lyric.words?.length > 0) {
+              setWords(lyric.words);
+              setLyrics(lyric.words.map(w => w.text).join(' '));
+            } else if (lyric.content) {
+              setLyrics(lyric.content);
+            }
+          }}
+          onAddNewLyrics={onAddLyrics ? () => {
+            setShowLyricBankPicker(false);
+            if (onAddLyrics) onAddLyrics({ title: 'New Lyrics', content: '' });
+          } : null}
+        />
 
         {/* Footer */}
         <div style={{

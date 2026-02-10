@@ -8,8 +8,10 @@ import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
 import useIsMobile from '../../hooks/useIsMobile';
 import AudioClipSelector from './AudioClipSelector';
+import EditorToolbar from './EditorToolbar';
 import LyricBank from './LyricBank';
 import LyricAnalyzer from './LyricAnalyzer';
+import useEditorHistory from '../../hooks/useEditorHistory';
 
 /**
  * MultiClipEditor v1 — "Multi-Clip" video editor mode
@@ -108,9 +110,36 @@ const MultiClipEditor = ({
     });
   }, [activeVideoIndex]);
 
+  // ── Undo/Redo history ──
+  const getHistorySnapshot = useCallback(() => {
+    const v = allVideos[activeVideoIndex];
+    return v ? { clips: v.clips, textOverlays: v.textOverlays } : null;
+  }, [allVideos, activeVideoIndex]);
+
+  const restoreHistorySnapshot = useCallback((snapshot) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const cur = copy[activeVideoIndex];
+      if (!cur) return prev;
+      copy[activeVideoIndex] = { ...cur, ...snapshot };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
+  const { canUndo, canRedo, handleUndo, handleRedo, resetHistory } = useEditorHistory({
+    getSnapshot: getHistorySnapshot,
+    restoreSnapshot: restoreHistorySnapshot,
+    deps: [clips, textOverlays],
+    isEditingText: false
+  });
+
+  // Reset history when switching video variations
+  useEffect(() => { resetHistory(); }, [activeVideoIndex, resetHistory]);
+
   // ── Audio state ──
   const [selectedAudio, setSelectedAudio] = useState(existingVideo?.audio || null);
   const audioRef = useRef(null);
+  const audioFileInputRef = useRef(null);
 
   // ── Clip durations tracking ──
   const clipDurationsRef = useRef({});
@@ -480,6 +509,43 @@ const MultiClipEditor = ({
     setEditingTextId(newOverlay.id);
     setEditingTextValue(newOverlay.text);
   }, [getDefaultTextStyle, setTextOverlays, currentTime, totalDuration]);
+
+  // ── Reroll: swap active clip with random from category ──
+  const handleReroll = useCallback(() => {
+    if (!category?.videos?.length) {
+      toastError('No clips in bank to reroll from.');
+      return;
+    }
+    const currentClip = clips[activeClipIndex];
+    const currentSourceId = currentClip?.id || currentClip?.sourceId;
+    const available = category.videos.filter(v => v.id !== currentSourceId);
+    if (available.length === 0) {
+      toastError('No other clips available to swap with.');
+      return;
+    }
+    const randomClip = available[Math.floor(Math.random() * available.length)];
+    setClips(prev => prev.map((c, i) => {
+      if (i !== activeClipIndex) return c;
+      return { ...c, id: randomClip.id, sourceId: randomClip.id, url: randomClip.url, localUrl: randomClip.localUrl, thumbnail: randomClip.thumbnailUrl || randomClip.thumbnail };
+    }));
+    toastSuccess('Swapped active clip');
+  }, [category?.videos, clips, activeClipIndex, setClips, toastSuccess, toastError]);
+
+  // ── Audio upload handler ──
+  const handleAudioUpload = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const localUrl = URL.createObjectURL(file);
+    const uploadedAudio = {
+      id: `upload_${Date.now()}`,
+      name: file.name,
+      file,
+      url: localUrl,
+      localUrl
+    };
+    handleAudioSelect(uploadedAudio);
+    if (audioFileInputRef.current) audioFileInputRef.current.value = '';
+  }, [handleAudioSelect]);
 
   const updateTextOverlay = useCallback((overlayId, updates) => {
     setTextOverlays(prev => prev.map(o =>
@@ -2469,6 +2535,33 @@ const MultiClipEditor = ({
             )}
           </div>
         </div>}
+
+        {/* ── Editor Toolbar ── */}
+        <EditorToolbar
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onReroll={category?.videos?.length > 1 ? handleReroll : null}
+          rerollDisabled={clips.length === 0}
+          onAddText={() => addTextOverlay()}
+          onDelete={clips.length > 1 ? () => removeClipFromTimeline(activeClipIndex) : null}
+          audioTracks={libraryAudio}
+          onSelectAudio={handleAudioSelect}
+          onUploadAudio={() => audioFileInputRef.current?.click()}
+          lyrics={lyricsBank}
+          onSelectLyric={(lyric) => addTextOverlay(lyric.content || lyric.title || '')}
+          onAddNewLyrics={onAddLyrics ? () => onAddLyrics({ title: 'New Lyrics', content: '' }) : null}
+        />
+
+        {/* Hidden audio file input */}
+        <input
+          ref={audioFileInputRef}
+          type="file"
+          accept="audio/*"
+          style={{ display: 'none' }}
+          onChange={handleAudioUpload}
+        />
 
         {/* ── Tab Bar (bottom) ── */}
         <div style={{
