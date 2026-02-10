@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
-import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, getLyrics, MEDIA_TYPES, addToTextBank, removeFromTextBank, assignToBank, saveCollectionToFirestore } from '../../services/libraryService';
+import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, getLyrics, MEDIA_TYPES, addToTextBank, removeFromTextBank, assignToBank, saveCollectionToFirestore, migrateCollectionBanks, getBankColor, getBankLabel, BANK_COLORS, MAX_BANKS, addBankToCollection } from '../../services/libraryService';
 import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
 import LyricBank from './LyricBank';
@@ -120,13 +120,10 @@ const SlideshowEditor = ({
   const [libraryImages, setLibraryImages] = useState([]);
   const [libraryAudio, setLibraryAudio] = useState([]);
   const [collections, setCollections] = useState([]);
-  const [selectedSource, setSelectedSource] = useState('bankA'); // 'bankA' | 'bankB' | 'all' | collection ID
+  const [selectedSource, setSelectedSource] = useState('bank_0'); // 'bank_0' | 'bank_1' | 'collectionId:bank_N' | collection ID
 
   // Text bank input state
-  const [newTextA, setNewTextA] = useState('');
-  const [newTextB, setNewTextB] = useState('');
-  const [newTextC, setNewTextC] = useState('');
-  const [newTextD, setNewTextD] = useState('');
+  const [newTextInputs, setNewTextInputs] = useState({});
 
   // Add text to a text bank and update local collections state
   const handleAddToTextBank = useCallback((bankNum, text) => {
@@ -260,7 +257,7 @@ const SlideshowEditor = ({
         const col = freshCols.find(c => c.id === targetCol.id);
         if (col) saveCollectionToFirestore(db, artistId, col).catch(() => {});
       }
-      toastSuccess(`Added ${mediaIds.length} image${mediaIds.length > 1 ? 's' : ''} to Bank ${bank}`);
+      toastSuccess(`Added ${mediaIds.length} image${mediaIds.length > 1 ? 's' : ''} to ${getBankLabel(bank)} Bank`);
     }
   }, [artistId, collections, db, toastSuccess]);
 
@@ -378,11 +375,14 @@ const SlideshowEditor = ({
   const canvasRef = useRef(null);
   const previewRef = useRef(null);
 
-  // Get content from category's banks (separate from video banks)
-  const imagesA = category?.imagesA || [];
-  const imagesB = category?.imagesB || [];
-  const imagesC = category?.imagesC || [];
-  const imagesD = category?.imagesD || [];
+  // Resolve category bank images dynamically
+  const categoryBankImages = (() => {
+    if (!category) return [];
+    const migrated = migrateCollectionBanks(category);
+    return (migrated.banks || []).map(bankIds =>
+      (bankIds || []).length > 0 ? libraryImages.filter(img => bankIds.includes(img.id)) : []
+    );
+  })();
   // Lyrics: merge category lyrics with library lyrics (for StudioHome/library mode)
   // Filter to only show lyrics tagged to the active collection
   const [libraryLyrics, setLibraryLyrics] = useState([]);
@@ -391,8 +391,8 @@ const SlideshowEditor = ({
   }, [artistId]);
   useEffect(() => { refreshLibraryLyrics(); }, [refreshLibraryLyrics]);
   const activeCollectionId = (() => {
-    if (selectedSource && selectedSource.includes(':bank')) return selectedSource.split(':')[0];
-    if (selectedSource && selectedSource !== 'bankA' && selectedSource !== 'bankB' && selectedSource !== 'all') return selectedSource;
+    if (selectedSource && selectedSource.includes(':bank_')) return selectedSource.split(':')[0];
+    if (selectedSource && !selectedSource.match(/^bank_\d+$/)) return selectedSource;
     return null;
   })();
   const lyrics = (() => {
@@ -418,11 +418,11 @@ const SlideshowEditor = ({
   const audioTracks = (() => {
     // Try to get collection-based audio from library system
     if (libraryAudio.length > 0) {
-      // Extract collection ID from selectedSource (format: "collectionId:bankA")
+      // Extract collection ID from selectedSource (format: "collectionId:bank_0")
       let colId = null;
-      if (selectedSource && selectedSource.includes(':bank')) {
+      if (selectedSource && selectedSource.includes(':bank_')) {
         colId = selectedSource.split(':')[0];
-      } else if (selectedSource && selectedSource !== 'bankA' && selectedSource !== 'bankB' && selectedSource !== 'all') {
+      } else if (selectedSource && !selectedSource.match(/^bank_\d+$/)) {
         colId = selectedSource;
       }
       if (colId) {
@@ -440,7 +440,7 @@ const SlideshowEditor = ({
     return category?.audio || [];
   })();
 
-  const activeContent = activeBank === 'imageA' ? imagesA : activeBank === 'imageB' ? imagesB : activeBank === 'audio' ? audioTracks : [];
+  const activeContent = activeBank === 'imageA' ? (categoryBankImages[0] || []) : activeBank === 'imageB' ? (categoryBankImages[1] || []) : activeBank === 'audio' ? audioTracks : [];
 
   // Load library images and collections when db/artistId available
   // Strategy: instant load from localStorage, then Firestore subscription merges in background
@@ -493,56 +493,42 @@ const SlideshowEditor = ({
   }, [db, artistId]);
 
   // Compute active images based on selected source
-  // Supports: 'bankA', 'bankB', 'bankC', 'bankD', 'all', collectionId, 'collectionId:bankA', 'collectionId:bankB', 'collectionId:bankC', 'collectionId:bankD'
+  // Supports: 'bank_0', 'bank_1', 'collectionId:bank_0', 'collectionId:bank_1', etc.
   // When category banks are empty, aggregates from all collection banks
   const activeImages = (() => {
-    if (selectedSource === 'bankA') {
-      // Use category bank first; if empty, aggregate from all collection bankA
-      if (imagesA.length > 0) return imagesA;
-      const allBankAIds = new Set();
-      collections.forEach(col => (col.bankA || []).forEach(id => allBankAIds.add(id)));
-      if (allBankAIds.size > 0) return libraryImages.filter(img => allBankAIds.has(img.id));
-      return imagesA;
+    // Parse bank index from selectedSource format: 'bank_0', 'bank_1', etc.
+    const bankMatch = selectedSource.match(/^bank_(\d+)$/);
+    if (bankMatch) {
+      const idx = parseInt(bankMatch[1], 10);
+      // Use category bank first; if empty, aggregate from all collections
+      if (categoryBankImages[idx]?.length > 0) return categoryBankImages[idx];
+      const allIds = new Set();
+      collections.forEach(col => {
+        const migrated = migrateCollectionBanks(col);
+        ((migrated.banks || [])[idx] || []).forEach(id => allIds.add(id));
+      });
+      if (allIds.size > 0) return libraryImages.filter(img => allIds.has(img.id));
+      return categoryBankImages[idx] || [];
     }
-    if (selectedSource === 'bankB') {
-      // Use category bank first; if empty, aggregate from all collection bankB
-      if (imagesB.length > 0) return imagesB;
-      const allBankBIds = new Set();
-      collections.forEach(col => (col.bankB || []).forEach(id => allBankBIds.add(id)));
-      if (allBankBIds.size > 0) return libraryImages.filter(img => allBankBIds.has(img.id));
-      return imagesB;
-    }
-    if (selectedSource === 'bankC') {
-      // Use category bank first; if empty, aggregate from all collection bankC
-      if (imagesC.length > 0) return imagesC;
-      const allBankCIds = new Set();
-      collections.forEach(col => (col.bankC || []).forEach(id => allBankCIds.add(id)));
-      if (allBankCIds.size > 0) return libraryImages.filter(img => allBankCIds.has(img.id));
-      return imagesC;
-    }
-    if (selectedSource === 'bankD') {
-      // Use category bank first; if empty, aggregate from all collection bankD
-      if (imagesD.length > 0) return imagesD;
-      const allBankDIds = new Set();
-      collections.forEach(col => (col.bankD || []).forEach(id => allBankDIds.add(id)));
-      if (allBankDIds.size > 0) return libraryImages.filter(img => allBankDIds.has(img.id));
-      return imagesD;
-    }
-    // Collection bank source — format: "collectionId:bankA", "collectionId:bankB", "collectionId:bankC", or "collectionId:bankD"
-    if (selectedSource.includes(':bank')) {
-      const [colId, bankKey] = selectedSource.split(':');
+    // Collection bank source — format: "collectionId:bank_0"
+    if (selectedSource.includes(':bank_')) {
+      const [colId, bankPart] = selectedSource.split(':');
+      const idx = parseInt(bankPart.replace('bank_', ''), 10);
       const col = collections.find(c => c.id === colId);
       if (col) {
-        const bankIds = col[bankKey] || [];
+        const migrated = migrateCollectionBanks(col);
+        const bankIds = (migrated.banks || [])[idx] || [];
         return libraryImages.filter(img => bankIds.includes(img.id));
       }
     }
-
-    // Fallback: aggregate from all collection bankA (Slide 1 photos)
+    // Fallback: aggregate from all collection bank 0
     const fallbackIds = new Set();
-    collections.forEach(col => (col.bankA || []).forEach(id => fallbackIds.add(id)));
+    collections.forEach(col => {
+      const migrated = migrateCollectionBanks(col);
+      ((migrated.banks || [])[0] || []).forEach(id => fallbackIds.add(id));
+    });
     if (fallbackIds.size > 0) return libraryImages.filter(img => fallbackIds.has(img.id));
-    return imagesA;
+    return categoryBankImages[0] || [];
   })();
 
   // Export dimensions based on aspect ratio
@@ -605,22 +591,20 @@ const SlideshowEditor = ({
     if (sourceAutoSwitched) return;
     if (!collections || collections.length === 0) return;
     // Only auto-switch if category banks are empty
-    if (imagesA.length > 0 || imagesB.length > 0) return;
+    if ((categoryBankImages[0] || []).length > 0 || (categoryBankImages[1] || []).length > 0) return;
 
     // Find first collection with populated banks
     for (const col of collections) {
-      if (col.bankA?.length > 0) {
-        setSelectedSource(`${col.id}:bankA`);
-        setSourceAutoSwitched(true);
-        return;
-      }
-      if (col.bankB?.length > 0) {
-        setSelectedSource(`${col.id}:bankB`);
-        setSourceAutoSwitched(true);
-        return;
+      const migrated = migrateCollectionBanks(col);
+      for (let idx = 0; idx < (migrated.banks || []).length; idx++) {
+        if ((migrated.banks || [])[idx]?.length > 0) {
+          setSelectedSource(`${col.id}:bank_${idx}`);
+          setSourceAutoSwitched(true);
+          return;
+        }
       }
     }
-  }, [collections, imagesA.length, imagesB.length, sourceAutoSwitched]);
+  }, [collections, categoryBankImages, sourceAutoSwitched]);
 
   // Initialize with at least one slide, or generate batch, or use initialImages, or auto-start from banks
   useEffect(() => {
@@ -641,11 +625,11 @@ const SlideshowEditor = ({
           imageTransform: { scale: 1, offsetX: 0, offsetY: 0 }
         }));
         setSlides(initSlides);
-      } else if (batchMode && (imagesA.length > 0 || imagesB.length > 0)) {
+      } else if (batchMode && ((categoryBankImages[0] || []).length > 0 || (categoryBankImages[1] || []).length > 0)) {
         // Batch mode: Generate 10 slides randomly from A/B banks
         const allImages = [
-          ...imagesA.map(img => ({ ...img, sourceBank: 'imageA' })),
-          ...imagesB.map(img => ({ ...img, sourceBank: 'imageB' }))
+          ...(categoryBankImages[0] || []).map(img => ({ ...img, sourceBank: 'imageA' })),
+          ...(categoryBankImages[1] || []).map(img => ({ ...img, sourceBank: 'imageB' }))
         ];
 
         if (allImages.length > 0) {
@@ -673,7 +657,7 @@ const SlideshowEditor = ({
       }
     }
   // eslint-disable-next-line
-  }, [batchMode, imagesA.length, imagesB.length]);
+  }, [batchMode, categoryBankImages]);
 
   // Auto-start from collection banks: once collections load, if slides are empty/blank
   // and any collection has banks populated, auto-create starter slides from selected banks
@@ -693,38 +677,32 @@ const SlideshowEditor = ({
 
     // Find collection with populated banks
     for (const col of collections) {
-      const bankAIds = useBankA ? (col.bankA || []) : [];
-      const bankBIds = useBankB ? (col.bankB || []) : [];
-      if (bankAIds.length === 0 && bankBIds.length === 0) continue;
-
-      const bankAImages = bankAIds.length > 0 ? libraryImages.filter(img => bankAIds.includes(img.id)) : [];
-      const bankBImages = bankBIds.length > 0 ? libraryImages.filter(img => bankBIds.includes(img.id)) : [];
-      if (bankAImages.length === 0 && bankBImages.length === 0) continue;
-
+      const migrated = migrateCollectionBanks(col);
       const newSlides = [];
-      if (bankAImages.length > 0) {
-        const imgA = bankAImages[Math.floor(Math.random() * bankAImages.length)];
+      let defaultBankIdx = -1;
+
+      for (let idx = 0; idx < Math.min((migrated.banks || []).length, 2); idx++) {
+        const useBank = idx === 0 ? useBankA : useBankB;
+        if (!useBank) continue;
+
+        const bankIds = (migrated.banks || [])[idx] || [];
+        const bankImages = bankIds.length > 0 ? libraryImages.filter(img => bankIds.includes(img.id)) : [];
+        if (bankImages.length === 0) continue;
+
+        if (defaultBankIdx === -1) defaultBankIdx = idx;
+        const img = bankImages[Math.floor(Math.random() * bankImages.length)];
         newSlides.push({
-          id: `slide_${Date.now()}_0`, index: 0,
-          backgroundImage: imgA.url || imgA.localUrl, thumbnail: imgA.url || imgA.localUrl,
-          sourceBank: 'imageA', sourceImageId: imgA.id,
+          id: `slide_${Date.now()}_${idx}`, index: newSlides.length,
+          backgroundImage: img.url || img.localUrl, thumbnail: img.url || img.localUrl,
+          sourceBank: `image${idx}`, sourceImageId: img.id,
           textOverlays: [], duration: 3, imageTransform: { scale: 1, offsetX: 0, offsetY: 0 }
         });
       }
-      if (bankBImages.length > 0) {
-        const imgB = bankBImages[Math.floor(Math.random() * bankBImages.length)];
-        newSlides.push({
-          id: `slide_${Date.now()}_1`, index: newSlides.length,
-          backgroundImage: imgB.url || imgB.localUrl, thumbnail: imgB.url || imgB.localUrl,
-          sourceBank: 'imageB', sourceImageId: imgB.id,
-          textOverlays: [], duration: 3, imageTransform: { scale: 1, offsetX: 0, offsetY: 0 }
-        });
-      }
+
       if (newSlides.length > 0) {
         setSlides(newSlides);
         // Set source to the first available bank of this collection
-        const defaultBank = bankAImages.length > 0 ? 'bankA' : 'bankB';
-        setSelectedSource(`${col.id}:${defaultBank}`);
+        setSelectedSource(`${col.id}:bank_${defaultBankIdx}`);
         setAutoStartAttempted(true);
         return;
       }
@@ -814,18 +792,20 @@ const SlideshowEditor = ({
     if (!currentSlide?.sourceBank) return [];
 
     // First try category-level banks
-    let bank = currentSlide.sourceBank === 'imageA' ? imagesA : currentSlide.sourceBank === 'imageB' ? imagesB : [];
+    let bank = currentSlide.sourceBank === 'imageA' ? (categoryBankImages[0] || []) : currentSlide.sourceBank === 'imageB' ? (categoryBankImages[1] || []) : [];
 
     // If category banks are empty, try collection-level banks
     if (bank.length === 0 && collections?.length > 0) {
       const isA = currentSlide.sourceBank === 'imageA';
       const isB = currentSlide.sourceBank === 'imageB';
       if (isA || isB) {
-        const bankKey = isA ? 'bankA' : 'bankB';
+        const idx = isA ? 0 : 1;
         const allBankIds = [];
         collections.forEach(col => {
-          if (col[bankKey]?.length > 0) {
-            allBankIds.push(...col[bankKey]);
+          const migrated = migrateCollectionBanks(col);
+          const bankIds = (migrated.banks || [])[idx] || [];
+          if (bankIds.length > 0) {
+            allBankIds.push(...bankIds);
           }
         });
         if (allBankIds.length > 0) {
@@ -845,7 +825,7 @@ const SlideshowEditor = ({
     }
 
     return bank;
-  }, [currentSlide, imagesA, imagesB, collections, libraryImages, activeImages]);
+  }, [currentSlide, categoryBankImages, collections, libraryImages, activeImages, migrateCollectionBanks]);
 
   // Re-roll: Replace current slide's image with random different image from same bank
   const handleReroll = useCallback(() => {
@@ -864,23 +844,23 @@ const SlideshowEditor = ({
 
   // Gather all text bank items from collections for text reroll
   const getTextBanks = useCallback(() => {
-    let textBank1 = [];
-    let textBank2 = [];
-    let textBank3 = [];
-    let textBank4 = [];
+    const result = [];
     for (const col of collections) {
-      if (col.textBank1?.length > 0) textBank1 = [...textBank1, ...col.textBank1];
-      if (col.textBank2?.length > 0) textBank2 = [...textBank2, ...col.textBank2];
-      if (col.textBank3?.length > 0) textBank3 = [...textBank3, ...col.textBank3];
-      if (col.textBank4?.length > 0) textBank4 = [...textBank4, ...col.textBank4];
+      const migrated = migrateCollectionBanks(col);
+      (migrated.textBanks || []).forEach((tb, i) => {
+        if (!result[i]) result[i] = [];
+        if (tb?.length > 0) result[i] = [...result[i], ...tb];
+      });
     }
-    return { textBank1, textBank2, textBank3, textBank4 };
-  }, [collections]);
+    // Ensure minimum 2 entries
+    while (result.length < 2) result.push([]);
+    return result;
+  }, [collections, migrateCollectionBanks]);
 
   // Re-roll text: Replace text overlays with random text from banks
   const handleTextReroll = useCallback((overlayId = null, bankSource = null) => {
-    const { textBank1, textBank2 } = getTextBanks();
-    if (textBank1.length === 0 && textBank2.length === 0) return;
+    const textBanks = getTextBanks();
+    if (textBanks.length === 0 || !textBanks.some(b => b?.length > 0)) return;
 
     setSlides(prev => prev.map((slide, i) => {
       if (i !== selectedSlideIndex) return slide;
@@ -890,9 +870,8 @@ const SlideshowEditor = ({
 
         // Use specified bank source, or auto-assign based on overlay index
         let bank;
-        if (bankSource === 1) bank = textBank1;
-        else if (bankSource === 2) bank = textBank2;
-        else bank = idx === 0 ? textBank1 : idx === 1 ? textBank2 : [...textBank1, ...textBank2];
+        if (bankSource !== null && bankSource !== undefined) bank = textBanks[bankSource] || [];
+        else bank = textBanks[idx] || textBanks[0] || [];
         if (bank.length === 0) return overlay;
 
         // Pick random text different from current if possible
@@ -1690,22 +1669,21 @@ const SlideshowEditor = ({
 
     try {
       // Gather image banks
-      const imgA = category?.imagesA || [];
-      const imgB = category?.imagesB || [];
-      let collBankA = [];
-      let collBankB = [];
+      let allImgA = categoryBankImages[0] || [];
+      let allImgB = categoryBankImages[1] || [];
       if (collections.length > 0) {
         for (const col of collections) {
-          if (col.bankA?.length > 0) {
-            collBankA = [...collBankA, ...libraryImages.filter(img => col.bankA.includes(img.id))];
+          const migrated = migrateCollectionBanks(col);
+          const bankA = (migrated.banks || [])[0] || [];
+          const bankB = (migrated.banks || [])[1] || [];
+          if (bankA?.length > 0) {
+            allImgA = [...allImgA, ...libraryImages.filter(img => bankA.includes(img.id))];
           }
-          if (col.bankB?.length > 0) {
-            collBankB = [...collBankB, ...libraryImages.filter(img => col.bankB.includes(img.id))];
+          if (bankB?.length > 0) {
+            allImgB = [...allImgB, ...libraryImages.filter(img => bankB.includes(img.id))];
           }
         }
       }
-      const allImgA = [...imgA, ...collBankA];
-      const allImgB = [...imgB, ...collBankB];
 
       if (allImgA.length === 0 && allImgB.length === 0) {
         toastError('No images in banks. Add images to Slide 1 and Slide 2 photos first.');
@@ -1713,7 +1691,7 @@ const SlideshowEditor = ({
       }
 
       // Gather text banks
-      const { textBank1, textBank2 } = getTextBanks();
+      const textBanks = getTextBanks();
 
       // Current count of generated slideshows (for naming)
       const existingGenCount = allSlideshows.filter(ss => !ss.isTemplate).length;
@@ -1739,7 +1717,7 @@ const SlideshowEditor = ({
           //   'both'   → keep text from ALL template slides (no bank replacement)
           //   'none'   → pull from text banks for all slides (original behavior)
           const templateOverlays = templateSlide.textOverlays || [];
-          const slideTBank = s === 0 ? textBank1 : s === 1 ? textBank2 : [...textBank1, ...textBank2];
+          const slideTBank = textBanks[s] || textBanks[0] || [];
           const isSlideA = s % 2 === 0;  // even slides = A, odd = B
           const shouldKeepText =
             keepTemplateText === 'both' ||
@@ -2167,216 +2145,67 @@ const SlideshowEditor = ({
                   cursor: 'pointer'
                 }}
               >
-                <option value="bankA">Image Bank A (Category)</option>
-                <option value="bankB">Image Bank B (Category)</option>
-                {(() => {
-                  const hasCOrD = collections.some(c => (c.bankC?.length > 0 || c.bankD?.length > 0));
-                  if (hasCOrD) {
-                    return (
-                      <>
-                        <option value="bankC">Image Bank C (Category)</option>
-                        <option value="bankD">Image Bank D (Category)</option>
-                      </>
-                    );
-                  }
-                  return null;
-                })()}
+                {(categoryBankImages.length > 0 ? categoryBankImages : [[], []]).map((_, idx) => (
+                  <option key={`bank_${idx}`} value={`bank_${idx}`}>{getBankLabel(idx)} Bank (Category)</option>
+                ))}
                 {collections.filter(c => c.type !== 'smart').map(c => {
-                  const hasBanks = (c.bankA?.length > 0 || c.bankB?.length > 0 || c.bankC?.length > 0 || c.bankD?.length > 0);
-                  if (!hasBanks) return null;
+                  const migrated = migrateCollectionBanks(c);
+                  if (!(migrated.banks || []).some(b => b?.length > 0)) return null;
                   return (
                     <React.Fragment key={c.id}>
-                      <option value={`${c.id}:bankA`}>{c.name} → Slide 1 ({c.bankA?.length || 0})</option>
-                      <option value={`${c.id}:bankB`}>{c.name} → Slide 2 ({c.bankB?.length || 0})</option>
-                      {(c.bankC?.length > 0 || c.bankD?.length > 0) && (
-                        <>
-                          <option value={`${c.id}:bankC`}>{c.name} → Slide 3 ({c.bankC?.length || 0})</option>
-                          <option value={`${c.id}:bankD`}>{c.name} → Slide 4 ({c.bankD?.length || 0})</option>
-                        </>
-                      )}
+                      {(migrated.banks || []).map((bank, idx) => (
+                        bank?.length > 0 && <option key={`${c.id}:bank_${idx}`} value={`${c.id}:bank_${idx}`}>{c.name} → {getBankLabel(idx)} ({bank.length})</option>
+                      ))}
                     </React.Fragment>
                   );
                 })}
               </select>
             </div>
 
-            {/* 3-Column Layout: Image A | Image B | Text Banks */}
+            {/* Dynamic Image Bank Columns + Text Banks */}
             <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-              {/* Column 1: Image A — drop zone */}
-              <div
-                style={{
-                  flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden',
-                  border: dragOverBankCol === 'A' ? '2px dashed rgba(20, 184, 166, 0.6)' : undefined,
-                  backgroundColor: dragOverBankCol === 'A' ? 'rgba(20, 184, 166, 0.05)' : undefined,
-                  transition: 'all 0.15s ease'
-                }}
-                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBankCol('A'); }}
-                onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverBankCol(null); }}
-                onDrop={(e) => handleDropOnBankColumn(e, 'A')}
-              >
-                <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: '#5eead4', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(20,184,166,0.08)', textAlign: 'center' }}>
-                  Slide 1 Photos
-                </div>
-                <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
-                  {(() => {
-                    const bankAImages = (() => {
-                      const col = collections.find(c => c.id === (typeof selectedSource === 'string' && selectedSource.includes(':') ? selectedSource.split(':')[0] : selectedSource));
-                      if (col?.bankA?.length > 0) {
-                        return libraryImages.filter(item => col.bankA.includes(item.id));
-                      }
-                      return imagesA;
-                    })();
-                    return bankAImages.length === 0 ? (
-                      <div style={{ fontSize: '11px', color: '#6b7280', padding: '16px 8px', textAlign: 'center' }}>
-                        No images in Slide 1
-                        {onImportToBank && (
-                          <button
-                            style={{ marginTop: '8px', padding: '6px 12px', borderRadius: '6px', border: '1px solid rgba(99,102,241,0.3)', backgroundColor: 'rgba(99,102,241,0.1)', color: '#a5b4fc', fontSize: '11px', cursor: 'pointer', display: 'block', width: '100%' }}
-                            onClick={() => importImageARef.current?.click()}
-                          >
-                            + Import
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px' }}>
-                        {bankAImages.map(image => {
-                          const isSel = selectedBankImages.has(image.id);
-                          return (
-                            <div key={image.id} style={{ ...styles.clipCard, border: isSel ? '1px solid rgba(20,184,166,0.5)' : '1px solid transparent', position: 'relative' }}
-                              draggable
-                              onClick={(e) => {
-                                if (e.metaKey || e.ctrlKey) {
-                                  setSelectedBankImages(prev => { const next = new Set(prev); if (next.has(image.id)) next.delete(image.id); else next.add(image.id); return next; });
-                                } else {
-                                  setSelectedBankImages(prev => prev.size === 1 && prev.has(image.id) ? new Set() : new Set([image.id]));
-                                }
-                                setActiveBank('imageA');
-                              }}
-                              onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ ...image, url: image.url || image.localUrl, thumbnail: image.url || image.localUrl, sourceBank: 'imageA' })); }}
-                            >
-                              {isSel && <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(20,184,166,0.2)', zIndex: 1, pointerEvents: 'none', borderRadius: '6px' }}><div style={{ position: 'absolute', bottom: 3, right: 3, width: '14px', height: '14px', backgroundColor: '#14b8a6', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', color: '#fff', fontWeight: 'bold' }}>✓</div></div>}
-                              <img src={image.thumbnailUrl || image.url || image.localUrl} alt={image.name} style={styles.clipThumbnail} loading="lazy" />
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              {/* Column 2: Image B — drop zone */}
-              <div
-                style={{
-                  flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden',
-                  border: dragOverBankCol === 'B' ? '2px dashed rgba(245, 158, 11, 0.6)' : undefined,
-                  backgroundColor: dragOverBankCol === 'B' ? 'rgba(245, 158, 11, 0.05)' : undefined,
-                  transition: 'all 0.15s ease'
-                }}
-                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBankCol('B'); }}
-                onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverBankCol(null); }}
-                onDrop={(e) => handleDropOnBankColumn(e, 'B')}
-              >
-                <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: '#fbbf24', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(245,158,11,0.08)', textAlign: 'center' }}>
-                  Slide 2 Photos
-                </div>
-                <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
-                  {(() => {
-                    const bankBImages = (() => {
-                      const col = collections.find(c => c.id === (typeof selectedSource === 'string' && selectedSource.includes(':') ? selectedSource.split(':')[0] : selectedSource));
-                      if (col?.bankB?.length > 0) {
-                        return libraryImages.filter(item => col.bankB.includes(item.id));
-                      }
-                      return imagesB;
-                    })();
-                    return bankBImages.length === 0 ? (
-                      <div style={{ fontSize: '11px', color: '#6b7280', padding: '16px 8px', textAlign: 'center' }}>
-                        No images in Slide 2
-                        {onImportToBank && (
-                          <button
-                            style={{ marginTop: '8px', padding: '6px 12px', borderRadius: '6px', border: '1px solid rgba(245,158,11,0.3)', backgroundColor: 'rgba(245,158,11,0.1)', color: '#fbbf24', fontSize: '11px', cursor: 'pointer', display: 'block', width: '100%' }}
-                            onClick={() => importImageBRef.current?.click()}
-                          >
-                            + Import
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px' }}>
-                        {bankBImages.map(image => {
-                          const isSel = selectedBankImages.has(image.id);
-                          return (
-                            <div key={image.id} style={{ ...styles.clipCard, border: isSel ? '1px solid rgba(245,158,11,0.5)' : '1px solid transparent', position: 'relative' }}
-                              draggable
-                              onClick={(e) => {
-                                if (e.metaKey || e.ctrlKey) {
-                                  setSelectedBankImages(prev => { const next = new Set(prev); if (next.has(image.id)) next.delete(image.id); else next.add(image.id); return next; });
-                                } else {
-                                  setSelectedBankImages(prev => prev.size === 1 && prev.has(image.id) ? new Set() : new Set([image.id]));
-                                }
-                                setActiveBank('imageB');
-                              }}
-                              onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ ...image, url: image.url || image.localUrl, thumbnail: image.url || image.localUrl, sourceBank: 'imageB' })); }}
-                            >
-                              {isSel && <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(245,158,11,0.2)', zIndex: 1, pointerEvents: 'none', borderRadius: '6px' }}><div style={{ position: 'absolute', bottom: 3, right: 3, width: '14px', height: '14px', backgroundColor: '#f59e0b', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', color: '#fff', fontWeight: 'bold' }}>✓</div></div>}
-                              <img src={image.thumbnailUrl || image.url || image.localUrl} alt={image.name} style={styles.clipThumbnail} loading="lazy" />
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-
+              {/* Dynamic image bank columns */}
               {(() => {
-                const hasCOrD = collections.some(c => (c.bankC?.length > 0 || c.bankD?.length > 0));
-                if (!hasCOrD) return null;
-                return (
-                  <>
-                    {/* Column C: Image C — drop zone */}
-                    <div
+                const numBanks = Math.max((categoryBankImages || []).length, 2);
+                return Array.from({ length: numBanks }).map((_, idx) => {
+                  const color = getBankColor(idx);
+                  return (
+                    <div key={`img-bank-${idx}`}
                       style={{
-                        flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden',
-                        border: dragOverBankCol === 'C' ? '2px dashed rgba(192, 132, 252, 0.6)' : undefined,
-                        backgroundColor: dragOverBankCol === 'C' ? 'rgba(192, 132, 252, 0.05)' : undefined,
+                        flex: 1, display: 'flex', flexDirection: 'column',
+                        borderRight: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden',
+                        border: dragOverBankCol === idx ? `2px dashed ${color.border}` : undefined,
+                        backgroundColor: dragOverBankCol === idx ? color.bg : undefined,
                         transition: 'all 0.15s ease'
                       }}
-                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBankCol('C'); }}
+                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBankCol(idx); }}
                       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverBankCol(null); }}
-                      onDrop={(e) => handleDropOnBankColumn(e, 'C')}
+                      onDrop={(e) => handleDropOnBankColumn(e, idx)}
                     >
-                      <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: '#d8b4fe', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(192,132,252,0.08)', textAlign: 'center' }}>
-                        Slide 3 Photos
+                      <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: color.light, borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: color.bg, textAlign: 'center' }}>
+                        {getBankLabel(idx)} Photos
                       </div>
                       <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
                         {(() => {
-                          const bankCImages = (() => {
-                            const col = collections.find(c => c.id === (typeof selectedSource === 'string' && selectedSource.includes(':') ? selectedSource.split(':')[0] : selectedSource));
-                            if (col?.bankC?.length > 0) {
-                              return libraryImages.filter(item => col.bankC.includes(item.id));
+                          const bankImages = (() => {
+                            const col = collections.find(c => c.id === (typeof selectedSource === 'string' && selectedSource.includes(':') ? selectedSource.split(':')[0] : null));
+                            if (col) {
+                              const migrated = migrateCollectionBanks(col);
+                              const ids = (migrated.banks || [])[idx] || [];
+                              if (ids.length > 0) return libraryImages.filter(item => ids.includes(item.id));
                             }
-                            return imagesC;
+                            return categoryBankImages[idx] || [];
                           })();
-                          return bankCImages.length === 0 ? (
+                          return bankImages.length === 0 ? (
                             <div style={{ fontSize: '11px', color: '#6b7280', padding: '16px 8px', textAlign: 'center' }}>
-                              No images in Slide 3
-                              {onImportToBank && (
-                                <button
-                                  style={{ marginTop: '8px', padding: '6px 12px', borderRadius: '6px', border: '1px solid rgba(192,132,252,0.3)', backgroundColor: 'rgba(192,132,252,0.1)', color: '#d8b4fe', fontSize: '11px', cursor: 'pointer', display: 'block', width: '100%' }}
-                                  onClick={() => importImageBRef.current?.click()}
-                                >
-                                  + Import
-                                </button>
-                              )}
+                              No images in {getBankLabel(idx)}
                             </div>
                           ) : (
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px' }}>
-                              {bankCImages.map(image => {
+                              {bankImages.map(image => {
                                 const isSel = selectedBankImages.has(image.id);
                                 return (
-                                  <div key={image.id} style={{ ...styles.clipCard, border: isSel ? '1px solid rgba(192,132,252,0.5)' : '1px solid transparent', position: 'relative' }}
+                                  <div key={image.id} style={{ ...styles.clipCard, border: isSel ? `1px solid ${color.primary}80` : '1px solid transparent', position: 'relative' }}
                                     draggable
                                     onClick={(e) => {
                                       if (e.metaKey || e.ctrlKey) {
@@ -2384,11 +2213,11 @@ const SlideshowEditor = ({
                                       } else {
                                         setSelectedBankImages(prev => prev.size === 1 && prev.has(image.id) ? new Set() : new Set([image.id]));
                                       }
-                                      setActiveBank('imageC');
+                                      setActiveBank(`image${idx}`);
                                     }}
-                                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ ...image, url: image.url || image.localUrl, thumbnail: image.url || image.localUrl, sourceBank: 'imageC' })); }}
+                                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ ...image, url: image.url || image.localUrl, thumbnail: image.url || image.localUrl, sourceBank: `image${idx}` })); }}
                                   >
-                                    {isSel && <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(192,132,252,0.2)', zIndex: 1, pointerEvents: 'none', borderRadius: '6px' }}><div style={{ position: 'absolute', bottom: 3, right: 3, width: '14px', height: '14px', backgroundColor: '#c084fc', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', color: '#fff', fontWeight: 'bold' }}>✓</div></div>}
+                                    {isSel && <div style={{ position: 'absolute', inset: 0, backgroundColor: `${color.primary}33`, zIndex: 1, pointerEvents: 'none', borderRadius: '6px' }}><div style={{ position: 'absolute', bottom: 3, right: 3, width: '14px', height: '14px', backgroundColor: color.primary, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', color: '#fff', fontWeight: 'bold' }}>✓</div></div>}
                                     <img src={image.thumbnailUrl || image.url || image.localUrl} alt={image.name} style={styles.clipThumbnail} loading="lazy" />
                                   </div>
                                 );
@@ -2398,238 +2227,58 @@ const SlideshowEditor = ({
                         })()}
                       </div>
                     </div>
-
-                    {/* Column D: Image D — drop zone */}
-                    <div
-                      style={{
-                        flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden',
-                        border: dragOverBankCol === 'D' ? '2px dashed rgba(251, 113, 133, 0.6)' : undefined,
-                        backgroundColor: dragOverBankCol === 'D' ? 'rgba(251, 113, 133, 0.05)' : undefined,
-                        transition: 'all 0.15s ease'
-                      }}
-                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBankCol('D'); }}
-                      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverBankCol(null); }}
-                      onDrop={(e) => handleDropOnBankColumn(e, 'D')}
-                    >
-                      <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: '#fb9cc6', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(251,113,133,0.08)', textAlign: 'center' }}>
-                        Slide 4 Photos
-                      </div>
-                      <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
-                        {(() => {
-                          const bankDImages = (() => {
-                            const col = collections.find(c => c.id === (typeof selectedSource === 'string' && selectedSource.includes(':') ? selectedSource.split(':')[0] : selectedSource));
-                            if (col?.bankD?.length > 0) {
-                              return libraryImages.filter(item => col.bankD.includes(item.id));
-                            }
-                            return imagesD;
-                          })();
-                          return bankDImages.length === 0 ? (
-                            <div style={{ fontSize: '11px', color: '#6b7280', padding: '16px 8px', textAlign: 'center' }}>
-                              No images in Slide 4
-                              {onImportToBank && (
-                                <button
-                                  style={{ marginTop: '8px', padding: '6px 12px', borderRadius: '6px', border: '1px solid rgba(251,113,133,0.3)', backgroundColor: 'rgba(251,113,133,0.1)', color: '#fb9cc6', fontSize: '11px', cursor: 'pointer', display: 'block', width: '100%' }}
-                                  onClick={() => importImageBRef.current?.click()}
-                                >
-                                  + Import
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px' }}>
-                              {bankDImages.map(image => {
-                                const isSel = selectedBankImages.has(image.id);
-                                return (
-                                  <div key={image.id} style={{ ...styles.clipCard, border: isSel ? '1px solid rgba(251,113,133,0.5)' : '1px solid transparent', position: 'relative' }}
-                                    draggable
-                                    onClick={(e) => {
-                                      if (e.metaKey || e.ctrlKey) {
-                                        setSelectedBankImages(prev => { const next = new Set(prev); if (next.has(image.id)) next.delete(image.id); else next.add(image.id); return next; });
-                                      } else {
-                                        setSelectedBankImages(prev => prev.size === 1 && prev.has(image.id) ? new Set() : new Set([image.id]));
-                                      }
-                                      setActiveBank('imageD');
-                                    }}
-                                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ ...image, url: image.url || image.localUrl, thumbnail: image.url || image.localUrl, sourceBank: 'imageD' })); }}
-                                  >
-                                    {isSel && <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(251,113,133,0.2)', zIndex: 1, pointerEvents: 'none', borderRadius: '6px' }}><div style={{ position: 'absolute', bottom: 3, right: 3, width: '14px', height: '14px', backgroundColor: '#fb7185', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', color: '#fff', fontWeight: 'bold' }}>✓</div></div>}
-                                    <img src={image.thumbnailUrl || image.url || image.localUrl} alt={image.name} style={styles.clipThumbnail} loading="lazy" />
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  </>
-                );
+                  );
+                });
               })()}
 
-              {/* Column 3: Text Banks + Audio */}
+              {/* Text Banks Column */}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: '#f9a8d4', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(236,72,153,0.08)', textAlign: 'center' }}>
                   Text Banks
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
-                  {/* Text Bank A — drop lyrics here */}
-                  <div style={{ marginBottom: '12px' }}
-                    onDragOver={(e) => { if (e.dataTransfer.types.includes('text/lyric')) { e.preventDefault(); e.currentTarget.style.outline = '1px dashed #f9a8d4'; } }}
-                    onDragLeave={(e) => { e.currentTarget.style.outline = 'none'; }}
-                    onDrop={(e) => { e.preventDefault(); e.currentTarget.style.outline = 'none'; const text = e.dataTransfer.getData('text/lyric'); if (text) handleAddToTextBank(1, text); }}
-                  >
-                    <div style={{ fontSize: '11px', fontWeight: '600', color: '#f9a8d4', marginBottom: '6px' }}>
-                      Slide 1 Text
-                    </div>
-                    <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
-                      <input type="text" value={newTextA} onChange={(e) => setNewTextA(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToTextBank(1, newTextA); setNewTextA(''); } }}
-                        placeholder="Add text..." style={{ flex: 1, padding: '5px 7px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '11px', outline: 'none' }} />
-                      <button onClick={() => { if (newTextA.trim()) { handleAddToTextBank(1, newTextA); setNewTextA(''); } }} disabled={!newTextA.trim()}
-                        style={{ padding: '5px 8px', borderRadius: '5px', border: 'none', backgroundColor: newTextA.trim() ? 'rgba(236,72,153,0.3)' : 'rgba(255,255,255,0.05)', color: newTextA.trim() ? '#f9a8d4' : '#4b5563', fontSize: '11px', cursor: newTextA.trim() ? 'pointer' : 'default' }}>+</button>
-                    </div>
-                    {(() => {
-                      const { textBank1 } = getTextBanks();
-                      return textBank1.length > 0 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          {textBank1.map((text, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'stretch', gap: '2px' }}>
-                              <div onClick={() => {
-                                if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
-                                  const newOverlay = { id: `text_${Date.now()}_${i}`, text, style: getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
-                                  setSlides(prev => prev.map((slide, idx) => idx === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
-                                  setEditingTextId(newOverlay.id);
-                                }
-                              }} style={{ flex: 1, padding: '6px 8px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px 0 0 5px', color: '#d1d5db', fontSize: '11px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word' }} title="Click to add as overlay">{text}</div>
-                              <button onClick={(e) => { e.stopPropagation(); handleRemoveFromTextBank(1, i); }}
-                                style={{ padding: '0 6px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.2)', borderLeft: 'none', borderRadius: '0 5px 5px 0', color: '#ef4444', fontSize: '10px', cursor: 'pointer', flexShrink: 0 }} title="Remove">×</button>
+                  {getTextBanks().map((textBank, idx) => {
+                    const color = getBankColor(idx);
+                    const inputVal = newTextInputs[idx] || '';
+                    return (
+                      <React.Fragment key={`tb-${idx}`}>
+                        {idx > 0 && <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: '12px' }} />}
+                        <div style={{ marginBottom: '12px' }}
+                          onDragOver={(e) => { if (e.dataTransfer.types.includes('text/lyric')) { e.preventDefault(); e.currentTarget.style.outline = `1px dashed ${color.light}`; } }}
+                          onDragLeave={(e) => { e.currentTarget.style.outline = 'none'; }}
+                          onDrop={(e) => { e.preventDefault(); e.currentTarget.style.outline = 'none'; const text = e.dataTransfer.getData('text/lyric'); if (text) handleAddToTextBank(idx + 1, text); }}
+                        >
+                          <div style={{ fontSize: '11px', fontWeight: '600', color: color.light, marginBottom: '6px' }}>
+                            {getBankLabel(idx)} Text
+                          </div>
+                          <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
+                            <input type="text" value={inputVal} onChange={(e) => setNewTextInputs(prev => ({ ...prev, [idx]: e.target.value }))}
+                              onKeyDown={(e) => { if (e.key === 'Enter' && inputVal.trim()) { handleAddToTextBank(idx + 1, inputVal); setNewTextInputs(prev => ({ ...prev, [idx]: '' })); } }}
+                              placeholder="Add text..." style={{ flex: 1, padding: '5px 7px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '11px', outline: 'none' }} />
+                            <button onClick={() => { if (inputVal.trim()) { handleAddToTextBank(idx + 1, inputVal); setNewTextInputs(prev => ({ ...prev, [idx]: '' })); } }} disabled={!inputVal.trim()}
+                              style={{ padding: '5px 8px', borderRadius: '5px', border: 'none', backgroundColor: inputVal.trim() ? `${color.primary}4d` : 'rgba(255,255,255,0.05)', color: inputVal.trim() ? color.light : '#4b5563', fontSize: '11px', cursor: inputVal.trim() ? 'pointer' : 'default' }}>+</button>
+                          </div>
+                          {textBank.length > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              {textBank.map((text, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'stretch', gap: '2px' }}>
+                                  <div onClick={() => {
+                                    if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
+                                      const newOverlay = { id: `text_${Date.now()}_${i}`, text, style: getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
+                                      setSlides(prev => prev.map((slide, si) => si === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
+                                      setEditingTextId(newOverlay.id);
+                                    }
+                                  }} style={{ flex: 1, padding: '6px 8px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px 0 0 5px', color: '#d1d5db', fontSize: '11px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word' }} title="Click to add as overlay">{text}</div>
+                                  <button onClick={(e) => { e.stopPropagation(); handleRemoveFromTextBank(idx + 1, i); }}
+                                    style={{ padding: '0 6px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.2)', borderLeft: 'none', borderRadius: '0 5px 5px 0', color: '#ef4444', fontSize: '10px', cursor: 'pointer', flexShrink: 0 }} title="Remove">×</button>
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          ) : <div style={{ fontSize: '10px', color: '#6b7280', padding: '6px', textAlign: 'center' }}>No text yet</div>}
                         </div>
-                      ) : <div style={{ fontSize: '10px', color: '#6b7280', padding: '6px', textAlign: 'center' }}>No text yet</div>;
-                    })()}
-                  </div>
-
-                  <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: '12px' }} />
-
-                  {/* Text Bank B — drop lyrics here */}
-                  <div style={{ marginBottom: '12px' }}
-                    onDragOver={(e) => { if (e.dataTransfer.types.includes('text/lyric')) { e.preventDefault(); e.currentTarget.style.outline = '1px dashed #a5b4fc'; } }}
-                    onDragLeave={(e) => { e.currentTarget.style.outline = 'none'; }}
-                    onDrop={(e) => { e.preventDefault(); e.currentTarget.style.outline = 'none'; const text = e.dataTransfer.getData('text/lyric'); if (text) handleAddToTextBank(2, text); }}
-                  >
-                    <div style={{ fontSize: '11px', fontWeight: '600', color: '#a5b4fc', marginBottom: '6px' }}>
-                      Slide 2 Text
-                    </div>
-                    <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
-                      <input type="text" value={newTextB} onChange={(e) => setNewTextB(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToTextBank(2, newTextB); setNewTextB(''); } }}
-                        placeholder="Add text..." style={{ flex: 1, padding: '5px 7px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '11px', outline: 'none' }} />
-                      <button onClick={() => { if (newTextB.trim()) { handleAddToTextBank(2, newTextB); setNewTextB(''); } }} disabled={!newTextB.trim()}
-                        style={{ padding: '5px 8px', borderRadius: '5px', border: 'none', backgroundColor: newTextB.trim() ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.05)', color: newTextB.trim() ? '#a5b4fc' : '#4b5563', fontSize: '11px', cursor: newTextB.trim() ? 'pointer' : 'default' }}>+</button>
-                    </div>
-                    {(() => {
-                      const { textBank2 } = getTextBanks();
-                      return textBank2.length > 0 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          {textBank2.map((text, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'stretch', gap: '2px' }}>
-                              <div onClick={() => {
-                                if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
-                                  const newOverlay = { id: `text_${Date.now()}_${i}`, text, style: getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
-                                  setSlides(prev => prev.map((slide, idx) => idx === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
-                                  setEditingTextId(newOverlay.id);
-                                }
-                              }} style={{ flex: 1, padding: '6px 8px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px 0 0 5px', color: '#d1d5db', fontSize: '11px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word' }} title="Click to add as overlay">{text}</div>
-                              <button onClick={(e) => { e.stopPropagation(); handleRemoveFromTextBank(2, i); }}
-                                style={{ padding: '0 6px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.2)', borderLeft: 'none', borderRadius: '0 5px 5px 0', color: '#ef4444', fontSize: '10px', cursor: 'pointer', flexShrink: 0 }} title="Remove">×</button>
-                            </div>
-                          ))}
-                        </div>
-                      ) : <div style={{ fontSize: '10px', color: '#6b7280', padding: '6px', textAlign: 'center' }}>No text yet</div>;
-                    })()}
-                  </div>
-
-                  <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: '12px' }} />
-
-                  {/* Text Bank C — drop lyrics here */}
-                  <div style={{ marginBottom: '12px' }}
-                    onDragOver={(e) => { if (e.dataTransfer.types.includes('text/lyric')) { e.preventDefault(); e.currentTarget.style.outline = '1px dashed #c084fc'; } }}
-                    onDragLeave={(e) => { e.currentTarget.style.outline = 'none'; }}
-                    onDrop={(e) => { e.preventDefault(); e.currentTarget.style.outline = 'none'; const text = e.dataTransfer.getData('text/lyric'); if (text) handleAddToTextBank(3, text); }}
-                  >
-                    <div style={{ fontSize: '11px', fontWeight: '600', color: '#c084fc', marginBottom: '6px' }}>
-                      Slide 3 Text
-                    </div>
-                    <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
-                      <input type="text" value={newTextC} onChange={(e) => setNewTextC(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter' && newTextC.trim()) { handleAddToTextBank(3, newTextC); setNewTextC(''); } }}
-                        placeholder="Add text..." style={{ flex: 1, padding: '5px 7px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '11px', outline: 'none' }} />
-                      <button onClick={() => { if (newTextC.trim()) { handleAddToTextBank(3, newTextC); setNewTextC(''); } }} disabled={!newTextC.trim()}
-                        style={{ padding: '5px 8px', borderRadius: '5px', border: 'none', backgroundColor: newTextC.trim() ? 'rgba(192,132,252,0.3)' : 'rgba(255,255,255,0.05)', color: newTextC.trim() ? '#c084fc' : '#4b5563', fontSize: '11px', cursor: newTextC.trim() ? 'pointer' : 'default' }}>+</button>
-                    </div>
-                    {(() => {
-                      const { textBank3 } = getTextBanks();
-                      return textBank3.length > 0 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          {textBank3.map((text, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'stretch', gap: '2px' }}>
-                              <div onClick={() => {
-                                if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
-                                  const newOverlay = { id: `text_${Date.now()}_${i}`, text, style: getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
-                                  setSlides(prev => prev.map((slide, idx) => idx === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
-                                  setEditingTextId(newOverlay.id);
-                                }
-                              }} style={{ flex: 1, padding: '6px 8px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px 0 0 5px', color: '#d1d5db', fontSize: '11px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word' }} title="Click to add as overlay">{text}</div>
-                              <button onClick={(e) => { e.stopPropagation(); handleRemoveFromTextBank(3, i); }}
-                                style={{ padding: '0 6px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.2)', borderLeft: 'none', borderRadius: '0 5px 5px 0', color: '#ef4444', fontSize: '10px', cursor: 'pointer', flexShrink: 0 }} title="Remove">×</button>
-                            </div>
-                          ))}
-                        </div>
-                      ) : <div style={{ fontSize: '10px', color: '#6b7280', padding: '6px', textAlign: 'center' }}>No text yet</div>;
-                    })()}
-                  </div>
-
-                  <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: '12px' }} />
-
-                  {/* Text Bank D — drop lyrics here */}
-                  <div style={{ marginBottom: '12px' }}
-                    onDragOver={(e) => { if (e.dataTransfer.types.includes('text/lyric')) { e.preventDefault(); e.currentTarget.style.outline = '1px dashed #fb7185'; } }}
-                    onDragLeave={(e) => { e.currentTarget.style.outline = 'none'; }}
-                    onDrop={(e) => { e.preventDefault(); e.currentTarget.style.outline = 'none'; const text = e.dataTransfer.getData('text/lyric'); if (text) handleAddToTextBank(4, text); }}
-                  >
-                    <div style={{ fontSize: '11px', fontWeight: '600', color: '#fb7185', marginBottom: '6px' }}>
-                      Slide 4 Text
-                    </div>
-                    <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
-                      <input type="text" value={newTextD} onChange={(e) => setNewTextD(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter' && newTextD.trim()) { handleAddToTextBank(4, newTextD); setNewTextD(''); } }}
-                        placeholder="Add text..." style={{ flex: 1, padding: '5px 7px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '11px', outline: 'none' }} />
-                      <button onClick={() => { if (newTextD.trim()) { handleAddToTextBank(4, newTextD); setNewTextD(''); } }} disabled={!newTextD.trim()}
-                        style={{ padding: '5px 8px', borderRadius: '5px', border: 'none', backgroundColor: newTextD.trim() ? 'rgba(251,113,133,0.3)' : 'rgba(255,255,255,0.05)', color: newTextD.trim() ? '#fb7185' : '#4b5563', fontSize: '11px', cursor: newTextD.trim() ? 'pointer' : 'default' }}>+</button>
-                    </div>
-                    {(() => {
-                      const { textBank4 } = getTextBanks();
-                      return textBank4.length > 0 ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          {textBank4.map((text, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'stretch', gap: '2px' }}>
-                              <div onClick={() => {
-                                if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
-                                  const newOverlay = { id: `text_${Date.now()}_${i}`, text, style: getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
-                                  setSlides(prev => prev.map((slide, idx) => idx === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
-                                  setEditingTextId(newOverlay.id);
-                                }
-                              }} style={{ flex: 1, padding: '6px 8px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px 0 0 5px', color: '#d1d5db', fontSize: '11px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word' }} title="Click to add as overlay">{text}</div>
-                              <button onClick={(e) => { e.stopPropagation(); handleRemoveFromTextBank(4, i); }}
-                                style={{ padding: '0 6px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.2)', borderLeft: 'none', borderRadius: '0 5px 5px 0', color: '#ef4444', fontSize: '10px', cursor: 'pointer', flexShrink: 0 }} title="Remove">×</button>
-                            </div>
-                          ))}
-                        </div>
-                      ) : <div style={{ fontSize: '10px', color: '#6b7280', padding: '6px', textAlign: 'center' }}>No text yet</div>;
-                    })()}
-                  </div>
-
+                      </React.Fragment>
+                    );
+                  })}
                 </div>
               </div>
             </div>

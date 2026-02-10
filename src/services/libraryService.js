@@ -761,27 +761,118 @@ export const addToCollection = (artistId, collectionId, mediaIds) => {
   saveLibrary(artistId, library);
 };
 
+// ── Dynamic Slide Bank System ──
+// Banks are stored as arrays: collection.banks = [[], [], ...] (image IDs per slide position)
+// Text banks: collection.textBanks = [[], [], ...] (text strings per slide position)
+// Minimum 2 banks always. Users can add more via "+ Add Slide Bank".
+
+export const BANK_COLORS = [
+  { primary: '#6366f1', light: '#a5b4fc', bg: 'rgba(99,102,241,0.06)', border: 'rgba(99,102,241,0.6)' },
+  { primary: '#22c55e', light: '#86efac', bg: 'rgba(34,197,94,0.06)', border: 'rgba(34,197,94,0.6)' },
+  { primary: '#a855f7', light: '#d8b4fe', bg: 'rgba(168,85,247,0.06)', border: 'rgba(168,85,247,0.6)' },
+  { primary: '#f43f5e', light: '#fda4af', bg: 'rgba(244,63,94,0.06)', border: 'rgba(244,63,94,0.6)' },
+  { primary: '#f59e0b', light: '#fcd34d', bg: 'rgba(245,158,11,0.06)', border: 'rgba(245,158,11,0.6)' },
+  { primary: '#06b6d4', light: '#67e8f9', bg: 'rgba(6,182,212,0.06)', border: 'rgba(6,182,212,0.6)' },
+];
+export const MIN_BANKS = 2;
+export const MAX_BANKS = 10;
+export const getBankColor = (index) => BANK_COLORS[index % BANK_COLORS.length];
+export const getBankLabel = (index) => `Slide ${index + 1}`;
+
 /**
- * Assign media to Bank A or Bank B within a collection
+ * Migrate a collection from legacy bankA/B/C/D format to dynamic banks[] array.
+ * Safe to call multiple times — no-op if already migrated.
+ */
+export const migrateCollectionBanks = (collection) => {
+  if (!collection) return collection;
+  if (collection.banks) return collection; // Already migrated
+
+  const banks = [];
+  // Pull from legacy letter-keyed properties
+  ['bankA', 'bankB', 'bankC', 'bankD'].forEach((key, i) => {
+    if (collection[key]?.length > 0) banks[i] = [...collection[key]];
+  });
+  // Ensure minimum 2 banks, fill sparse gaps
+  while (banks.length < MIN_BANKS) banks.push([]);
+  for (let i = 0; i < banks.length; i++) if (!banks[i]) banks[i] = [];
+
+  const textBanks = [];
+  ['textBank1', 'textBank2', 'textBank3', 'textBank4'].forEach((key, i) => {
+    if (collection[key]?.length > 0) textBanks[i] = [...collection[key]];
+  });
+  while (textBanks.length < MIN_BANKS) textBanks.push([]);
+  for (let i = 0; i < textBanks.length; i++) if (!textBanks[i]) textBanks[i] = [];
+
+  return { ...collection, banks, textBanks };
+};
+
+/**
+ * Add a new slide bank to a collection (both image + text)
+ */
+export const addBankToCollection = (artistId, collectionId) => {
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection) return;
+  const migrated = migrateCollectionBanks(collection);
+  Object.assign(collection, migrated);
+  if (collection.banks.length >= MAX_BANKS) return;
+  collection.banks.push([]);
+  collection.textBanks = collection.textBanks || [];
+  collection.textBanks.push([]);
+  collection.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
+};
+
+/**
+ * Remove a slide bank from a collection (must keep minimum 2)
+ */
+export const removeBankFromCollection = (artistId, collectionId, bankIndex) => {
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection) return;
+  const migrated = migrateCollectionBanks(collection);
+  Object.assign(collection, migrated);
+  if (collection.banks.length <= MIN_BANKS) return;
+  collection.banks.splice(bankIndex, 1);
+  if (collection.textBanks?.[bankIndex] !== undefined) collection.textBanks.splice(bankIndex, 1);
+  collection.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
+};
+
+/**
+ * Assign media to a slide bank within a collection
  * @param {string} artistId
  * @param {string} collectionId
  * @param {string|string[]} mediaIds
- * @param {'A'|'B'} bank - Which bank to assign to
+ * @param {number|string} bank - 0-based index OR legacy letter ('A','B','C','D')
  */
 export const assignToBank = (artistId, collectionId, mediaIds, bank) => {
   const idsToAssign = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
-  const bankMap = { A: 'bankA', B: 'bankB', C: 'bankC', D: 'bankD' };
-  const bankKey = bankMap[bank] || `bank${bank}`;
+  // Support both legacy letters and new numeric index
+  let bankIndex;
+  if (typeof bank === 'number') {
+    bankIndex = bank;
+  } else {
+    const legacyMap = { A: 0, B: 1, C: 2, D: 3 };
+    bankIndex = legacyMap[bank] !== undefined ? legacyMap[bank] : parseInt(bank, 10) || 0;
+  }
 
   const collections = getUserCollections(artistId);
   const collection = collections.find(c => c.id === collectionId);
   if (!collection) return;
 
+  // Auto-migrate if needed
+  const migrated = migrateCollectionBanks(collection);
+  Object.assign(collection, migrated);
+
   // Ensure media is in this collection first
   collection.mediaIds = [...new Set([...collection.mediaIds, ...idsToAssign])];
 
-  // Add to target bank (allow same image in both banks)
-  collection[bankKey] = [...new Set([...(collection[bankKey] || []), ...idsToAssign])];
+  // Extend banks array if needed
+  while (collection.banks.length <= bankIndex) collection.banks.push([]);
+
+  // Add to target bank
+  collection.banks[bankIndex] = [...new Set([...collection.banks[bankIndex], ...idsToAssign])];
   collection.updatedAt = new Date().toISOString();
   saveCollections(artistId, collections);
 
@@ -809,10 +900,14 @@ export const removeFromBank = (artistId, collectionId, mediaIds) => {
   const collection = collections.find(c => c.id === collectionId);
   if (!collection) return;
 
-  collection.bankA = (collection.bankA || []).filter(id => !idsToRemove.includes(id));
-  collection.bankB = (collection.bankB || []).filter(id => !idsToRemove.includes(id));
-  collection.bankC = (collection.bankC || []).filter(id => !idsToRemove.includes(id));
-  collection.bankD = (collection.bankD || []).filter(id => !idsToRemove.includes(id));
+  // Auto-migrate if needed
+  const migrated = migrateCollectionBanks(collection);
+  Object.assign(collection, migrated);
+
+  // Remove from all banks dynamically
+  collection.banks = collection.banks.map(bank =>
+    bank.filter(id => !idsToRemove.includes(id))
+  );
   collection.updatedAt = new Date().toISOString();
   saveCollections(artistId, collections);
 };
@@ -821,15 +916,18 @@ export const removeFromBank = (artistId, collectionId, mediaIds) => {
  * Add text to a text bank
  * @param {string} artistId
  * @param {string} collectionId
- * @param {number} bankNum - 1 or 2
+ * @param {number} bankNum - 1-based slide position (1 = Slide 1, etc.)
  * @param {string} text
  */
 export const addToTextBank = (artistId, collectionId, bankNum, text) => {
   const collections = getUserCollections(artistId);
   const collection = collections.find(c => c.id === collectionId);
   if (!collection) return;
-  const key = `textBank${bankNum}`;
-  collection[key] = [...(collection[key] || []), text];
+  const migrated = migrateCollectionBanks(collection);
+  Object.assign(collection, migrated);
+  const idx = bankNum - 1; // Convert to 0-based
+  while (collection.textBanks.length <= idx) collection.textBanks.push([]);
+  collection.textBanks[idx] = [...collection.textBanks[idx], text];
   collection.updatedAt = new Date().toISOString();
   saveCollections(artistId, collections);
 };
@@ -838,15 +936,19 @@ export const addToTextBank = (artistId, collectionId, bankNum, text) => {
  * Remove text from a text bank
  * @param {string} artistId
  * @param {string} collectionId
- * @param {number} bankNum - 1 or 2
+ * @param {number} bankNum - 1-based slide position
  * @param {number} index
  */
 export const removeFromTextBank = (artistId, collectionId, bankNum, index) => {
   const collections = getUserCollections(artistId);
   const collection = collections.find(c => c.id === collectionId);
   if (!collection) return;
-  const key = `textBank${bankNum}`;
-  collection[key] = (collection[key] || []).filter((_, i) => i !== index);
+  const migrated = migrateCollectionBanks(collection);
+  Object.assign(collection, migrated);
+  const idx = bankNum - 1;
+  if (collection.textBanks[idx]) {
+    collection.textBanks[idx] = collection.textBanks[idx].filter((_, i) => i !== index);
+  }
   collection.updatedAt = new Date().toISOString();
   saveCollections(artistId, collections);
 };
@@ -855,14 +957,18 @@ export const removeFromTextBank = (artistId, collectionId, bankNum, index) => {
  * Update entire text bank
  * @param {string} artistId
  * @param {string} collectionId
- * @param {number} bankNum - 1 or 2
+ * @param {number} bankNum - 1-based slide position
  * @param {string[]} texts
  */
 export const updateTextBank = (artistId, collectionId, bankNum, texts) => {
   const collections = getUserCollections(artistId);
   const collection = collections.find(c => c.id === collectionId);
   if (!collection) return;
-  collection[`textBank${bankNum}`] = texts;
+  const migrated = migrateCollectionBanks(collection);
+  Object.assign(collection, migrated);
+  const idx = bankNum - 1;
+  while (collection.textBanks.length <= idx) collection.textBanks.push([]);
+  collection.textBanks[idx] = texts;
   collection.updatedAt = new Date().toISOString();
   saveCollections(artistId, collections);
 };
@@ -933,29 +1039,27 @@ export const saveTextTemplates = (artistId, collectionId, templates) => {
 };
 
 /**
- * Get collection media split by bank assignment
+ * Get collection media split by bank assignment (dynamic)
  * @param {string} artistId
  * @param {string} collectionId
- * @returns {{ bankA: Object[], bankB: Object[], unassigned: Object[] }}
+ * @returns {{ banks: Object[][], unassigned: Object[] }}
  */
 export const getCollectionBanks = (artistId, collectionId) => {
   const library = getLibrary(artistId);
   const collections = getUserCollections(artistId);
-  const collection = collections.find(c => c.id === collectionId);
-  if (!collection) return { bankA: [], bankB: [], bankC: [], bankD: [], unassigned: [] };
+  let collection = collections.find(c => c.id === collectionId);
+  if (!collection) return { banks: [[], []], unassigned: [] };
 
-  const allMedia = library.filter(item => collection.mediaIds.includes(item.id));
-  const bankAIds = collection.bankA || [];
-  const bankBIds = collection.bankB || [];
-  const bankCIds = collection.bankC || [];
-  const bankDIds = collection.bankD || [];
-  const allAssigned = new Set([...bankAIds, ...bankBIds, ...bankCIds, ...bankDIds]);
+  collection = migrateCollectionBanks(collection);
+  const allMedia = library.filter(item => (collection.mediaIds || []).includes(item.id));
+  const allAssigned = new Set();
+  const banks = collection.banks.map(bankIds => {
+    (bankIds || []).forEach(id => allAssigned.add(id));
+    return allMedia.filter(item => (bankIds || []).includes(item.id));
+  });
 
   return {
-    bankA: allMedia.filter(item => bankAIds.includes(item.id)),
-    bankB: allMedia.filter(item => bankBIds.includes(item.id)),
-    bankC: allMedia.filter(item => bankCIds.includes(item.id)),
-    bankD: allMedia.filter(item => bankDIds.includes(item.id)),
+    banks,
     unassigned: allMedia.filter(item => !allAssigned.has(item.id))
   };
 };
@@ -2015,23 +2119,40 @@ export const subscribeToCollections = (db, artistId, callback) => {
         const mergedCollections = firestoreCollections.map(col => {
           const localCol = localCollections.find(lc => lc.id === col.id);
           if (localCol) {
+            // Migrate both sources to new format, then merge
+            const migratedCol = migrateCollectionBanks(col);
+            const migratedLocal = migrateCollectionBanks(localCol);
+            // Merge banks: prefer Firestore if it has data, fallback to local
+            const mergedBanks = (migratedCol.banks || []).map((fsBank, i) => {
+              const localBank = (migratedLocal.banks || [])[i] || [];
+              return (fsBank?.length > 0 ? fsBank : localBank);
+            });
+            // If local has more banks than Firestore, append them
+            if ((migratedLocal.banks || []).length > mergedBanks.length) {
+              for (let i = mergedBanks.length; i < migratedLocal.banks.length; i++) {
+                mergedBanks.push(migratedLocal.banks[i] || []);
+              }
+            }
+            const mergedTextBanks = (migratedCol.textBanks || []).map((fsBank, i) => {
+              const localBank = (migratedLocal.textBanks || [])[i] || [];
+              return (fsBank?.length > 0 ? fsBank : localBank);
+            });
+            if ((migratedLocal.textBanks || []).length > mergedTextBanks.length) {
+              for (let i = mergedTextBanks.length; i < migratedLocal.textBanks.length; i++) {
+                mergedTextBanks.push(migratedLocal.textBanks[i] || []);
+              }
+            }
             return {
               ...col,
-              bankA: (col.bankA?.length > 0 ? col.bankA : localCol.bankA) || [],
-              bankB: (col.bankB?.length > 0 ? col.bankB : localCol.bankB) || [],
-              bankC: (col.bankC?.length > 0 ? col.bankC : localCol.bankC) || [],
-              bankD: (col.bankD?.length > 0 ? col.bankD : localCol.bankD) || [],
-              textBank1: (col.textBank1?.length > 0 ? col.textBank1 : localCol.textBank1) || [],
-              textBank2: (col.textBank2?.length > 0 ? col.textBank2 : localCol.textBank2) || [],
-              textBank3: (col.textBank3?.length > 0 ? col.textBank3 : localCol.textBank3) || [],
-              textBank4: (col.textBank4?.length > 0 ? col.textBank4 : localCol.textBank4) || [],
+              banks: mergedBanks,
+              textBanks: mergedTextBanks,
               videoTextBank1: (col.videoTextBank1?.length > 0 ? col.videoTextBank1 : localCol.videoTextBank1) || [],
               videoTextBank2: (col.videoTextBank2?.length > 0 ? col.videoTextBank2 : localCol.videoTextBank2) || [],
               textTemplates: (col.textTemplates?.length > 0 ? col.textTemplates : localCol.textTemplates) || [],
               mediaIds: (col.mediaIds?.length > 0 ? col.mediaIds : localCol.mediaIds) || [],
             };
           }
-          return col;
+          return migrateCollectionBanks(col);
         });
 
         // Save merged data to localStorage for offline access

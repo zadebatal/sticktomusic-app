@@ -52,11 +52,15 @@ import {
   updateLibraryItemAsync,
   migrateToFirestore,
   migrateThumbnails,
-  migrateVideoThumbnails
+  migrateVideoThumbnails,
+  // Dynamic bank system
+  migrateCollectionBanks,
+  getBankColor,
+  getBankLabel,
+  addBankToCollection,
+  MAX_BANKS
 } from '../../services/libraryService';
 import { uploadFile, getMediaDuration } from '../../services/firebaseStorage';
-import CollectionBankEditor from './CollectionBankEditor';
-import CaptionHashtagBank from './CaptionHashtagBank';
 import log from '../../utils/logger';
 
 const StudioHome = ({
@@ -88,7 +92,7 @@ const StudioHome = ({
   const [activeTab, setActiveTab] = useState('media'); // kept for compat
   const [sidebarSection, setSidebarSection] = useState({ audio: true, lyrics: false, banks: false });
   const [selectedCollection, setSelectedCollection] = useState(null);
-  const [selectedBanks, setSelectedBanks] = useState({ bankA: true, bankB: true, bankC: false, bankD: false }); // Which banks feed into editor
+  const [selectedBanks, setSelectedBanks] = useState(new Set([0, 1])); // indices of selected banks
   // autoCollectionSet removed — we always default to All Media now
 
   // Library State
@@ -1037,13 +1041,11 @@ const StudioHome = ({
       const colAudioItems = colMedia.filter(m => m.type === MEDIA_TYPES.AUDIO);
 
       // Use bank images (not all collection images) for slideshow initialization
-      // Pick one from Bank A (Slide 1) and one from Bank B (Slide 2)
       if (imagesForEditor.length === 0 && col) {
-        const bankAIds = col.bankA || [];
-        const bankBIds = col.bankB || [];
-        const bankAImg = colImages.find(img => bankAIds.includes(img.id));
-        const bankBImg = colImages.find(img => bankBIds.includes(img.id));
-        const bankImages = [bankAImg, bankBImg].filter(Boolean);
+        const migrated = migrateCollectionBanks(col);
+        const bankImages = (migrated.banks || []).map(bankIds =>
+          colImages.find(img => (bankIds || []).includes(img.id))
+        ).filter(Boolean);
         imagesForEditor = bankImages.length > 0 ? bankImages : colImages.slice(0, 2);
       }
       if (!audioForEditor && colAudioItems.length > 0) {
@@ -1076,22 +1078,25 @@ const StudioHome = ({
     const col = collections.find(c => c.id === selectedCollection);
     if (!col) return;
 
-    const bankAImages = library.filter(item => (col.bankA || []).includes(item.id));
-    const bankBImages = library.filter(item => (col.bankB || []).includes(item.id));
+    const migrated = migrateCollectionBanks(col);
+    const bankImages = (migrated.banks || []).map(bankIds =>
+      library.filter(item => (bankIds || []).includes(item.id))
+    );
     const textBank1 = col.textBank1 || [];
     const textBank2 = col.textBank2 || [];
     const template = col.textTemplates?.[0] || null;
 
     // Validate: at least one bank must have images
-    if (bankAImages.length === 0 && bankBImages.length === 0) {
-      toastError('Please add images to Bank A and/or Bank B first.');
+    const anyPopulated = bankImages.some(bank => bank.length > 0);
+    if (!anyPopulated) {
+      toastError('Please add images to at least one bank first.');
       return;
     }
 
     // Warn if only one bank is populated
-    if (bankAImages.length === 0 || bankBImages.length === 0) {
-      const emptyBank = bankAImages.length === 0 ? 'A' : 'B';
-      console.warn(`[Batch] Bank ${emptyBank} is empty — will use images from the other bank as fallback.`);
+    const populatedCount = bankImages.filter(bank => bank.length > 0).length;
+    if (populatedCount === 1) {
+      console.warn(`[Batch] Only one bank is populated — will use images from that bank.`);
     }
 
     setBatchGenerating(true);
@@ -1104,11 +1109,10 @@ const StudioHome = ({
     for (let i = 0; i < batchCount; i++) {
       const slides = [];
       for (let s = 0; s < batchSlidesPerShow; s++) {
-        // Alternate between Bank A and Bank B: even slides = A, odd = B
-        const useA = s % 2 === 0;
-        const bank = useA ? bankAImages : bankBImages;
-        const fallbackBank = useA ? bankBImages : bankAImages;
-        const img = randomFrom(bank.length > 0 ? bank : fallbackBank);
+        // Cycle through banks: slide 0 = bank 0, slide 1 = bank 1, etc.
+        const bankIndex = s % bankImages.length;
+        const bank = bankImages[bankIndex];
+        const img = randomFrom(bank.length > 0 ? bank : bankImages.find(b => b.length > 0));
 
         // Skip slides with no image (both banks exhausted somehow)
         if (!img) {
@@ -1921,20 +1925,11 @@ const StudioHome = ({
               {selectedCollection && (() => {
                 const col = collections.find(c => c.id === selectedCollection);
                 if (!col) return null;
-                const bankCounts = {
-                  bankA: (col.bankA || []).length,
-                  bankB: (col.bankB || []).length,
-                  bankC: (col.bankC || []).length,
-                  bankD: (col.bankD || []).length
-                };
-                const totalBanked = bankCounts.bankA + bankCounts.bankB + bankCounts.bankC + bankCounts.bankD;
+                const migrated = migrateCollectionBanks(col);
+                const bankCounts = (migrated.banks || []).map(b => (b || []).length);
+                const totalBanked = bankCounts.reduce((a, b) => a + b, 0);
                 if (totalBanked === 0) return null;
-                const bankDefs = [
-                  { key: 'bankA', label: 'Bank A', color: '#14b8a6' },
-                  { key: 'bankB', label: 'Bank B', color: '#f59e0b' },
-                  { key: 'bankC', label: 'Bank C', color: '#a78bfa' },
-                  { key: 'bankD', label: 'Bank D', color: '#f472b6' }
-                ];
+                const numBanks = migrated?.banks?.length || 2;
                 return (
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap',
@@ -1945,22 +1940,15 @@ const StudioHome = ({
                     <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                       Pull from:
                     </span>
-                    {bankDefs.map(({ key, label, color }) => {
-                      const count = bankCounts[key];
-                      if (count === 0 && key !== 'bankA' && key !== 'bankB') return null; // Only show C/D if they have items
+                    {Array.from({ length: numBanks }).map((_, idx) => {
+                      const color = getBankColor(idx);
+                      const count = bankCounts[idx] || 0;
                       return (
-                        <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px', color: count > 0 ? '#fff' : 'rgba(255,255,255,0.3)' }}>
-                          <input
-                            type="checkbox"
-                            checked={selectedBanks[key]}
-                            onChange={(e) => setSelectedBanks(prev => ({ ...prev, [key]: e.target.checked }))}
-                            disabled={count === 0}
-                            style={{ accentColor: color, width: '16px', height: '16px', cursor: 'pointer' }}
-                          />
-                          <span style={{ color, fontWeight: 600 }}>{label}</span>
-                          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', backgroundColor: 'rgba(255,255,255,0.05)', padding: '1px 6px', borderRadius: '4px' }}>
-                            {count}
-                          </span>
+                        <label key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: selectedBanks.has(idx) ? color.light : 'rgba(255,255,255,0.3)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          <input type="checkbox" checked={selectedBanks.has(idx)}
+                            onChange={() => setSelectedBanks(prev => { const next = new Set(prev); if (next.has(idx)) next.delete(idx); else next.add(idx); return next; })}
+                            style={{ accentColor: color.primary }} />
+                          {getBankLabel(idx)} <span style={{ opacity: 0.5 }}>{count}</span>
                         </label>
                       );
                     })}
@@ -2585,68 +2573,6 @@ const StudioHome = ({
               </div>
             )}
 
-            {/* ── Captions / Hashtags Column (visible when collection selected) ── */}
-            {selectedCollection && (
-              <div style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden'
-              }}>
-                <div style={{
-                  padding: '6px 8px',
-                  borderBottom: `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexShrink: 0
-                }}>
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#fff' }}>
-                    #️⃣ Hashtags & Captions
-                  </span>
-                </div>
-                <div style={{ flex: 1, overflowY: 'auto', padding: '4px 6px' }}>
-                  <CollectionBankEditor
-                    collection={collections.find(c => c.id === selectedCollection)}
-                    artistId={artistId}
-                    onBankChange={() => setCollections(getCollections(artistId))}
-                    compact
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* ── Caption/Hashtag Bank Column (niche-based, always available) ── */}
-            <div style={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              borderLeft: `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}`
-            }}>
-              <div style={{
-                padding: '6px 8px',
-                borderBottom: `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexShrink: 0
-              }}>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#fff' }}>
-                  🏷️ Caption Bank
-                </span>
-              </div>
-              <div style={{ flex: 1, overflow: 'hidden' }}>
-                <CaptionHashtagBank
-                  db={db}
-                  artistId={artistId}
-                  compact={true}
-                  onBankChange={(bankData) => {
-                    log('Caption/Hashtag bank updated:', bankData);
-                  }}
-                />
-              </div>
-            </div>
 
             {/* ── Video Text Banks Column (only when collection selected in video mode) ── */}
             {selectedCollection && studioMode === 'videos' && (() => {
@@ -2751,11 +2677,8 @@ const StudioHome = ({
               {(() => {
                 const col = collections.find(c => c.id === selectedCollection);
                 if (!col) return ' — Select a collection first';
-                const aCount = col.bankA?.length || 0;
-                const bCount = col.bankB?.length || 0;
-                const t1Count = col.textBank1?.length || 0;
-                const t2Count = col.textBank2?.length || 0;
-                return ` • Bank A: ${aCount} • Bank B: ${bCount} • Text 1: ${t1Count} • Text 2: ${t2Count}`;
+                const migrated = migrateCollectionBanks(col);
+                return (migrated.banks || []).map((b, i) => ` • ${getBankLabel(i)}: ${(b || []).length}`).join('');
               })()}
             </div>
 
