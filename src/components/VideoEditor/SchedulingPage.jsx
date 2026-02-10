@@ -439,8 +439,9 @@ const SchedulingPage = ({
   }, [handleUpdatePost]);
 
   // ── Publish / push a post to Late.co (auto-renders if needed) ──
-  const handlePublishPost = useCallback(async (postId) => {
-    const post = posts.find(p => p.id === postId);
+  // postOverride: optional post object with latest data (used by batch schedule to avoid stale state)
+  const handlePublishPost = useCallback(async (postId, postOverride = null) => {
+    const post = postOverride || posts.find(p => p.id === postId);
     if (!post) return;
     if (!onSchedulePost) {
       toastError('Scheduling not available. Late API not connected.');
@@ -597,10 +598,18 @@ const SchedulingPage = ({
     setSelectedPostIds(new Set());
 
     // Auto-render and push each scheduled post to Late in sequence
+    // Pass updated post data directly to avoid stale React state
     if (onSchedulePost) {
       for (const post of scheduled) {
         try {
-          await handlePublishPost(post.id);
+          const existingPost = posts.find(p => p.id === post.id);
+          const updatedPost = {
+            ...existingPost,
+            scheduledTime: post.scheduledTime instanceof Date ? post.scheduledTime.toISOString() : post.scheduledTime,
+            status: POST_STATUS.SCHEDULED,
+            ...(Object.keys(platformUpdate).length > 0 ? { platforms: { ...(existingPost?.platforms || {}), ...platformUpdate } } : {})
+          };
+          await handlePublishPost(post.id, updatedPost);
         } catch (err) {
           log('[Schedule] Failed to push post', post.id, 'to Late:', err.message);
         }
