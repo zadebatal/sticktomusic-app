@@ -1582,9 +1582,9 @@ const CalendarView = ({ posts, expandedPostId, onSelectPost, calendarDate, onCha
   return (
     <div style={s.calView}>
       <div style={s.calHeader}>
-        <button style={s.calNavBtn} onClick={() => onChangeMonth(new Date(year, month - 1))}>&#8249;</button>
+        <button style={{ ...s.calNavBtn, ...(isMobile ? { width: '44px', height: '44px', fontSize: '20px' } : {}) }} onClick={() => onChangeMonth(new Date(year, month - 1))}>&#8249;</button>
         <span style={s.calTitle}>{firstDay.toLocaleString('en-US', { month: 'long', year: 'numeric' })}</span>
-        <button style={s.calNavBtn} onClick={() => onChangeMonth(new Date(year, month + 1))}>&#8250;</button>
+        <button style={{ ...s.calNavBtn, ...(isMobile ? { width: '44px', height: '44px', fontSize: '20px' } : {}) }} onClick={() => onChangeMonth(new Date(year, month + 1))}>&#8250;</button>
         <button style={{ ...s.drawerBtn, marginLeft: '8px', padding: isMobile ? '8px 14px' : '4px 10px', minHeight: isMobile ? '44px' : 'auto' }} onClick={() => onChangeMonth(new Date())}>Today</button>
       </div>
       <div style={{ ...s.calGrid, ...(isMobile ? { padding: '4px' } : {}) }}>
@@ -1746,7 +1746,7 @@ const getS = (theme) => ({
   // Calendar
   calView: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
   calHeader: { display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 20px', borderBottom: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.surface },
-  calNavBtn: { background: 'none', border: `1px solid ${theme.border.default}`, color: theme.text.secondary, width: isMobile ? '44px' : '28px', height: isMobile ? '44px' : '28px', borderRadius: '6px', cursor: 'pointer', fontSize: isMobile ? '20px' : '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  calNavBtn: { background: 'none', border: `1px solid ${theme.border.default}`, color: theme.text.secondary, width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   calTitle: { fontSize: '15px', fontWeight: '600', color: theme.text.primary, minWidth: '150px', textAlign: 'center' },
   calGrid: { flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1px', padding: '8px', backgroundColor: theme.border.default, overflow: 'auto' },
   calDayHeader: { padding: '8px 6px', backgroundColor: theme.bg.surface, color: theme.text.muted, fontSize: '11px', fontWeight: '600', textAlign: 'center', textTransform: 'uppercase' },
