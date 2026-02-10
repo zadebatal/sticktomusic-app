@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useToast } from '../ui';
 import { getLateProfiles, createLateProfile, getConnectUrl } from '../../services/lateService';
@@ -539,7 +539,7 @@ const PagesTab = ({
   onRemoveManualAccount,
 }) => {
   const { theme } = useTheme();
-  const { toastError } = useToast();
+  const { success: toastSuccess, error: toastError } = useToast();
   const { isMobile } = useIsMobile();
   const t = theme.tw;
   const [expandedArtists, setExpandedArtists] = useState({});
@@ -554,6 +554,7 @@ const PagesTab = ({
 
   const isAtLimit = socialSetsAllowed > 0 && socialSetsUsed >= socialSetsAllowed && !(user?.paymentExempt || user?.role === 'conductor');
   const [connectingPlatform, setConnectingPlatform] = useState(null); // { artistId, platform }
+  const oauthPendingRef = useRef(false);
 
   // Group latePages by artistId, then by handle
   const pagesByArtist = useMemo(() => {
@@ -624,7 +625,8 @@ const PagesTab = ({
       const { authUrl } = await getConnectUrl(artistId, platform, profileId, redirectUrl);
 
       if (authUrl) {
-        // Open Late OAuth in new tab
+        // Open Late OAuth in new tab — set pending flag for auto-refresh on return
+        oauthPendingRef.current = true;
         window.open(authUrl, '_blank', 'noopener,noreferrer');
       } else {
         throw new Error('No auth URL returned from Late');
@@ -637,16 +639,43 @@ const PagesTab = ({
     }
   }, []);
 
+  // Auto-refresh Late accounts when returning from OAuth tab
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && oauthPendingRef.current) {
+        oauthPendingRef.current = false;
+        onLoadLatePages?.();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [onLoadLatePages]);
+
   // Default all artists to expanded
   const isArtistExpanded = (artistId) => expandedArtists[artistId] !== false;
 
-  // Bulk entry save handler
+  // Bulk entry save handler — auto-triggers OAuth for newly saved accounts if Late is configured
   const handleBulkSave = useCallback(async (artistId, accounts) => {
+    let result;
     if (onAddManualAccounts) {
-      return onAddManualAccounts(artistId, accounts);
+      result = await onAddManualAccounts(artistId, accounts);
+    } else {
+      result = accounts.map(a => ({ ...a, status: 'saved' }));
     }
-    return accounts.map(a => ({ ...a, status: 'saved' }));
-  }, [onAddManualAccounts]);
+
+    // Auto-trigger OAuth for newly saved accounts if Late is configured
+    const isLateConfigured = !unconfiguredIds.has(artistId);
+    if (isLateConfigured) {
+      const savedAccounts = result.filter(r => r.status === 'saved');
+      const uniquePlatforms = [...new Set(savedAccounts.map(a => a.platform))];
+      if (uniquePlatforms.length > 0) {
+        toastSuccess(`Now connect ${uniquePlatforms.join(', ')} via OAuth...`);
+        // Auto-trigger first platform's OAuth
+        handleConnectPlatform(artistId, uniquePlatforms[0]);
+      }
+    }
+    return result;
+  }, [onAddManualAccounts, unconfiguredIds, handleConnectPlatform, toastSuccess]);
 
   // Find the artist for bulk entry modal
   const bulkEntryArtist = bulkEntryArtistId ? visibleArtists.find(a => a.id === bulkEntryArtistId) : null;

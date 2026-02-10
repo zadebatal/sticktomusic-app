@@ -272,6 +272,7 @@ const VideoStudio = ({
   artistId: initialArtistId = null,
   lateAccountIds = {},
   onSchedulePost,
+  onDeleteLatePost,
   onArtistChange = null // Callback when artist selection changes
 }) => {
   // BUG-034: Toast notifications instead of alert()
@@ -2360,6 +2361,7 @@ const VideoStudio = ({
             accounts={accounts}
             lateAccountIds={lateAccountIds}
             onSchedulePost={onSchedulePost}
+            onDeleteLatePost={onDeleteLatePost}
             onEditDraft={(post) => {
               if (post.editorState) {
                 setSchedulerEditPostId(post.id); // Track which scheduledPost we're editing

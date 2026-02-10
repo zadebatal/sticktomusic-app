@@ -3181,6 +3181,7 @@ const StickToMusic = () => {
               onArtistChange={() => {}}
               lateAccountIds={derivedLateAccountIds}
               onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: effectiveArtistId })}
+              onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, effectiveArtistId)}
             />
           )}
 
@@ -3204,6 +3205,7 @@ const StickToMusic = () => {
                 accounts={latePages}
                 lateAccountIds={derivedLateAccountIds}
                 onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: effectiveArtistId })}
+                onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, effectiveArtistId)}
                 onEditDraft={() => {}}
                 onBack={() => setArtistTab('dashboard')}
                 readOnly={isArtistOrCollaborator(user)}
@@ -3568,6 +3570,7 @@ const StickToMusic = () => {
               accounts={latePages}
               lateAccountIds={derivedLateAccountIds}
               onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: currentArtistId })}
+              onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, currentArtistId)}
               onEditDraft={(post) => {
                 if (post.editorState) {
                   setShowVideoEditor(true);
@@ -6116,6 +6119,7 @@ const StickToMusic = () => {
             onArtistChange={handleArtistChange}
             lateAccountIds={derivedLateAccountIds}
             onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: currentArtistId })}
+            onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, currentArtistId)}
           />
         )}
 

@@ -29,6 +29,7 @@ const SchedulingPage = ({
   lateAccountIds = {},
   onEditDraft,
   onSchedulePost,
+  onDeleteLatePost,
   onBack,
   readOnly = false
 }) => {
@@ -368,12 +369,25 @@ const SchedulingPage = ({
 
   const handleDeletePost = useCallback((postId) => {
     const post = posts.find(p => p.id === postId);
+    const isPostedOrScheduled = post?.status === POST_STATUS.POSTED || post?.status === POST_STATUS.SCHEDULED;
+    const hasLateId = !!post?.latePostId;
+
     setConfirmDialog({
       isOpen: true,
       title: 'Remove Post',
-      message: `Remove "${post?.contentName || 'this post'}" from the queue?`,
+      message: hasLateId && isPostedOrScheduled
+        ? `Remove "${post?.contentName || 'this post'}" from the queue AND from Late.co?`
+        : `Remove "${post?.contentName || 'this post'}" from the queue?`,
       variant: 'destructive',
       onConfirm: async () => {
+        // Delete from Late first (if applicable)
+        if (hasLateId && onDeleteLatePost) {
+          try {
+            await onDeleteLatePost(post.latePostId);
+          } catch (err) {
+            log('[Schedule] Late delete failed (continuing local delete):', err);
+          }
+        }
         await deleteScheduledPost(db, artistId, postId);
         if (expandedPostId === postId) setExpandedPostId(null);
         setSelectedPostIds(prev => { const next = new Set(prev); next.delete(postId); return next; });
@@ -381,19 +395,33 @@ const SchedulingPage = ({
         toastSuccess('Post removed');
       }
     });
-  }, [posts, db, artistId, expandedPostId, toastSuccess]);
+  }, [posts, db, artistId, expandedPostId, onDeleteLatePost, toastSuccess]);
 
   // ── Delete Selected Posts ──
   const handleDeleteSelected = useCallback(() => {
     if (selectedCount === 0) return;
+    const selectedList = posts.filter(p => selectedPostIds.has(p.id));
+    const lateCount = selectedList.filter(p => p.latePostId && (p.status === POST_STATUS.POSTED || p.status === POST_STATUS.SCHEDULED)).length;
+
     setConfirmDialog({
       isOpen: true,
       title: 'Delete Selected Posts',
-      message: `Permanently remove ${selectedCount} post${selectedCount !== 1 ? 's' : ''} from the queue?`,
+      message: lateCount > 0
+        ? `Permanently remove ${selectedCount} post${selectedCount !== 1 ? 's' : ''} from the queue? (${lateCount} will also be removed from Late.co)`
+        : `Permanently remove ${selectedCount} post${selectedCount !== 1 ? 's' : ''} from the queue?`,
       variant: 'destructive',
       onConfirm: async () => {
         const ids = [...selectedPostIds];
         for (const id of ids) {
+          const post = posts.find(p => p.id === id);
+          // Delete from Late if applicable
+          if (post?.latePostId && onDeleteLatePost) {
+            try {
+              await onDeleteLatePost(post.latePostId);
+            } catch (err) {
+              log('[Schedule] Late delete failed for', id, '(continuing):', err);
+            }
+          }
           await deleteScheduledPost(db, artistId, id);
         }
         setSelectedPostIds(new Set());
@@ -402,7 +430,7 @@ const SchedulingPage = ({
         toastSuccess(`Removed ${ids.length} post${ids.length !== 1 ? 's' : ''}`);
       }
     });
-  }, [selectedPostIds, selectedCount, db, artistId, expandedPostId, toastSuccess]);
+  }, [selectedPostIds, selectedCount, posts, db, artistId, expandedPostId, onDeleteLatePost, toastSuccess]);
 
   // ── Auto-render a video post if it has no cloudUrl ──
   const autoRenderPost = useCallback(async (post) => {
@@ -497,7 +525,24 @@ const SchedulingPage = ({
         await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: result.error || 'Unknown error' });
         toastError(`Failed to publish: ${result.error || 'Unknown error'}`);
       } else {
-        await handleUpdatePost(postId, { status: POST_STATUS.POSTED, postedAt: new Date().toISOString() });
+        // Build postResults from Late API response
+        const latePost = result?.post || {};
+        const latePostId = latePost._id || latePost.id || null;
+        const platformResults = {};
+        platformEntries.forEach(({ platform }) => {
+          platformResults[platform] = {
+            postId: latePostId,
+            url: latePost.url || latePost.permalink || null,
+            error: null
+          };
+        });
+
+        await handleUpdatePost(postId, {
+          status: POST_STATUS.POSTED,
+          postedAt: new Date().toISOString(),
+          latePostId,
+          postResults: platformResults
+        });
         toastSuccess('Published successfully!');
       }
     } catch (err) {
@@ -708,7 +753,24 @@ const SchedulingPage = ({
           await handleUpdatePost(post.id, { status: POST_STATUS.FAILED, errorMessage: result.error || 'Unknown error' });
           failed++;
         } else {
-          await handleUpdatePost(post.id, { status: POST_STATUS.POSTED, postedAt: new Date().toISOString() });
+          // Build postResults from Late API response
+          const latePost = result?.post || {};
+          const latePostId = latePost._id || latePost.id || null;
+          const platformResults = {};
+          platformEntries.forEach(({ platform }) => {
+            platformResults[platform] = {
+              postId: latePostId,
+              url: latePost.url || latePost.permalink || null,
+              error: null
+            };
+          });
+
+          await handleUpdatePost(post.id, {
+            status: POST_STATUS.POSTED,
+            postedAt: new Date().toISOString(),
+            latePostId,
+            postResults: platformResults
+          });
           succeeded++;
         }
       } catch (err) {
