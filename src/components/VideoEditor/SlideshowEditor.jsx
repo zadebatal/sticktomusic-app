@@ -133,12 +133,16 @@ const SlideshowEditor = ({
     if (!text.trim() || !artistId || collections.length === 0) return;
     const targetCol = collections[0]; // Add to first collection
     addToTextBank(artistId, targetCol.id, bankNum, text.trim());
-    // Update local state so UI refreshes immediately
-    setCollections(prev => prev.map(col =>
-      col.id === targetCol.id
-        ? { ...col, [`textBank${bankNum}`]: [...(col[`textBank${bankNum}`] || []), text.trim()] }
-        : col
-    ));
+    // Update local state so UI refreshes immediately (write to textBanks array)
+    setCollections(prev => prev.map(col => {
+      if (col.id !== targetCol.id) return col;
+      const migrated = migrateCollectionBanks(col);
+      const textBanks = [...(migrated.textBanks || [])];
+      const idx = bankNum - 1;
+      while (textBanks.length <= idx) textBanks.push([]);
+      textBanks[idx] = [...textBanks[idx], text.trim()];
+      return { ...col, textBanks };
+    }));
   }, [artistId, collections]);
 
   // Delete text from a text bank
@@ -146,11 +150,16 @@ const SlideshowEditor = ({
     if (!artistId || collections.length === 0) return;
     const targetCol = collections[0];
     removeFromTextBank(artistId, targetCol.id, bankNum, index);
-    setCollections(prev => prev.map(col =>
-      col.id === targetCol.id
-        ? { ...col, [`textBank${bankNum}`]: (col[`textBank${bankNum}`] || []).filter((_, i) => i !== index) }
-        : col
-    ));
+    setCollections(prev => prev.map(col => {
+      if (col.id !== targetCol.id) return col;
+      const migrated = migrateCollectionBanks(col);
+      const textBanks = [...(migrated.textBanks || [])];
+      const idx = bankNum - 1;
+      if (textBanks[idx]) {
+        textBanks[idx] = textBanks[idx].filter((_, i) => i !== index);
+      }
+      return { ...col, textBanks };
+    }));
   }, [artistId, collections]);
 
   // Filmstrip drag-and-drop state

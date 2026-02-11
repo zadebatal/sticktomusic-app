@@ -692,6 +692,8 @@ const LibraryBrowser = ({
           URL.revokeObjectURL(mediaEl.src);
         }
 
+        let thumbnailUrl = null;
+
         if (type === MEDIA_TYPES.IMAGE) {
           const img = new Image();
           img.src = URL.createObjectURL(file);
@@ -703,6 +705,24 @@ const LibraryBrowser = ({
             };
             img.onerror = resolve;
           });
+          // Generate lightweight thumbnail
+          try {
+            const maxThumbSize = 150;
+            const scale = Math.min(1, maxThumbSize / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round((img.naturalWidth || 150) * scale);
+            canvas.height = Math.round((img.naturalHeight || 150) * scale);
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.5));
+            if (thumbBlob) {
+              const thumbFile = new File([thumbBlob], `thumb_${file.name}.jpg`, { type: 'image/jpeg' });
+              const thumbResult = await uploadFile(thumbFile, 'thumbnails');
+              thumbnailUrl = thumbResult.url;
+            }
+          } catch (thumbErr) {
+            console.warn('[LibraryBrowser] Thumbnail generation failed:', thumbErr);
+          }
           URL.revokeObjectURL(img.src);
         }
 
@@ -711,6 +731,7 @@ const LibraryBrowser = ({
           type,
           name: file.name,
           url: result.url,
+          thumbnailUrl,
           storagePath: result.path,
           duration,
           width,
@@ -2441,7 +2462,9 @@ const LibraryBrowser = ({
                           color="#c4b5fd"
                           texts={(() => {
                             const col = collections.find(c => c.id === activeView);
-                            return col?.textBank1 || [];
+                            if (!col) return [];
+                            const migrated = migrateCollectionBanks(col);
+                            return migrated.textBanks?.[0] || [];
                           })()}
                           onAdd={(text) => { addToTextBank(artistId, activeView, 1, text); loadData(); syncCollection(activeView); }}
                           onRemove={(index) => { removeFromTextBank(artistId, activeView, 1, index); loadData(); syncCollection(activeView); }}
@@ -2453,7 +2476,9 @@ const LibraryBrowser = ({
                           color="#86efac"
                           texts={(() => {
                             const col = collections.find(c => c.id === activeView);
-                            return col?.textBank2 || [];
+                            if (!col) return [];
+                            const migrated = migrateCollectionBanks(col);
+                            return migrated.textBanks?.[1] || [];
                           })()}
                           onAdd={(text) => { addToTextBank(artistId, activeView, 2, text); loadData(); syncCollection(activeView); }}
                           onRemove={(index) => { removeFromTextBank(artistId, activeView, 2, index); loadData(); syncCollection(activeView); }}
