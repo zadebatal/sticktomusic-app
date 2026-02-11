@@ -5,7 +5,7 @@
  * can't render .heic files in <img> or Canvas, breaking thumbnails and export.
  * Similarly, TIFF files (.tif/.tiff) are not natively renderable in most browsers.
  *
- * Uses heic2any (lazy-loaded ~300KB WASM) for HEIC and utif2 (~80KB) for TIFF,
+ * Uses heic-to (libheif 1.21.2 WASM) for HEIC and utif2 (~80KB) for TIFF,
  * converting at upload time to JPEG.
  */
 
@@ -63,16 +63,15 @@ const convertTiff = async (file) => {
 };
 
 /**
- * Convert a HEIC/HEIF file to JPEG using heic2any.
+ * Convert a HEIC/HEIF file to JPEG using heic-to (libheif 1.21.2).
  * @param {File} file — HEIC input file
  * @returns {Promise<File>} — converted JPEG file
  */
 const convertHeic = async (file) => {
-  const heic2any = (await import('heic2any')).default;
-  const blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 });
-  const resultBlob = Array.isArray(blob) ? blob[0] : blob;
+  const { heicTo } = await import('heic-to');
+  const blob = await heicTo({ blob: file, type: 'image/jpeg', quality: 0.92 });
   const newName = file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg');
-  return new File([resultBlob], newName, { type: 'image/jpeg' });
+  return new File([blob], newName, { type: 'image/jpeg' });
 };
 
 /**
