@@ -2946,7 +2946,7 @@ const SlideshowEditor = ({
               <input
                 ref={importImageARef}
                 type="file"
-                accept="image/*,.heic,.heif"
+                accept="image/*,.heic,.heif,.tif,.tiff"
                 multiple
                 onChange={(e) => handleImportImages(e, 'A')}
                 style={{ display: 'none' }}
@@ -2954,7 +2954,7 @@ const SlideshowEditor = ({
               <input
                 ref={importImageBRef}
                 type="file"
-                accept="image/*,.heic,.heif"
+                accept="image/*,.heic,.heif,.tif,.tiff"
                 multiple
                 onChange={(e) => handleImportImages(e, 'B')}
                 style={{ display: 'none' }}
@@ -2962,7 +2962,7 @@ const SlideshowEditor = ({
               <input
                 ref={importImageGenericRef}
                 type="file"
-                accept="image/*,.heic,.heif"
+                accept="image/*,.heic,.heif,.tif,.tiff"
                 multiple
                 onChange={(e) => handleImportImages(e, importBankIndexRef.current)}
                 style={{ display: 'none' }}

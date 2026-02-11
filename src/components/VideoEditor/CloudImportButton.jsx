@@ -39,7 +39,7 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
     switch (mediaType) {
       case 'video': return ['.mp4', '.mov', '.avi', '.webm', '.mkv'];
       case 'audio': return ['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac'];
-      case 'image': return ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.heic', '.heif'];
+      case 'image': return ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.heic', '.heif', '.tif', '.tiff'];
       default: return null; // all files
     }
   };
@@ -169,7 +169,7 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
     const lower = name.toLowerCase();
     if (['.mp4', '.mov', '.avi', '.webm', '.mkv'].some(e => lower.endsWith(e))) return 'video';
     if (['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac'].some(e => lower.endsWith(e))) return 'audio';
-    if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.heic', '.heif'].some(e => lower.endsWith(e))) return 'image';
+    if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.heic', '.heif', '.tif', '.tiff'].some(e => lower.endsWith(e))) return 'image';
     return 'other';
   };
 

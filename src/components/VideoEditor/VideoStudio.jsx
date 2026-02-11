@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import useIsMobile from '../../hooks/useIsMobile';
-import { convertHeicFilesIfNeeded } from '../../utils/heicConverter';
+import { convertImageFilesIfNeeded } from '../../utils/imageConverter';
 import AestheticHome from './AestheticHome';
 import StudioHome from './StudioHome';
 import ContentLibrary from './ContentLibrary';
@@ -1575,7 +1575,7 @@ const VideoStudio = ({
   const handleUploadImages = useCallback(async (files, bank = 'A') => {
     if (!selectedCategory) return;
 
-    const convertedFiles = await convertHeicFilesIfNeeded(Array.from(files));
+    const convertedFiles = await convertImageFilesIfNeeded(Array.from(files));
     const bankKey = bank === 'A' ? 'imagesA' : 'imagesB';
     setUploadProgress({ type: 'image', current: 0, total: convertedFiles.length });
 

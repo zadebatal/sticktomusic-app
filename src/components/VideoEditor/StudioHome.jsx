@@ -12,7 +12,8 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import useIsMobile from '../../hooks/useIsMobile';
-import { convertHeicIfNeeded, isHeicFile } from '../../utils/heicConverter';
+import { convertImageIfNeeded, isHeicFile, isTiffFile } from '../../utils/imageConverter';
+import { runPool } from '../../utils/uploadPool';
 // OnboardingModal removed - auto-setup happens in VideoStudio
 import { useTheme } from '../../contexts/ThemeContext';
 import LibraryBrowser from './LibraryBrowser';
@@ -414,153 +415,142 @@ const StudioHome = ({
     setUploadProgress({ current: 0, total: files.length, percent: 0 });
     cancelFunctionsRef.current = [];
 
-    const uploadedItems = [];
-    const failedFiles = [];
+    const processOneFile = async (rawFile) => {
+      const file = type === MEDIA_TYPES.IMAGE ? await convertImageIfNeeded(rawFile) : rawFile;
 
-    for (let i = 0; i < files.length; i++) {
-      const file = type === MEDIA_TYPES.IMAGE ? await convertHeicIfNeeded(files[i]) : files[i];
-      const basePercent = (i / files.length) * 100;
-      setUploadProgress({ current: i + 1, total: files.length, name: file.name, percent: Math.round(basePercent) });
+      log('[StudioHome] Uploading file:', file.name, 'size:', file.size, 'type:', file.type);
 
-      try {
-        log('[StudioHome] Uploading file:', file.name, 'size:', file.size, 'type:', file.type);
-
-        // Upload to Firebase with progress tracking
-        const folder = type === MEDIA_TYPES.VIDEO ? 'videos'
-          : type === MEDIA_TYPES.IMAGE ? 'images' : 'audio';
-        log('[StudioHome] Calling uploadFile to folder:', folder);
-        const { url, path } = await uploadFile(file, folder, (filePercent) => {
-          const overall = Math.round(basePercent + (filePercent / files.length));
-          setUploadProgress(prev => ({ ...prev, percent: Math.min(overall, 99) }));
-        }, {
-          onCancel: (cancelFn) => {
-            cancelFunctionsRef.current.push(cancelFn);
-          }
-        });
-        log('[StudioHome] Upload successful! URL:', url?.substring(0, 50) + '...');
-
-        // Get metadata
-        let duration = null;
-        let width = null;
-        let height = null;
-        let hasEmbeddedAudio = false;
-
-        const localUrl = URL.createObjectURL(file);
-
-        if (type === MEDIA_TYPES.VIDEO || type === MEDIA_TYPES.AUDIO) {
-          try {
-            duration = await getMediaDuration(localUrl, type === MEDIA_TYPES.VIDEO ? 'video' : 'audio');
-          } catch (e) {
-            console.warn('Could not get duration:', e);
-          }
+      // Upload to Firebase
+      const folder = type === MEDIA_TYPES.VIDEO ? 'videos'
+        : type === MEDIA_TYPES.IMAGE ? 'images' : 'audio';
+      const { url, path } = await uploadFile(file, folder, undefined, {
+        onCancel: (cancelFn) => {
+          cancelFunctionsRef.current.push(cancelFn);
         }
+      });
+      log('[StudioHome] Upload successful! URL:', url?.substring(0, 50) + '...');
 
-        if (type === MEDIA_TYPES.VIDEO) {
-          // Extract video metadata (dimensions)
-          const metaVideo = document.createElement('video');
-          metaVideo.src = localUrl;
-          await new Promise(r => { metaVideo.onloadedmetadata = r; });
-          width = metaVideo.videoWidth;
-          height = metaVideo.videoHeight;
-          hasEmbeddedAudio = true; // Assume true, can't reliably detect
+      // Get metadata
+      let duration = null;
+      let width = null;
+      let height = null;
+      let hasEmbeddedAudio = false;
+
+      const localUrl = URL.createObjectURL(file);
+
+      if (type === MEDIA_TYPES.VIDEO || type === MEDIA_TYPES.AUDIO) {
+        try {
+          duration = await getMediaDuration(localUrl, type === MEDIA_TYPES.VIDEO ? 'video' : 'audio');
+        } catch (e) {
+          console.warn('Could not get duration:', e);
         }
-
-        let thumbnailUrl = null;
-
-        // Generate thumbnail from video frame (seek to 1s or 25% of duration)
-        if (type === MEDIA_TYPES.VIDEO) {
-          try {
-            const video = document.createElement('video');
-            video.src = localUrl;
-            video.crossOrigin = 'anonymous';
-            video.muted = true;
-            await new Promise((resolve, reject) => {
-              video.onloadeddata = resolve;
-              video.onerror = reject;
-              // Fallback timeout in case onloadeddata never fires
-              setTimeout(resolve, 5000);
-            });
-            const seekTime = Math.min(1, (video.duration || 2) * 0.25);
-            video.currentTime = seekTime;
-            await new Promise(r => { video.onseeked = r; });
-
-            const maxThumbSize = 150;
-            const scale = Math.min(1, maxThumbSize / Math.max(video.videoWidth, video.videoHeight));
-            const canvas = document.createElement('canvas');
-            canvas.width = Math.round(video.videoWidth * scale);
-            canvas.height = Math.round(video.videoHeight * scale);
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.5));
-            if (thumbBlob) {
-              const thumbFile = new File([thumbBlob], `thumb_${file.name}.jpg`, { type: 'image/jpeg' });
-              const thumbResult = await uploadFile(thumbFile, 'thumbnails');
-              thumbnailUrl = thumbResult.url;
-            }
-          } catch (thumbErr) {
-            console.warn('[StudioHome] Video thumbnail generation failed:', thumbErr);
-          }
-        }
-
-        if (type === MEDIA_TYPES.IMAGE) {
-          const img = new Image();
-          img.src = localUrl;
-          await new Promise(r => { img.onload = r; });
-          width = img.naturalWidth;
-          height = img.naturalHeight;
-
-          // Generate lightweight thumbnail for grid/library views
-          try {
-            const maxThumbSize = 150;
-            const scale = Math.min(1, maxThumbSize / Math.max(img.naturalWidth, img.naturalHeight));
-            const canvas = document.createElement('canvas');
-            canvas.width = Math.round(img.naturalWidth * scale);
-            canvas.height = Math.round(img.naturalHeight * scale);
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.5));
-            if (thumbBlob) {
-              const thumbFile = new File([thumbBlob], `thumb_${file.name}`, { type: 'image/jpeg' });
-              const thumbResult = await uploadFile(thumbFile, 'thumbnails');
-              thumbnailUrl = thumbResult.url;
-            }
-          } catch (thumbErr) {
-            console.warn('[StudioHome] Thumbnail generation failed:', thumbErr);
-          }
-        }
-
-        const item = {
-          type,
-          name: file.name,
-          url,
-          thumbnailUrl,
-          storagePath: path,
-          duration,
-          width,
-          height,
-          hasEmbeddedAudio,
-          metadata: {
-            fileSize: file.size,
-            mimeType: file.type
-          }
-        };
-
-        // Add to selected collection if one is selected
-        if (selectedCollection) {
-          item.collectionIds = [selectedCollection];
-        }
-
-        uploadedItems.push(item);
-
-        // Keep local URL for current session (revoked on unmount via blobUrlsRef)
-        item.localUrl = localUrl;
-        blobUrlsRef.current.push(localUrl);
-
-      } catch (error) {
-        console.error('[StudioHome] Upload FAILED for:', file.name, 'Error:', error.message);
-        failedFiles.push({ name: file.name, error: error.message });
       }
-    }
+
+      if (type === MEDIA_TYPES.VIDEO) {
+        const metaVideo = document.createElement('video');
+        metaVideo.src = localUrl;
+        await new Promise(r => { metaVideo.onloadedmetadata = r; });
+        width = metaVideo.videoWidth;
+        height = metaVideo.videoHeight;
+        hasEmbeddedAudio = true;
+      }
+
+      let thumbnailUrl = null;
+
+      if (type === MEDIA_TYPES.VIDEO) {
+        try {
+          const video = document.createElement('video');
+          video.src = localUrl;
+          video.crossOrigin = 'anonymous';
+          video.muted = true;
+          await new Promise((resolve, reject) => {
+            video.onloadeddata = resolve;
+            video.onerror = reject;
+            setTimeout(resolve, 5000);
+          });
+          const seekTime = Math.min(1, (video.duration || 2) * 0.25);
+          video.currentTime = seekTime;
+          await new Promise(r => { video.onseeked = r; });
+
+          const maxThumbSize = 150;
+          const scale = Math.min(1, maxThumbSize / Math.max(video.videoWidth, video.videoHeight));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(video.videoWidth * scale);
+          canvas.height = Math.round(video.videoHeight * scale);
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.5));
+          if (thumbBlob) {
+            const thumbFile = new File([thumbBlob], `thumb_${file.name}.jpg`, { type: 'image/jpeg' });
+            const thumbResult = await uploadFile(thumbFile, 'thumbnails');
+            thumbnailUrl = thumbResult.url;
+          }
+        } catch (thumbErr) {
+          console.warn('[StudioHome] Video thumbnail generation failed:', thumbErr);
+        }
+      }
+
+      if (type === MEDIA_TYPES.IMAGE) {
+        const img = new Image();
+        img.src = localUrl;
+        await new Promise(r => { img.onload = r; });
+        width = img.naturalWidth;
+        height = img.naturalHeight;
+
+        try {
+          const maxThumbSize = 150;
+          const scale = Math.min(1, maxThumbSize / Math.max(img.naturalWidth, img.naturalHeight));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.naturalWidth * scale);
+          canvas.height = Math.round(img.naturalHeight * scale);
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.5));
+          if (thumbBlob) {
+            const thumbFile = new File([thumbBlob], `thumb_${file.name}`, { type: 'image/jpeg' });
+            const thumbResult = await uploadFile(thumbFile, 'thumbnails');
+            thumbnailUrl = thumbResult.url;
+          }
+        } catch (thumbErr) {
+          console.warn('[StudioHome] Thumbnail generation failed:', thumbErr);
+        }
+      }
+
+      const item = {
+        type,
+        name: file.name,
+        url,
+        thumbnailUrl,
+        storagePath: path,
+        duration,
+        width,
+        height,
+        hasEmbeddedAudio,
+        metadata: {
+          fileSize: file.size,
+          mimeType: file.type
+        }
+      };
+
+      if (selectedCollection) {
+        item.collectionIds = [selectedCollection];
+      }
+
+      item.localUrl = localUrl;
+      blobUrlsRef.current.push(localUrl);
+
+      return item;
+    };
+
+    const { results, errors: poolErrors } = await runPool(files, processOneFile, {
+      concurrency: 5,
+      onProgress: (completed, total) => {
+        setUploadProgress({ current: completed, total, percent: Math.min(Math.round((completed / total) * 100), 99) });
+      }
+    });
+
+    const uploadedItems = results.filter(Boolean);
+    const failedFiles = poolErrors.map(e => ({ name: e.item?.name || 'unknown', error: e.error?.message || 'Unknown error' }));
 
     if (uploadedItems.length > 0) {
       log('[StudioHome] Adding', uploadedItems.length, 'items to library for artist:', artistId);
@@ -689,7 +679,7 @@ const StudioHome = ({
       const videoFiles = files.filter(f => f.type.startsWith('video/'));
       if (videoFiles.length > 0) handleFileUpload(videoFiles, MEDIA_TYPES.VIDEO);
     } else if (studioMode === 'slideshows') {
-      const imageFiles = files.filter(f => f.type.startsWith('image/') || isHeicFile(f));
+      const imageFiles = files.filter(f => f.type.startsWith('image/') || isHeicFile(f) || isTiffFile(f));
       if (imageFiles.length > 0) handleFileUpload(imageFiles, MEDIA_TYPES.IMAGE);
     } else if (studioMode === 'audio') {
       const audioFiles = files.filter(f => f.type.startsWith('audio/'));

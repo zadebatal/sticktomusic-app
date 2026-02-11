@@ -4,7 +4,8 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { convertHeicIfNeeded, isHeicFile } from '../../utils/heicConverter';
+import { convertImageIfNeeded, isHeicFile, isTiffFile } from '../../utils/imageConverter';
+import { runPool } from '../../utils/uploadPool';
 import {
   getLibrary,
   saveLibrary,
@@ -632,24 +633,20 @@ const LibraryBrowser = ({
     setUploadProgress(0);
 
     try {
-      for (let i = 0; i < files.length; i++) {
-        const file = await convertHeicIfNeeded(files[i]);
-        const basePercent = (i / files.length) * 100;
+      const processOneFile = async (rawFile) => {
+        const file = await convertImageIfNeeded(rawFile);
 
         // Determine media type
         let type;
         if (file.type.startsWith('video/')) type = MEDIA_TYPES.VIDEO;
-        else if (file.type.startsWith('image/') || isHeicFile(files[i])) type = MEDIA_TYPES.IMAGE;
+        else if (file.type.startsWith('image/') || isHeicFile(rawFile) || isTiffFile(rawFile)) type = MEDIA_TYPES.IMAGE;
         else if (file.type === 'audio/mpeg' || file.type === 'audio/mp3') type = MEDIA_TYPES.AUDIO;
-        else continue;
+        else return null;
 
         log('[LibraryBrowser] Uploading file:', file.name, 'type:', type);
 
-        // Upload to Firebase with progress tracking
-        const result = await uploadFile(file, type + 's', (filePercent) => {
-          const overall = Math.round(basePercent + (filePercent / files.length));
-          setUploadProgress(Math.min(overall, 99));
-        });
+        // Upload to Firebase
+        const result = await uploadFile(file, type + 's');
         log('[LibraryBrowser] Firebase upload result:', result);
 
         // Get duration for video/audio
@@ -668,7 +665,6 @@ const LibraryBrowser = ({
               if (type === MEDIA_TYPES.VIDEO) {
                 width = mediaEl.videoWidth;
                 height = mediaEl.videoHeight;
-                // Check for audio tracks
                 hasEmbeddedAudio = mediaEl.mozHasAudio ||
                   Boolean(mediaEl.webkitAudioDecodedByteCount) ||
                   Boolean(mediaEl.audioTracks?.length);
@@ -710,10 +706,22 @@ const LibraryBrowser = ({
           }
         });
         log('[LibraryBrowser] Added to library:', newItem);
+        return newItem;
+      };
+
+      const { errors } = await runPool(files, processOneFile, {
+        concurrency: 5,
+        onProgress: (completed, total) => {
+          setUploadProgress(Math.min(Math.round((completed / total) * 100), 99));
+        }
+      });
+
+      if (errors.length > 0) {
+        console.error('[LibraryBrowser] Some uploads failed:', errors);
+        toastError(`${errors.length} file(s) failed to upload`);
       }
 
       log('[LibraryBrowser] Upload complete');
-      // Note: If using Firestore subscription, library will auto-update via onSnapshot
       if (!db) loadData();
     } catch (error) {
       console.error('[LibraryBrowser] Upload failed:', error);
@@ -917,9 +925,9 @@ const LibraryBrowser = ({
   const getAcceptTypes = () => {
     switch (mode) {
       case 'videos': return 'video/*';
-      case 'images': return 'image/*,.heic,.heif';
+      case 'images': return 'image/*,.heic,.heif,.tif,.tiff';
       case 'audio': return '.mp3,audio/mpeg';
-      default: return 'video/*,image/*,.heic,.heif,.mp3,audio/mpeg';
+      default: return 'video/*,image/*,.heic,.heif,.tif,.tiff,.mp3,audio/mpeg';
     }
   };
 
@@ -1918,7 +1926,7 @@ const LibraryBrowser = ({
               ref={fileInputRef}
               type="file"
               multiple
-              accept={isMobile ? 'image/*,video/*,.heic,.heif' : getAcceptTypes()}
+              accept={isMobile ? 'image/*,video/*,.heic,.heif,.tif,.tiff' : getAcceptTypes()}
               {...(isMobile ? { capture: 'environment' } : {})}
               onChange={handleFileUpload}
               style={{ display: 'none' }}
@@ -2498,7 +2506,7 @@ const LibraryBrowser = ({
                   <input
                     type="file"
                     multiple
-                    accept={isMobile ? 'image/*,video/*,.heic,.heif' : getAcceptTypes()}
+                    accept={isMobile ? 'image/*,video/*,.heic,.heif,.tif,.tiff' : getAcceptTypes()}
                     {...(isMobile ? { capture: 'environment' } : {})}
                     onChange={handleFileUpload}
                     style={{ display: 'none' }}

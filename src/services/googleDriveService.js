@@ -448,11 +448,11 @@ export async function getFileMetadata(fileId) {
 export const DRIVE_MIME_TYPES = {
   VIDEO: ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo'],
   AUDIO: ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/aac', 'audio/mp4'],
-  IMAGE: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+  IMAGE: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/tiff'],
   ALL_MEDIA: [
     'video/mp4', 'video/quicktime', 'video/webm',
     'audio/mpeg', 'audio/wav', 'audio/ogg',
-    'image/jpeg', 'image/png', 'image/gif', 'image/webp'
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/tiff'
   ]
 };
 

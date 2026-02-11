@@ -529,8 +529,8 @@ export async function saveDropboxSettings(db, artistId, settings) {
 export const DROPBOX_EXTENSIONS = {
   VIDEO: ['mp4', 'mov', 'webm', 'avi'],
   AUDIO: ['mp3', 'wav', 'ogg', 'aac', 'm4a'],
-  IMAGE: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
-  ALL_MEDIA: ['mp4', 'mov', 'webm', 'mp3', 'wav', 'ogg', 'jpg', 'jpeg', 'png', 'gif', 'webp']
+  IMAGE: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'tif', 'tiff'],
+  ALL_MEDIA: ['mp4', 'mov', 'webm', 'mp3', 'wav', 'ogg', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'tif', 'tiff']
 };
 
 /**
