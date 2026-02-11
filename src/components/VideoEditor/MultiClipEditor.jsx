@@ -469,6 +469,7 @@ const MultiClipEditor = ({
       const localUrl = URL.createObjectURL(trimmedFile);
       handleAudioSelect({
         ...audioToTrim,
+        id: `audio_trim_${Date.now()}`,
         name: trimmedName || trimmedFile.name,
         file: trimmedFile,
         url: localUrl,
