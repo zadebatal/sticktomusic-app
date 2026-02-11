@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import useIsMobile from '../../hooks/useIsMobile';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
-import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, getLyrics, MEDIA_TYPES, addToTextBank, removeFromTextBank, assignToBank, saveCollectionToFirestore, migrateCollectionBanks, getBankColor, getBankLabel, BANK_COLORS, MAX_BANKS, addBankToCollection, updateLibraryItem } from '../../services/libraryService';
+import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, getLyrics, MEDIA_TYPES, addToTextBank, removeFromTextBank, assignToBank, saveCollectionToFirestore, migrateCollectionBanks, getBankColor, getBankLabel, BANK_COLORS, MAX_BANKS, MIN_BANKS, addBankToCollection, removeBankFromCollection, updateLibraryItem } from '../../services/libraryService';
 import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
 import LyricBank from './LyricBank';
@@ -2305,6 +2305,39 @@ const SlideshowEditor = ({
                             setLibraryImages(prev => [...prev, ...newItems]);
                           }}
                         />
+                        {idx >= MIN_BANKS && (
+                          <button
+                            title={`Delete ${getBankLabel(idx)}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!window.confirm(`Delete ${getBankLabel(idx)}? Images will remain in your library.`)) return;
+                              // Find which collection(s) have this bank and remove it
+                              collections.forEach(col => {
+                                const migrated = migrateCollectionBanks(col);
+                                if ((migrated.banks || []).length > idx) {
+                                  removeBankFromCollection(artistId, col.id, idx);
+                                  if (db) {
+                                    const freshCols = getCollections(artistId);
+                                    const updated = freshCols.find(c => c.id === col.id);
+                                    if (updated) saveCollectionToFirestore(db, artistId, updated).catch(() => {});
+                                  }
+                                }
+                              });
+                              // Refresh collections state
+                              setCollections(getCollections(artistId));
+                              toastSuccess(`${getBankLabel(idx)} deleted`);
+                            }}
+                            style={{
+                              background: 'none', border: 'none', color: color.light,
+                              cursor: 'pointer', padding: '0 2px', fontSize: '14px',
+                              opacity: 0.6, lineHeight: 1
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                            onMouseLeave={(e) => e.currentTarget.style.opacity = '0.6'}
+                          >
+                            ×
+                          </button>
+                        )}
                       </div>
                       <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
                         {(() => {
