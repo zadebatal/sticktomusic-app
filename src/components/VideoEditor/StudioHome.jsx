@@ -1966,51 +1966,6 @@ const StudioHome = ({
                 </div>
               </div>
 
-              {/* ── Video Text Banks (stacked, matching slideshow style) ── */}
-              {selectedCollection && (() => {
-                const col = collections.find(c => c.id === selectedCollection);
-                if (!col) return null;
-                const syncCol = () => {
-                  loadData();
-                  if (db) {
-                    const cols = getCollections(artistId);
-                    const fresh = cols.find(c => c.id === selectedCollection);
-                    if (fresh) saveCollectionToFirestore(db, artistId, fresh).catch(console.error);
-                  }
-                };
-                return (
-                  <div style={{
-                    margin: '0 16px',
-                    borderTop: `1px solid ${theme.border.subtle}`,
-                    padding: '8px 0'
-                  }}>
-                    <div style={{ padding: '4px 8px', fontSize: '10px', fontWeight: '600', color: '#38bdf8', borderBottom: `1px solid ${theme.border.subtle}`, backgroundColor: 'rgba(56,189,248,0.08)', textAlign: 'center', marginBottom: '4px', borderRadius: '4px 4px 0 0' }}>
-                      Video Text Banks
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '4px 6px' }}>
-                      <TextBankPanel
-                        bankNum={1}
-                        label="Video Text 1"
-                        color="#38bdf8"
-                        texts={col.videoTextBank1 || []}
-                        onAdd={(text) => { addToVideoTextBank(artistId, selectedCollection, 1, text); syncCol(); }}
-                        onRemove={(index) => { removeFromVideoTextBank(artistId, selectedCollection, 1, index); syncCol(); }}
-                        onUpdate={(texts) => { updateVideoTextBank(artistId, selectedCollection, 1, texts); syncCol(); }}
-                      />
-                      <div style={{ height: '1px', backgroundColor: theme.border.subtle }} />
-                      <TextBankPanel
-                        bankNum={2}
-                        label="Video Text 2"
-                        color="#fb923c"
-                        texts={col.videoTextBank2 || []}
-                        onAdd={(text) => { addToVideoTextBank(artistId, selectedCollection, 2, text); syncCol(); }}
-                        onRemove={(index) => { removeFromVideoTextBank(artistId, selectedCollection, 2, index); syncCol(); }}
-                        onUpdate={(texts) => { updateVideoTextBank(artistId, selectedCollection, 2, texts); syncCol(); }}
-                      />
-                    </div>
-                  </div>
-                );
-              })()}
 
             </div>
           )}
@@ -2252,7 +2207,7 @@ const StudioHome = ({
           <div style={{
             display: 'flex',
             flexDirection: isMobile ? 'column' : 'row',
-            width: isMobile ? '100%' : (selectedCollection && studioMode === 'slideshows' ? '680px' : selectedCollection ? '480px' : '240px'),
+            width: isMobile ? '100%' : (selectedCollection ? '680px' : '240px'),
             flexShrink: isMobile ? 0 : 0,
             borderLeft: isMobile ? 'none' : `1px solid ${theme?.border?.default || 'rgba(255,255,255,0.1)'}`,
             borderTop: isMobile ? `1px solid ${theme?.border?.default || 'rgba(255,255,255,0.1)'}` : 'none',
@@ -2716,10 +2671,11 @@ const StudioHome = ({
             )}
 
 
-            {/* ── Text Banks Column (slideshow mode only — video text banks moved to main content) ── */}
-            {selectedCollection && studioMode === 'slideshows' && (!isMobile || mobileSidebarTab === 'banks') && (() => {
+            {/* ── Text Banks Column (both video & slideshow modes) ── */}
+            {selectedCollection && (!isMobile || mobileSidebarTab === 'banks') && (() => {
               const col = collections.find(c => c.id === selectedCollection);
               if (!col) return null;
+              const isVideo = studioMode === 'videos';
               const syncCol = () => {
                 loadData();
                 if (db) {
@@ -2741,28 +2697,53 @@ const StudioHome = ({
                     flexShrink: 0
                   }}>
                     <span style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary }}>
-                      Slideshow Text Banks
+                      {isVideo ? 'Video' : 'Slideshow'} Text Banks
                     </span>
                   </div>
                   <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <TextBankPanel
-                      bankNum={1}
-                      label="Text Bank 1"
-                      color="#c4b5fd"
-                      texts={(() => { const m = migrateCollectionBanks(col); return m.textBanks?.[0] || []; })()}
-                      onAdd={(text) => { addToTextBank(artistId, selectedCollection, 1, text); syncCol(); }}
-                      onRemove={(index) => { removeFromTextBank(artistId, selectedCollection, 1, index); syncCol(); }}
-                      onUpdate={(texts) => { updateTextBank(artistId, selectedCollection, 1, texts); syncCol(); }}
-                    />
-                    <TextBankPanel
-                      bankNum={2}
-                      label="Text Bank 2"
-                      color="#86efac"
-                      texts={(() => { const m = migrateCollectionBanks(col); return m.textBanks?.[1] || []; })()}
-                      onAdd={(text) => { addToTextBank(artistId, selectedCollection, 2, text); syncCol(); }}
-                      onRemove={(index) => { removeFromTextBank(artistId, selectedCollection, 2, index); syncCol(); }}
-                      onUpdate={(texts) => { updateTextBank(artistId, selectedCollection, 2, texts); syncCol(); }}
-                    />
+                    {isVideo ? (
+                      <>
+                        <TextBankPanel
+                          bankNum={1}
+                          label="Video Text 1"
+                          color="#38bdf8"
+                          texts={col.videoTextBank1 || []}
+                          onAdd={(text) => { addToVideoTextBank(artistId, selectedCollection, 1, text); syncCol(); }}
+                          onRemove={(index) => { removeFromVideoTextBank(artistId, selectedCollection, 1, index); syncCol(); }}
+                          onUpdate={(texts) => { updateVideoTextBank(artistId, selectedCollection, 1, texts); syncCol(); }}
+                        />
+                        <TextBankPanel
+                          bankNum={2}
+                          label="Video Text 2"
+                          color="#fb923c"
+                          texts={col.videoTextBank2 || []}
+                          onAdd={(text) => { addToVideoTextBank(artistId, selectedCollection, 2, text); syncCol(); }}
+                          onRemove={(index) => { removeFromVideoTextBank(artistId, selectedCollection, 2, index); syncCol(); }}
+                          onUpdate={(texts) => { updateVideoTextBank(artistId, selectedCollection, 2, texts); syncCol(); }}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <TextBankPanel
+                          bankNum={1}
+                          label="Text Bank 1"
+                          color="#c4b5fd"
+                          texts={(() => { const m = migrateCollectionBanks(col); return m.textBanks?.[0] || []; })()}
+                          onAdd={(text) => { addToTextBank(artistId, selectedCollection, 1, text); syncCol(); }}
+                          onRemove={(index) => { removeFromTextBank(artistId, selectedCollection, 1, index); syncCol(); }}
+                          onUpdate={(texts) => { updateTextBank(artistId, selectedCollection, 1, texts); syncCol(); }}
+                        />
+                        <TextBankPanel
+                          bankNum={2}
+                          label="Text Bank 2"
+                          color="#86efac"
+                          texts={(() => { const m = migrateCollectionBanks(col); return m.textBanks?.[1] || []; })()}
+                          onAdd={(text) => { addToTextBank(artistId, selectedCollection, 2, text); syncCol(); }}
+                          onRemove={(index) => { removeFromTextBank(artistId, selectedCollection, 2, index); syncCol(); }}
+                          onUpdate={(texts) => { updateTextBank(artistId, selectedCollection, 2, texts); syncCol(); }}
+                        />
+                      </>
+                    )}
                   </div>
                 </div>
               );
