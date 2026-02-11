@@ -933,9 +933,11 @@ const SlideshowEditor = ({
     if (!audioToTrim) return;
     if (trimmedFile) {
       // Audio was actually trimmed to a new file — use it directly (starts at 0)
+      // Use a NEW id so selectedAudioUrl doesn't replace blob URL with original library URL
       const localUrl = URL.createObjectURL(trimmedFile);
       const editedAudio = {
         ...audioToTrim,
+        id: `audio_trim_${Date.now()}`,
         name: trimmedName || trimmedFile.name,
         file: trimmedFile,
         url: localUrl,

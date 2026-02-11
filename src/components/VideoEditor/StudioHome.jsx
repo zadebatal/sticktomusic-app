@@ -71,8 +71,6 @@ import {
   addToTextBank,
   removeFromTextBank,
   updateTextBank,
-  addToVideoTextBank,
-  removeFromVideoTextBank,
   updateVideoTextBank,
   // Created content subscription
   subscribeToCreatedContent
@@ -109,7 +107,6 @@ const StudioHome = ({
   const [activeTab, setActiveTab] = useState('media'); // kept for compat
   const [sidebarSection, setSidebarSection] = useState({ audio: true, lyrics: false, banks: false });
   const [mobileSidebarTab, setMobileSidebarTab] = useState('audio'); // 'audio' | 'lyrics' | 'banks'
-  const [newVideoTextInputs, setNewVideoTextInputs] = useState({}); // { 0: 'text', 1: 'text' } for inline video text bank inputs
   const [selectedCollection, setSelectedCollection] = useState(null);
   const [selectedBanks, setSelectedBanks] = useState(new Set([0, 1])); // indices of selected banks
 
@@ -1967,55 +1964,7 @@ const StudioHome = ({
                 </div>
               </div>
 
-              {/* Inline Video Text Banks (compact, matching SlideshowEditor style) */}
-              {selectedCollection && (() => {
-                const col = collections.find(c => c.id === selectedCollection);
-                if (!col) return null;
-                const banks = [
-                  { label: 'Video Text 1', texts: col.videoTextBank1 || [], bankNum: 1, color: '#38bdf8' },
-                  { label: 'Video Text 2', texts: col.videoTextBank2 || [], bankNum: 2, color: '#fb923c' }
-                ];
-                const syncCol = () => {
-                  loadData();
-                  if (db) {
-                    const cols = getCollections(artistId);
-                    const fresh = cols.find(c => c.id === selectedCollection);
-                    if (fresh) saveCollectionToFirestore(db, artistId, fresh).catch(console.error);
-                  }
-                };
-                return (
-                  <div style={{ display: 'flex', gap: '12px', padding: '8px 16px', borderTop: `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}`, backgroundColor: theme?.bg?.surface || 'rgba(0,0,0,0.15)' }}>
-                    {banks.map((bank, idx) => {
-                      const inputVal = newVideoTextInputs[idx] || '';
-                      return (
-                        <div key={idx} style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: '10px', fontWeight: '600', color: bank.color, marginBottom: '3px' }}>
-                            {bank.label}
-                          </div>
-                          <div style={{ display: 'flex', gap: '3px', marginBottom: '2px' }}>
-                            <input type="text" value={inputVal} onChange={(e) => setNewVideoTextInputs(prev => ({ ...prev, [idx]: e.target.value }))}
-                              onKeyDown={(e) => { if (e.key === 'Enter' && inputVal.trim()) { addToVideoTextBank(artistId, selectedCollection, bank.bankNum, inputVal.trim()); syncCol(); setNewVideoTextInputs(prev => ({ ...prev, [idx]: '' })); } }}
-                              placeholder="Add text..." style={{ flex: 1, padding: '3px 6px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '10px', outline: 'none', minWidth: 0 }} />
-                            <button onClick={() => { if (inputVal.trim()) { addToVideoTextBank(artistId, selectedCollection, bank.bankNum, inputVal.trim()); syncCol(); setNewVideoTextInputs(prev => ({ ...prev, [idx]: '' })); } }} disabled={!inputVal.trim()}
-                              style={{ padding: '3px 6px', borderRadius: '4px', border: 'none', backgroundColor: inputVal.trim() ? `${bank.color}4d` : 'rgba(255,255,255,0.05)', color: inputVal.trim() ? bank.color : '#4b5563', fontSize: '10px', cursor: inputVal.trim() ? 'pointer' : 'default' }}>+</button>
-                          </div>
-                          {bank.texts.length > 0 ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                              {bank.texts.map((text, i) => (
-                                <div key={i} style={{ display: 'flex', alignItems: 'stretch', gap: '2px' }}>
-                                  <div style={{ flex: 1, padding: '4px 6px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '4px 0 0 4px', color: '#d1d5db', fontSize: '10px', lineHeight: '1.3', wordBreak: 'break-word', minWidth: 0 }}>{text}</div>
-                                  <button onClick={() => { removeFromVideoTextBank(artistId, selectedCollection, bank.bankNum, i); syncCol(); }}
-                                    style={{ padding: '0 5px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.2)', borderLeft: 'none', borderRadius: '0 4px 4px 0', color: '#ef4444', fontSize: '9px', cursor: 'pointer', flexShrink: 0 }}>×</button>
-                                </div>
-                              ))}
-                            </div>
-                          ) : <div style={{ fontSize: '9px', color: '#6b7280', padding: '2px', textAlign: 'center' }}>No text yet</div>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
+              {/* Video Text Banks now shown in LibraryBrowser right column */}
 
             </div>
           )}

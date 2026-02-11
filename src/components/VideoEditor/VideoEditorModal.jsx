@@ -1203,8 +1203,9 @@ const VideoEditorModal = ({
   }, [allVideos, generateCount, libraryVideos, getTextBanks, keepTemplateText, toast]);
 
   // ── Save all videos ──
-  const handleSaveAllAndClose = useCallback(() => {
-    allVideos.forEach(video => {
+  const handleSaveAllAndClose = useCallback(async () => {
+    let savedCount = 0;
+    for (const video of allVideos) {
       const videoData = {
         id: video.isTemplate ? existingVideo?.id : undefined,
         audio: video.audio,
@@ -1218,11 +1219,19 @@ const VideoEditorModal = ({
         thumbnail: video.clips[0]?.thumbnail || null,
         textOverlay: video.words[0]?.text || video.lyrics.split('\n')[0] || ''
       };
-      onSave(videoData);
-    });
+      try {
+        await onSave(videoData);
+      } catch (err) {
+        console.error(`[VideoEditorModal] Failed to save video ${savedCount}:`, err);
+        toast.error(`Failed to save video. Please try again.`);
+        return; // Stop on failure so user doesn't lose context
+      }
+      savedCount++;
+    }
     clearAutoSave();
-    toast.success(`Saved ${allVideos.length} video${allVideos.length > 1 ? 's' : ''}`);
-  }, [allVideos, existingVideo, bpm, onSave, clearAutoSave, toast]);
+    toast.success(`Saved ${savedCount} video${savedCount !== 1 ? 's' : ''}`);
+    onClose?.();
+  }, [allVideos, existingVideo, bpm, onSave, clearAutoSave, toast, onClose]);
 
   // Get current visible text
   const currentText = words.find(w =>
