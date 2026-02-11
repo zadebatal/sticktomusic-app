@@ -500,17 +500,16 @@ const VideoEditorModal = ({
       // Create audio element for playback - use cloud URL if blob expired
       if (audioRef.current) {
         const playbackUrl = isBlobUrl ? selectedAudio.url : (localUrl || selectedAudio.url);
-        audioRef.current.src = playbackUrl;
-        audioRef.current.load();
-        audioRef.current.onloadedmetadata = () => {
-          // Use trimmed duration if audio was trimmed, otherwise full duration
-          const start = selectedAudio.startTime || 0;
-          const end = selectedAudio.endTime || audioRef.current.duration;
+        const start = selectedAudio.startTime || 0;
+        const endProp = selectedAudio.endTime || null;
+
+        const onLoadedMetadata = () => {
+          if (!audioRef.current) return;
+          const end = endProp || audioRef.current.duration;
           const effectiveDuration = end - start;
           setDuration(effectiveDuration);
 
           // Store the start boundary on the audioRef for child components (WordTimeline)
-          // This allows them to calculate relative time for the trimmed range
           audioRef.current._startBoundary = start;
           audioRef.current._endBoundary = end;
 
@@ -520,11 +519,24 @@ const VideoEditorModal = ({
           }
           log(`Audio loaded: ${start.toFixed(1)}s - ${end.toFixed(1)}s (${effectiveDuration.toFixed(1)}s)`);
         };
+
+        // Set handler BEFORE load so cached audio doesn't miss the event
+        audioRef.current.onloadedmetadata = onLoadedMetadata;
+        audioRef.current.src = playbackUrl;
+        audioRef.current.load();
+
         // Handle audio ended
         audioRef.current.onended = () => {
           setIsPlaying(false);
           setCurrentTime(0);
         };
+
+        // Fallback: if audio was already cached, onloadedmetadata may not re-fire
+        setTimeout(() => {
+          if (audioRef.current && audioRef.current.readyState >= 1 && audioRef.current.duration > 0) {
+            onLoadedMetadata();
+          }
+        }, 100);
       }
     }
   }, [selectedAudio, analyzeAudio]);

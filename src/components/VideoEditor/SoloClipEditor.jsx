@@ -310,10 +310,10 @@ const SoloClipEditor = ({
       if (audioRef.current) audioRef.current.pause();
       cancelAnimationFrame(animationRef.current);
     } else {
-      // Seek audio to startTime before playing
+      // Always enforce trim start boundary before playing
       const startBoundary = selectedAudio?.startTime || 0;
       if (audioRef.current && audioRef.current.src) {
-        if (audioRef.current.currentTime < startBoundary) {
+        if (!isFinite(audioRef.current.currentTime) || audioRef.current.currentTime < startBoundary) {
           audioRef.current.currentTime = startBoundary;
         }
         audioRef.current.play().catch(() => {});
@@ -336,33 +336,54 @@ const SoloClipEditor = ({
     }
   }, [selectedAudio]);
 
-  // ── Audio selection ──
+  // ── Audio selection — just set state, useEffect handles element config ──
   const handleAudioSelect = useCallback((audio) => {
     setSelectedAudio(audio);
-    if (audioRef.current && audio) {
-      const url = audio.localUrl || audio.url;
-      audioRef.current.src = url;
-      audioRef.current.load();
-      audioRef.current.onloadedmetadata = () => {
-        // Use trimmed duration if audio has trim boundaries
-        const start = audio.startTime || 0;
-        const end = audio.endTime || audioRef.current.duration;
-        const effectiveDuration = end - start;
-        setAudioDuration(effectiveDuration);
-        // Seek to trim start
-        if (start > 0) {
-          audioRef.current.currentTime = start;
-        }
-      };
-    } else if (audioRef.current && !audio) {
-      audioRef.current.src = '';
-      setAudioDuration(0);
-    }
     // When library audio is selected, mute source video audio so they don't overlap
     if (videoRef.current) {
       videoRef.current.muted = !!(audio && !audio.isSourceVideo);
     }
   }, []);
+
+  // ── Audio element config — runs whenever selectedAudio changes ──
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (!selectedAudio) {
+      el.src = '';
+      setAudioDuration(0);
+      return;
+    }
+    const url = selectedAudio.localUrl || selectedAudio.url;
+    if (!url) return;
+
+    const start = selectedAudio.startTime || 0;
+    const endProp = selectedAudio.endTime || null;
+
+    const onLoadedMetadata = () => {
+      if (!audioRef.current) return;
+      const end = endProp || audioRef.current.duration;
+      setAudioDuration(end - start);
+      if (start > 0) {
+        audioRef.current.currentTime = start;
+      }
+    };
+
+    // Set handler BEFORE load so cached audio doesn't miss the event
+    el.onloadedmetadata = onLoadedMetadata;
+    el.src = url;
+    el.load();
+
+    // Fallback: if audio was already cached, onloadedmetadata may not re-fire
+    // Check after a tick whether readyState is sufficient
+    const fallback = setTimeout(() => {
+      if (el.readyState >= 1 && el.duration > 0) {
+        onLoadedMetadata();
+      }
+    }, 100);
+
+    return () => clearTimeout(fallback);
+  }, [selectedAudio]);
 
   // ── Audio trim save handler ──
   const handleAudioTrimSave = useCallback(({ startTime, endTime, duration: trimDuration, trimmedFile, trimmedName }) => {
