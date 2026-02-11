@@ -1,4 +1,5 @@
-import * as lamejs from 'lamejs';
+// eslint-disable-next-line no-undef
+const lamejs = require('lamejs');
 
 /**
  * Audio Trimmer Utility

@@ -6,7 +6,8 @@
  *
  * Uses Web Audio API for decoding + lamejs for MP3 encoding (already in project).
  */
-import * as lamejs from 'lamejs';
+// eslint-disable-next-line no-undef
+const lamejs = require('lamejs');
 
 const AUDIO_EXTENSIONS = ['.wav', '.m4a', '.aif', '.aiff', '.ogg', '.flac', '.aac', '.wma'];
 
