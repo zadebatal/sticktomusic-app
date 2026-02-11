@@ -2990,6 +2990,22 @@ const SlideshowEditor = ({
                       }}
                     />
                   </div>
+                  <button
+                    onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}
+                    style={{
+                      padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+                      border: '1px solid rgba(34,197,94,0.3)', backgroundColor: 'transparent',
+                      color: '#86efac', cursor: 'pointer', flexShrink: 0
+                    }}
+                  >Trim</button>
+                  <button
+                    onClick={handleRemoveAudio}
+                    style={{
+                      padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+                      border: '1px solid rgba(239,68,68,0.3)', backgroundColor: 'transparent',
+                      color: '#ef4444', cursor: 'pointer', flexShrink: 0
+                    }}
+                  >Remove</button>
                 </div>
               )}
 

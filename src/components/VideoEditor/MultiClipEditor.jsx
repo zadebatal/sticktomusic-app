@@ -76,6 +76,7 @@ const MultiClipEditor = ({
     Math.min(10, Math.max(1, (category?.videos?.length || 1) - 1))
   );
   const [isGenerating, setIsGenerating] = useState(false);
+  const [keepTemplateText, setKeepTemplateText] = useState('none');
 
   // Derived reads from active video
   const activeVideo = allVideos[activeVideoIndex];
@@ -178,6 +179,7 @@ const MultiClipEditor = ({
 
   // ── Text editing state ──
   const [editingTextId, setEditingTextId] = useState(null);
+  const [showTextPanel, setShowTextPanel] = useState(false);
   const [editingTextValue, setEditingTextValue] = useState('');
   const [draggingTextId, setDraggingTextId] = useState(null);
   const dragStartRef = useRef(null);
@@ -219,6 +221,7 @@ const MultiClipEditor = ({
 
   // ── Audio trimmer state ──
   const [showAudioTrimmer, setShowAudioTrimmer] = useState(false);
+  const [audioToTrim, setAudioToTrim] = useState(null);
 
   // ── Transcriber state ──
   const [showTranscriber, setShowTranscriber] = useState(false);
@@ -302,12 +305,25 @@ const MultiClipEditor = ({
   const timelineDuration = Math.max(totalDuration || 0, audioDuration || 0) || totalDuration || 1;
 
   const playbackLoop = useCallback(() => {
+    const startBoundary = selectedAudio?.startTime || 0;
+    const endBoundary = selectedAudio?.endTime || (audioRef.current?.duration > 0 ? audioRef.current.duration : 0);
+
     // If audio is longer than all clips and all clips ended, track audio time
     if (audioRef.current && audioRef.current.src && !audioRef.current.paused && audioRef.current.duration > 0) {
       const allClipsEnded = videoRef.current ? videoRef.current.ended : true;
       const isLastClip = activeClipIndex >= clips.length - 1;
-      if (allClipsEnded && isLastClip && audioRef.current.currentTime > (totalDuration || 0)) {
-        setCurrentTime(audioRef.current.currentTime);
+      const actualTime = audioRef.current.currentTime;
+
+      // Loop at endBoundary
+      if (endBoundary > 0 && actualTime >= endBoundary) {
+        audioRef.current.currentTime = startBoundary;
+        if (videoRef.current) videoRef.current.currentTime = 0;
+        setActiveClipIndex(0);
+      }
+
+      const relTime = actualTime - startBoundary;
+      if (allClipsEnded && isLastClip && relTime > (totalDuration || 0)) {
+        setCurrentTime(relTime);
         animationRef.current = requestAnimationFrame(playbackLoop);
         return;
       }
@@ -321,7 +337,7 @@ const MultiClipEditor = ({
       setCurrentTime(accBefore + videoRef.current.currentTime);
     }
     animationRef.current = requestAnimationFrame(playbackLoop);
-  }, [activeClipIndex, clips, totalDuration]);
+  }, [activeClipIndex, clips, totalDuration, selectedAudio]);
 
   const handlePlayPause = useCallback(() => {
     if (!videoRef.current) return;
@@ -330,12 +346,19 @@ const MultiClipEditor = ({
       if (audioRef.current) audioRef.current.pause();
       cancelAnimationFrame(animationRef.current);
     } else {
+      // Seek audio to startTime before playing
+      const startBoundary = selectedAudio?.startTime || 0;
+      if (audioRef.current && audioRef.current.src) {
+        if (audioRef.current.currentTime < startBoundary) {
+          audioRef.current.currentTime = startBoundary;
+        }
+        audioRef.current.play().catch(() => {});
+      }
       videoRef.current.play();
-      if (audioRef.current && audioRef.current.src) audioRef.current.play().catch(() => {});
       animationRef.current = requestAnimationFrame(playbackLoop);
     }
     setIsPlaying(!isPlaying);
-  }, [isPlaying, playbackLoop]);
+  }, [isPlaying, playbackLoop, selectedAudio]);
 
   // Handle clip progression
   useEffect(() => {
@@ -385,9 +408,11 @@ const MultiClipEditor = ({
       videoRef.current.currentTime = timeInClip;
     }
     if (audioRef.current) {
-      audioRef.current.currentTime = time;
+      // Add audio start boundary offset for trimmed audio
+      const startBoundary = selectedAudio?.startTime || 0;
+      audioRef.current.currentTime = time + startBoundary;
     }
-  }, [clips]);
+  }, [clips, selectedAudio]);
 
   // ── Audio selection ──
   const handleAudioSelect = useCallback((audio) => {
@@ -397,7 +422,15 @@ const MultiClipEditor = ({
       audioRef.current.src = url;
       audioRef.current.load();
       audioRef.current.onloadedmetadata = () => {
-        setAudioDuration(audioRef.current.duration || 0);
+        // Use trimmed duration if audio has trim boundaries
+        const start = audio.startTime || 0;
+        const end = audio.endTime || audioRef.current.duration;
+        const effectiveDuration = end - start;
+        setAudioDuration(effectiveDuration);
+        // Seek to trim start
+        if (start > 0) {
+          audioRef.current.currentTime = start;
+        }
       };
     } else if (audioRef.current && !audio) {
       audioRef.current.src = '';
@@ -410,31 +443,33 @@ const MultiClipEditor = ({
   }, []);
 
   // ── Audio trim save handler ──
-  const handleAudioTrimSave = useCallback(async (trimResult) => {
-    // Create a local URL for the trimmed file if we have one
-    if (trimResult.trimmedFile) {
-      const localUrl = URL.createObjectURL(trimResult.trimmedFile);
-      const savedAudio = {
-        id: `audio_trim_${Date.now()}`,
-        type: MEDIA_TYPES.AUDIO,
-        name: trimResult.trimmedName || 'Trimmed Audio',
+  const handleAudioTrimSave = useCallback(({ startTime, endTime, duration: trimDuration, trimmedFile, trimmedName }) => {
+    if (!audioToTrim) return;
+    if (trimmedFile) {
+      const localUrl = URL.createObjectURL(trimmedFile);
+      handleAudioSelect({
+        ...audioToTrim,
+        name: trimmedName || trimmedFile.name,
+        file: trimmedFile,
         url: localUrl,
-        localUrl: localUrl,
-        duration: trimResult.duration
-      };
-      // Save to library
-      if (artistId) {
-        await addToLibraryAsync(db, artistId, savedAudio);
-        setLibraryMedia(getLibrary(artistId));
-      }
-      handleAudioSelect(savedAudio);
-      toastSuccess(`Saved "${savedAudio.name}"`);
+        localUrl,
+        startTime: 0,
+        endTime: trimDuration,
+        trimmedDuration: trimDuration,
+        duration: trimDuration
+      });
     } else {
-      // Metadata-only trim — update selectedAudio with trim points
-      setSelectedAudio(prev => prev ? { ...prev, startTime: trimResult.startTime, endTime: trimResult.endTime } : prev);
+      handleAudioSelect({
+        ...audioToTrim,
+        startTime,
+        endTime,
+        trimmedDuration: endTime - startTime,
+        isTrimmed: startTime > 0 || (audioToTrim.duration && Math.abs(endTime - audioToTrim.duration) > 0.1)
+      });
     }
     setShowAudioTrimmer(false);
-  }, [artistId, handleAudioSelect, toastSuccess]);
+    setAudioToTrim(null);
+  }, [audioToTrim, handleAudioSelect]);
 
   const handleAudioSaveClip = useCallback(async (clipData) => {
     if (!selectedAudio || !artistId) return;
@@ -504,7 +539,7 @@ const MultiClipEditor = ({
 
   // Generate waveform data from audio for timeline visualization
   useEffect(() => {
-    if (!selectedAudio?.url && !selectedAudio?.localUrl) {
+    if (!selectedAudio?.url && !selectedAudio?.localUrl && !(selectedAudio?.file instanceof Blob)) {
       setWaveformData([]);
       return;
     }
@@ -514,7 +549,7 @@ const MultiClipEditor = ({
         const source = selectedAudio.file instanceof Blob ? selectedAudio.file
           : (selectedAudio.localUrl && !selectedAudio.localUrl.startsWith('blob:'))
             ? selectedAudio.localUrl : selectedAudio.url;
-        if (!source) return;
+        if (!source) { setWaveformData([]); return; }
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         let arrayBuffer;
         if (source instanceof Blob) {
@@ -591,7 +626,7 @@ const MultiClipEditor = ({
     toastSuccess('Swapped active clip');
   }, [visibleVideos, category?.videos, clips, activeClipIndex, setClips, toastSuccess, toastError]);
 
-  // ── Audio upload handler ──
+  // ── Audio upload handler — route through trimmer ──
   const handleAudioUpload = useCallback((e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -603,9 +638,10 @@ const MultiClipEditor = ({
       url: localUrl,
       localUrl
     };
-    handleAudioSelect(uploadedAudio);
+    setAudioToTrim(uploadedAudio);
+    setShowAudioTrimmer(true);
     if (audioFileInputRef.current) audioFileInputRef.current.value = '';
-  }, [handleAudioSelect]);
+  }, []);
 
   const updateTextOverlay = useCallback((overlayId, updates) => {
     setTextOverlays(prev => prev.map(o =>
@@ -850,9 +886,11 @@ const MultiClipEditor = ({
 
         const newOverlays = template.textOverlays.map((overlay, idx) => {
           let newText = overlay.text;
-          const bank = idx === 0 ? videoTextBank1 : idx === 1 ? videoTextBank2 : combinedBank;
-          if (bank.length > 0) {
-            newText = bank[(existingGenCount + i) % bank.length];
+          if (keepTemplateText === 'none') {
+            const bank = idx === 0 ? videoTextBank1 : idx === 1 ? videoTextBank2 : combinedBank;
+            if (bank.length > 0) {
+              newText = bank[(existingGenCount + i) % bank.length];
+            }
           }
           return {
             ...overlay,
@@ -878,7 +916,7 @@ const MultiClipEditor = ({
     } finally {
       setIsGenerating(false);
     }
-  }, [allVideos, generateCount, category, getVideoTextBanks, toastSuccess, toastError]);
+  }, [allVideos, generateCount, category, getVideoTextBanks, keepTemplateText, toastSuccess, toastError]);
 
   // ── Save Draft (active video only) ──
   const handleSaveDraft = useCallback(() => {
@@ -1892,8 +1930,12 @@ const MultiClipEditor = ({
             </div>
           )}
 
-          {/* ── RIGHT PANEL: Text Overlays ── */}
-          {!isMobile && <div style={styles.rightPanel}>
+          {/* ── RIGHT PANEL: Text Overlays (collapsible) ── */}
+          {showTextPanel && !isMobile && <div style={{ ...styles.rightPanel, width: '280px' }}>
+            <div style={{ padding: '6px 12px', borderBottom: `1px solid ${theme.border.subtle}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '13px', fontWeight: 600, color: theme.text.primary }}>Text Controls</span>
+              <button onClick={() => setShowTextPanel(false)} style={{ background: 'none', border: 'none', color: theme.text.muted, fontSize: '18px', cursor: 'pointer', padding: '2px 6px' }}>×</button>
+            </div>
             <div style={styles.rightPanelScroll}>
 
               {/* ── TEXT OVERLAYS SECTION ── */}
@@ -2101,8 +2143,59 @@ const MultiClipEditor = ({
           </div>}
         </div>
 
+        {/* ── Audio Info Bar ── */}
+        {selectedAudio && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '10px',
+            padding: '6px 12px', marginBottom: '4px',
+            backgroundColor: 'rgba(139, 92, 246, 0.1)',
+            border: '1px solid rgba(139, 92, 246, 0.2)',
+            borderRadius: '8px'
+          }}>
+            <span style={{ fontSize: '12px', color: theme.text.primary, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {selectedAudio.name}
+              {selectedAudio.isTrimmed && <span style={{ marginLeft: '6px', fontSize: '10px', padding: '1px 5px', backgroundColor: 'rgba(139,92,246,0.2)', borderRadius: '4px', color: '#a78bfa' }}>Trimmed</span>}
+            </span>
+            <button
+              onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}
+              style={{
+                padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+                border: '1px solid rgba(139,92,246,0.3)', backgroundColor: 'transparent',
+                color: '#a78bfa', cursor: 'pointer'
+              }}
+            >Trim</button>
+            <button
+              onClick={() => {
+                if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; }
+                if (animationRef.current) cancelAnimationFrame(animationRef.current);
+                setSelectedAudio(null); setIsPlaying(false); setCurrentTime(0); setAudioDuration(0);
+                if (videoRef.current) videoRef.current.muted = false;
+              }}
+              style={{
+                padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+                border: '1px solid rgba(239,68,68,0.3)', backgroundColor: 'transparent',
+                color: '#ef4444', cursor: 'pointer'
+              }}
+            >Remove</button>
+          </div>
+        )}
+
         {/* ── Timeline Section ── */}
-        {!isMobile && <div style={styles.timelineSection}>
+        {!isMobile && <div style={{ ...styles.timelineSection, position: 'relative' }}>
+          {/* Text Controls toggle */}
+          <button
+            onClick={() => setShowTextPanel(p => !p)}
+            style={{
+              position: 'absolute', top: '4px', right: '8px', zIndex: 5,
+              padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+              border: `1px solid ${showTextPanel ? theme.accent.primary : theme.border.default}`,
+              backgroundColor: showTextPanel ? theme.accent.primary + '22' : 'transparent',
+              color: showTextPanel ? theme.accent.primary : theme.text.secondary,
+              cursor: 'pointer'
+            }}
+          >
+            Text Controls
+          </button>
           <div
             ref={timelineRef}
             style={styles.timelineTrackArea}
@@ -2241,8 +2334,8 @@ const MultiClipEditor = ({
                 <div style={{ position: 'absolute', left: '20px', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: '1px' }}>
                   {waveformData.map((amplitude, i) => (
                     <div key={i} style={{
-                      flex: 1, minWidth: '1px', backgroundColor: '#22c55e',
-                      height: `${amplitude * 100}%`, opacity: 0.35
+                      flex: 1, minWidth: '1px', backgroundColor: 'rgba(139, 92, 246, 0.5)',
+                      height: `${amplitude * 100}%`, opacity: 0.6
                     }} />
                   ))}
                 </div>
@@ -2317,7 +2410,10 @@ const MultiClipEditor = ({
           onAddText={() => addTextOverlay()}
           onDelete={clips.length > 1 ? () => removeClipFromTimeline(activeClipIndex) : null}
           audioTracks={libraryAudio}
-          onSelectAudio={handleAudioSelect}
+          onSelectAudio={(audio) => {
+            setAudioToTrim(audio);
+            setShowAudioTrimmer(true);
+          }}
           onUploadAudio={() => audioFileInputRef.current?.click()}
           lyrics={lyricsBank}
           onSelectLyric={(lyric) => addTextOverlay(lyric.content || lyric.title || '')}
@@ -2368,21 +2464,96 @@ const MultiClipEditor = ({
               </div>
             ))}
           </div>
+
+          {/* ── Generate + keepText controls ── */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto', paddingRight: '8px', flexShrink: 0 }}>
+            <div style={{
+              display: 'flex',
+              borderRadius: '4px',
+              overflow: 'hidden',
+              border: `1px solid ${theme.border.subtle}`
+            }}>
+              <button
+                onClick={() => setKeepTemplateText('none')}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: keepTemplateText === 'none' ? theme.accent.primary : 'transparent',
+                  color: keepTemplateText === 'none' ? '#fff' : theme.text.secondary,
+                }}
+              >Random</button>
+              <button
+                onClick={() => setKeepTemplateText('all')}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  border: 'none',
+                  borderLeft: `1px solid ${theme.border.subtle}`,
+                  cursor: 'pointer',
+                  backgroundColor: keepTemplateText === 'all' ? theme.accent.primary : 'transparent',
+                  color: keepTemplateText === 'all' ? '#fff' : theme.text.secondary,
+                }}
+              >Keep Text</button>
+            </div>
+            <input
+              type="number"
+              min="1"
+              max="20"
+              value={generateCount}
+              onChange={(e) => setGenerateCount(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+              style={{
+                width: '36px',
+                padding: '4px',
+                fontSize: '11px',
+                textAlign: 'center',
+                borderRadius: '4px',
+                border: `1px solid ${theme.border.subtle}`,
+                backgroundColor: theme.bg.input,
+                color: theme.text.primary,
+              }}
+            />
+            <button
+              onClick={executeGeneration}
+              disabled={isGenerating}
+              style={{
+                padding: '4px 10px',
+                fontSize: '11px',
+                fontWeight: 600,
+                borderRadius: '4px',
+                border: 'none',
+                cursor: isGenerating ? 'not-allowed' : 'pointer',
+                backgroundColor: isGenerating ? theme.text.muted : theme.accent.primary,
+                color: '#fff',
+                opacity: isGenerating ? 0.6 : 1,
+              }}
+            >{isGenerating ? 'Generating...' : 'Generate'}</button>
+          </div>
         </div>
 
         {/* ── Hidden Audio Element ── */}
         <audio ref={audioRef} style={{ display: 'none' }} crossOrigin="anonymous" />
 
         {/* ── Audio Trimmer Modal ── */}
-        {showAudioTrimmer && selectedAudio && (
-          <AudioClipSelector
-            audioUrl={selectedAudio.localUrl || selectedAudio.url}
-            audioName={selectedAudio.name || selectedAudio.fileName || 'Audio'}
-            onSave={handleAudioTrimSave}
-            onSaveClip={handleAudioSaveClip}
-            onCancel={() => setShowAudioTrimmer(false)}
-          />
-        )}
+        {showAudioTrimmer && (audioToTrim || selectedAudio) && (() => {
+          const trimTarget = audioToTrim || selectedAudio;
+          return (
+            <AudioClipSelector
+              audioFile={trimTarget.file}
+              audioUrl={trimTarget.localUrl || trimTarget.url}
+              audioName={trimTarget.name || trimTarget.fileName || 'Audio'}
+              initialStart={trimTarget.startTime || 0}
+              initialEnd={trimTarget.endTime || null}
+              onSave={handleAudioTrimSave}
+              onSaveClip={handleAudioSaveClip}
+              onCancel={() => {
+                setShowAudioTrimmer(false);
+                setAudioToTrim(null);
+              }}
+            />
+          );
+        })()}
 
         {/* ── Lyric Analyzer Modal ── */}
         {showTranscriber && selectedAudio && (
@@ -2924,9 +3095,9 @@ const getStyles = (theme) => ({
     textAlign: 'left'
   },
   audioTrackButtonActive: {
-    borderColor: '#22c55e',
-    backgroundColor: 'rgba(34,197,94,0.1)',
-    color: '#22c55e'
+    borderColor: '#8b5cf6',
+    backgroundColor: 'rgba(139,92,246,0.1)',
+    color: '#8b5cf6'
   },
   audioNowPlaying: {
     display: 'flex',

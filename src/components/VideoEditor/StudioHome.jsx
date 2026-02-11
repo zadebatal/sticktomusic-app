@@ -22,6 +22,7 @@ import CollectionPicker from './CollectionPicker';
 import AudioClipSelector from './AudioClipSelector';
 import LyricBank from './LyricBank';
 import CloudImportButton from './CloudImportButton';
+import TextBankPanel from './TextBankPanel';
 import { useToast, ConfirmDialog } from '../ui';
 import {
   getLibrary,
@@ -64,6 +65,15 @@ import {
   getBankLabel,
   addBankToCollection,
   MAX_BANKS,
+  // Collection update
+  updateCollection,
+  // Text bank functions
+  addToTextBank,
+  removeFromTextBank,
+  updateTextBank,
+  addToVideoTextBank,
+  removeFromVideoTextBank,
+  updateVideoTextBank,
   // Created content subscription
   subscribeToCreatedContent
 } from '../../services/libraryService';
@@ -631,12 +641,43 @@ const StudioHome = ({
   }, []);
 
   const handleAudioUpload = async (e) => {
-    const files = e.target.files;
-    if (files.length > 0) {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) { e.target.value = ''; return; }
+    // Single file → AudioClipSelector flow
+    if (files.length === 1) {
       const file = await convertAudioIfNeeded(files[0]);
       const url = URL.createObjectURL(file);
       setPendingAudio({ file, url, name: file.name });
+      e.target.value = '';
+      return;
     }
+    // Multiple files → bulk upload directly to library + collection audio bank
+    setUploadProgress({ current: 0, total: files.length, percent: 0, name: files[0].name });
+    for (let i = 0; i < files.length; i++) {
+      try {
+        setUploadProgress({ current: i, total: files.length, percent: Math.round((i / files.length) * 100), name: files[i].name });
+        const converted = await convertAudioIfNeeded(files[i]);
+        const storagePath = `artists/${artistId}/audio/${Date.now()}_${converted.name}`;
+        const downloadURL = await uploadFile(converted, storagePath);
+        const duration = await getMediaDuration(converted);
+        const audioItem = {
+          id: `audio_${Date.now()}_${i}`,
+          name: converted.name,
+          type: MEDIA_TYPES.AUDIO,
+          url: downloadURL,
+          duration: duration || 0,
+          addedAt: new Date().toISOString()
+        };
+        await addToLibraryAsync(artistId, audioItem, db);
+        if (selectedCollection) {
+          await addToCollectionAsync(artistId, selectedCollection, [audioItem.id], db);
+        }
+      } catch (err) {
+        console.error(`[StudioHome] Failed to upload audio file ${files[i].name}:`, err);
+      }
+    }
+    setUploadProgress({ current: 0, total: 0, percent: 0 });
+    loadData();
     e.target.value = '';
   };
 
@@ -733,7 +774,9 @@ const StudioHome = ({
     cancelFunctionsRef.current = [];
 
     try {
-      const { url, path } = await uploadFile(pendingAudio.file, 'audio', (pct) => {
+      // Upload trimmed file if available, otherwise fall back to original
+      const fileToUpload = clipData.trimmedFile || pendingAudio.file;
+      const { url, path } = await uploadFile(fileToUpload, 'audio', (pct) => {
         setUploadProgress(prev => ({ ...prev, percent: Math.min(Math.round(pct), 99) }));
       }, {
         onCancel: (cancelFn) => {
@@ -1237,7 +1280,6 @@ const StudioHome = ({
 
   // State for "import from other collection" dropdowns
   const [showAudioImport, setShowAudioImport] = useState(false);
-  const [showLyricsImport, setShowLyricsImport] = useState(false);
 
   // Audio items NOT in current collection (for import dropdown)
   const importableAudio = useMemo(() => {
@@ -1250,13 +1292,6 @@ const StudioHome = ({
     );
   }, [library, collections, selectedCollection]);
 
-  // Lyrics NOT in current collection (for import dropdown)
-  const importableLyrics = useMemo(() => {
-    if (!selectedCollection) return [];
-    return lyrics.filter(l =>
-      !(l.collectionIds || []).includes(selectedCollection)
-    );
-  }, [lyrics, selectedCollection]);
 
   // =====================
   // STYLES
@@ -2121,6 +2156,7 @@ const StudioHome = ({
                     ref={audioInputRef}
                     type="file"
                     accept="audio/*,.m4a,.wav,.aif,.aiff"
+                    multiple
                     onChange={handleAudioUpload}
                     style={{ display: 'none' }}
                   />
@@ -2192,7 +2228,7 @@ const StudioHome = ({
                 {[
                   { key: 'audio', label: 'Audio' },
                   ...(selectedCollection ? [{ key: 'lyrics', label: 'Lyrics' }] : []),
-                  ...(selectedCollection && studioMode === 'videos' ? [{ key: 'banks', label: 'Banks' }] : [])
+                  ...(selectedCollection ? [{ key: 'banks', label: 'Banks' }] : [])
                 ].map(tab => (
                   <button
                     key={tab.key}
@@ -2258,6 +2294,7 @@ const StudioHome = ({
                   <input
                     type="file"
                     accept="audio/*,.m4a,.wav,.aif,.aiff"
+                    multiple
                     onChange={handleAudioUpload}
                     style={{ display: 'none' }}
                   />
@@ -2614,60 +2651,9 @@ const StudioHome = ({
                   <span style={{ fontSize: '11px', fontWeight: 600, color: theme.text.primary }}>
                     📝 Lyrics
                   </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.35)' }}>
-                      {sidebarLyrics.length} saved
-                    </span>
-                    {importableLyrics.length > 0 && (
-                      <div style={{ position: 'relative' }}>
-                        <button
-                          onClick={() => setShowLyricsImport(!showLyricsImport)}
-                          style={{
-                            background: 'none', border: 'none', color: '#6366f1',
-                            cursor: 'pointer', fontSize: '10px', padding: '1px 4px'
-                          }}
-                          title="Import lyrics from another collection"
-                        >
-                          + Import
-                        </button>
-                        {showLyricsImport && (
-                          <div style={{
-                            position: 'absolute', top: '100%', right: 0, zIndex: 50,
-                            backgroundColor: '#1a1a2e', border: '1px solid rgba(255,255,255,0.15)',
-                            borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                            maxHeight: '200px', overflowY: 'auto', minWidth: '200px', padding: '4px'
-                          }}>
-                            <div style={{ padding: '4px 8px', fontSize: '9px', color: 'rgba(255,255,255,0.35)', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: '4px' }}>
-                              Add lyrics to this collection:
-                            </div>
-                            {importableLyrics.map(l => (
-                              <div
-                                key={l.id}
-                                onClick={() => {
-                                  // Add collection ID to the lyric item
-                                  const updatedCollectionIds = [...(l.collectionIds || []), selectedCollection];
-                                  handleUpdateLyrics(l.id, { ...l, collectionIds: updatedCollectionIds });
-                                  setShowLyricsImport(false);
-                                }}
-                                style={{
-                                  display: 'flex', alignItems: 'center', gap: '6px',
-                                  padding: '5px 8px', borderRadius: '4px', cursor: 'pointer',
-                                  fontSize: '10px', color: 'rgba(255,255,255,0.7)'
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                              >
-                                <span>📝</span>
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {l.title || 'Untitled'}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.35)' }}>
+                    {sidebarLyrics.length} saved
+                  </span>
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px' }}>
                   <LyricBank
@@ -2683,12 +2669,19 @@ const StudioHome = ({
             )}
 
 
-            {/* ── Video Text Banks Column (only when collection selected in video mode) ── */}
-            {selectedCollection && studioMode === 'videos' && (!isMobile || mobileSidebarTab === 'banks') && (() => {
+            {/* ── Text Banks Column (when collection selected, both video & slideshow modes) ── */}
+            {selectedCollection && (!isMobile || mobileSidebarTab === 'banks') && (() => {
               const col = collections.find(c => c.id === selectedCollection);
-              const vt1 = col?.videoTextBank1 || [];
-              const vt2 = col?.videoTextBank2 || [];
-              if (vt1.length === 0 && vt2.length === 0) return null;
+              if (!col) return null;
+              const isVideo = studioMode === 'videos';
+              const syncCol = () => {
+                loadData();
+                if (db) {
+                  const cols = getCollections(artistId);
+                  const fresh = cols.find(c => c.id === selectedCollection);
+                  if (fresh) saveCollectionToFirestore(db, artistId, fresh).catch(console.error);
+                }
+              };
               return (
                 <div style={{
                   flex: 1,
@@ -2702,60 +2695,110 @@ const StudioHome = ({
                     flexShrink: 0
                   }}>
                     <span style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary }}>
-                      Video Text Banks
+                      {isVideo ? 'Video' : 'Slideshow'} Text Banks
                     </span>
                   </div>
-                  <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px' }}>
-                    {/* Bank A */}
-                    <div style={{ marginBottom: '10px' }}>
-                      <div style={{ fontSize: '10px', fontWeight: 600, color: theme.text.muted, marginBottom: '4px' }}>
-                        Bank A ({vt1.length})
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                        {vt1.map((text, i) => (
-                          <span key={i} style={{
-                            display: 'inline-block',
-                            padding: '3px 8px',
-                            backgroundColor: 'rgba(124,58,237,0.15)',
-                            borderRadius: '4px',
-                            fontSize: '10px',
-                            color: '#a78bfa',
-                            maxWidth: '150px',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap'
-                          }} title={text}>
-                            {text}
-                          </span>
-                        ))}
-                        {vt1.length === 0 && <span style={{ fontSize: '10px', color: theme.text.muted }}>Empty</span>}
-                      </div>
-                    </div>
-                    {/* Bank B */}
-                    <div>
-                      <div style={{ fontSize: '10px', fontWeight: 600, color: theme.text.muted, marginBottom: '4px' }}>
-                        Bank B ({vt2.length})
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                        {vt2.map((text, i) => (
-                          <span key={i} style={{
-                            display: 'inline-block',
-                            padding: '3px 8px',
-                            backgroundColor: 'rgba(99,102,241,0.15)',
-                            borderRadius: '4px',
-                            fontSize: '10px',
-                            color: '#818cf8',
-                            maxWidth: '150px',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap'
-                          }} title={text}>
-                            {text}
-                          </span>
-                        ))}
-                        {vt2.length === 0 && <span style={{ fontSize: '10px', color: theme.text.muted }}>Empty</span>}
-                      </div>
-                    </div>
+                  <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {isVideo ? (
+                      <>
+                        <TextBankPanel
+                          bankNum={1}
+                          label="Video Text 1"
+                          color="#38bdf8"
+                          texts={col.videoTextBank1 || []}
+                          onAdd={(text) => { addToVideoTextBank(artistId, selectedCollection, 1, text); syncCol(); }}
+                          onRemove={(index) => { removeFromVideoTextBank(artistId, selectedCollection, 1, index); syncCol(); }}
+                          onUpdate={(texts) => { updateVideoTextBank(artistId, selectedCollection, 1, texts); syncCol(); }}
+                        />
+                        <TextBankPanel
+                          bankNum={2}
+                          label="Video Text 2"
+                          color="#fb923c"
+                          texts={col.videoTextBank2 || []}
+                          onAdd={(text) => { addToVideoTextBank(artistId, selectedCollection, 2, text); syncCol(); }}
+                          onRemove={(index) => { removeFromVideoTextBank(artistId, selectedCollection, 2, index); syncCol(); }}
+                          onUpdate={(texts) => { updateVideoTextBank(artistId, selectedCollection, 2, texts); syncCol(); }}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <TextBankPanel
+                          bankNum={1}
+                          label="Text Bank 1"
+                          color="#c4b5fd"
+                          texts={(() => { const m = migrateCollectionBanks(col); return m.textBanks?.[0] || []; })()}
+                          onAdd={(text) => { addToTextBank(artistId, selectedCollection, 1, text); syncCol(); }}
+                          onRemove={(index) => { removeFromTextBank(artistId, selectedCollection, 1, index); syncCol(); }}
+                          onUpdate={(texts) => { updateTextBank(artistId, selectedCollection, 1, texts); syncCol(); }}
+                        />
+                        <TextBankPanel
+                          bankNum={2}
+                          label="Text Bank 2"
+                          color="#86efac"
+                          texts={(() => { const m = migrateCollectionBanks(col); return m.textBanks?.[1] || []; })()}
+                          onAdd={(text) => { addToTextBank(artistId, selectedCollection, 2, text); syncCol(); }}
+                          onRemove={(index) => { removeFromTextBank(artistId, selectedCollection, 2, index); syncCol(); }}
+                          onUpdate={(texts) => { updateTextBank(artistId, selectedCollection, 2, texts); syncCol(); }}
+                        />
+                      </>
+                    )}
+
+                    {/* ── Default Text Style Editor ── */}
+                    {isVideo && (() => {
+                      const ts = col.defaultTextStyle || { fontSize: 48, fontFamily: 'Inter, sans-serif', color: '#ffffff', outline: true, outlineColor: '#000000' };
+                      const updateStyle = (patch) => {
+                        updateCollection(artistId, selectedCollection, { defaultTextStyle: { ...ts, ...patch } });
+                        syncCol();
+                      };
+                      return (
+                        <div style={{
+                          borderRadius: '10px', border: `1px solid ${theme.border.subtle}`,
+                          padding: '10px 12px'
+                        }}>
+                          <div style={{ fontSize: '13px', fontWeight: 600, color: theme.text.primary, marginBottom: '8px' }}>
+                            Default Text Style
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {/* Font size */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '11px', color: theme.text.muted, width: '50px' }}>Size</span>
+                              <button onClick={() => updateStyle({ fontSize: Math.max(12, ts.fontSize - 4) })} style={{ background: theme.bg.input, border: `1px solid ${theme.border.subtle}`, borderRadius: '4px', color: theme.text.primary, padding: '2px 8px', cursor: 'pointer', fontSize: '13px' }}>A-</button>
+                              <span style={{ fontSize: '12px', color: theme.text.secondary, minWidth: '30px', textAlign: 'center' }}>{ts.fontSize}px</span>
+                              <button onClick={() => updateStyle({ fontSize: Math.min(120, ts.fontSize + 4) })} style={{ background: theme.bg.input, border: `1px solid ${theme.border.subtle}`, borderRadius: '4px', color: theme.text.primary, padding: '2px 8px', cursor: 'pointer', fontSize: '13px' }}>A+</button>
+                            </div>
+                            {/* Font family */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '11px', color: theme.text.muted, width: '50px' }}>Font</span>
+                              <select
+                                value={ts.fontFamily || 'Inter, sans-serif'}
+                                onChange={(e) => updateStyle({ fontFamily: e.target.value })}
+                                style={{ flex: 1, padding: '4px 8px', borderRadius: '6px', border: `1px solid ${theme.border.subtle}`, backgroundColor: theme.bg.input, color: theme.text.primary, fontSize: '11px' }}
+                              >
+                                {['Inter, sans-serif', 'Arial, sans-serif', 'Georgia, serif', 'Courier New, monospace', 'Impact, sans-serif', 'Comic Sans MS, cursive'].map(f => (
+                                  <option key={f} value={f} style={{ fontFamily: f }}>{f.split(',')[0]}</option>
+                                ))}
+                              </select>
+                            </div>
+                            {/* Color + Bold + Outline */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '11px', color: theme.text.muted, width: '50px' }}>Color</span>
+                              <input type="color" value={ts.color || '#ffffff'} onChange={(e) => updateStyle({ color: e.target.value })} style={{ width: '28px', height: '24px', border: 'none', cursor: 'pointer', backgroundColor: 'transparent' }} />
+                              <button
+                                onClick={() => updateStyle({ fontWeight: ts.fontWeight === '700' ? '400' : '700' })}
+                                style={{ padding: '2px 8px', borderRadius: '4px', border: `1px solid ${theme.border.subtle}`, backgroundColor: ts.fontWeight === '700' ? theme.accent.primary + '33' : theme.bg.input, color: ts.fontWeight === '700' ? theme.accent.primary : theme.text.muted, cursor: 'pointer', fontWeight: '700', fontSize: '12px' }}
+                              >B</button>
+                              <button
+                                onClick={() => updateStyle({ outline: !ts.outline })}
+                                style={{ padding: '2px 8px', borderRadius: '4px', border: `1px solid ${theme.border.subtle}`, backgroundColor: ts.outline ? theme.accent.primary + '33' : theme.bg.input, color: ts.outline ? theme.accent.primary : theme.text.muted, cursor: 'pointer', fontSize: '12px' }}
+                              >Outline</button>
+                              {ts.outline && (
+                                <input type="color" value={ts.outlineColor || '#000000'} onChange={(e) => updateStyle({ outlineColor: e.target.value })} style={{ width: '28px', height: '24px', border: 'none', cursor: 'pointer', backgroundColor: 'transparent' }} title="Outline color" />
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               );

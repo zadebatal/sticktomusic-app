@@ -86,6 +86,7 @@ const VideoEditorModal = ({
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
   const [generateCount, setGenerateCount] = useState(10);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [keepTemplateText, setKeepTemplateText] = useState('none');
 
   // Derived reads from active video
   const selectedAudio = allVideos[activeVideoIndex]?.audio || null;
@@ -312,6 +313,7 @@ const VideoEditorModal = ({
   const [showBeatSelector, setShowBeatSelector] = useState(false);
   const [selectedClips, setSelectedClips] = useState([]);
   const [timelineScale, setTimelineScale] = useState(1);
+  const [showTextPanel, setShowTextPanel] = useState(false);
   const [clipResize, setClipResize] = useState({ active: false, clipIndex: -1, edge: null, startX: 0, startDuration: 0 });
 
   // AI Transcription state
@@ -529,7 +531,7 @@ const VideoEditorModal = ({
 
   // Generate waveform data from audio for inline timeline visualization
   useEffect(() => {
-    if (!selectedAudio?.url && !selectedAudio?.localUrl) {
+    if (!selectedAudio?.url && !selectedAudio?.localUrl && !(selectedAudio?.file instanceof Blob)) {
       setWaveformData([]);
       return;
     }
@@ -539,7 +541,7 @@ const VideoEditorModal = ({
         const source = selectedAudio.file instanceof Blob ? selectedAudio.file
           : (selectedAudio.localUrl && !selectedAudio.localUrl.startsWith('blob:'))
             ? selectedAudio.localUrl : selectedAudio.url;
-        if (!source) return;
+        if (!source) { setWaveformData([]); return; }
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         let arrayBuffer;
         if (source instanceof Blob) {
@@ -1116,9 +1118,9 @@ const VideoEditorModal = ({
         return clip;
       });
 
-      // Cycle text from banks if available
+      // Cycle text from banks if available (unless keepTemplateText is active)
       let genWords = [...template.words];
-      if (textBank1.length > 0 && genWords.length > 0) {
+      if (keepTemplateText === 'none' && textBank1.length > 0 && genWords.length > 0) {
         const bankText = textBank1[g % textBank1.length];
         if (bankText) {
           // Replace first word with cycled text
@@ -1143,7 +1145,7 @@ const VideoEditorModal = ({
     setAllVideos(prev => [...prev, ...newVideos]);
     setIsGenerating(false);
     toast.success(`Generated ${generateCount} variations`);
-  }, [allVideos, generateCount, libraryVideos, getTextBanks, toast]);
+  }, [allVideos, generateCount, libraryVideos, getTextBanks, keepTemplateText, toast]);
 
   // ── Save all videos ──
   const handleSaveAllAndClose = useCallback(() => {
@@ -2265,17 +2267,16 @@ const VideoEditorModal = ({
             </div>
           )}
 
-          {/* Preview Section - Collapsible on mobile */}
+          {/* Main Area - Preview + Timeline */}
           <div style={{
-            ...styles.previewSection,
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            position: 'relative',
             ...(isMobile ? {
               width: '100%',
-              padding: '12px 16px',
-              borderRight: 'none',
-              borderBottom: `1px solid ${theme.bg.surface}`,
-              flexShrink: 0,
-              maxHeight: mobilePreviewExpanded ? '60vh' : '220px',
-              transition: 'max-height 0.3s ease'
+              flexShrink: 0
             } : {})
           }}>
             <div style={styles.previewContainer}>
@@ -2594,19 +2595,312 @@ const VideoEditorModal = ({
                 Make this a preset
               </button>
             )}
+
+            {/* ── Audio Info Bar ── */}
+            {selectedAudio && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                padding: '6px 12px', margin: '0 8px 4px',
+                backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                border: '1px solid rgba(139, 92, 246, 0.2)',
+                borderRadius: '8px'
+              }}>
+                <span style={{ fontSize: '12px', color: theme.text.primary, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selectedAudio.name}
+                  {selectedAudio.isTrimmed && <span style={{ marginLeft: '6px', fontSize: '10px', padding: '1px 5px', backgroundColor: 'rgba(139,92,246,0.2)', borderRadius: '4px', color: '#a78bfa' }}>Trimmed</span>}
+                </span>
+                <button
+                  onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}
+                  style={{
+                    padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+                    border: '1px solid rgba(139,92,246,0.3)', backgroundColor: 'transparent',
+                    color: '#a78bfa', cursor: 'pointer'
+                  }}
+                >Trim</button>
+                <button
+                  onClick={() => {
+                    if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; }
+                    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+                    setSelectedAudio(null);
+                    setIsPlaying(false);
+                    setCurrentTime(0);
+                    setDuration(0);
+                  }}
+                  style={{
+                    padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+                    border: '1px solid rgba(239,68,68,0.3)', backgroundColor: 'transparent',
+                    color: '#ef4444', cursor: 'pointer'
+                  }}
+                >Remove</button>
+              </div>
+            )}
+
+            {/* ── Timeline Section (moved from right panel to main area) ── */}
+            <div style={{ ...styles.clipsSection, borderTop: `1px solid ${theme.border.subtle}`, flexShrink: 0 }}>
+              <div style={styles.clipsSectionHeader}>
+                <h4 style={styles.sectionTitle}>Timeline ({clips.length} clips)</h4>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={styles.beatsInfo}>
+                    {isAnalyzing ? 'Analyzing beats...' : bpm ? `${Math.round(bpm)} BPM (${filteredBeats.length} beats)` : 'No beats detected'}
+                  </div>
+                  <button
+                    onClick={() => setShowTextPanel(p => !p)}
+                    style={{
+                      padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+                      border: `1px solid ${showTextPanel ? theme.accent.primary : theme.border.default}`,
+                      backgroundColor: showTextPanel ? theme.accent.primary + '22' : 'transparent',
+                      color: showTextPanel ? theme.accent.primary : theme.text.secondary,
+                      cursor: 'pointer'
+                    }}
+                    title="Toggle text/style controls panel"
+                  >
+                    Text Controls
+                  </button>
+                </div>
+              </div>
+
+              <div style={{...styles.clipsTimeline, position: 'relative'}} ref={timelineRef} onPointerDown={handleTimelineMarqueeDown}>
+                {/* Marquee overlay */}
+                {marqueeState && (() => {
+                  const minX = Math.min(marqueeState.startX, marqueeState.currentX);
+                  const maxX = Math.max(marqueeState.startX, marqueeState.currentX);
+                  const minY = Math.min(marqueeState.startY, marqueeState.currentY);
+                  const maxY = Math.max(marqueeState.startY, marqueeState.currentY);
+                  return (
+                    <div style={{
+                      position: 'absolute', left: minX, top: minY,
+                      width: maxX - minX, height: maxY - minY,
+                      backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                      border: '1px solid rgba(99, 102, 241, 0.5)',
+                      pointerEvents: 'none', zIndex: 25
+                    }} />
+                  );
+                })()}
+                {/* Playhead indicator */}
+                {clips.length > 0 && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: `${(currentTime / trimmedDuration) * 100}%`,
+                      top: 0,
+                      bottom: 0,
+                      width: '2px',
+                      background: '#ef4444',
+                      zIndex: 20,
+                      pointerEvents: 'none',
+                      boxShadow: '0 0 4px rgba(239, 68, 68, 0.5)',
+                      transition: isPlaying ? 'none' : 'left 0.1s ease-out'
+                    }}
+                  >
+                    {/* Playhead top triangle */}
+                    <div style={{
+                      position: 'absolute',
+                      top: '-4px',
+                      left: '-5px',
+                      width: 0,
+                      height: 0,
+                      borderLeft: '6px solid transparent',
+                      borderRight: '6px solid transparent',
+                      borderTop: '8px solid #ef4444'
+                    }} />
+                  </div>
+                )}
+                {clips.length === 0 ? (
+                  <div style={styles.noClips}>
+                    <p>Click clips above to add, or use Cut by beat</p>
+                  </div>
+                ) : (
+                  <div style={styles.clipsRow}>
+                    {clips.map((clip, index) => {
+                      const pxPerSec = 40 * timelineScale;
+                      const clipWidth = Math.max(50, (clip.duration || 1) * pxPerSec);
+                      const thumbWidth = 68;
+                      return (
+                      <div
+                        key={clip.id}
+                        data-clip-block="true"
+                        draggable={!clip.locked && !clipResize.active}
+                        onDragStart={() => !clipResize.active && handleClipDragStart(index)}
+                        onDragOver={(e) => { e.preventDefault(); handleClipDragOver(index); }}
+                        onDragEnd={handleClipDragEnd}
+                        style={{
+                          ...styles.clipItem,
+                          width: `${clipWidth}px`,
+                          minWidth: '50px',
+                          display: 'flex',
+                          flexDirection: 'row',
+                          ...(selectedClips.includes(index) ? styles.clipItemSelected : {}),
+                          ...(clipDrag.dragging && clipDrag.fromIndex === index ? { opacity: 0.5 } : {}),
+                          ...(clipDrag.dragging && clipDrag.toIndex === index && clipDrag.fromIndex !== index ? {
+                            borderLeft: '3px solid #22c55e',
+                            marginLeft: '-3px'
+                          } : {}),
+                          cursor: clip.locked ? 'not-allowed' : 'grab',
+                          position: 'relative',
+                          transition: clipResize.active ? 'none' : 'width 0.15s ease-out'
+                        }}
+                        onClick={(e) => handleClipSelect(index, e)}
+                      >
+                        {/* Thumbnail area - fixed width at start of clip */}
+                        <div style={{
+                          width: `${thumbWidth}px`,
+                          height: '100%',
+                          flexShrink: 0,
+                          position: 'relative',
+                          overflow: 'hidden',
+                          borderRadius: '6px 0 0 6px'
+                        }}>
+                          {clip.thumbnailUrl || clip.url || clip.localUrl ? (
+                            <video
+                              src={clip.thumbnailUrl || clip.url || clip.localUrl}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
+                              preload="metadata"
+                              muted
+                            />
+                          ) : (
+                            <div style={{ width: '100%', height: '100%', backgroundColor: theme.bg.elevated, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <span style={{ fontSize: '10px', color: theme.text.muted }}>No thumb</span>
+                            </div>
+                          )}
+                          {clip.locked && (
+                            <div style={{
+                              position: 'absolute', top: 2, right: 2, zIndex: 2,
+                              width: '16px', height: '16px', borderRadius: '50%',
+                              backgroundColor: '#f59e0b', display: 'flex',
+                              alignItems: 'center', justifyContent: 'center', fontSize: '10px'
+                            }}>🔒</div>
+                          )}
+                          {clip.duration > 0 && (
+                            <span style={{
+                              position: 'absolute', bottom: 2, left: 2, padding: '1px 4px',
+                              backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: '3px',
+                              fontSize: '9px', color: '#fff'
+                            }}>
+                              {clip.duration.toFixed(1)}s
+                            </span>
+                          )}
+                        </div>
+                        {/* Duration track area after thumbnail */}
+                        <div style={{
+                          flex: 1,
+                          height: '100%',
+                          backgroundColor: selectedClips.includes(index) ? `${theme.accent.primary}22` : `${theme.bg.surface}`,
+                          position: 'relative',
+                          borderRadius: '0 6px 6px 0',
+                          overflow: 'hidden'
+                        }}>
+                          {/* Duration bars */}
+                          <div style={{
+                            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                            display: 'flex', alignItems: 'flex-end', padding: '2px', gap: '1px', opacity: 0.3
+                          }}>
+                            {Array.from({ length: Math.ceil((clip.duration || 1) * 2) }, (_, i) => (
+                              <div key={i} style={{
+                                flex: 1, minWidth: '2px',
+                                height: `${20 + Math.random() * 60}%`,
+                                backgroundColor: selectedClips.includes(index) ? theme.accent.primary : theme.text.muted,
+                                borderRadius: '1px'
+                              }} />
+                            ))}
+                          </div>
+                        </div>
+                        {/* Right-edge resize handle */}
+                        {!clip.locked && (
+                          <div
+                            onPointerDown={(e) => handleClipResizeStart(e, index)}
+                            style={{
+                              position: 'absolute', top: 0, right: 0, width: '8px', height: '100%',
+                              cursor: 'col-resize',
+                              zIndex: 3,
+                              background: 'linear-gradient(to left, rgba(167,139,250,0.4), transparent)',
+                              opacity: 0,
+                              transition: 'opacity 0.15s',
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                            onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}
+                          />
+                        )}
+                      </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {/* Audio Waveform Track */}
+                {waveformData.length > 0 && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', height: '32px',
+                    borderTop: `1px solid ${theme.border.subtle}`, marginTop: '4px',
+                    pointerEvents: 'none'
+                  }}>
+                    <span style={{ fontSize: '12px', width: '20px', flexShrink: 0, textAlign: 'center' }}>🔊</span>
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '1px', height: '100%' }}>
+                      {waveformData.map((amplitude, i) => (
+                        <div key={i} style={{
+                          flex: 1, minWidth: '1px', backgroundColor: 'rgba(139, 92, 246, 0.5)',
+                          height: `${amplitude * 100}%`, opacity: 0.6
+                        }} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Clip Actions */}
+              <div style={styles.clipActions}>
+                <button style={styles.clipAction} onClick={handleCombine} title="Combine selected clips or clip at playhead with next">Combine</button>
+                <button style={styles.clipAction} onClick={handleBreak} title="Split clip at playhead position">Break</button>
+                <button style={styles.clipAction} onClick={handleReroll} title="Replace clip(s) with random from bank">Reroll</button>
+                <button style={styles.clipAction} onClick={handleRearrange}>Rearrange</button>
+                <button style={styles.clipActionDanger} onClick={handleRemoveClips} title="Delete selected clip(s) or clip at playhead">Remove</button>
+                <div style={styles.scaleControl}>
+                  <span>Scale</span>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2"
+                    step="0.1"
+                    value={timelineScale}
+                    onChange={(e) => setTimelineScale(parseFloat(e.target.value))}
+                    style={styles.scaleSlider}
+                  />
+                  <span>{timelineScale.toFixed(2)}x</span>
+                </div>
+              </div>
+
+              {/* Selection info */}
+              {selectedClips.length > 1 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 8px', fontSize: '12px', color: theme.accent.primary }}>
+                  <span>{selectedClips.length} clips selected</span>
+                  <button style={{ ...styles.clipAction, fontSize: '11px', padding: '2px 8px' }} onClick={() => setSelectedClips([])}>Clear</button>
+                </div>
+              )}
+
+              {/* Cut Actions */}
+              <div style={styles.cutActions}>
+                <span style={styles.cutHint}>Click-drag timeline to marquee select, or Shift-click clips</span>
+                <div style={styles.cutButtons}>
+                  <button style={styles.cutButton} onClick={handleCutByWord}>Cut by word</button>
+                  <button style={styles.cutButton} onClick={handleCutByBeat}>Cut by beat</button>
+                  <button style={{...styles.cutButton, opacity: 0.5, cursor: 'not-allowed'}} title="Coming soon" disabled>Record cuts</button>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Right - Controls */}
+          {/* ── Floating Text Controls Panel ── */}
+          {showTextPanel && !isMobile && (
           <div style={{
-            ...styles.controlsSection,
-            ...(isMobile ? {
-              padding: '16px',
-              flex: 1,
-              overflowY: 'auto',
-              WebkitOverflowScrolling: 'touch'
-            } : {})
+            width: '300px',
+            borderLeft: `1px solid ${theme.border.subtle}`,
+            backgroundColor: theme.bg.surface,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'auto'
           }}>
-            {/* Audio selection moved to left sidebar */}
+            <div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.border.subtle}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '13px', fontWeight: 600, color: theme.text.primary }}>Text Controls</span>
+              <button onClick={() => setShowTextPanel(false)} style={{ background: 'none', border: 'none', color: theme.text.muted, fontSize: '18px', cursor: 'pointer', padding: '2px 6px' }}>×</button>
+            </div>
 
                 {/* Tabs - scrollable on mobile */}
                 <div style={{
@@ -2967,242 +3261,8 @@ const VideoEditorModal = ({
                   </div>
                 )}
 
-                {/* Clips Timeline — Available Clips moved to left sidebar */}
-                <div style={styles.clipsSection}>
-                  <div style={styles.clipsSectionHeader}>
-                    <h4 style={styles.sectionTitle}>Timeline ({clips.length} clips)</h4>
-                    <div style={styles.beatsInfo}>
-                      {isAnalyzing ? 'Analyzing beats...' : bpm ? `${Math.round(bpm)} BPM (${filteredBeats.length} beats)` : 'No beats detected'}
-                    </div>
-                  </div>
-
-                  <div style={{...styles.clipsTimeline, position: 'relative'}} ref={timelineRef} onPointerDown={handleTimelineMarqueeDown}>
-                    {/* Marquee overlay */}
-                    {marqueeState && (() => {
-                      const minX = Math.min(marqueeState.startX, marqueeState.currentX);
-                      const maxX = Math.max(marqueeState.startX, marqueeState.currentX);
-                      const minY = Math.min(marqueeState.startY, marqueeState.currentY);
-                      const maxY = Math.max(marqueeState.startY, marqueeState.currentY);
-                      return (
-                        <div style={{
-                          position: 'absolute', left: minX, top: minY,
-                          width: maxX - minX, height: maxY - minY,
-                          backgroundColor: 'rgba(99, 102, 241, 0.2)',
-                          border: '1px solid rgba(99, 102, 241, 0.5)',
-                          pointerEvents: 'none', zIndex: 25
-                        }} />
-                      );
-                    })()}
-                    {/* Playhead indicator */}
-                    {clips.length > 0 && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          left: `${(currentTime / trimmedDuration) * 100}%`,
-                          top: 0,
-                          bottom: 0,
-                          width: '2px',
-                          background: '#ef4444',
-                          zIndex: 20,
-                          pointerEvents: 'none',
-                          boxShadow: '0 0 4px rgba(239, 68, 68, 0.5)',
-                          transition: isPlaying ? 'none' : 'left 0.1s ease-out'
-                        }}
-                      >
-                        {/* Playhead top triangle */}
-                        <div style={{
-                          position: 'absolute',
-                          top: '-4px',
-                          left: '-5px',
-                          width: 0,
-                          height: 0,
-                          borderLeft: '6px solid transparent',
-                          borderRight: '6px solid transparent',
-                          borderTop: '8px solid #ef4444'
-                        }} />
-                      </div>
-                    )}
-                    {clips.length === 0 ? (
-                      <div style={styles.noClips}>
-                        <p>Click clips above to add, or use Cut by beat</p>
-                      </div>
-                    ) : (
-                      <div style={styles.clipsRow}>
-                        {clips.map((clip, index) => {
-                          const pxPerSec = 40 * timelineScale;
-                          const clipWidth = Math.max(50, (clip.duration || 1) * pxPerSec);
-                          const thumbWidth = 68; // fixed thumbnail width at start of clip
-                          return (
-                          <div
-                            key={clip.id}
-                            data-clip-block="true"
-                            draggable={!clip.locked && !clipResize.active}
-                            onDragStart={() => !clipResize.active && handleClipDragStart(index)}
-                            onDragOver={(e) => { e.preventDefault(); handleClipDragOver(index); }}
-                            onDragEnd={handleClipDragEnd}
-                            style={{
-                              ...styles.clipItem,
-                              width: `${clipWidth}px`,
-                              minWidth: '50px',
-                              display: 'flex',
-                              flexDirection: 'row',
-                              ...(selectedClips.includes(index) ? styles.clipItemSelected : {}),
-                              ...(clipDrag.dragging && clipDrag.fromIndex === index ? { opacity: 0.5 } : {}),
-                              ...(clipDrag.dragging && clipDrag.toIndex === index && clipDrag.fromIndex !== index ? {
-                                borderLeft: '3px solid #22c55e',
-                                marginLeft: '-3px'
-                              } : {}),
-                              cursor: clip.locked ? 'not-allowed' : 'grab',
-                              position: 'relative',
-                              transition: clipResize.active ? 'none' : 'width 0.15s ease-out'
-                            }}
-                            onClick={(e) => handleClipSelect(index, e)}
-                          >
-                            {/* Left resize handle */}
-                            {!clip.locked && (
-                              <div
-                                onMouseDown={(e) => handleResizeStart(e, index, 'left')}
-                                style={{
-                                  position: 'absolute',
-                                  left: 0,
-                                  top: 0,
-                                  bottom: 0,
-                                  width: '12px',
-                                  cursor: 'col-resize',
-                                  zIndex: 3,
-                                  background: 'linear-gradient(to right, rgba(167,139,250,0.4), transparent)',
-                                  opacity: 0,
-                                  transition: 'opacity 0.15s',
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                                onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}
-                              />
-                            )}
-                            {/* Thumbnail pinned at start */}
-                            <div style={{
-                              width: `${Math.min(thumbWidth, clipWidth - 4)}px`,
-                              height: '100%',
-                              flexShrink: 0,
-                              overflow: 'hidden',
-                              position: 'relative'
-                            }}>
-                              {clip.thumbnail ? (
-                                <img src={clip.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} draggable={false} />
-                              ) : (
-                                <video src={getClipUrl(clip)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted preload="metadata" />
-                              )}
-                            </div>
-                            {/* Colored duration bar extending right */}
-                            {clipWidth > thumbWidth + 4 && (
-                              <div style={{
-                                flex: 1,
-                                height: '100%',
-                                background: selectedClips.includes(index)
-                                  ? `linear-gradient(135deg, ${theme.accent.muted} 0%, ${theme.accent.primary} 100%)`
-                                  : `linear-gradient(135deg, ${theme.accent.muted} 0%, ${theme.accent.muted} 100%)`,
-                                display: 'flex',
-                                alignItems: 'flex-end',
-                                justifyContent: 'flex-end',
-                                padding: '4px 6px'
-                              }}>
-                                <span style={{ fontSize: '10px', color: theme.text.secondary }}>
-                                  {clip.duration?.toFixed(1)}s
-                                </span>
-                              </div>
-                            )}
-                            {/* Duration label for short clips */}
-                            {clipWidth <= thumbWidth + 4 && (
-                              <span style={styles.clipDuration}>
-                                {clip.duration?.toFixed(1)}s
-                              </span>
-                            )}
-                            {clip.locked && <span style={styles.clipLock}>🔒</span>}
-                            {/* Right resize handle */}
-                            {!clip.locked && (
-                              <div
-                                onMouseDown={(e) => handleResizeStart(e, index, 'right')}
-                                style={{
-                                  position: 'absolute',
-                                  right: 0,
-                                  top: 0,
-                                  bottom: 0,
-                                  width: '12px',
-                                  cursor: 'col-resize',
-                                  zIndex: 3,
-                                  background: 'linear-gradient(to left, rgba(167,139,250,0.4), transparent)',
-                                  opacity: 0,
-                                  transition: 'opacity 0.15s',
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                                onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}
-                              />
-                            )}
-                          </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {/* Audio Waveform Track */}
-                    {waveformData.length > 0 && (
-                      <div style={{
-                        display: 'flex', alignItems: 'center', height: '32px',
-                        borderTop: `1px solid ${theme.border.subtle}`, marginTop: '4px',
-                        pointerEvents: 'none'
-                      }}>
-                        <span style={{ fontSize: '12px', width: '20px', flexShrink: 0, textAlign: 'center' }}>🔊</span>
-                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '1px', height: '100%' }}>
-                          {waveformData.map((amplitude, i) => (
-                            <div key={i} style={{
-                              flex: 1, minWidth: '1px', backgroundColor: '#22c55e',
-                              height: `${amplitude * 100}%`, opacity: 0.4
-                            }} />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Clip Actions */}
-                  <div style={styles.clipActions}>
-                    <button style={styles.clipAction} onClick={handleCombine} title="Combine selected clips or clip at playhead with next">Combine</button>
-                    <button style={styles.clipAction} onClick={handleBreak} title="Split clip at playhead position">Break</button>
-                    <button style={styles.clipAction} onClick={handleReroll} title="Replace clip(s) with random from bank">Reroll</button>
-                    <button style={styles.clipAction} onClick={handleRearrange}>Rearrange</button>
-                    <button style={styles.clipActionDanger} onClick={handleRemoveClips} title="Delete selected clip(s) or clip at playhead">🗑️ Remove</button>
-                    <div style={styles.scaleControl}>
-                      <span>Scale</span>
-                      <input
-                        type="range"
-                        min="0.5"
-                        max="2"
-                        step="0.1"
-                        value={timelineScale}
-                        onChange={(e) => setTimelineScale(parseFloat(e.target.value))}
-                        style={styles.scaleSlider}
-                      />
-                      <span>{timelineScale.toFixed(2)}x</span>
-                    </div>
-                  </div>
-
-                  {/* Selection info */}
-                  {selectedClips.length > 1 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 8px', fontSize: '12px', color: theme.accent.primary }}>
-                      <span>{selectedClips.length} clips selected</span>
-                      <button style={{ ...styles.clipAction, fontSize: '11px', padding: '2px 8px' }} onClick={() => setSelectedClips([])}>Clear</button>
-                    </div>
-                  )}
-
-                  {/* Cut Actions */}
-                  <div style={styles.cutActions}>
-                    <span style={styles.cutHint}>Click-drag timeline to marquee select, or Shift-click clips</span>
-                    <div style={styles.cutButtons}>
-                      <button style={styles.cutButton} onClick={handleCutByWord}>Cut by word</button>
-                      <button style={styles.cutButton} onClick={handleCutByBeat}>Cut by beat</button>
-                      <button style={{...styles.cutButton, opacity: 0.5, cursor: 'not-allowed'}} title="Coming soon" disabled>Record cuts</button>
-                    </div>
-                  </div>
-                </div>
           </div>
+          )}
         </div>
 
         {/* ── Video Variation Tabs + Generate ── */}
@@ -3261,6 +3321,26 @@ const VideoEditorModal = ({
                   </>
                 )}
               </button>
+            ))}
+          </div>
+
+          {/* keepText toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+            {[
+              { value: 'none', label: 'Random' },
+              { value: 'all', label: 'Keep Text' }
+            ].map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setKeepTemplateText(opt.value)}
+                style={{
+                  padding: '3px 6px', borderRadius: '4px', border: 'none',
+                  backgroundColor: keepTemplateText === opt.value ? 'rgba(99,102,241,0.6)' : 'transparent',
+                  color: keepTemplateText === opt.value ? '#fff' : theme.text.muted,
+                  fontSize: '10px', fontWeight: keepTemplateText === opt.value ? '700' : '500',
+                  cursor: 'pointer'
+                }}
+              >{opt.label}</button>
             ))}
           </div>
 
@@ -3861,7 +3941,7 @@ const getStyles = (theme) => ({
   },
   modal: {
     width: '100%',
-    maxWidth: '1100px',
+    maxWidth: '1200px',
     maxHeight: '90vh',
     backgroundColor: theme.bg.input,
     borderRadius: '12px',
@@ -4043,14 +4123,23 @@ const getStyles = (theme) => ({
     flexDirection: 'column'
   },
   previewContainer: {
-    marginBottom: '16px'
+    marginBottom: '16px',
+    flex: 1,
+    display: 'flex',
+    justifyContent: 'center',
+    minHeight: 0,
+    overflow: 'hidden',
+    padding: '12px'
   },
   preview: {
     position: 'relative',
     aspectRatio: '9/16',
     backgroundColor: theme.bg.page,
     borderRadius: '8px',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    maxWidth: '360px',
+    width: '100%',
+    alignSelf: 'center'
   },
   previewVideo: {
     width: '100%',

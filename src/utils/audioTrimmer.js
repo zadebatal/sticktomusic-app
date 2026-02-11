@@ -93,6 +93,16 @@ function encodeMP3(buffer) {
     channelData.push(buffer.getChannelData(ch));
   }
 
+  // Convert Float32 samples (-1.0 to 1.0) to Int16 (-32768 to 32767) for lamejs
+  const toInt16 = (floatData, offset, length) => {
+    const int16 = new Int16Array(length);
+    for (let j = 0; j < length; j++) {
+      const s = Math.max(-1, Math.min(1, floatData[offset + j]));
+      int16[j] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+    return int16;
+  };
+
   // Encode in chunks (process samples in batches for efficiency)
   const mp3Data = [];
   const chunkSize = 4096;
@@ -102,23 +112,22 @@ function encodeMP3(buffer) {
 
     if (numChannels === 1) {
       // Mono
-      const mono = channelData[0].slice(i, i + sampleChunkSize);
-      const encoded = encoder.encodeBuffer(mono);
+      const encoded = encoder.encodeBuffer(toInt16(channelData[0], i, sampleChunkSize));
       if (encoded.length > 0) {
         mp3Data.push(encoded);
       }
     } else if (numChannels === 2) {
       // Stereo
-      const left = channelData[0].slice(i, i + sampleChunkSize);
-      const right = channelData[1].slice(i, i + sampleChunkSize);
+      const left = toInt16(channelData[0], i, sampleChunkSize);
+      const right = toInt16(channelData[1], i, sampleChunkSize);
       const encoded = encoder.encodeBuffer(left, right);
       if (encoded.length > 0) {
         mp3Data.push(encoded);
       }
     } else {
-      // Multi-channel: downmix to stereo
-      const left = new Float32Array(sampleChunkSize);
-      const right = new Float32Array(sampleChunkSize);
+      // Multi-channel: downmix to stereo, then convert to Int16
+      const leftFloat = new Float32Array(sampleChunkSize);
+      const rightFloat = new Float32Array(sampleChunkSize);
 
       for (let j = 0; j < sampleChunkSize; j++) {
         let leftSample = 0;
@@ -133,10 +142,12 @@ function encodeMP3(buffer) {
           }
         }
 
-        left[j] = leftSample;
-        right[j] = rightSample;
+        leftFloat[j] = leftSample;
+        rightFloat[j] = rightSample;
       }
 
+      const left = toInt16(leftFloat, 0, sampleChunkSize);
+      const right = toInt16(rightFloat, 0, sampleChunkSize);
       const encoded = encoder.encodeBuffer(left, right);
       if (encoded.length > 0) {
         mp3Data.push(encoded);
