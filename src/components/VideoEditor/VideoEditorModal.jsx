@@ -571,43 +571,67 @@ const VideoEditorModal = ({
     return () => { cancelled = true; };
   }, [selectedAudio]);
 
-  // Handle play/pause with trim boundary support
-  useEffect(() => {
-    if (!audioRef.current) return;
+  // Handle play/pause with trim boundary support + wall-clock fallback
+  const playStartRef = useRef(null); // wall-clock start time for fallback
+  const playOffsetRef = useRef(0);   // currentTime when play was pressed
 
+  useEffect(() => {
     const startBoundary = selectedAudio?.startTime || 0;
-    const endBoundary = selectedAudio?.endTime || audioRef.current.duration || duration;
+    const endBoundary = selectedAudio?.endTime || (audioRef.current?.duration > 0 ? audioRef.current.duration : 0) || duration;
+    const effectiveDuration = endBoundary - startBoundary;
 
     // Update ref to avoid stale closure
     isPlayingRef.current = isPlaying;
 
     if (isPlaying) {
-      audioRef.current.play().catch(console.error);
+      // Try to play audio if it has a valid source
+      const hasAudio = audioRef.current?.src && audioRef.current.src !== '' && audioRef.current.src !== window.location.href;
+      if (hasAudio) {
+        audioRef.current.play().catch(() => {});
+      }
 
-      // Update currentTime during playback, respecting trim boundaries
+      // Record wall-clock start for fallback timing
+      playStartRef.current = performance.now();
+      playOffsetRef.current = currentTime;
+
+      // Update currentTime during playback
       const updateTime = () => {
-        if (audioRef.current && isPlayingRef.current) {
+        if (!isPlayingRef.current) return;
+
+        let relTime;
+
+        // Primary: use audio element time if audio is actively playing
+        if (hasAudio && audioRef.current && !audioRef.current.paused && audioRef.current.currentTime > 0) {
           const actualTime = audioRef.current.currentTime;
 
-          // Check if we've reached the end boundary
-          if (actualTime >= endBoundary) {
-            // Loop back to start boundary
+          if (effectiveDuration > 0 && actualTime >= endBoundary) {
             audioRef.current.currentTime = startBoundary;
-            setCurrentTime(0); // Reset relative time to 0
+            relTime = 0;
           } else {
-            // Set relative time (offset from start boundary)
-            setCurrentTime(actualTime - startBoundary);
+            relTime = actualTime - startBoundary;
           }
+        } else {
+          // Fallback: use wall-clock elapsed time
+          const elapsed = (performance.now() - playStartRef.current) / 1000;
+          relTime = playOffsetRef.current + elapsed;
 
-          // Continue animation loop using ref to check current state
-          if (isPlayingRef.current) {
-            animationRef.current = requestAnimationFrame(updateTime);
+          // Loop if we've exceeded duration
+          if (effectiveDuration > 0 && relTime >= effectiveDuration) {
+            relTime = 0;
+            playStartRef.current = performance.now();
+            playOffsetRef.current = 0;
+            if (hasAudio && audioRef.current) {
+              audioRef.current.currentTime = startBoundary;
+            }
           }
         }
+
+        setCurrentTime(relTime);
+        animationRef.current = requestAnimationFrame(updateTime);
       };
       animationRef.current = requestAnimationFrame(updateTime);
     } else {
-      audioRef.current.pause();
+      if (audioRef.current) audioRef.current.pause();
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
@@ -618,6 +642,7 @@ const VideoEditorModal = ({
         cancelAnimationFrame(animationRef.current);
       }
     };
+  // eslint-disable-next-line
   }, [isPlaying, selectedAudio, duration]);
 
   // Sync video with audio time (use active video element)
