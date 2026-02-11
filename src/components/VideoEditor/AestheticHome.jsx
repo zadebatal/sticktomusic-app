@@ -630,7 +630,7 @@ const AestheticHome = ({
                         </svg>
                         Add
                       </label>
-                      <input id="image-a-bank-input" ref={imageAInputRef} type="file" accept="image/*" multiple onChange={(e) => handleImageUpload(e, 'A')} style={{ display: 'none' }} />
+                      <input id="image-a-bank-input" ref={imageAInputRef} type="file" accept="image/*,.heic,.heif" multiple onChange={(e) => handleImageUpload(e, 'A')} style={{ display: 'none' }} />
                     </div>
 
                     {/* Image B Bank */}
@@ -657,7 +657,7 @@ const AestheticHome = ({
                         </svg>
                         Add
                       </label>
-                      <input id="image-b-bank-input" ref={imageBInputRef} type="file" accept="image/*" multiple onChange={(e) => handleImageUpload(e, 'B')} style={{ display: 'none' }} />
+                      <input id="image-b-bank-input" ref={imageBInputRef} type="file" accept="image/*,.heic,.heif" multiple onChange={(e) => handleImageUpload(e, 'B')} style={{ display: 'none' }} />
                     </div>
 
                     {/* Audio Bank (for slideshows) */}

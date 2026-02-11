@@ -141,6 +141,7 @@ const MultiClipEditor = ({
   const [selectedAudio, setSelectedAudio] = useState(existingVideo?.audio || null);
   const audioRef = useRef(null);
   const audioFileInputRef = useRef(null);
+  const [waveformData, setWaveformData] = useState([]);
 
   // ── Clip durations tracking ──
   const clipDurationsRef = useRef({});
@@ -500,6 +501,50 @@ const MultiClipEditor = ({
       audioRef.current.muted = isMuted;
     }
   }, [isMuted, selectedAudio]);
+
+  // Generate waveform data from audio for timeline visualization
+  useEffect(() => {
+    if (!selectedAudio?.url && !selectedAudio?.localUrl) {
+      setWaveformData([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const source = selectedAudio.file instanceof Blob ? selectedAudio.file
+          : (selectedAudio.localUrl && !selectedAudio.localUrl.startsWith('blob:'))
+            ? selectedAudio.localUrl : selectedAudio.url;
+        if (!source) return;
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let arrayBuffer;
+        if (source instanceof Blob) {
+          arrayBuffer = await source.arrayBuffer();
+        } else {
+          const resp = await fetch(source, { mode: 'cors' });
+          arrayBuffer = await resp.arrayBuffer();
+        }
+        const buffer = await audioCtx.decodeAudioData(arrayBuffer);
+        await audioCtx.close();
+        if (cancelled) return;
+        const rawData = buffer.getChannelData(0);
+        const samples = 200;
+        const blockSize = Math.floor(rawData.length / samples);
+        const filteredData = [];
+        for (let i = 0; i < samples; i++) {
+          let sum = 0;
+          for (let j = 0; j < blockSize; j++) {
+            sum += Math.abs(rawData[(i * blockSize) + j]);
+          }
+          filteredData.push(sum / blockSize);
+        }
+        const max = Math.max(...filteredData);
+        setWaveformData(filteredData.map(d => d / max));
+      } catch (err) {
+        console.warn('Waveform generation failed:', err.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedAudio]);
 
   useEffect(() => {
     return () => {
@@ -2189,6 +2234,21 @@ const MultiClipEditor = ({
               })}
             </div>
 
+            {/* Audio Waveform Track */}
+            {waveformData.length > 0 && (
+              <div style={styles.audioTrack}>
+                <span style={{ fontSize: '10px', position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)', zIndex: 2 }}>🔊</span>
+                <div style={{ position: 'absolute', left: '20px', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: '1px' }}>
+                  {waveformData.map((amplitude, i) => (
+                    <div key={i} style={{
+                      flex: 1, minWidth: '1px', backgroundColor: '#22c55e',
+                      height: `${amplitude * 100}%`, opacity: 0.35
+                    }} />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Playhead — draggable */}
             {timelineDuration > 0 && (
               <div
@@ -2944,7 +3004,7 @@ const getStyles = (theme) => ({
   },
   timelineTrackArea: {
     position: 'relative',
-    height: '110px',
+    height: '140px',
     cursor: 'pointer'
   },
   timelineRuler: {
@@ -2968,6 +3028,14 @@ const getStyles = (theme) => ({
     left: 0,
     right: 0,
     height: '44px'
+  },
+  audioTrack: {
+    position: 'absolute',
+    top: '102px',
+    left: 0,
+    right: 0,
+    height: '30px',
+    borderTop: `1px solid ${theme.border.subtle}`
   },
 
   // ── Tab Bar ──

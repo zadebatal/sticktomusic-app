@@ -2967,21 +2967,6 @@ const VideoEditorModal = ({
                         }} />
                       );
                     })()}
-                    {/* Waveform background */}
-                    {waveformData.length > 0 && (
-                      <div style={{
-                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                        display: 'flex', alignItems: 'center', gap: '1px', opacity: 0.2,
-                        pointerEvents: 'none', zIndex: 1
-                      }}>
-                        {waveformData.map((amplitude, i) => (
-                          <div key={i} style={{
-                            flex: 1, minWidth: '1px', backgroundColor: '#22c55e',
-                            height: `${amplitude * 100}%`
-                          }} />
-                        ))}
-                      </div>
-                    )}
                     {/* Playhead indicator */}
                     {clips.length > 0 && (
                       <div
@@ -3129,6 +3114,24 @@ const VideoEditorModal = ({
                           </div>
                           );
                         })}
+                      </div>
+                    )}
+                    {/* Audio Waveform Track */}
+                    {waveformData.length > 0 && (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', height: '32px',
+                        borderTop: `1px solid ${theme.border.subtle}`, marginTop: '4px',
+                        pointerEvents: 'none'
+                      }}>
+                        <span style={{ fontSize: '12px', width: '20px', flexShrink: 0, textAlign: 'center' }}>🔊</span>
+                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '1px', height: '100%' }}>
+                          {waveformData.map((amplitude, i) => (
+                            <div key={i} style={{
+                              flex: 1, minWidth: '1px', backgroundColor: '#22c55e',
+                              height: `${amplitude * 100}%`, opacity: 0.4
+                            }} />
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>

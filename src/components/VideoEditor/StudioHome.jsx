@@ -12,6 +12,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import useIsMobile from '../../hooks/useIsMobile';
+import { convertHeicIfNeeded, isHeicFile } from '../../utils/heicConverter';
 // OnboardingModal removed - auto-setup happens in VideoStudio
 import { useTheme } from '../../contexts/ThemeContext';
 import LibraryBrowser from './LibraryBrowser';
@@ -417,7 +418,7 @@ const StudioHome = ({
     const failedFiles = [];
 
     for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+      const file = type === MEDIA_TYPES.IMAGE ? await convertHeicIfNeeded(files[i]) : files[i];
       const basePercent = (i / files.length) * 100;
       setUploadProgress({ current: i + 1, total: files.length, name: file.name, percent: Math.round(basePercent) });
 
@@ -688,7 +689,7 @@ const StudioHome = ({
       const videoFiles = files.filter(f => f.type.startsWith('video/'));
       if (videoFiles.length > 0) handleFileUpload(videoFiles, MEDIA_TYPES.VIDEO);
     } else if (studioMode === 'slideshows') {
-      const imageFiles = files.filter(f => f.type.startsWith('image/'));
+      const imageFiles = files.filter(f => f.type.startsWith('image/') || isHeicFile(f));
       if (imageFiles.length > 0) handleFileUpload(imageFiles, MEDIA_TYPES.IMAGE);
     } else if (studioMode === 'audio') {
       const audioFiles = files.filter(f => f.type.startsWith('audio/'));

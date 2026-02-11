@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { convertHeicIfNeeded, isHeicFile } from '../../utils/heicConverter';
 import {
   getLibrary,
   saveLibrary,
@@ -632,13 +633,13 @@ const LibraryBrowser = ({
 
     try {
       for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+        const file = await convertHeicIfNeeded(files[i]);
         const basePercent = (i / files.length) * 100;
 
         // Determine media type
         let type;
         if (file.type.startsWith('video/')) type = MEDIA_TYPES.VIDEO;
-        else if (file.type.startsWith('image/')) type = MEDIA_TYPES.IMAGE;
+        else if (file.type.startsWith('image/') || isHeicFile(files[i])) type = MEDIA_TYPES.IMAGE;
         else if (file.type === 'audio/mpeg' || file.type === 'audio/mp3') type = MEDIA_TYPES.AUDIO;
         else continue;
 
@@ -916,9 +917,9 @@ const LibraryBrowser = ({
   const getAcceptTypes = () => {
     switch (mode) {
       case 'videos': return 'video/*';
-      case 'images': return 'image/*';
+      case 'images': return 'image/*,.heic,.heif';
       case 'audio': return '.mp3,audio/mpeg';
-      default: return 'video/*,image/*,.mp3,audio/mpeg';
+      default: return 'video/*,image/*,.heic,.heif,.mp3,audio/mpeg';
     }
   };
 
@@ -1917,7 +1918,7 @@ const LibraryBrowser = ({
               ref={fileInputRef}
               type="file"
               multiple
-              accept={isMobile ? 'image/*,video/*' : getAcceptTypes()}
+              accept={isMobile ? 'image/*,video/*,.heic,.heif' : getAcceptTypes()}
               {...(isMobile ? { capture: 'environment' } : {})}
               onChange={handleFileUpload}
               style={{ display: 'none' }}
@@ -2497,7 +2498,7 @@ const LibraryBrowser = ({
                   <input
                     type="file"
                     multiple
-                    accept={isMobile ? 'image/*,video/*' : getAcceptTypes()}
+                    accept={isMobile ? 'image/*,video/*,.heic,.heif' : getAcceptTypes()}
                     {...(isMobile ? { capture: 'environment' } : {})}
                     onChange={handleFileUpload}
                     style={{ display: 'none' }}
