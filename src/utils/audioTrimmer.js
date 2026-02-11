@@ -1,5 +1,4 @@
-// eslint-disable-next-line no-undef
-const lamejs = require('lamejs');
+import { Mp3Encoder } from '@breezystack/lamejs';
 
 /**
  * Audio Trimmer Utility
@@ -86,7 +85,7 @@ function encodeMP3(buffer) {
   const kbps = 128; // Bitrate: 128kbps provides good quality-to-size ratio
 
   // Initialize the encoder
-  const encoder = new lamejs.Mp3Encoder(numChannels, sampleRate, kbps);
+  const encoder = new Mp3Encoder(numChannels, sampleRate, kbps);
 
   // Prepare channel data
   const channelData = [];

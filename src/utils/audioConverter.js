@@ -6,8 +6,7 @@
  *
  * Uses Web Audio API for decoding + lamejs for MP3 encoding (already in project).
  */
-// eslint-disable-next-line no-undef
-const lamejs = require('lamejs');
+import { Mp3Encoder } from '@breezystack/lamejs';
 
 const AUDIO_EXTENSIONS = ['.wav', '.m4a', '.aif', '.aiff', '.ogg', '.flac', '.aac', '.wma'];
 
@@ -42,7 +41,7 @@ function encodeMP3(buffer) {
   const sampleRate = buffer.sampleRate;
   const kbps = 192;
 
-  const encoder = new lamejs.Mp3Encoder(numChannels, sampleRate, kbps);
+  const encoder = new Mp3Encoder(numChannels, sampleRate, kbps);
 
   const channelData = [];
   for (let ch = 0; ch < buffer.numberOfChannels; ch++) {

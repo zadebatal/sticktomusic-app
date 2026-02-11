@@ -322,7 +322,7 @@ const StudioHome = ({
   // Background thumbnail migration for existing images
   // THUMB_VERSION: bump this to force re-migration (e.g. after changing thumbnail size)
   useEffect(() => {
-    const THUMB_VERSION = 3; // v3 = 80px @ 0.3 quality (was v2 = 150px @ 0.5)
+    const THUMB_VERSION = 4; // v4 = 50px @ 0.2 quality
     if (thumbMigrationRef.current || !artistId) return;
     if (library.length === 0) return;
 
@@ -475,14 +475,14 @@ const StudioHome = ({
           video.currentTime = seekTime;
           await new Promise(r => { video.onseeked = r; });
 
-          const maxThumbSize = 80;
+          const maxThumbSize = 50;
           const scale = Math.min(1, maxThumbSize / Math.max(video.videoWidth, video.videoHeight));
           const canvas = document.createElement('canvas');
           canvas.width = Math.round(video.videoWidth * scale);
           canvas.height = Math.round(video.videoHeight * scale);
           const ctx = canvas.getContext('2d');
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.3));
+          const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.2));
           if (thumbBlob) {
             const thumbFile = new File([thumbBlob], `thumb_${file.name}.jpg`, { type: 'image/jpeg' });
             const thumbResult = await uploadFile(thumbFile, 'thumbnails');
@@ -501,14 +501,14 @@ const StudioHome = ({
         height = img.naturalHeight;
 
         try {
-          const maxThumbSize = 80;
+          const maxThumbSize = 50;
           const scale = Math.min(1, maxThumbSize / Math.max(img.naturalWidth, img.naturalHeight));
           const canvas = document.createElement('canvas');
           canvas.width = Math.round(img.naturalWidth * scale);
           canvas.height = Math.round(img.naturalHeight * scale);
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.3));
+          const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.2));
           if (thumbBlob) {
             const thumbFile = new File([thumbBlob], `thumb_${file.name}`, { type: 'image/jpeg' });
             const thumbResult = await uploadFile(thumbFile, 'thumbnails');

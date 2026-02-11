@@ -343,7 +343,7 @@ const LibraryBrowser = ({
   // Background thumbnail migration for existing images without thumbnails
   const thumbMigrationRef = useRef(false);
   useEffect(() => {
-    const THUMB_VERSION = 3; // v3 = 80px @ 0.3 quality
+    const THUMB_VERSION = 4; // v4 = 50px @ 0.2 quality
     if (thumbMigrationRef.current || !artistId) return;
     if (library.length === 0) return;
 
@@ -740,16 +740,16 @@ const LibraryBrowser = ({
             };
             img.onerror = resolve;
           });
-          // Generate lightweight thumbnail (80px max, low quality for grid previews)
+          // Generate tiny thumbnail (50px max, minimal quality for grid previews)
           try {
-            const maxThumbSize = 80;
+            const maxThumbSize = 50;
             const scale = Math.min(1, maxThumbSize / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
             const canvas = document.createElement('canvas');
-            canvas.width = Math.round((img.naturalWidth || 80) * scale);
-            canvas.height = Math.round((img.naturalHeight || 80) * scale);
+            canvas.width = Math.round((img.naturalWidth || 50) * scale);
+            canvas.height = Math.round((img.naturalHeight || 50) * scale);
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.3));
+            const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.2));
             if (thumbBlob) {
               const thumbFile = new File([thumbBlob], `thumb_${file.name}.jpg`, { type: 'image/jpeg' });
               const thumbResult = await uploadFile(thumbFile, 'thumbnails');
