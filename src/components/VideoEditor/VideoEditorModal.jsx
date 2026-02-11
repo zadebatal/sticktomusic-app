@@ -2446,48 +2446,48 @@ const VideoEditorModal = ({
                   </div>
                 )}
 
-                {/* Crop Overlay — left/right bars for 16:9 canvas */}
+                {/* Crop Overlay */}
                 {cropMode === '4:3' && (
                   <>
                     <div style={{
-                      position: 'absolute', top: 0, left: 0, bottom: 0,
-                      width: 'calc((100% - (100% * 0.75)) / 2)',
+                      position: 'absolute', top: 0, left: 0, right: 0,
+                      height: 'calc((100% - (100% * 0.75)) / 2)',
                       backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                      borderRight: '2px dashed rgba(255, 255, 255, 0.4)',
+                      borderBottom: '2px dashed rgba(255, 255, 255, 0.4)',
                       pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 8
                     }}>
-                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px', writingMode: 'vertical-rl' }}>Cropped</span>
+                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px' }}>Cropped</span>
                     </div>
                     <div style={{
-                      position: 'absolute', top: 0, right: 0, bottom: 0,
-                      width: 'calc((100% - (100% * 0.75)) / 2)',
+                      position: 'absolute', bottom: 0, left: 0, right: 0,
+                      height: 'calc((100% - (100% * 0.75)) / 2)',
                       backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                      borderLeft: '2px dashed rgba(255, 255, 255, 0.4)',
+                      borderTop: '2px dashed rgba(255, 255, 255, 0.4)',
                       pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 8
                     }}>
-                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px', writingMode: 'vertical-rl' }}>Cropped</span>
+                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px' }}>Cropped</span>
                     </div>
                   </>
                 )}
                 {cropMode === '1:1' && (
                   <>
                     <div style={{
-                      position: 'absolute', top: 0, left: 0, bottom: 0,
-                      width: 'calc((100% - (100% * 0.5625)) / 2)',
+                      position: 'absolute', top: 0, left: 0, right: 0,
+                      height: 'calc((100% - (100% * 0.5625)) / 2)',
                       backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                      borderRight: '2px dashed rgba(255, 255, 255, 0.4)',
+                      borderBottom: '2px dashed rgba(255, 255, 255, 0.4)',
                       pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 8
                     }}>
-                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px', writingMode: 'vertical-rl' }}>Cropped</span>
+                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px' }}>Cropped</span>
                     </div>
                     <div style={{
-                      position: 'absolute', top: 0, right: 0, bottom: 0,
-                      width: 'calc((100% - (100% * 0.5625)) / 2)',
+                      position: 'absolute', bottom: 0, left: 0, right: 0,
+                      height: 'calc((100% - (100% * 0.5625)) / 2)',
                       backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                      borderLeft: '2px dashed rgba(255, 255, 255, 0.4)',
+                      borderTop: '2px dashed rgba(255, 255, 255, 0.4)',
                       pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 8
                     }}>
-                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px', writingMode: 'vertical-rl' }}>Cropped</span>
+                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px' }}>Cropped</span>
                     </div>
                   </>
                 )}
@@ -4211,11 +4211,11 @@ const getStyles = (theme) => ({
   },
   preview: {
     position: 'relative',
-    aspectRatio: '16/9',
+    aspectRatio: '9/16',
     backgroundColor: theme.bg.page,
     borderRadius: '8px',
     overflow: 'hidden',
-    maxWidth: '640px',
+    maxWidth: '360px',
     width: '100%',
     alignSelf: 'center'
   },

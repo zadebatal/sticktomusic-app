@@ -890,8 +890,8 @@ const SoloClipEditor = ({
   // Currently editing overlay
   const editingOverlay = textOverlays.find(o => o.id === editingTextId);
 
-  // Canvas is 16:9 — aspect ratio only controls how media is cropped within it
-  const previewDims = { width: 480, height: 270 };
+  // Canvas is ALWAYS 9:16 — aspect ratio only controls how media is cropped within it
+  const previewDims = { width: 270, height: 480 };
 
   // Compute video style based on crop mode (aspect ratio)
   const getVideoCropStyle = () => {

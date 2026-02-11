@@ -1066,10 +1066,10 @@ const MultiClipEditor = ({
   // Currently editing overlay
   const editingOverlay = textOverlays.find(o => o.id === editingTextId);
 
-  // Canvas is 16:9 — aspect ratio only controls how media is cropped within it
+  // Canvas is ALWAYS 9:16 — aspect ratio only controls how media is cropped within it
   const previewDims = isMobile
-    ? { width: Math.min(window.innerWidth - 32, 400), height: Math.min(window.innerWidth - 32, 400) * (9 / 16) }
-    : { width: 480, height: 270 };
+    ? { width: Math.min(window.innerWidth - 32, 300), height: Math.min(window.innerWidth - 32, 300) * (480 / 270) }
+    : { width: 270, height: 480 };
 
   // Compute video style based on crop mode (aspect ratio)
   const getVideoCropStyle = () => {

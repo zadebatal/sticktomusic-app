@@ -1966,7 +1966,7 @@ const StudioHome = ({
                 </div>
               </div>
 
-              {/* ── Video Text Banks (inline, below action bar) ── */}
+              {/* ── Video Text Banks (stacked, matching slideshow style) ── */}
               {selectedCollection && (() => {
                 const col = collections.find(c => c.id === selectedCollection);
                 if (!col) return null;
@@ -1978,87 +1978,40 @@ const StudioHome = ({
                     if (fresh) saveCollectionToFirestore(db, artistId, fresh).catch(console.error);
                   }
                 };
-                const ts = col.defaultTextStyle || { fontSize: 48, fontFamily: 'Inter, sans-serif', color: '#ffffff', outline: true, outlineColor: '#000000' };
-                const updateStyle = (patch) => {
-                  updateCollection(artistId, selectedCollection, { defaultTextStyle: { ...ts, ...patch } });
-                  syncCol();
-                };
                 return (
                   <div style={{
-                    margin: '12px 16px 0',
-                    borderRadius: '10px',
-                    border: `1px solid ${theme.border.subtle}`,
-                    backgroundColor: theme.bg.surface,
-                    overflow: 'hidden'
+                    margin: '0 16px',
+                    borderTop: `1px solid ${theme.border.subtle}`,
+                    padding: '8px 0'
                   }}>
-                    <div style={{
-                      padding: '8px 12px',
-                      borderBottom: `1px solid ${theme.border.subtle}`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between'
-                    }}>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary }}>
-                        Video Text Banks
-                      </span>
+                    <div style={{ padding: '4px 8px', fontSize: '10px', fontWeight: '600', color: '#38bdf8', borderBottom: `1px solid ${theme.border.subtle}`, backgroundColor: 'rgba(56,189,248,0.08)', textAlign: 'center', marginBottom: '4px', borderRadius: '4px 4px 0 0' }}>
+                      Video Text Banks
                     </div>
-                    <div style={{ display: 'flex', gap: '1px', backgroundColor: theme.border.subtle }}>
-                      <div style={{ flex: 1, padding: '8px 10px', backgroundColor: theme.bg.surface }}>
-                        <TextBankPanel
-                          bankNum={1}
-                          label="Video Text 1"
-                          color="#38bdf8"
-                          texts={col.videoTextBank1 || []}
-                          onAdd={(text) => { addToVideoTextBank(artistId, selectedCollection, 1, text); syncCol(); }}
-                          onRemove={(index) => { removeFromVideoTextBank(artistId, selectedCollection, 1, index); syncCol(); }}
-                          onUpdate={(texts) => { updateVideoTextBank(artistId, selectedCollection, 1, texts); syncCol(); }}
-                        />
-                      </div>
-                      <div style={{ flex: 1, padding: '8px 10px', backgroundColor: theme.bg.surface }}>
-                        <TextBankPanel
-                          bankNum={2}
-                          label="Video Text 2"
-                          color="#fb923c"
-                          texts={col.videoTextBank2 || []}
-                          onAdd={(text) => { addToVideoTextBank(artistId, selectedCollection, 2, text); syncCol(); }}
-                          onRemove={(index) => { removeFromVideoTextBank(artistId, selectedCollection, 2, index); syncCol(); }}
-                          onUpdate={(texts) => { updateVideoTextBank(artistId, selectedCollection, 2, texts); syncCol(); }}
-                        />
-                      </div>
-                    </div>
-                    {/* Default Text Style */}
-                    <div style={{ padding: '8px 12px', borderTop: `1px solid ${theme.border.subtle}` }}>
-                      <div style={{ fontSize: '11px', fontWeight: 600, color: theme.text.muted, marginBottom: '6px' }}>Default Text Style</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <button onClick={() => updateStyle({ fontSize: Math.max(12, ts.fontSize - 4) })} style={{ background: theme.bg.input, border: `1px solid ${theme.border.subtle}`, borderRadius: '4px', color: theme.text.primary, padding: '2px 8px', cursor: 'pointer', fontSize: '13px' }}>A-</button>
-                        <span style={{ fontSize: '12px', color: theme.text.secondary, minWidth: '30px', textAlign: 'center' }}>{ts.fontSize}px</span>
-                        <button onClick={() => updateStyle({ fontSize: Math.min(120, ts.fontSize + 4) })} style={{ background: theme.bg.input, border: `1px solid ${theme.border.subtle}`, borderRadius: '4px', color: theme.text.primary, padding: '2px 8px', cursor: 'pointer', fontSize: '13px' }}>A+</button>
-                        <select
-                          value={ts.fontFamily || 'Inter, sans-serif'}
-                          onChange={(e) => updateStyle({ fontFamily: e.target.value })}
-                          style={{ padding: '4px 8px', borderRadius: '6px', border: `1px solid ${theme.border.subtle}`, backgroundColor: theme.bg.input, color: theme.text.primary, fontSize: '11px' }}
-                        >
-                          {['Inter, sans-serif', 'Arial, sans-serif', 'Georgia, serif', 'Courier New, monospace', 'Impact, sans-serif', 'Comic Sans MS, cursive'].map(f => (
-                            <option key={f} value={f} style={{ fontFamily: f }}>{f.split(',')[0]}</option>
-                          ))}
-                        </select>
-                        <input type="color" value={ts.color || '#ffffff'} onChange={(e) => updateStyle({ color: e.target.value })} style={{ width: '28px', height: '24px', border: 'none', cursor: 'pointer', backgroundColor: 'transparent' }} />
-                        <button
-                          onClick={() => updateStyle({ fontWeight: ts.fontWeight === '700' ? '400' : '700' })}
-                          style={{ padding: '2px 8px', borderRadius: '4px', border: `1px solid ${theme.border.subtle}`, backgroundColor: ts.fontWeight === '700' ? theme.accent.primary + '33' : theme.bg.input, color: ts.fontWeight === '700' ? theme.accent.primary : theme.text.muted, cursor: 'pointer', fontWeight: '700', fontSize: '12px' }}
-                        >B</button>
-                        <button
-                          onClick={() => updateStyle({ outline: !ts.outline })}
-                          style={{ padding: '2px 8px', borderRadius: '4px', border: `1px solid ${theme.border.subtle}`, backgroundColor: ts.outline ? theme.accent.primary + '33' : theme.bg.input, color: ts.outline ? theme.accent.primary : theme.text.muted, cursor: 'pointer', fontSize: '12px' }}
-                        >Outline</button>
-                        {ts.outline && (
-                          <input type="color" value={ts.outlineColor || '#000000'} onChange={(e) => updateStyle({ outlineColor: e.target.value })} style={{ width: '28px', height: '24px', border: 'none', cursor: 'pointer', backgroundColor: 'transparent' }} title="Outline color" />
-                        )}
-                      </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '4px 6px' }}>
+                      <TextBankPanel
+                        bankNum={1}
+                        label="Video Text 1"
+                        color="#38bdf8"
+                        texts={col.videoTextBank1 || []}
+                        onAdd={(text) => { addToVideoTextBank(artistId, selectedCollection, 1, text); syncCol(); }}
+                        onRemove={(index) => { removeFromVideoTextBank(artistId, selectedCollection, 1, index); syncCol(); }}
+                        onUpdate={(texts) => { updateVideoTextBank(artistId, selectedCollection, 1, texts); syncCol(); }}
+                      />
+                      <div style={{ height: '1px', backgroundColor: theme.border.subtle }} />
+                      <TextBankPanel
+                        bankNum={2}
+                        label="Video Text 2"
+                        color="#fb923c"
+                        texts={col.videoTextBank2 || []}
+                        onAdd={(text) => { addToVideoTextBank(artistId, selectedCollection, 2, text); syncCol(); }}
+                        onRemove={(index) => { removeFromVideoTextBank(artistId, selectedCollection, 2, index); syncCol(); }}
+                        onUpdate={(texts) => { updateVideoTextBank(artistId, selectedCollection, 2, texts); syncCol(); }}
+                      />
                     </div>
                   </div>
                 );
               })()}
+
             </div>
           )}
 
