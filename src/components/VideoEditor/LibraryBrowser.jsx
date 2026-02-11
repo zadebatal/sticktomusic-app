@@ -463,7 +463,9 @@ const LibraryBrowser = ({
   const handleDropOnBank = (e, bankIndex) => {
     e.preventDefault();
     e.stopPropagation();
-    // Try to get multi-select drag IDs from dataTransfer
+    setDragOverBank(null);
+
+    // Try to get multi-select drag IDs from dataTransfer (internal library drags)
     let dragIds = [];
     try {
       const data = e.dataTransfer.getData('text/plain');
@@ -476,9 +478,18 @@ const LibraryBrowser = ({
       assignToBankAsync(db, artistId, activeView, dragIds, bankIndex);
       loadData();
       toastSuccess(`Added ${dragIds.length} item${dragIds.length > 1 ? 's' : ''} to ${getBankLabel(bankIndex)}`);
+      setDraggedItem(null);
+      return;
     }
+
+    // Handle file drops from desktop
+    const droppedFiles = Array.from(e.dataTransfer.files || []);
+    const imageFiles = droppedFiles.filter(f => f.type.startsWith('image/') || /\.(heic|heif|tif|tiff)$/i.test(f.name));
+    if (imageFiles.length > 0) {
+      uploadFiles(imageFiles, { targetBankIndex: bankIndex });
+    }
+
     setDraggedItem(null);
-    setDragOverBank(null);
   };
 
   const [dragOverBank, setDragOverBank] = useState(null); // numeric index or null
@@ -616,9 +627,8 @@ const LibraryBrowser = ({
     });
   };
 
-  // Handle file upload
-  const handleFileUpload = async (e) => {
-    const files = Array.from(e.target.files);
+  // Core upload logic — uploads files to library, optionally assigns to a bank
+  const uploadFiles = async (files, { targetBankIndex } = {}) => {
     if (files.length === 0) return;
 
     log('[LibraryBrowser] Starting upload for', files.length, 'files, artistId:', artistId);
@@ -709,7 +719,7 @@ const LibraryBrowser = ({
         return newItem;
       };
 
-      const { errors } = await runPool(files, processOneFile, {
+      const { results, errors } = await runPool(files, processOneFile, {
         concurrency: 5,
         onProgress: (completed, total) => {
           setUploadProgress(Math.min(Math.round((completed / total) * 100), 99));
@@ -719,6 +729,15 @@ const LibraryBrowser = ({
       if (errors.length > 0) {
         console.error('[LibraryBrowser] Some uploads failed:', errors);
         toastError(`${errors.length} file(s) failed to upload`);
+      }
+
+      // If targeting a bank, assign uploaded items to it
+      if (targetBankIndex != null && activeView) {
+        const uploadedIds = results.filter(Boolean).map(item => item.id);
+        if (uploadedIds.length > 0) {
+          assignToBankAsync(db, artistId, activeView, uploadedIds, targetBankIndex);
+          toastSuccess(`Uploaded & added ${uploadedIds.length} image${uploadedIds.length > 1 ? 's' : ''} to ${getBankLabel(targetBankIndex)}`);
+        }
       }
 
       log('[LibraryBrowser] Upload complete');
@@ -736,6 +755,11 @@ const LibraryBrowser = ({
         fileInputRef.current.value = '';
       }
     }
+  };
+
+  // Handle file upload from file input
+  const handleFileUpload = async (e) => {
+    uploadFiles(Array.from(e.target.files));
   };
 
   // Handle media selection — macOS-style:
