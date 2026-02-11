@@ -1578,14 +1578,14 @@ const MultiClipEditor = ({
                 onClick={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
                   const percent = ((e.touches ? e.touches[0].clientX : e.clientX) - rect.left) / rect.width;
-                  handleSeek(percent * totalDuration);
+                  handleSeek(percent * timelineDuration);
                 }}
               >
-                <div style={{ ...styles.progressFill, width: `${totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0}%` }} />
+                <div style={{ ...styles.progressFill, width: `${timelineDuration > 0 ? (currentTime / timelineDuration) * 100 : 0}%` }} />
               </div>
 
               <span style={styles.timeDisplay}>
-                {formatTime(currentTime)} / {formatTime(totalDuration)}
+                {formatTime(currentTime)} / {formatTime(timelineDuration)}
               </span>
 
               <button onClick={() => setIsMuted(!isMuted)} style={{

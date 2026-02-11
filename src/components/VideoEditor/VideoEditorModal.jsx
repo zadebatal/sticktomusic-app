@@ -345,6 +345,10 @@ const VideoEditorModal = ({
   const [progressDragging, setProgressDragging] = useState(false);
   const progressBarRef = useRef(null);
 
+  // Inline timeline playhead dragging state
+  const [playheadDragging, setPlayheadDragging] = useState(false);
+  const wasPlayingBeforePlayheadDrag = useRef(false);
+
   // Clip drag reordering state
   const [clipDrag, setClipDrag] = useState({ dragging: false, fromIndex: -1, toIndex: -1 });
 
@@ -722,6 +726,35 @@ const VideoEditorModal = ({
     };
   }, [progressDragging, trimmedDuration, handleSeek]);
 
+  // Inline timeline playhead dragging
+  useEffect(() => {
+    if (!playheadDragging) return;
+
+    const handleMouseMove = (e) => {
+      if (!timelineRef.current) return;
+      const rect = timelineRef.current.getBoundingClientRect();
+      const clickX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+      const percent = clickX / rect.width;
+      const newTime = percent * trimmedDuration;
+      handleSeek(newTime);
+    };
+
+    const handleMouseUp = () => {
+      setPlayheadDragging(false);
+      if (wasPlayingBeforePlayheadDrag.current) {
+        setIsPlaying(true);
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [playheadDragging, trimmedDuration, handleSeek]);
+
   // Double-buffered video loading for smooth clip transitions
   useEffect(() => {
     const clipUrl = getClipUrl(currentClip);
@@ -807,12 +840,22 @@ const VideoEditorModal = ({
 
   const handleToggleMute = useCallback(() => {
     setIsMuted(prev => {
-      if (audioRef.current) {
-        audioRef.current.muted = !prev;
-      }
-      return !prev;
+      const next = !prev;
+      if (audioRef.current) audioRef.current.muted = next;
+      const hasLibraryAudio = selectedAudio && selectedAudio.url;
+      if (videoRef.current) videoRef.current.muted = next || !!hasLibraryAudio;
+      if (videoRefB.current) videoRefB.current.muted = next || !!hasLibraryAudio;
+      return next;
     });
-  }, []);
+  }, [selectedAudio]);
+
+  // Dynamically mute video when external audio is selected
+  useEffect(() => {
+    const hasLibraryAudio = selectedAudio && selectedAudio.url;
+    if (videoRef.current) videoRef.current.muted = isMuted || !!hasLibraryAudio;
+    if (videoRefB.current) videoRefB.current.muted = isMuted || !!hasLibraryAudio;
+    if (audioRef.current) audioRef.current.muted = isMuted;
+  }, [isMuted, selectedAudio]);
 
   const handlePlayPause = useCallback(() => {
     setIsPlaying(prev => !prev);
@@ -1939,6 +1982,7 @@ const VideoEditorModal = ({
   // Marquee selection: pointer down on timeline background
   const handleTimelineMarqueeDown = (e) => {
     if (e.target.closest('[data-clip-block]')) return;
+    if (playheadDragging) return;
     if (!timelineRef.current) return;
     const rect = timelineRef.current.getBoundingClientRect();
     const scrollLeft = timelineRef.current.scrollLeft || 0;
@@ -2312,7 +2356,6 @@ const VideoEditorModal = ({
                         top: 0,
                         left: 0
                       }}
-                      muted
                       loop
                       playsInline
                       preload="auto"
@@ -2339,7 +2382,6 @@ const VideoEditorModal = ({
                         top: 0,
                         left: 0
                       }}
-                      muted
                       loop
                       playsInline
                       preload="auto"
@@ -2689,7 +2731,7 @@ const VideoEditorModal = ({
                     }} />
                   );
                 })()}
-                {/* Playhead indicator */}
+                {/* Playhead indicator — draggable */}
                 {clips.length > 0 && (
                   <div
                     style={{
@@ -2700,11 +2742,30 @@ const VideoEditorModal = ({
                       width: '2px',
                       background: '#ef4444',
                       zIndex: 20,
-                      pointerEvents: 'none',
+                      pointerEvents: 'auto',
                       boxShadow: '0 0 4px rgba(239, 68, 68, 0.5)',
                       transition: isPlaying ? 'none' : 'left 0.1s ease-out'
                     }}
                   >
+                    {/* Wider grab area for easier dragging */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '-6px',
+                        left: '-8px',
+                        width: '18px',
+                        bottom: 0,
+                        cursor: 'ew-resize',
+                        zIndex: 21
+                      }}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        wasPlayingBeforePlayheadDrag.current = isPlaying;
+                        if (isPlaying) setIsPlaying(false);
+                        setPlayheadDragging(true);
+                      }}
+                    />
                     {/* Playhead top triangle */}
                     <div style={{
                       position: 'absolute',
@@ -2714,7 +2775,8 @@ const VideoEditorModal = ({
                       height: 0,
                       borderLeft: '6px solid transparent',
                       borderRight: '6px solid transparent',
-                      borderTop: '8px solid #ef4444'
+                      borderTop: '8px solid #ef4444',
+                      cursor: 'ew-resize'
                     }} />
                   </div>
                 )}
@@ -2838,24 +2900,27 @@ const VideoEditorModal = ({
                     })}
                   </div>
                 )}
-                {/* Audio Waveform Track */}
-                {waveformData.length > 0 && (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', height: '32px',
-                    borderTop: `1px solid ${theme.border.subtle}`, marginTop: '4px',
-                    pointerEvents: 'none'
-                  }}>
-                    <span style={{ fontSize: '12px', width: '20px', flexShrink: 0, textAlign: 'center' }}>🔊</span>
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '1px', height: '100%' }}>
-                      {waveformData.map((amplitude, i) => (
-                        <div key={i} style={{
-                          flex: 1, minWidth: '1px', backgroundColor: 'rgba(139, 92, 246, 0.5)',
-                          height: `${amplitude * 100}%`, opacity: 0.6
-                        }} />
-                      ))}
+                {/* Audio Waveform Track — scales with clips */}
+                {waveformData.length > 0 && (() => {
+                  const pxPerSec = 40 * timelineScale;
+                  const totalClipsWidth = clips.reduce((sum, clip) => sum + Math.max(50, (clip.duration || 1) * pxPerSec), 0) + Math.max(0, clips.length - 1) * 8;
+                  return (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', height: '32px',
+                      borderTop: `1px solid ${theme.border.subtle}`, marginTop: '4px',
+                      pointerEvents: 'none'
+                    }}>
+                      <div style={{ width: totalClipsWidth, display: 'flex', alignItems: 'center', gap: '1px', height: '100%', flexShrink: 0 }}>
+                        {waveformData.map((amplitude, i) => (
+                          <div key={i} style={{
+                            flex: 1, minWidth: '1px', backgroundColor: 'rgba(139, 92, 246, 0.5)',
+                            height: `${amplitude * 100}%`, opacity: 0.6
+                          }} />
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
 
               {/* Clip Actions */}

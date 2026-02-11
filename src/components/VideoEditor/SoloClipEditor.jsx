@@ -1320,14 +1320,14 @@ const SoloClipEditor = ({
                 onClick={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
                   const percent = (e.clientX - rect.left) / rect.width;
-                  handleSeek(percent * clipDuration);
+                  handleSeek(percent * timelineDuration);
                 }}
               >
-                <div style={{ ...styles.progressFill, width: `${clipDuration > 0 ? (currentTime / clipDuration) * 100 : 0}%` }} />
+                <div style={{ ...styles.progressFill, width: `${timelineDuration > 0 ? (currentTime / timelineDuration) * 100 : 0}%` }} />
               </div>
 
               <span style={styles.timeDisplay}>
-                {formatTime(currentTime)} / {formatTime(clipDuration)}
+                {formatTime(currentTime)} / {formatTime(timelineDuration)}
               </span>
 
               <button onClick={() => setIsMuted(!isMuted)} style={{
