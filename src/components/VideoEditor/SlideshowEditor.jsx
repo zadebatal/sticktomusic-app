@@ -265,8 +265,16 @@ const SlideshowEditor = ({
         if (col) saveCollectionToFirestore(db, artistId, col).catch(() => {});
       }
       toastSuccess(`Added ${mediaIds.length} image${mediaIds.length > 1 ? 's' : ''} to ${getBankLabel(bank)} Bank`);
+      return;
     }
-  }, [artistId, collections, db, toastSuccess]);
+
+    // Handle file drops from desktop (no media IDs found)
+    const droppedFiles = Array.from(e.dataTransfer.files || []);
+    const imageFiles = droppedFiles.filter(f => f.type.startsWith('image/') || /\.(heic|heif|tif|tiff)$/i.test(f.name));
+    if (imageFiles.length > 0 && onImportToBank) {
+      onImportToBank(imageFiles, bank);
+    }
+  }, [artistId, collections, db, toastSuccess, onImportToBank]);
 
   // Image drag/resize state (declared early — needed by history tracking)
   const [isDraggingImage, setIsDraggingImage] = useState(false);
