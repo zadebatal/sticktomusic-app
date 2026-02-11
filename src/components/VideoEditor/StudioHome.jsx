@@ -109,6 +109,7 @@ const StudioHome = ({
   const [activeTab, setActiveTab] = useState('media'); // kept for compat
   const [sidebarSection, setSidebarSection] = useState({ audio: true, lyrics: false, banks: false });
   const [mobileSidebarTab, setMobileSidebarTab] = useState('audio'); // 'audio' | 'lyrics' | 'banks'
+  const [newVideoTextInputs, setNewVideoTextInputs] = useState({}); // { 0: 'text', 1: 'text' } for inline video text bank inputs
   const [selectedCollection, setSelectedCollection] = useState(null);
   const [selectedBanks, setSelectedBanks] = useState(new Set([0, 1])); // indices of selected banks
 
@@ -1966,6 +1967,55 @@ const StudioHome = ({
                 </div>
               </div>
 
+              {/* Inline Video Text Banks (compact, matching SlideshowEditor style) */}
+              {selectedCollection && (() => {
+                const col = collections.find(c => c.id === selectedCollection);
+                if (!col) return null;
+                const banks = [
+                  { label: 'Video Text 1', texts: col.videoTextBank1 || [], bankNum: 1, color: '#38bdf8' },
+                  { label: 'Video Text 2', texts: col.videoTextBank2 || [], bankNum: 2, color: '#fb923c' }
+                ];
+                const syncCol = () => {
+                  loadData();
+                  if (db) {
+                    const cols = getCollections(artistId);
+                    const fresh = cols.find(c => c.id === selectedCollection);
+                    if (fresh) saveCollectionToFirestore(db, artistId, fresh).catch(console.error);
+                  }
+                };
+                return (
+                  <div style={{ display: 'flex', gap: '12px', padding: '8px 16px', borderTop: `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}`, backgroundColor: theme?.bg?.surface || 'rgba(0,0,0,0.15)' }}>
+                    {banks.map((bank, idx) => {
+                      const inputVal = newVideoTextInputs[idx] || '';
+                      return (
+                        <div key={idx} style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '10px', fontWeight: '600', color: bank.color, marginBottom: '3px' }}>
+                            {bank.label}
+                          </div>
+                          <div style={{ display: 'flex', gap: '3px', marginBottom: '2px' }}>
+                            <input type="text" value={inputVal} onChange={(e) => setNewVideoTextInputs(prev => ({ ...prev, [idx]: e.target.value }))}
+                              onKeyDown={(e) => { if (e.key === 'Enter' && inputVal.trim()) { addToVideoTextBank(artistId, selectedCollection, bank.bankNum, inputVal.trim()); syncCol(); setNewVideoTextInputs(prev => ({ ...prev, [idx]: '' })); } }}
+                              placeholder="Add text..." style={{ flex: 1, padding: '3px 6px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '10px', outline: 'none', minWidth: 0 }} />
+                            <button onClick={() => { if (inputVal.trim()) { addToVideoTextBank(artistId, selectedCollection, bank.bankNum, inputVal.trim()); syncCol(); setNewVideoTextInputs(prev => ({ ...prev, [idx]: '' })); } }} disabled={!inputVal.trim()}
+                              style={{ padding: '3px 6px', borderRadius: '4px', border: 'none', backgroundColor: inputVal.trim() ? `${bank.color}4d` : 'rgba(255,255,255,0.05)', color: inputVal.trim() ? bank.color : '#4b5563', fontSize: '10px', cursor: inputVal.trim() ? 'pointer' : 'default' }}>+</button>
+                          </div>
+                          {bank.texts.length > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              {bank.texts.map((text, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'stretch', gap: '2px' }}>
+                                  <div style={{ flex: 1, padding: '4px 6px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '4px 0 0 4px', color: '#d1d5db', fontSize: '10px', lineHeight: '1.3', wordBreak: 'break-word', minWidth: 0 }}>{text}</div>
+                                  <button onClick={() => { removeFromVideoTextBank(artistId, selectedCollection, bank.bankNum, i); syncCol(); }}
+                                    style={{ padding: '0 5px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.2)', borderLeft: 'none', borderRadius: '0 4px 4px 0', color: '#ef4444', fontSize: '9px', cursor: 'pointer', flexShrink: 0 }}>×</button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : <div style={{ fontSize: '9px', color: '#6b7280', padding: '2px', textAlign: 'center' }}>No text yet</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
 
             </div>
           )}
@@ -2207,7 +2257,7 @@ const StudioHome = ({
           <div style={{
             display: 'flex',
             flexDirection: isMobile ? 'column' : 'row',
-            width: isMobile ? '100%' : (selectedCollection ? '680px' : '240px'),
+            width: isMobile ? '100%' : (selectedCollection ? (studioMode === 'videos' ? '460px' : '680px') : '240px'),
             flexShrink: isMobile ? 0 : 0,
             borderLeft: isMobile ? 'none' : `1px solid ${theme?.border?.default || 'rgba(255,255,255,0.1)'}`,
             borderTop: isMobile ? `1px solid ${theme?.border?.default || 'rgba(255,255,255,0.1)'}` : 'none',
@@ -2230,7 +2280,7 @@ const StudioHome = ({
                 {[
                   { key: 'audio', label: 'Audio' },
                   ...(selectedCollection ? [{ key: 'lyrics', label: 'Lyrics' }] : []),
-                  ...(selectedCollection ? [{ key: 'banks', label: 'Banks' }] : [])
+                  ...(selectedCollection && studioMode === 'slideshows' ? [{ key: 'banks', label: 'Banks' }] : [])
                 ].map(tab => (
                   <button
                     key={tab.key}
@@ -2671,11 +2721,10 @@ const StudioHome = ({
             )}
 
 
-            {/* ── Text Banks Column (both video & slideshow modes) ── */}
-            {selectedCollection && (!isMobile || mobileSidebarTab === 'banks') && (() => {
+            {/* ── Text Banks Column (slideshow mode only — video text banks are inline in main content) ── */}
+            {studioMode === 'slideshows' && selectedCollection && (!isMobile || mobileSidebarTab === 'banks') && (() => {
               const col = collections.find(c => c.id === selectedCollection);
               if (!col) return null;
-              const isVideo = studioMode === 'videos';
               const syncCol = () => {
                 loadData();
                 if (db) {
@@ -2697,53 +2746,28 @@ const StudioHome = ({
                     flexShrink: 0
                   }}>
                     <span style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary }}>
-                      {isVideo ? 'Video' : 'Slideshow'} Text Banks
+                      Slideshow Text Banks
                     </span>
                   </div>
                   <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {isVideo ? (
-                      <>
-                        <TextBankPanel
-                          bankNum={1}
-                          label="Video Text 1"
-                          color="#38bdf8"
-                          texts={col.videoTextBank1 || []}
-                          onAdd={(text) => { addToVideoTextBank(artistId, selectedCollection, 1, text); syncCol(); }}
-                          onRemove={(index) => { removeFromVideoTextBank(artistId, selectedCollection, 1, index); syncCol(); }}
-                          onUpdate={(texts) => { updateVideoTextBank(artistId, selectedCollection, 1, texts); syncCol(); }}
-                        />
-                        <TextBankPanel
-                          bankNum={2}
-                          label="Video Text 2"
-                          color="#fb923c"
-                          texts={col.videoTextBank2 || []}
-                          onAdd={(text) => { addToVideoTextBank(artistId, selectedCollection, 2, text); syncCol(); }}
-                          onRemove={(index) => { removeFromVideoTextBank(artistId, selectedCollection, 2, index); syncCol(); }}
-                          onUpdate={(texts) => { updateVideoTextBank(artistId, selectedCollection, 2, texts); syncCol(); }}
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <TextBankPanel
-                          bankNum={1}
-                          label="Text Bank 1"
-                          color="#c4b5fd"
-                          texts={(() => { const m = migrateCollectionBanks(col); return m.textBanks?.[0] || []; })()}
-                          onAdd={(text) => { addToTextBank(artistId, selectedCollection, 1, text); syncCol(); }}
-                          onRemove={(index) => { removeFromTextBank(artistId, selectedCollection, 1, index); syncCol(); }}
-                          onUpdate={(texts) => { updateTextBank(artistId, selectedCollection, 1, texts); syncCol(); }}
-                        />
-                        <TextBankPanel
-                          bankNum={2}
-                          label="Text Bank 2"
-                          color="#86efac"
-                          texts={(() => { const m = migrateCollectionBanks(col); return m.textBanks?.[1] || []; })()}
-                          onAdd={(text) => { addToTextBank(artistId, selectedCollection, 2, text); syncCol(); }}
-                          onRemove={(index) => { removeFromTextBank(artistId, selectedCollection, 2, index); syncCol(); }}
-                          onUpdate={(texts) => { updateTextBank(artistId, selectedCollection, 2, texts); syncCol(); }}
-                        />
-                      </>
-                    )}
+                    <TextBankPanel
+                      bankNum={1}
+                      label="Text Bank 1"
+                      color="#c4b5fd"
+                      texts={(() => { const m = migrateCollectionBanks(col); return m.textBanks?.[0] || []; })()}
+                      onAdd={(text) => { addToTextBank(artistId, selectedCollection, 1, text); syncCol(); }}
+                      onRemove={(index) => { removeFromTextBank(artistId, selectedCollection, 1, index); syncCol(); }}
+                      onUpdate={(texts) => { updateTextBank(artistId, selectedCollection, 1, texts); syncCol(); }}
+                    />
+                    <TextBankPanel
+                      bankNum={2}
+                      label="Text Bank 2"
+                      color="#86efac"
+                      texts={(() => { const m = migrateCollectionBanks(col); return m.textBanks?.[1] || []; })()}
+                      onAdd={(text) => { addToTextBank(artistId, selectedCollection, 2, text); syncCol(); }}
+                      onRemove={(index) => { removeFromTextBank(artistId, selectedCollection, 2, index); syncCol(); }}
+                      onUpdate={(texts) => { updateTextBank(artistId, selectedCollection, 2, texts); syncCol(); }}
+                    />
                   </div>
                 </div>
               );
