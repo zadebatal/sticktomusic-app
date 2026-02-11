@@ -52,7 +52,8 @@ import {
   removeFromCollectionAsync,
   assignToBankAsync,
   updateCollectionAsync,
-  deleteCollectionAsync
+  deleteCollectionAsync,
+  migrateThumbnails
 } from '../../services/libraryService';
 import { uploadFile } from '../../services/firebaseStorage';
 import {
@@ -338,6 +339,40 @@ const LibraryBrowser = ({
 
     return () => unsubscribes.forEach(unsub => unsub());
   }, [db, artistId, refreshTrigger]);
+
+  // Background thumbnail migration for existing images without thumbnails
+  const thumbMigrationRef = useRef(false);
+  useEffect(() => {
+    const THUMB_VERSION = 3; // v3 = 80px @ 0.3 quality
+    if (thumbMigrationRef.current || !artistId) return;
+    if (library.length === 0) return;
+
+    const versionKey = `stm_libthumb_v${THUMB_VERSION}_${artistId}`;
+    if (localStorage.getItem(versionKey)) return;
+
+    const imageItems = library.filter(item => item.type === 'image' && item.url);
+    if (imageItems.length === 0) return;
+    thumbMigrationRef.current = true;
+
+    log(`[LibraryBrowser] Thumbnail migration v${THUMB_VERSION}: ${imageItems.length} images`);
+
+    const timer = setTimeout(async () => {
+      try {
+        const result = await migrateThumbnails(db, artistId, library, uploadFile, (done, total) => {
+          if (done % 10 === 0 || done === total) {
+            setLibrary(getLibrary(artistId));
+          }
+        });
+        log(`[LibraryBrowser] Thumbnail migration complete: ${result.generated} generated`);
+        localStorage.setItem(versionKey, Date.now().toString());
+        if (result.generated > 0) setLibrary(getLibrary(artistId));
+      } catch (err) {
+        console.warn('[LibraryBrowser] Thumbnail migration error:', err);
+      }
+    }, 3000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line
+  }, [library, artistId]);
 
   const loadData = () => {
     // Still needed for local mutations that update localStorage
@@ -705,16 +740,16 @@ const LibraryBrowser = ({
             };
             img.onerror = resolve;
           });
-          // Generate lightweight thumbnail
+          // Generate lightweight thumbnail (80px max, low quality for grid previews)
           try {
-            const maxThumbSize = 150;
+            const maxThumbSize = 80;
             const scale = Math.min(1, maxThumbSize / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
             const canvas = document.createElement('canvas');
-            canvas.width = Math.round((img.naturalWidth || 150) * scale);
-            canvas.height = Math.round((img.naturalHeight || 150) * scale);
+            canvas.width = Math.round((img.naturalWidth || 80) * scale);
+            canvas.height = Math.round((img.naturalHeight || 80) * scale);
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.5));
+            const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.3));
             if (thumbBlob) {
               const thumbFile = new File([thumbBlob], `thumb_${file.name}.jpg`, { type: 'image/jpeg' });
               const thumbResult = await uploadFile(thumbFile, 'thumbnails');

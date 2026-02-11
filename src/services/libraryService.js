@@ -2640,8 +2640,8 @@ export const migrateThumbnails = async (db, artistId, libraryItems, uploadFileFn
       // Load image (handles CORS with fallback)
       const { img, cleanup } = await loadImageForCanvas(item.url);
 
-      // Canvas resize to 300px max dimension
-      const maxSize = 150;
+      // Canvas resize to 80px max dimension (tiny grid cells)
+      const maxSize = 80;
       const scale = Math.min(1, maxSize / Math.max(img.naturalWidth, img.naturalHeight));
       const canvas = document.createElement('canvas');
       canvas.width = Math.round(img.naturalWidth * scale);
@@ -2650,8 +2650,8 @@ export const migrateThumbnails = async (db, artistId, libraryItems, uploadFileFn
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       cleanup();
 
-      // Convert to JPEG blob
-      const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.5));
+      // Convert to JPEG blob (low quality — only used for grid previews)
+      const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.3));
       if (!thumbBlob) throw new Error('Canvas toBlob returned null');
 
       // Upload thumbnail to Firebase Storage
