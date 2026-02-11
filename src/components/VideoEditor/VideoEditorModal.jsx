@@ -377,6 +377,8 @@ const VideoEditorModal = ({
   const animationRef = useRef(null);
   const previousTrimHashRef = useRef(null);
   const isPlayingRef = useRef(false); // Ref to avoid stale closure in animation loop
+  const clipsRef = useRef(clips); // Ref to avoid stale closure in animation loop
+  clipsRef.current = clips;
   const videoCache = useRef(new Map()); // Cache for preloaded video blobs
   const preloadQueue = useRef([]); // Queue for videos being preloaded
   const lastClipIdRef = useRef(null); // Track last clip to detect changes
@@ -588,15 +590,37 @@ const VideoEditorModal = ({
       const updateTime = () => {
         if (audioRef.current && isPlayingRef.current) {
           const actualTime = audioRef.current.currentTime;
+          let relTime;
 
           // Check if we've reached the end boundary
           if (actualTime >= endBoundary) {
             // Loop back to start boundary
             audioRef.current.currentTime = startBoundary;
-            setCurrentTime(0); // Reset relative time to 0
+            relTime = 0;
+            setCurrentTime(0);
           } else {
             // Set relative time (offset from start boundary)
-            setCurrentTime(actualTime - startBoundary);
+            relTime = actualTime - startBoundary;
+            setCurrentTime(relTime);
+          }
+
+          // Sync video element time to clip position (avoids separate React effect)
+          const activeVideo = activeVideoRef.current === 'A' ? videoRef.current : videoRefB.current;
+          if (activeVideo && activeVideo.readyState >= 2) {
+            // Find which clip we're in and calculate position within it
+            const curClips = clipsRef.current;
+            const clip = curClips.find((c, i) => {
+              const next = curClips[i + 1];
+              return !next || (relTime >= c.startTime && relTime < next.startTime);
+            }) || curClips[0];
+            if (clip) {
+              const clipStart = clip.startTime || 0;
+              const clipDur = clip.duration || 2;
+              const posInClip = (relTime - clipStart) % clipDur;
+              if (Math.abs(activeVideo.currentTime - posInClip) > 0.3) {
+                activeVideo.currentTime = posInClip;
+              }
+            }
           }
 
           // Continue animation loop using ref to check current state
@@ -620,27 +644,32 @@ const VideoEditorModal = ({
     };
   }, [isPlaying, selectedAudio, duration]);
 
-  // Sync video with audio time (use active video element)
+  // Sync video play/pause state when isPlaying or clip changes (NOT on every currentTime tick)
+  const playPromiseRef = useRef(null);
   useEffect(() => {
     const activeVideo = activeVideoRef.current === 'A' ? videoRef.current : videoRefB.current;
-    if (activeVideo && currentClip?.url) {
-      // Calculate position within the clip
-      const clipStartTime = currentClip.startTime || 0;
-      const clipDuration = currentClip.duration || 2;
-      const positionInClip = (currentTime - clipStartTime) % clipDuration;
+    if (!activeVideo) return;
 
-      // Set video time if significantly different
-      if (Math.abs(activeVideo.currentTime - positionInClip) > 0.3) {
-        activeVideo.currentTime = positionInClip;
+    if (isPlaying) {
+      // Guard against AbortError: wait for any pending play() to resolve before calling again
+      const doPlay = () => {
+        playPromiseRef.current = activeVideo.play();
+        playPromiseRef.current?.catch(() => {});
+      };
+      if (playPromiseRef.current) {
+        playPromiseRef.current.then(doPlay).catch(doPlay);
+      } else {
+        doPlay();
       }
-
-      if (isPlaying) {
-        activeVideo.play().catch(() => {});
+    } else {
+      if (playPromiseRef.current) {
+        playPromiseRef.current.then(() => activeVideo.pause()).catch(() => activeVideo.pause());
+        playPromiseRef.current = null;
       } else {
         activeVideo.pause();
       }
     }
-  }, [currentClip, currentTime, isPlaying]);
+  }, [currentClip?.id, isPlaying]);
 
   // Handlers - MUST be defined before useEffect that references them (TDZ fix)
   const handleSeek = useCallback((time) => {
