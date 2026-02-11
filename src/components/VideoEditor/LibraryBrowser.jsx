@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { convertImageIfNeeded, isHeicFile, isTiffFile } from '../../utils/imageConverter';
+import { convertAudioIfNeeded, isAudioFile } from '../../utils/audioConverter';
 import { runPool } from '../../utils/uploadPool';
 import {
   getLibrary,
@@ -482,11 +483,14 @@ const LibraryBrowser = ({
       return;
     }
 
-    // Handle file drops from desktop
+    // Handle file drops from desktop (images or audio)
     const droppedFiles = Array.from(e.dataTransfer.files || []);
-    const imageFiles = droppedFiles.filter(f => f.type.startsWith('image/') || /\.(heic|heif|tif|tiff)$/i.test(f.name));
-    if (imageFiles.length > 0) {
-      uploadFiles(imageFiles, { targetBankIndex: bankIndex });
+    const mediaFiles = droppedFiles.filter(f =>
+      f.type.startsWith('image/') || f.type.startsWith('audio/') ||
+      /\.(heic|heif|tif|tiff|m4a|wav|aif|aiff|mp3|ogg|flac|aac)$/i.test(f.name)
+    );
+    if (mediaFiles.length > 0) {
+      uploadFiles(mediaFiles, { targetBankIndex: bankIndex });
     }
 
     setDraggedItem(null);
@@ -644,13 +648,15 @@ const LibraryBrowser = ({
 
     try {
       const processOneFile = async (rawFile) => {
-        const file = await convertImageIfNeeded(rawFile);
+        // Convert images (HEIC/TIFF→JPEG) and audio (WAV/M4A/AIF→MP3)
+        let file = await convertImageIfNeeded(rawFile);
+        if (isAudioFile(rawFile)) file = await convertAudioIfNeeded(rawFile);
 
         // Determine media type
         let type;
         if (file.type.startsWith('video/')) type = MEDIA_TYPES.VIDEO;
         else if (file.type.startsWith('image/') || isHeicFile(rawFile) || isTiffFile(rawFile)) type = MEDIA_TYPES.IMAGE;
-        else if (file.type === 'audio/mpeg' || file.type === 'audio/mp3') type = MEDIA_TYPES.AUDIO;
+        else if (file.type.startsWith('audio/') || isAudioFile(rawFile)) type = MEDIA_TYPES.AUDIO;
         else return null;
 
         log('[LibraryBrowser] Uploading file:', file.name, 'type:', type);
@@ -950,8 +956,8 @@ const LibraryBrowser = ({
     switch (mode) {
       case 'videos': return 'video/*';
       case 'images': return 'image/*,.heic,.heif,.tif,.tiff';
-      case 'audio': return '.mp3,audio/mpeg';
-      default: return 'video/*,image/*,.heic,.heif,.tif,.tiff,.mp3,audio/mpeg';
+      case 'audio': return 'audio/*,.m4a,.wav,.aif,.aiff';
+      default: return 'video/*,image/*,.heic,.heif,.tif,.tiff,audio/*,.m4a,.wav,.aif,.aiff';
     }
   };
 

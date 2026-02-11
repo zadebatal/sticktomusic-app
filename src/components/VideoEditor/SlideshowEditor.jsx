@@ -1601,10 +1601,12 @@ const SlideshowEditor = ({
   }, [selectedSlideIndex]);
 
 
-  // Handle audio file upload in slideshow editor - opens the audio editor/trimmer
-  const handleSlideshowAudioUpload = useCallback((e) => {
-    const file = e.target.files?.[0];
-    if (file) {
+  // Handle audio file upload in slideshow editor - converts to MP3 if needed, then opens trimmer
+  const handleSlideshowAudioUpload = useCallback(async (e) => {
+    const rawFile = e.target.files?.[0];
+    if (rawFile) {
+      const { convertAudioIfNeeded } = await import('../../utils/audioConverter');
+      const file = await convertAudioIfNeeded(rawFile);
       const url = URL.createObjectURL(file);
       const audioObj = {
         id: `audio_${Date.now()}`,
@@ -1615,7 +1617,6 @@ const SlideshowEditor = ({
         startTime: 0,
         endTime: null
       };
-      // Open the audio editor/trimmer with this uploaded file
       setAudioToTrim(audioObj);
       setShowAudioTrimmer(true);
     }
@@ -2980,7 +2981,7 @@ const SlideshowEditor = ({
               <input
                 ref={slideshowAudioInputRef}
                 type="file"
-                accept=".mp3,audio/mpeg"
+                accept="audio/*,.m4a,.wav,.aif,.aiff"
                 onChange={handleSlideshowAudioUpload}
                 style={{ display: 'none' }}
               />

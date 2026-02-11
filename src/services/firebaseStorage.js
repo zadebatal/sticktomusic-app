@@ -32,7 +32,7 @@ if (process.env.NODE_ENV === 'development') {
 // File upload constraints
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'];
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4'];
+const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/aiff', 'audio/x-aiff', 'audio/x-m4a', 'audio/aac', 'audio/flac'];
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB max
 
 // Initialize Firebase only if not already initialized

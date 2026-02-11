@@ -13,6 +13,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import useIsMobile from '../../hooks/useIsMobile';
 import { convertImageIfNeeded, isHeicFile, isTiffFile } from '../../utils/imageConverter';
+import { convertAudioIfNeeded, isAudioFile } from '../../utils/audioConverter';
 import { runPool } from '../../utils/uploadPool';
 // OnboardingModal removed - auto-setup happens in VideoStudio
 import { useTheme } from '../../contexts/ThemeContext';
@@ -416,7 +417,9 @@ const StudioHome = ({
     cancelFunctionsRef.current = [];
 
     const processOneFile = async (rawFile) => {
-      const file = type === MEDIA_TYPES.IMAGE ? await convertImageIfNeeded(rawFile) : rawFile;
+      let file = rawFile;
+      if (type === MEDIA_TYPES.IMAGE) file = await convertImageIfNeeded(rawFile);
+      else if (type === MEDIA_TYPES.AUDIO) file = await convertAudioIfNeeded(rawFile);
 
       log('[StudioHome] Uploading file:', file.name, 'size:', file.size, 'type:', file.type);
 
@@ -627,10 +630,10 @@ const StudioHome = ({
     return () => { if (inlineAudioRef.current) { inlineAudioRef.current.pause(); } };
   }, []);
 
-  const handleAudioUpload = (e) => {
+  const handleAudioUpload = async (e) => {
     const files = e.target.files;
     if (files.length > 0) {
-      const file = files[0];
+      const file = await convertAudioIfNeeded(files[0]);
       const url = URL.createObjectURL(file);
       setPendingAudio({ file, url, name: file.name });
     }
@@ -682,7 +685,7 @@ const StudioHome = ({
       const imageFiles = files.filter(f => f.type.startsWith('image/') || isHeicFile(f) || isTiffFile(f));
       if (imageFiles.length > 0) handleFileUpload(imageFiles, MEDIA_TYPES.IMAGE);
     } else if (studioMode === 'audio') {
-      const audioFiles = files.filter(f => f.type.startsWith('audio/'));
+      const audioFiles = files.filter(f => f.type.startsWith('audio/') || isAudioFile(f));
       if (audioFiles.length > 0) handleFileUpload(audioFiles, MEDIA_TYPES.AUDIO);
     }
   };
@@ -2117,7 +2120,7 @@ const StudioHome = ({
                   <input
                     ref={audioInputRef}
                     type="file"
-                    accept=".mp3,audio/mpeg"
+                    accept="audio/*,.m4a,.wav,.aif,.aiff"
                     onChange={handleAudioUpload}
                     style={{ display: 'none' }}
                   />
@@ -2221,7 +2224,18 @@ const StudioHome = ({
               flexDirection: 'column',
               minHeight: 0,
               borderRight: isMobile ? 'none' : (selectedCollection ? `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}` : 'none')
-            }}>
+            }}
+              onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } }}
+              onDrop={(e) => {
+                const files = Array.from(e.dataTransfer.files || []);
+                const audioFiles = files.filter(f => f.type.startsWith('audio/') || isAudioFile(f));
+                if (audioFiles.length > 0) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleFileUpload(audioFiles, MEDIA_TYPES.AUDIO);
+                }
+              }}
+            >
               <div style={{
                 padding: '6px 8px',
                 borderBottom: `1px solid ${theme?.border?.subtle || 'rgba(255,255,255,0.08)'}`,
@@ -2243,7 +2257,7 @@ const StudioHome = ({
                   ⬆ Upload
                   <input
                     type="file"
-                    accept=".mp3,audio/mpeg"
+                    accept="audio/*,.m4a,.wav,.aif,.aiff"
                     onChange={handleAudioUpload}
                     style={{ display: 'none' }}
                   />

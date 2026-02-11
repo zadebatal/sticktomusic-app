@@ -448,7 +448,7 @@ const AestheticHome = ({
                         </svg>
                         Add
                       </label>
-                      <input id="audio-bank-input" ref={audioInputRef} type="file" accept=".mp3,audio/mpeg" onChange={handleAudioUpload} style={{ display: 'none' }} />
+                      <input id="audio-bank-input" ref={audioInputRef} type="file" accept="audio/*,.m4a,.wav,.aif,.aiff" onChange={handleAudioUpload} style={{ display: 'none' }} />
                     </div>
 
                     {/* Lyrics Bank */}
