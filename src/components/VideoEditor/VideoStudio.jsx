@@ -829,6 +829,7 @@ const VideoStudio = ({
         const savedVideo = addCreatedVideo(currentArtistId, {
           ...videoData,
           id: videoData.id || `video_${Date.now()}`,
+          collectionId: videoData.collectionId || pullFromCollection || null,
           createdAt: new Date().toISOString(),
           status: VIDEO_STATUS.DRAFT
         });
@@ -1516,6 +1517,7 @@ const VideoStudio = ({
         const data = {
           ...slideshowData,
           id: slideshowData.id || `slideshow_${Date.now()}`,
+          collectionId: slideshowData.collectionId || pullFromCollection || null,
           createdAt: slideshowData.createdAt || new Date().toISOString(),
           status: slideshowData.status || 'draft'
         };

@@ -8,7 +8,7 @@ import {
 import { getTemplates, generateFromTemplate } from '../../services/contentTemplateService';
 import CaptionHashtagBank from './CaptionHashtagBank';
 import { useToast, ConfirmDialog } from '../ui';
-import { getCreatedContent } from '../../services/libraryService';
+import { getCreatedContent, getCollections } from '../../services/libraryService';
 import { renderVideo } from '../../services/videoExportService';
 import { uploadFile } from '../../services/firebaseStorage';
 import log from '../../utils/logger';
@@ -885,13 +885,26 @@ const SchedulingPage = ({
   // ── Add from drafts handler ──
   const handleAddFromDrafts = useCallback(async (selectedItems) => {
     try {
+      // Resolve collection names: check collectionId first, then look up by mediaIds membership
+      const cols = getCollections(artistId);
+      const resolveCollectionName = (item) => {
+        if (item.collectionName) return item.collectionName;
+        if (item.collectionId) {
+          const col = cols.find(c => c.id === item.collectionId);
+          return col?.name || item.collectionId;
+        }
+        // Check if any collection contains this item by mediaIds
+        const parent = cols.find(c => c.type !== 'smart' && (c.mediaIds || []).includes(item.id));
+        return parent?.name || null;
+      };
+
       const itemsToAdd = selectedItems.map(item => ({
         contentId: item.id,
         contentType: item.type,
         contentName: item.name || item.title || (item.type === 'slideshow' ? 'Untitled Slideshow' : 'Untitled Video'),
         thumbnail: item.thumbnail || item.slides?.[0]?.backgroundImage || item.slides?.[0]?.imageUrl || null,
         cloudUrl: item.cloudUrl || null,
-        collectionName: item.collectionName || item.collectionId || null, // Track originating collection
+        collectionName: resolveCollectionName(item),
         editorState: item
       }));
       await addManyScheduledPosts(db, artistId, itemsToAdd);
