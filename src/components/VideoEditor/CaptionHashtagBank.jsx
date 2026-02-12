@@ -21,7 +21,9 @@ const CaptionHashtagBank = ({
   db,
   artistId,
   compact = false,
-  onBankChange
+  onBankChange,
+  draftCount = 0,
+  onApplyToDrafts
 }) => {
   const { theme } = useTheme();
   const [templates, setTemplates] = useState({});
@@ -264,6 +266,14 @@ const CaptionHashtagBank = ({
         >
           +
         </button>
+        {onApplyToDrafts && selectedCategory && draftCount > 0 && (
+          <button
+            onClick={() => onApplyToDrafts(selectedCategory)}
+            style={getStyles(theme).applyBtn}
+          >
+            Apply to {draftCount} Draft{draftCount !== 1 ? 's' : ''}
+          </button>
+        )}
       </div>
 
       {/* Add category modal */}
@@ -545,6 +555,19 @@ const getStyles = (theme) => ({
       backgroundColor: theme.accent.primary,
       color: '#fff'
     }
+  },
+  applyBtn: {
+    marginLeft: 'auto',
+    padding: '5px 14px',
+    fontSize: '12px',
+    fontWeight: 600,
+    borderRadius: '6px',
+    cursor: 'pointer',
+    backgroundColor: theme.accent.primary,
+    color: '#fff',
+    border: 'none',
+    whiteSpace: 'nowrap',
+    flexShrink: 0
   },
   modal: {
     position: 'fixed',
