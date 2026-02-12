@@ -437,10 +437,11 @@ const SchedulingPage = ({
       const updates = {};
       if (!post.caption && generated.caption) updates.caption = generated.caption;
       if (generated.hashtags) {
-        const existing = (post.hashtags || '').split(/\s+/).filter(Boolean);
+        const existing = Array.isArray(post.hashtags) ? post.hashtags : (post.hashtags || '').split(/\s+/).filter(Boolean);
         const newTags = generated.hashtags.split(/\s+/).filter(Boolean);
-        const merged = [...new Set([...existing, ...newTags])].join(' ');
-        if (merged !== (post.hashtags || '')) updates.hashtags = merged;
+        const merged = [...new Set([...existing, ...newTags])];
+        const currentStr = Array.isArray(post.hashtags) ? post.hashtags.join(' ') : (post.hashtags || '');
+        if (merged.join(' ') !== currentStr) updates.hashtags = merged.join(' ');
       }
       if (Object.keys(updates).length > 0) {
         await handleUpdatePost(post.id, updates);
