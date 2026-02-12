@@ -820,10 +820,13 @@ const VideoEditorModal = ({
   // Dynamically mute/volume video when external audio is selected
   useEffect(() => {
     const hasLibraryAudio = selectedAudio && selectedAudio.url && !selectedAudio.isSourceAudio;
-    const videoMuted = isMuted || (!!hasLibraryAudio && sourceVideoMuted);
+    const isSourceAudio = !!selectedAudio?.isSourceAudio;
+    // Mute video when: global mute, OR source audio mode (audioRef provides sound),
+    // OR external audio is present and source toggle is muted
+    const videoMuted = isMuted || isSourceAudio || (!!hasLibraryAudio && sourceVideoMuted);
     if (videoRef.current) { videoRef.current.muted = videoMuted; videoRef.current.volume = sourceVideoVolume; }
     if (videoRefB.current) { videoRefB.current.muted = videoMuted; videoRefB.current.volume = sourceVideoVolume; }
-    if (audioRef.current) { audioRef.current.muted = isMuted; audioRef.current.volume = externalAudioVolume; }
+    if (audioRef.current) { audioRef.current.muted = isMuted; audioRef.current.volume = isSourceAudio ? sourceVideoVolume : externalAudioVolume; }
   }, [isMuted, selectedAudio, sourceVideoMuted, sourceVideoVolume, externalAudioVolume]);
 
   const handlePlayPause = useCallback(() => {
