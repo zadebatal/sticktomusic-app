@@ -819,7 +819,7 @@ const VideoEditorModal = ({
 
   // Dynamically mute/volume video when external audio is selected
   useEffect(() => {
-    const hasLibraryAudio = selectedAudio && selectedAudio.url;
+    const hasLibraryAudio = selectedAudio && selectedAudio.url && !selectedAudio.isSourceAudio;
     const videoMuted = isMuted || (!!hasLibraryAudio && sourceVideoMuted);
     if (videoRef.current) { videoRef.current.muted = videoMuted; videoRef.current.volume = sourceVideoVolume; }
     if (videoRefB.current) { videoRefB.current.muted = videoMuted; videoRefB.current.volume = sourceVideoVolume; }
@@ -1211,7 +1211,7 @@ const VideoEditorModal = ({
   const handleAudioSelect = (audio) => {
     setSelectedAudio(audio);
     // Auto-mute source video when external audio is added; restore when removed
-    const hasExternal = audio && audio.url;
+    const hasExternal = audio && audio.url && !audio.isSourceAudio;
     setSourceVideoMuted(!!hasExternal);
 
     // Auto-load saved lyrics from this audio if available and no lyrics exist yet
@@ -2882,10 +2882,9 @@ const VideoEditorModal = ({
                     })}
                   </div>
                 )}
-                {/* Added Audio Waveform Track (purple) — per-clip cells matching video clips */}
-                {selectedAudio && selectedAudio.url && waveformData.length > 0 && (() => {
+                {/* Added Audio Waveform Track (purple) — per-clip cells, only for external audio */}
+                {selectedAudio && selectedAudio.url && !selectedAudio.isSourceAudio && waveformData.length > 0 && (() => {
                   const pxPerSec = 40 * timelineScale;
-                  // Split waveformData proportionally across clips
                   const totalDur = clips.reduce((s, c) => s + (c.duration || 1), 0);
                   let sampleOffset = 0;
                   return (
@@ -2894,7 +2893,12 @@ const VideoEditorModal = ({
                       borderTop: `1px solid ${theme.border.subtle}`, marginTop: '4px',
                       pointerEvents: 'auto', position: 'relative'
                     }}>
-                      <div style={{ width: '60px', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, padding: '0 4px', zIndex: 2 }}>
+                      {/* Controls overlay */}
+                      <div style={{
+                        position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)',
+                        display: 'flex', alignItems: 'center', gap: '3px', zIndex: 3,
+                        backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: '4px', padding: '2px 5px'
+                      }}>
                         <span style={{ fontSize: '10px' }}>{'\uD83C\uDFB5'}</span>
                         <input type="range" min="0" max="1" step="0.05" value={externalAudioVolume}
                           onChange={e => setExternalAudioVolume(parseFloat(e.target.value))}
@@ -2929,17 +2933,22 @@ const VideoEditorModal = ({
                   );
                 })()}
 
-                {/* Source Video Audio Waveform Track (blue) — per-clip cells matching video clips */}
+                {/* Source Video Audio Waveform Track (blue) — per-clip cells */}
                 {Object.keys(clipWaveforms).length > 0 && (() => {
                   const pxPerSec = 40 * timelineScale;
-                  const hasExternal = selectedAudio && selectedAudio.url;
+                  const hasExternal = selectedAudio && selectedAudio.url && !selectedAudio.isSourceAudio;
                   return (
                     <div style={{
                       display: 'flex', alignItems: 'center', height: '32px',
                       borderTop: `1px solid ${theme.border.subtle}`, marginTop: '4px',
                       pointerEvents: 'auto', position: 'relative'
                     }}>
-                      <div style={{ width: '60px', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, padding: '0 4px', zIndex: 2 }}>
+                      {/* Controls overlay */}
+                      <div style={{
+                        position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)',
+                        display: 'flex', alignItems: 'center', gap: '3px', zIndex: 3,
+                        backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: '4px', padding: '2px 5px'
+                      }}>
                         <button
                           onClick={() => setSourceVideoMuted(m => !m)}
                           style={{
@@ -4786,8 +4795,7 @@ const getStyles = (theme) => ({
   },
   clipsRow: {
     display: 'flex',
-    gap: '8px',
-    marginLeft: '60px'
+    gap: '8px'
   },
   clipItem: {
     position: 'relative',

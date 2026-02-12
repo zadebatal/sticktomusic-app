@@ -31,9 +31,9 @@ export default function useWaveform({ selectedAudio, clips = [], getClipUrl }) {
     };
   }, []);
 
-  // External audio waveform
+  // External audio waveform (skip for source video audio — that's handled by clipWaveforms)
   useEffect(() => {
-    const hasAudio = selectedAudio?.url || selectedAudio?.localUrl || (selectedAudio?.file instanceof Blob);
+    const hasAudio = (selectedAudio?.url || selectedAudio?.localUrl || (selectedAudio?.file instanceof Blob)) && !selectedAudio?.isSourceAudio;
     if (!hasAudio) {
       setWaveformData([]);
       return;
