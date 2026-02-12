@@ -3609,6 +3609,8 @@ const StickToMusic = () => {
                 }
               }}
               onBack={() => setOperatorTab('pages')}
+              visibleArtists={getVisibleArtists()}
+              onArtistChange={(id) => setCurrentArtistId(id)}
             />
           )}
 

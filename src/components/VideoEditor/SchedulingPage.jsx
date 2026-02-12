@@ -5,7 +5,7 @@ import {
   getScheduledPosts, subscribeToScheduledPosts, reorderPosts,
   addManyScheduledPosts
 } from '../../services/scheduledPostsService';
-import { getTemplates } from '../../services/contentTemplateService';
+import { getTemplates, generateFromTemplate } from '../../services/contentTemplateService';
 import CaptionHashtagBank from './CaptionHashtagBank';
 import { useToast, ConfirmDialog } from '../ui';
 import { getCreatedContent } from '../../services/libraryService';
@@ -31,7 +31,9 @@ const SchedulingPage = ({
   onSchedulePost,
   onDeleteLatePost,
   onBack,
-  readOnly = false
+  readOnly = false,
+  visibleArtists = [],
+  onArtistChange
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
@@ -74,6 +76,11 @@ const SchedulingPage = ({
   // ── Always-on hashtags from templates ──
   const [alwaysOnHashtags, setAlwaysOnHashtags] = useState([]);
   const [alwaysOnCaption, setAlwaysOnCaption] = useState('');
+
+  // ── Collection Bank Assignment ──
+  const [templates, setTemplates] = useState({});
+  const [collectionBankMap, setCollectionBankMap] = useState({}); // { collectionName: categoryKey }
+  const [showCollectionBanks, setShowCollectionBanks] = useState(false);
 
   // Calendar state
   const [calendarDate, setCalendarDate] = useState(new Date());
@@ -216,11 +223,12 @@ const SchedulingPage = ({
   const loadAlwaysOnFromTemplates = useCallback(async () => {
     if (!db || !artistId) return;
     try {
-      const templates = await getTemplates(db, artistId);
-      if (templates) {
+      const tmpl = await getTemplates(db, artistId);
+      if (tmpl) {
+        setTemplates(tmpl);
         const allAlways = new Set();
         let firstCaption = '';
-        Object.values(templates).forEach(t => {
+        Object.values(tmpl).forEach(t => {
           if (t?.hashtags?.always) t.hashtags.always.forEach(h => allAlways.add(h));
           if (!firstCaption && t?.captions?.always?.length > 0) firstCaption = t.captions.always[0];
         });
@@ -233,6 +241,82 @@ const SchedulingPage = ({
   }, [db, artistId]);
 
   useEffect(() => { loadAlwaysOnFromTemplates(); }, [loadAlwaysOnFromTemplates]);
+
+  // ── Collection Groups (derived from posts) ──
+  const collectionGroups = useMemo(() => {
+    const groups = {};
+    posts.forEach(p => {
+      const name = p.collectionName || 'Uncategorized';
+      if (!groups[name]) groups[name] = { name, draftCount: 0, totalCount: 0 };
+      groups[name].totalCount++;
+      if (p.status === POST_STATUS.DRAFT) groups[name].draftCount++;
+    });
+    return Object.values(groups).sort((a, b) => a.name.localeCompare(b.name));
+  }, [posts]);
+
+  // ── localStorage persistence for collectionBankMap ──
+  useEffect(() => {
+    if (!artistId) return;
+    try {
+      const saved = localStorage.getItem(`stm_collection_banks_${artistId}`);
+      if (saved) setCollectionBankMap(JSON.parse(saved));
+    } catch { /* ignore */ }
+  }, [artistId]);
+
+  useEffect(() => {
+    if (!artistId || Object.keys(collectionBankMap).length === 0) return;
+    localStorage.setItem(`stm_collection_banks_${artistId}`, JSON.stringify(collectionBankMap));
+  }, [collectionBankMap, artistId]);
+
+  // ── Auto-match: collection name → template category (case-insensitive) ──
+  useEffect(() => {
+    if (Object.keys(templates).length === 0 || collectionGroups.length === 0) return;
+    const categoryKeys = Object.keys(templates);
+    setCollectionBankMap(prev => {
+      const next = { ...prev };
+      let changed = false;
+      collectionGroups.forEach(g => {
+        if (g.name === 'Uncategorized' || next[g.name]) return;
+        const match = categoryKeys.find(k => k.toLowerCase() === g.name.toLowerCase());
+        if (match) { next[g.name] = match; changed = true; }
+      });
+      return changed ? next : prev;
+    });
+  }, [templates, collectionGroups]);
+
+  // ── Apply collection banks to drafts ──
+  const handleApplyCollectionBanks = useCallback(async () => {
+    const assignedCollections = Object.entries(collectionBankMap).filter(([, cat]) => cat);
+    if (assignedCollections.length === 0) {
+      toastError('No bank categories assigned to collections');
+      return;
+    }
+    let updated = 0;
+    for (const post of posts) {
+      if (post.status !== POST_STATUS.DRAFT) continue;
+      const colName = post.collectionName || 'Uncategorized';
+      const categoryKey = collectionBankMap[colName];
+      if (!categoryKey || !templates[categoryKey]) continue;
+
+      const platform = post.platforms ? Object.keys(post.platforms).find(p => post.platforms[p]) || 'tiktok' : 'tiktok';
+      const generated = generateFromTemplate(templates[categoryKey], platform);
+
+      const updates = {};
+      if (!post.caption && generated.caption) updates.caption = generated.caption;
+      if (generated.hashtags) {
+        const existing = (post.hashtags || '').split(/\s+/).filter(Boolean);
+        const newTags = generated.hashtags.split(/\s+/).filter(Boolean);
+        const merged = [...new Set([...existing, ...newTags])].join(' ');
+        if (merged !== (post.hashtags || '')) updates.hashtags = merged;
+      }
+      if (Object.keys(updates).length > 0) {
+        await handleUpdatePost(post.id, updates);
+        updated++;
+      }
+    }
+    if (updated > 0) toastSuccess(`Applied banks to ${updated} draft${updated !== 1 ? 's' : ''}`);
+    else toastSuccess('All drafts already have content — nothing to fill');
+  }, [collectionBankMap, templates, posts, handleUpdatePost, toastSuccess, toastError]);
 
   // ── Selection Handlers ──
   const togglePostSelection = useCallback((postId) => {
@@ -839,7 +923,25 @@ const SchedulingPage = ({
             <span style={{ fontSize: '18px' }}>&#8592;</span>
           </button>
           <div>
-            <h1 style={s.pageTitle}>Schedule</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <h1 style={s.pageTitle}>Schedule</h1>
+              {visibleArtists.length > 1 && onArtistChange && (
+                <select
+                  value={artistId}
+                  onChange={(e) => onArtistChange(e.target.value)}
+                  style={{
+                    backgroundColor: theme.bg.input, color: theme.text.primary,
+                    border: `1px solid ${theme.border.default}`, borderRadius: '6px',
+                    padding: '4px 8px', fontSize: '13px', cursor: 'pointer', outline: 'none',
+                    maxWidth: '180px'
+                  }}
+                >
+                  {visibleArtists.map(a => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
             <p style={s.subtitle}>
               {posts.length} post{posts.length !== 1 ? 's' : ''} &middot; {draftCount} draft{draftCount !== 1 ? 's' : ''}
               {hasSelection && <span style={{ color: '#a5b4fc' }}> &middot; {selectedCount} selected</span>}
@@ -1059,6 +1161,12 @@ const SchedulingPage = ({
               >
                 <span style={{ fontSize: '14px', lineHeight: 1 }}>#</span> Caption Bank
               </button>
+              <button
+                style={{ ...s.toolbarBtn, ...(showCollectionBanks ? { backgroundColor: '#134e4a', borderColor: '#14b8a6', color: '#5eead4' } : {}) }}
+                onClick={() => setShowCollectionBanks(!showCollectionBanks)}
+              >
+                <span style={{ fontSize: '14px', lineHeight: 1 }}>&#9776;</span> Collection Banks
+              </button>
             </>
           )}
         </div>
@@ -1087,6 +1195,69 @@ const SchedulingPage = ({
             compact={true}
             onBankChange={() => { loadAlwaysOnFromTemplates(); }}
           />
+        </div>
+      )}
+
+      {/* ═══ COLLECTION BANKS ASSIGNMENT BAR ═══ */}
+      {showCollectionBanks && collectionGroups.length > 0 && (
+        <div style={{
+          padding: '12px 16px', borderBottom: `1px solid ${theme.border.default}`,
+          backgroundColor: theme.bg.surface, display: 'flex', flexDirection: 'column', gap: '8px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: theme.text.secondary, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Collection → Bank Category
+            </span>
+            {(() => {
+              const applyCount = posts.filter(p => {
+                if (p.status !== POST_STATUS.DRAFT) return false;
+                const colName = p.collectionName || 'Uncategorized';
+                return !!collectionBankMap[colName];
+              }).length;
+              return applyCount > 0 && (
+                <button
+                  onClick={handleApplyCollectionBanks}
+                  style={{
+                    padding: '5px 14px', fontSize: '12px', fontWeight: 600, borderRadius: '6px', cursor: 'pointer',
+                    backgroundColor: '#0d9488', color: '#fff', border: '1px solid #14b8a6'
+                  }}
+                >
+                  Apply to {applyCount} Draft{applyCount !== 1 ? 's' : ''}
+                </button>
+              );
+            })()}
+          </div>
+          {collectionGroups.map(g => {
+            const categoryKeys = Object.keys(templates);
+            return (
+              <div key={g.name} style={{
+                display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 10px',
+                backgroundColor: theme.bg.input, borderRadius: '6px', border: `1px solid ${theme.border.subtle}`
+              }}>
+                <span style={{ flex: 1, fontSize: '13px', color: theme.text.primary, fontWeight: 500 }}>
+                  {g.name}
+                  <span style={{ color: theme.text.muted, fontWeight: 400, marginLeft: '6px', fontSize: '11px' }}>
+                    {g.draftCount} draft{g.draftCount !== 1 ? 's' : ''}
+                  </span>
+                </span>
+                <select
+                  value={collectionBankMap[g.name] || ''}
+                  onChange={(e) => setCollectionBankMap(prev => ({ ...prev, [g.name]: e.target.value || undefined }))}
+                  style={{
+                    backgroundColor: theme.bg.elevated, color: theme.text.primary,
+                    border: `1px solid ${theme.border.default}`, borderRadius: '5px',
+                    padding: '3px 8px', fontSize: '12px', cursor: 'pointer', outline: 'none',
+                    minWidth: '140px'
+                  }}
+                >
+                  <option value="">none</option>
+                  {categoryKeys.map(k => (
+                    <option key={k} value={k}>{k}</option>
+                  ))}
+                </select>
+              </div>
+            );
+          })}
         </div>
       )}
 
