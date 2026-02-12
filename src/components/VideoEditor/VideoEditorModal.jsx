@@ -10,6 +10,7 @@ import AudioClipSelector from './AudioClipSelector';
 import CloudImportButton from './CloudImportButton';
 import EditorToolbar from './EditorToolbar';
 import useEditorHistory from '../../hooks/useEditorHistory';
+import useWaveform from '../../hooks/useWaveform';
 import { saveApiKey, loadApiKey } from '../../services/storageService';
 import { ErrorPanel, EmptyState as SharedEmptyState, useToast } from '../ui';
 import {
@@ -199,6 +200,11 @@ const VideoEditorModal = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
 
+  // ── Audio leveling state ──
+  const [sourceVideoMuted, setSourceVideoMuted] = useState(false);
+  const [sourceVideoVolume, setSourceVideoVolume] = useState(1.0);
+  const [externalAudioVolume, setExternalAudioVolume] = useState(1.0);
+
   // Auto-select source video audio when clips exist — skip the audio picker screen
   useEffect(() => {
     if (!selectedAudio && category?.videos?.length > 0) {
@@ -352,8 +358,7 @@ const VideoEditorModal = ({
   // Clip drag reordering state
   const [clipDrag, setClipDrag] = useState({ dragging: false, fromIndex: -1, toIndex: -1 });
 
-  // Waveform data for inline timeline
-  const [waveformData, setWaveformData] = useState([]);
+  // Waveform via shared hook (below)
 
   // Marquee selection state for inline timeline
   const [marqueeState, setMarqueeState] = useState(null);
@@ -545,49 +550,12 @@ const VideoEditorModal = ({
     }
   }, [selectedAudio, analyzeAudio]);
 
-  // Generate waveform data from audio for inline timeline visualization
-  useEffect(() => {
-    if (!selectedAudio?.url && !selectedAudio?.localUrl && !(selectedAudio?.file instanceof Blob)) {
-      setWaveformData([]);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const source = selectedAudio.file instanceof Blob ? selectedAudio.file
-          : (selectedAudio.localUrl && !selectedAudio.localUrl.startsWith('blob:'))
-            ? selectedAudio.localUrl : selectedAudio.url;
-        if (!source) { setWaveformData([]); return; }
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        let arrayBuffer;
-        if (source instanceof Blob) {
-          arrayBuffer = await source.arrayBuffer();
-        } else {
-          const resp = await fetch(source, { mode: 'cors' });
-          arrayBuffer = await resp.arrayBuffer();
-        }
-        const buffer = await audioCtx.decodeAudioData(arrayBuffer);
-        await audioCtx.close();
-        if (cancelled) return;
-        const rawData = buffer.getChannelData(0);
-        const samples = 200;
-        const blockSize = Math.floor(rawData.length / samples);
-        const filteredData = [];
-        for (let i = 0; i < samples; i++) {
-          let sum = 0;
-          for (let j = 0; j < blockSize; j++) {
-            sum += Math.abs(rawData[(i * blockSize) + j]);
-          }
-          filteredData.push(sum / blockSize);
-        }
-        const max = Math.max(...filteredData);
-        setWaveformData(filteredData.map(d => d / max));
-      } catch (err) {
-        console.warn('Waveform generation failed:', err.message);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [selectedAudio]);
+  // Waveform data via shared hook
+  const { waveformData, clipWaveforms, waveformSource } = useWaveform({
+    selectedAudio,
+    clips,
+    getClipUrl
+  });
 
   // Handle play/pause with trim boundary support + wall-clock fallback
   const playStartRef = useRef(null); // wall-clock start time for fallback
@@ -839,23 +807,17 @@ const VideoEditorModal = ({
   }, [clips, currentClip?.id, getClipUrl]);
 
   const handleToggleMute = useCallback(() => {
-    setIsMuted(prev => {
-      const next = !prev;
-      if (audioRef.current) audioRef.current.muted = next;
-      const hasLibraryAudio = selectedAudio && selectedAudio.url;
-      if (videoRef.current) videoRef.current.muted = next || !!hasLibraryAudio;
-      if (videoRefB.current) videoRefB.current.muted = next || !!hasLibraryAudio;
-      return next;
-    });
-  }, [selectedAudio]);
+    setIsMuted(prev => !prev);
+  }, []);
 
-  // Dynamically mute video when external audio is selected
+  // Dynamically mute/volume video when external audio is selected
   useEffect(() => {
     const hasLibraryAudio = selectedAudio && selectedAudio.url;
-    if (videoRef.current) videoRef.current.muted = isMuted || !!hasLibraryAudio;
-    if (videoRefB.current) videoRefB.current.muted = isMuted || !!hasLibraryAudio;
-    if (audioRef.current) audioRef.current.muted = isMuted;
-  }, [isMuted, selectedAudio]);
+    const videoMuted = isMuted || (!!hasLibraryAudio && sourceVideoMuted);
+    if (videoRef.current) { videoRef.current.muted = videoMuted; videoRef.current.volume = sourceVideoVolume; }
+    if (videoRefB.current) { videoRefB.current.muted = videoMuted; videoRefB.current.volume = sourceVideoVolume; }
+    if (audioRef.current) { audioRef.current.muted = isMuted; audioRef.current.volume = externalAudioVolume; }
+  }, [isMuted, selectedAudio, sourceVideoMuted, sourceVideoVolume, externalAudioVolume]);
 
   const handlePlayPause = useCallback(() => {
     setIsPlaying(prev => !prev);
@@ -1241,6 +1203,9 @@ const VideoEditorModal = ({
   // Handlers
   const handleAudioSelect = (audio) => {
     setSelectedAudio(audio);
+    // Auto-mute source video when external audio is added; restore when removed
+    const hasExternal = audio && audio.url;
+    setSourceVideoMuted(!!hasExternal);
 
     // Auto-load saved lyrics from this audio if available and no lyrics exist yet
     if (audio?.savedLyrics?.length > 0 && words.length === 0) {
@@ -2689,6 +2654,7 @@ const VideoEditorModal = ({
                     setIsPlaying(false);
                     setCurrentTime(0);
                     setDuration(0);
+                    setSourceVideoMuted(false);
                   }}
                   style={{
                     padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
@@ -2909,16 +2875,24 @@ const VideoEditorModal = ({
                     })}
                   </div>
                 )}
-                {/* Audio Waveform Track — scales with clips */}
-                {waveformData.length > 0 && (() => {
+                {/* Added Audio Waveform Track (purple) — shown when external audio present */}
+                {selectedAudio && selectedAudio.url && waveformData.length > 0 && (() => {
                   const pxPerSec = 40 * timelineScale;
                   const totalClipsWidth = clips.reduce((sum, clip) => sum + Math.max(50, (clip.duration || 1) * pxPerSec), 0) + Math.max(0, clips.length - 1) * 8;
                   return (
                     <div style={{
                       display: 'flex', alignItems: 'center', height: '32px',
                       borderTop: `1px solid ${theme.border.subtle}`, marginTop: '4px',
-                      pointerEvents: 'none'
+                      pointerEvents: 'auto', position: 'relative'
                     }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, padding: '0 4px', zIndex: 2 }}>
+                        <span style={{ fontSize: '10px' }}>{'\uD83C\uDFB5'}</span>
+                        <input type="range" min="0" max="1" step="0.05" value={externalAudioVolume}
+                          onChange={e => setExternalAudioVolume(parseFloat(e.target.value))}
+                          style={{ width: '36px', height: '3px', accentColor: '#8b5cf6', cursor: 'pointer' }}
+                          title={`Added audio: ${Math.round(externalAudioVolume * 100)}%`}
+                        />
+                      </div>
                       <div style={{ width: totalClipsWidth, display: 'flex', alignItems: 'center', gap: '1px', height: '100%', flexShrink: 0 }}>
                         {waveformData.map((amplitude, i) => (
                           <div key={i} style={{
@@ -2926,6 +2900,57 @@ const VideoEditorModal = ({
                             height: `${amplitude * 100}%`, opacity: 0.6
                           }} />
                         ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Source Video Audio Waveform Track (blue) — shown when clips have audio */}
+                {Object.keys(clipWaveforms).length > 0 && (() => {
+                  const pxPerSec = 40 * timelineScale;
+                  const hasExternal = selectedAudio && selectedAudio.url;
+                  return (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', height: '32px',
+                      borderTop: `1px solid ${theme.border.subtle}`, marginTop: '4px',
+                      pointerEvents: 'auto', position: 'relative'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, padding: '0 4px', zIndex: 2 }}>
+                        <button
+                          onClick={() => setSourceVideoMuted(m => !m)}
+                          style={{
+                            background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '10px',
+                            opacity: (hasExternal && sourceVideoMuted) ? 0.4 : 1
+                          }}
+                          title={sourceVideoMuted ? 'Unmute source audio' : 'Mute source audio'}
+                        >{sourceVideoMuted ? '\uD83D\uDD07' : '\uD83C\uDFAC'}</button>
+                        {hasExternal && (
+                          <input type="range" min="0" max="1" step="0.05" value={sourceVideoVolume}
+                            onChange={e => setSourceVideoVolume(parseFloat(e.target.value))}
+                            style={{ width: '36px', height: '3px', accentColor: '#3b82f6', cursor: 'pointer' }}
+                            title={`Source audio: ${Math.round(sourceVideoVolume * 100)}%`}
+                          />
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', height: '100%', gap: '8px', flexShrink: 0 }}>
+                        {clips.map((clip, idx) => {
+                          const clipWidth = Math.max(50, (clip.duration || 1) * pxPerSec);
+                          const clipId = clip.id || clip.sourceId;
+                          const data = clipWaveforms[clipId] || [];
+                          return (
+                            <div key={idx} style={{
+                              width: clipWidth, display: 'flex', alignItems: 'center', gap: '1px',
+                              height: '100%', flexShrink: 0
+                            }}>
+                              {data.map((amplitude, i) => (
+                                <div key={i} style={{
+                                  flex: 1, minWidth: '1px', backgroundColor: 'rgba(59, 130, 246, 0.4)',
+                                  height: `${amplitude * 100}%`, opacity: (hasExternal && sourceVideoMuted) ? 0.3 : 0.6
+                                }} />
+                              ))}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );
