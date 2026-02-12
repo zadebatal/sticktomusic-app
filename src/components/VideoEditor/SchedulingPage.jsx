@@ -284,40 +284,6 @@ const SchedulingPage = ({
     });
   }, [templates, collectionGroups]);
 
-  // ── Apply collection banks to drafts ──
-  const handleApplyCollectionBanks = useCallback(async () => {
-    const assignedCollections = Object.entries(collectionBankMap).filter(([, cat]) => cat);
-    if (assignedCollections.length === 0) {
-      toastError('No bank categories assigned to collections');
-      return;
-    }
-    let updated = 0;
-    for (const post of posts) {
-      if (post.status !== POST_STATUS.DRAFT) continue;
-      const colName = post.collectionName || 'Uncategorized';
-      const categoryKey = collectionBankMap[colName];
-      if (!categoryKey || !templates[categoryKey]) continue;
-
-      const platform = post.platforms ? Object.keys(post.platforms).find(p => post.platforms[p]) || 'tiktok' : 'tiktok';
-      const generated = generateFromTemplate(templates[categoryKey], platform);
-
-      const updates = {};
-      if (!post.caption && generated.caption) updates.caption = generated.caption;
-      if (generated.hashtags) {
-        const existing = (post.hashtags || '').split(/\s+/).filter(Boolean);
-        const newTags = generated.hashtags.split(/\s+/).filter(Boolean);
-        const merged = [...new Set([...existing, ...newTags])].join(' ');
-        if (merged !== (post.hashtags || '')) updates.hashtags = merged;
-      }
-      if (Object.keys(updates).length > 0) {
-        await handleUpdatePost(post.id, updates);
-        updated++;
-      }
-    }
-    if (updated > 0) toastSuccess(`Applied banks to ${updated} draft${updated !== 1 ? 's' : ''}`);
-    else toastSuccess('All drafts already have content — nothing to fill');
-  }, [collectionBankMap, templates, posts, handleUpdatePost, toastSuccess, toastError]);
-
   // ── Selection Handlers ──
   const togglePostSelection = useCallback((postId) => {
     setSelectedPostIds(prev => {
@@ -450,6 +416,40 @@ const SchedulingPage = ({
     setPosts(prev => prev.map(p => p.id === postId ? { ...p, ...updates } : p));
     await updateScheduledPost(db, artistId, postId, updates);
   }, [db, artistId]);
+
+  // ── Apply collection banks to drafts ──
+  const handleApplyCollectionBanks = useCallback(async () => {
+    const assignedCollections = Object.entries(collectionBankMap).filter(([, cat]) => cat);
+    if (assignedCollections.length === 0) {
+      toastError('No bank categories assigned to collections');
+      return;
+    }
+    let updated = 0;
+    for (const post of posts) {
+      if (post.status !== POST_STATUS.DRAFT) continue;
+      const colName = post.collectionName || 'Uncategorized';
+      const categoryKey = collectionBankMap[colName];
+      if (!categoryKey || !templates[categoryKey]) continue;
+
+      const platform = post.platforms ? Object.keys(post.platforms).find(p => post.platforms[p]) || 'tiktok' : 'tiktok';
+      const generated = generateFromTemplate(templates[categoryKey], platform);
+
+      const updates = {};
+      if (!post.caption && generated.caption) updates.caption = generated.caption;
+      if (generated.hashtags) {
+        const existing = (post.hashtags || '').split(/\s+/).filter(Boolean);
+        const newTags = generated.hashtags.split(/\s+/).filter(Boolean);
+        const merged = [...new Set([...existing, ...newTags])].join(' ');
+        if (merged !== (post.hashtags || '')) updates.hashtags = merged;
+      }
+      if (Object.keys(updates).length > 0) {
+        await handleUpdatePost(post.id, updates);
+        updated++;
+      }
+    }
+    if (updated > 0) toastSuccess(`Applied banks to ${updated} draft${updated !== 1 ? 's' : ''}`);
+    else toastSuccess('All drafts already have content — nothing to fill');
+  }, [collectionBankMap, templates, posts, handleUpdatePost, toastSuccess, toastError]);
 
   const handleDeletePost = useCallback((postId) => {
     const post = posts.find(p => p.id === postId);
