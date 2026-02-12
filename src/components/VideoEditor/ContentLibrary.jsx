@@ -129,7 +129,9 @@ const ContentLibrary = ({
   // Load scheduled posts when in drafts view
   React.useEffect(() => {
     if (!isDraftsView || !db || !artistId) return;
-    getScheduledPosts(db, artistId).then(posts => setScheduledPosts(posts)).catch(() => {});
+    getScheduledPosts(db, artistId).then(posts =>
+      setScheduledPosts(posts.filter(p => p.status !== 'draft'))
+    ).catch(() => {});
   }, [isDraftsView, db, artistId]);
 
   // Handle rendering a video recipe into a real video

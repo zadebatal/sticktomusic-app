@@ -331,8 +331,7 @@ export function assignScheduleTimes(posts, startTime, intervalMinutes) {
   const start = new Date(startTime);
   return posts.map((post, index) => ({
     ...post,
-    scheduledTime: new Date(start.getTime() + index * intervalMinutes * 60 * 1000).toISOString(),
-    status: POST_STATUS.SCHEDULED
+    scheduledTime: new Date(start.getTime() + index * intervalMinutes * 60 * 1000).toISOString()
   }));
 }
 
@@ -346,8 +345,7 @@ export function assignRandomScheduleTimes(posts, startTime, minMinutes, maxMinut
     current = new Date(current.getTime() + interval * 60 * 1000);
     return {
       ...post,
-      scheduledTime: current.toISOString(),
-      status: POST_STATUS.SCHEDULED
+      scheduledTime: current.toISOString()
     };
   });
 }

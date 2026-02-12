@@ -1448,7 +1448,7 @@ const PostRow = ({
     const d = newDate || schedDate;
     const t = newTime || schedTime;
     if (d && t) {
-      onUpdate({ scheduledTime: new Date(`${d}T${t}`).toISOString(), status: POST_STATUS.SCHEDULED });
+      onUpdate({ scheduledTime: new Date(`${d}T${t}`).toISOString() });
     }
   };
 
