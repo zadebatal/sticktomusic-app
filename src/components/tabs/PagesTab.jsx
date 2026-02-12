@@ -808,24 +808,22 @@ const PagesTab = ({
                                               </span>
                                             );
                                           })}
-                                          {/* Missing platform connect buttons (inline) */}
-                                          {isLateConfigured && missingPlatforms.map(platform => {
+                                          {/* Missing platform connect buttons (inline) — opens bulk entry modal */}
+                                          {missingPlatforms.map(platform => {
                                             const meta = PLATFORM_META[platform];
-                                            const isConnecting = connectingPlatform?.artistId === artist.id && connectingPlatform?.platform === platform;
                                             return (
                                               <button
                                                 key={`add-${platform}`}
-                                                onClick={(e) => { e.stopPropagation(); handleConnectPlatform(artist.id, platform); }}
-                                                disabled={!!connectingPlatform}
-                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border border-dashed opacity-40 hover:opacity-80 transition disabled:opacity-20"
+                                                onClick={(e) => { e.stopPropagation(); setBulkEntryArtistId(artist.id); }}
+                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border border-dashed opacity-40 hover:opacity-80 transition"
                                                 style={{
                                                   borderColor: meta.color + '66', color: meta.color,
                                                   ...(isMobile ? { minHeight: 32, padding: '6px 10px' } : {}),
                                                 }}
-                                                title={`Connect ${meta.label}`}
+                                                title={`Add ${meta.label}`}
                                               >
                                                 <span>{meta.icon}</span>
-                                                <span>{isConnecting ? '...' : '+'}</span>
+                                                <span>+</span>
                                               </button>
                                             );
                                           })}
