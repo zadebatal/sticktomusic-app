@@ -4748,7 +4748,9 @@ const getStyles = (theme) => ({
     borderRadius: '8px',
     padding: '12px',
     marginBottom: '12px',
-    overflowX: 'auto'
+    overflowX: 'auto',
+    userSelect: 'none',
+    WebkitUserSelect: 'none'
   },
   noClips: {
     textAlign: 'center',

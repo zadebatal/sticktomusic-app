@@ -3229,7 +3229,9 @@ const getStyles = (theme) => ({
   timelineTrackArea: {
     position: 'relative',
     height: '140px',
-    cursor: 'pointer'
+    cursor: 'pointer',
+    userSelect: 'none',
+    WebkitUserSelect: 'none'
   },
   timelineRuler: {
     position: 'absolute',
