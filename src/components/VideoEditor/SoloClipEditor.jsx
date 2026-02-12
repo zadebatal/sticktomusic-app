@@ -1998,6 +1998,8 @@ const SoloClipEditor = ({
                   e.preventDefault();
                   e.stopPropagation();
                   setPlayheadDragging(true);
+                  document.body.style.userSelect = 'none';
+                  document.body.style.WebkitUserSelect = 'none';
                   const wasPlaying = isPlaying;
                   if (isPlaying) { videoRef.current?.pause(); audioRef.current?.pause(); cancelAnimationFrame(animationRef.current); setIsPlaying(false); }
                   const handleDragMove = (moveE) => {
@@ -2009,6 +2011,8 @@ const SoloClipEditor = ({
                   };
                   const handleDragEnd = () => {
                     setPlayheadDragging(false);
+                    document.body.style.userSelect = '';
+                    document.body.style.WebkitUserSelect = '';
                     window.removeEventListener('mousemove', handleDragMove);
                     window.removeEventListener('mouseup', handleDragEnd);
                     if (wasPlaying) { videoRef.current?.play(); if (audioRef.current?.src) audioRef.current.play().catch(() => {}); animationRef.current = requestAnimationFrame(playbackLoop); setIsPlaying(true); }

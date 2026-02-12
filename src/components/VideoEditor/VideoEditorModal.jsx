@@ -697,6 +697,9 @@ const VideoEditorModal = ({
   // Inline timeline playhead dragging
   useEffect(() => {
     if (!playheadDragging) return;
+    // Prevent text selection while dragging
+    document.body.style.userSelect = 'none';
+    document.body.style.WebkitUserSelect = 'none';
 
     const handleMouseMove = (e) => {
       if (!timelineRef.current) return;
@@ -709,6 +712,8 @@ const VideoEditorModal = ({
 
     const handleMouseUp = () => {
       setPlayheadDragging(false);
+      document.body.style.userSelect = '';
+      document.body.style.WebkitUserSelect = '';
       if (wasPlayingBeforePlayheadDrag.current) {
         setIsPlaying(true);
       }
@@ -720,6 +725,8 @@ const VideoEditorModal = ({
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = '';
+      document.body.style.WebkitUserSelect = '';
     };
   }, [playheadDragging, trimmedDuration, handleSeek]);
 
@@ -2875,10 +2882,12 @@ const VideoEditorModal = ({
                     })}
                   </div>
                 )}
-                {/* Added Audio Waveform Track (purple) — shown when external audio present */}
+                {/* Added Audio Waveform Track (purple) — per-clip cells matching video clips */}
                 {selectedAudio && selectedAudio.url && waveformData.length > 0 && (() => {
                   const pxPerSec = 40 * timelineScale;
-                  const totalClipsWidth = clips.reduce((sum, clip) => sum + Math.max(50, (clip.duration || 1) * pxPerSec), 0) + Math.max(0, clips.length - 1) * 8;
+                  // Split waveformData proportionally across clips
+                  const totalDur = clips.reduce((s, c) => s + (c.duration || 1), 0);
+                  let sampleOffset = 0;
                   return (
                     <div style={{
                       display: 'flex', alignItems: 'center', height: '32px',
@@ -2893,19 +2902,34 @@ const VideoEditorModal = ({
                           title={`Added audio: ${Math.round(externalAudioVolume * 100)}%`}
                         />
                       </div>
-                      <div style={{ width: totalClipsWidth, display: 'flex', alignItems: 'center', gap: '1px', height: '100%', flexShrink: 0 }}>
-                        {waveformData.map((amplitude, i) => (
-                          <div key={i} style={{
-                            flex: 1, minWidth: '1px', backgroundColor: 'rgba(139, 92, 246, 0.5)',
-                            height: `${amplitude * 100}%`, opacity: 0.6
-                          }} />
-                        ))}
+                      <div style={{ display: 'flex', alignItems: 'center', height: '100%', gap: '8px', flexShrink: 0 }}>
+                        {clips.map((clip, idx) => {
+                          const clipWidth = Math.max(50, (clip.duration || 1) * pxPerSec);
+                          const sampleCount = Math.max(1, Math.round((clip.duration || 1) / totalDur * waveformData.length));
+                          const slicedData = waveformData.slice(sampleOffset, sampleOffset + sampleCount);
+                          sampleOffset += sampleCount;
+                          return (
+                            <div key={idx} style={{
+                              width: clipWidth, display: 'flex', alignItems: 'center', gap: '1px',
+                              height: '28px', flexShrink: 0, borderRadius: '4px', overflow: 'hidden',
+                              backgroundColor: 'rgba(139, 92, 246, 0.08)',
+                              border: '1px solid rgba(139, 92, 246, 0.2)'
+                            }}>
+                              {slicedData.map((amplitude, i) => (
+                                <div key={i} style={{
+                                  flex: 1, minWidth: '1px', backgroundColor: 'rgba(139, 92, 246, 0.5)',
+                                  height: `${amplitude * 100}%`, opacity: 0.6
+                                }} />
+                              ))}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );
                 })()}
 
-                {/* Source Video Audio Waveform Track (blue) — shown when clips have audio */}
+                {/* Source Video Audio Waveform Track (blue) — per-clip cells matching video clips */}
                 {Object.keys(clipWaveforms).length > 0 && (() => {
                   const pxPerSec = 40 * timelineScale;
                   const hasExternal = selectedAudio && selectedAudio.url;
@@ -2940,7 +2964,9 @@ const VideoEditorModal = ({
                           return (
                             <div key={idx} style={{
                               width: clipWidth, display: 'flex', alignItems: 'center', gap: '1px',
-                              height: '100%', flexShrink: 0
+                              height: '28px', flexShrink: 0, borderRadius: '4px', overflow: 'hidden',
+                              backgroundColor: (hasExternal && sourceVideoMuted) ? 'rgba(59, 130, 246, 0.04)' : 'rgba(59, 130, 246, 0.08)',
+                              border: `1px solid rgba(59, 130, 246, ${(hasExternal && sourceVideoMuted) ? '0.1' : '0.2'})`
                             }}>
                               {data.map((amplitude, i) => (
                                 <div key={i} style={{
