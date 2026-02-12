@@ -808,6 +808,27 @@ const PagesTab = ({
                                               </span>
                                             );
                                           })}
+                                          {/* Missing platform connect buttons (inline) */}
+                                          {isLateConfigured && missingPlatforms.map(platform => {
+                                            const meta = PLATFORM_META[platform];
+                                            const isConnecting = connectingPlatform?.artistId === artist.id && connectingPlatform?.platform === platform;
+                                            return (
+                                              <button
+                                                key={`add-${platform}`}
+                                                onClick={(e) => { e.stopPropagation(); handleConnectPlatform(artist.id, platform); }}
+                                                disabled={!!connectingPlatform}
+                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border border-dashed opacity-40 hover:opacity-80 transition disabled:opacity-20"
+                                                style={{
+                                                  borderColor: meta.color + '66', color: meta.color,
+                                                  ...(isMobile ? { minHeight: 32, padding: '6px 10px' } : {}),
+                                                }}
+                                                title={`Connect ${meta.label}`}
+                                              >
+                                                <span>{meta.icon}</span>
+                                                <span>{isConnecting ? '...' : '+'}</span>
+                                              </button>
+                                            );
+                                          })}
                                         </div>
                                       </div>
                                     </div>
@@ -900,7 +921,7 @@ const PagesTab = ({
                                       {/* Add missing platforms for this handle */}
                                       {missingPlatforms.length > 0 && isLateConfigured && (
                                         <div className={`${isMobile ? 'px-4' : 'px-8'} py-3 border-t ${t.borderSubtle}`}>
-                                          <p className={`text-xs ${t.textMuted} mb-2`}>Add platform:</p>
+                                          <p className={`text-xs ${t.textMuted} mb-2`}>Connect another platform:</p>
                                           <div className="flex gap-2 flex-wrap">
                                             {missingPlatforms.map(platform => {
                                               const meta = PLATFORM_META[platform];
