@@ -885,17 +885,24 @@ const SchedulingPage = ({
   // ── Add from drafts handler ──
   const handleAddFromDrafts = useCallback(async (selectedItems) => {
     try {
-      // Resolve collection names: check collectionId first, then look up by mediaIds membership
-      const cols = getCollections(artistId);
+      // Resolve collection names: check collectionId, then match source media against collections
+      const cols = getCollections(artistId).filter(c => c.type !== 'smart');
       const resolveCollectionName = (item) => {
         if (item.collectionName) return item.collectionName;
         if (item.collectionId) {
           const col = cols.find(c => c.id === item.collectionId);
           return col?.name || item.collectionId;
         }
-        // Check if any collection contains this item by mediaIds
-        const parent = cols.find(c => c.type !== 'smart' && (c.mediaIds || []).includes(item.id));
-        return parent?.name || null;
+        // Gather source media IDs from clips (sourceId), slides, and audio
+        const sourceIds = new Set();
+        (item.clips || []).forEach(c => { if (c.sourceId) sourceIds.add(c.sourceId); });
+        (item.slides || []).forEach(s => { if (s.mediaId) sourceIds.add(s.mediaId); if (s.id) sourceIds.add(s.id); });
+        if (item.audio?.id) sourceIds.add(item.audio.id);
+        if (sourceIds.size > 0) {
+          const parent = cols.find(c => (c.mediaIds || []).some(mid => sourceIds.has(mid)));
+          if (parent) return parent.name;
+        }
+        return null;
       };
 
       const itemsToAdd = selectedItems.map(item => ({
