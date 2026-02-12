@@ -63,7 +63,7 @@ import {
 } from './services/artistService';
 
 // Late Service - for per-artist Late connection status
-import { getArtistLateKeyStatus, setArtistLateKey } from './services/lateService';
+import { getArtistLateKeyStatus, setArtistLateKey, removeArtistLateKey } from './services/lateService';
 
 // Content Template Service - reusable caption/hashtag templates
 import {
@@ -6838,7 +6838,17 @@ const StickToMusic = () => {
                       }
                       setConnectingLate(true);
                       try {
+                        // Save the key first
                         await setArtistLateKey(currentArtistId, lateApiKeyInput.trim());
+                        // Validate it by fetching accounts — if Late.co rejects (401), the key is bad
+                        try {
+                          await lateApi.fetchAccounts(currentArtistId);
+                        } catch (validationErr) {
+                          // Key rejected by Late.co — remove it so status reverts to unconfigured
+                          try { await removeArtistLateKey(currentArtistId); } catch (_) {}
+                          showToast('Invalid API key — Late.co rejected it. Please check the key and try again.', 'error');
+                          return;
+                        }
                         setArtistLateConnected(true);
                         setShowLateConnectModal(false);
                         setLateApiKeyInput('');
