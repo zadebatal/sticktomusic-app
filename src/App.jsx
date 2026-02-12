@@ -240,7 +240,7 @@ const lateApi = {
       const accounts = data.accounts || data.data || (Array.isArray(data) ? data : []);
       return { success: true, accounts };
     } catch (error) {
-      console.error('Late API error:', error);
+      console.warn('[Late] fetchAccounts:', error.message);
       return { success: false, error: error.message };
     }
   },
@@ -299,7 +299,7 @@ const lateApi = {
       }
       return { success: true, post: await response.json() };
     } catch (error) {
-      console.error('Late API error:', error);
+      console.warn('[Late] schedulePost:', error.message);
       return { success: false, error: error.message };
     }
   },
@@ -342,7 +342,7 @@ const lateApi = {
 
       return { success: true, posts: allPosts };
     } catch (error) {
-      console.error('Late API error:', error);
+      console.warn('[Late] fetchScheduledPosts:', error.message);
       return { success: false, error: error.message };
     }
   },
@@ -363,7 +363,7 @@ const lateApi = {
       }
       return { success: true };
     } catch (error) {
-      console.error('Late API error:', error);
+      console.warn('[Late] deletePost:', error.message);
       return { success: false, error: error.message };
     }
   }
@@ -754,9 +754,13 @@ const StickToMusic = () => {
         if (result.success) {
           setLatePosts(result.posts || []);
           setLastSynced(new Date());
+        } else if (result.error && result.error.includes('401')) {
+          // Stale key — auto-remove to stop future 401s
+          try { await removeArtistLateKey(newArtistId); } catch (_) {}
+          setArtistLateConnected(false);
         }
       } catch (error) {
-        console.error('Error fetching Late posts for new artist:', error);
+        console.warn('Error fetching Late posts for new artist:', error.message);
       }
     }
   };
@@ -821,6 +825,10 @@ const StickToMusic = () => {
                 lateAccountId: String(realId)
               });
             });
+          } else if (!result.success && result.error && result.error.includes('401')) {
+            // Key is stale or revoked — auto-remove it to stop future 401s
+            try { await removeArtistLateKey(artist.id); } catch (_) {}
+            unconfigured.push({ id: artist.id, name: artist.name });
           }
         } catch (artistError) {
           // If we get a 403 or other error for this artist, treat as unconfigured
@@ -6841,9 +6849,8 @@ const StickToMusic = () => {
                         // Save the key first
                         await setArtistLateKey(currentArtistId, lateApiKeyInput.trim());
                         // Validate it by fetching accounts — if Late.co rejects (401), the key is bad
-                        try {
-                          await lateApi.fetchAccounts(currentArtistId);
-                        } catch (validationErr) {
+                        const validation = await lateApi.fetchAccounts(currentArtistId);
+                        if (!validation.success) {
                           // Key rejected by Late.co — remove it so status reverts to unconfigured
                           try { await removeArtistLateKey(currentArtistId); } catch (_) {}
                           showToast('Invalid API key — Late.co rejected it. Please check the key and try again.', 'error');
