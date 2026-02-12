@@ -378,149 +378,6 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
 };
 
 // ═══════════════════════════════════════════════════════════
-// ManualAccountsSection — Display saved manual accounts per artist
-// ═══════════════════════════════════════════════════════════
-
-const ManualAccountsSection = ({ accounts, artistId, latePages, isLateConfigured, onRemove, onConnectPlatform, connectingPlatform, isMobile }) => {
-  const { theme } = useTheme();
-  const t = theme.tw;
-  const [showPasswords, setShowPasswords] = useState({});
-
-  if (!accounts || accounts.length === 0) return null;
-
-  // Group manual accounts by handle
-  const grouped = {};
-  accounts.forEach((acc, idx) => {
-    if (!grouped[acc.handle]) grouped[acc.handle] = [];
-    grouped[acc.handle].push({ ...acc, _idx: idx });
-  });
-
-  const isConnectedInLate = (handle, platform) => {
-    const normalized = handle.replace(/^@/, '').toLowerCase();
-    return latePages.some(p =>
-      p.artistId === artistId &&
-      p.handle?.replace(/^@/, '').toLowerCase() === normalized &&
-      p.platform === platform
-    );
-  };
-
-  const togglePw = (key) => setShowPasswords(prev => ({ ...prev, [key]: !prev[key] }));
-
-  return (
-    <div className={`border-t ${t.borderSubtle}`}>
-      <div className={`px-6 py-2.5 flex items-center justify-between`} style={{ backgroundColor: theme.bg.surface }}>
-        <span className={`text-xs font-semibold uppercase tracking-wider ${t.textMuted}`}>Manual Accounts</span>
-      </div>
-      {Object.entries(grouped).map(([handle, entries]) => (
-        <div key={handle} className={`px-6 py-3 border-t ${t.borderSubtle}`} style={{ backgroundColor: theme.bg.page }}>
-          <div className={`text-sm font-semibold ${t.textPrimary} mb-2`}>{handle}</div>
-          <div className={`${isMobile ? 'space-y-3' : 'space-y-1.5'} ${isMobile ? 'ml-0' : 'ml-2'}`}>
-            {entries.map((acc) => {
-              const meta = PLATFORM_META[acc.platform] || { label: acc.platform, icon: '🔗', color: '#888' };
-              const connected = isConnectedInLate(acc.handle, acc.platform);
-              const pwKey = `manual-${acc._idx}`;
-              const pwVisible = showPasswords[pwKey];
-              return isMobile ? (
-                /* Mobile: stacked card layout */
-                <div
-                  key={`${acc.platform}-${acc._idx}`}
-                  className={`p-3 rounded-xl border ${t.cardBorder}`}
-                  style={{ backgroundColor: theme.bg.elevated }}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">{meta.icon}</span>
-                      <span className="text-xs font-medium" style={{ color: meta.color }}>{meta.label}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {connected ? (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/15 text-green-400">Connected</span>
-                      ) : isLateConfigured ? (
-                        <button
-                          onClick={() => onConnectPlatform(artistId, acc.platform)}
-                          disabled={!!connectingPlatform}
-                          className="px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-500/15 text-yellow-400 hover:bg-yellow-500/25 transition disabled:opacity-40"
-                          style={{ minHeight: 44, minWidth: 44 }}
-                        >
-                          {connectingPlatform?.artistId === artistId && connectingPlatform?.platform === acc.platform
-                            ? 'Connecting...' : 'Connect'}
-                        </button>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-zinc-500/15 text-zinc-400">Waiting for Late</span>
-                      )}
-                      <button
-                        onClick={() => onRemove(artistId, acc._idx)}
-                        className={`text-xs ${t.textMuted} hover:text-red-400 transition`}
-                        style={{ minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                        title="Remove"
-                      >
-                        &times;
-                      </button>
-                    </div>
-                  </div>
-                  {acc.password && (
-                    <div className={`text-xs ${t.textMuted} font-mono flex items-center gap-1`}>
-                      {pwVisible ? acc.password : '••••••••'}
-                      <button
-                        onClick={() => togglePw(pwKey)}
-                        className={`text-xs ${t.textMuted} hover:${t.textSecondary}`}
-                        style={{ minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                        title={pwVisible ? 'Hide' : 'Show'}
-                      >
-                        {pwVisible ? '🙈' : '👁'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                /* Desktop: inline row layout */
-                <div key={`${acc.platform}-${acc._idx}`} className={`flex items-center gap-2 py-1.5`}>
-                  <span className="text-sm">{meta.icon}</span>
-                  <span className="text-xs font-medium w-16 shrink-0" style={{ color: meta.color }}>{meta.label}</span>
-                  {/* Password */}
-                  {acc.password && (
-                    <span className={`text-xs ${t.textMuted} font-mono flex items-center gap-1`}>
-                      {pwVisible ? acc.password : '••••••••'}
-                      <button onClick={() => togglePw(pwKey)} className={`text-xs ${t.textMuted} hover:${t.textSecondary}`} title={pwVisible ? 'Hide' : 'Show'}>
-                        {pwVisible ? '🙈' : '👁'}
-                      </button>
-                    </span>
-                  )}
-                  <div className="flex-1" />
-                  {/* Status badge */}
-                  {connected ? (
-                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-500/15 text-green-400">Connected</span>
-                  ) : isLateConfigured ? (
-                    <button
-                      onClick={() => onConnectPlatform(artistId, acc.platform)}
-                      disabled={!!connectingPlatform}
-                      className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-yellow-500/15 text-yellow-400 hover:bg-yellow-500/25 transition disabled:opacity-40"
-                    >
-                      {connectingPlatform?.artistId === artistId && connectingPlatform?.platform === acc.platform
-                        ? 'Connecting...' : 'Connect'}
-                    </button>
-                  ) : (
-                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-zinc-500/15 text-zinc-400">Waiting for Late</span>
-                  )}
-                  {/* Remove */}
-                  <button
-                    onClick={() => onRemove(artistId, acc._idx)}
-                    className={`text-xs ${t.textMuted} hover:text-red-400 transition ml-1`}
-                    title="Remove"
-                  >
-                    &times;
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-// ═══════════════════════════════════════════════════════════
 // PagesTab — Main component
 // ═══════════════════════════════════════════════════════════
 
@@ -545,6 +402,8 @@ const PagesTab = ({
   const [expandedArtists, setExpandedArtists] = useState({});
   const [expandedHandles, setExpandedHandles] = useState({});
   const [bulkEntryArtistId, setBulkEntryArtistId] = useState(null);
+  const [showPasswords, setShowPasswords] = useState({});
+  const togglePw = (key) => setShowPasswords(prev => ({ ...prev, [key]: !prev[key] }));
 
   // Social Set usage
   const socialSetsUsed = useMemo(() => {
@@ -556,16 +415,35 @@ const PagesTab = ({
   const [connectingPlatform, setConnectingPlatform] = useState(null); // { artistId, platform }
   const oauthPendingRef = useRef(false);
 
-  // Group latePages by artistId, then by handle
-  const pagesByArtist = useMemo(() => {
-    const grouped = {};
+  // Group latePages + manual accounts by artistId, then by normalized handle
+  const mergedPagesByArtist = useMemo(() => {
+    const merged = {};
+    // Add Late pages
     latePages.forEach(page => {
-      if (!grouped[page.artistId]) grouped[page.artistId] = {};
-      if (!grouped[page.artistId][page.handle]) grouped[page.artistId][page.handle] = [];
-      grouped[page.artistId][page.handle].push(page);
+      const aid = page.artistId;
+      if (!merged[aid]) merged[aid] = {};
+      const norm = page.handle?.replace(/^@/, '').toLowerCase() || '';
+      if (!merged[aid][norm]) merged[aid][norm] = { displayHandle: page.handle, pages: [], manualEntries: [] };
+      merged[aid][norm].pages.push(page);
+      merged[aid][norm].displayHandle = page.handle; // prefer Late casing
     });
-    return grouped;
-  }, [latePages]);
+    // Add manual accounts
+    Object.entries(manualAccountsByArtist).forEach(([artistId, accounts]) => {
+      if (!accounts?.length) return;
+      if (!merged[artistId]) merged[artistId] = {};
+      accounts.forEach((acc, idx) => {
+        const norm = acc.handle?.replace(/^@/, '').toLowerCase() || '';
+        if (!merged[artistId][norm]) merged[artistId][norm] = { displayHandle: acc.handle, pages: [], manualEntries: [] };
+        const group = merged[artistId][norm];
+        // Only add manual entry if Late doesn't already cover this handle+platform
+        const alreadyCovered = group.pages.some(p => p.platform === acc.platform);
+        if (!alreadyCovered) {
+          group.manualEntries.push({ ...acc, _idx: idx });
+        }
+      });
+    });
+    return merged;
+  }, [latePages, manualAccountsByArtist]);
 
   // Set of unconfigured artist IDs for quick lookup
   const unconfiguredIds = useMemo(() =>
@@ -579,12 +457,20 @@ const PagesTab = ({
     [latePages]
   );
 
-  // Total stats
-  const totalAccounts = latePages.length;
+  // Total stats (Late + manual-only)
+  const totalAccounts = useMemo(() => {
+    let count = latePages.length;
+    Object.values(mergedPagesByArtist).forEach(handles => {
+      Object.values(handles).forEach(group => { count += group.manualEntries.length; });
+    });
+    return count;
+  }, [latePages.length, mergedPagesByArtist]);
+
   const totalHandles = useMemo(() => {
-    const handles = new Set(latePages.map(p => `${p.artistId}:${p.handle}`));
-    return handles.size;
-  }, [latePages]);
+    let count = 0;
+    Object.values(mergedPagesByArtist).forEach(handles => { count += Object.keys(handles).length; });
+    return count;
+  }, [mergedPagesByArtist]);
 
   const toggleArtist = (artistId) => {
     setExpandedArtists(prev => ({ ...prev, [artistId]: !prev[artistId] }));
@@ -718,19 +604,26 @@ const PagesTab = ({
         ) : (
           <div className="space-y-6">
             {visibleArtists.map(artist => {
-              const artistPages = pagesByArtist[artist.id] || {};
-              const handleEntries = Object.entries(artistPages);
-              const hasPages = handleEntries.length > 0;
+              const artistMerged = mergedPagesByArtist[artist.id] || {};
+              const handleEntries = Object.entries(artistMerged);
+              const hasPages = handleEntries.some(([, g]) => g.pages.length > 0);
+              const hasAnyEntries = handleEntries.length > 0;
               const isUnconfigured = unconfiguredIds.has(artist.id) || (!hasPages && !configuredIds.has(artist.id));
               const isLateConfigured = !isUnconfigured || configuredIds.has(artist.id);
               const expanded = isArtistExpanded(artist.id);
-              const manualAccounts = manualAccountsByArtist[artist.id] || [];
-              const hasManualAccounts = manualAccounts.length > 0;
 
-              // Count total followers for this artist
-              const artistFollowers = handleEntries.reduce((sum, [, pages]) =>
-                sum + pages.reduce((s, p) => s + (p.followers || 0), 0), 0
+              // Count total followers for this artist (Late only)
+              const artistFollowers = handleEntries.reduce((sum, [, group]) =>
+                sum + group.pages.reduce((s, p) => s + (p.followers || 0), 0), 0
               );
+
+              // All platforms already connected (Late or manual) across all handles for this artist
+              const allConnectedPlatforms = new Set();
+              handleEntries.forEach(([, group]) => {
+                group.pages.forEach(p => allConnectedPlatforms.add(p.platform));
+                group.manualEntries.forEach(e => allConnectedPlatforms.add(e.platform));
+              });
+              const artistMissingPlatforms = ALL_PLATFORMS.filter(p => !allConnectedPlatforms.has(p));
 
               return (
                 <div key={artist.id} className={`rounded-xl border ${t.cardBorder} overflow-hidden`}>
@@ -748,13 +641,11 @@ const PagesTab = ({
                       <div className="min-w-0 flex-1">
                         <h2 className={`font-bold ${isMobile ? 'text-base' : 'text-lg'} ${t.textPrimary} truncate`}>{artist.name}</h2>
                         <p className={`text-xs ${t.textSecondary}`}>
-                          {hasPages
-                            ? `${handleEntries.length} handle${handleEntries.length !== 1 ? 's' : ''} · ${formatFollowers(artistFollowers)} followers`
-                            : hasManualAccounts
-                              ? `${manualAccounts.length} manual account${manualAccounts.length !== 1 ? 's' : ''}`
-                              : isUnconfigured
-                                ? 'Late not connected'
-                                : 'No pages found'
+                          {hasAnyEntries
+                            ? `${handleEntries.length} handle${handleEntries.length !== 1 ? 's' : ''}${artistFollowers > 0 ? ` · ${formatFollowers(artistFollowers)} followers` : ''}`
+                            : isUnconfigured
+                              ? 'Late not connected'
+                              : 'No pages found'
                           }
                         </p>
                       </div>
@@ -768,12 +659,12 @@ const PagesTab = ({
                       >
                         + Add Accounts
                       </button>
-                      {!isMobile && isUnconfigured && !hasManualAccounts && (
+                      {!isMobile && isUnconfigured && !hasAnyEntries && (
                         <span className="px-3 py-1 rounded-full text-xs font-semibold bg-orange-500/15 text-orange-400">
                           Setup Required
                         </span>
                       )}
-                      {!isMobile && hasManualAccounts && !hasPages && (
+                      {!isMobile && hasAnyEntries && !hasPages && (
                         <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/15 text-blue-400">
                           Manual
                         </span>
@@ -792,8 +683,8 @@ const PagesTab = ({
                   {/* Artist Content (expanded) */}
                   {expanded && (
                     <div className={`border-t ${t.borderSubtle}`}>
-                      {/* Unconfigured + no manual accounts — show connect CTA */}
-                      {isUnconfigured && !hasPages && !hasManualAccounts && (
+                      {/* Unconfigured + no entries at all — show connect CTA */}
+                      {isUnconfigured && !hasAnyEntries && (
                         <div className="px-6 py-8 text-center">
                           <div className="text-3xl mb-3">🔗</div>
                           <h3 className={`font-semibold mb-2 ${t.textPrimary}`}>
@@ -821,186 +712,265 @@ const PagesTab = ({
                         </div>
                       )}
 
-                      {/* Has pages — show handles */}
-                      {hasPages && (
-                        <div className="divide-y" style={{ borderColor: theme.bg.surface }}>
-                          {handleEntries.map(([handle, pages]) => {
-                            const handleKey = `${artist.id}:${handle}`;
-                            const isHandleExpanded = expandedHandles[handleKey] || false;
-                            const totalHandleFollowers = pages.reduce((s, p) => s + (p.followers || 0), 0);
-                            const profilePic = pages.find(p => p.profileImage)?.profileImage;
-                            const primaryMeta = PLATFORM_META[pages[0]?.platform] || { label: 'Unknown', icon: '🔗', color: '#888' };
-                            const connectedPlatforms = pages.map(p => p.platform);
-                            const missingPlatforms = ALL_PLATFORMS.filter(p => !connectedPlatforms.includes(p));
+                      {/* Has entries — unified handle list */}
+                      {hasAnyEntries && (
+                        <>
+                          {/* Inline Late banner if unconfigured */}
+                          {isUnconfigured && (
+                            <div
+                              className={`${isMobile ? 'px-4' : 'px-6'} py-3 flex items-center justify-between gap-3`}
+                              style={{ backgroundColor: theme.accent?.primary ? theme.accent.primary + '11' : '#6366f111' }}
+                            >
+                              <p className={`text-sm ${t.textSecondary}`}>
+                                Connect Late to enable scheduling for {artist.name}'s accounts.
+                              </p>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); onConfigureLate(artist.id); }}
+                                className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition ${t.btnPrimary} shrink-0`}
+                                style={isMobile ? { minHeight: 44 } : {}}
+                              >
+                                Connect Late
+                              </button>
+                            </div>
+                          )}
 
-                            return (
-                              <div key={handleKey}>
-                                {/* Handle Row */}
-                                <div
-                                  onClick={() => toggleHandle(handleKey)}
-                                  className="cursor-pointer px-6 py-3 flex items-center justify-between gap-4 hover:opacity-80 transition"
-                                  style={{ backgroundColor: theme.bg.page }}
-                                >
-                                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                                    {profilePic ? (
-                                      <img src={profilePic} alt={handle} className="w-9 h-9 rounded-full object-cover shrink-0" />
-                                    ) : (
-                                      <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
-                                        style={{ backgroundColor: primaryMeta.color + '22', color: primaryMeta.color }}>
-                                        <span className="text-sm">{primaryMeta.icon}</span>
-                                      </div>
-                                    )}
-                                    <div className="min-w-0 flex-1">
-                                      <span className={`font-semibold text-sm ${t.textPrimary}`}>{handle}</span>
-                                      <div className="flex gap-1.5 mt-1 flex-wrap">
-                                        {pages.map(page => {
-                                          const meta = PLATFORM_META[page.platform] || { label: page.platform, icon: '🔗', color: '#888' };
-                                          const profileUrl = getProfileUrl(page.platform, page.handle);
-                                          return (
-                                            <a
-                                              key={page.platform}
-                                              href={profileUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              onClick={(e) => e.stopPropagation()}
-                                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-white no-underline hover:brightness-110 transition"
-                                              style={{
-                                                backgroundColor: meta.color,
-                                                ...(isMobile ? { minHeight: 32, padding: '6px 10px' } : {}),
-                                              }}
-                                              title={`Open ${meta.label} profile`}
-                                            >
-                                              <span>{meta.icon}</span>
-                                              <span>{meta.label}</span>
-                                            </a>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-4 shrink-0">
-                                    <div className="text-right">
-                                      <span className={`text-sm font-semibold ${t.textPrimary}`}>{formatFollowers(totalHandleFollowers)}</span>
-                                      <span className={`text-xs ${t.textSecondary} ml-1`}>followers</span>
-                                    </div>
-                                    <span className={`text-sm transition-transform duration-200 ${isHandleExpanded ? '' : '-rotate-90'} ${t.textSecondary}`}>▼</span>
-                                  </div>
-                                </div>
+                          <div className="divide-y" style={{ borderColor: theme.bg.surface }}>
+                            {handleEntries.map(([normalizedHandle, group]) => {
+                              const { displayHandle, pages, manualEntries } = group;
+                              const handleKey = `${artist.id}:${normalizedHandle}`;
+                              const isHandleExpanded = expandedHandles[handleKey] || false;
+                              const totalHandleFollowers = pages.reduce((s, p) => s + (p.followers || 0), 0);
+                              const profilePic = pages.find(p => p.profileImage)?.profileImage;
+                              const firstPlatform = pages[0]?.platform || manualEntries[0]?.platform;
+                              const primaryMeta = PLATFORM_META[firstPlatform] || { label: 'Unknown', icon: '🔗', color: '#888' };
+                              const latePlatforms = pages.map(p => p.platform);
+                              const manualPlatforms = manualEntries.map(e => e.platform);
+                              const coveredPlatforms = [...new Set([...latePlatforms, ...manualPlatforms])];
+                              const missingPlatforms = ALL_PLATFORMS.filter(p => !coveredPlatforms.includes(p));
 
-                                {/* Handle Expanded — platform details + add platform */}
-                                {isHandleExpanded && (
-                                  <div className={`${t.bgSurface} border-t ${t.borderSubtle}`}>
-                                    {pages.map(page => {
-                                      const meta = PLATFORM_META[page.platform] || { label: page.platform, icon: '🔗', color: '#888' };
-                                      return (
-                                        <div key={`${page.handle}-${page.platform}`}
-                                          className={`px-8 py-2.5 flex items-center justify-between border-b ${t.borderSubtle} last:border-b-0`}>
-                                          <a
-                                            href={getProfileUrl(page.platform, page.handle)}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="flex items-center gap-3 no-underline hover:underline"
-                                            title={`Open ${meta.label} profile`}
-                                          >
-                                            <span className="text-base">{meta.icon}</span>
-                                            <span className="text-sm" style={{ color: meta.color }}>{meta.label}</span>
-                                          </a>
-                                          <div className="flex items-center gap-4">
-                                            <span className={`text-sm ${t.textSecondary}`}>{formatFollowers(page.followers)}</span>
-                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                                              page.status === 'active' ? 'bg-green-500/15 text-green-400' : 'bg-yellow-500/15 text-yellow-400'
-                                            }`}>
-                                              {page.status === 'active' ? 'Active' : 'Inactive'}
-                                            </span>
-                                          </div>
+                              return (
+                                <div key={handleKey}>
+                                  {/* Handle Row */}
+                                  <div
+                                    onClick={() => toggleHandle(handleKey)}
+                                    className="cursor-pointer px-6 py-3 flex items-center justify-between gap-4 hover:opacity-80 transition"
+                                    style={{ backgroundColor: theme.bg.page }}
+                                  >
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                      {profilePic ? (
+                                        <img src={profilePic} alt={displayHandle} className="w-9 h-9 rounded-full object-cover shrink-0" />
+                                      ) : (
+                                        <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                                          style={{ backgroundColor: primaryMeta.color + '22', color: primaryMeta.color }}>
+                                          <span className="text-sm">{primaryMeta.icon}</span>
                                         </div>
-                                      );
-                                    })}
-                                    {/* Add missing platforms */}
-                                    {missingPlatforms.length > 0 && (
-                                      <div className={`${isMobile ? 'px-4' : 'px-8'} py-3 border-t ${t.borderSubtle}`}>
-                                        <p className={`text-xs ${t.textMuted} mb-2`}>Add platform:</p>
-                                        <div className="flex gap-2 flex-wrap">
-                                          {missingPlatforms.map(platform => {
-                                            const meta = PLATFORM_META[platform];
-                                            const isConnecting = connectingPlatform?.artistId === artist.id && connectingPlatform?.platform === platform;
+                                      )}
+                                      <div className="min-w-0 flex-1">
+                                        <span className={`font-semibold text-sm ${t.textPrimary}`}>{displayHandle}</span>
+                                        <div className="flex gap-1.5 mt-1 flex-wrap">
+                                          {/* Late platform badges (solid) */}
+                                          {pages.map(page => {
+                                            const meta = PLATFORM_META[page.platform] || { label: page.platform, icon: '🔗', color: '#888' };
+                                            const profileUrl = getProfileUrl(page.platform, page.handle);
                                             return (
-                                              <button
-                                                key={platform}
-                                                onClick={() => handleConnectPlatform(artist.id, platform)}
-                                                disabled={!!connectingPlatform}
-                                                className="inline-flex items-center gap-1.5 rounded-lg text-xs font-medium border border-dashed transition hover:opacity-80 disabled:opacity-40"
+                                              <a
+                                                key={page.platform}
+                                                href={profileUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-white no-underline hover:brightness-110 transition"
                                                 style={{
-                                                  borderColor: meta.color + '66',
-                                                  color: meta.color,
-                                                  ...(isMobile
-                                                    ? { minHeight: '44px', padding: '10px 16px' }
-                                                    : { padding: '6px 12px' }
-                                                  ),
+                                                  backgroundColor: meta.color,
+                                                  ...(isMobile ? { minHeight: 32, padding: '6px 10px' } : {}),
+                                                }}
+                                                title={`Open ${meta.label} profile`}
+                                              >
+                                                <span>{meta.icon}</span>
+                                                <span>{meta.label}</span>
+                                              </a>
+                                            );
+                                          })}
+                                          {/* Manual-only platform badges (dashed border) */}
+                                          {manualEntries.map(entry => {
+                                            const meta = PLATFORM_META[entry.platform] || { label: entry.platform, icon: '🔗', color: '#888' };
+                                            return (
+                                              <span
+                                                key={`manual-${entry.platform}`}
+                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border border-dashed"
+                                                style={{
+                                                  borderColor: meta.color, color: meta.color,
+                                                  ...(isMobile ? { minHeight: 32, padding: '6px 10px' } : {}),
                                                 }}
                                               >
                                                 <span>{meta.icon}</span>
-                                                {isConnecting ? 'Connecting...' : `+ ${meta.label}`}
-                                              </button>
+                                                <span>{meta.label}</span>
+                                              </span>
                                             );
                                           })}
                                         </div>
                                       </div>
-                                    )}
+                                    </div>
+                                    <div className="flex items-center gap-4 shrink-0">
+                                      {totalHandleFollowers > 0 && (
+                                        <div className="text-right">
+                                          <span className={`text-sm font-semibold ${t.textPrimary}`}>{formatFollowers(totalHandleFollowers)}</span>
+                                          <span className={`text-xs ${t.textSecondary} ml-1`}>followers</span>
+                                        </div>
+                                      )}
+                                      <span className={`text-sm transition-transform duration-200 ${isHandleExpanded ? '' : '-rotate-90'} ${t.textSecondary}`}>▼</span>
+                                    </div>
                                   </div>
-                                )}
+
+                                  {/* Handle Expanded — platform details */}
+                                  {isHandleExpanded && (
+                                    <div className={`${t.bgSurface} border-t ${t.borderSubtle}`}>
+                                      {/* Late platform rows */}
+                                      {pages.map(page => {
+                                        const meta = PLATFORM_META[page.platform] || { label: page.platform, icon: '🔗', color: '#888' };
+                                        return (
+                                          <div key={`${page.handle}-${page.platform}`}
+                                            className={`px-8 py-2.5 flex items-center justify-between border-b ${t.borderSubtle} last:border-b-0`}>
+                                            <a
+                                              href={getProfileUrl(page.platform, page.handle)}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="flex items-center gap-3 no-underline hover:underline"
+                                              title={`Open ${meta.label} profile`}
+                                            >
+                                              <span className="text-base">{meta.icon}</span>
+                                              <span className="text-sm" style={{ color: meta.color }}>{meta.label}</span>
+                                            </a>
+                                            <div className="flex items-center gap-4">
+                                              <span className={`text-sm ${t.textSecondary}`}>{formatFollowers(page.followers)}</span>
+                                              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                                                page.status === 'active' ? 'bg-green-500/15 text-green-400' : 'bg-yellow-500/15 text-yellow-400'
+                                              }`}>
+                                                {page.status === 'active' ? 'Active' : 'Inactive'}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+
+                                      {/* Manual-only platform rows */}
+                                      {manualEntries.map(entry => {
+                                        const meta = PLATFORM_META[entry.platform] || { label: entry.platform, icon: '🔗', color: '#888' };
+                                        const pwKey = `manual-${entry._idx}`;
+                                        const pwVisible = showPasswords[pwKey];
+                                        return (
+                                          <div key={`manual-${entry.platform}-${entry._idx}`}
+                                            className={`px-8 py-2.5 flex items-center justify-between border-b ${t.borderSubtle} last:border-b-0`}>
+                                            <div className="flex items-center gap-3">
+                                              <span className="text-base">{meta.icon}</span>
+                                              <span className="text-sm" style={{ color: meta.color }}>{meta.label}</span>
+                                              {entry.password && (
+                                                <span className={`text-xs ${t.textMuted} font-mono flex items-center gap-1 ml-2`}>
+                                                  {pwVisible ? entry.password : '••••••••'}
+                                                  <button onClick={() => togglePw(pwKey)} className={`text-xs ${t.textMuted}`} title={pwVisible ? 'Hide' : 'Show'}>
+                                                    {pwVisible ? '🙈' : '👁'}
+                                                  </button>
+                                                </span>
+                                              )}
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-500/15 text-blue-400">Manual</span>
+                                              {isLateConfigured && (
+                                                <button
+                                                  onClick={() => handleConnectPlatform(artist.id, entry.platform)}
+                                                  disabled={!!connectingPlatform}
+                                                  className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-yellow-500/15 text-yellow-400 hover:bg-yellow-500/25 transition disabled:opacity-40"
+                                                >
+                                                  {connectingPlatform?.artistId === artist.id && connectingPlatform?.platform === entry.platform
+                                                    ? 'Connecting...' : 'Connect'}
+                                                </button>
+                                              )}
+                                              <button
+                                                onClick={() => onRemoveManualAccount(artist.id, entry._idx)}
+                                                className={`text-xs ${t.textMuted} hover:text-red-400 transition`}
+                                                title="Remove"
+                                              >
+                                                &times;
+                                              </button>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+
+                                      {/* Add missing platforms for this handle */}
+                                      {missingPlatforms.length > 0 && isLateConfigured && (
+                                        <div className={`${isMobile ? 'px-4' : 'px-8'} py-3 border-t ${t.borderSubtle}`}>
+                                          <p className={`text-xs ${t.textMuted} mb-2`}>Add platform:</p>
+                                          <div className="flex gap-2 flex-wrap">
+                                            {missingPlatforms.map(platform => {
+                                              const meta = PLATFORM_META[platform];
+                                              const isConnecting = connectingPlatform?.artistId === artist.id && connectingPlatform?.platform === platform;
+                                              return (
+                                                <button
+                                                  key={platform}
+                                                  onClick={() => handleConnectPlatform(artist.id, platform)}
+                                                  disabled={!!connectingPlatform}
+                                                  className="inline-flex items-center gap-1.5 rounded-lg text-xs font-medium border border-dashed transition hover:opacity-80 disabled:opacity-40"
+                                                  style={{
+                                                    borderColor: meta.color + '66',
+                                                    color: meta.color,
+                                                    ...(isMobile
+                                                      ? { minHeight: '44px', padding: '10px 16px' }
+                                                      : { padding: '6px 12px' }
+                                                    ),
+                                                  }}
+                                                >
+                                                  <span>{meta.icon}</span>
+                                                  {isConnecting ? 'Connecting...' : `+ ${meta.label}`}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                            {/* Connect a new account — only show platforms not already connected */}
+                            {isLateConfigured && artistMissingPlatforms.length > 0 && (
+                              <div className={`${isMobile ? 'px-4' : 'px-6'} py-3`} style={{ backgroundColor: theme.bg.page }}>
+                                <p className={`text-xs ${t.textMuted} mb-2`}>Connect a new account:</p>
+                                <div className="flex gap-2 flex-wrap">
+                                  {artistMissingPlatforms.map(platform => {
+                                    const meta = PLATFORM_META[platform];
+                                    const isConnecting = connectingPlatform?.artistId === artist.id && connectingPlatform?.platform === platform;
+                                    return (
+                                      <button
+                                        key={platform}
+                                        onClick={() => handleConnectPlatform(artist.id, platform)}
+                                        disabled={!!connectingPlatform}
+                                        className="inline-flex items-center gap-1.5 rounded-lg text-xs font-medium border border-dashed transition hover:opacity-80 disabled:opacity-40"
+                                        style={{
+                                          borderColor: meta.color + '66',
+                                          color: meta.color,
+                                          ...(isMobile
+                                            ? { minHeight: '44px', padding: '10px 16px' }
+                                            : { padding: '6px 12px' }
+                                          ),
+                                        }}
+                                      >
+                                        <span>{meta.icon}</span>
+                                        {isConnecting ? 'Connecting...' : `+ ${meta.label}`}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
                               </div>
-                            );
-                          })}
-
-                          {/* Add New Page button for configured artists */}
-                          <div className={`${isMobile ? 'px-4' : 'px-6'} py-3`} style={{ backgroundColor: theme.bg.page }}>
-                            <p className={`text-xs ${t.textMuted} mb-2`}>Connect a new account:</p>
-                            <div className="flex gap-2 flex-wrap">
-                              {ALL_PLATFORMS.map(platform => {
-                                const meta = PLATFORM_META[platform];
-                                const isConnecting = connectingPlatform?.artistId === artist.id && connectingPlatform?.platform === platform;
-                                return (
-                                  <button
-                                    key={platform}
-                                    onClick={() => handleConnectPlatform(artist.id, platform)}
-                                    disabled={!!connectingPlatform}
-                                    className="inline-flex items-center gap-1.5 rounded-lg text-xs font-medium border border-dashed transition hover:opacity-80 disabled:opacity-40"
-                                    style={{
-                                      borderColor: meta.color + '66',
-                                      color: meta.color,
-                                      ...(isMobile
-                                        ? { minHeight: '44px', padding: '10px 16px' }
-                                        : { padding: '6px 12px' }
-                                      ),
-                                    }}
-                                  >
-                                    <span>{meta.icon}</span>
-                                    {isConnecting ? 'Connecting...' : `+ ${meta.label}`}
-                                  </button>
-                                );
-                              })}
-                            </div>
+                            )}
                           </div>
-                        </div>
+                        </>
                       )}
 
-                      {/* Manual accounts section (shown for all artists that have them) */}
-                      {hasManualAccounts && (
-                        <ManualAccountsSection
-                          accounts={manualAccounts}
-                          artistId={artist.id}
-                          latePages={latePages}
-                          isLateConfigured={isLateConfigured}
-                          onRemove={onRemoveManualAccount}
-                          onConnectPlatform={handleConnectPlatform}
-                          connectingPlatform={connectingPlatform}
-                          isMobile={isMobile}
-                        />
-                      )}
-
-                      {/* Configured but no pages yet and no manual accounts */}
-                      {!isUnconfigured && !hasPages && !hasManualAccounts && (
+                      {/* Configured but no entries at all */}
+                      {!isUnconfigured && !hasAnyEntries && (
                         <div className="px-6 py-8 text-center">
                           <div className="text-3xl mb-3">📱</div>
                           <h3 className={`font-semibold mb-2 ${t.textPrimary}`}>
@@ -1030,22 +1000,6 @@ const PagesTab = ({
                               );
                             })}
                           </div>
-                        </div>
-                      )}
-
-                      {/* Unconfigured + has manual accounts — show Late CTA + manual accounts */}
-                      {isUnconfigured && !hasPages && hasManualAccounts && (
-                        <div className={`${isMobile ? 'px-4' : 'px-6'} py-4 text-center`}>
-                          <p className={`text-sm ${t.textSecondary} mb-3`}>
-                            Connect Late to enable scheduling for {artist.name}'s accounts.
-                          </p>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); onConfigureLate(artist.id); }}
-                            className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition ${t.btnPrimary}`}
-                            style={isMobile ? { minHeight: 44, width: '100%' } : {}}
-                          >
-                            Connect Late API Key
-                          </button>
                         </div>
                       )}
                     </div>
