@@ -2894,7 +2894,7 @@ const VideoEditorModal = ({
                       borderTop: `1px solid ${theme.border.subtle}`, marginTop: '4px',
                       pointerEvents: 'auto', position: 'relative'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, padding: '0 4px', zIndex: 2 }}>
+                      <div style={{ width: '60px', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, padding: '0 4px', zIndex: 2 }}>
                         <span style={{ fontSize: '10px' }}>{'\uD83C\uDFB5'}</span>
                         <input type="range" min="0" max="1" step="0.05" value={externalAudioVolume}
                           onChange={e => setExternalAudioVolume(parseFloat(e.target.value))}
@@ -2939,7 +2939,7 @@ const VideoEditorModal = ({
                       borderTop: `1px solid ${theme.border.subtle}`, marginTop: '4px',
                       pointerEvents: 'auto', position: 'relative'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, padding: '0 4px', zIndex: 2 }}>
+                      <div style={{ width: '60px', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, padding: '0 4px', zIndex: 2 }}>
                         <button
                           onClick={() => setSourceVideoMuted(m => !m)}
                           style={{
@@ -4786,7 +4786,8 @@ const getStyles = (theme) => ({
   },
   clipsRow: {
     display: 'flex',
-    gap: '8px'
+    gap: '8px',
+    marginLeft: '60px'
   },
   clipItem: {
     position: 'relative',
