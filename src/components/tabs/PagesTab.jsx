@@ -937,7 +937,7 @@ const PagesTab = ({
                             {/* Connect a new account — only show platforms not already connected */}
                             {isLateConfigured && artistMissingPlatforms.length > 0 && (
                               <div className={`${isMobile ? 'px-4' : 'px-6'} py-3`} style={{ backgroundColor: theme.bg.page }}>
-                                <p className={`text-xs ${t.textMuted} mb-2`}>Connect a new account:</p>
+                                <p className={`text-xs ${t.textMuted} mb-2`}>Connect another platform:</p>
                                 <div className="flex gap-2 flex-wrap">
                                   {artistMissingPlatforms.map(platform => {
                                     const meta = PLATFORM_META[platform];
