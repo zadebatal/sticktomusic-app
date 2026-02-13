@@ -1635,7 +1635,7 @@ const SlideshowEditor = ({
   }, []);
 
   // Save active slideshow only (does NOT close editor so user can keep editing other timelines)
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     const activeSlideshow = allSlideshows[activeSlideshowIndex];
     if (!activeSlideshow) return;
     const slideshowData = {
@@ -1648,7 +1648,7 @@ const SlideshowEditor = ({
       createdAt: existingSlideshow?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    onSave?.(slideshowData);
+    await onSave?.(slideshowData);
     toastSuccess(`Saved "${activeSlideshow.name}"`);
   }, [allSlideshows, activeSlideshowIndex, aspectRatio, existingSlideshow, onSave]);
 

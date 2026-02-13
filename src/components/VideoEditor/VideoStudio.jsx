@@ -1495,22 +1495,18 @@ const VideoStudio = ({
     if (schedulerEditPostId) {
       try {
         // Upload audio file to Firebase if it has a local blob URL (non-serializable for Firestore)
-        if (slideshowData.audio?.file && (slideshowData.audio.url?.startsWith('blob:') || slideshowData.audio.localUrl)) {
-          try {
-            const audioFile = slideshowData.audio.file;
+        if (slideshowData.audio && (slideshowData.audio.file || slideshowData.audio.url?.startsWith('blob:'))) {
+          const audioFile = slideshowData.audio.file;
+          if (audioFile) {
             const { url: firebaseUrl } = await uploadFile(audioFile, 'audio');
             slideshowData = {
               ...slideshowData,
               audio: {
                 ...slideshowData.audio,
                 url: firebaseUrl,
-                localUrl: undefined,
-                file: undefined
               }
             };
             log('[VideoStudio] Uploaded audio to Firebase:', firebaseUrl);
-          } catch (audioErr) {
-            console.warn('[VideoStudio] Audio upload failed, saving without:', audioErr);
           }
         }
         // Strip non-serializable fields from audio before Firestore save
