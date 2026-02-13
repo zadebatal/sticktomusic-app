@@ -925,11 +925,23 @@ export const removeFromBank = (artistId, collectionId, mediaIds) => {
 };
 
 /**
+ * Extract plain text from a text bank entry (string or { text, style } object)
+ */
+export const getTextBankText = (entry) =>
+  typeof entry === 'string' ? entry : entry?.text || '';
+
+/**
+ * Extract style from a text bank entry, or null if plain string
+ */
+export const getTextBankStyle = (entry) =>
+  typeof entry === 'object' && entry?.style ? entry.style : null;
+
+/**
  * Add text to a text bank
  * @param {string} artistId
  * @param {string} collectionId
  * @param {number} bankNum - 1-based slide position (1 = Slide 1, etc.)
- * @param {string} text
+ * @param {string|object} text - plain string or { text, style } object
  */
 export const addToTextBank = (artistId, collectionId, bankNum, text) => {
   const collections = getUserCollections(artistId);

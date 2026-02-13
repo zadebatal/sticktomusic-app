@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import useIsMobile from '../../hooks/useIsMobile';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
-import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, getLyrics, MEDIA_TYPES, addToTextBank, removeFromTextBank, assignToBank, saveCollectionToFirestore, migrateCollectionBanks, getBankColor, getBankLabel, BANK_COLORS, MAX_BANKS, MIN_BANKS, addBankToCollection, removeBankFromCollection, updateLibraryItem } from '../../services/libraryService';
+import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, getLyrics, MEDIA_TYPES, addToTextBank, removeFromTextBank, assignToBank, saveCollectionToFirestore, migrateCollectionBanks, getBankColor, getBankLabel, BANK_COLORS, MAX_BANKS, MIN_BANKS, addBankToCollection, removeBankFromCollection, updateLibraryItem, getTextBankText, getTextBankStyle } from '../../services/libraryService';
 import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
 import LyricBank from './LyricBank';
@@ -148,12 +148,17 @@ const SlideshowEditor = ({
 
   // Text bank input state
   const [newTextInputs, setNewTextInputs] = useState({});
+  const [showAddToBankPicker, setShowAddToBankPicker] = useState(false);
 
   // Add text to a text bank and update local collections state
+  // text can be a plain string or { text: string, style: object }
   const handleAddToTextBank = useCallback((bankNum, text) => {
-    if (!text.trim() || !artistId || collections.length === 0) return;
+    const plainText = typeof text === 'string' ? text : text?.text || '';
+    if (!plainText.trim() || !artistId || collections.length === 0) return;
+    // For plain strings, trim; for styled objects, trim the text inside
+    const entry = typeof text === 'string' ? text.trim() : { ...text, text: text.text.trim() };
     const targetCol = collections[0]; // Add to first collection
-    addToTextBank(artistId, targetCol.id, bankNum, text.trim());
+    addToTextBank(artistId, targetCol.id, bankNum, entry);
     // Update local state so UI refreshes immediately (write to textBanks array)
     setCollections(prev => prev.map(col => {
       if (col.id !== targetCol.id) return col;
@@ -161,7 +166,7 @@ const SlideshowEditor = ({
       const textBanks = [...(migrated.textBanks || [])];
       const idx = bankNum - 1;
       while (textBanks.length <= idx) textBanks.push([]);
-      textBanks[idx] = [...textBanks[idx], text.trim()];
+      textBanks[idx] = [...textBanks[idx], entry];
       return { ...col, textBanks };
     }));
   }, [artistId, collections]);
@@ -933,11 +938,13 @@ const SlideshowEditor = ({
         else bank = textBanks[idx] || textBanks[0] || [];
         if (bank.length === 0) return overlay;
 
-        // Pick random text different from current if possible
-        const others = bank.filter(t => t !== overlay.text);
+        // Pick random entry different from current if possible
+        const others = bank.filter(t => getTextBankText(t) !== overlay.text);
         const pool = others.length > 0 ? others : bank;
-        const randomText = pool[Math.floor(Math.random() * pool.length)];
-        return { ...overlay, text: randomText };
+        const randomEntry = pool[Math.floor(Math.random() * pool.length)];
+        const randomText = getTextBankText(randomEntry);
+        const randomStyle = getTextBankStyle(randomEntry);
+        return { ...overlay, text: randomText, ...(randomStyle ? { style: { ...overlay.style, ...randomStyle } } : {}) };
       });
       return { ...slide, textOverlays: updatedOverlays };
     }));
@@ -1848,17 +1855,21 @@ const SlideshowEditor = ({
           }
           const newTextOverlays = templateOverlays.map((overlay, textIdx) => {
             let newText = overlay.text; // Default: keep template text
+            let bankStyle = null;
             if (!shouldKeepText && slideTBank.length > 0) {
               // Cycle: use both generation index AND overlay index for variety
               // generation 0 overlay 0 → bank[0], generation 0 overlay 1 → bank[1], etc.
               const bankIndex = (i * Math.max(templateOverlays.length, 1) + textIdx) % slideTBank.length;
-              newText = slideTBank[bankIndex];
+              const bankEntry = slideTBank[bankIndex];
+              newText = getTextBankText(bankEntry);
+              bankStyle = getTextBankStyle(bankEntry);
             }
             return {
               ...overlay,
               id: `text_${timestamp}_${i}_${s}_${textIdx}`,
-              text: newText
-              // style, position, etc. are preserved via ...overlay spread
+              text: newText,
+              // If bank entry has stored style, merge it on top of template style
+              ...(bankStyle ? { style: { ...overlay.style, ...bankStyle } } : {})
             };
           });
 
@@ -2455,19 +2466,26 @@ const SlideshowEditor = ({
                           </div>
                           {textBank.length > 0 ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                              {textBank.map((text, i) => (
+                              {textBank.map((entry, i) => {
+                                const entryText = getTextBankText(entry);
+                                const entryStyle = getTextBankStyle(entry);
+                                return (
                                 <div key={i} style={{ display: 'flex', alignItems: 'stretch', gap: '2px' }}>
                                   <div onClick={() => {
                                     if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
-                                      const newOverlay = { id: `text_${Date.now()}_${i}`, text, style: getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
+                                      const newOverlay = { id: `text_${Date.now()}_${i}`, text: entryText, style: entryStyle ? { ...entryStyle } : getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
                                       setSlides(prev => prev.map((slide, si) => si === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
                                       setEditingTextId(newOverlay.id);
                                     }
-                                  }} style={{ flex: 1, padding: '4px 6px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '4px 0 0 4px', color: '#d1d5db', fontSize: '10px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word' }} title="Click to add as overlay">{text}</div>
+                                  }} style={{ flex: 1, padding: '4px 6px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '4px 0 0 4px', color: '#d1d5db', fontSize: '10px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word', display: 'flex', alignItems: 'center', gap: '4px' }} title={entryStyle ? `Click to add as overlay (styled: ${entryStyle.fontFamily || ''})` : 'Click to add as overlay'}>
+                                    {entryStyle && <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: entryStyle.color || '#fff', flexShrink: 0, border: '1px solid rgba(255,255,255,0.2)' }} />}
+                                    {entryText}
+                                  </div>
                                   <button onClick={(e) => { e.stopPropagation(); handleRemoveFromTextBank(idx + 1, i); }}
                                     style={{ padding: '0 5px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.2)', borderLeft: 'none', borderRadius: '0 4px 4px 0', color: '#ef4444', fontSize: '9px', cursor: 'pointer', flexShrink: 0 }} title="Remove">×</button>
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           ) : <div style={{ fontSize: '9px', color: '#6b7280', padding: '2px', textAlign: 'center' }}>No text yet</div>}
                         </div>
@@ -3423,6 +3441,56 @@ const SlideshowEditor = ({
                         <polyline points="20 6 9 17 4 12"/>
                       </svg>
                     </button>
+                    {/* Add to Bank button with dropdown */}
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        onClick={() => setShowAddToBankPicker(prev => !prev)}
+                        style={{
+                          padding: '4px 8px', borderRadius: '5px', border: '1px solid rgba(236,72,153,0.3)',
+                          backgroundColor: showAddToBankPicker ? 'rgba(236,72,153,0.2)' : 'rgba(236,72,153,0.1)',
+                          color: '#f9a8d4', cursor: 'pointer', fontSize: '10px', fontWeight: '600',
+                          display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap'
+                        }}
+                        title="Save styled text to a text bank"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M12 5v14M5 12h14"/>
+                        </svg>
+                        Bank
+                      </button>
+                      {showAddToBankPicker && (() => {
+                        const banks = getTextBanks();
+                        const bankCount = Math.max(banks.length, 2);
+                        return (
+                          <div style={{
+                            position: 'absolute', top: '100%', right: 0, marginTop: '4px', zIndex: 20,
+                            backgroundColor: '#1e1e2e', border: '1px solid rgba(255,255,255,0.15)',
+                            borderRadius: '6px', padding: '4px', minWidth: '120px',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
+                          }}>
+                            {Array.from({ length: bankCount }, (_, i) => (
+                              <button key={i}
+                                onClick={() => {
+                                  const styledEntry = { text: selOverlay.text, style: { ...selOverlay.style } };
+                                  handleAddToTextBank(i + 1, styledEntry);
+                                  setShowAddToBankPicker(false);
+                                  toastSuccess(`Added to ${getBankLabel(i)} Text bank`);
+                                }}
+                                style={{
+                                  display: 'block', width: '100%', padding: '5px 8px', border: 'none',
+                                  backgroundColor: 'transparent', color: getBankColor(i).light,
+                                  fontSize: '11px', cursor: 'pointer', borderRadius: '4px', textAlign: 'left'
+                                }}
+                                onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.08)'}
+                                onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                              >
+                                {getBankLabel(i)} Text
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
 
                   {/* Row 2: Font, Size, Color, Align, Position */}
