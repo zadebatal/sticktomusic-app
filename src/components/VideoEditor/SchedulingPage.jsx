@@ -10,6 +10,7 @@ import CaptionHashtagBank from './CaptionHashtagBank';
 import { useToast, ConfirmDialog } from '../ui';
 import { getCreatedContent, getCollections } from '../../services/libraryService';
 import { renderVideo } from '../../services/videoExportService';
+import { exportSlideshowAsImages } from '../../services/slideshowExportService';
 import { uploadFile } from '../../services/firebaseStorage';
 import log from '../../utils/logger';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -524,10 +525,6 @@ const SchedulingPage = ({
 
     const isSlideshow = post.contentType === 'slideshow';
     let videoUrl = post.cloudUrl || post.editorState?.cloudUrl;
-    // Prefer exported images (rendered at correct aspect ratio with text overlays) over raw backgrounds
-    const slideshowImages = isSlideshow
-      ? (post.editorState?.exportedImages || (post.editorState?.slides || []).map(s => ({ url: s.backgroundImage || s.imageUrl }))).filter(s => s.url)
-      : null;
 
     if (!isSlideshow && !videoUrl) {
       if (!post.editorState?.clips?.length) {
@@ -554,37 +551,101 @@ const SchedulingPage = ({
     const caption = [post.caption || '', allHashtags.join(' ')].filter(Boolean).join('\n\n');
 
     try {
-      const result = await onSchedulePost({
-        videoUrl,
-        caption,
-        platforms: platformEntries,
-        scheduledFor: post.scheduledTime || new Date().toISOString(),
-        ...(isSlideshow ? { type: 'carousel', images: slideshowImages } : {})
-      });
-
-      if (result?.success === false) {
-        await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: result.error || 'Unknown error' });
-        toastError(`Failed to publish: ${result.error || 'Unknown error'}`);
-      } else {
-        // Build postResults from Late API response
-        const latePost = result?.post || {};
-        const latePostId = latePost._id || latePost.id || null;
+      if (isSlideshow) {
+        // Export at correct aspect ratio per platform (Instagram=4:5, TikTok=9:16)
+        const slides = post.editorState?.slides || [];
+        const slideshowName = post.editorState?.name || post.name || 'slideshow';
+        const existingRatio = post.editorState?.aspectRatio || '9:16';
+        const existingImages = post.editorState?.exportedImages;
         const platformResults = {};
-        platformEntries.forEach(({ platform }) => {
-          platformResults[platform] = {
-            postId: latePostId,
-            url: latePost.url || latePost.permalink || null,
-            error: null
-          };
+        let lastLatePostId = null;
+        let anyFailed = false;
+
+        for (const entry of platformEntries) {
+          const targetRatio = entry.platform === 'instagram' ? '4:5' : '9:16';
+          let images;
+
+          if (existingImages?.length && existingRatio === targetRatio) {
+            images = existingImages;
+          } else if (slides.some(s => s.backgroundImage || s.imageUrl)) {
+            log(`[Schedule] Re-exporting slideshow at ${targetRatio} for ${entry.platform}`);
+            images = await exportSlideshowAsImages(
+              { slides, aspectRatio: targetRatio, name: slideshowName },
+              () => {}
+            );
+          } else {
+            platformResults[entry.platform] = { postId: null, url: null, error: 'No slide images' };
+            anyFailed = true;
+            continue;
+          }
+
+          const result = await onSchedulePost({
+            caption,
+            platforms: [entry],
+            scheduledFor: post.scheduledTime || new Date().toISOString(),
+            type: 'carousel',
+            images
+          });
+
+          if (result?.success === false) {
+            platformResults[entry.platform] = { postId: null, url: null, error: result.error };
+            anyFailed = true;
+          } else {
+            const latePost = result?.post || {};
+            lastLatePostId = latePost._id || latePost.id || null;
+            platformResults[entry.platform] = {
+              postId: lastLatePostId,
+              url: latePost.url || latePost.permalink || null,
+              error: null
+            };
+          }
+        }
+
+        if (anyFailed && !lastLatePostId) {
+          const errors = Object.entries(platformResults).filter(([,v]) => v.error).map(([p,v]) => `${p}: ${v.error}`).join('; ');
+          await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: errors });
+          toastError(`Failed to publish: ${errors}`);
+        } else {
+          await handleUpdatePost(postId, {
+            status: POST_STATUS.POSTED,
+            postedAt: new Date().toISOString(),
+            latePostId: lastLatePostId,
+            postResults: platformResults
+          });
+          toastSuccess(anyFailed ? 'Partially published (some platforms failed)' : 'Published successfully!');
+        }
+      } else {
+        // Video post — single API call for all platforms
+        const result = await onSchedulePost({
+          videoUrl,
+          caption,
+          platforms: platformEntries,
+          scheduledFor: post.scheduledTime || new Date().toISOString(),
         });
 
-        await handleUpdatePost(postId, {
-          status: POST_STATUS.POSTED,
-          postedAt: new Date().toISOString(),
-          latePostId,
-          postResults: platformResults
-        });
-        toastSuccess('Published successfully!');
+        if (result?.success === false) {
+          await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: result.error || 'Unknown error' });
+          toastError(`Failed to publish: ${result.error || 'Unknown error'}`);
+        } else {
+          const latePost = result?.post || {};
+          const latePostId = latePost._id || latePost.id || null;
+          const platformResults = {};
+          platformEntries.forEach(({ platform }) => {
+            platformResults[platform] = {
+              postId: latePostId,
+              url: latePost.url || latePost.permalink || null,
+              error: null
+            };
+          });
+
+          await handleUpdatePost(postId, {
+            status: POST_STATUS.POSTED,
+            postedAt: new Date().toISOString(),
+            latePostId,
+            postResults: platformResults
+          });
+          toastSuccess('Published successfully!');
+        }
       }
     } catch (err) {
       log('[Schedule] Publish error:', err);
@@ -757,10 +818,6 @@ const SchedulingPage = ({
 
       const isSlideshow = post.contentType === 'slideshow';
       let videoUrl = post.cloudUrl || post.editorState?.cloudUrl;
-      // Prefer exported images (rendered at correct aspect ratio with text overlays) over raw backgrounds
-      const slideshowImages = isSlideshow
-        ? (post.editorState?.exportedImages || (post.editorState?.slides || []).map(s => ({ url: s.backgroundImage || s.imageUrl }))).filter(s => s.url)
-        : null;
 
       // Auto-render if no cloudUrl
       if (!isSlideshow && !videoUrl) {
@@ -786,37 +843,101 @@ const SchedulingPage = ({
       const caption = [post.caption || '', allHashtags.join(' ')].filter(Boolean).join('\n\n');
 
       try {
-        const result = await onSchedulePost({
-          videoUrl,
-          caption,
-          platforms: platformEntries,
-          scheduledFor: post.scheduledTime || new Date().toISOString(),
-          ...(isSlideshow ? { type: 'carousel', images: slideshowImages } : {})
-        });
-
-        if (result?.success === false) {
-          await handleUpdatePost(post.id, { status: POST_STATUS.FAILED, errorMessage: result.error || 'Unknown error' });
-          failed++;
-        } else {
-          // Build postResults from Late API response
-          const latePost = result?.post || {};
-          const latePostId = latePost._id || latePost.id || null;
+        if (isSlideshow) {
+          // Export at correct aspect ratio per platform
+          const slides = post.editorState?.slides || [];
+          const slideshowName = post.editorState?.name || post.name || 'slideshow';
+          const existingRatio = post.editorState?.aspectRatio || '9:16';
+          const existingImages = post.editorState?.exportedImages;
           const platformResults = {};
-          platformEntries.forEach(({ platform }) => {
-            platformResults[platform] = {
-              postId: latePostId,
-              url: latePost.url || latePost.permalink || null,
-              error: null
-            };
+          let lastLatePostId = null;
+          let postFailed = false;
+
+          for (const entry of platformEntries) {
+            const targetRatio = entry.platform === 'instagram' ? '4:5' : '9:16';
+            let images;
+
+            if (existingImages?.length && existingRatio === targetRatio) {
+              images = existingImages;
+            } else if (slides.some(s => s.backgroundImage || s.imageUrl)) {
+              log(`[Schedule] Bulk: re-exporting at ${targetRatio} for ${entry.platform}`);
+              images = await exportSlideshowAsImages(
+                { slides, aspectRatio: targetRatio, name: slideshowName },
+                () => {}
+              );
+            } else {
+              platformResults[entry.platform] = { postId: null, url: null, error: 'No slide images' };
+              postFailed = true;
+              continue;
+            }
+
+            const result = await onSchedulePost({
+              caption,
+              platforms: [entry],
+              scheduledFor: post.scheduledTime || new Date().toISOString(),
+              type: 'carousel',
+              images
+            });
+
+            if (result?.success === false) {
+              platformResults[entry.platform] = { postId: null, url: null, error: result.error };
+              postFailed = true;
+            } else {
+              const latePost = result?.post || {};
+              lastLatePostId = latePost._id || latePost.id || null;
+              platformResults[entry.platform] = {
+                postId: lastLatePostId,
+                url: latePost.url || latePost.permalink || null,
+                error: null
+              };
+            }
+          }
+
+          if (postFailed && !lastLatePostId) {
+            const errors = Object.entries(platformResults).filter(([,v]) => v.error).map(([p,v]) => `${p}: ${v.error}`).join('; ');
+            await handleUpdatePost(post.id, { status: POST_STATUS.FAILED, errorMessage: errors });
+            failed++;
+          } else {
+            await handleUpdatePost(post.id, {
+              status: POST_STATUS.POSTED,
+              postedAt: new Date().toISOString(),
+              latePostId: lastLatePostId,
+              postResults: platformResults
+            });
+            succeeded++;
+          }
+        } else {
+          // Video post — single API call
+          const result = await onSchedulePost({
+            videoUrl,
+            caption,
+            platforms: platformEntries,
+            scheduledFor: post.scheduledTime || new Date().toISOString(),
           });
 
-          await handleUpdatePost(post.id, {
-            status: POST_STATUS.POSTED,
-            postedAt: new Date().toISOString(),
-            latePostId,
-            postResults: platformResults
-          });
-          succeeded++;
+          if (result?.success === false) {
+            await handleUpdatePost(post.id, { status: POST_STATUS.FAILED, errorMessage: result.error || 'Unknown error' });
+            failed++;
+          } else {
+            const latePost = result?.post || {};
+            const latePostId = latePost._id || latePost.id || null;
+            const platformResults = {};
+            platformEntries.forEach(({ platform }) => {
+              platformResults[platform] = {
+                postId: latePostId,
+                url: latePost.url || latePost.permalink || null,
+                error: null
+              };
+            });
+
+            await handleUpdatePost(post.id, {
+              status: POST_STATUS.POSTED,
+              postedAt: new Date().toISOString(),
+              latePostId,
+              postResults: platformResults
+            });
+            succeeded++;
+          }
         }
       } catch (err) {
         log('[Schedule] Bulk publish error for', post.id, ':', err);
