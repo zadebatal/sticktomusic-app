@@ -215,7 +215,8 @@ const SchedulingPage = ({
   }, [db, artistId]);
 
   useEffect(() => {
-    setBatchStartDate(new Date().toISOString().split('T')[0]);
+    const now = new Date();
+    setBatchStartDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
   }, []);
 
   // Load always-on hashtags/captions from content templates (reusable)
@@ -1443,7 +1444,11 @@ const PostRow = ({
       const raw = post.scheduledTime;
       const d = new Date(raw?.toDate ? raw.toDate() : raw);
       if (!isNaN(d.getTime())) {
-        setSchedDate(d.toISOString().split('T')[0]);
+        // Use local date parts (toISOString() uses UTC which shifts the day in US timezones)
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        setSchedDate(`${yyyy}-${mm}-${dd}`);
         setSchedTime(d.toTimeString().substring(0, 5));
       } else {
         setSchedDate('');
