@@ -1106,8 +1106,7 @@ const StudioHome = ({
     const bankImages = (migrated.banks || []).map(bankIds =>
       library.filter(item => (bankIds || []).includes(item.id))
     );
-    const textBank1 = col.textBank1 || [];
-    const textBank2 = col.textBank2 || [];
+    const textBanks = migrated.textBanks || [];
     const template = col.textTemplates?.[0] || null;
 
     // Validate: at least one bank must have images
@@ -1162,9 +1161,10 @@ const StudioHome = ({
           duration: 3
         };
 
-        // Add text overlay from text banks
-        const textBankForSlide = s === 0 ? textBank1 : s === 1 ? textBank2 : (s % 2 === 0 ? textBank1 : textBank2);
-        const textStyleForSlide = s === 0 ? template?.text1Style : s === 1 ? template?.text2Style : (s % 2 === 0 ? template?.text1Style : template?.text2Style);
+        // Add text overlay from text banks (cycle through all available banks)
+        const textBankIndex = s % (textBanks.length || 1);
+        const textBankForSlide = textBanks[textBankIndex] || [];
+        const textStyleForSlide = textBankIndex === 0 ? template?.text1Style : template?.text2Style;
 
         if (textBankForSlide.length > 0) {
           const randomText = randomFrom(textBankForSlide);

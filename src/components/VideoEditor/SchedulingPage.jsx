@@ -662,7 +662,13 @@ const SchedulingPage = ({
     if (!batchStartDate || selectedCount === 0) return;
 
     const selectedPosts = posts.filter(p => selectedPostIds.has(p.id));
-    const startTime = new Date(`${batchStartDate}T${batchStartTime}`);
+    let startTime = new Date(`${batchStartDate}T${batchStartTime}`);
+
+    // If start time is in the past, bump to now + 5 minutes
+    const now = new Date();
+    if (startTime < now) {
+      startTime = new Date(now.getTime() + 5 * 60 * 1000);
+    }
 
     // ── Compute staggered times using postsPerDay + spacing ──
     const WAKING_MINUTES = 960; // 16 hours (6am–10pm spread)
