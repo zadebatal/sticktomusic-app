@@ -394,8 +394,8 @@ const SchedulingPage = ({
         const existing = Array.isArray(post.hashtags) ? post.hashtags : (post.hashtags || '').split(/\s+/).filter(Boolean);
         const newTags = generated.hashtags.split(/\s+/).filter(Boolean);
         const merged = [...new Set([...existing, ...newTags])];
-        const currentStr = Array.isArray(post.hashtags) ? post.hashtags.join(' ') : (post.hashtags || '');
-        if (merged.join(' ') !== currentStr) updates.hashtags = merged.join(' ');
+        const currentArr = Array.isArray(post.hashtags) ? post.hashtags : (post.hashtags || '').split(/\s+/).filter(Boolean);
+        if (merged.join(' ') !== currentArr.join(' ')) updates.hashtags = merged;
       }
       if (Object.keys(updates).length > 0) {
         await handleUpdatePost(post.id, updates);
@@ -730,7 +730,7 @@ const SchedulingPage = ({
 
       // Merge hashtags: always-on + existing per-post
       const existingPost = posts.find(p => p.id === post.id);
-      const perPostTags = existingPost?.hashtags || [];
+      const perPostTags = toHashtagArray(existingPost?.hashtags);
       const mergedTags = [...new Set([...alwaysOnHashtags, ...perPostTags])];
       if (mergedTags.length > 0) updates.hashtags = mergedTags;
 
@@ -1663,16 +1663,19 @@ const PostRow = ({
 // ExpandedDrawer — Full details with tiered hashtags
 // ═══════════════════════════════════════════════════
 
+// Normalize hashtags to array — handles both string and array formats
+const toHashtagArray = (h) => Array.isArray(h) ? h : (h || '').split(/\s+/).filter(Boolean);
+
 const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [], alwaysOnCaption = '', onUpdate, onTogglePlatform, onSetPlatformAccount, onEditDraft, onPublish, readOnly = false, isMobile = false }) => {
   const { theme } = useTheme();
   const s = getS(theme);
-  const [hashtags, setHashtags] = useState((post.hashtags || []).join(' '));
+  const [hashtags, setHashtags] = useState(toHashtagArray(post.hashtags).join(' '));
   const [hashtagBank, setHashtagBank] = useState([]);
   const [showSaveSet, setShowSaveSet] = useState(false);
   const [newSetName, setNewSetName] = useState('');
 
   useEffect(() => {
-    setHashtags((post.hashtags || []).join(' '));
+    setHashtags(toHashtagArray(post.hashtags).join(' '));
   }, [post.id, post.hashtags]);
 
   useEffect(() => {
@@ -1683,7 +1686,7 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
 
   const handleHashtagsBlur = () => {
     const tags = hashtags.split(/[\s,]+/).filter(Boolean).map(h => h.startsWith('#') ? h : `#${h}`);
-    if (tags.join(' ') !== (post.hashtags || []).join(' ')) onUpdate({ hashtags: tags });
+    if (tags.join(' ') !== toHashtagArray(post.hashtags).join(' ')) onUpdate({ hashtags: tags });
   };
 
   const handleApplySet = (set) => { setHashtags(set.tags.join(' ')); onUpdate({ hashtags: set.tags }); };
@@ -1715,7 +1718,7 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
   const previewImage = post.thumbnail || post.editorState?.thumbnail || post.editorState?.slides?.[0]?.backgroundImage || post.editorState?.slides?.[0]?.imageUrl || post.editorState?.clips?.[0]?.thumbnail || null;
 
   // Separate per-post tags from always-on tags
-  const perPostTags = (post.hashtags || []).filter(t => !alwaysOnHashtags.includes(t));
+  const perPostTags = toHashtagArray(post.hashtags).filter(t => !alwaysOnHashtags.includes(t));
 
   return (
     <div style={{ ...s.drawer, ...(isMobile ? { padding: '12px 16px' } : {}) }}>
