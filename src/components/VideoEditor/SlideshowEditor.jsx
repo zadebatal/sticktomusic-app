@@ -22,6 +22,15 @@ import log from '../../utils/logger';
  * - Export as carousel images for Instagram/TikTok
  */
 
+// Stroke string helpers: parse "2px black" ↔ { width: 2, color: '#000000' }
+const parseStroke = (str) => {
+  if (!str) return { width: 2, color: '#000000' };
+  const match = str.match(/(\d+)px\s+(.*)/);
+  if (!match) return { width: 2, color: '#000000' };
+  return { width: parseInt(match[1], 10), color: match[2] || '#000000' };
+};
+const buildStroke = (width, color) => `${width}px ${color}`;
+
 const SlideshowEditor = ({
   db = null,
   artistId = null,
@@ -54,13 +63,25 @@ const SlideshowEditor = ({
     ...s,
     textOverlays: s.textOverlays || []
   }));
-  const [allSlideshows, setAllSlideshows] = useState([{
-    id: 'template',
-    name: existingSlideshow?.name || 'Untitled Slideshow',
-    slides: ensureTextOverlays(existingSlideshow?.slides),
-    audio: existingSlideshow?.audio || initialAudio || null,
-    isTemplate: true
-  }]);
+  const isMultiDraftMode = !!(existingSlideshow?.multiple && Array.isArray(existingSlideshow.multiple));
+  const [allSlideshows, setAllSlideshows] = useState(() => {
+    if (isMultiDraftMode) {
+      return existingSlideshow.multiple.map((ss, idx) => ({
+        id: ss.id || `multi_${idx}`,
+        name: ss.name || `Slideshow ${idx + 1}`,
+        slides: ensureTextOverlays(ss.slides),
+        audio: ss.audio || null,
+        isTemplate: false
+      }));
+    }
+    return [{
+      id: 'template',
+      name: existingSlideshow?.name || 'Untitled Slideshow',
+      slides: ensureTextOverlays(existingSlideshow?.slides),
+      audio: existingSlideshow?.audio || initialAudio || null,
+      isTemplate: true
+    }];
+  });
   const [activeSlideshowIndex, setActiveSlideshowIndex] = useState(0);
   const [generateCount, setGenerateCount] = useState(10);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -2902,7 +2923,8 @@ const SlideshowEditor = ({
                         backgroundColor: isSelected ? 'rgba(99,102,241,0.1)' : 'transparent',
                         boxSizing: 'border-box',
                         overflow: 'hidden',
-                        wordBreak: 'break-word'
+                        wordBreak: 'break-word',
+                        whiteSpace: 'pre-wrap'
                       }}
                       onMouseDown={(e) => handleTextMouseDown(e, overlay.id)}
                       onClick={(e) => {
@@ -3362,16 +3384,17 @@ const SlideshowEditor = ({
                   gap: '8px'
                 }}>
                   {/* Row 1: Text input + close */}
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <input
-                      type="text"
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                    <textarea
+                      rows={2}
                       value={selOverlay.text}
                       onChange={(e) => updateTextOverlay(selOverlay.id, { text: e.target.value })}
                       placeholder="Enter text..."
                       style={{
                         flex: 1, padding: '7px 10px', borderRadius: '6px',
                         border: '1px solid rgba(99,102,241,0.3)', backgroundColor: 'rgba(255,255,255,0.06)',
-                        color: '#fff', fontSize: '13px', outline: 'none'
+                        color: '#fff', fontSize: '13px', outline: 'none', resize: 'vertical',
+                        fontFamily: 'inherit', lineHeight: '1.4'
                       }}
                     />
                     <button
@@ -3555,7 +3578,7 @@ const SlideshowEditor = ({
                     {/* Text stroke toggle — on/off */}
                     <button
                       onClick={() => updateTextOverlay(selOverlay.id, {
-                        style: { ...selOverlay.style, textStroke: selOverlay.style.textStroke ? '' : '2px black' }
+                        style: { ...selOverlay.style, textStroke: selOverlay.style.textStroke ? '' : buildStroke(2, '#000000') }
                       })}
                       style={{
                         padding: '4px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
@@ -3566,6 +3589,42 @@ const SlideshowEditor = ({
                       title={selOverlay.style.textStroke ? 'Remove text stroke' : 'Add text stroke'}
                     >St</button>
                   </div>
+
+                  {/* Stroke width + color controls (when stroke is active) */}
+                  {selOverlay.style.textStroke && (() => {
+                    const { width: strokeW, color: strokeC } = parseStroke(selOverlay.style.textStroke);
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '4px' }}>
+                        <span style={{ color: '#9ca3af', fontSize: '11px' }}>Stroke</span>
+                        <button
+                          onClick={() => { if (strokeW > 1) updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textStroke: buildStroke(strokeW - 1, strokeC) } }); }}
+                          style={{
+                            width: '22px', height: '22px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.15)',
+                            backgroundColor: 'transparent', color: '#9ca3af', cursor: strokeW > 1 ? 'pointer' : 'not-allowed',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '700',
+                            opacity: strokeW > 1 ? 1 : 0.4
+                          }}
+                        >−</button>
+                        <span style={{ color: '#fff', fontSize: '11px', minWidth: '24px', textAlign: 'center' }}>{strokeW}px</span>
+                        <button
+                          onClick={() => { if (strokeW < 10) updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textStroke: buildStroke(strokeW + 1, strokeC) } }); }}
+                          style={{
+                            width: '22px', height: '22px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.15)',
+                            backgroundColor: 'transparent', color: '#9ca3af', cursor: strokeW < 10 ? 'pointer' : 'not-allowed',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '700',
+                            opacity: strokeW < 10 ? 1 : 0.4
+                          }}
+                        >+</button>
+                        <input
+                          type="color"
+                          value={strokeC.startsWith('#') ? strokeC : '#000000'}
+                          onChange={(e) => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textStroke: buildStroke(strokeW, e.target.value) } })}
+                          style={{ width: '24px', height: '22px', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: 0, background: 'transparent' }}
+                          title="Stroke color"
+                        />
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })()}
@@ -3691,6 +3750,8 @@ const SlideshowEditor = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   {schedulerEditMode ? (
                     <span style={{ fontSize: '11px', color: '#6b7280' }}>Editing scheduled post</span>
+                  ) : isMultiDraftMode ? (
+                    <span style={{ fontSize: '11px', color: '#a5b4fc', fontWeight: '600' }}>Editing {allSlideshows.length} drafts</span>
                   ) : <>
                   {/* Template quick-switch */}
                   <button
@@ -4329,7 +4390,8 @@ const AVAILABLE_FONTS = [
   { name: 'Comic Sans', value: "'Comic Sans MS', cursive" },
   { name: 'Trebuchet', value: "'Trebuchet MS', sans-serif" },
   { name: 'Verdana', value: 'Verdana, sans-serif' },
-  { name: 'Palatino', value: "'Palatino Linotype', serif" }
+  { name: 'Palatino', value: "'Palatino Linotype', serif" },
+  { name: 'TikTok Sans', value: "'TikTok Sans', sans-serif" }
 ];
 
 const TextEditorPanel = ({

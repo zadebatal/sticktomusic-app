@@ -253,6 +253,7 @@ const DraftsView = (props) => {
           onUpdateVideo={props.onUpdateVideo}
           onMakeSlideshow={props.onMakeSlideshow}
           onEditSlideshow={props.onEditSlideshow}
+          onEditMultipleSlideshows={props.onEditMultipleSlideshows}
           onDeleteSlideshow={props.onDeleteSlideshow}
           onSchedulePost={props.onSchedulePost}
           onViewScheduling={props.onViewScheduling}
@@ -1483,6 +1484,13 @@ const VideoStudio = ({
     }
   }, [selectedCategory, currentArtistId, setCategories, setSelectedCategory, setCurrentView]);
 
+  const handleEditMultipleSlideshows = useCallback((items) => {
+    setSlideshowBatchMode(false);
+    setEditingSlideshow({ multiple: items });
+    setShowSlideshowEditor(true);
+    setStudioMode('slideshows');
+  }, []);
+
   const handleCloseSlideshowEditor = useCallback(() => {
     setShowSlideshowEditor(false);
     setEditingSlideshow(null);
@@ -2352,6 +2360,7 @@ const VideoStudio = ({
             onBack={() => setCurrentView('home')}
             onMakeSlideshow={handleMakeSlideshow}
             onEditSlideshow={(slideshow) => handleMakeSlideshow(slideshow)}
+            onEditMultipleSlideshows={handleEditMultipleSlideshows}
             onDeleteSlideshow={handleDeleteSlideshow}
             onSchedulePost={onSchedulePost}
             onViewScheduling={() => setCurrentView('scheduling')}
@@ -2378,6 +2387,7 @@ const VideoStudio = ({
             onUpdateVideo={handleUpdateVideo}
             onMakeSlideshow={handleMakeSlideshow}
             onEditSlideshow={(slideshow) => handleMakeSlideshow(slideshow)}
+            onEditMultipleSlideshows={handleEditMultipleSlideshows}
             onDeleteSlideshow={handleDeleteSlideshow}
             onSchedulePost={onSchedulePost}
             onViewScheduling={() => setCurrentView('scheduling')}

@@ -146,6 +146,9 @@ const drawTextOverlay = (ctx, overlay, dimensions) => {
  * Render a single slide to a canvas and return as blob
  */
 const renderSlideToCanvas = async (slide, dimensions) => {
+  // Ensure web fonts (e.g. TikTok Sans) are loaded before drawing text
+  await document.fonts.ready;
+
   const canvas = document.createElement('canvas');
   canvas.width = dimensions.width;
   canvas.height = dimensions.height;
