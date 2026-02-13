@@ -111,10 +111,10 @@ const drawTextOverlay = (ctx, overlay, dimensions) => {
 
   // Draw text stroke/border if enabled
   if (style.textStroke) {
-    const strokeMatch = (style.textStroke || '').match(/(\d+)px\s+(.*)/);
+    const strokeMatch = (style.textStroke || '').match(/([\d.]+)px\s+(.*)/);
     if (strokeMatch) {
       ctx.strokeStyle = strokeMatch[2] || '#000000';
-      ctx.lineWidth = parseInt(strokeMatch[1], 10) * 2;
+      ctx.lineWidth = parseFloat(strokeMatch[1]) * 2;
       ctx.lineJoin = 'round';
       lines.forEach((line, i) => {
         const lineY = y + (i - (lines.length - 1) / 2) * lineHeight;
