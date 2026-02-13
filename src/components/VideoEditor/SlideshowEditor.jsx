@@ -1112,6 +1112,33 @@ const SlideshowEditor = ({
     loadedAudioKeyRef.current = null;
   }, []);
 
+  const handleApplyAudioToAll = useCallback(() => {
+    if (!isMultiDraftMode || allSlideshows.length <= 1) return;
+    const currentAudio = allSlideshows[currentSlideshowIndex]?.audio || null;
+    setAllSlideshows(prev => prev.map((ss, i) =>
+      i === currentSlideshowIndex ? ss : { ...ss, audio: currentAudio ? { ...currentAudio } : null }
+    ));
+  }, [isMultiDraftMode, allSlideshows, currentSlideshowIndex]);
+
+  const handleRemoveAudioFromAll = useCallback(() => {
+    if (!isMultiDraftMode || allSlideshows.length <= 1) return;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+    }
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+    setSelectedAudio(null);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setAudioDuration(0);
+    setAudioReady(false);
+    setAudioError(null);
+    loadedAudioKeyRef.current = null;
+    setAllSlideshows(prev => prev.map(ss => ({ ...ss, audio: null })));
+  }, [isMultiDraftMode, allSlideshows.length]);
+
   // Load audio when selected — use a stable key to avoid reloading on unrelated re-renders
   // selectedAudio is derived from allSlideshows and gets a new reference on every slide edit,
   // so we track the actual audio identity via a key and only reload when it truly changes.
@@ -3045,6 +3072,16 @@ const SlideshowEditor = ({
                       color: '#86efac', cursor: 'pointer', flexShrink: 0
                     }}
                   >Trim</button>
+                  {isMultiDraftMode && allSlideshows.length > 1 && (
+                    <button
+                      onClick={handleApplyAudioToAll}
+                      style={{
+                        padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+                        border: `1px solid ${theme.accent.primary}40`, backgroundColor: 'transparent',
+                        color: theme.accent.primary, cursor: 'pointer', flexShrink: 0
+                      }}
+                    >Apply to All</button>
+                  )}
                   <button
                     onClick={handleRemoveAudio}
                     style={{
@@ -3053,6 +3090,16 @@ const SlideshowEditor = ({
                       color: '#ef4444', cursor: 'pointer', flexShrink: 0
                     }}
                   >Remove</button>
+                  {isMultiDraftMode && allSlideshows.length > 1 && (
+                    <button
+                      onClick={handleRemoveAudioFromAll}
+                      style={{
+                        padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+                        border: '1px solid rgba(239,68,68,0.3)', backgroundColor: 'transparent',
+                        color: '#ef4444', cursor: 'pointer', flexShrink: 0
+                      }}
+                    >Remove All</button>
+                  )}
                 </div>
               )}
 
