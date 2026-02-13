@@ -1114,11 +1114,11 @@ const SlideshowEditor = ({
 
   const handleApplyAudioToAll = useCallback(() => {
     if (!isMultiDraftMode || allSlideshows.length <= 1) return;
-    const currentAudio = allSlideshows[currentSlideshowIndex]?.audio || null;
+    const currentAudio = allSlideshows[activeSlideshowIndex]?.audio || null;
     setAllSlideshows(prev => prev.map((ss, i) =>
-      i === currentSlideshowIndex ? ss : { ...ss, audio: currentAudio ? { ...currentAudio } : null }
+      i === activeSlideshowIndex ? ss : { ...ss, audio: currentAudio ? { ...currentAudio } : null }
     ));
-  }, [isMultiDraftMode, allSlideshows, currentSlideshowIndex]);
+  }, [isMultiDraftMode, allSlideshows, activeSlideshowIndex]);
 
   const handleRemoveAudioFromAll = useCallback(() => {
     if (!isMultiDraftMode || allSlideshows.length <= 1) return;
