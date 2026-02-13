@@ -1984,13 +1984,18 @@ const SlideshowEditor = ({
       }
 
       // Schedule as carousel (array of image URLs)
-      await onSchedulePost({
+      const result = await onSchedulePost({
         platforms: platformsArray,
         caption: fullCaption,
-        mediaUrls: exportedImages.map(img => img.url), // Carousel images
-        mediaType: 'carousel',
+        type: 'carousel',
+        images: exportedImages.map(img => ({ url: img.url })),
         scheduledFor: scheduledFor.toISOString()
       });
+
+      if (result?.success === false) {
+        toastError(`Failed to schedule: ${result.error || 'Unknown error'}`);
+        return;
+      }
 
       toastSuccess(`Scheduled carousel to ${platformsArray.map(p => p.platform).join(' & ')}!`);
       setShowSchedulePanel(false);

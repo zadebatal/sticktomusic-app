@@ -129,9 +129,10 @@ const renderSlideToCanvas = async (slide, dimensions) => {
       }
 
       // Apply user transform (scale + pan) — scale from center, then offset
-      // The preview canvas is 270x480 (previewScale=0.25), export is 1080x1920
+      // Preview uses 0.25 scale, so export = preview * 4
       // offsetX/Y are in preview pixels, scale to export dimensions
-      const exportScale = dimensions.width / 270; // 1080/270 = 4
+      const previewScale = 0.25;
+      const exportScale = 1 / previewScale; // always 4
       const userScale = transform.scale;
       const userOffsetX = (transform.offsetX || 0) * exportScale;
       const userOffsetY = (transform.offsetY || 0) * exportScale;

@@ -524,7 +524,10 @@ const SchedulingPage = ({
 
     const isSlideshow = post.contentType === 'slideshow';
     let videoUrl = post.cloudUrl || post.editorState?.cloudUrl;
-    const slideshowImages = isSlideshow ? (post.editorState?.slides || []).map(s => ({ url: s.backgroundImage || s.imageUrl })).filter(s => s.url) : null;
+    // Prefer exported images (rendered at correct aspect ratio with text overlays) over raw backgrounds
+    const slideshowImages = isSlideshow
+      ? (post.editorState?.exportedImages || (post.editorState?.slides || []).map(s => ({ url: s.backgroundImage || s.imageUrl }))).filter(s => s.url)
+      : null;
 
     if (!isSlideshow && !videoUrl) {
       if (!post.editorState?.clips?.length) {
@@ -546,7 +549,8 @@ const SchedulingPage = ({
       await handleUpdatePost(postId, { status: POST_STATUS.POSTING });
     }
 
-    const allHashtags = [...(post.hashtags || []), ...(alwaysOnHashtags || [])];
+    const postHashtags = Array.isArray(post.hashtags) ? post.hashtags : (post.hashtags || '').split(/\s+/).filter(Boolean);
+    const allHashtags = [...postHashtags, ...(alwaysOnHashtags || [])];
     const caption = [post.caption || '', allHashtags.join(' ')].filter(Boolean).join('\n\n');
 
     try {
@@ -753,7 +757,10 @@ const SchedulingPage = ({
 
       const isSlideshow = post.contentType === 'slideshow';
       let videoUrl = post.cloudUrl || post.editorState?.cloudUrl;
-      const slideshowImages = isSlideshow ? (post.editorState?.slides || []).map(s => ({ url: s.backgroundImage || s.imageUrl })).filter(s => s.url) : null;
+      // Prefer exported images (rendered at correct aspect ratio with text overlays) over raw backgrounds
+      const slideshowImages = isSlideshow
+        ? (post.editorState?.exportedImages || (post.editorState?.slides || []).map(s => ({ url: s.backgroundImage || s.imageUrl }))).filter(s => s.url)
+        : null;
 
       // Auto-render if no cloudUrl
       if (!isSlideshow && !videoUrl) {
@@ -774,7 +781,8 @@ const SchedulingPage = ({
         await handleUpdatePost(post.id, { status: POST_STATUS.POSTING });
       }
 
-      const allHashtags = [...(post.hashtags || []), ...(alwaysOnHashtags || [])];
+      const batchPostHashtags = Array.isArray(post.hashtags) ? post.hashtags : (post.hashtags || '').split(/\s+/).filter(Boolean);
+      const allHashtags = [...batchPostHashtags, ...(alwaysOnHashtags || [])];
       const caption = [post.caption || '', allHashtags.join(' ')].filter(Boolean).join('\n\n');
 
       try {
