@@ -1515,12 +1515,12 @@ const VideoStudio = ({
           slideshowData = { ...slideshowData, audio: cleanAudio };
         }
         const slides = slideshowData.slides || [];
-        const slideWithText = slides.find(s => s.textOverlays?.length > 0) || slides[0];
-        // Generate thumbnail with text overlays for scheduler preview
-        let thumbnail = slideWithText?.backgroundImage || slideWithText?.thumbnail || null;
-        if (slideWithText) {
+        const firstSlide = slides[0];
+        // Generate thumbnail with text overlays for scheduler preview (always slide 1)
+        let thumbnail = firstSlide?.backgroundImage || firstSlide?.thumbnail || null;
+        if (firstSlide) {
           try {
-            thumbnail = await generateSlideThumbnail(slideWithText, slideshowData.aspectRatio || '9:16');
+            thumbnail = await generateSlideThumbnail(firstSlide, slideshowData.aspectRatio || '9:16');
           } catch (e) {
             console.warn('[VideoStudio] Thumbnail generation failed, using raw image:', e);
           }

@@ -273,10 +273,10 @@ export const exportSlideshowAsImages = async (slideshow, onProgress = () => {}) 
 export const generateSlideThumbnail = async (slide, aspectRatio = '9:16') => {
   const fullDimensions = DIMENSIONS[aspectRatio] || DIMENSIONS['9:16'];
 
-  // Use smaller dimensions for thumbnail
+  // Use smaller dimensions for thumbnail (0.5x for readable text)
   const thumbnailDimensions = {
-    width: Math.round(fullDimensions.width * 0.2),
-    height: Math.round(fullDimensions.height * 0.2)
+    width: Math.round(fullDimensions.width * 0.5),
+    height: Math.round(fullDimensions.height * 0.5)
   };
 
   const canvas = document.createElement('canvas');

@@ -228,7 +228,7 @@ export const resetToDefaults = async (db, artistId) => {
 export const generateFromTemplate = (template, platform = 'tiktok', options = {}) => {
   if (!template) return { caption: '', hashtags: '' };
 
-  const { hashtagCount = 4, captionCount = 2 } = options;
+  const { hashtagCount = 4, captionCount = 1 } = options;
 
   // Platform-specific limits
   const maxHashtags = platform === 'instagram' ? 10 : platform === 'youtube' ? 15 : 5;

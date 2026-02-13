@@ -993,10 +993,8 @@ const SchedulingPage = ({
         // Generate thumbnail with text overlays for slideshows
         let thumbnail = item.thumbnail || item.slides?.[0]?.backgroundImage || item.slides?.[0]?.imageUrl || null;
         if (item.type === 'slideshow' && item.slides?.length > 0) {
-          // Find first slide with text overlays for a more representative thumbnail
-          const slideWithText = item.slides.find(s => s.textOverlays?.length > 0) || item.slides[0];
           try {
-            thumbnail = await generateSlideThumbnail(slideWithText, item.aspectRatio || '9:16');
+            thumbnail = await generateSlideThumbnail(item.slides[0], item.aspectRatio || '9:16');
           } catch (e) { /* fall back to raw image */ }
         }
         return {
