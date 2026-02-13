@@ -288,6 +288,18 @@ export const generateSlideThumbnail = async (slide, aspectRatio = '9:16') => {
     }
   }
 
+  // Draw text overlays scaled to thumbnail size
+  if (slide.textOverlays && slide.textOverlays.length > 0) {
+    const scale = thumbnailDimensions.width / fullDimensions.width;
+    slide.textOverlays.forEach(overlay => {
+      const scaledOverlay = {
+        ...overlay,
+        style: { ...overlay.style, fontSize: Math.max(6, Math.round(overlay.style.fontSize * scale)) }
+      };
+      drawTextOverlay(ctx, scaledOverlay, thumbnailDimensions);
+    });
+  }
+
   return canvas.toDataURL('image/jpeg', 0.7);
 };
 

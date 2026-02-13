@@ -1493,6 +1493,30 @@ const VideoStudio = ({
     // Scheduler edit mode: update the scheduledPost directly and return to scheduler
     if (schedulerEditPostId) {
       try {
+        // Upload audio file to Firebase if it has a local blob URL (non-serializable for Firestore)
+        if (slideshowData.audio?.file && (slideshowData.audio.url?.startsWith('blob:') || slideshowData.audio.localUrl)) {
+          try {
+            const audioFile = slideshowData.audio.file;
+            const { url: firebaseUrl } = await uploadFile(audioFile, 'audio');
+            slideshowData = {
+              ...slideshowData,
+              audio: {
+                ...slideshowData.audio,
+                url: firebaseUrl,
+                localUrl: undefined,
+                file: undefined
+              }
+            };
+            log('[VideoStudio] Uploaded audio to Firebase:', firebaseUrl);
+          } catch (audioErr) {
+            console.warn('[VideoStudio] Audio upload failed, saving without:', audioErr);
+          }
+        }
+        // Strip non-serializable fields from audio before Firestore save
+        if (slideshowData.audio) {
+          const { file, localUrl, ...cleanAudio } = slideshowData.audio;
+          slideshowData = { ...slideshowData, audio: cleanAudio };
+        }
         const firstSlide = slideshowData.slides?.[0];
         await updateScheduledPost(db, currentArtistId, schedulerEditPostId, {
           editorState: slideshowData,
