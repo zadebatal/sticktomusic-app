@@ -2230,12 +2230,13 @@ const VideoStudio = ({
               handleMakeSlideshow(options?.existingSlideshow || null);
             }}
             onViewContent={(options) => {
-              // For now, create a default category to view content
               const isSlideshows = options?.type === 'slideshows';
               setCurrentView(isSlideshows ? 'slideshows' : 'library');
               setStudioMode(isSlideshows ? 'slideshows' : 'videos');
-              // Select first category if none selected
-              if (!selectedCategory && artistCategories.length > 0) {
+              if (isSlideshows) {
+                // Slideshows are stored in libraryCategory, not artist categories
+                setSelectedCategory(null);
+              } else if (!selectedCategory && artistCategories.length > 0) {
                 setSelectedCategory(artistCategories[0]);
               }
             }}
