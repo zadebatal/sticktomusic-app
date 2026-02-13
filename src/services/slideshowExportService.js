@@ -30,8 +30,28 @@ const loadImage = (src) => {
 };
 
 /**
+ * Break a single word into chunks that fit within maxWidth (character-level break).
+ */
+const breakWord = (ctx, word, maxWidth) => {
+  const chunks = [];
+  let current = '';
+  for (const ch of word) {
+    const test = current + ch;
+    if (current && ctx.measureText(test).width > maxWidth) {
+      chunks.push(current);
+      current = ch;
+    } else {
+      current = test;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+};
+
+/**
  * Word-wrap text to fit within a max pixel width on canvas.
  * Splits on explicit \n first, then wraps each paragraph to maxWidth.
+ * Long words without spaces are broken character-by-character (like CSS word-break: break-word).
  */
 const wrapText = (ctx, text, maxWidth) => {
   const paragraphs = text.split('\n');
@@ -39,17 +59,26 @@ const wrapText = (ctx, text, maxWidth) => {
   for (const para of paragraphs) {
     const words = para.split(/\s+/).filter(Boolean);
     if (words.length === 0) { wrapped.push(''); continue; }
-    let currentLine = words[0];
-    for (let i = 1; i < words.length; i++) {
-      const testLine = currentLine + ' ' + words[i];
+    let currentLine = '';
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      // Break long words that exceed maxWidth on their own
+      if (ctx.measureText(word).width > maxWidth) {
+        if (currentLine) { wrapped.push(currentLine); currentLine = ''; }
+        const chunks = breakWord(ctx, word, maxWidth);
+        for (let c = 0; c < chunks.length - 1; c++) wrapped.push(chunks[c]);
+        currentLine = chunks[chunks.length - 1] || '';
+        continue;
+      }
+      const testLine = currentLine ? currentLine + ' ' + word : word;
       if (ctx.measureText(testLine).width > maxWidth) {
         wrapped.push(currentLine);
-        currentLine = words[i];
+        currentLine = word;
       } else {
         currentLine = testLine;
       }
     }
-    wrapped.push(currentLine);
+    if (currentLine) wrapped.push(currentLine);
   }
   return wrapped;
 };
