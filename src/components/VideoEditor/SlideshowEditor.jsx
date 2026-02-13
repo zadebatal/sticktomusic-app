@@ -1167,6 +1167,9 @@ const SlideshowEditor = ({
     if (!selectedAudioUrl || !el) {
       loadedAudioKeyRef.current = null;
       setAudioReady(false);
+      if (selectedAudio && !selectedAudioUrl) {
+        setAudioError('Audio file unavailable');
+      }
       return;
     }
 
