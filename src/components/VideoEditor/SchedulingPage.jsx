@@ -10,7 +10,7 @@ import CaptionHashtagBank from './CaptionHashtagBank';
 import { useToast, ConfirmDialog } from '../ui';
 import { getCreatedContent, getCollections } from '../../services/libraryService';
 import { renderVideo } from '../../services/videoExportService';
-import { exportSlideshowAsImages } from '../../services/slideshowExportService';
+import { exportSlideshowAsImages, generateSlideThumbnail } from '../../services/slideshowExportService';
 import { uploadFile } from '../../services/firebaseStorage';
 import log from '../../utils/logger';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -989,14 +989,23 @@ const SchedulingPage = ({
         return null;
       };
 
-      const itemsToAdd = selectedItems.map(item => ({
-        contentId: item.id,
-        contentType: item.type,
-        contentName: item.name || item.title || (item.type === 'slideshow' ? 'Untitled Slideshow' : 'Untitled Video'),
-        thumbnail: item.thumbnail || item.slides?.[0]?.backgroundImage || item.slides?.[0]?.imageUrl || null,
-        cloudUrl: item.cloudUrl || null,
-        collectionName: resolveCollectionName(item),
-        editorState: item
+      const itemsToAdd = await Promise.all(selectedItems.map(async (item) => {
+        // Generate thumbnail with text overlays for slideshows
+        let thumbnail = item.thumbnail || item.slides?.[0]?.backgroundImage || item.slides?.[0]?.imageUrl || null;
+        if (item.type === 'slideshow' && item.slides?.[0]?.textOverlays?.length > 0) {
+          try {
+            thumbnail = await generateSlideThumbnail(item.slides[0], item.aspectRatio || '9:16');
+          } catch (e) { /* fall back to raw image */ }
+        }
+        return {
+          contentId: item.id,
+          contentType: item.type,
+          contentName: item.name || item.title || (item.type === 'slideshow' ? 'Untitled Slideshow' : 'Untitled Video'),
+          thumbnail,
+          cloudUrl: item.cloudUrl || null,
+          collectionName: resolveCollectionName(item),
+          editorState: item
+        };
       }));
       await addManyScheduledPosts(db, artistId, itemsToAdd);
       toastSuccess(`Added ${itemsToAdd.length} item(s) to queue`);
