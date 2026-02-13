@@ -73,7 +73,9 @@ import {
   updateTextBank,
   updateVideoTextBank,
   // Created content subscription
-  subscribeToCreatedContent
+  subscribeToCreatedContent,
+  getTextBankText,
+  getTextBankStyle
 } from '../../services/libraryService';
 import { uploadFile, getMediaDuration } from '../../services/firebaseStorage';
 import log from '../../utils/logger';
@@ -1167,7 +1169,9 @@ const StudioHome = ({
         const textStyleForSlide = textBankIndex === 0 ? template?.text1Style : template?.text2Style;
 
         if (textBankForSlide.length > 0) {
-          const randomText = randomFrom(textBankForSlide);
+          const randomEntry = randomFrom(textBankForSlide);
+          const randomText = getTextBankText(randomEntry);
+          const bankStyle = getTextBankStyle(randomEntry);
           if (randomText) {
             slide.textOverlays.push({
               id: `text_${Date.now()}_${i}_${s}`,
@@ -1180,7 +1184,8 @@ const StudioHome = ({
                 color: textStyleForSlide?.color || '#ffffff',
                 textAlign: 'center',
                 outline: textStyleForSlide?.outline !== false,
-                outlineColor: textStyleForSlide?.outlineColor || 'rgba(0,0,0,0.5)'
+                outlineColor: textStyleForSlide?.outlineColor || 'rgba(0,0,0,0.5)',
+                ...(bankStyle || {})
               }
             });
           }

@@ -4,6 +4,7 @@
  */
 import React, { useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { getTextBankText, getTextBankStyle } from '../../services/libraryService';
 
 const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate }) => {
   const { theme } = useTheme();
@@ -36,7 +37,10 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
           <div style={{ padding: '12px', textAlign: 'center', color: theme.text.muted, fontSize: '11px' }}>
             No text lines yet. Add some below.
           </div>
-        ) : texts.map((text, i) => (
+        ) : texts.map((entry, i) => {
+          const displayText = getTextBankText(entry);
+          const entryStyle = getTextBankStyle(entry);
+          return (
           <div key={i} style={{
             display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px',
             borderRadius: '6px', marginBottom: '4px',
@@ -50,7 +54,7 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     const updated = [...texts];
-                    updated[i] = editText;
+                    updated[i] = entryStyle ? { text: editText, style: entryStyle } : editText;
                     onUpdate(updated);
                     setEditingIndex(null);
                   }
@@ -58,7 +62,7 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
                 }}
                 onBlur={() => {
                   const updated = [...texts];
-                  updated[i] = editText;
+                  updated[i] = entryStyle ? { text: editText, style: entryStyle } : editText;
                   onUpdate(updated);
                   setEditingIndex(null);
                 }}
@@ -70,11 +74,12 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
               />
             ) : (
               <span
-                style={{ flex: 1, cursor: 'pointer' }}
-                onClick={() => { setEditingIndex(i); setEditText(text); }}
+                style={{ flex: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                onClick={() => { setEditingIndex(i); setEditText(displayText); }}
                 title="Click to edit"
               >
-                {text}
+                {entryStyle && <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: entryStyle.color || color, flexShrink: 0 }} />}
+                {displayText}
               </span>
             )}
             <button
@@ -86,7 +91,8 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
               title="Remove"
             >×</button>
           </div>
-        ))}
+          );
+        })}
       </div>
       {/* Add new text input */}
       <div style={{
