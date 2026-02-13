@@ -30,6 +30,31 @@ const loadImage = (src) => {
 };
 
 /**
+ * Word-wrap text to fit within a max pixel width on canvas.
+ * Splits on explicit \n first, then wraps each paragraph to maxWidth.
+ */
+const wrapText = (ctx, text, maxWidth) => {
+  const paragraphs = text.split('\n');
+  const wrapped = [];
+  for (const para of paragraphs) {
+    const words = para.split(/\s+/).filter(Boolean);
+    if (words.length === 0) { wrapped.push(''); continue; }
+    let currentLine = words[0];
+    for (let i = 1; i < words.length; i++) {
+      const testLine = currentLine + ' ' + words[i];
+      if (ctx.measureText(testLine).width > maxWidth) {
+        wrapped.push(currentLine);
+        currentLine = words[i];
+      } else {
+        currentLine = testLine;
+      }
+    }
+    wrapped.push(currentLine);
+  }
+  return wrapped;
+};
+
+/**
  * Draw text with proper styling on canvas
  */
 const drawTextOverlay = (ctx, overlay, dimensions) => {
@@ -42,10 +67,18 @@ const drawTextOverlay = (ctx, overlay, dimensions) => {
   const x = (position.x / 100) * dimensions.width;
   const y = (position.y / 100) * dimensions.height;
 
+  // Text box width as percentage of canvas (matches CSS preview: width={position.width || 80}%)
+  const boxWidthPct = position.width || 80;
+  const maxTextWidth = (boxWidthPct / 100) * dimensions.width;
+
   // Set font
   ctx.font = `${style.fontWeight} ${style.fontSize}px ${style.fontFamily}`;
   ctx.textAlign = style.textAlign || 'center';
   ctx.textBaseline = 'middle';
+
+  // Word-wrap text to fit the box width (with small padding)
+  const lines = wrapText(ctx, text, maxTextWidth - 16);
+  const lineHeight = style.fontSize * 1.2;
 
   // Draw text stroke/border if enabled
   if (style.textStroke) {
@@ -54,8 +87,6 @@ const drawTextOverlay = (ctx, overlay, dimensions) => {
       ctx.strokeStyle = strokeMatch[2] || '#000000';
       ctx.lineWidth = parseInt(strokeMatch[1], 10) * 2;
       ctx.lineJoin = 'round';
-      const lines = text.split('\n');
-      const lineHeight = style.fontSize * 1.2;
       lines.forEach((line, i) => {
         const lineY = y + (i - (lines.length - 1) / 2) * lineHeight;
         ctx.strokeText(line, x, lineY);
@@ -68,11 +99,6 @@ const drawTextOverlay = (ctx, overlay, dimensions) => {
     ctx.strokeStyle = style.outlineColor || 'rgba(0,0,0,0.5)';
     ctx.lineWidth = Math.max(style.fontSize / 12, 2);
     ctx.lineJoin = 'round';
-
-    // Split text into lines
-    const lines = text.split('\n');
-    const lineHeight = style.fontSize * 1.2;
-
     lines.forEach((line, i) => {
       const lineY = y + (i - (lines.length - 1) / 2) * lineHeight;
       ctx.strokeText(line, x, lineY);
@@ -81,10 +107,6 @@ const drawTextOverlay = (ctx, overlay, dimensions) => {
 
   // Draw fill text
   ctx.fillStyle = style.color || '#ffffff';
-
-  const lines = text.split('\n');
-  const lineHeight = style.fontSize * 1.2;
-
   lines.forEach((line, i) => {
     const lineY = y + (i - (lines.length - 1) / 2) * lineHeight;
     ctx.fillText(line, x, lineY);
