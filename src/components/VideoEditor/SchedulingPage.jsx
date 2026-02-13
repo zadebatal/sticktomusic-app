@@ -376,15 +376,17 @@ const SchedulingPage = ({
     await updateScheduledPost(db, artistId, postId, updates);
   }, [db, artistId]);
 
-  // ── Apply caption bank category to drafts ──
+  // ── Apply caption bank category to drafts (respects selection) ──
   const handleApplyCategory = useCallback(async (categoryKey) => {
     if (!categoryKey || !templates[categoryKey]) {
       toastError('No category selected');
       return;
     }
+    const hasSelection = selectedPostIds.size > 0;
     let updated = 0;
     for (const post of posts) {
       if (post.status !== POST_STATUS.DRAFT) continue;
+      if (hasSelection && !selectedPostIds.has(post.id)) continue;
       const platform = post.platforms ? Object.keys(post.platforms).find(p => post.platforms[p]) || 'tiktok' : 'tiktok';
       const generated = generateFromTemplate(templates[categoryKey], platform);
 
@@ -404,7 +406,7 @@ const SchedulingPage = ({
     }
     if (updated > 0) toastSuccess(`Applied "${categoryKey}" to ${updated} draft${updated !== 1 ? 's' : ''}`);
     else toastSuccess('All drafts already have content — nothing to fill');
-  }, [templates, posts, handleUpdatePost, toastSuccess, toastError]);
+  }, [templates, posts, selectedPostIds, handleUpdatePost, toastSuccess, toastError]);
 
   const handleDeletePost = useCallback((postId) => {
     const post = posts.find(p => p.id === postId);
@@ -1291,7 +1293,9 @@ const SchedulingPage = ({
             artistId={artistId}
             compact={true}
             onBankChange={() => { loadAlwaysOnFromTemplates(); }}
-            draftCount={posts.filter(p => p.status === POST_STATUS.DRAFT).length}
+            draftCount={selectedPostIds.size > 0
+              ? posts.filter(p => p.status === POST_STATUS.DRAFT && selectedPostIds.has(p.id)).length
+              : posts.filter(p => p.status === POST_STATUS.DRAFT).length}
             onApplyToDrafts={handleApplyCategory}
           />
         </div>
@@ -1488,7 +1492,7 @@ const PostRow = ({
     [POST_STATUS.FAILED]: '#7f1d1d'
   }[post.status] || (theme?.border?.default || '#27272a');
 
-  const previewImage = post.thumbnail || post.editorState?.thumbnail || post.editorState?.slides?.[0]?.backgroundImage || null;
+  const previewImage = post.editorState?.exportedImages?.[0]?.url || post.thumbnail || post.editorState?.thumbnail || post.editorState?.slides?.[0]?.backgroundImage || null;
 
   return (
     <div style={{ borderBottom: '1px solid #1e1e22' }}>
@@ -1715,7 +1719,7 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
   }, [accounts]);
 
   const selectedPlatforms = post.platforms || {};
-  const previewImage = post.thumbnail || post.editorState?.thumbnail || post.editorState?.slides?.[0]?.backgroundImage || post.editorState?.slides?.[0]?.imageUrl || post.editorState?.clips?.[0]?.thumbnail || null;
+  const previewImage = post.editorState?.exportedImages?.[0]?.url || post.thumbnail || post.editorState?.thumbnail || post.editorState?.slides?.[0]?.backgroundImage || post.editorState?.slides?.[0]?.imageUrl || post.editorState?.clips?.[0]?.thumbnail || null;
 
   // Separate per-post tags from always-on tags
   const perPostTags = toHashtagArray(post.hashtags).filter(t => !alwaysOnHashtags.includes(t));

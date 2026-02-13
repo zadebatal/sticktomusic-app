@@ -11,6 +11,7 @@ import SlideshowEditor from './SlideshowEditor';
 import SchedulingPage from './SchedulingPage';
 // OnboardingModal removed - auto-setup Music Artist template instead
 import { uploadFile, deleteFile, getMediaDuration, generateThumbnail } from '../../services/firebaseStorage';
+import { generateSlideThumbnail } from '../../services/slideshowExportService';
 import {
   saveCategories, loadCategories, savePresets, loadPresets, cleanupStorage,
   saveArtistCategories, loadArtistCategories, saveArtistPresets, loadArtistPresets,
@@ -1518,10 +1519,19 @@ const VideoStudio = ({
           slideshowData = { ...slideshowData, audio: cleanAudio };
         }
         const firstSlide = slideshowData.slides?.[0];
+        // Generate thumbnail with text overlays for scheduler preview
+        let thumbnail = firstSlide?.backgroundImage || firstSlide?.thumbnail || null;
+        if (firstSlide?.textOverlays?.length > 0) {
+          try {
+            thumbnail = await generateSlideThumbnail(firstSlide, slideshowData.aspectRatio || '9:16');
+          } catch (e) {
+            console.warn('[VideoStudio] Thumbnail generation failed, using raw image:', e);
+          }
+        }
         await updateScheduledPost(db, currentArtistId, schedulerEditPostId, {
           editorState: slideshowData,
           contentName: slideshowData.name || 'Edited Slideshow',
-          thumbnail: firstSlide?.backgroundImage || firstSlide?.thumbnail || null
+          thumbnail
         });
         log('[VideoStudio] Updated scheduledPost (slideshow) from editor:', schedulerEditPostId);
       } catch (err) {
