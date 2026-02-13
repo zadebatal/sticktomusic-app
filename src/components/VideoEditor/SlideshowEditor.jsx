@@ -1767,6 +1767,11 @@ const SlideshowEditor = ({
   // Switch active slideshow (timeline)
   const switchToSlideshow = useCallback((index) => {
     if (index === activeSlideshowIndex) return;
+    // Check if new tab has the same audio — if so, skip audio reset to avoid stuck "Loading..."
+    const newAudio = allSlideshows[index]?.audio;
+    const newUrl = newAudio?.url || newAudio?.localUrl || null;
+    const newKey = newAudio ? `${newAudio.id || ''}|${newUrl}|${newAudio.startTime || 0}|${newAudio.endTime || ''}` : null;
+    const sameAudio = newKey && loadedAudioKeyRef.current === newKey;
     // Stop audio playback
     if (audioRef.current) {
       audioRef.current.pause();
@@ -1774,9 +1779,11 @@ const SlideshowEditor = ({
     }
     setIsPlaying(false);
     setCurrentTime(0);
-    setAudioReady(false);
-    setAudioError(null);
-    loadedAudioKeyRef.current = null; // Force reload for new slideshow's audio
+    if (!sameAudio) {
+      setAudioReady(false);
+      setAudioError(null);
+      loadedAudioKeyRef.current = null; // Force reload for new slideshow's audio
+    }
     // Reset editor state
     setSelectedSlideIndex(0);
     setEditingTextId(null);
@@ -1788,7 +1795,7 @@ const SlideshowEditor = ({
     setCanRedo(false);
     // Switch
     setActiveSlideshowIndex(index);
-  }, [activeSlideshowIndex]);
+  }, [activeSlideshowIndex, allSlideshows]);
 
   // Delete a generated slideshow (cannot delete template at index 0)
   const handleDeleteSlideshow = useCallback((index) => {
