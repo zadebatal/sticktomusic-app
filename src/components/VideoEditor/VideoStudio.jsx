@@ -1514,12 +1514,13 @@ const VideoStudio = ({
           const { file, localUrl, ...cleanAudio } = slideshowData.audio;
           slideshowData = { ...slideshowData, audio: cleanAudio };
         }
-        const firstSlide = slideshowData.slides?.[0];
+        const slides = slideshowData.slides || [];
+        const slideWithText = slides.find(s => s.textOverlays?.length > 0) || slides[0];
         // Generate thumbnail with text overlays for scheduler preview
-        let thumbnail = firstSlide?.backgroundImage || firstSlide?.thumbnail || null;
-        if (firstSlide?.textOverlays?.length > 0) {
+        let thumbnail = slideWithText?.backgroundImage || slideWithText?.thumbnail || null;
+        if (slideWithText) {
           try {
-            thumbnail = await generateSlideThumbnail(firstSlide, slideshowData.aspectRatio || '9:16');
+            thumbnail = await generateSlideThumbnail(slideWithText, slideshowData.aspectRatio || '9:16');
           } catch (e) {
             console.warn('[VideoStudio] Thumbnail generation failed, using raw image:', e);
           }
