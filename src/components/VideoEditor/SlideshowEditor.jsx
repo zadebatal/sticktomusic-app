@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import useIsMobile from '../../hooks/useIsMobile';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
-import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, getLyrics, MEDIA_TYPES, addToTextBank, removeFromTextBank, assignToBank, saveCollectionToFirestore, migrateCollectionBanks, getBankColor, getBankLabel, BANK_COLORS, MAX_BANKS, MIN_BANKS, addBankToCollection, removeBankFromCollection, updateLibraryItem, getTextBankText, getTextBankStyle } from '../../services/libraryService';
+import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, getLyrics, MEDIA_TYPES, addToTextBank, removeFromTextBank, assignToBank, saveCollectionToFirestore, migrateCollectionBanks, getBankColor, getBankLabel, BANK_COLORS, MAX_BANKS, MIN_BANKS, addBankToCollection, removeBankFromCollection, updateLibraryItem, getTextBankText, getTextBankStyle, addToLibraryAsync } from '../../services/libraryService';
+import { uploadFile } from '../../services/firebaseStorage';
 import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
 import LyricBank from './LyricBank';
@@ -548,6 +549,20 @@ const SlideshowEditor = ({
     return () => unsubscribes.forEach(unsub => unsub());
   }, [db, artistId]);
 
+  // Auto-select the first collection with populated banks when default 'bank_0' has no category data
+  useEffect(() => {
+    if (selectedSource !== 'bank_0') return;
+    if (categoryBankImages.some(b => (b || []).length > 0)) return;
+    for (const col of collections) {
+      const migrated = migrateCollectionBanks(col);
+      const hasPopulated = (migrated.banks || []).some(b => b?.length > 0);
+      if (hasPopulated) {
+        setSelectedSource(`${col.id}:bank_0`);
+        return;
+      }
+    }
+  }, [collections, categoryBankImages, selectedSource]);
+
   // Compute active images based on selected source
   // Supports: 'bank_0', 'bank_1', 'collectionId:bank_0', 'collectionId:bank_1', etc.
   // When category banks are empty, aggregates from all collection banks
@@ -957,15 +972,15 @@ const SlideshowEditor = ({
     setShowAudioTrimmer(true);
   }, []);
 
-  const handleAudioTrimSave = useCallback(({ startTime, endTime, duration, trimmedFile, trimmedName }) => {
+  const handleAudioTrimSave = useCallback(async ({ startTime, endTime, duration, trimmedFile, trimmedName }) => {
     if (!audioToTrim) return;
     if (trimmedFile) {
-      // Audio was actually trimmed to a new file — use it directly (starts at 0)
-      // Use a NEW id so selectedAudioUrl doesn't replace blob URL with original library URL
+      // Audio was actually trimmed to a new file — use blob immediately for responsiveness
       const localUrl = URL.createObjectURL(trimmedFile);
+      const trimId = `audio_trim_${Date.now()}`;
       const editedAudio = {
         ...audioToTrim,
-        id: `audio_trim_${Date.now()}`,
+        id: trimId,
         name: trimmedName || trimmedFile.name,
         file: trimmedFile,
         url: localUrl,
@@ -973,12 +988,42 @@ const SlideshowEditor = ({
         startTime: 0,
         endTime: duration,
         trimmedDuration: duration,
-        isTrimmed: false, // It's a new independent file, not metadata-trimmed
+        isTrimmed: false,
         duration: duration
       };
       setSelectedAudio(editedAudio);
       setShowAudioTrimmer(false);
       setAudioToTrim(null);
+
+      // Upload trimmed file to Firebase Storage + save to library in background
+      if (db && artistId) {
+        try {
+          const { url: firebaseUrl, path: storagePath } = await uploadFile(trimmedFile, 'audio');
+          const audioItem = {
+            id: trimId,
+            type: MEDIA_TYPES.AUDIO,
+            name: trimmedName || trimmedFile.name,
+            url: firebaseUrl,
+            storagePath,
+            duration: duration,
+            metadata: {
+              trimStart: 0,
+              trimEnd: duration,
+              originalName: audioToTrim.name,
+              originalMediaId: audioToTrim.id
+            }
+          };
+          await addToLibraryAsync(db, artistId, audioItem);
+          // Update selectedAudio with the persistent Firebase URL so it survives page reloads
+          setAllSlideshows(prev => prev.map((ss, i) =>
+            i === activeSlideshowIndex && ss.audio?.id === trimId
+              ? { ...ss, audio: { ...ss.audio, url: firebaseUrl, localUrl: firebaseUrl } }
+              : ss
+          ));
+        } catch (err) {
+          console.error('[SlideshowEditor] Failed to persist trimmed audio:', err);
+        }
+      }
     } else {
       // Metadata-only trim (fallback or full-length selection)
       const editedAudio = {
@@ -2080,2368 +2125,1661 @@ const SlideshowEditor = ({
   // Mobile panel state
   const [mobilePanelTab, setMobilePanelTab] = useState('preview'); // 'preview' | 'banks' | 'text'
 
-  return (
+  // Collapsible sidebar sections state
+  const [openSections, setOpenSections] = useState({
+    source: true,
+    audio: true,
+    textStyle: false,
+    textBanks: true,
+    slideBanks: true,
+    lyrics: false
+  });
+
+  const toggleSection = useCallback((key) => {
+    setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  const renderCollapsibleSection = (key, title, content, icon) => (
     <div style={{
-      ...styles.overlay,
-      ...(isMobile ? { padding: 0 } : {})
+      borderBottom: `1px solid ${theme.border.subtle}`
     }}>
-      <div style={{
-        ...styles.modal,
-        ...(isMobile ? {
+      <button
+        onClick={() => toggleSection(key)}
+        style={{
           width: '100%',
-          height: '100vh',
-          borderRadius: 0
-        } : {})
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '10px 16px',
+          backgroundColor: 'transparent',
+          border: 'none',
+          color: theme.text.primary,
+          fontSize: '12px',
+          fontWeight: '600',
+          cursor: 'pointer',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px'
+        }}
+      >
+        <svg
+          width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+          style={{
+            transition: 'transform 0.15s',
+            transform: openSections[key] ? 'rotate(90deg)' : 'rotate(0deg)',
+            flexShrink: 0
+          }}
+        >
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+        {icon}
+        <span style={{ flex: 1, textAlign: 'left' }}>{title}</span>
+      </button>
+      {openSections[key] && (
+        <div style={{ padding: '0 16px 12px' }}>
+          {content}
+        </div>
+      )}
+    </div>
+  );
+
+  // ─── Render: Top Bar ───
+  const renderTopBar = () => (
+    <header style={{
+      ...styles.header,
+      ...(isMobile ? { padding: '12px 16px', flexWrap: 'wrap', gap: '8px' } : {})
+    }}>
+      {!isMobile && (
+        <button
+          onClick={onClose}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '4px',
+            padding: '6px 10px', borderRadius: '6px',
+            border: `1px solid ${theme.border.default}`,
+            backgroundColor: 'transparent',
+            color: theme.text.secondary, cursor: 'pointer', fontSize: '12px', marginRight: '8px'
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          Back
+        </button>
+      )}
+      <div style={{
+        ...styles.headerLeft,
+        ...(isMobile ? { order: 1, flex: '1 1 auto' } : {})
       }}>
-        {/* Header */}
-        <header style={{
-          ...styles.header,
-          ...(isMobile ? {
-            padding: '12px 16px',
-            flexWrap: 'wrap',
-            gap: '8px'
-          } : {})
-        }}>
-          <div style={{
-            ...styles.headerLeft,
-            ...(isMobile ? { order: 1, flex: '1 1 auto' } : {})
-          }}>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              style={{
-                ...styles.nameInput,
-                ...(isMobile ? { width: '100%', fontSize: '16px' } : {})
-              }}
-              placeholder="Slideshow name..."
-            />
-          </div>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          style={{
+            ...styles.nameInput,
+            ...(isMobile ? { width: '100%', fontSize: '16px' } : {})
+          }}
+          placeholder="Slideshow name..."
+        />
+      </div>
 
-          {!isMobile && (
-            <div style={styles.headerCenter}>
-              {/* Aspect Ratio Toggle */}
-              <div style={styles.aspectToggle}>
-                <button
-                  style={{
-                  ...styles.aspectButton,
-                  ...(aspectRatio === '9:16' ? styles.aspectButtonActive : {})
-                }}
-                onClick={() => setAspectRatio('9:16')}
-              >
-                TikTok
-              </button>
+      {!isMobile && (
+        <div style={styles.headerCenter}>
+          <div style={styles.aspectToggle}>
+            {[{ label: '9:16', value: '9:16' }, { label: '4:5', value: '4:5' }, { label: '4:3', value: '4:3' }].map(opt => (
               <button
-                  style={{
+                key={opt.value}
+                style={{
                   ...styles.aspectButton,
-                  ...(aspectRatio === '4:5' ? styles.aspectButtonActive : {})
+                  ...(aspectRatio === opt.value ? styles.aspectButtonActive : {})
                 }}
-                onClick={() => setAspectRatio('4:5')}
-              >
-                Instagram
-              </button>
-            </div>
-
-            {/* Default Template Selector */}
-            {textTemplates.length > 0 && (
-              <div style={styles.templateSelector}>
-                <label style={styles.templateLabel}>Text Style:</label>
-                <select
-                  value={selectedDefaultTemplate?.id || ''}
-                  onChange={(e) => {
-                    const template = textTemplates.find(t => t.id === e.target.value);
-                    setSelectedDefaultTemplate(template || null);
-                  }}
-                  style={styles.templateSelect}
-                >
-                  <option value="">Default</option>
-                  {textTemplates.map(template => (
-                    <option key={template.id} value={template.id}>
-                      {template.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+                onClick={() => setAspectRatio(opt.value)}
+              >{opt.label}</button>
+            ))}
           </div>
-          )}
+        </div>
+      )}
 
-          <div style={{
-            ...styles.headerRight,
-            ...(isMobile ? { order: 2, gap: '8px' } : {})
-          }}>
-            <button
-              style={{
-                ...styles.exportButton,
-                backgroundColor: 'rgba(255,255,255,0.1)',
-                border: '1px solid rgba(255,255,255,0.2)',
-                ...(isMobile ? { padding: '10px 16px', fontSize: '13px' } : {})
-              }}
-              onClick={handleExport}
-              disabled={isExporting || slides.filter(s => s.backgroundImage).length === 0}
-            >
-              {isExporting ? (
-                <>
-                  <span style={styles.exportSpinner} />
-                  {isMobile ? `${exportProgress}%` : `Exporting ${exportProgress}%`}
-                </>
-              ) : (
-                <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                    <polyline points="7 10 12 15 17 10"/>
-                    <line x1="12" y1="15" x2="12" y2="3"/>
-                  </svg>
-                  {isMobile ? 'Export' : 'Export Carousel'}
-                </>
-              )}
-            </button>
-            {!isMobile && (
-              <>
-                {!schedulerEditMode && allSlideshows.length > 1 && (
-                  <button
-                    style={{
-                      ...styles.saveButton,
-                      background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                      color: '#fff'
-                    }}
-                    onClick={handleSaveAllAndClose}
-                  >
-                    Save All ({allSlideshows.length})
-                  </button>
-                )}
-                <button style={{ ...styles.saveButton, backgroundColor: '#059669', border: 'none', color: '#fff' }} onClick={handleSave}>
-                  {schedulerEditMode ? 'Save' : 'Save Draft'}
-                </button>
-              </>
-            )}
-            <button style={{
-              ...styles.closeButton,
-              ...(isMobile ? { padding: '10px' } : {})
-            }} onClick={onClose}>
-              <svg width={isMobile ? 24 : 20} height={isMobile ? 24 : 20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
+      <div style={{
+        ...styles.headerRight,
+        ...(isMobile ? { order: 2, gap: '8px' } : {})
+      }}>
+        <button
+          style={{
+            ...styles.exportButton,
+            backgroundColor: 'rgba(255,255,255,0.1)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            ...(isMobile ? { padding: '10px 16px', fontSize: '13px' } : {})
+          }}
+          onClick={handleExport}
+          disabled={isExporting || slides.filter(s => s.backgroundImage).length === 0}
+        >
+          {isExporting ? (
+            <>
+              <span style={styles.exportSpinner} />
+              {isMobile ? `${exportProgress}%` : `Exporting ${exportProgress}%`}
+            </>
+          ) : (
+            <>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
+              {isMobile ? 'Export' : 'Export'}
+            </>
+          )}
+        </button>
+        {!isMobile && (
+          <>
+            {!schedulerEditMode && allSlideshows.length > 1 && (
+              <button
+                style={{
+                  ...styles.saveButton,
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  color: '#fff'
+                }}
+                onClick={handleSaveAllAndClose}
+              >
+                Save All ({allSlideshows.length})
+              </button>
+            )}
+            <button style={{ ...styles.saveButton, backgroundColor: '#059669', border: 'none', color: '#fff' }} onClick={handleSave}>
+              {schedulerEditMode ? 'Save' : 'Save Draft'}
             </button>
-          </div>
-        </header>
+          </>
+        )}
+        <button style={{
+          ...styles.closeButton,
+          ...(isMobile ? { padding: '10px' } : {})
+        }} onClick={onClose}>
+          <svg width={isMobile ? 24 : 20} height={isMobile ? 24 : 20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+  );
 
-        {/* Mobile Tab Bar */}
-        {isMobile && (
-          <div style={{
-            display: 'flex',
-            borderBottom: '1px solid rgba(255,255,255,0.1)',
-            backgroundColor: '#1a1a2e'
-          }}>
-            <button
+  // ─── Render: Draft Tabs Bar ───
+  const renderDraftTabsBar = () => {
+    if (allSlideshows.length <= 1 && !isMultiDraftMode) return null;
+    return (
+      <div style={{
+        borderBottom: `1px solid ${theme.border.subtle}`,
+        padding: '6px 16px',
+        backgroundColor: theme.bg.surface,
+        flexShrink: 0
+      }}>
+        <div style={{
+          display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px',
+          scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.15) transparent'
+        }}>
+          {allSlideshows.map((show, idx) => (
+            <div
+              key={show.id}
+              onClick={() => switchToSlideshow(idx)}
               style={{
-                flex: 1,
-                padding: '12px',
-                border: 'none',
-                backgroundColor: mobilePanelTab === 'preview' ? '#6366f1' : 'transparent',
-                color: mobilePanelTab === 'preview' ? '#fff' : '#9ca3af',
-                fontSize: '13px',
-                fontWeight: '500',
-                cursor: 'pointer'
+                flexShrink: 0, display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '5px 10px', borderRadius: '6px',
+                backgroundColor: idx === activeSlideshowIndex ? theme.accent.primary : 'rgba(255,255,255,0.06)',
+                border: '1px solid ' + (idx === activeSlideshowIndex ? '#818cf8' : 'rgba(255,255,255,0.08)'),
+                color: idx === activeSlideshowIndex ? '#fff' : theme.text.secondary,
+                fontSize: '11px', fontWeight: idx === activeSlideshowIndex ? '600' : '400',
+                cursor: 'pointer', transition: 'all 0.15s ease', whiteSpace: 'nowrap'
               }}
-              onClick={() => setMobilePanelTab('preview')}
             >
-              Preview
-            </button>
-            <button
+              {show.isTemplate ? (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="3" y1="9" x2="21" y2="9"/>
+                  <line x1="9" y1="21" x2="9" y2="9"/>
+                </svg>
+              ) : (
+                <span style={{ fontSize: '10px', opacity: 0.6 }}>#{idx}</span>
+              )}
+              <span>{show.isTemplate ? 'Template' : show.name || `Slideshow ${idx}`}</span>
+              {!show.isTemplate && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDeleteSlideshow(idx); }}
+                  style={{
+                    background: 'none', border: 'none',
+                    color: idx === activeSlideshowIndex ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)',
+                    cursor: 'pointer', padding: '0 0 0 4px', fontSize: '14px', lineHeight: 1,
+                    display: 'flex', alignItems: 'center'
+                  }}
+                  title="Delete this slideshow"
+                >×</button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // ─── Render: Canvas Preview ───
+  const renderCanvasPreview = () => (
+    <div
+      style={{
+        ...styles.canvasContainer,
+        ...(isMobile ? { padding: '16px' } : {})
+      }}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      <div
+        ref={previewRef}
+        style={{
+          ...styles.canvas,
+          width: isMobile ? Math.min(window.innerWidth - 32, previewDimensions.width) : previewDimensions.width,
+          height: isMobile ? Math.min((window.innerWidth - 32) * (baseDimensions.height / baseDimensions.width), previewDimensions.height) : previewDimensions.height,
+          maxWidth: '576px',
+          maxHeight: 'calc(95vh - 340px)',
+          aspectRatio: `${baseDimensions.width}/${baseDimensions.height}`
+        }}
+      >
+        {/* Background Image */}
+        {currentSlide?.backgroundImage ? (
+          <>
+            <img
+              src={currentSlide.backgroundImage}
+              alt="Slide background"
               style={{
-                flex: 1,
-                padding: '12px',
-                border: 'none',
-                backgroundColor: mobilePanelTab === 'banks' ? '#6366f1' : 'transparent',
-                color: mobilePanelTab === 'banks' ? '#fff' : '#9ca3af',
-                fontSize: '13px',
-                fontWeight: '500',
-                cursor: 'pointer'
+                position: 'absolute', width: '100%', height: '100%', objectFit: 'cover',
+                transform: `scale(${(currentSlide.imageTransform?.scale || 1)}) translate(${(currentSlide.imageTransform?.offsetX || 0)}px, ${(currentSlide.imageTransform?.offsetY || 0)}px)`,
+                transformOrigin: 'center center',
+                cursor: isDraggingImage ? 'grabbing' : 'grab',
+                userSelect: 'none', pointerEvents: 'auto', zIndex: 1
               }}
-              onClick={() => setMobilePanelTab('banks')}
-            >
-              Media
-            </button>
-            <button
+              onMouseDown={handleImageMouseDown}
+              draggable={false}
+            />
+            <div
+              onMouseDown={handleResizeMouseDown}
               style={{
-                flex: 1,
-                padding: '12px',
-                border: 'none',
-                backgroundColor: mobilePanelTab === 'text' ? '#6366f1' : 'transparent',
-                color: mobilePanelTab === 'text' ? '#fff' : '#9ca3af',
-                fontSize: '13px',
-                fontWeight: '500',
-                cursor: 'pointer'
+                position: 'absolute', bottom: 4, right: 4, width: 20, height: 20,
+                cursor: 'nwse-resize', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: 4, backgroundColor: 'rgba(99, 102, 241, 0.8)', border: '1px solid rgba(255,255,255,0.5)'
               }}
-              onClick={() => setMobilePanelTab('text')}
             >
-              Text
-            </button>
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="white">
+                <path d="M9 1v8H1" fill="none" stroke="white" strokeWidth="1.5"/>
+                <path d="M6 4v5H1" fill="none" stroke="white" strokeWidth="1.5" opacity="0.5"/>
+              </svg>
+            </div>
+          </>
+        ) : (
+          <div style={styles.canvasPlaceholder}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <path d="M21 15l-5-5L5 21"/>
+            </svg>
+            <p>Drag an image here</p>
           </div>
         )}
 
-        {/* Main Content */}
-        <div style={{
-          ...styles.content,
-          ...(isMobile ? { flexDirection: 'column' } : {})
-        }}>
-          {/* Left Panel - Content Banks */}
-          {(!isMobile || mobilePanelTab === 'banks') && (
-          <div style={{
-            ...styles.leftPanel,
-            ...(isMobile ? {
-              width: '100%',
-              height: isMobile ? '100%' : 'auto',
-              borderRight: 'none',
-              borderBottom: '1px solid rgba(255,255,255,0.1)'
-            } : {})
-          }}>
-            {/* Source Dropdown */}
+        {/* 4:3 Crop Indicator */}
+        {aspectRatio === '4:3' && (
+          <>
             <div style={{
-              padding: '8px 12px',
-              borderBottom: '1px solid rgba(255,255,255,0.1)'
+              position: 'absolute', top: 0, left: 0, right: 0,
+              height: 'calc((100% - (100% * 0.75)) / 2)',
+              backgroundColor: 'rgba(0, 0, 0, 0.5)', borderBottom: '2px dashed rgba(255, 255, 255, 0.4)',
+              pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 8
             }}>
-              <select
-                value={selectedSource}
-                onChange={(e) => setSelectedSource(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '6px 10px',
-                  borderRadius: '6px',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  backgroundColor: '#1a1a2e',
-                  color: '#fff',
-                  fontSize: '13px',
-                  outline: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                {collections.filter(c => c.type !== 'smart').map(c => {
-                  const migrated = migrateCollectionBanks(c);
-                  const populatedBanks = (migrated.banks || []).filter(b => b?.length > 0);
-                  if (populatedBanks.length === 0) return null;
-                  const totalImages = populatedBanks.reduce((sum, b) => sum + b.length, 0);
-                  return (
-                    <React.Fragment key={c.id}>
-                      <option value={`${c.id}:bank_0`}>{c.name} — All Banks ({totalImages})</option>
-                      {(migrated.banks || []).map((bank, idx) => (
-                        bank?.length > 0 && <option key={`${c.id}:bank_${idx}`} value={`${c.id}:bank_${idx}`}>&nbsp;&nbsp;{c.name} → {getBankLabel(idx)} ({bank.length})</option>
-                      ))}
-                    </React.Fragment>
-                  );
-                })}
-                {categoryBankImages.some(b => (b || []).length > 0) && (categoryBankImages.length > 0 ? categoryBankImages : [[], []]).map((bank, idx) => (
-                  (bank || []).length > 0 && <option key={`bank_${idx}`} value={`bank_${idx}`}>{getBankLabel(idx)} Bank (Category)</option>
-                ))}
-              </select>
+              <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px' }}>Cropped</span>
             </div>
-
-            {/* Dynamic Image Bank Columns + Text Banks */}
-            <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-              {/* Dynamic image bank columns */}
-              {(() => {
-                // Count banks from both category and collections to show all available bank columns
-                const collectionMaxBanks = collections.reduce((max, col) => {
-                  const migrated = migrateCollectionBanks(col);
-                  return Math.max(max, (migrated.banks || []).length);
-                }, 0);
-                const numBanks = Math.max((categoryBankImages || []).length, collectionMaxBanks, 2);
-                return Array.from({ length: numBanks }).map((_, idx) => {
-                  const color = getBankColor(idx);
-                  return (
-                    <div key={`img-bank-${idx}`}
-                      style={{
-                        flex: 1, display: 'flex', flexDirection: 'column',
-                        borderRight: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden',
-                        border: dragOverBankCol === idx ? `2px dashed ${color.border}` : undefined,
-                        backgroundColor: dragOverBankCol === idx ? color.bg : undefined,
-                        transition: 'all 0.15s ease'
-                      }}
-                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBankCol(idx); }}
-                      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverBankCol(null); }}
-                      onDrop={(e) => handleDropOnBankColumn(e, idx)}
-                    >
-                      <div style={{ padding: '6px 8px', fontSize: '11px', fontWeight: '600', color: color.light, borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: color.bg, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                        {getBankLabel(idx)} Photos
-                        <CloudImportButton
-                          artistId={artistId}
-                          db={db}
-                          mediaType="image"
-                          compact
-                          onImportMedia={(files) => {
-                            const newItems = files.map((f, i) => ({
-                              id: `cloud_${Date.now()}_${i}`,
-                              name: f.name,
-                              url: f.url,
-                              localUrl: f.localUrl,
-                              type: 'image'
-                            }));
-                            setLibraryImages(prev => [...prev, ...newItems]);
-                          }}
-                        />
-                        {idx >= MIN_BANKS && (
-                          <button
-                            title={`Delete ${getBankLabel(idx)}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (!window.confirm(`Delete ${getBankLabel(idx)}? Images will remain in your library.`)) return;
-                              // Find which collection(s) have this bank and remove it
-                              collections.forEach(col => {
-                                const migrated = migrateCollectionBanks(col);
-                                if ((migrated.banks || []).length > idx) {
-                                  removeBankFromCollection(artistId, col.id, idx);
-                                  if (db) {
-                                    const freshCols = getCollections(artistId);
-                                    const updated = freshCols.find(c => c.id === col.id);
-                                    if (updated) saveCollectionToFirestore(db, artistId, updated).catch(() => {});
-                                  }
-                                }
-                              });
-                              // Refresh collections state
-                              setCollections(getCollections(artistId));
-                              toastSuccess(`${getBankLabel(idx)} deleted`);
-                            }}
-                            style={{
-                              background: 'none', border: 'none', color: color.light,
-                              cursor: 'pointer', padding: '0 2px', fontSize: '14px',
-                              opacity: 0.6, lineHeight: 1
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                            onMouseLeave={(e) => e.currentTarget.style.opacity = '0.6'}
-                          >
-                            ×
-                          </button>
-                        )}
-                      </div>
-                      <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
-                        {(() => {
-                          const bankImages = (() => {
-                            // If selectedSource points to a specific collection, use that
-                            const colId = typeof selectedSource === 'string' && selectedSource.includes(':') ? selectedSource.split(':')[0] : null;
-                            if (colId) {
-                              const col = collections.find(c => c.id === colId);
-                              if (col) {
-                                const migrated = migrateCollectionBanks(col);
-                                const ids = (migrated.banks || [])[idx] || [];
-                                if (ids.length > 0) return libraryImages.filter(item => ids.includes(item.id));
-                              }
-                            }
-                            // Try category banks
-                            if ((categoryBankImages[idx] || []).length > 0) return categoryBankImages[idx];
-                            // Aggregate from all collections
-                            const allIds = new Set();
-                            collections.forEach(col => {
-                              const migrated = migrateCollectionBanks(col);
-                              ((migrated.banks || [])[idx] || []).forEach(id => allIds.add(id));
-                            });
-                            if (allIds.size > 0) return libraryImages.filter(item => allIds.has(item.id));
-                            return [];
-                          })();
-                          return bankImages.length === 0 ? (
-                            <div style={{ fontSize: '11px', color: '#6b7280', padding: '16px 8px', textAlign: 'center' }}>
-                              No images in {getBankLabel(idx)}
-                            </div>
-                          ) : (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px' }}>
-                              {bankImages.map(image => {
-                                const isSel = selectedBankImages.has(image.id);
-                                return (
-                                  <div key={image.id} style={{ ...styles.clipCard, border: isSel ? `1px solid ${color.primary}80` : '1px solid transparent', position: 'relative' }}
-                                    draggable
-                                    onClick={(e) => {
-                                      if (e.metaKey || e.ctrlKey) {
-                                        setSelectedBankImages(prev => { const next = new Set(prev); if (next.has(image.id)) next.delete(image.id); else next.add(image.id); return next; });
-                                      } else {
-                                        setSelectedBankImages(prev => prev.size === 1 && prev.has(image.id) ? new Set() : new Set([image.id]));
-                                      }
-                                      setActiveBank(`image${idx}`);
-                                    }}
-                                    onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ ...image, url: image.url || image.localUrl, thumbnail: image.url || image.localUrl, sourceBank: `image${idx}` })); }}
-                                  >
-                                    {isSel && <div style={{ position: 'absolute', inset: 0, backgroundColor: `${color.primary}33`, zIndex: 1, pointerEvents: 'none', borderRadius: '6px' }}><div style={{ position: 'absolute', bottom: 3, right: 3, width: '14px', height: '14px', backgroundColor: color.primary, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', color: '#fff', fontWeight: 'bold' }}>✓</div></div>}
-                                    <img src={image.thumbnailUrl || image.url || image.localUrl} alt={image.name} style={styles.clipThumbnail} loading="lazy" />
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  );
-                });
-              })()}
-
-              {/* Text Banks Column */}
-              <div style={{ flex: 1.2, minWidth: '160px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                <div style={{ padding: '4px 8px', fontSize: '10px', fontWeight: '600', color: '#f9a8d4', borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'rgba(236,72,153,0.08)', textAlign: 'center' }}>
-                  Text Banks
-                </div>
-                <div style={{ flex: 1, overflowY: 'auto', padding: '4px 6px' }}>
-                  {getTextBanks().map((textBank, idx) => {
-                    const color = getBankColor(idx);
-                    const inputVal = newTextInputs[idx] || '';
-                    return (
-                      <React.Fragment key={`tb-${idx}`}>
-                        {idx > 0 && <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.06)', marginBottom: '4px' }} />}
-                        <div style={{ marginBottom: '4px' }}
-                          onDragOver={(e) => { if (e.dataTransfer.types.includes('text/lyric')) { e.preventDefault(); e.currentTarget.style.outline = `1px dashed ${color.light}`; } }}
-                          onDragLeave={(e) => { e.currentTarget.style.outline = 'none'; }}
-                          onDrop={(e) => { e.preventDefault(); e.currentTarget.style.outline = 'none'; const text = e.dataTransfer.getData('text/lyric'); if (text) handleAddToTextBank(idx + 1, text); }}
-                        >
-                          <div style={{ fontSize: '10px', fontWeight: '600', color: color.light, marginBottom: '3px' }}>
-                            {getBankLabel(idx)} Text
-                          </div>
-                          <div style={{ display: 'flex', gap: '3px', marginBottom: '2px' }}>
-                            <input type="text" value={inputVal} onChange={(e) => setNewTextInputs(prev => ({ ...prev, [idx]: e.target.value }))}
-                              onKeyDown={(e) => { if (e.key === 'Enter' && inputVal.trim()) { handleAddToTextBank(idx + 1, inputVal); setNewTextInputs(prev => ({ ...prev, [idx]: '' })); } }}
-                              placeholder="Add text..." style={{ flex: 1, padding: '3px 6px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '10px', outline: 'none' }} />
-                            <button onClick={() => { if (inputVal.trim()) { handleAddToTextBank(idx + 1, inputVal); setNewTextInputs(prev => ({ ...prev, [idx]: '' })); } }} disabled={!inputVal.trim()}
-                              style={{ padding: '3px 6px', borderRadius: '4px', border: 'none', backgroundColor: inputVal.trim() ? `${color.primary}4d` : 'rgba(255,255,255,0.05)', color: inputVal.trim() ? color.light : '#4b5563', fontSize: '10px', cursor: inputVal.trim() ? 'pointer' : 'default' }}>+</button>
-                          </div>
-                          {textBank.length > 0 ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                              {textBank.map((entry, i) => {
-                                const entryText = getTextBankText(entry);
-                                const entryStyle = getTextBankStyle(entry);
-                                return (
-                                <div key={i} style={{ display: 'flex', alignItems: 'stretch', gap: '2px' }}>
-                                  <div onClick={() => {
-                                    if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
-                                      const newOverlay = { id: `text_${Date.now()}_${i}`, text: entryText, style: entryStyle ? { ...entryStyle } : getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
-                                      setSlides(prev => prev.map((slide, si) => si === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
-                                      setEditingTextId(newOverlay.id);
-                                    }
-                                  }} style={{ flex: 1, padding: '4px 6px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '4px 0 0 4px', color: '#d1d5db', fontSize: '10px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word', display: 'flex', alignItems: 'center', gap: '4px' }} title={entryStyle ? `Click to add as overlay (styled: ${entryStyle.fontFamily || ''})` : 'Click to add as overlay'}>
-                                    {entryStyle && <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: entryStyle.color || '#fff', flexShrink: 0, border: '1px solid rgba(255,255,255,0.2)' }} />}
-                                    {entryText}
-                                  </div>
-                                  <button onClick={(e) => { e.stopPropagation(); handleRemoveFromTextBank(idx + 1, i); }}
-                                    style={{ padding: '0 5px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.2)', borderLeft: 'none', borderRadius: '0 4px 4px 0', color: '#ef4444', fontSize: '9px', cursor: 'pointer', flexShrink: 0 }} title="Remove">×</button>
-                                </div>
-                                );
-                              })}
-                            </div>
-                          ) : <div style={{ fontSize: '9px', color: '#6b7280', padding: '2px', textAlign: 'center' }}>No text yet</div>}
-                        </div>
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
-              </div>
+            <div style={{
+              position: 'absolute', bottom: 0, left: 0, right: 0,
+              height: 'calc((100% - (100% * 0.75)) / 2)',
+              backgroundColor: 'rgba(0, 0, 0, 0.5)', borderTop: '2px dashed rgba(255, 255, 255, 0.4)',
+              pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 8
+            }}>
+              <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px' }}>Cropped</span>
             </div>
+          </>
+        )}
 
-            {/* Selection action bar */}
-            {selectedBankImages.size > 0 && (
-              <div style={{ display: 'flex', gap: '8px', padding: '6px 10px', borderTop: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(99,102,241,0.05)' }}>
-                <button onClick={addSelectedImagesToSlides} style={{ flex: 1, padding: '6px 12px', backgroundColor: '#7c3aed', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
-                  Add {selectedBankImages.size} to Slides
-                </button>
-                <button onClick={() => setSelectedBankImages(new Set())} style={{ padding: '6px 8px', backgroundColor: 'transparent', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '6px', fontSize: '11px', cursor: 'pointer' }}>Clear</button>
-              </div>
-            )}
-
-            {/* Old bank content - now only for fallback image display (kept hidden) */}
-            <div style={{ ...styles.bankContent, display: 'none' }}>
-              {activeBank === 'audio' ? (
-                /* Audio Bank Panel */
-                (!selectedAudio && audioTracks.length === 0) ? (
-                  <div style={styles.emptyBank}>
-                    <p>No audio tracks</p>
-                    <p style={styles.emptySubtext}>Upload audio to get started</p>
-                    <button
-                      style={styles.uploadAudioBtn}
-                      onClick={() => slideshowAudioInputRef.current?.click()}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M12 5v14M5 12h14"/>
-                      </svg>
-                      Add Audio
-                    </button>
-                  </div>
-                ) : (
-                  <div style={styles.audioList}>
-                    {/* Selected Audio Indicator */}
-                    {selectedAudio && (
-                      <div style={styles.selectedAudioCard}>
-                        <div style={styles.selectedAudioHeader}>
-                          <span style={styles.selectedAudioIcon}>🎵</span>
-                          <span style={styles.selectedAudioLabel}>Selected</span>
-                        </div>
-                        <div style={styles.selectedAudioName}>{selectedAudio.name}</div>
-                        <div style={styles.selectedAudioDuration}>
-                          {formatTime(selectedAudio.trimmedDuration || selectedAudio.duration || 0)}
-                          {selectedAudio.isTrimmed && <span style={styles.trimmedBadge}>Trimmed</span>}
-                        </div>
-                        <div style={styles.selectedAudioActions}>
-                          <button
-                            style={styles.trimAudioBtn}
-                            onClick={() => {
-                              setAudioToTrim(selectedAudio);
-                              setShowAudioTrimmer(true);
-                            }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <circle cx="6" cy="6" r="3"/>
-                              <circle cx="6" cy="18" r="3"/>
-                              <line x1="20" y1="4" x2="8.12" y2="15.88"/>
-                              <line x1="14.47" y1="14.48" x2="20" y2="20"/>
-                              <line x1="8.12" y1="8.12" x2="12" y2="12"/>
-                            </svg>
-                            Trim
-                          </button>
-                          <button style={styles.removeAudioBtn} onClick={handleRemoveAudio}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                            </svg>
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    {/* Audio Track List from bank */}
-                    {audioTracks.map(audio => (
-                      <div
-                        key={audio.id}
-                        style={{
-                          ...styles.audioCard,
-                          ...(selectedAudio?.id === audio.id ? styles.audioCardSelected : {})
-                        }}
-                        onClick={() => handleSelectAudio(audio)}
-                      >
-                        <div style={styles.audioCardIcon}>🎵</div>
-                        <div style={styles.audioCardInfo}>
-                          <div style={styles.audioCardName}>{audio.name}</div>
-                          <div style={styles.audioCardDuration}>
-                            {formatTime(audio.duration || 0)}
-                          </div>
-                        </div>
-                        <button style={styles.audioSelectBtn}>
-                          {selectedAudio?.id === audio.id ? '✓' : 'Use'}
-                        </button>
-                      </div>
-                    ))}
-                    {/* Add more audio button when audio already exists */}
-                    <button
-                      style={{
-                        ...styles.uploadAudioBtn,
-                        marginTop: '8px',
-                        width: '100%',
-                        opacity: 0.7
-                      }}
-                      onClick={() => slideshowAudioInputRef.current?.click()}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M12 5v14M5 12h14"/>
-                      </svg>
-                      Replace Audio
-                    </button>
-                  </div>
-                )
-              ) : (() => {
-                // Always use activeImages which respects the selectedSource dropdown
-                const isImageBank = activeBank.startsWith('image');
-                const displayImages = isImageBank ? activeImages : activeContent;
-                const sourceName = (() => {
-                  const bankMatch = selectedSource.match(/^bank_(\d+)$/);
-                  if (bankMatch) return getBankLabel(parseInt(bankMatch[1], 10));
-                  if (selectedSource === 'all') return 'Library';
-                  return collections.find(c => selectedSource.startsWith(c.id))?.name || 'Collection';
-                })();
-                return displayImages.length === 0 ? (
-                  <div style={styles.emptyBank}>
-                    <p>No images in {sourceName}</p>
-                    <p style={styles.emptySubtext}>Upload images in the Aesthetic Home</p>
-                    {onImportToBank && isImageBank && (
-                      <button
-                        style={{
-                          marginTop: '8px', padding: '8px 16px', borderRadius: '8px',
-                          border: '1px solid rgba(99,102,241,0.4)', backgroundColor: 'rgba(99,102,241,0.15)',
-                          color: '#a5b4fc', fontSize: '12px', cursor: 'pointer',
-                          display: 'flex', alignItems: 'center', gap: '6px'
-                        }}
-                        onClick={() => { const m = activeBank.match(/^image(\d+)$/); importBankIndexRef.current = m ? parseInt(m[1], 10) : 0; importImageGenericRef.current?.click(); }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M12 5v14M5 12h14"/>
-                        </svg>
-                        Import Images
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                  {selectedBankImages.size > 0 && (
-                    <div style={{ display: 'flex', gap: '8px', padding: '4px 0', marginBottom: '4px' }}>
-                      <button
-                        onClick={addSelectedImagesToSlides}
-                        style={{
-                          flex: 1,
-                          padding: '6px 12px',
-                          backgroundColor: '#7c3aed',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          fontSize: '12px',
-                          cursor: 'pointer',
-                          fontWeight: '600'
-                        }}
-                      >
-                        Add {selectedBankImages.size} to Slides
-                      </button>
-                      <button
-                        onClick={() => setSelectedBankImages(new Set())}
-                        style={{
-                          padding: '6px 8px',
-                          backgroundColor: 'transparent',
-                          color: 'rgba(255,255,255,0.6)',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          borderRadius: '6px',
-                          fontSize: '11px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  )}
-                  <div style={styles.clipGrid}>
-                    {displayImages.map(image => {
-                      const isSel = selectedBankImages.has(image.id);
-                      const isInSlides = slides.some(s => s.sourceImageId === image.id);
-                      return (
-                      <div
-                        key={image.id}
-                        style={{
-                          ...styles.clipCard,
-                          border: isSel ? '1px solid rgba(99, 102, 241, 0.5)' : isInSlides ? '1px solid rgba(34,197,94,0.3)' : '1px solid transparent',
-                          position: 'relative'
-                        }}
-                        draggable
-                        onClick={(e) => {
-                          const isMetaKey = e.metaKey || e.ctrlKey;
-                          if (isMetaKey) {
-                            // Cmd/Ctrl+click: toggle in/out
-                            setSelectedBankImages(prev => {
-                              const next = new Set(prev);
-                              if (next.has(image.id)) next.delete(image.id);
-                              else next.add(image.id);
-                              return next;
-                            });
-                          } else {
-                            // Regular click: exclusive select or deselect
-                            setSelectedBankImages(prev =>
-                              prev.size === 1 && prev.has(image.id)
-                                ? new Set() : new Set([image.id])
-                            );
-                          }
-                        }}
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData('application/json', JSON.stringify({
-                            ...image,
-                            url: image.url || image.localUrl,
-                            thumbnail: image.url || image.localUrl,
-                            sourceBank: (() => {
-                      const m = selectedSource.match(/(?:.*:)?bank_(\d+)$/);
-                      return m ? `image${m[1]}` : selectedSource;
-                    })()
-                          }));
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isSel) e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isSel) e.currentTarget.style.backgroundColor = '';
-                        }}
-                      >
-                        {/* In-slides indicator — green checkmark top-right */}
-                        {isInSlides && (
-                          <div style={{
-                            position: 'absolute', top: 3, right: 3, zIndex: 2,
-                            width: '16px', height: '16px', borderRadius: '50%',
-                            backgroundColor: '#22c55e', display: 'flex',
-                            alignItems: 'center', justifyContent: 'center',
-                            fontSize: '9px', color: '#fff', fontWeight: 'bold',
-                            boxShadow: '0 1px 4px rgba(0,0,0,0.4)', pointerEvents: 'none'
-                          }}>✓</div>
-                        )}
-                        {/* Selection overlay — subtle tint + checkmark */}
-                        {isSel && (
-                          <div style={{
-                            position: 'absolute', inset: 0,
-                            backgroundColor: 'rgba(99, 102, 241, 0.2)',
-                            zIndex: 1, pointerEvents: 'none', borderRadius: '6px'
-                          }}>
-                            <div style={{
-                              position: 'absolute', bottom: 3, right: 3, width: '16px', height: '16px',
-                              backgroundColor: '#6366f1', borderRadius: '50%', display: 'flex',
-                              alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#fff', fontWeight: 'bold'
-                            }}>✓</div>
-                          </div>
-                        )}
-                        <img
-                          src={image.thumbnailUrl || image.url || image.localUrl}
-                          alt={image.name}
-                          style={styles.clipThumbnail}
-                          loading="lazy"
-                        />
-                        <span style={styles.clipName}>{image.name?.slice(0, 15) || 'Untitled'}</span>
-                      </div>
-                      );
-                    })}
-                  </div>
-                  {/* Import button at bottom of image grid */}
-                  {onImportToBank && activeBank.startsWith('image') && (
-                    <button
-                      style={{
-                        marginTop: '8px', padding: '6px 12px', borderRadius: '6px',
-                        border: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(255,255,255,0.04)',
-                        color: '#9ca3af', fontSize: '11px', cursor: 'pointer', width: '100%',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
-                      }}
-                      onClick={() => { const m = activeBank.match(/^image(\d+)$/); importBankIndexRef.current = m ? parseInt(m[1], 10) : 0; importImageGenericRef.current?.click(); }}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M12 5v14M5 12h14"/>
-                      </svg>
-                      Import More Images
-                    </button>
-                  )}
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-          )}
-
-          {/* Right Panel - Canvas, Filmstrip & Timeline Switcher */}
-          {(!isMobile || mobilePanelTab === 'preview') && (
-          <div style={{
-            ...styles.rightPanel,
-            ...(isMobile ? {
-              width: '100%',
-              flex: 1
-            } : {})
-          }}>
-
-            {/* Scrollable area: canvas + audio */}
-            <div style={{ flex: 1, overflow: 'auto', padding: '12px 24px 4px', minHeight: 0 }}>
-
-            {/* Canvas Preview */}
+        {/* Text Overlays */}
+        {(currentSlide?.textOverlays || []).map(overlay => {
+          const isSelected = editingTextId === overlay.id;
+          const isDragging = draggingTextId === overlay.id;
+          return (
             <div
+              key={overlay.id}
               style={{
-                ...styles.canvasContainer,
-                ...(isMobile ? {
-                  padding: '16px'
-                } : {})
+                ...styles.textOverlay,
+                left: `${overlay.position.x}%`, top: `${overlay.position.y}%`,
+                transform: 'translate(-50%, -50%)',
+                width: `${overlay.position.width || 80}%`,
+                fontSize: `${overlay.style.fontSize * previewScale}px`,
+                fontFamily: overlay.style.fontFamily, fontWeight: overlay.style.fontWeight,
+                color: overlay.style.color, textAlign: overlay.style.textAlign,
+                textTransform: overlay.style.textTransform || 'none',
+                WebkitTextStroke: overlay.style.textStroke || undefined,
+                textShadow: overlay.style.outline ? `0 0 ${4 * previewScale}px ${overlay.style.outlineColor}` : 'none',
+                cursor: isDragging ? 'grabbing' : 'grab',
+                border: isSelected ? '1px dashed rgba(99,102,241,0.8)' : '1px dashed transparent',
+                padding: '4px 8px', borderRadius: '4px',
+                transition: isDragging ? 'none' : 'border-color 0.15s',
+                backgroundColor: isSelected ? 'rgba(99,102,241,0.1)' : 'transparent',
+                boxSizing: 'border-box', overflow: 'hidden', wordBreak: 'break-word', whiteSpace: 'pre-wrap'
               }}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
+              onMouseDown={(e) => handleTextMouseDown(e, overlay.id)}
+              onClick={(e) => { e.stopPropagation(); handleTextClick(e, overlay.id); }}
             >
-              <div
-                ref={previewRef}
-                style={{
-                  ...styles.canvas,
-                  width: isMobile ? Math.min(window.innerWidth - 32, previewDimensions.width) : previewDimensions.width,
-                  height: isMobile ? Math.min((window.innerWidth - 32) * (baseDimensions.height / baseDimensions.width), previewDimensions.height) : previewDimensions.height,
-                  maxHeight: 'calc(95vh - 340px)',
-                  aspectRatio: `${baseDimensions.width}/${baseDimensions.height}`
-                }}
-              >
-                {/* Background Image - Draggable and resizable */}
-                {currentSlide?.backgroundImage ? (
-                  <>
-                    <img
-                      src={currentSlide.backgroundImage}
-                      alt="Slide background"
-                      style={{
-                        position: 'absolute',
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        transform: `scale(${(currentSlide.imageTransform?.scale || 1)}) translate(${(currentSlide.imageTransform?.offsetX || 0)}px, ${(currentSlide.imageTransform?.offsetY || 0)}px)`,
-                        transformOrigin: 'center center',
-                        cursor: isDraggingImage ? 'grabbing' : 'grab',
-                        userSelect: 'none',
-                        pointerEvents: 'auto',
-                        zIndex: 1
-                      }}
-                      onMouseDown={handleImageMouseDown}
-                      draggable={false}
-                    />
-                    {/* Resize handle - bottom right corner */}
-                    <div
-                      onMouseDown={handleResizeMouseDown}
-                      style={{
-                        position: 'absolute',
-                        bottom: 4,
-                        right: 4,
-                        width: 20,
-                        height: 20,
-                        cursor: 'nwse-resize',
-                        zIndex: 10,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderRadius: 4,
-                        backgroundColor: 'rgba(99, 102, 241, 0.8)',
-                        border: '1px solid rgba(255,255,255,0.5)'
-                      }}
-                    >
-                      <svg width="10" height="10" viewBox="0 0 10 10" fill="white">
-                        <path d="M9 1v8H1" fill="none" stroke="white" strokeWidth="1.5"/>
-                        <path d="M6 4v5H1" fill="none" stroke="white" strokeWidth="1.5" opacity="0.5"/>
-                      </svg>
-                    </div>
-                  </>
-                ) : (
-                  <div style={styles.canvasPlaceholder}>
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <rect x="3" y="3" width="18" height="18" rx="2"/>
-                      <circle cx="8.5" cy="8.5" r="1.5"/>
-                      <path d="M21 15l-5-5L5 21"/>
-                    </svg>
-                    <p>Drag an image here</p>
-                  </div>
-                )}
-
-                {/* 4:3 Crop Indicator - shows what area will be exported */}
-                {aspectRatio === '4:3' && (
-                  <>
-                    {/* Top crop overlay */}
-                    <div style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: 'calc((100% - (100% * 0.75)) / 2)',
-                      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                      borderBottom: '2px dashed rgba(255, 255, 255, 0.4)',
-                      pointerEvents: 'none',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      zIndex: 8
-                    }}>
-                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px' }}>Cropped</span>
-                    </div>
-                    {/* Bottom crop overlay */}
-                    <div style={{
-                      position: 'absolute',
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      height: 'calc((100% - (100% * 0.75)) / 2)',
-                      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                      borderTop: '2px dashed rgba(255, 255, 255, 0.4)',
-                      pointerEvents: 'none',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      zIndex: 8
-                    }}>
-                      <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '1px' }}>Cropped</span>
-                    </div>
-                  </>
-                )}
-
-                {/* Text Overlays — draggable */}
-                {(currentSlide?.textOverlays || []).map(overlay => {
-                  const isSelected = editingTextId === overlay.id;
-                  const isDragging = draggingTextId === overlay.id;
-                  return (
-                    <div
-                      key={overlay.id}
-                      style={{
-                        ...styles.textOverlay,
-                        left: `${overlay.position.x}%`,
-                        top: `${overlay.position.y}%`,
-                        transform: 'translate(-50%, -50%)',
-                        width: `${overlay.position.width || 80}%`,
-                        fontSize: `${overlay.style.fontSize * previewScale}px`,
-                        fontFamily: overlay.style.fontFamily,
-                        fontWeight: overlay.style.fontWeight,
-                        color: overlay.style.color,
-                        textAlign: overlay.style.textAlign,
-                        textTransform: overlay.style.textTransform || 'none',
-                        WebkitTextStroke: overlay.style.textStroke || 'none',
-                        textShadow: overlay.style.outline
-                          ? `0 0 ${4 * previewScale}px ${overlay.style.outlineColor}`
-                          : 'none',
-                        cursor: isDragging ? 'grabbing' : 'grab',
-                        border: isSelected ? '1px dashed rgba(99,102,241,0.8)' : '1px dashed transparent',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        transition: isDragging ? 'none' : 'border-color 0.15s',
-                        backgroundColor: isSelected ? 'rgba(99,102,241,0.1)' : 'transparent',
-                        boxSizing: 'border-box',
-                        overflow: 'hidden',
-                        wordBreak: 'break-word',
-                        whiteSpace: 'pre-wrap'
-                      }}
-                      onMouseDown={(e) => handleTextMouseDown(e, overlay.id)}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleTextClick(e, overlay.id);
-                      }}
-                    >
-                      {overlay.text}
-                      {isSelected && (
-                        <>
-                          <div style={{
-                            position: 'absolute', top: '-14px', left: '50%', transform: 'translateX(-50%)',
-                            fontSize: '8px', color: 'rgba(163,180,252,0.9)', whiteSpace: 'nowrap',
-                            backgroundColor: 'rgba(30,30,40,0.85)', padding: '1px 5px', borderRadius: '3px',
-                            pointerEvents: 'none'
-                          }}>drag to move</div>
-                          {/* Right-edge resize handle */}
-                          <div
-                            style={{
-                              position: 'absolute', right: '-4px', top: '50%', transform: 'translateY(-50%)',
-                              width: '8px', height: '24px', backgroundColor: 'rgba(99,102,241,0.8)',
-                              borderRadius: '3px', cursor: 'ew-resize', zIndex: 5
-                            }}
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setResizingTextId(overlay.id);
-                              resizeStartRef.current = {
-                                mouseX: e.clientX,
-                                startWidth: overlay.position.width || 80
-                              };
-                            }}
-                            title="Drag to resize width"
-                          />
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Hidden audio element */}
-              <audio ref={audioRef} preload="auto" style={{ display: 'none' }} />
-
-              {/* Audio Player Controls */}
-              {selectedAudio && (
-                <div style={styles.audioPlayerBar}>
-                  <button
+              {overlay.text}
+              {isSelected && (
+                <>
+                  <div style={{
+                    position: 'absolute', top: '-14px', left: '50%', transform: 'translateX(-50%)',
+                    fontSize: '8px', color: 'rgba(163,180,252,0.9)', whiteSpace: 'nowrap',
+                    backgroundColor: 'rgba(30,30,40,0.85)', padding: '1px 5px', borderRadius: '3px',
+                    pointerEvents: 'none'
+                  }}>drag to move</div>
+                  <div
                     style={{
-                      ...styles.playPauseBtn,
-                      ...(!audioReady && !audioError ? { opacity: 0.5 } : {}),
-                      ...(audioError ? { backgroundColor: '#ef4444' } : {})
+                      position: 'absolute', right: '-4px', top: '50%', transform: 'translateY(-50%)',
+                      width: '8px', height: '24px', backgroundColor: 'rgba(99,102,241,0.8)',
+                      borderRadius: '3px', cursor: 'ew-resize', zIndex: 5
                     }}
-                    onClick={handlePlayPause}
-                    disabled={!audioReady || !!audioError}
-                  >
-                    {!audioReady && !audioError ? (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 1s linear infinite' }}>
-                        <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/>
-                      </svg>
-                    ) : audioError ? (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
-                      </svg>
-                    ) : isPlaying ? (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        <rect x="6" y="4" width="4" height="16" rx="1"/>
-                        <rect x="14" y="4" width="4" height="16" rx="1"/>
-                      </svg>
-                    ) : (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        <polygon points="5,3 19,12 5,21"/>
-                      </svg>
-                    )}
-                  </button>
-                  <div style={styles.audioPlayerInfo}>
-                    <span style={styles.audioPlayerName}>
-                      {audioError ? 'Audio failed to load' : selectedAudio.name}
-                    </span>
-                    <span style={styles.audioPlayerTime}>
-                      {!audioReady && !audioError
-                        ? 'Loading...'
-                        : `${formatTime(currentTime)} / ${formatTime(audioDuration)}`
-                      }
-                    </span>
-                  </div>
-                  <div style={styles.audioProgressBar}>
-                    <div
-                      style={{
-                        ...styles.audioProgressFill,
-                        width: `${audioDuration > 0 ? (currentTime / audioDuration) * 100 : 0}%`
-                      }}
-                    />
-                  </div>
-                  <button
-                    onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}
-                    style={{
-                      padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
-                      border: '1px solid rgba(34,197,94,0.3)', backgroundColor: 'transparent',
-                      color: '#86efac', cursor: 'pointer', flexShrink: 0
+                    onMouseDown={(e) => {
+                      e.preventDefault(); e.stopPropagation();
+                      setResizingTextId(overlay.id);
+                      resizeStartRef.current = { mouseX: e.clientX, startWidth: overlay.position.width || 80 };
                     }}
-                  >Trim</button>
-                  {isMultiDraftMode && allSlideshows.length > 1 && (
-                    <button
-                      onClick={handleApplyAudioToAll}
-                      style={{
-                        padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
-                        border: `1px solid ${theme.accent.primary}40`, backgroundColor: 'transparent',
-                        color: theme.accent.primary, cursor: 'pointer', flexShrink: 0
-                      }}
-                    >Apply to All</button>
-                  )}
-                  <button
-                    onClick={handleRemoveAudio}
-                    style={{
-                      padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
-                      border: '1px solid rgba(239,68,68,0.3)', backgroundColor: 'transparent',
-                      color: '#ef4444', cursor: 'pointer', flexShrink: 0
-                    }}
-                  >Remove</button>
-                  {isMultiDraftMode && allSlideshows.length > 1 && (
-                    <button
-                      onClick={handleRemoveAudioFromAll}
-                      style={{
-                        padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
-                        border: '1px solid rgba(239,68,68,0.3)', backgroundColor: 'transparent',
-                        color: '#ef4444', cursor: 'pointer', flexShrink: 0
-                      }}
-                    >Remove All</button>
-                  )}
-                </div>
+                    title="Drag to resize width"
+                  />
+                </>
               )}
-
-              {/* Hidden file inputs for importing to banks */}
-              <input
-                ref={importImageARef}
-                type="file"
-                accept="image/*,.heic,.heif,.tif,.tiff"
-                multiple
-                onChange={(e) => handleImportImages(e, 'A')}
-                style={{ display: 'none' }}
-              />
-              <input
-                ref={importImageBRef}
-                type="file"
-                accept="image/*,.heic,.heif,.tif,.tiff"
-                multiple
-                onChange={(e) => handleImportImages(e, 'B')}
-                style={{ display: 'none' }}
-              />
-              <input
-                ref={importImageGenericRef}
-                type="file"
-                accept="image/*,.heic,.heif,.tif,.tiff"
-                multiple
-                onChange={(e) => handleImportImages(e, importBankIndexRef.current)}
-                style={{ display: 'none' }}
-              />
-
-              {/* Hidden audio input for slideshow */}
-              <input
-                ref={slideshowAudioInputRef}
-                type="file"
-                accept="audio/*,.m4a,.wav,.aif,.aiff"
-                onChange={handleSlideshowAudioUpload}
-                style={{ display: 'none' }}
-              />
-
-            </div>{/* end scrollable area */}
-
-              {/* Canvas Actions — sticky bottom toolbar */}
-              <div style={{ ...styles.canvasActions, padding: '4px 12px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
-                {/* Undo / Redo */}
-                <button
-                  style={{ ...styles.rerollButton, opacity: canUndo ? 1 : 0.35, pointerEvents: canUndo ? 'auto' : 'none' }}
-                  onClick={handleUndo}
-                  title="Undo (⌘Z)"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M3 10h10a5 5 0 015 5v0a5 5 0 01-5 5H3"/>
-                    <path d="M7 6l-4 4 4 4"/>
-                  </svg>
-                  Undo
-                </button>
-                <button
-                  style={{ ...styles.rerollButton, opacity: canRedo ? 1 : 0.35, pointerEvents: canRedo ? 'auto' : 'none' }}
-                  onClick={handleRedo}
-                  title="Redo (⌘⇧Z)"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 10H11a5 5 0 00-5 5v0a5 5 0 005 5h10"/>
-                    <path d="M17 6l4 4-4 4"/>
-                  </svg>
-                  Redo
-                </button>
-
-                {/* Re-roll Button (only show when slide has an image) */}
-                {currentSlide?.backgroundImage && (
-                  <button
-                    style={styles.rerollButton}
-                    onClick={handleReroll}
-                    title="Replace with random image from same bank"
-                    disabled={getRerollBank().filter(img => img.id !== currentSlide?.sourceImageId).length === 0}
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M23 4v6h-6"/>
-                      <path d="M1 20v-6h6"/>
-                      <path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/>
-                      <path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/>
-                    </svg>
-                    Reroll
-                  </button>
-                )}
-
-                {/* Re-roll Text Button (only show when slide has text overlays) */}
-                {currentSlide?.textOverlays?.length > 0 && (() => {
-                  const tBanks = getTextBanks();
-                  const hasTextBanks = tBanks.some(b => b?.length > 0);
-                  return hasTextBanks ? (
-                    <button
-                      style={styles.rerollButton}
-                      onClick={() => handleTextReroll()}
-                      title="Replace text with random text from banks"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M4 7V4h16v3M9 20h6M12 4v16"/>
-                      </svg>
-                      Reroll Text
-                    </button>
-                  ) : null;
-                })()}
-
-                {/* Add Text Button */}
-                <button style={styles.addTextButton} onClick={() => { addTextOverlay(); }} title="Add text overlay">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 5v14M5 12h14"/>
-                  </svg>
-                  Add Text
-                </button>
-
-                {/* Delete Slide Button */}
-                {slides.length > 1 && (
-                  <button
-                    onClick={() => removeSlide(slides[selectedSlideIndex]?.id)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: '4px 8px',
-                      borderRadius: '6px',
-                      border: '1px solid rgba(239, 68, 68, 0.3)',
-                      background: 'rgba(239, 68, 68, 0.1)',
-                      color: '#f87171',
-                      cursor: 'pointer',
-                      fontSize: '11px',
-                      transition: 'all 0.15s'
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)'; e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'; }}
-                    title="Delete current slide (Delete key)"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="3 6 5 6 21 6"/>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                    </svg>
-                    Delete
-                  </button>
-                )}
-
-                {/* Add Audio Button with Dropdown */}
-                <div style={{ position: 'relative' }}>
-                  <button
-                    style={styles.addAudioButton}
-                    onClick={() => setShowAudioPicker(!showAudioPicker)}
-                    title="Add audio to slideshow"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M9 18V5l12-2v13"/>
-                      <circle cx="6" cy="18" r="3"/>
-                      <circle cx="18" cy="16" r="3"/>
-                    </svg>
-                    Audio
-                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="6 9 12 15 18 9"/>
-                    </svg>
-                  </button>
-
-                  {/* Audio Picker Dropdown */}
-                  {showAudioPicker && (
-                    <div style={styles.audioPickerDropdown}>
-                      <div style={styles.audioPickerHeader}>Select Audio</div>
-
-                      {/* Existing audio from bank */}
-                      {audioTracks.length > 0 ? (
-                        <div style={styles.audioPickerList}>
-                          {audioTracks.map(audio => (
-                            <button
-                              key={audio.id}
-                              style={styles.audioPickerItem}
-                              onClick={() => {
-                                setAudioToTrim(audio);
-                                setShowAudioTrimmer(true);
-                                setShowAudioPicker(false);
-                              }}
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M9 18V5l12-2v13"/>
-                                <circle cx="6" cy="18" r="3"/>
-                                <circle cx="18" cy="16" r="3"/>
-                              </svg>
-                              <span style={styles.audioPickerItemName}>{audio.name}</span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <div style={styles.audioPickerEmpty}>No audio in bank</div>
-                      )}
-
-                      {/* Divider */}
-                      <div style={styles.audioPickerDivider} />
-
-                      {/* Upload new option */}
-                      <button
-                        style={styles.audioPickerUpload}
-                        onClick={() => {
-                          slideshowAudioInputRef.current?.click();
-                          setShowAudioPicker(false);
-                        }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                          <polyline points="17 8 12 3 7 8"/>
-                          <line x1="12" y1="3" x2="12" y2="15"/>
-                        </svg>
-                        Upload New Audio
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* AI Transcribe Button */}
-                {selectedAudio && (
-                  <button
-                    style={styles.aiTranscribeButton}
-                    onClick={() => setShowLyricAnalyzer(true)}
-                    title="AI transcribe audio to add lyrics"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
-                      <path d="M19 10v2a7 7 0 01-14 0v-2"/>
-                      <line x1="12" y1="19" x2="12" y2="23"/>
-                      <line x1="8" y1="23" x2="16" y2="23"/>
-                    </svg>
-                    Transcribe
-                  </button>
-                )}
-
-                {/* Lyric Bank Button with Dropdown */}
-                {onAddLyrics && (
-                  <div style={{ position: 'relative' }} data-lyric-bank-picker>
-                    <button
-                      style={styles.addToLyricBankButton}
-                      onClick={() => setShowLyricBankPicker(!showLyricBankPicker)}
-                      title="Add lyrics to your bank"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-                        <path d="M14 2v6h6"/>
-                      </svg>
-                      Lyrics
-                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="6 9 12 15 18 9"/>
-                      </svg>
-                    </button>
-
-                    {/* Lyric Bank Dropdown Picker */}
-                    {showLyricBankPicker && (
-                      <div style={styles.lyricBankDropdown}>
-                        <div style={styles.lyricBankDropdownHeader}>SELECT LYRICS</div>
-                        <div style={styles.lyricBankDropdownList}>
-                          {lyrics.length === 0 ? (
-                            <div style={styles.lyricBankDropdownEmpty}>
-                              No lyrics in bank yet
-                            </div>
-                          ) : (
-                            lyrics.map((lyric) => (
-                              <div
-                                key={lyric.id}
-                                draggable
-                                onDragStart={(e) => {
-                                  e.dataTransfer.setData('text/lyric', lyric.content || lyric.title || '');
-                                  e.dataTransfer.effectAllowed = 'copy';
-                                }}
-                                style={{
-                                  ...styles.lyricBankDropdownItem,
-                                  ...(linkedLyricId === lyric.id ? { border: '1px solid #6366f1', backgroundColor: 'rgba(99,102,241,0.15)' } : {})
-                                }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // Add lyric as text overlay to current slide
-                                  if (currentSlide) {
-                                    const newOverlay = {
-                                      id: `text_${Date.now()}`,
-                                      text: lyric.content,
-                                      style: getDefaultTextStyle(),
-                                      position: { x: 50, y: 50, width: 80, height: 20 }
-                                    };
-                                    setSlides(prev => prev.map((slide, i) =>
-                                      i === selectedSlideIndex
-                                        ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] }
-                                        : slide
-                                    ));
-                                    setEditingTextId(newOverlay.id);
-                                    // Text editor is now inline — editingTextId activates it
-                                  }
-                                  setShowLyricBankPicker(false);
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = 'rgba(139, 92, 246, 0.3)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = 'rgba(139, 92, 246, 0.1)';
-                                }}
-                              >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, opacity: 0.6, pointerEvents: 'none' }}>
-                                  <path d="M9 18V5l12-2v13"/>
-                                  <circle cx="6" cy="18" r="3"/>
-                                  <circle cx="18" cy="16" r="3"/>
-                                </svg>
-                                <span style={{ pointerEvents: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {lyric.title || lyric.content?.slice(0, 30) || 'Untitled'}
-                                  {linkedLyricId === lyric.id && <span style={{ marginLeft: '4px', fontSize: '8px', color: '#6366f1', fontWeight: 700 }}>LINKED</span>}
-                                </span>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                        <div
-                          style={styles.lyricBankDropdownAddNew}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setLyricsPromptValue('');
-                            setShowLyricsPrompt(true);
-                            setShowLyricBankPicker(false);
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(16, 185, 129, 0.2)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'transparent';
-                          }}
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ pointerEvents: 'none' }}>
-                            <line x1="12" y1="5" x2="12" y2="19"/>
-                            <line x1="5" y1="12" x2="19" y2="12"/>
-                          </svg>
-                          <span style={{ pointerEvents: 'none' }}>Add New Lyrics</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
             </div>
+          );
+        })}
+      </div>
 
-            {/* ─── Inline Text Editor Bar ─── */}
-            {editingTextId && currentSlide && (() => {
-              const selOverlay = currentSlide.textOverlays?.find(o => o.id === editingTextId);
-              if (!selOverlay) return null;
+      {/* Hidden audio element */}
+      <audio ref={audioRef} preload="auto" style={{ display: 'none' }} />
+    </div>
+  );
+
+  // ─── Render: Audio Player Bar ───
+  const renderAudioPlayerBar = () => {
+    if (!selectedAudio) return null;
+    return (
+      <div style={styles.audioPlayerBar}>
+        <button
+          style={{
+            ...styles.playPauseBtn,
+            ...(!audioReady && !audioError ? { opacity: 0.5 } : {}),
+            ...(audioError ? { backgroundColor: '#ef4444' } : {})
+          }}
+          onClick={handlePlayPause}
+          disabled={!audioReady || !!audioError}
+        >
+          {!audioReady && !audioError ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 1s linear infinite' }}>
+              <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/>
+            </svg>
+          ) : audioError ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+            </svg>
+          ) : isPlaying ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="4" width="4" height="16" rx="1"/>
+              <rect x="14" y="4" width="4" height="16" rx="1"/>
+            </svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5,3 19,12 5,21"/>
+            </svg>
+          )}
+        </button>
+        <div style={styles.audioPlayerInfo}>
+          <span style={styles.audioPlayerName}>
+            {audioError ? 'Audio failed to load' : selectedAudio.name}
+          </span>
+          <span style={styles.audioPlayerTime}>
+            {!audioReady && !audioError ? 'Loading...' : `${formatTime(currentTime)} / ${formatTime(audioDuration)}`}
+          </span>
+        </div>
+        <div style={styles.audioProgressBar}>
+          <div style={{ ...styles.audioProgressFill, width: `${audioDuration > 0 ? (currentTime / audioDuration) * 100 : 0}%` }} />
+        </div>
+        <button
+          onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}
+          style={{
+            padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+            border: '1px solid rgba(34,197,94,0.3)', backgroundColor: 'transparent',
+            color: '#86efac', cursor: 'pointer', flexShrink: 0
+          }}
+        >Trim</button>
+        {isMultiDraftMode && allSlideshows.length > 1 && (
+          <button
+            onClick={handleApplyAudioToAll}
+            style={{
+              padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+              border: `1px solid ${theme.accent.primary}40`, backgroundColor: 'transparent',
+              color: theme.accent.primary, cursor: 'pointer', flexShrink: 0
+            }}
+          >Apply to All</button>
+        )}
+        <button
+          onClick={handleRemoveAudio}
+          style={{
+            padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+            border: '1px solid rgba(239,68,68,0.3)', backgroundColor: 'transparent',
+            color: '#ef4444', cursor: 'pointer', flexShrink: 0
+          }}
+        >Remove</button>
+        {isMultiDraftMode && allSlideshows.length > 1 && (
+          <button
+            onClick={handleRemoveAudioFromAll}
+            style={{
+              padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+              border: '1px solid rgba(239,68,68,0.3)', backgroundColor: 'transparent',
+              color: '#ef4444', cursor: 'pointer', flexShrink: 0
+            }}
+          >Remove All</button>
+        )}
+      </div>
+    );
+  };
+
+  // ─── Render: Canvas Actions ───
+  const renderCanvasActions = () => (
+    <div style={{ ...styles.canvasActions, padding: '4px 12px', borderTop: `1px solid ${theme.border.subtle}`, flexShrink: 0 }}>
+      {/* Undo / Redo */}
+      <button
+        style={{ ...styles.rerollButton, opacity: canUndo ? 1 : 0.35, pointerEvents: canUndo ? 'auto' : 'none' }}
+        onClick={handleUndo} title="Undo (⌘Z)"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M3 10h10a5 5 0 015 5v0a5 5 0 01-5 5H3"/><path d="M7 6l-4 4 4 4"/>
+        </svg>
+        Undo
+      </button>
+      <button
+        style={{ ...styles.rerollButton, opacity: canRedo ? 1 : 0.35, pointerEvents: canRedo ? 'auto' : 'none' }}
+        onClick={handleRedo} title="Redo (⌘⇧Z)"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21 10H11a5 5 0 00-5 5v0a5 5 0 005 5h10"/><path d="M17 6l4 4-4 4"/>
+        </svg>
+        Redo
+      </button>
+
+      {/* Re-roll Image */}
+      {currentSlide?.backgroundImage && (
+        <button
+          style={styles.rerollButton} onClick={handleReroll}
+          title="Replace with random image from same bank"
+          disabled={getRerollBank().filter(img => img.id !== currentSlide?.sourceImageId).length === 0}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/><path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/>
+          </svg>
+          Reroll
+        </button>
+      )}
+
+      {/* Re-roll Text */}
+      {currentSlide?.textOverlays?.length > 0 && (() => {
+        const tBanks = getTextBanks();
+        const hasTextBanks = tBanks.some(b => b?.length > 0);
+        return hasTextBanks ? (
+          <button style={styles.rerollButton} onClick={() => handleTextReroll()} title="Replace text with random text from banks">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 7V4h16v3M9 20h6M12 4v16"/>
+            </svg>
+            Reroll Text
+          </button>
+        ) : null;
+      })()}
+
+      {/* Add Text */}
+      <button style={styles.addTextButton} onClick={() => { addTextOverlay(); }} title="Add text overlay">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        Add Text
+      </button>
+
+      {/* Delete Slide */}
+      {slides.length > 1 && (
+        <button
+          onClick={() => removeSlide(slides[selectedSlideIndex]?.id)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', borderRadius: '6px',
+            border: '1px solid rgba(239, 68, 68, 0.3)', background: 'rgba(239, 68, 68, 0.1)',
+            color: '#f87171', cursor: 'pointer', fontSize: '11px', transition: 'all 0.15s'
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)'; e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'; }}
+          title="Delete current slide (Delete key)"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          </svg>
+          Delete
+        </button>
+      )}
+
+      {/* Slide navigation */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto' }}>
+        <button
+          onClick={() => setSelectedSlideIndex(Math.max(0, selectedSlideIndex - 1))}
+          disabled={selectedSlideIndex === 0}
+          style={{
+            padding: '4px 6px', borderRadius: '4px', border: `1px solid ${theme.border.subtle}`,
+            backgroundColor: 'transparent', color: selectedSlideIndex === 0 ? theme.text.muted : theme.text.secondary,
+            cursor: selectedSlideIndex === 0 ? 'default' : 'pointer', fontSize: '11px'
+          }}
+        >◀</button>
+        <span style={{ fontSize: '11px', color: theme.text.secondary, whiteSpace: 'nowrap' }}>
+          Slide {selectedSlideIndex + 1} of {slides.length}
+        </span>
+        <button
+          onClick={() => setSelectedSlideIndex(Math.min(slides.length - 1, selectedSlideIndex + 1))}
+          disabled={selectedSlideIndex === slides.length - 1}
+          style={{
+            padding: '4px 6px', borderRadius: '4px', border: `1px solid ${theme.border.subtle}`,
+            backgroundColor: 'transparent', color: selectedSlideIndex === slides.length - 1 ? theme.text.muted : theme.text.secondary,
+            cursor: selectedSlideIndex === slides.length - 1 ? 'default' : 'pointer', fontSize: '11px'
+          }}
+        >▶</button>
+      </div>
+    </div>
+  );
+
+  // ─── Render: Inline Text Editor ───
+  const renderInlineTextEditor = () => {
+    if (!editingTextId || !currentSlide) return null;
+    const selOverlay = currentSlide.textOverlays?.find(o => o.id === editingTextId);
+    if (!selOverlay) return null;
+    return (
+      <div style={{
+        borderTop: '1px solid rgba(99,102,241,0.25)',
+        backgroundColor: 'rgba(30,30,50,0.95)',
+        padding: '10px 16px',
+        display: 'flex', flexDirection: 'column', gap: '8px'
+      }}>
+        {/* Row 1: Text input + close */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+          <textarea
+            rows={2}
+            value={selOverlay.text}
+            onChange={(e) => updateTextOverlay(selOverlay.id, { text: e.target.value })}
+            placeholder="Enter text..."
+            style={{
+              flex: 1, padding: '7px 10px', borderRadius: '6px',
+              border: '1px solid rgba(99,102,241,0.3)', backgroundColor: 'rgba(255,255,255,0.06)',
+              color: '#fff', fontSize: '13px', outline: 'none', resize: 'vertical',
+              fontFamily: 'inherit', lineHeight: '1.4'
+            }}
+          />
+          <button
+            onClick={() => { removeTextOverlay(selOverlay.id); setEditingTextId(null); }}
+            style={{
+              padding: '6px', borderRadius: '5px', border: '1px solid rgba(239,68,68,0.3)',
+              backgroundColor: 'rgba(239,68,68,0.1)', color: '#f87171', cursor: 'pointer',
+              display: 'flex', alignItems: 'center'
+            }}
+            title="Delete text block"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/>
+            </svg>
+          </button>
+          <button
+            onClick={() => setEditingTextId(null)}
+            style={{
+              padding: '6px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.15)',
+              backgroundColor: 'transparent', color: '#9ca3af', cursor: 'pointer',
+              display: 'flex', alignItems: 'center'
+            }}
+            title="Done editing"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </button>
+          {/* Add to Bank */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowAddToBankPicker(prev => !prev)}
+              style={{
+                padding: '4px 8px', borderRadius: '5px', border: '1px solid rgba(236,72,153,0.3)',
+                backgroundColor: showAddToBankPicker ? 'rgba(236,72,153,0.2)' : 'rgba(236,72,153,0.1)',
+                color: '#f9a8d4', cursor: 'pointer', fontSize: '10px', fontWeight: '600',
+                display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap'
+              }}
+              title="Save styled text to a text bank"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+              Bank
+            </button>
+            {showAddToBankPicker && (() => {
+              const banks = getTextBanks();
+              const bankCount = Math.max(banks.length, 2);
               return (
                 <div style={{
-                  borderTop: '1px solid rgba(99,102,241,0.25)',
-                  backgroundColor: 'rgba(30,30,50,0.95)',
-                  padding: '10px 16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px'
+                  position: 'absolute', top: '100%', right: 0, marginTop: '4px', zIndex: 20,
+                  backgroundColor: '#1e1e2e', border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: '6px', padding: '4px', minWidth: '120px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
                 }}>
-                  {/* Row 1: Text input + close */}
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                    <textarea
-                      rows={2}
-                      value={selOverlay.text}
-                      onChange={(e) => updateTextOverlay(selOverlay.id, { text: e.target.value })}
-                      placeholder="Enter text..."
-                      style={{
-                        flex: 1, padding: '7px 10px', borderRadius: '6px',
-                        border: '1px solid rgba(99,102,241,0.3)', backgroundColor: 'rgba(255,255,255,0.06)',
-                        color: '#fff', fontSize: '13px', outline: 'none', resize: 'vertical',
-                        fontFamily: 'inherit', lineHeight: '1.4'
+                  {Array.from({ length: bankCount }, (_, i) => (
+                    <button key={i}
+                      onClick={() => {
+                        const styledEntry = { text: selOverlay.text, style: { ...selOverlay.style } };
+                        handleAddToTextBank(i + 1, styledEntry);
+                        setShowAddToBankPicker(false);
+                        toastSuccess(`Added to ${getBankLabel(i)} Text bank`);
                       }}
-                    />
-                    <button
-                      onClick={() => { removeTextOverlay(selOverlay.id); setEditingTextId(null); }}
                       style={{
-                        padding: '6px', borderRadius: '5px', border: '1px solid rgba(239,68,68,0.3)',
-                        backgroundColor: 'rgba(239,68,68,0.1)', color: '#f87171', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center'
+                        display: 'block', width: '100%', padding: '5px 8px', border: 'none',
+                        backgroundColor: 'transparent', color: getBankColor(i).light,
+                        fontSize: '11px', cursor: 'pointer', borderRadius: '4px', textAlign: 'left'
                       }}
-                      title="Delete text block"
+                      onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.08)'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/>
-                      </svg>
+                      {getBankLabel(i)} Text
                     </button>
-                    <button
-                      onClick={() => setEditingTextId(null)}
-                      style={{
-                        padding: '6px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.15)',
-                        backgroundColor: 'transparent', color: '#9ca3af', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center'
-                      }}
-                      title="Done editing"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="20 6 9 17 4 12"/>
-                      </svg>
-                    </button>
-                    {/* Add to Bank button with dropdown */}
-                    <div style={{ position: 'relative' }}>
-                      <button
-                        onClick={() => setShowAddToBankPicker(prev => !prev)}
-                        style={{
-                          padding: '4px 8px', borderRadius: '5px', border: '1px solid rgba(236,72,153,0.3)',
-                          backgroundColor: showAddToBankPicker ? 'rgba(236,72,153,0.2)' : 'rgba(236,72,153,0.1)',
-                          color: '#f9a8d4', cursor: 'pointer', fontSize: '10px', fontWeight: '600',
-                          display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap'
-                        }}
-                        title="Save styled text to a text bank"
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M12 5v14M5 12h14"/>
-                        </svg>
-                        Bank
-                      </button>
-                      {showAddToBankPicker && (() => {
-                        const banks = getTextBanks();
-                        const bankCount = Math.max(banks.length, 2);
-                        return (
-                          <div style={{
-                            position: 'absolute', top: '100%', right: 0, marginTop: '4px', zIndex: 20,
-                            backgroundColor: '#1e1e2e', border: '1px solid rgba(255,255,255,0.15)',
-                            borderRadius: '6px', padding: '4px', minWidth: '120px',
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
-                          }}>
-                            {Array.from({ length: bankCount }, (_, i) => (
-                              <button key={i}
-                                onClick={() => {
-                                  const styledEntry = { text: selOverlay.text, style: { ...selOverlay.style } };
-                                  handleAddToTextBank(i + 1, styledEntry);
-                                  setShowAddToBankPicker(false);
-                                  toastSuccess(`Added to ${getBankLabel(i)} Text bank`);
-                                }}
-                                style={{
-                                  display: 'block', width: '100%', padding: '5px 8px', border: 'none',
-                                  backgroundColor: 'transparent', color: getBankColor(i).light,
-                                  fontSize: '11px', cursor: 'pointer', borderRadius: '4px', textAlign: 'left'
-                                }}
-                                onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.08)'}
-                                onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
-                              >
-                                {getBankLabel(i)} Text
-                              </button>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
-
-                  {/* Row 2: Font, Size, Color, Align, Position */}
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    {/* Font */}
-                    <select
-                      value={selOverlay.style.fontFamily}
-                      onChange={(e) => updateTextOverlay(selOverlay.id, {
-                        style: { ...selOverlay.style, fontFamily: e.target.value }
-                      })}
-                      style={{
-                        padding: '5px 6px', borderRadius: '5px',
-                        border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)',
-                        color: '#d1d5db', fontSize: '11px', outline: 'none', maxWidth: '100px'
-                      }}
-                    >
-                      {AVAILABLE_FONTS.map(f => (
-                        <option key={f.name} value={f.value}>{f.name}</option>
-                      ))}
-                    </select>
-
-                    {/* Size controls */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '2px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.12)', overflow: 'hidden' }}>
-                      <button onClick={() => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, fontSize: Math.max(12, selOverlay.style.fontSize - 4) } })}
-                        style={{ padding: '4px 8px', border: 'none', backgroundColor: 'rgba(255,255,255,0.06)', color: '#d1d5db', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>A-</button>
-                      <span style={{ padding: '4px 6px', backgroundColor: 'rgba(255,255,255,0.03)', color: '#9ca3af', fontSize: '11px', minWidth: '32px', textAlign: 'center' }}>{selOverlay.style.fontSize}</span>
-                      <button onClick={() => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, fontSize: Math.min(120, selOverlay.style.fontSize + 4) } })}
-                        style={{ padding: '4px 8px', border: 'none', backgroundColor: 'rgba(255,255,255,0.06)', color: '#d1d5db', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>A+</button>
-                    </div>
-
-                    {/* Color */}
-                    <input
-                      type="color"
-                      value={selOverlay.style.color}
-                      onChange={(e) => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, color: e.target.value } })}
-                      style={{ width: '28px', height: '28px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '5px', cursor: 'pointer', backgroundColor: 'transparent', padding: '1px' }}
-                    />
-
-                    {/* Divider */}
-                    <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
-
-                    {/* Text Align */}
-                    {['left', 'center', 'right'].map(align => (
-                      <button
-                        key={align}
-                        onClick={() => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textAlign: align } })}
-                        style={{
-                          padding: '5px', borderRadius: '4px', border: 'none', cursor: 'pointer',
-                          backgroundColor: selOverlay.style.textAlign === align ? 'rgba(99,102,241,0.3)' : 'transparent',
-                          color: selOverlay.style.textAlign === align ? '#a5b4fc' : '#6b7280'
-                        }}
-                        title={`Align ${align}`}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          {align === 'left' && <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></>}
-                          {align === 'center' && <><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></>}
-                          {align === 'right' && <><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></>}
-                        </svg>
-                      </button>
-                    ))}
-
-                    {/* Divider */}
-                    <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
-
-                    {/* Auto-Align Position buttons */}
-                    <button
-                      onClick={() => updateTextOverlay(selOverlay.id, { position: { ...selOverlay.position, x: 50 } })}
-                      style={{
-                        padding: '4px 8px', borderRadius: '5px', border: '1px solid rgba(99,102,241,0.25)',
-                        backgroundColor: Math.abs(selOverlay.position.x - 50) < 1 ? 'rgba(99,102,241,0.2)' : 'transparent',
-                        color: Math.abs(selOverlay.position.x - 50) < 1 ? '#a5b4fc' : '#6b7280',
-                        cursor: 'pointer', fontSize: '10px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '3px'
-                      }}
-                      title="Center horizontally"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <line x1="12" y1="2" x2="12" y2="22"/><polyline points="8 6 12 2 16 6"/><polyline points="8 18 12 22 16 18"/>
-                      </svg>
-                      H
-                    </button>
-                    <button
-                      onClick={() => updateTextOverlay(selOverlay.id, { position: { ...selOverlay.position, y: 50 } })}
-                      style={{
-                        padding: '4px 8px', borderRadius: '5px', border: '1px solid rgba(99,102,241,0.25)',
-                        backgroundColor: Math.abs(selOverlay.position.y - 50) < 1 ? 'rgba(99,102,241,0.2)' : 'transparent',
-                        color: Math.abs(selOverlay.position.y - 50) < 1 ? '#a5b4fc' : '#6b7280',
-                        cursor: 'pointer', fontSize: '10px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '3px'
-                      }}
-                      title="Center vertically"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <line x1="2" y1="12" x2="22" y2="12"/><polyline points="6 8 2 12 6 16"/><polyline points="18 8 22 12 18 16"/>
-                      </svg>
-                      V
-                    </button>
-
-                    {/* Bold toggle */}
-                    <button
-                      onClick={() => updateTextOverlay(selOverlay.id, {
-                        style: { ...selOverlay.style, fontWeight: selOverlay.style.fontWeight === '700' ? '400' : '700' }
-                      })}
-                      style={{
-                        padding: '5px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
-                        backgroundColor: selOverlay.style.fontWeight === '700' ? 'rgba(99,102,241,0.3)' : 'transparent',
-                        color: selOverlay.style.fontWeight === '700' ? '#a5b4fc' : '#6b7280',
-                        fontWeight: '700', fontSize: '13px'
-                      }}
-                      title="Bold"
-                    >B</button>
-
-                    {/* ALL CAPS toggle */}
-                    <button
-                      onClick={() => updateTextOverlay(selOverlay.id, {
-                        style: { ...selOverlay.style, textTransform: selOverlay.style.textTransform === 'uppercase' ? 'none' : 'uppercase' }
-                      })}
-                      style={{
-                        padding: '4px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
-                        backgroundColor: selOverlay.style.textTransform === 'uppercase' ? 'rgba(99,102,241,0.3)' : 'transparent',
-                        color: selOverlay.style.textTransform === 'uppercase' ? '#a5b4fc' : '#6b7280',
-                        fontSize: '10px', fontWeight: '700', letterSpacing: '1px'
-                      }}
-                      title="ALL CAPS"
-                    >AA</button>
-
-                    {/* all lowercase toggle */}
-                    <button
-                      onClick={() => updateTextOverlay(selOverlay.id, {
-                        style: { ...selOverlay.style, textTransform: selOverlay.style.textTransform === 'lowercase' ? 'none' : 'lowercase' }
-                      })}
-                      style={{
-                        padding: '4px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
-                        backgroundColor: selOverlay.style.textTransform === 'lowercase' ? 'rgba(99,102,241,0.3)' : 'transparent',
-                        color: selOverlay.style.textTransform === 'lowercase' ? '#a5b4fc' : '#6b7280',
-                        fontSize: '10px', fontWeight: '700', letterSpacing: '1px'
-                      }}
-                      title="all lowercase"
-                    >aa</button>
-
-                    {/* Outline toggle */}
-                    <button
-                      onClick={() => updateTextOverlay(selOverlay.id, {
-                        style: { ...selOverlay.style, outline: !selOverlay.style.outline }
-                      })}
-                      style={{
-                        padding: '4px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
-                        backgroundColor: selOverlay.style.outline ? 'rgba(99,102,241,0.3)' : 'transparent',
-                        color: selOverlay.style.outline ? '#a5b4fc' : '#6b7280',
-                        fontSize: '11px', fontWeight: '600'
-                      }}
-                      title="Text shadow/outline"
-                    >Sh</button>
-
-                    {/* Text stroke toggle — on/off */}
-                    <button
-                      onClick={() => updateTextOverlay(selOverlay.id, {
-                        style: { ...selOverlay.style, textStroke: selOverlay.style.textStroke ? '' : buildStroke(0.5, '#000000') }
-                      })}
-                      style={{
-                        padding: '4px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
-                        backgroundColor: selOverlay.style.textStroke ? 'rgba(99,102,241,0.3)' : 'transparent',
-                        color: selOverlay.style.textStroke ? '#a5b4fc' : '#6b7280',
-                        fontSize: '11px', fontWeight: '600'
-                      }}
-                      title={selOverlay.style.textStroke ? 'Remove text stroke' : 'Add text stroke'}
-                    >St</button>
-                  </div>
-
-                  {/* Stroke width + color controls (when stroke is active) */}
-                  {selOverlay.style.textStroke && (() => {
-                    const { width: strokeW, color: strokeC } = parseStroke(selOverlay.style.textStroke);
-                    return (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '4px' }}>
-                        <span style={{ color: '#9ca3af', fontSize: '11px' }}>Stroke</span>
-                        <button
-                          onClick={() => { const nw = Math.round((strokeW - 0.1) * 10) / 10; if (nw >= 0.1) updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textStroke: buildStroke(nw, strokeC) } }); }}
-                          style={{
-                            width: '22px', height: '22px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.15)',
-                            backgroundColor: 'transparent', color: '#9ca3af', cursor: strokeW > 0.1 ? 'pointer' : 'not-allowed',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '700',
-                            opacity: strokeW > 0.1 ? 1 : 0.4
-                          }}
-                        >−</button>
-                        <span style={{ color: '#fff', fontSize: '11px', minWidth: '30px', textAlign: 'center' }}>{strokeW}px</span>
-                        <button
-                          onClick={() => { const nw = Math.round((strokeW + 0.1) * 10) / 10; if (nw <= 10) updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textStroke: buildStroke(nw, strokeC) } }); }}
-                          style={{
-                            width: '22px', height: '22px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.15)',
-                            backgroundColor: 'transparent', color: '#9ca3af', cursor: strokeW < 10 ? 'pointer' : 'not-allowed',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '700',
-                            opacity: strokeW < 10 ? 1 : 0.4
-                          }}
-                        >+</button>
-                        <input
-                          type="color"
-                          value={strokeC.startsWith('#') ? strokeC : '#000000'}
-                          onChange={(e) => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textStroke: buildStroke(strokeW, e.target.value) } })}
-                          style={{ width: '24px', height: '22px', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: 0, background: 'transparent' }}
-                          title="Stroke color"
-                        />
-                      </div>
-                    );
-                  })()}
+                  ))}
                 </div>
               );
             })()}
+          </div>
+        </div>
 
+        {/* Row 2: Font, Size, Color, Align, Position */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <select
+            value={selOverlay.style.fontFamily}
+            onChange={(e) => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, fontFamily: e.target.value } })}
+            style={{
+              padding: '5px 6px', borderRadius: '5px',
+              border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)',
+              color: '#d1d5db', fontSize: '11px', outline: 'none', maxWidth: '100px'
+            }}
+          >
+            {AVAILABLE_FONTS.map(f => (
+              <option key={f.name} value={f.value}>{f.name}</option>
+            ))}
+          </select>
 
-            {/* Slide Filmstrip — drop zone for bank images */}
-            <div style={styles.filmstrip}>
-              <div
-                style={styles.filmstripScroll}
-                onDragOver={handleFilmstripDragOver}
-                onDragLeave={handleFilmstripDragLeave}
-                onDrop={handleFilmstripDrop}
-              >
-                {slides.map((slide, index) => (
-                  <React.Fragment key={slide.id}>
-                    {/* Drop indicator before this slide */}
-                    {filmstripDropIndex === index && (
-                      <div style={styles.filmstripDropIndicator} />
-                    )}
-                    <div
-                      data-filmstrip-slide="true"
-                      style={{
-                        ...styles.filmstripSlide,
-                        ...(index === selectedSlideIndex ? styles.filmstripSlideActive : {})
-                      }}
-                      onClick={() => setSelectedSlideIndex(index)}
-                    >
-                      {slide.backgroundImage ? (
-                        <img
-                          src={slide.thumbnail || slide.backgroundImage}
-                          alt={`Slide ${index + 1}`}
-                          style={styles.filmstripThumbnail}
-                        />
-                      ) : (
-                        <div style={styles.filmstripEmpty}>
-                          <span>{index + 1}</span>
-                        </div>
-                      )}
-                      {/* Per-slide keep-text toggle */}
-                      <button
-                        style={{
-                          position: 'absolute',
-                          bottom: '2px',
-                          left: '2px',
-                          width: '18px',
-                          height: '18px',
-                          borderRadius: '3px',
-                          background: slide.keepText ? 'rgba(99,102,241,0.85)' : 'rgba(0,0,0,0.5)',
-                          border: slide.keepText ? '1px solid rgba(99,102,241,0.9)' : '1px solid rgba(255,255,255,0.15)',
-                          color: slide.keepText ? '#fff' : 'rgba(255,255,255,0.5)',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: 0,
-                          zIndex: 2,
-                          fontSize: '9px',
-                          fontWeight: 700
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSlides(prev => prev.map((s, i) => i === index ? { ...s, keepText: !s.keepText } : s));
-                        }}
-                        title={slide.keepText ? 'Keep text on generate (click to disable)' : 'Click to keep this slide\'s text on generate'}
-                      >T</button>
-                      {slides.length > 1 && (
-                      <button
-                        style={{
-                          ...styles.removeSlideButton,
-                          position: 'absolute',
-                          top: '2px',
-                          right: '2px',
-                          width: '20px',
-                          height: '20px',
-                          borderRadius: '50%',
-                          background: 'rgba(239, 68, 68, 0.8)',
-                          border: 'none',
-                          color: '#fff',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: 0,
-                          zIndex: 2,
-                          opacity: 1,
-                          transition: 'background 0.15s'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 1)'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.8)'}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeSlide(slide.id);
-                        }}
-                        title="Remove slide"
-                      >
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                          <line x1="18" y1="6" x2="6" y2="18"/>
-                          <line x1="6" y1="6" x2="18" y2="18"/>
-                        </svg>
-                      </button>
-                      )}
-                    </div>
-                  </React.Fragment>
-                ))}
+          {/* Size controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.12)', overflow: 'hidden' }}>
+            <button onClick={() => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, fontSize: Math.max(12, selOverlay.style.fontSize - 4) } })}
+              style={{ padding: '4px 8px', border: 'none', backgroundColor: 'rgba(255,255,255,0.06)', color: '#d1d5db', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>A-</button>
+            <span style={{ padding: '4px 6px', backgroundColor: 'rgba(255,255,255,0.03)', color: '#9ca3af', fontSize: '11px', minWidth: '32px', textAlign: 'center' }}>{selOverlay.style.fontSize}</span>
+            <button onClick={() => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, fontSize: Math.min(120, selOverlay.style.fontSize + 4) } })}
+              style={{ padding: '4px 8px', border: 'none', backgroundColor: 'rgba(255,255,255,0.06)', color: '#d1d5db', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>A+</button>
+          </div>
 
-                {/* Drop indicator after last slide */}
-                {filmstripDropIndex === slides.length && (
-                  <div style={styles.filmstripDropIndicator} />
-                )}
+          {/* Color */}
+          <input
+            type="color" value={selOverlay.style.color}
+            onChange={(e) => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, color: e.target.value } })}
+            style={{ width: '28px', height: '28px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '5px', cursor: 'pointer', backgroundColor: 'transparent', padding: '1px' }}
+          />
 
-                {/* Add Slide Button */}
-                <button style={styles.addSlideButton} onClick={addSlide}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 5v14M5 12h14"/>
+          <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
+
+          {/* Align */}
+          {['left', 'center', 'right'].map(align => (
+            <button
+              key={align}
+              onClick={() => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textAlign: align } })}
+              style={{
+                padding: '5px', borderRadius: '4px', border: 'none', cursor: 'pointer',
+                backgroundColor: selOverlay.style.textAlign === align ? 'rgba(99,102,241,0.3)' : 'transparent',
+                color: selOverlay.style.textAlign === align ? '#a5b4fc' : '#6b7280'
+              }}
+              title={`Align ${align}`}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                {align === 'left' && <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></>}
+                {align === 'center' && <><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></>}
+                {align === 'right' && <><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></>}
+              </svg>
+            </button>
+          ))}
+
+          <div style={{ width: '1px', height: '20px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
+
+          {/* Position H / V */}
+          <button
+            onClick={() => updateTextOverlay(selOverlay.id, { position: { ...selOverlay.position, x: 50 } })}
+            style={{
+              padding: '4px 8px', borderRadius: '5px', border: '1px solid rgba(99,102,241,0.25)',
+              backgroundColor: Math.abs(selOverlay.position.x - 50) < 1 ? 'rgba(99,102,241,0.2)' : 'transparent',
+              color: Math.abs(selOverlay.position.x - 50) < 1 ? '#a5b4fc' : '#6b7280',
+              cursor: 'pointer', fontSize: '10px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '3px'
+            }}
+            title="Center horizontally"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="12" y1="2" x2="12" y2="22"/><polyline points="8 6 12 2 16 6"/><polyline points="8 18 12 22 16 18"/>
+            </svg>
+            H
+          </button>
+          <button
+            onClick={() => updateTextOverlay(selOverlay.id, { position: { ...selOverlay.position, y: 50 } })}
+            style={{
+              padding: '4px 8px', borderRadius: '5px', border: '1px solid rgba(99,102,241,0.25)',
+              backgroundColor: Math.abs(selOverlay.position.y - 50) < 1 ? 'rgba(99,102,241,0.2)' : 'transparent',
+              color: Math.abs(selOverlay.position.y - 50) < 1 ? '#a5b4fc' : '#6b7280',
+              cursor: 'pointer', fontSize: '10px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '3px'
+            }}
+            title="Center vertically"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="2" y1="12" x2="22" y2="12"/><polyline points="6 8 2 12 6 16"/><polyline points="18 8 22 12 18 16"/>
+            </svg>
+            V
+          </button>
+
+          {/* Bold */}
+          <button
+            onClick={() => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, fontWeight: selOverlay.style.fontWeight === '700' ? '400' : '700' } })}
+            style={{
+              padding: '5px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
+              backgroundColor: selOverlay.style.fontWeight === '700' ? 'rgba(99,102,241,0.3)' : 'transparent',
+              color: selOverlay.style.fontWeight === '700' ? '#a5b4fc' : '#6b7280',
+              fontWeight: '700', fontSize: '13px'
+            }}
+            title="Bold"
+          >B</button>
+
+          {/* ALL CAPS */}
+          <button
+            onClick={() => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textTransform: selOverlay.style.textTransform === 'uppercase' ? 'none' : 'uppercase' } })}
+            style={{
+              padding: '4px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
+              backgroundColor: selOverlay.style.textTransform === 'uppercase' ? 'rgba(99,102,241,0.3)' : 'transparent',
+              color: selOverlay.style.textTransform === 'uppercase' ? '#a5b4fc' : '#6b7280',
+              fontSize: '10px', fontWeight: '700', letterSpacing: '1px'
+            }}
+            title="ALL CAPS"
+          >AA</button>
+
+          {/* lowercase */}
+          <button
+            onClick={() => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textTransform: selOverlay.style.textTransform === 'lowercase' ? 'none' : 'lowercase' } })}
+            style={{
+              padding: '4px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
+              backgroundColor: selOverlay.style.textTransform === 'lowercase' ? 'rgba(99,102,241,0.3)' : 'transparent',
+              color: selOverlay.style.textTransform === 'lowercase' ? '#a5b4fc' : '#6b7280',
+              fontSize: '10px', fontWeight: '700', letterSpacing: '1px'
+            }}
+            title="all lowercase"
+          >aa</button>
+
+          {/* Outline */}
+          <button
+            onClick={() => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, outline: !selOverlay.style.outline } })}
+            style={{
+              padding: '4px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
+              backgroundColor: selOverlay.style.outline ? 'rgba(99,102,241,0.3)' : 'transparent',
+              color: selOverlay.style.outline ? '#a5b4fc' : '#6b7280',
+              fontSize: '11px', fontWeight: '600'
+            }}
+            title="Text shadow/outline"
+          >Sh</button>
+
+          {/* Stroke toggle */}
+          <button
+            onClick={() => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textStroke: selOverlay.style.textStroke ? null : buildStroke(0.5, '#000000') } })}
+            style={{
+              padding: '4px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
+              backgroundColor: selOverlay.style.textStroke ? 'rgba(99,102,241,0.3)' : 'transparent',
+              color: selOverlay.style.textStroke ? '#a5b4fc' : '#6b7280',
+              fontSize: '11px', fontWeight: '600'
+            }}
+            title={selOverlay.style.textStroke ? 'Remove text stroke' : 'Add text stroke'}
+          >St</button>
+        </div>
+
+        {/* Stroke width + color controls */}
+        {selOverlay.style.textStroke && (() => {
+          const { width: strokeW, color: strokeC } = parseStroke(selOverlay.style.textStroke);
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '4px' }}>
+              <span style={{ color: '#9ca3af', fontSize: '11px' }}>Stroke</span>
+              <button
+                onClick={() => { const nw = Math.round((strokeW - 0.1) * 10) / 10; if (nw >= 0.1) updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textStroke: buildStroke(nw, strokeC) } }); }}
+                style={{
+                  width: '22px', height: '22px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.15)',
+                  backgroundColor: 'transparent', color: '#9ca3af', cursor: strokeW > 0.1 ? 'pointer' : 'not-allowed',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '700',
+                  opacity: strokeW > 0.1 ? 1 : 0.4
+                }}
+              >−</button>
+              <span style={{ color: '#fff', fontSize: '11px', minWidth: '30px', textAlign: 'center' }}>{strokeW}px</span>
+              <button
+                onClick={() => { const nw = Math.round((strokeW + 0.1) * 10) / 10; if (nw <= 10) updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textStroke: buildStroke(nw, strokeC) } }); }}
+                style={{
+                  width: '22px', height: '22px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.15)',
+                  backgroundColor: 'transparent', color: '#9ca3af', cursor: strokeW < 10 ? 'pointer' : 'not-allowed',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '700',
+                  opacity: strokeW < 10 ? 1 : 0.4
+                }}
+              >+</button>
+              <input
+                type="color" value={strokeC.startsWith('#') ? strokeC : '#000000'}
+                onChange={(e) => updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textStroke: buildStroke(strokeW, e.target.value) } })}
+                style={{ width: '24px', height: '22px', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: 0, background: 'transparent' }}
+                title="Stroke color"
+              />
+            </div>
+          );
+        })()}
+      </div>
+    );
+  };
+
+  // ─── Render: Filmstrip ───
+  const renderFilmstrip = () => (
+    <div style={styles.filmstrip}>
+      <div
+        style={styles.filmstripScroll}
+        onDragOver={handleFilmstripDragOver}
+        onDragLeave={handleFilmstripDragLeave}
+        onDrop={handleFilmstripDrop}
+      >
+        {slides.map((slide, index) => (
+          <React.Fragment key={slide.id}>
+            {filmstripDropIndex === index && <div style={styles.filmstripDropIndicator} />}
+            <div
+              data-filmstrip-slide="true"
+              style={{
+                ...styles.filmstripSlide,
+                ...(index === selectedSlideIndex ? styles.filmstripSlideActive : {})
+              }}
+              onClick={() => setSelectedSlideIndex(index)}
+            >
+              {slide.backgroundImage ? (
+                <img src={slide.thumbnail || slide.backgroundImage} alt={`Slide ${index + 1}`} style={styles.filmstripThumbnail} />
+              ) : (
+                <div style={styles.filmstripEmpty}><span>{index + 1}</span></div>
+              )}
+              {/* Per-slide keep-text toggle */}
+              <button
+                style={{
+                  position: 'absolute', bottom: '2px', left: '2px', width: '18px', height: '18px',
+                  borderRadius: '3px',
+                  background: slide.keepText ? 'rgba(99,102,241,0.85)' : 'rgba(0,0,0,0.5)',
+                  border: slide.keepText ? '1px solid rgba(99,102,241,0.9)' : '1px solid rgba(255,255,255,0.15)',
+                  color: slide.keepText ? '#fff' : 'rgba(255,255,255,0.5)',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: 0, zIndex: 2, fontSize: '9px', fontWeight: 700
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSlides(prev => prev.map((s, i) => i === index ? { ...s, keepText: !s.keepText } : s));
+                }}
+                title={slide.keepText ? 'Keep text on generate (click to disable)' : 'Click to keep this slide\'s text on generate'}
+              >T</button>
+              {slides.length > 1 && (
+                <button
+                  style={{
+                    ...styles.removeSlideButton,
+                    position: 'absolute', top: '2px', right: '2px', width: '20px', height: '20px',
+                    borderRadius: '50%', background: 'rgba(239, 68, 68, 0.8)', border: 'none',
+                    color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    padding: 0, zIndex: 2, opacity: 1, transition: 'background 0.15s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 1)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.8)'}
+                  onClick={(e) => { e.stopPropagation(); removeSlide(slide.id); }}
+                  title="Remove slide"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                   </svg>
                 </button>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 0' }}>
-                <div style={{ ...styles.slideCount, fontSize: '10px' }}>
-                  {slides.length}/10
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  {schedulerEditMode ? (
-                    <span style={{ fontSize: '11px', color: '#6b7280' }}>Editing scheduled post</span>
-                  ) : isMultiDraftMode ? (
-                    <span style={{ fontSize: '11px', color: '#a5b4fc', fontWeight: '600' }}>Editing {allSlideshows.length} drafts</span>
-                  ) : <>
-                  {/* Template quick-switch */}
-                  <button
-                    onClick={() => switchToSlideshow(0)}
-                    style={{
-                      padding: '4px 8px',
-                      borderRadius: '6px',
-                      border: '1px solid ' + (activeSlideshowIndex === 0 ? '#818cf8' : 'rgba(255,255,255,0.1)'),
-                      backgroundColor: activeSlideshowIndex === 0 ? '#6366f1' : 'rgba(255,255,255,0.06)',
-                      color: activeSlideshowIndex === 0 ? '#fff' : '#9ca3af',
-                      fontSize: '10px',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      transition: 'all 0.15s'
-                    }}
-                    title="Switch to template"
-                  >
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                      <line x1="3" y1="9" x2="21" y2="9"/>
-                      <line x1="9" y1="21" x2="9" y2="9"/>
-                    </svg>
-                    Template
-                  </button>
-                  {/* Count selector */}
-                  <input
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={generateCount}
-                    onChange={(e) => setGenerateCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
-                    style={{
-                      width: '44px',
-                      padding: '5px 4px',
-                      borderRadius: '6px',
-                      border: '1px solid rgba(255,255,255,0.12)',
-                      backgroundColor: 'rgba(255,255,255,0.06)',
-                      color: '#fff',
-                      fontSize: '12px',
-                      textAlign: 'center',
-                      outline: 'none'
-                    }}
-                    title="Number of slideshows to generate"
-                  />
-                  {/* Keep template text toggle */}
-                  <span style={{ fontSize: '9px', color: '#9ca3af', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Keep Text:</span>
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: '1px',
-                    backgroundColor: 'rgba(255,255,255,0.04)',
-                    borderRadius: '5px', border: '1px solid rgba(255,255,255,0.08)',
-                    padding: '1px'
-                  }} title="Keep exact text from template: Randomize = pull from text banks, per-slide = keep that slide's text, All = keep all text">
-                    {[
-                      ...slides.map((_, i) => ({ value: `slide_${i}`, label: `S${i + 1}` })),
-                      { value: 'all', label: 'All' },
-                      { value: 'none', label: 'Random' }
-                    ].map(opt => (
-                      <button
-                        key={opt.value}
-                        onClick={() => setKeepTemplateText(opt.value)}
-                        style={{
-                          padding: '2px 5px',
-                          borderRadius: '4px',
-                          border: 'none',
-                          backgroundColor: keepTemplateText === opt.value ? 'rgba(99,102,241,0.6)' : 'transparent',
-                          color: keepTemplateText === opt.value ? '#fff' : '#9ca3af',
-                          fontSize: '9px',
-                          fontWeight: keepTemplateText === opt.value ? '700' : '500',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s',
-                          letterSpacing: '0.3px'
-                        }}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                  {/* Generate button */}
-                  <button
-                    onClick={handleGenerateMore}
-                    disabled={isGenerating}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      padding: '4px 10px',
-                      borderRadius: '6px',
-                      border: 'none',
-                      background: isGenerating ? 'rgba(99,102,241,0.4)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                      color: '#fff',
-                      fontSize: '11px',
-                      fontWeight: '600',
-                      cursor: isGenerating ? 'not-allowed' : 'pointer',
-                      transition: 'all 0.2s',
-                      boxShadow: '0 2px 8px rgba(99,102,241,0.3)',
-                      whiteSpace: 'nowrap'
-                    }}
-                    title={`Generate ${generateCount} more slideshows from this template`}
-                  >
-                    {isGenerating ? (
-                      <><span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span> Generating...</>
-                    ) : (
-                      <>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <path d="M12 5v14M5 12h14"/>
-                        </svg>
-                        Generate
-                      </>
-                    )}
-                  </button>
-                  {allSlideshows.length > 1 && (
-                    <>
-                      <span style={{ fontSize: '10px', color: '#6b7280', whiteSpace: 'nowrap' }}>
-                        {allSlideshows.length} total
-                      </span>
-                      <button
-                        onClick={handleApplyTemplateToAll}
-                        title="Apply template text styles to all generated slideshows"
-                        style={{
-                          padding: '4px 8px',
-                          marginLeft: '8px',
-                          borderRadius: '4px',
-                          border: '1px solid #4b5563',
-                          background: '#1f2937',
-                          color: '#d1d5db',
-                          fontSize: '11px',
-                          fontWeight: '500',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          whiteSpace: 'nowrap'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.target.style.background = '#374151';
-                          e.target.style.borderColor = '#6b7280';
-                          e.target.style.color = '#f3f4f6';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.target.style.background = '#1f2937';
-                          e.target.style.borderColor = '#4b5563';
-                          e.target.style.color = '#d1d5db';
-                        }}
-                      >
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <path d="M7 12c0-1.657 1.343-3 3-3h4c1.657 0 3 1.343 3 3v4c0 1.657-1.343 3-3 3h-4c-1.657 0-3-1.343-3-3v-4zM3 3l9 9M15 21l-9-9"/>
-                        </svg>
-                        Apply Style
-                      </button>
-                    </>
-                  )}
-                  </>}
-                </div>
-              </div>
+              )}
             </div>
+          </React.Fragment>
+        ))}
+        {filmstripDropIndex === slides.length && <div style={styles.filmstripDropIndicator} />}
+        <button style={styles.addSlideButton} onClick={addSlide}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+        </button>
+      </div>
+      <div style={{ ...styles.slideCount, fontSize: '10px', textAlign: 'left' }}>{slides.length}/10</div>
+    </div>
+  );
 
-            {/* ─── Timeline Switcher ─── */}
-            <div style={{
-              borderTop: '1px solid rgba(255,255,255,0.08)',
-              padding: '6px 16px',
-              backgroundColor: 'rgba(0,0,0,0.15)',
-              flexShrink: 0
-            }}>
-              {/* Scrollable row of timeline tabs */}
-              <div style={{
-                display: 'flex',
-                gap: '6px',
-                overflowX: 'auto',
-                paddingBottom: '4px',
-                scrollbarWidth: 'thin',
-                scrollbarColor: 'rgba(255,255,255,0.15) transparent'
-              }}>
-                {allSlideshows.map((show, idx) => (
-                  <div
-                    key={show.id}
-                    onClick={() => switchToSlideshow(idx)}
-                    style={{
-                      flexShrink: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: '5px 10px',
-                      borderRadius: '6px',
-                      backgroundColor: idx === activeSlideshowIndex ? '#6366f1' : 'rgba(255,255,255,0.06)',
-                      border: '1px solid ' + (idx === activeSlideshowIndex ? '#818cf8' : 'rgba(255,255,255,0.08)'),
-                      color: idx === activeSlideshowIndex ? '#fff' : '#9ca3af',
-                      fontSize: '11px',
-                      fontWeight: idx === activeSlideshowIndex ? '600' : '400',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                      whiteSpace: 'nowrap'
+  // ─── Render: Generation Controls ───
+  const renderGenerationControls = () => {
+    if (schedulerEditMode) return (
+      <div style={{ padding: '4px 16px', fontSize: '11px', color: '#6b7280' }}>Editing scheduled post</div>
+    );
+    if (isMultiDraftMode) return (
+      <div style={{ padding: '4px 16px', fontSize: '11px', color: '#a5b4fc', fontWeight: '600' }}>Editing {allSlideshows.length} drafts</div>
+    );
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap',
+        padding: '6px 16px', borderTop: `1px solid ${theme.border.subtle}`, flexShrink: 0
+      }}>
+        {/* Template quick-switch */}
+        <button
+          onClick={() => switchToSlideshow(0)}
+          style={{
+            padding: '4px 8px', borderRadius: '6px',
+            border: '1px solid ' + (activeSlideshowIndex === 0 ? '#818cf8' : 'rgba(255,255,255,0.1)'),
+            backgroundColor: activeSlideshowIndex === 0 ? '#6366f1' : 'rgba(255,255,255,0.06)',
+            color: activeSlideshowIndex === 0 ? '#fff' : '#9ca3af',
+            fontSize: '10px', fontWeight: '600', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.15s'
+          }}
+          title="Switch to template"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>
+          </svg>
+          Template
+        </button>
+
+        {/* Count */}
+        <input
+          type="number" min="1" max="100" value={generateCount}
+          onChange={(e) => setGenerateCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+          style={{
+            width: '44px', padding: '5px 4px', borderRadius: '6px',
+            border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)',
+            color: '#fff', fontSize: '12px', textAlign: 'center', outline: 'none'
+          }}
+          title="Number of slideshows to generate"
+        />
+
+        {/* Keep text */}
+        <span style={{ fontSize: '9px', color: '#9ca3af', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Keep Text:</span>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '1px',
+          backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: '5px',
+          border: '1px solid rgba(255,255,255,0.08)', padding: '1px'
+        }} title="Keep exact text from template">
+          {[
+            ...slides.map((_, i) => ({ value: `slide_${i}`, label: `S${i + 1}` })),
+            { value: 'all', label: 'All' },
+            { value: 'none', label: 'Random' }
+          ].map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setKeepTemplateText(opt.value)}
+              style={{
+                padding: '2px 5px', borderRadius: '4px', border: 'none',
+                backgroundColor: keepTemplateText === opt.value ? 'rgba(99,102,241,0.6)' : 'transparent',
+                color: keepTemplateText === opt.value ? '#fff' : '#9ca3af',
+                fontSize: '9px', fontWeight: keepTemplateText === opt.value ? '700' : '500',
+                cursor: 'pointer', transition: 'all 0.15s', letterSpacing: '0.3px'
+              }}
+            >{opt.label}</button>
+          ))}
+        </div>
+
+        {/* Generate */}
+        <button
+          onClick={handleGenerateMore} disabled={isGenerating}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '6px',
+            border: 'none',
+            background: isGenerating ? 'rgba(99,102,241,0.4)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            color: '#fff', fontSize: '11px', fontWeight: '600',
+            cursor: isGenerating ? 'not-allowed' : 'pointer',
+            transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(99,102,241,0.3)', whiteSpace: 'nowrap'
+          }}
+          title={`Generate ${generateCount} more slideshows from this template`}
+        >
+          {isGenerating ? (
+            <><span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span> Generating...</>
+          ) : (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+              Generate
+            </>
+          )}
+        </button>
+
+        {allSlideshows.length > 1 && (
+          <>
+            <span style={{ fontSize: '10px', color: '#6b7280', whiteSpace: 'nowrap' }}>{allSlideshows.length} total</span>
+            <button
+              onClick={handleApplyTemplateToAll}
+              title="Apply template text styles to all generated slideshows"
+              style={{
+                padding: '4px 8px', marginLeft: '8px', borderRadius: '4px',
+                border: '1px solid #4b5563', background: '#1f2937', color: '#d1d5db',
+                fontSize: '11px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s',
+                display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap'
+              }}
+              onMouseEnter={(e) => { e.target.style.background = '#374151'; e.target.style.borderColor = '#6b7280'; e.target.style.color = '#f3f4f6'; }}
+              onMouseLeave={(e) => { e.target.style.background = '#1f2937'; e.target.style.borderColor = '#4b5563'; e.target.style.color = '#d1d5db'; }}
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M7 12c0-1.657 1.343-3 3-3h4c1.657 0 3 1.343 3 3v4c0 1.657-1.343 3-3 3h-4c-1.657 0-3-1.343-3-3v-4zM3 3l9 9M15 21l-9-9"/>
+              </svg>
+              Apply Style
+            </button>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  // ─── Render: Sidebar Source ───
+  const renderSidebarSource = () => (
+    <div>
+      <select
+        value={selectedSource}
+        onChange={(e) => setSelectedSource(e.target.value)}
+        style={{
+          width: '100%', padding: '6px 10px', borderRadius: '6px',
+          border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.input,
+          color: theme.text.primary, fontSize: '12px', outline: 'none', cursor: 'pointer'
+        }}
+      >
+        {collections.filter(c => c.type !== 'smart').map(c => {
+          const migrated = migrateCollectionBanks(c);
+          const populatedBanks = (migrated.banks || []).filter(b => b?.length > 0);
+          if (populatedBanks.length === 0) return null;
+          const totalImages = populatedBanks.reduce((sum, b) => sum + b.length, 0);
+          return (
+            <React.Fragment key={c.id}>
+              <option value={`${c.id}:bank_0`}>{c.name} — All Banks ({totalImages})</option>
+              {(migrated.banks || []).map((bank, idx) => (
+                bank?.length > 0 && <option key={`${c.id}:bank_${idx}`} value={`${c.id}:bank_${idx}`}>&nbsp;&nbsp;{c.name} → {getBankLabel(idx)} ({bank.length})</option>
+              ))}
+            </React.Fragment>
+          );
+        })}
+        {categoryBankImages.some(b => (b || []).length > 0) && (categoryBankImages.length > 0 ? categoryBankImages : [[], []]).map((bank, idx) => (
+          (bank || []).length > 0 && <option key={`bank_${idx}`} value={`bank_${idx}`}>{getBankLabel(idx)} Bank (Category)</option>
+        ))}
+      </select>
+
+      {/* Default Template Selector */}
+      {textTemplates.length > 0 && (
+        <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label style={{ color: theme.text.secondary, fontSize: '11px', fontWeight: '500', whiteSpace: 'nowrap' }}>Text Style:</label>
+          <select
+            value={selectedDefaultTemplate?.id || ''}
+            onChange={(e) => {
+              const template = textTemplates.find(t => t.id === e.target.value);
+              setSelectedDefaultTemplate(template || null);
+            }}
+            style={{
+              flex: 1, padding: '5px 8px', borderRadius: '6px',
+              border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.input,
+              color: theme.text.primary, fontSize: '11px', outline: 'none', cursor: 'pointer'
+            }}
+          >
+            <option value="">Default</option>
+            {textTemplates.map(template => (
+              <option key={template.id} value={template.id}>{template.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+    </div>
+  );
+
+  // ─── Render: Sidebar Audio ───
+  const renderSidebarAudio = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {/* Audio Picker */}
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        <button
+          style={{
+            display: 'flex', alignItems: 'center', gap: '4px',
+            padding: '6px 10px', borderRadius: '6px', fontSize: '11px',
+            border: '1px solid rgba(251, 146, 60, 0.4)', backgroundColor: 'rgba(251, 146, 60, 0.1)',
+            color: '#fdba74', cursor: 'pointer'
+          }}
+          onClick={() => slideshowAudioInputRef.current?.click()}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          Upload
+        </button>
+        {audioTracks.length > 0 && (
+          <div style={{ position: 'relative' }}>
+            <button
+              style={{
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '6px 10px', borderRadius: '6px', fontSize: '11px',
+                border: `1px solid ${theme.border.default}`, backgroundColor: 'transparent',
+                color: theme.text.secondary, cursor: 'pointer'
+              }}
+              onClick={() => setShowAudioPicker(!showAudioPicker)}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+              </svg>
+              Library ({audioTracks.length})
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+            {showAudioPicker && (
+              <div style={styles.audioPickerDropdown}>
+                <div style={styles.audioPickerHeader}>Select Audio</div>
+                {audioTracks.map(audio => (
+                  <button
+                    key={audio.id}
+                    style={styles.audioPickerItem}
+                    onClick={() => {
+                      setAudioToTrim(audio); setShowAudioTrimmer(true); setShowAudioPicker(false);
                     }}
                   >
-                    {show.isTemplate ? (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                        <line x1="3" y1="9" x2="21" y2="9"/>
-                        <line x1="9" y1="21" x2="9" y2="9"/>
-                      </svg>
-                    ) : (
-                      <span style={{ fontSize: '10px', opacity: 0.6 }}>#{idx}</span>
-                    )}
-                    <span>{show.isTemplate ? 'Template' : show.name || `Slideshow ${idx}`}</span>
-                    {!show.isTemplate && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteSlideshow(idx);
-                        }}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: idx === activeSlideshowIndex ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)',
-                          cursor: 'pointer',
-                          padding: '0 0 0 4px',
-                          fontSize: '14px',
-                          lineHeight: 1,
-                          display: 'flex',
-                          alignItems: 'center'
-                        }}
-                        title="Delete this slideshow"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+                    </svg>
+                    <span style={styles.audioPickerItemName}>{audio.name}</span>
+                  </button>
                 ))}
               </div>
-
-            </div>
+            )}
           </div>
-          )}
+        )}
+      </div>
 
-          {/* Mobile Text Panel */}
-          {isMobile && mobilePanelTab === 'text' && currentSlide && (
-            <div style={{
-              flex: 1,
-              backgroundColor: '#16162a',
-              overflow: 'auto',
-              WebkitOverflowScrolling: 'touch',
-              padding: '16px'
-            }}>
-              <TextEditorPanel
-                slide={currentSlide}
-                editingTextId={editingTextId}
-                lyrics={lyrics}
-                templates={textTemplates}
-                textBank1={getTextBanks()[0] || []}
-                textBank2={getTextBanks()[1] || []}
-                onSelectText={(text) => {
-                  const newOverlay = {
-                    id: `text_${Date.now()}`,
-                    text: text,
-                    style: {
-                      fontFamily: 'Inter, sans-serif',
-                      fontSize: 48,
-                      fontWeight: '600',
-                      color: '#ffffff',
-                      textAlign: 'center',
-                      outline: true,
-                      outlineColor: '#000000'
-                    },
-                    position: { x: 50, y: 50, width: 80, height: 20 }
-                  };
-                  setSlides(prev => prev.map((slide, i) =>
-                    i === selectedSlideIndex
-                      ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] }
-                      : slide
-                  ));
-                  setEditingTextId(newOverlay.id);
-                  setMobilePanelTab('preview');
-                }}
-                onAddTextOverlay={() => {
-                  const newOverlay = {
-                    id: `text_${Date.now()}`,
-                    text: 'New Text',
-                    style: {
-                      fontFamily: 'Inter, sans-serif',
-                      fontSize: 48,
-                      fontWeight: '600',
-                      color: '#ffffff',
-                      textAlign: 'center',
-                      outline: true,
-                      outlineColor: '#000000'
-                    },
-                    position: { x: 50, y: 50, width: 80, height: 20 }
-                  };
-                  setSlides(prev => prev.map((slide, i) =>
-                    i === selectedSlideIndex
-                      ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] }
-                      : slide
-                  ));
-                  setEditingTextId(newOverlay.id);
-                }}
-                onSelectOverlay={(overlayId) => setEditingTextId(overlayId)}
-                onUpdateOverlay={(overlayId, updates) => {
-                  setSlides(prev => prev.map((slide, idx) =>
-                    idx === selectedSlideIndex
-                      ? {
-                          ...slide,
-                          textOverlays: (slide.textOverlays || []).map(overlay =>
-                            overlay.id === overlayId ? { ...overlay, ...updates } : overlay
-                          )
+      {/* Selected audio info */}
+      {selectedAudio && (
+        <div style={{
+          padding: '8px', borderRadius: '8px',
+          backgroundColor: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.2)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '12px' }}>🎵</span>
+            <span style={{ fontSize: '11px', color: '#fff', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {selectedAudio.name}
+            </span>
+            <span style={{ fontSize: '10px', color: '#86efac', fontFamily: 'monospace' }}>
+              {formatTime(selectedAudio.trimmedDuration || selectedAudio.duration || 0)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* AI Transcribe */}
+      {selectedAudio && (
+        <button
+          style={{
+            display: 'flex', alignItems: 'center', gap: '4px',
+            padding: '6px 10px', borderRadius: '6px', fontSize: '11px',
+            border: '1px solid rgba(251, 191, 36, 0.4)', backgroundColor: 'rgba(251, 191, 36, 0.1)',
+            color: '#fcd34d', cursor: 'pointer', width: 'fit-content'
+          }}
+          onClick={() => setShowLyricAnalyzer(true)}
+          title="AI transcribe audio to add lyrics"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
+            <path d="M19 10v2a7 7 0 01-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+          Transcribe
+        </button>
+      )}
+    </div>
+  );
+
+  // ─── Render: Sidebar Text Banks ───
+  const renderSidebarTextBanks = () => (
+    <div>
+      {getTextBanks().map((textBank, idx) => {
+        const color = getBankColor(idx);
+        const inputVal = newTextInputs[idx] || '';
+        return (
+          <div key={`tb-${idx}`} style={{ marginBottom: '8px' }}
+            onDragOver={(e) => { if (e.dataTransfer.types.includes('text/lyric')) { e.preventDefault(); e.currentTarget.style.outline = `1px dashed ${color.light}`; } }}
+            onDragLeave={(e) => { e.currentTarget.style.outline = 'none'; }}
+            onDrop={(e) => { e.preventDefault(); e.currentTarget.style.outline = 'none'; const text = e.dataTransfer.getData('text/lyric'); if (text) handleAddToTextBank(idx + 1, text); }}
+          >
+            <div style={{ fontSize: '10px', fontWeight: '600', color: color.light, marginBottom: '4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              {getBankLabel(idx)} Text
+              {idx >= MIN_BANKS && (
+                <button
+                  title={`Delete ${getBankLabel(idx)} Text Bank`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!window.confirm(`Delete ${getBankLabel(idx)} text and image bank?`)) return;
+                    collections.forEach(col => {
+                      const migrated = migrateCollectionBanks(col);
+                      if ((migrated.banks || []).length > idx) {
+                        removeBankFromCollection(artistId, col.id, idx);
+                        if (db) {
+                          const freshCols = getCollections(artistId);
+                          const updated = freshCols.find(c => c.id === col.id);
+                          if (updated) saveCollectionToFirestore(db, artistId, updated).catch(() => {});
                         }
-                      : slide
-                  ));
-                }}
-                onRemoveOverlay={(overlayId) => {
-                  setSlides(prev => prev.map((slide, idx) =>
-                    idx === selectedSlideIndex
-                      ? {
-                          ...slide,
-                          textOverlays: (slide.textOverlays || []).filter(o => o.id !== overlayId)
+                      }
+                    });
+                    setCollections(getCollections(artistId));
+                    toastSuccess(`${getBankLabel(idx)} deleted`);
+                  }}
+                  style={{ background: 'none', border: 'none', color: color.light, cursor: 'pointer', padding: '0 2px', fontSize: '12px', opacity: 0.6, lineHeight: 1 }}
+                  onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                  onMouseLeave={(e) => e.currentTarget.style.opacity = '0.6'}
+                >×</button>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '3px', marginBottom: '4px' }}>
+              <input type="text" value={inputVal} onChange={(e) => setNewTextInputs(prev => ({ ...prev, [idx]: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === 'Enter' && inputVal.trim()) { handleAddToTextBank(idx + 1, inputVal); setNewTextInputs(prev => ({ ...prev, [idx]: '' })); } }}
+                placeholder="Add text..." style={{ flex: 1, padding: '4px 6px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '11px', outline: 'none' }} />
+              <button onClick={() => { if (inputVal.trim()) { handleAddToTextBank(idx + 1, inputVal); setNewTextInputs(prev => ({ ...prev, [idx]: '' })); } }} disabled={!inputVal.trim()}
+                style={{ padding: '4px 8px', borderRadius: '4px', border: 'none', backgroundColor: inputVal.trim() ? `${color.primary}4d` : 'rgba(255,255,255,0.05)', color: inputVal.trim() ? color.light : '#4b5563', fontSize: '11px', cursor: inputVal.trim() ? 'pointer' : 'default' }}>+</button>
+            </div>
+            {textBank.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                {textBank.map((entry, i) => {
+                  const entryText = getTextBankText(entry);
+                  const entryStyle = getTextBankStyle(entry);
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'stretch', gap: '2px' }}>
+                      <div onClick={() => {
+                        if (selectedSlideIndex >= 0 && slides[selectedSlideIndex]) {
+                          const newOverlay = { id: `text_${Date.now()}_${i}`, text: entryText, style: entryStyle ? { ...entryStyle } : getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
+                          setSlides(prev => prev.map((slide, si) => si === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
+                          setEditingTextId(newOverlay.id);
                         }
-                      : slide
-                  ));
-                  setEditingTextId(null);
+                      }} style={{ flex: 1, padding: '4px 6px', backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '4px 0 0 4px', color: '#d1d5db', fontSize: '10px', cursor: 'pointer', lineHeight: '1.3', wordBreak: 'break-word', display: 'flex', alignItems: 'center', gap: '4px' }} title={entryStyle ? `Click to add as overlay (styled)` : 'Click to add as overlay'}>
+                        {entryStyle && <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: entryStyle.color || '#fff', flexShrink: 0, border: '1px solid rgba(255,255,255,0.2)' }} />}
+                        {entryText}
+                      </div>
+                      <button onClick={(e) => { e.stopPropagation(); handleRemoveFromTextBank(idx + 1, i); }}
+                        style={{ padding: '0 5px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.2)', borderLeft: 'none', borderRadius: '0 4px 4px 0', color: '#ef4444', fontSize: '9px', cursor: 'pointer', flexShrink: 0 }} title="Remove">×</button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : <div style={{ fontSize: '9px', color: '#6b7280', padding: '2px', textAlign: 'center' }}>No text yet</div>}
+          </div>
+        );
+      })}
+      {getTextBanks().length < MAX_BANKS && collections.length > 0 && (
+        <button
+          onClick={() => {
+            const targetCol = collections[0];
+            addBankToCollection(artistId, targetCol.id);
+            if (db) {
+              const freshCols = getCollections(artistId);
+              const updated = freshCols.find(c => c.id === targetCol.id);
+              if (updated) saveCollectionToFirestore(db, artistId, updated).catch(() => {});
+            }
+            setCollections(getCollections(artistId));
+            toastSuccess(`${getBankLabel(getTextBanks().length)} added`);
+          }}
+          style={{
+            width: '100%', padding: '5px 8px', marginTop: '4px', borderRadius: '4px',
+            border: '1px dashed rgba(236,72,153,0.3)', backgroundColor: 'rgba(236,72,153,0.05)',
+            color: '#f9a8d4', fontSize: '10px', cursor: 'pointer', fontWeight: '600'
+          }}
+        >+ Add Slide Bank</button>
+      )}
+    </div>
+  );
+
+  // ─── Render: Sidebar Slide Banks (Image Banks) ───
+  const renderSidebarSlideBanks = () => {
+    const collectionMaxBanks = collections.reduce((max, col) => {
+      const migrated = migrateCollectionBanks(col);
+      return Math.max(max, (migrated.banks || []).length);
+    }, 0);
+    const numBanks = Math.max((categoryBankImages || []).length, collectionMaxBanks, 2);
+
+    return (
+      <div>
+        {Array.from({ length: numBanks }).map((_, idx) => {
+          const color = getBankColor(idx);
+          const bankImages = (() => {
+            const colId = typeof selectedSource === 'string' && selectedSource.includes(':') ? selectedSource.split(':')[0] : null;
+            if (colId) {
+              const col = collections.find(c => c.id === colId);
+              if (col) {
+                const migrated = migrateCollectionBanks(col);
+                const ids = (migrated.banks || [])[idx] || [];
+                if (ids.length > 0) return libraryImages.filter(item => ids.includes(item.id));
+              }
+            }
+            if ((categoryBankImages[idx] || []).length > 0) return categoryBankImages[idx];
+            const allIds = new Set();
+            collections.forEach(col => {
+              const migrated = migrateCollectionBanks(col);
+              ((migrated.banks || [])[idx] || []).forEach(id => allIds.add(id));
+            });
+            if (allIds.size > 0) return libraryImages.filter(item => allIds.has(item.id));
+            return [];
+          })();
+
+          return (
+            <div key={`img-bank-${idx}`}
+              style={{
+                marginBottom: '8px', borderRadius: '6px', overflow: 'hidden',
+                border: dragOverBankCol === idx ? `2px dashed ${color.border}` : `1px solid ${theme.border.subtle}`,
+                backgroundColor: dragOverBankCol === idx ? color.bg : 'transparent',
+                transition: 'all 0.15s ease'
+              }}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverBankCol(idx); }}
+              onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverBankCol(null); }}
+              onDrop={(e) => handleDropOnBankColumn(e, idx)}
+            >
+              <div style={{
+                padding: '4px 8px', fontSize: '10px', fontWeight: '600', color: color.light,
+                backgroundColor: color.bg, display: 'flex', alignItems: 'center', gap: '6px'
+              }}>
+                {getBankLabel(idx)} Photos ({bankImages.length})
+                <CloudImportButton
+                  artistId={artistId} db={db} mediaType="image" compact
+                  onImportMedia={(files) => {
+                    const newItems = files.map((f, i) => ({
+                      id: `cloud_${Date.now()}_${i}`, name: f.name, url: f.url, localUrl: f.localUrl, type: 'image'
+                    }));
+                    setLibraryImages(prev => [...prev, ...newItems]);
+                  }}
+                />
+                {idx >= MIN_BANKS && (
+                  <button
+                    title={`Delete ${getBankLabel(idx)}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!window.confirm(`Delete ${getBankLabel(idx)}? Images will remain in your library.`)) return;
+                      collections.forEach(col => {
+                        const migrated = migrateCollectionBanks(col);
+                        if ((migrated.banks || []).length > idx) {
+                          removeBankFromCollection(artistId, col.id, idx);
+                          if (db) {
+                            const freshCols = getCollections(artistId);
+                            const updated = freshCols.find(c => c.id === col.id);
+                            if (updated) saveCollectionToFirestore(db, artistId, updated).catch(() => {});
+                          }
+                        }
+                      });
+                      setCollections(getCollections(artistId));
+                      toastSuccess(`${getBankLabel(idx)} deleted`);
+                    }}
+                    style={{ background: 'none', border: 'none', color: color.light, cursor: 'pointer', padding: '0 2px', fontSize: '14px', opacity: 0.6, lineHeight: 1, marginLeft: 'auto' }}
+                    onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                    onMouseLeave={(e) => e.currentTarget.style.opacity = '0.6'}
+                  >×</button>
+                )}
+              </div>
+              <div style={{ padding: '4px' }}>
+                {bankImages.length === 0 ? (
+                  <div style={{ fontSize: '10px', color: '#6b7280', padding: '8px', textAlign: 'center' }}>
+                    No images in {getBankLabel(idx)}
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '3px' }}>
+                    {bankImages.map(image => {
+                      const isSel = selectedBankImages.has(image.id);
+                      return (
+                        <div key={image.id} style={{ ...styles.clipCard, border: isSel ? `1px solid ${color.primary}80` : '1px solid transparent', position: 'relative', aspectRatio: '1' }}
+                          draggable
+                          onClick={(e) => {
+                            if (e.metaKey || e.ctrlKey) {
+                              setSelectedBankImages(prev => { const next = new Set(prev); if (next.has(image.id)) next.delete(image.id); else next.add(image.id); return next; });
+                            } else {
+                              setSelectedBankImages(prev => prev.size === 1 && prev.has(image.id) ? new Set() : new Set([image.id]));
+                            }
+                            setActiveBank(`image${idx}`);
+                          }}
+                          onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify({ ...image, url: image.url || image.localUrl, thumbnail: image.url || image.localUrl, sourceBank: `image${idx}` })); }}
+                        >
+                          {isSel && <div style={{ position: 'absolute', inset: 0, backgroundColor: `${color.primary}33`, zIndex: 1, pointerEvents: 'none', borderRadius: '6px' }}><div style={{ position: 'absolute', bottom: 3, right: 3, width: '14px', height: '14px', backgroundColor: color.primary, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', color: '#fff', fontWeight: 'bold' }}>✓</div></div>}
+                          <img src={image.thumbnailUrl || image.url || image.localUrl} alt={image.name} style={styles.clipThumbnail} loading="lazy" />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Selection action bar */}
+        {selectedBankImages.size > 0 && (
+          <div style={{ display: 'flex', gap: '8px', padding: '6px 0', marginTop: '4px' }}>
+            <button onClick={addSelectedImagesToSlides} style={{ flex: 1, padding: '6px 12px', backgroundColor: '#7c3aed', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
+              Add {selectedBankImages.size} to Slides
+            </button>
+            <button onClick={() => setSelectedBankImages(new Set())} style={{ padding: '6px 8px', backgroundColor: 'transparent', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '6px', fontSize: '11px', cursor: 'pointer' }}>Clear</button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ─── Render: Sidebar Lyrics ───
+  const renderSidebarLyrics = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {onAddLyrics && (
+        <div style={{ position: 'relative' }} data-lyric-bank-picker>
+          <button
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px', width: '100%',
+              padding: '8px 12px', borderRadius: '8px', fontSize: '12px',
+              border: '1px solid rgba(139, 92, 246, 0.3)', backgroundColor: 'rgba(139, 92, 246, 0.1)',
+              color: '#c4b5fd', cursor: 'pointer'
+            }}
+            onClick={() => setShowLyricBankPicker(!showLyricBankPicker)}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+              <path d="M14 2v6h6"/>
+            </svg>
+            Select Lyrics
+          </button>
+          {showLyricBankPicker && (
+            <div style={styles.lyricBankDropdown}>
+              <div style={styles.lyricBankDropdownHeader}>SELECT LYRICS</div>
+              <div style={styles.lyricBankDropdownList}>
+                {lyrics.length === 0 ? (
+                  <div style={styles.lyricBankDropdownEmpty}>No lyrics in bank yet</div>
+                ) : (
+                  lyrics.map((lyric) => (
+                    <div
+                      key={lyric.id}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('text/lyric', lyric.content || lyric.title || '');
+                        e.dataTransfer.effectAllowed = 'copy';
+                      }}
+                      style={{
+                        ...styles.lyricBankDropdownItem,
+                        ...(linkedLyricId === lyric.id ? { border: '1px solid #6366f1', backgroundColor: 'rgba(99,102,241,0.15)' } : {})
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (currentSlide) {
+                          const newOverlay = {
+                            id: `text_${Date.now()}`, text: lyric.content,
+                            style: getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 }
+                          };
+                          setSlides(prev => prev.map((slide, i) =>
+                            i === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide
+                          ));
+                          setEditingTextId(newOverlay.id);
+                        }
+                        setShowLyricBankPicker(false);
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(139, 92, 246, 0.3)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(139, 92, 246, 0.1)'; }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, opacity: 0.6, pointerEvents: 'none' }}>
+                        <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+                      </svg>
+                      <span style={{ pointerEvents: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {lyric.title || lyric.content?.slice(0, 30) || 'Untitled'}
+                        {linkedLyricId === lyric.id && <span style={{ marginLeft: '4px', fontSize: '8px', color: '#6366f1', fontWeight: 700 }}>LINKED</span>}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div
+                style={styles.lyricBankDropdownAddNew}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLyricsPromptValue('');
+                  setShowLyricsPrompt(true);
+                  setShowLyricBankPicker(false);
                 }}
-                onRerollText={(overlayId, bankSource) => handleTextReroll(overlayId, bankSource)}
-                onAddLyrics={handleAddLyricsAndRefresh}
-                onSaveTemplate={handleSaveTemplate}
-                onRequestSaveTemplate={(style) => {
-                  setPendingTemplateStyle(style);
-                  setTemplatePromptValue('');
-                  setShowTemplatePrompt(true);
-                }}
-                onClose={() => setMobilePanelTab('preview')}
-                isMobile={true}
-              />
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(16, 185, 129, 0.2)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ pointerEvents: 'none' }}>
+                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                <span style={{ pointerEvents: 'none' }}>Add New Lyrics</span>
+              </div>
             </div>
           )}
         </div>
+      )}
+    </div>
+  );
 
-        {/* Schedule Panel (shown after export) */}
-        {showSchedulePanel && (
-          <div style={styles.schedulePanel}>
-            <div style={styles.schedulePanelHeader}>
-              <h3 style={styles.schedulePanelTitle}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="4" width="18" height="18" rx="2"/>
-                  <line x1="16" y1="2" x2="16" y2="6"/>
-                  <line x1="8" y1="2" x2="8" y2="6"/>
-                  <line x1="3" y1="10" x2="21" y2="10"/>
-                </svg>
-                Schedule Carousel
-              </h3>
-              <button
-                style={styles.scheduleCloseBtn}
-                onClick={() => setShowSchedulePanel(false)}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18"/>
-                  <line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
-            </div>
-
-            <div style={styles.scheduleGrid}>
-              {/* Account Selection */}
-              <div style={styles.scheduleField}>
-                <label style={styles.scheduleLabel}>Account</label>
-                <select
-                  value={selectedHandle}
-                  onChange={(e) => setSelectedHandle(e.target.value)}
-                  style={styles.scheduleSelect}
-                >
-                  <option value="">Select account...</option>
-                  {availableHandles.map(handle => (
-                    <option key={handle} value={handle}>{handle}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Date & Time */}
-              <div style={styles.scheduleField}>
-                <label style={styles.scheduleLabel}>Date</label>
-                <input
-                  type="date"
-                  value={scheduleDate}
-                  onChange={(e) => setScheduleDate(e.target.value)}
-                  style={styles.scheduleDateInput}
-                />
-              </div>
-
-              <div style={styles.scheduleField}>
-                <label style={styles.scheduleLabel}>Time</label>
-                <input
-                  type="time"
-                  value={scheduleTime}
-                  onChange={(e) => setScheduleTime(e.target.value)}
-                  style={styles.scheduleDateInput}
-                />
-              </div>
-
-              {/* Platforms */}
-              <div style={styles.scheduleField}>
-                <label style={styles.scheduleLabel}>Platforms</label>
-                <div style={styles.platformCheckboxes}>
-                  <label style={styles.platformCheck}>
-                    <input
-                      type="checkbox"
-                      checked={platforms.tiktok}
-                      onChange={(e) => setPlatforms(p => ({ ...p, tiktok: e.target.checked }))}
-                    />
-                    TikTok
-                  </label>
-                  <label style={styles.platformCheck}>
-                    <input
-                      type="checkbox"
-                      checked={platforms.instagram}
-                      onChange={(e) => setPlatforms(p => ({ ...p, instagram: e.target.checked }))}
-                    />
-                    Instagram
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            {/* Caption & hashtags managed in Scheduler */}
-            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', padding: '4px 0', fontStyle: 'italic' }}>
-              Caption & hashtags can be added in the Scheduler
-            </div>
-
-            {/* Preview */}
-            <div style={styles.schedulePreview}>
-              <span style={styles.schedulePreviewLabel}>
-                {exportedImages.length} images ready to post
-              </span>
-              <div style={styles.schedulePreviewImages}>
-                {exportedImages.slice(0, 5).map((img, i) => (
-                  <img
-                    key={i}
-                    src={img.url}
-                    alt={`Slide ${i + 1}`}
-                    style={styles.schedulePreviewImg}
-                  />
-                ))}
-                {exportedImages.length > 5 && (
-                  <div style={styles.schedulePreviewMore}>
-                    +{exportedImages.length - 5}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div style={styles.scheduleActions}>
-              <button
-                style={styles.scheduleSkipBtn}
-                onClick={() => {
-                  setShowSchedulePanel(false);
-                  toastSuccess(`Exported ${exportedImages.length} images! You can schedule them later.`);
-                }}
-              >
-                Skip for now
-              </button>
-              <button
-                style={styles.scheduleSubmitBtn}
-                onClick={handleSchedule}
-                disabled={isScheduling || !selectedHandle}
-              >
-                {isScheduling ? 'Scheduling...' : 'Schedule Post'}
-              </button>
-            </div>
+  // ─── Render: Modals ───
+  const renderModals = () => (
+    <>
+      {/* Schedule Panel */}
+      {showSchedulePanel && (
+        <div style={styles.schedulePanel}>
+          <div style={styles.schedulePanelHeader}>
+            <h3 style={styles.schedulePanelTitle}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="4" width="18" height="18" rx="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              Schedule Carousel
+            </h3>
+            <button style={styles.scheduleCloseBtn} onClick={() => setShowSchedulePanel(false)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
           </div>
-        )}
-
-        {/* AI Lyric Analyzer Modal */}
-        {showLyricAnalyzer && selectedAudio && (
-          <LyricAnalyzer
-            audioFile={selectedAudio.file}
-            audioUrl={selectedAudio.url || selectedAudio.localUrl}
-            startTime={selectedAudio.startTime}
-            endTime={selectedAudio.endTime}
-            onComplete={handleTranscriptionComplete}
-            onClose={() => setShowLyricAnalyzer(false)}
-          />
-        )}
-
-
-        {/* Audio Trimmer Modal */}
-        {showAudioTrimmer && audioToTrim && (
-          <AudioClipSelector
-            audioFile={audioToTrim.file}
-            audioUrl={audioToTrim.url || audioToTrim.localUrl}
-            audioName={audioToTrim.name}
-            initialStart={audioToTrim.startTime || 0}
-            initialEnd={audioToTrim.endTime || null}
-            onSave={handleAudioTrimSave}
-            onCancel={() => {
-              setShowAudioTrimmer(false);
-              setAudioToTrim(null);
-            }}
-          />
-        )}
-
-        {/* Audio Prompt — first generation without audio */}
-        {showAudioPrompt && (
-          <div style={{
-            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)',
-            backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', zIndex: 10002
-          }}>
-            <div style={{
-              backgroundColor: '#1a1a2e', borderRadius: '16px', padding: '28px',
-              maxWidth: '380px', width: '90%', textAlign: 'center',
-              boxShadow: '0 20px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1)'
-            }}>
-              <div style={{
-                width: '48px', height: '48px', borderRadius: '12px',
-                background: 'linear-gradient(135deg, rgba(251,146,60,0.2), rgba(251,146,60,0.1))',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                margin: '0 auto 16px'
-              }}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fb923c" strokeWidth="2">
-                  <path d="M9 18V5l12-2v13"/>
-                  <circle cx="6" cy="18" r="3"/>
-                  <circle cx="18" cy="16" r="3"/>
-                </svg>
-              </div>
-              <h3 style={{ margin: '0 0 8px', color: '#fff', fontSize: '16px', fontWeight: '600' }}>
-                Add audio first?
-              </h3>
-              <p style={{ margin: '0 0 20px', color: '#9ca3af', fontSize: '13px', lineHeight: '1.5' }}>
-                Your template doesn't have audio yet. All generated slideshows will inherit the template's audio.
-              </p>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button
-                  onClick={() => {
-                    setShowAudioPrompt(false);
-                    executeGeneration();
-                  }}
-                  style={{
-                    flex: 1, padding: '10px', borderRadius: '8px',
-                    border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'transparent',
-                    color: '#9ca3af', fontSize: '13px', cursor: 'pointer'
-                  }}
-                >
-                  Skip, Generate Anyway
-                </button>
-                <button
-                  onClick={() => {
-                    setShowAudioPrompt(false);
-                    setShowAudioPicker(true);
-                  }}
-                  style={{
-                    flex: 1, padding: '10px', borderRadius: '8px', border: 'none',
-                    background: 'linear-gradient(135deg, #fb923c, #f97316)',
-                    color: '#fff', fontSize: '13px', fontWeight: '600', cursor: 'pointer'
-                  }}
-                >
-                  Add Audio
-                </button>
+          <div style={styles.scheduleGrid}>
+            <div style={styles.scheduleField}>
+              <label style={styles.scheduleLabel}>Account</label>
+              <select value={selectedHandle} onChange={(e) => setSelectedHandle(e.target.value)} style={styles.scheduleSelect}>
+                <option value="">Select account...</option>
+                {availableHandles.map(handle => (<option key={handle} value={handle}>{handle}</option>))}
+              </select>
+            </div>
+            <div style={styles.scheduleField}>
+              <label style={styles.scheduleLabel}>Date</label>
+              <input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} style={styles.scheduleDateInput} />
+            </div>
+            <div style={styles.scheduleField}>
+              <label style={styles.scheduleLabel}>Time</label>
+              <input type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} style={styles.scheduleDateInput} />
+            </div>
+            <div style={styles.scheduleField}>
+              <label style={styles.scheduleLabel}>Platforms</label>
+              <div style={styles.platformCheckboxes}>
+                <label style={styles.platformCheck}>
+                  <input type="checkbox" checked={platforms.tiktok} onChange={(e) => setPlatforms(p => ({ ...p, tiktok: e.target.checked }))} /> TikTok
+                </label>
+                <label style={styles.platformCheck}>
+                  <input type="checkbox" checked={platforms.instagram} onChange={(e) => setPlatforms(p => ({ ...p, instagram: e.target.checked }))} /> Instagram
+                </label>
               </div>
             </div>
           </div>
-        )}
+          <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', padding: '4px 0', fontStyle: 'italic' }}>
+            Caption & hashtags can be added in the Scheduler
+          </div>
+          <div style={styles.schedulePreview}>
+            <span style={styles.schedulePreviewLabel}>{exportedImages.length} images ready to post</span>
+            <div style={styles.schedulePreviewImages}>
+              {exportedImages.slice(0, 5).map((img, i) => (
+                <img key={i} src={img.url} alt={`Slide ${i + 1}`} style={styles.schedulePreviewImg} />
+              ))}
+              {exportedImages.length > 5 && <div style={styles.schedulePreviewMore}>+{exportedImages.length - 5}</div>}
+            </div>
+          </div>
+          <div style={styles.scheduleActions}>
+            <button style={styles.scheduleSkipBtn} onClick={() => { setShowSchedulePanel(false); toastSuccess(`Exported ${exportedImages.length} images! You can schedule them later.`); }}>
+              Skip for now
+            </button>
+            <button style={styles.scheduleSubmitBtn} onClick={handleSchedule} disabled={isScheduling || !selectedHandle}>
+              {isScheduling ? 'Scheduling...' : 'Schedule Post'}
+            </button>
+          </div>
+        </div>
+      )}
 
-      </div>
+      {/* AI Lyric Analyzer */}
+      {showLyricAnalyzer && selectedAudio && (
+        <LyricAnalyzer
+          audioFile={selectedAudio.file} audioUrl={selectedAudio.url || selectedAudio.localUrl}
+          startTime={selectedAudio.startTime} endTime={selectedAudio.endTime}
+          onComplete={handleTranscriptionComplete} onClose={() => setShowLyricAnalyzer(false)}
+        />
+      )}
 
-      {/* Inline Lyrics Prompt Modal */}
+      {/* Audio Trimmer */}
+      {showAudioTrimmer && audioToTrim && (
+        <AudioClipSelector
+          audioFile={audioToTrim.file} audioUrl={audioToTrim.url || audioToTrim.localUrl}
+          audioName={audioToTrim.name} initialStart={audioToTrim.startTime || 0} initialEnd={audioToTrim.endTime || null}
+          onSave={handleAudioTrimSave} onCancel={() => { setShowAudioTrimmer(false); setAudioToTrim(null); }}
+        />
+      )}
+
+      {/* Audio Prompt */}
+      {showAudioPrompt && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10002 }}>
+          <div style={{ backgroundColor: '#1a1a2e', borderRadius: '16px', padding: '28px', maxWidth: '380px', width: '90%', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1)' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'linear-gradient(135deg, rgba(251,146,60,0.2), rgba(251,146,60,0.1))', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fb923c" strokeWidth="2">
+                <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+              </svg>
+            </div>
+            <h3 style={{ margin: '0 0 8px', color: '#fff', fontSize: '16px', fontWeight: '600' }}>Add audio first?</h3>
+            <p style={{ margin: '0 0 20px', color: '#9ca3af', fontSize: '13px', lineHeight: '1.5' }}>
+              Your template doesn't have audio yet. All generated slideshows will inherit the template's audio.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => { setShowAudioPrompt(false); executeGeneration(); }}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'transparent', color: '#9ca3af', fontSize: '13px', cursor: 'pointer' }}>
+                Skip, Generate Anyway
+              </button>
+              <button onClick={() => { setShowAudioPrompt(false); setShowAudioPicker(true); }}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #fb923c, #f97316)', color: '#fff', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+                Add Audio
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lyrics Prompt */}
       {showLyricsPrompt && (
         <div style={{ position: 'fixed', inset: 0, background: theme.overlay.heavy, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           onClick={() => setShowLyricsPrompt(false)}>
@@ -4465,7 +3803,7 @@ const SlideshowEditor = ({
         </div>
       )}
 
-      {/* Inline Template Name Prompt Modal */}
+      {/* Template Name Prompt */}
       {showTemplatePrompt && (
         <div style={{ position: 'fixed', inset: 0, background: theme.overlay.heavy, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           onClick={() => setShowTemplatePrompt(false)}>
@@ -4495,7 +3833,171 @@ const SlideshowEditor = ({
           </div>
         </div>
       )}
+    </>
+  );
 
+  // ─── Hidden File Inputs ───
+  const renderHiddenInputs = () => (
+    <>
+      <input ref={importImageARef} type="file" accept="image/*,.heic,.heif,.tif,.tiff" multiple onChange={(e) => handleImportImages(e, 'A')} style={{ display: 'none' }} />
+      <input ref={importImageBRef} type="file" accept="image/*,.heic,.heif,.tif,.tiff" multiple onChange={(e) => handleImportImages(e, 'B')} style={{ display: 'none' }} />
+      <input ref={importImageGenericRef} type="file" accept="image/*,.heic,.heif,.tif,.tiff" multiple onChange={(e) => handleImportImages(e, importBankIndexRef.current)} style={{ display: 'none' }} />
+      <input ref={slideshowAudioInputRef} type="file" accept="audio/*,.m4a,.wav,.aif,.aiff" onChange={handleSlideshowAudioUpload} style={{ display: 'none' }} />
+    </>
+  );
+
+  // ═══════════════════════════════════════════
+  // ─── MAIN RETURN ───
+  // ═══════════════════════════════════════════
+  return (
+    <div style={{
+      ...styles.overlay,
+      ...(isMobile ? { padding: 0 } : {})
+    }}>
+      <div style={{
+        ...styles.modal,
+        ...(isMobile ? { width: '100%', height: '100vh', borderRadius: 0 } : {})
+      }}>
+        {renderTopBar()}
+        {renderDraftTabsBar()}
+
+        {/* Mobile Tab Bar */}
+        {isMobile && (
+          <div style={{
+            display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.1)', backgroundColor: theme.bg.surface
+          }}>
+            {['preview', 'banks', 'text'].map(tab => (
+              <button
+                key={tab}
+                style={{
+                  flex: 1, padding: '12px', border: 'none',
+                  backgroundColor: mobilePanelTab === tab ? theme.accent.primary : 'transparent',
+                  color: mobilePanelTab === tab ? '#fff' : theme.text.secondary,
+                  fontSize: '13px', fontWeight: '500', cursor: 'pointer'
+                }}
+                onClick={() => setMobilePanelTab(tab)}
+              >
+                {tab === 'preview' ? 'Preview' : tab === 'banks' ? 'Media' : 'Text'}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Main Content */}
+        <div style={{ ...styles.content, ...(isMobile ? { flexDirection: 'column' } : {}) }}>
+
+          {/* ─── CENTER AREA ─── */}
+          {(!isMobile || mobilePanelTab === 'preview') && (
+            <div style={{
+              flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0
+            }}>
+              {/* Scrollable: canvas + audio */}
+              <div style={{ flex: 1, overflow: 'auto', padding: '12px 24px 4px', minHeight: 0 }}>
+                {renderCanvasPreview()}
+                {renderAudioPlayerBar()}
+                {renderHiddenInputs()}
+              </div>
+
+              {renderCanvasActions()}
+              {renderInlineTextEditor()}
+              {renderFilmstrip()}
+              {renderGenerationControls()}
+            </div>
+          )}
+
+          {/* ─── RIGHT SIDEBAR ─── */}
+          {(!isMobile || mobilePanelTab === 'banks') && (
+            <div style={{
+              width: isMobile ? '100%' : '384px',
+              borderLeft: isMobile ? 'none' : `1px solid ${theme.border.default}`,
+              display: 'flex', flexDirection: 'column',
+              backgroundColor: theme.bg.surface,
+              overflowY: 'auto',
+              flexShrink: 0
+            }}>
+              {renderCollapsibleSection('source', 'Source', renderSidebarSource(),
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+              )}
+              {renderCollapsibleSection('audio', 'Audio', renderSidebarAudio(),
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+              )}
+              {renderCollapsibleSection('textBanks', 'Text Banks', renderSidebarTextBanks(),
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>
+              )}
+              {renderCollapsibleSection('slideBanks', 'Slide Banks', renderSidebarSlideBanks(),
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              )}
+              {renderCollapsibleSection('lyrics', 'Lyrics', renderSidebarLyrics(),
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+              )}
+            </div>
+          )}
+
+          {/* Mobile Text Panel */}
+          {isMobile && mobilePanelTab === 'text' && currentSlide && (
+            <div style={{
+              flex: 1, backgroundColor: '#16162a', overflow: 'auto',
+              WebkitOverflowScrolling: 'touch', padding: '16px'
+            }}>
+              <TextEditorPanel
+                slide={currentSlide}
+                editingTextId={editingTextId}
+                lyrics={lyrics}
+                templates={textTemplates}
+                textBank1={getTextBanks()[0] || []}
+                textBank2={getTextBanks()[1] || []}
+                onSelectText={(text) => {
+                  const newOverlay = {
+                    id: `text_${Date.now()}`, text: text,
+                    style: { fontFamily: 'Inter, sans-serif', fontSize: 48, fontWeight: '600', color: '#ffffff', textAlign: 'center', outline: true, outlineColor: '#000000' },
+                    position: { x: 50, y: 50, width: 80, height: 20 }
+                  };
+                  setSlides(prev => prev.map((slide, i) => i === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
+                  setEditingTextId(newOverlay.id);
+                  setMobilePanelTab('preview');
+                }}
+                onAddTextOverlay={() => {
+                  const newOverlay = {
+                    id: `text_${Date.now()}`, text: 'New Text',
+                    style: { fontFamily: 'Inter, sans-serif', fontSize: 48, fontWeight: '600', color: '#ffffff', textAlign: 'center', outline: true, outlineColor: '#000000' },
+                    position: { x: 50, y: 50, width: 80, height: 20 }
+                  };
+                  setSlides(prev => prev.map((slide, i) => i === selectedSlideIndex ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
+                  setEditingTextId(newOverlay.id);
+                }}
+                onSelectOverlay={(overlayId) => setEditingTextId(overlayId)}
+                onUpdateOverlay={(overlayId, updates) => {
+                  setSlides(prev => prev.map((slide, idx) =>
+                    idx === selectedSlideIndex
+                      ? { ...slide, textOverlays: (slide.textOverlays || []).map(overlay => overlay.id === overlayId ? { ...overlay, ...updates } : overlay) }
+                      : slide
+                  ));
+                }}
+                onRemoveOverlay={(overlayId) => {
+                  setSlides(prev => prev.map((slide, idx) =>
+                    idx === selectedSlideIndex
+                      ? { ...slide, textOverlays: (slide.textOverlays || []).filter(o => o.id !== overlayId) }
+                      : slide
+                  ));
+                  setEditingTextId(null);
+                }}
+                onRerollText={(overlayId, bankSource) => handleTextReroll(overlayId, bankSource)}
+                onAddLyrics={handleAddLyricsAndRefresh}
+                onSaveTemplate={handleSaveTemplate}
+                onRequestSaveTemplate={(style) => {
+                  setPendingTemplateStyle(style);
+                  setTemplatePromptValue('');
+                  setShowTemplatePrompt(true);
+                }}
+                onClose={() => setMobilePanelTab('preview')}
+                isMobile={true}
+              />
+            </div>
+          )}
+        </div>
+
+        {renderModals()}
+      </div>
     </div>
   );
 };
