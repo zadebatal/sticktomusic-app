@@ -4460,13 +4460,14 @@ const getStyles = (theme) => ({
     padding: '4px'
   },
   aspectButton: {
-    padding: '8px 16px',
+    padding: '6px 12px',
     border: 'none',
     borderRadius: '6px',
     backgroundColor: 'transparent',
     color: theme.text.secondary,
     cursor: 'pointer',
-    fontSize: '14px',
+    fontSize: '12px',
+    fontWeight: '500',
     transition: 'all 0.2s'
   },
   aspectButtonActive: {
@@ -4547,70 +4548,10 @@ const getStyles = (theme) => ({
     flex: 1,
     overflow: 'hidden'
   },
-  leftPanel: {
-    width: '660px',
-    borderRight: `1px solid ${theme.border.default}`,
-    display: 'flex',
-    flexDirection: 'column',
-    backgroundColor: theme.bg.surface
-  },
-  bankTabs: {
-    display: 'flex',
-    borderBottom: `1px solid ${theme.border.default}`
-  },
-  bankTab: {
-    flex: 1,
-    padding: '12px',
-    border: 'none',
-    backgroundColor: 'transparent',
-    color: theme.text.secondary,
-    cursor: 'pointer',
-    fontSize: '13px',
-    fontWeight: '500',
-    transition: 'all 0.2s'
-  },
-  bankTabActive: {
-    color: theme.text.primary,
-    backgroundColor: `${theme.accent.muted}40`,
-    borderBottom: `2px solid ${theme.accent.primary}`
-  },
-  // Colored tab variants
-  bankTabTeal: {
-    color: '#5eead4'
-  },
-  bankTabActiveTeal: {
-    color: '#14b8a6',
-    backgroundColor: 'rgba(20, 184, 166, 0.15)',
-    borderBottom: '2px solid #14b8a6'
-  },
-  bankTabAmber: {
-    color: '#fcd34d'
-  },
-  bankTabActiveAmber: {
-    color: '#f59e0b',
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    borderBottom: '2px solid #f59e0b'
-  },
-  bankTabPurple: {
-    color: '#c4b5fd'
-  },
-  bankTabActivePurple: {
-    color: '#a78bfa',
-    backgroundColor: 'rgba(167, 139, 250, 0.15)',
-    borderBottom: '2px solid #a78bfa'
-  },
-  bankTabGreen: {
-    color: '#86efac'
-  },
   bankTabActiveGreen: {
     color: '#22c55e',
     backgroundColor: 'rgba(34, 197, 94, 0.15)',
     borderBottom: '2px solid #22c55e'
-  },
-  bankContent: {
-    flex: 1,
-    overflow: 'auto',
-    padding: '12px'
   },
   emptyBank: {
     display: 'flex',
@@ -4662,15 +4603,6 @@ const getStyles = (theme) => ({
     overflow: 'hidden',
     textOverflow: 'ellipsis'
   },
-  rightPanel: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    padding: '0',
-    gap: '0',
-    overflow: 'hidden',
-    minHeight: 0
-  },
   canvasContainer: {
     display: 'flex',
     flexDirection: 'column',
@@ -4681,11 +4613,12 @@ const getStyles = (theme) => ({
   },
   canvas: {
     backgroundColor: '#000',
-    borderRadius: '12px',
+    borderRadius: '8px',
     overflow: 'hidden',
     position: 'relative',
     boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
-    flexShrink: 0
+    flexShrink: 0,
+    border: `1px solid ${theme.border.subtle}`
   },
   canvasBackground: {
     width: '100%',
