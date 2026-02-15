@@ -2340,6 +2340,33 @@ const LibraryBrowser = ({
                                 )}
                               </>
                             )}
+                            {/* Delete bank button (only show if more than 2 banks exist) */}
+                            {(collectionBanks?.banks?.length || 0) > 2 && (
+                              <button
+                                onClick={() => {
+                                  if (window.confirm(`Delete ${getBankLabel(idx)}? All images will be moved to Library.`)) {
+                                    removeBankFromCollection(artistId, activeView, idx);
+                                    loadData();
+                                    syncCollection(activeView);
+                                  }
+                                }}
+                                style={{
+                                  marginLeft: 'auto', padding: '4px 8px', fontSize: '11px',
+                                  backgroundColor: 'transparent', border: `1px solid ${theme.border.subtle}`,
+                                  borderRadius: '4px', color: theme.text.muted, cursor: 'pointer',
+                                  transition: 'all 0.2s', display: 'flex', alignItems: 'center'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+                                  e.currentTarget.style.color = '#fca5a5';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.borderColor = theme.border.subtle;
+                                  e.currentTarget.style.color = theme.text.muted;
+                                }}
+                                title={`Delete ${getBankLabel(idx)}`}
+                              >✕</button>
+                            )}
                           </div>
                           <div style={{
                             flex: 1, overflowY: 'auto', padding: '16px', minHeight: 0,
@@ -2374,39 +2401,30 @@ const LibraryBrowser = ({
                   </div>
                 ) : (
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden' }}>
-                    {/* Slideshow Text Banks (only in images/slideshows mode) */}
-                    {mode !== 'videos' && (
-                      <>
-                        <TextBankPanel
-                          bankNum={1}
-                          label="Text Bank 1"
-                          color="#c4b5fd"
-                          texts={(() => {
-                            const col = collections.find(c => c.id === activeView);
-                            if (!col) return [];
-                            const migrated = migrateCollectionBanks(col);
-                            return migrated.textBanks?.[0] || [];
-                          })()}
-                          onAdd={(text) => { addToTextBank(artistId, activeView, 1, text); loadData(); syncCollection(activeView); }}
-                          onRemove={(index) => { removeFromTextBank(artistId, activeView, 1, index); loadData(); syncCollection(activeView); }}
-                          onUpdate={(texts) => { updateTextBank(artistId, activeView, 1, texts); loadData(); syncCollection(activeView); }}
-                        />
-                        <TextBankPanel
-                          bankNum={2}
-                          label="Text Bank 2"
-                          color="#86efac"
-                          texts={(() => {
-                            const col = collections.find(c => c.id === activeView);
-                            if (!col) return [];
-                            const migrated = migrateCollectionBanks(col);
-                            return migrated.textBanks?.[1] || [];
-                          })()}
-                          onAdd={(text) => { addToTextBank(artistId, activeView, 2, text); loadData(); syncCollection(activeView); }}
-                          onRemove={(index) => { removeFromTextBank(artistId, activeView, 2, index); loadData(); syncCollection(activeView); }}
-                          onUpdate={(texts) => { updateTextBank(artistId, activeView, 2, texts); loadData(); syncCollection(activeView); }}
-                        />
-                      </>
-                    )}
+                    {/* Slideshow Text Banks (only in images/slideshows mode) - Dynamic based on collection banks */}
+                    {mode !== 'videos' && (() => {
+                      const col = collections.find(c => c.id === activeView);
+                      if (!col) return null;
+                      const migrated = migrateCollectionBanks(col);
+                      const numBanks = migrated.textBanks?.length || 0;
+
+                      return Array.from({ length: numBanks }, (_, idx) => {
+                        const bankNum = idx + 1;
+                        const bankColor = getBankColor(idx);
+                        return (
+                          <TextBankPanel
+                            key={`textbank-${idx}`}
+                            bankNum={bankNum}
+                            label={getBankLabel(idx)}
+                            color={bankColor.light}
+                            texts={migrated.textBanks?.[idx] || []}
+                            onAdd={(text) => { addToTextBank(artistId, activeView, bankNum, text); loadData(); syncCollection(activeView); }}
+                            onRemove={(index) => { removeFromTextBank(artistId, activeView, bankNum, index); loadData(); syncCollection(activeView); }}
+                            onUpdate={(texts) => { updateTextBank(artistId, activeView, bankNum, texts); loadData(); syncCollection(activeView); }}
+                          />
+                        );
+                      });
+                    })()}
                     {mode === 'videos' && (
                       <>
                         {/* Video Text Bank 1 */}

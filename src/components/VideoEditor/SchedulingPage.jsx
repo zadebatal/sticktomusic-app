@@ -550,7 +550,8 @@ const SchedulingPage = ({
     }
 
     const postHashtags = Array.isArray(post.hashtags) ? post.hashtags : (post.hashtags || '').split(/\s+/).filter(Boolean);
-    const allHashtags = [...postHashtags, ...(alwaysOnHashtags || [])];
+    // Don't auto-merge always-on hashtags - let users control hashtags explicitly
+    const allHashtags = postHashtags;
     const caption = [post.caption || '', allHashtags.join(' ')].filter(Boolean).join('\n\n');
 
     try {
@@ -587,7 +588,8 @@ const SchedulingPage = ({
             platforms: [entry],
             scheduledFor: post.scheduledTime || new Date().toISOString(),
             type: 'carousel',
-            images
+            images,
+            audioUrl: post.audioUrl || post.editorState?.audio?.url || post.editorState?.audio?.localUrl || null
           });
 
           if (result?.success === false) {
@@ -736,11 +738,10 @@ const SchedulingPage = ({
         status: POST_STATUS.SCHEDULED
       };
 
-      // Merge hashtags: always-on + existing per-post
+      // Don't auto-merge always-on hashtags - preserve user's explicit hashtag choices
       const existingPost = posts.find(p => p.id === post.id);
       const perPostTags = toHashtagArray(existingPost?.hashtags);
-      const mergedTags = [...new Set([...alwaysOnHashtags, ...perPostTags])];
-      if (mergedTags.length > 0) updates.hashtags = mergedTags;
+      if (perPostTags.length > 0) updates.hashtags = perPostTags;
 
       // Apply batch account platforms
       if (Object.keys(platformUpdate).length > 0) {

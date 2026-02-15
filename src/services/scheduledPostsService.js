@@ -84,6 +84,7 @@ export async function createScheduledPost(db, artistId, data) {
     contentName: data.contentName || 'Untitled',
     thumbnail: data.thumbnail || null,
     cloudUrl: data.cloudUrl || null,
+    audioUrl: data.audioUrl || null, // Audio file URL for slideshows
 
     // Platform selections: { instagram: { accountId, handle }, ... }
     platforms: data.platforms || {},
