@@ -4209,6 +4209,9 @@ const SlideshowEditor = ({
                 }}
                 onClose={() => setMobilePanelTab('preview')}
                 isMobile={true}
+                handleAddLyricsAndRefresh={handleAddLyricsAndRefresh}
+                toastSuccess={toastSuccess}
+                linkedLyricId={linkedLyricId}
               />
             </div>
           )}
@@ -4536,7 +4539,10 @@ const TextEditorPanel = ({
   onSaveTemplate,
   onRequestSaveTemplate,
   onClose,
-  isMobile = false
+  isMobile = false,
+  handleAddLyricsAndRefresh,
+  toastSuccess,
+  linkedLyricId
 }) => {
   const [showLyricPicker, setShowLyricPicker] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);

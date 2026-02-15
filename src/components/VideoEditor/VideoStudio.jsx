@@ -836,6 +836,15 @@ const VideoStudio = ({
           status: VIDEO_STATUS.DRAFT
         });
         log('[VideoStudio] Saved video via library system:', savedVideo.id);
+
+        // Sync to Firestore for cross-device access
+        if (db && currentArtistId) {
+          const content = getCreatedContent(currentArtistId);
+          saveCreatedContentAsync(db, currentArtistId, content).catch(err =>
+            console.error('[VideoStudio] Failed to sync video to Firestore:', err)
+          );
+        }
+
         setCreatedContentVersion(v => v + 1);
         setShowEditor(false);
         setEditingVideo(null);

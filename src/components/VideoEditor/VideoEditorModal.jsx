@@ -201,9 +201,9 @@ const VideoEditorModal = ({
   const [isMuted, setIsMuted] = useState(false);
 
   // ── Audio leveling state ──
-  const [sourceVideoMuted, setSourceVideoMuted] = useState(false);
-  const [sourceVideoVolume, setSourceVideoVolume] = useState(1.0);
-  const [externalAudioVolume, setExternalAudioVolume] = useState(1.0);
+  const [sourceVideoMuted, setSourceVideoMuted] = useState(existingVideo?.sourceVideoMuted ?? false);
+  const [sourceVideoVolume, setSourceVideoVolume] = useState(existingVideo?.sourceVideoVolume ?? 1.0);
+  const [externalAudioVolume, setExternalAudioVolume] = useState(existingVideo?.externalAudioVolume ?? 1.0);
 
   // Auto-select source video audio when clips exist — skip the audio picker screen
   useEffect(() => {
@@ -872,7 +872,11 @@ const VideoEditorModal = ({
       duration,
       bpm,
       thumbnail: clips[0]?.thumbnail || null,
-      textOverlay: words[0]?.text || lyrics.split('\n')[0] || ''
+      textOverlay: words[0]?.text || lyrics.split('\n')[0] || '',
+      // Audio mixing state
+      sourceVideoMuted,
+      sourceVideoVolume,
+      externalAudioVolume
     };
 
     // If we have lyrics and a save handler, prompt to save to song
@@ -885,7 +889,7 @@ const VideoEditorModal = ({
     // Save directly
     onSave(videoData);
     clearAutoSave();
-  }, [existingVideo, selectedAudio, clips, words, lyrics, textStyle, cropMode, duration, bpm, onSave, onSaveLyrics, clearAutoSave]);
+  }, [existingVideo, selectedAudio, clips, words, lyrics, textStyle, cropMode, duration, bpm, sourceVideoMuted, sourceVideoVolume, externalAudioVolume, onSave, onSaveLyrics, clearAutoSave]);
 
   // Handle lyrics save prompt response
   const handleLyricsPromptResponse = useCallback((saveLyrics) => {

@@ -848,9 +848,9 @@ const SchedulingPage = ({
         await handleUpdatePost(post.id, { status: POST_STATUS.POSTING });
       }
 
+      // Don't auto-merge always-on hashtags - let users control hashtags explicitly per post
       const batchPostHashtags = Array.isArray(post.hashtags) ? post.hashtags : (post.hashtags || '').split(/\s+/).filter(Boolean);
-      const allHashtags = [...batchPostHashtags, ...(alwaysOnHashtags || [])];
-      const caption = [post.caption || '', allHashtags.join(' ')].filter(Boolean).join('\n\n');
+      const caption = [post.caption || '', batchPostHashtags.join(' ')].filter(Boolean).join('\n\n');
 
       try {
         if (isSlideshow) {

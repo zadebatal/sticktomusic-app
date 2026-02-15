@@ -1156,7 +1156,7 @@ const StudioHome = ({
           index: s,
           backgroundImage: imageUrl,
           thumbnail: imageUrl,
-          sourceBank: useA ? 'imageA' : 'imageB',
+          sourceBank: `bank_${bankIndex}`,
           sourceImageId: img.id,
           textOverlays: [],
           imageTransform: { scale: 1, offsetX: 0, offsetY: 0 },
@@ -1216,6 +1216,7 @@ const StudioHome = ({
         } : null,
         status: 'draft',
         collectionId: selectedCollection,
+        collectionName: col.name,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };

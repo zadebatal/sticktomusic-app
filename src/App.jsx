@@ -245,7 +245,7 @@ const lateApi = {
     }
   },
 
-  async schedulePost({ platforms, caption, videoUrl, scheduledFor, artistId = null, type = 'video', images = null }) {
+  async schedulePost({ platforms, caption, videoUrl, scheduledFor, artistId = null, type = 'video', images = null, audioUrl = null }) {
     try {
       const token = await getFirebaseToken();
       // Validate required fields
@@ -278,6 +278,11 @@ const lateApi = {
         scheduledFor,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles'
       };
+
+      // Include audioUrl if provided (for carousel posts with audio)
+      if (audioUrl) {
+        payload.audioUrl = audioUrl;
+      }
 
       log('Sending to Late:', JSON.stringify(payload, null, 2));
 

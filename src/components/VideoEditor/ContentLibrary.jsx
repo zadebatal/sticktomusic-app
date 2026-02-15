@@ -1369,6 +1369,8 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
               caption: fullCaption,
               images,
               scheduledFor,
+              audioUrl: slideshow.audio?.url || slideshow.audio?.localUrl || null,
+              collectionName: slideshow.collectionName || null
             });
             log(`[Schedule] ${job.label} result:`, result);
             if (result?.success === false) {

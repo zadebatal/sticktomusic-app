@@ -36,6 +36,7 @@ import {
   COLLECTION_TYPES,
   SMART_COLLECTION_IDS,
   addBankToCollection,
+  removeBankFromCollection,
   getBankColor,
   getBankLabel,
   migrateCollectionBanks,
