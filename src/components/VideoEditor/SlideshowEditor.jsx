@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import useIsMobile from '../../hooks/useIsMobile';
-import { exportSlideshowAsImages } from '../../services/slideshowExportService';
+import { exportSlideshowAsImages, generateSlideThumbnail } from '../../services/slideshowExportService';
 import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, getLyrics, MEDIA_TYPES, addToTextBank, removeFromTextBank, assignToBank, saveCollectionToFirestore, migrateCollectionBanks, getBankColor, getBankLabel, BANK_COLORS, MAX_BANKS, MIN_BANKS, addBankToCollection, removeBankFromCollection, updateLibraryItem, getTextBankText, getTextBankStyle } from '../../services/libraryService';
 import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -1696,12 +1696,24 @@ const SlideshowEditor = ({
   const handleSave = useCallback(async () => {
     const activeSlideshow = allSlideshows[activeSlideshowIndex];
     if (!activeSlideshow) return;
+
+    // Generate fresh thumbnail with current text overlays
+    let thumbnail = activeSlideshow.slides[0]?.backgroundImage || activeSlideshow.slides[0]?.imageUrl || null;
+    if (activeSlideshow.slides[0]) {
+      try {
+        thumbnail = await generateSlideThumbnail(activeSlideshow.slides[0], aspectRatio);
+      } catch (err) {
+        console.warn('[SlideshowEditor] Failed to generate thumbnail:', err);
+      }
+    }
+
     const slideshowData = {
       id: activeSlideshow.isTemplate ? (existingSlideshow?.id || `slideshow_${Date.now()}`) : activeSlideshow.id,
       name: activeSlideshow.name,
       aspectRatio,
       slides: activeSlideshow.slides,
       audio: activeSlideshow.audio,
+      thumbnail,
       status: 'draft',
       createdAt: existingSlideshow?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -1713,12 +1725,23 @@ const SlideshowEditor = ({
   // Save all slideshows and close
   const handleSaveAllAndClose = useCallback(async () => {
     for (const ss of allSlideshows) {
+      // Generate fresh thumbnail with current text overlays
+      let thumbnail = ss.slides[0]?.backgroundImage || ss.slides[0]?.imageUrl || null;
+      if (ss.slides[0]) {
+        try {
+          thumbnail = await generateSlideThumbnail(ss.slides[0], aspectRatio);
+        } catch (err) {
+          console.warn('[SlideshowEditor] Failed to generate thumbnail:', err);
+        }
+      }
+
       const slideshowData = {
         id: ss.isTemplate ? (existingSlideshow?.id || `slideshow_${Date.now()}`) : ss.id,
         name: ss.name,
         aspectRatio,
         slides: ss.slides,
         audio: ss.audio,
+        thumbnail,
         status: 'draft',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -1981,6 +2004,7 @@ const SlideshowEditor = ({
         name,
         aspectRatio,
         slides,
+        thumbnail: images[0]?.url || slides[0]?.backgroundImage || slides[0]?.imageUrl || null,
         status: 'rendered',
         exportedImages: images,
         createdAt: existingSlideshow?.createdAt || new Date().toISOString(),
