@@ -832,13 +832,24 @@ const ContentLibrary = ({
                 style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }}
               />
             ) : previewingVideo.clips?.length > 0 ? (
-              <video
-                src={previewingVideo.clips[0].url || previewingVideo.clips[0].localUrl}
-                controls
-                playsInline
-                preload="metadata"
-                style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }}
-              />
+              <>
+                <video
+                  src={previewingVideo.clips[0].url || previewingVideo.clips[0].localUrl}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  muted={!!(previewingVideo.audio?.url && !previewingVideo.audio.url.startsWith('blob:') && !previewingVideo.audio.isSourceAudio)}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }}
+                />
+                {previewingVideo.audio?.url && !previewingVideo.audio.url.startsWith('blob:') && !previewingVideo.audio.isSourceAudio && (
+                  <audio
+                    src={previewingVideo.audio.url}
+                    autoPlay
+                    controls
+                    style={{ position: 'absolute', bottom: 70, left: 16, right: 16, height: 32, opacity: 0.9 }}
+                  />
+                )}
+              </>
             ) : (
               <div style={{ padding: 40, color: theme.text.muted, textAlign: 'center' }}>
                 No preview available - video needs to be rendered first
