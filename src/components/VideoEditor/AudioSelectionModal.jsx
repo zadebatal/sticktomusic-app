@@ -16,26 +16,29 @@ const AudioSelectionModal = ({
 
   // Filter audio by search and collection
   const filteredAudio = useMemo(() => {
-    let filtered = libraryAudio;
+    try {
+      let filtered = Array.isArray(libraryAudio) ? libraryAudio : [];
 
-    // Collection filter
-    if (filterCollection !== 'all') {
-      const collection = collections.find(c => c.id === filterCollection);
-      if (collection && collection.audio) {
-        const collectionAudioIds = new Set(collection.audio);
-        filtered = filtered.filter(a => collectionAudioIds.has(a.id));
+      // Collection filter
+      if (filterCollection !== 'all') {
+        const collection = Array.isArray(collections) ? collections.find(c => c.id === filterCollection) : null;
+        if (collection && Array.isArray(collection.audio)) {
+          const collectionAudioIds = new Set(collection.audio);
+          filtered = filtered.filter(a => a && collectionAudioIds.has(a.id));
+        }
       }
-    }
 
-    // Search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(a =>
-        a.name?.toLowerCase().includes(query)
-      );
-    }
+      // Search filter
+      if (searchQuery && searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        filtered = filtered.filter(a => a && a.name && a.name.toLowerCase().includes(query));
+      }
 
-    return filtered;
+      return filtered;
+    } catch (error) {
+      console.error('[AudioSelectionModal] Filter error:', error);
+      return [];
+    }
   }, [libraryAudio, searchQuery, filterCollection, collections]);
 
   const handlePreview = (audio, e) => {
