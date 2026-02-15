@@ -80,6 +80,8 @@ const VideoEditorModal = ({
     if (clean.url && clean.url.startsWith('blob:')) clean.url = null;
     if (!clean.url && !clean.localUrl && !(clean.file instanceof File || clean.file instanceof Blob)) {
       console.warn('[VideoEditorModal] Audio has stale blob URL — cleared on load');
+      // Keep the object shell (with id/name) so library recovery can find the cloud URL
+      if (clean.id) return clean;
       return null;
     }
     return clean;
@@ -284,18 +286,30 @@ const VideoEditorModal = ({
   // Recover audio from library if it was sanitized (had stale blob URL but has ID)
   const audioRecoveryDoneRef = useRef(false);
   useEffect(() => {
-    if (audioRecoveryDoneRef.current || !libraryAudio.length) return;
+    if (audioRecoveryDoneRef.current) return;
     const audio = allVideos[0]?.audio;
     if (!audio?.id || audio.url || audio.localUrl) return; // already has valid URL or no ID
-    const libItem = libraryAudio.find(a => a.id === audio.id);
-    if (libItem?.url && !libItem.url.startsWith('blob:')) {
+
+    if (libraryAudio.length) {
+      const libItem = libraryAudio.find(a => a.id === audio.id);
+      if (libItem?.url && !libItem.url.startsWith('blob:')) {
+        audioRecoveryDoneRef.current = true;
+        setAllVideos(prev => {
+          const copy = [...prev];
+          copy[0] = { ...copy[0], audio: { ...copy[0].audio, url: libItem.url } };
+          return copy;
+        });
+        log('[VideoEditorModal] Recovered audio URL from library:', libItem.url.slice(0, 50));
+        return;
+      }
+      // Library loaded but audio not found — clear the dead audio shell
       audioRecoveryDoneRef.current = true;
+      console.warn('[VideoEditorModal] Audio ID not found in library — clearing dead audio');
       setAllVideos(prev => {
         const copy = [...prev];
-        copy[0] = { ...copy[0], audio: { ...copy[0].audio, url: libItem.url } };
+        copy[0] = { ...copy[0], audio: null };
         return copy;
       });
-      log('[VideoEditorModal] Recovered audio URL from library:', libItem.url.slice(0, 50));
     }
   }, [libraryAudio, allVideos]);
 
