@@ -1557,16 +1557,25 @@ export const saveCreatedContentAsync = async (db, artistId, content) => {
     // Save videos (strip thumbnails and blob URLs)
     (content.videos || []).forEach(video => {
       const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', video.id);
+
+      // Clean clips (remove non-serializable fields)
+      const cleanedClips = (video.clips || []).map(c => {
+        const { file, localUrl, thumbnail, ...clipData } = c;
+        const cleaned = {
+          ...clipData,
+          url: c.url?.startsWith('blob:') ? null : c.url
+        };
+        // Remove undefined fields
+        Object.keys(cleaned).forEach(key => {
+          if (cleaned[key] === undefined) delete cleaned[key];
+        });
+        return cleaned;
+      }).filter(c => c.url);
+
       batch.set(docRef, {
         ...video,
         thumbnail: null,
-        clips: (video.clips || []).map(c => ({
-          ...c,
-          thumbnail: null,
-          file: undefined,
-          localUrl: undefined,
-          url: c.url?.startsWith('blob:') ? null : c.url
-        })).filter(c => c.url),
+        clips: cleanedClips,
         updatedAt: serverTimestamp()
       }, { merge: true });
     });
@@ -1574,15 +1583,27 @@ export const saveCreatedContentAsync = async (db, artistId, content) => {
     // Save slideshows (strip thumbnails and blob URLs)
     (content.slideshows || []).forEach(slideshow => {
       const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', slideshow.id);
+
+      // Clean audio object (remove non-serializable fields)
+      let cleanedAudio = null;
+      if (slideshow.audio) {
+        const { file, localUrl, ...audioData } = slideshow.audio;
+        cleanedAudio = {
+          ...audioData,
+          url: slideshow.audio.url?.startsWith('blob:') ? null : slideshow.audio.url
+        };
+        // Remove undefined fields
+        Object.keys(cleanedAudio).forEach(key => {
+          if (cleanedAudio[key] === undefined) delete cleanedAudio[key];
+        });
+        // Don't save if no valid URL
+        if (!cleanedAudio.url) cleanedAudio = null;
+      }
+
       batch.set(docRef, {
         ...slideshow,
         thumbnail: null,
-        audio: slideshow.audio ? {
-          ...slideshow.audio,
-          file: undefined,
-          localUrl: undefined,
-          url: slideshow.audio.url?.startsWith('blob:') ? null : slideshow.audio.url
-        } : null,
+        audio: cleanedAudio,
         slides: (slideshow.slides || []).map(slide => ({
           ...slide,
           backgroundImage: slide.backgroundImage?.startsWith('blob:') ? null : slide.backgroundImage
