@@ -1570,6 +1570,41 @@ const VideoStudio = ({
           status: slideshowData.status || 'draft'
         };
 
+        // Upload audio to Firebase Storage if it has a blob URL (same as scheduler mode)
+        if (data.audio && (data.audio.file || data.audio.url?.startsWith('blob:'))) {
+          try {
+            const audioFile = data.audio.file;
+            if (audioFile) {
+              const { url: firebaseUrl } = await uploadFile(audioFile, 'audio');
+              data = {
+                ...data,
+                audio: {
+                  ...data.audio,
+                  url: firebaseUrl,
+                }
+              };
+              log('[VideoStudio] Uploaded audio to Firebase:', firebaseUrl);
+            } else if (data.audio.url?.startsWith('blob:')) {
+              // Blob URL without file - try to find in library by ID
+              const libAudio = libraryAudio.find(a => a.id === data.audio.id);
+              if (libAudio && libAudio.url && !libAudio.url.startsWith('blob:')) {
+                data = {
+                  ...data,
+                  audio: {
+                    ...data.audio,
+                    url: libAudio.url
+                  }
+                };
+                log('[VideoStudio] Replaced blob URL with library URL for audio:', libAudio.name);
+              } else {
+                console.warn('[VideoStudio] Audio has blob URL but no file and not found in library');
+              }
+            }
+          } catch (err) {
+            console.error('[VideoStudio] Failed to upload audio:', err);
+          }
+        }
+
         // Clean audio object for Firestore (remove non-serializable fields)
         if (data.audio) {
           const { file, localUrl, ...cleanAudio } = data.audio;
