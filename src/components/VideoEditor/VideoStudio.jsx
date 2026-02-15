@@ -1562,17 +1562,26 @@ const VideoStudio = ({
     // Library mode: save via libraryService (with Firestore sync)
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
-        const data = {
+        let data = {
           ...slideshowData,
           id: slideshowData.id || `slideshow_${Date.now()}`,
           collectionId: slideshowData.collectionId || pullFromCollection || null,
           createdAt: slideshowData.createdAt || new Date().toISOString(),
           status: slideshowData.status || 'draft'
         };
+
+        // Clean audio object for Firestore (remove non-serializable fields)
+        if (data.audio) {
+          const { file, localUrl, ...cleanAudio } = data.audio;
+          data = { ...data, audio: cleanAudio };
+        }
+
         const savedSlideshow = addCreatedSlideshow(currentArtistId, data);
         // Sync to Firestore for persistence across refreshes/devices
         if (db) {
-          addCreatedSlideshowAsync(db, currentArtistId, data).catch(console.error);
+          addCreatedSlideshowAsync(db, currentArtistId, data).catch((err) => {
+            console.error('[VideoStudio] Failed to sync slideshow to Firestore:', err);
+          });
         }
         log('[VideoStudio] Saved slideshow via library system:', savedSlideshow.id);
         setCreatedContentVersion(v => v + 1);
