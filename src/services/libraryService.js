@@ -370,6 +370,14 @@ export const createCreatedSlideshow = ({
   cropMode = '9:16',
   collectionId = null
 }) => {
+  // Validation
+  if (!slides || slides.length === 0) {
+    throw new Error('Slideshow must have at least one slide');
+  }
+  if (slides.some(s => !s.backgroundImage)) {
+    console.warn('[Library] Some slides missing background images');
+  }
+
   const now = new Date().toISOString();
   return {
     id: `slideshow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -815,7 +823,18 @@ export const migrateCollectionBanks = (collection) => {
   while (textBanks.length < MIN_BANKS) textBanks.push([]);
   for (let i = 0; i < textBanks.length; i++) if (!textBanks[i]) textBanks[i] = [];
 
-  return { ...collection, banks, textBanks };
+  // Delete legacy bank keys after migration
+  const migrated = { ...collection, banks, textBanks };
+  delete migrated.bankA;
+  delete migrated.bankB;
+  delete migrated.bankC;
+  delete migrated.bankD;
+  delete migrated.textBank1;
+  delete migrated.textBank2;
+  delete migrated.textBank3;
+  delete migrated.textBank4;
+
+  return migrated;
 };
 
 /**
@@ -1508,20 +1527,39 @@ export const saveCreatedContentAsync = async (db, artistId, content) => {
     // New structure: save each video/slideshow as its own document
     const batch = writeBatch(db);
 
-    // Save videos
+    // Save videos (strip thumbnails and blob URLs)
     (content.videos || []).forEach(video => {
       const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', video.id);
       batch.set(docRef, {
         ...video,
+        thumbnail: null,
+        clips: (video.clips || []).map(c => ({
+          ...c,
+          thumbnail: null,
+          file: undefined,
+          localUrl: undefined,
+          url: c.url?.startsWith('blob:') ? null : c.url
+        })).filter(c => c.url),
         updatedAt: serverTimestamp()
       }, { merge: true });
     });
 
-    // Save slideshows
+    // Save slideshows (strip thumbnails and blob URLs)
     (content.slideshows || []).forEach(slideshow => {
       const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', slideshow.id);
       batch.set(docRef, {
         ...slideshow,
+        thumbnail: null,
+        audio: slideshow.audio ? {
+          ...slideshow.audio,
+          file: undefined,
+          localUrl: undefined,
+          url: slideshow.audio.url?.startsWith('blob:') ? null : slideshow.audio.url
+        } : null,
+        slides: (slideshow.slides || []).map(slide => ({
+          ...slide,
+          backgroundImage: slide.backgroundImage?.startsWith('blob:') ? null : slide.backgroundImage
+        })),
         updatedAt: serverTimestamp()
       }, { merge: true });
     });
@@ -1656,7 +1694,12 @@ export const subscribeToCreatedContent = (db, artistId, callback) => {
 export const addCreatedSlideshowAsync = async (db, artistId, slideshowData) => {
   const result = addCreatedSlideshow(artistId, slideshowData);
   const content = getCreatedContent(artistId);
-  await saveCreatedContentAsync(db, artistId, content);
+  try {
+    await saveCreatedContentAsync(db, artistId, content);
+  } catch (error) {
+    console.error('[Library] Failed to sync slideshow to Firestore:', error);
+    // Data still saved to localStorage, mark as unsynced
+  }
   return result;
 };
 
@@ -1666,7 +1709,12 @@ export const addCreatedSlideshowAsync = async (db, artistId, slideshowData) => {
 export const updateCreatedSlideshowAsync = async (db, artistId, slideshowId, updates) => {
   const result = updateCreatedSlideshow(artistId, slideshowId, updates);
   const content = getCreatedContent(artistId);
-  await saveCreatedContentAsync(db, artistId, content);
+  try {
+    await saveCreatedContentAsync(db, artistId, content);
+  } catch (error) {
+    console.error('[Library] Failed to sync slideshow update to Firestore:', error);
+    // Data still saved to localStorage, mark as unsynced
+  }
   return result;
 };
 
@@ -1676,7 +1724,12 @@ export const updateCreatedSlideshowAsync = async (db, artistId, slideshowId, upd
 export const deleteCreatedSlideshowAsync = async (db, artistId, slideshowId) => {
   const result = deleteCreatedSlideshow(artistId, slideshowId);
   const content = getCreatedContent(artistId);
-  await saveCreatedContentAsync(db, artistId, content);
+  try {
+    await saveCreatedContentAsync(db, artistId, content);
+  } catch (error) {
+    console.error('[Library] Failed to sync slideshow deletion to Firestore:', error);
+    // Data still saved to localStorage, mark as unsynced
+  }
   return result;
 };
 
@@ -2185,21 +2238,25 @@ export const addManyToLibraryAsync = async (db, artistId, mediaItems) => {
   // Always save to localStorage first
   const localResult = addManyToLibrary(artistId, newItems);
 
-  // Then batch save to Firestore
+  // Then batch save to Firestore (split into chunks of 500 to avoid batch size limit)
   if (db && artistId && newItems.length > 0) {
     try {
-      const batch = writeBatch(db);
+      for (let i = 0; i < newItems.length; i += 500) {
+        const chunk = newItems.slice(i, i + 500);
+        const batch = writeBatch(db);
 
-      newItems.forEach(item => {
-        const docRef = doc(db, 'artists', artistId, 'library', 'data', 'mediaItems', item.id);
-        batch.set(docRef, {
-          ...item,
-          updatedAt: serverTimestamp()
+        chunk.forEach(item => {
+          const docRef = doc(db, 'artists', artistId, 'library', 'data', 'mediaItems', item.id);
+          batch.set(docRef, {
+            ...item,
+            updatedAt: serverTimestamp()
+          });
         });
-      });
 
-      await batch.commit();
-      log('[Library] Batch saved to Firestore:', newItems.length, 'items');
+        await batch.commit();
+        log('[Library] Batch saved chunk to Firestore:', chunk.length, 'items');
+      }
+      log('[Library] All items saved to Firestore:', newItems.length, 'total items');
       localResult.syncedToCloud = true;
     } catch (error) {
       console.error('[Library] Firestore batch write failed:', error.message);
