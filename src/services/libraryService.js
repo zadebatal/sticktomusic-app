@@ -1476,6 +1476,33 @@ export const addCreatedSlideshow = (artistId, slideshowData) => {
 };
 
 /**
+ * Add multiple created slideshows at once (batch operation)
+ * @param {string} artistId
+ * @param {Array<Object>} slideshowsData
+ * @returns {Array<Object>} Created slideshows
+ */
+export const addCreatedSlideshowsBatch = (artistId, slideshowsData) => {
+  const content = getCreatedContent(artistId);
+  const newSlideshows = slideshowsData.map(data =>
+    data.id ? data : createCreatedSlideshow(data)
+  );
+
+  // Upsert all slideshows
+  newSlideshows.forEach(newSlideshow => {
+    const existingIndex = content.slideshows.findIndex(s => s.id === newSlideshow.id);
+    if (existingIndex >= 0) {
+      content.slideshows[existingIndex] = { ...content.slideshows[existingIndex], ...newSlideshow, updatedAt: new Date().toISOString() };
+    } else {
+      content.slideshows.push(newSlideshow);
+    }
+  });
+
+  // Save once to localStorage
+  saveCreatedContent(artistId, content);
+  return newSlideshows;
+};
+
+/**
  * Update a created slideshow
  * @param {string} artistId
  * @param {string} slideshowId
@@ -1731,6 +1758,26 @@ export const deleteCreatedSlideshowAsync = async (db, artistId, slideshowId) => 
     // Data still saved to localStorage, mark as unsynced
   }
   return result;
+};
+
+/**
+ * Add multiple created slideshows at once (with single Firestore sync)
+ * More efficient than calling addCreatedSlideshowAsync in a loop
+ */
+export const addCreatedSlideshowsBatchAsync = async (db, artistId, slideshowsData) => {
+  // Save all to localStorage in one operation
+  const results = addCreatedSlideshowsBatch(artistId, slideshowsData);
+
+  // Then sync to Firestore once
+  const content = getCreatedContent(artistId);
+  try {
+    await saveCreatedContentAsync(db, artistId, content);
+  } catch (error) {
+    console.error('[Library] Failed to sync batch slideshows to Firestore:', error);
+    // Data still saved to localStorage, mark as unsynced
+  }
+
+  return results;
 };
 
 // ============================================================================

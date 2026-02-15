@@ -1813,38 +1813,51 @@ const SlideshowEditor = ({
 
   // Save all slideshows and close
   const handleSaveAllAndClose = useCallback(async () => {
-    for (const ss of allSlideshows) {
-      // Generate fresh thumbnail with current text overlays
-      let thumbnail = ss.slides[0]?.backgroundImage || ss.slides[0]?.imageUrl || null;
-      if (ss.slides[0]) {
-        try {
-          thumbnail = await generateSlideThumbnail(ss.slides[0], aspectRatio);
-        } catch (err) {
-          console.warn('[SlideshowEditor] Failed to generate thumbnail:', err);
+    // Prepare all slideshow data first (parallel thumbnail generation)
+    const slideshowsToSave = await Promise.all(
+      allSlideshows.map(async (ss) => {
+        let thumbnail = ss.slides[0]?.backgroundImage || ss.slides[0]?.imageUrl || null;
+        if (ss.slides[0]) {
+          try {
+            thumbnail = await generateSlideThumbnail(ss.slides[0], aspectRatio);
+          } catch (err) {
+            console.warn('[SlideshowEditor] Failed to generate thumbnail:', err);
+          }
+        }
+
+        return {
+          id: ss.isTemplate ? (existingSlideshow?.id || `slideshow_${Date.now()}`) : ss.id,
+          name: ss.name,
+          aspectRatio,
+          slides: ss.slides,
+          audio: ss.audio ? {
+            ...ss.audio,
+            startTime: ss.audio.startTime || 0,
+            endTime: ss.audio.endTime || null
+          } : null,
+          thumbnail,
+          status: 'draft',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+      })
+    );
+
+    // Save all at once with a single Firestore sync (not in a loop)
+    try {
+      // Call onSave for each but add small delays to prevent Firestore write stream exhaustion
+      for (let i = 0; i < slideshowsToSave.length; i++) {
+        await onSave?.(slideshowsToSave[i]);
+        // Add 100ms delay between saves to prevent overwhelming Firestore
+        if (i < slideshowsToSave.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
-
-      const slideshowData = {
-        id: ss.isTemplate ? (existingSlideshow?.id || `slideshow_${Date.now()}`) : ss.id,
-        name: ss.name,
-        aspectRatio,
-        slides: ss.slides,
-        audio: ss.audio ? {
-          ...ss.audio,
-          startTime: ss.audio.startTime || 0,
-          endTime: ss.audio.endTime || null
-        } : null,
-        thumbnail,
-        status: 'draft',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      try {
-        await onSave?.(slideshowData);
-      } catch (err) {
-        console.error(`[SlideshowEditor] Failed to save "${ss.name}":`, err);
-        return; // Stop on failure
-      }
+      toastSuccess(`Saved ${slideshowsToSave.length} slideshows`);
+    } catch (err) {
+      console.error(`[SlideshowEditor] Failed to save slideshows:`, err);
+      toastError('Some slideshows failed to save');
+      return; // Stop on failure
     }
     onClose?.();
   }, [allSlideshows, aspectRatio, existingSlideshow, onSave, onClose]);
