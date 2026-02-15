@@ -8,7 +8,10 @@ import ContentLibrary from './ContentLibrary';
 import VideoEditorModal from './VideoEditorModal';
 import BatchPipeline from './BatchPipeline';
 import SlideshowEditor from './SlideshowEditor';
+import BeatSyncEditor from './BeatSyncEditor';
 import SchedulingPage from './SchedulingPage';
+import PipelineListView from './PipelineListView';
+import PipelineWorkspace from './PipelineWorkspace';
 // OnboardingModal removed - auto-setup Music Artist template instead
 import { uploadFile, deleteFile, getMediaDuration, generateThumbnail } from '../../services/firebaseStorage';
 import { generateSlideThumbnail } from '../../services/slideshowExportService';
@@ -274,6 +277,7 @@ const VideoStudio = ({
   artists = [],
   artistId: initialArtistId = null,
   lateAccountIds = {},
+  latePages = [],
   onSchedulePost,
   onDeleteLatePost,
   onArtistChange = null // Callback when artist selection changes
@@ -329,6 +333,7 @@ const VideoStudio = ({
     if (path.includes('/studio/slideshows')) return 'slideshows';
     if (path.includes('/studio/drafts')) return 'drafts';
     if (path.includes('/studio/scheduling')) return 'scheduling';
+    if (path.includes('/studio/workspace')) return 'workspace';
     return 'home';
   };
 
@@ -337,6 +342,7 @@ const VideoStudio = ({
 
   // Navigation state - restore from session if available, or use URL
   const [currentView, setCurrentViewState] = useState(getInitialViewFromUrl() || savedSession?.currentView || 'home');
+  const [activePipelineId, setActivePipelineId] = useState(null);
 
   // Wrap setCurrentView to also update URL
   const setCurrentView = useCallback((view) => {
@@ -347,6 +353,7 @@ const VideoStudio = ({
     else if (view === 'slideshows') targetPath = '/operator/studio/slideshows';
     else if (view === 'drafts') targetPath = '/operator/studio/drafts';
     else if (view === 'scheduling') targetPath = '/operator/studio/scheduling';
+    else if (view === 'workspace') targetPath = '/operator/studio/workspace';
     if (location.pathname !== targetPath) {
       navigate(targetPath, { replace: false });
     }
@@ -562,6 +569,9 @@ const VideoStudio = ({
   const [showSlideshowEditor, setShowSlideshowEditor] = useState(false);
   const [editingSlideshow, setEditingSlideshow] = useState(null);
 
+  // Beat Sync editor state
+  const [showBeatSyncEditor, setShowBeatSyncEditor] = useState(false);
+
   // Scheduler edit mode — when editing a post from the scheduler, save goes back to scheduler
   const [schedulerEditPostId, setSchedulerEditPostId] = useState(null);
 
@@ -574,7 +584,7 @@ const VideoStudio = ({
    * @param {Function} action — The navigation callback to execute
    */
   const navigateWithDraftCheck = useCallback((action) => {
-    const inEditor = showEditor || showSlideshowEditor;
+    const inEditor = showEditor || showSlideshowEditor || showBeatSyncEditor;
     if (!inEditor) {
       action();
       return;
@@ -2298,25 +2308,28 @@ const VideoStudio = ({
       {/* Main Content */}
       <main style={styles.main}>
         {currentView === 'home' && USE_LIBRARY_SYSTEM && !selectedCategory && (
-          <StudioHome
+          <PipelineListView
             db={db}
             artistId={currentArtistId}
-            artists={artists}
-            isMobile={isMobile}
-            studioMode={studioMode}
-            onSetStudioMode={setStudioMode}
-            onMakeVideo={(options) => {
-              // If coming from library system, create a temporary category-like structure
-              if (options?.libraryVideos || options?.libraryAudio) {
-                setSelectedLibraryMedia({
-                  videos: options.libraryVideos || [],
-                  audio: options.libraryAudio || null,
-                  images: [],
-                  lyrics: options.libraryLyrics || []
-                });
-                setPullFromCollection(options.pullFromCollection);
+            latePages={latePages}
+            onOpenPipeline={(id) => {
+              setActivePipelineId(id);
+              setCurrentView('workspace');
+            }}
+            onQuickGenerate={(pipeline) => {
+              setActivePipelineId(pipeline.id);
+              setPullFromCollection(pipeline.id);
+              handleMakeSlideshow(null);
+            }}
+            onViewContent={(options) => {
+              const isSlideshows = options?.type === 'slideshows';
+              setCurrentView(isSlideshows ? 'slideshows' : 'library');
+              setStudioMode(isSlideshows ? 'slideshows' : 'videos');
+              if (isSlideshows) {
+                setSelectedCategory(null);
+              } else if (!selectedCategory && artistCategories.length > 0) {
+                setSelectedCategory(artistCategories[0]);
               }
-              handleMakeVideo(options?.existingVideo || null);
             }}
             onMakeSlideshow={(options) => {
               if (options?.libraryImages || options?.libraryAudio || options?.libraryLyrics) {
@@ -2333,22 +2346,30 @@ const VideoStudio = ({
               }
               handleMakeSlideshow(options?.existingSlideshow || null);
             }}
-            onViewContent={(options) => {
-              const isSlideshows = options?.type === 'slideshows';
-              setCurrentView(isSlideshows ? 'slideshows' : 'library');
-              setStudioMode(isSlideshows ? 'slideshows' : 'videos');
-              if (isSlideshows) {
-                // Slideshows are stored in libraryCategory, not artist categories
-                setSelectedCategory(null);
-              } else if (!selectedCategory && artistCategories.length > 0) {
-                setSelectedCategory(artistCategories[0]);
-              }
+            onOpenBeatSync={() => setShowBeatSyncEditor(true)}
+          />
+        )}
+
+        {currentView === 'workspace' && activePipelineId && (
+          <PipelineWorkspace
+            db={db}
+            artistId={currentArtistId}
+            pipelineId={activePipelineId}
+            onBack={() => {
+              setActivePipelineId(null);
+              setCurrentView('home');
             }}
-            onShowBatchPipeline={() => setShowBatchPipeline(true)}
-            onAddLyrics={handleAddLyrics}
-            onUpdateLyrics={handleUpdateLyrics}
-            onDeleteLyrics={handleDeleteLyrics}
-            onViewScheduling={() => setCurrentView('scheduling')}
+            onOpenEditor={(pipeline, count, existingDraft) => {
+              setPullFromCollection(pipeline.id);
+              handleMakeSlideshow(existingDraft || null);
+            }}
+            onViewDrafts={() => {
+              setCurrentView('slideshows');
+              setStudioMode('slideshows');
+            }}
+            onSchedule={() => {
+              setCurrentView('scheduling');
+            }}
           />
         )}
 
@@ -2565,6 +2586,22 @@ const VideoStudio = ({
           lateAccountIds={lateAccountIds}
           schedulerEditMode={!!schedulerEditPostId}
         />
+      )}
+
+      {/* Beat Sync Editor */}
+      {showBeatSyncEditor && currentArtistId && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100 }}>
+          <BeatSyncEditor
+            db={db}
+            artistId={currentArtistId}
+            category={selectedCategory}
+            onSave={(data) => {
+              console.log('[BeatSync] Save:', data);
+              setShowBeatSyncEditor(false);
+            }}
+            onClose={() => setShowBeatSyncEditor(false)}
+          />
+        </div>
       )}
 
       {/* Batch Pipeline - Streamlined batch create & schedule */}

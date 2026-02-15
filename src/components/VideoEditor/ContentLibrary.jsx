@@ -1248,7 +1248,21 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
             {slideshow.name}
           </div>
         )}
-        <StatusPill status={slideshow.status || VIDEO_STATUS.DRAFT} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {slideshow.collectionName && (
+            <span style={{
+              fontSize: 9,
+              padding: '1px 5px',
+              borderRadius: 4,
+              backgroundColor: 'rgba(99,102,241,0.15)',
+              color: '#818cf8',
+              whiteSpace: 'nowrap',
+            }}>
+              {slideshow.collectionName}
+            </span>
+          )}
+          <StatusPill status={slideshow.status || VIDEO_STATUS.DRAFT} />
+        </div>
       </div>
     </div>
   );

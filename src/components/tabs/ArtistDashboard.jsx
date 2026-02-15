@@ -1,15 +1,41 @@
 import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
-import { useTheme } from '../../contexts/ThemeContext';
 import { useToast } from '../ui';
 import { getTierForSets, computeSocialSetsUsed, shouldShowPaymentUI } from '../../services/subscriptionService';
 import { PLATFORM_META, getProfileUrl, formatFollowers } from '../../utils/platformUtils';
 import { subscribeToScheduledPosts, POST_STATUS, PLATFORM_COLORS } from '../../services/scheduledPostsService';
+import { subscribeToCreatedContent } from '../../services/libraryService';
 import { getLateProfiles, createLateProfile, getConnectUrl } from '../../services/lateService';
+import { Button } from '../../ui/components/Button';
+import { Badge } from '../../ui/components/Badge';
+import { IconButton } from '../../ui/components/IconButton';
+import { IconWithBackground } from '../../ui/components/IconWithBackground';
+import {
+  FeatherEye, FeatherHeart, FeatherCalendar, FeatherTrendingUp,
+  FeatherVideo, FeatherPlay, FeatherEdit2, FeatherLayers, FeatherSend,
+  FeatherMusic, FeatherCamera
+} from '@subframe/core';
+
+/** Returns a human-readable relative time string (e.g. "2 days ago") */
+const getTimeAgo = (date) => {
+  if (!date) return '';
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+};
 
 /**
  * ArtistDashboard — Home tab for artist and collaborator roles.
- * Shows welcome, stats, Social Sets usage, upcoming posts, and operator contact.
+ * Shows welcome, stats, recent content, upcoming posts, connected accounts, and operator contact.
  */
 const ArtistDashboard = ({
   user,
@@ -23,10 +49,9 @@ const ArtistDashboard = ({
   onAddManualAccounts,
   onRemoveManualAccount,
   onLoadLatePages,
+  onNavigate,
 }) => {
-  const { theme } = useTheme();
   const { toastInfo, toastError, toastSuccess } = useToast();
-  const t = theme.tw;
 
   // latePages is pre-filtered to this artist's pages by parent
   const socialSetsUsed = computeSocialSetsUsed(latePages);
@@ -40,6 +65,30 @@ const ArtistDashboard = ({
     const unsub = subscribeToScheduledPosts(db, artistId, setLocalPosts);
     return unsub;
   }, [db, artistId]);
+
+  // Created content subscription (for Recent Content section + stats)
+  const [createdContent, setCreatedContent] = useState({ videos: [], slideshows: [] });
+  useEffect(() => {
+    if (!db || !artistId) return;
+    const unsub = subscribeToCreatedContent(db, artistId, setCreatedContent);
+    return unsub;
+  }, [db, artistId]);
+
+  // All content items sorted by createdAt descending
+  const recentContent = useMemo(() => {
+    const all = [
+      ...(createdContent.videos || []).map(v => ({ ...v, _type: 'video' })),
+      ...(createdContent.slideshows || []).map(s => ({ ...s, _type: 'slideshow' })),
+    ];
+    all.sort((a, b) => {
+      const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const db2 = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return db2 - da;
+    });
+    return all;
+  }, [createdContent]);
+
+  const totalContentCount = recentContent.length;
 
   // Upcoming posts (next 10, sorted by date) — from local scheduler
   const upcomingPosts = localPosts
@@ -231,453 +280,524 @@ const ArtistDashboard = ({
   }, [groupedAccounts, handleGroups, saveHandleGroups]);
 
   return (
-    <div className={`flex-1 overflow-auto p-6 ${t.bgPage}`}>
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Welcome */}
-        <div>
-          <h1 className={`text-2xl font-bold ${t.textPrimary}`}>
-            Welcome back, {user?.name || 'Artist'}
-          </h1>
-          <p className={`${t.textSecondary} text-sm mt-1`}>
-            Here's an overview of your account.
-          </p>
-        </div>
+    <div className="flex w-full flex-col items-start gap-8 px-12 py-12">
+      {/* Welcome */}
+      <div className="flex w-full flex-col items-start gap-2">
+        <span className="text-heading-1 font-heading-1 text-[#ffffffff]">
+          Welcome back, {user?.name || 'Artist'}
+        </span>
+        <span className="text-body font-body text-neutral-400">
+          Here's what's happening with your content
+        </span>
+      </div>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div className={`p-5 rounded-xl border ${t.cardBorder} ${t.cardBg}`}>
-            <p className={`text-sm ${t.textMuted} mb-1`}>Social Sets</p>
-            <p className={`text-2xl font-bold ${t.textPrimary}`}>{socialSetsUsed}/{socialSetsAllowed || '—'}</p>
-            <p className={`text-xs ${t.textMuted} mt-1`}>connected</p>
+      {/* Stat Cards — 3 cols: Total Content, Scheduled, Posted */}
+      <div className="w-full items-start gap-6 grid grid-cols-3 mobile:grid mobile:grid-cols-1">
+        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 rounded-xl border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-5">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600">
+            <FeatherLayers className="text-[#ffffffff]" />
           </div>
-          <div className={`p-5 rounded-xl border ${t.cardBorder} ${t.cardBg}`}>
-            <p className={`text-sm ${t.textMuted} mb-1`}>Scheduled</p>
-            <p className={`text-2xl font-bold ${t.textPrimary}`}>{upcomingPosts.length}</p>
-            <p className={`text-xs ${t.textMuted} mt-1`}>upcoming posts</p>
+          <div className="flex w-full flex-col items-start gap-1">
+            <span className="text-caption font-caption text-neutral-400">Total Content</span>
+            <span className="text-heading-1 font-heading-1 text-[#ffffffff]">{totalContentCount}</span>
           </div>
-          <div className={`p-5 rounded-xl border ${t.cardBorder} ${t.cardBg}`}>
-            <p className={`text-sm ${t.textMuted} mb-1`}>Posted</p>
-            <p className={`text-2xl font-bold ${t.textPrimary}`}>{postedPosts.length}</p>
-            <p className={`text-xs ${t.textMuted} mt-1`}>published</p>
-          </div>
-          <div className={`p-5 rounded-xl border ${t.cardBorder} ${t.cardBg}`}>
-            <p className={`text-sm ${t.textMuted} mb-1`}>Platforms</p>
-            <p className={`text-2xl font-bold ${t.textPrimary}`}>{artistPages.length + manualAccounts.length}</p>
-            <p className={`text-xs ${t.textMuted} mt-1`}>accounts</p>
-          </div>
-          <div className={`p-5 rounded-xl border ${t.cardBorder} ${t.cardBg}`}>
-            <p className={`text-sm ${t.textMuted} mb-1`}>Plan</p>
-            <p className={`text-2xl font-bold ${t.textPrimary}`}>{tierInfo.name}</p>
-            <p className={`text-xs ${t.textMuted} mt-1`}>{tierInfo.price}</p>
+          <div className="flex items-center gap-2">
+            <span className="text-caption font-caption text-neutral-400">
+              {createdContent.videos?.length || 0} videos, {createdContent.slideshows?.length || 0} slideshows
+            </span>
           </div>
         </div>
-
-        {/* Social Sets Usage Bar */}
-        {socialSetsAllowed > 0 && (
-          <div className={`p-5 rounded-xl border ${t.cardBorder} ${t.cardBg}`}>
-            <div className="flex justify-between items-center mb-2">
-              <h2 className={`text-sm font-semibold ${t.textPrimary}`}>Social Set Usage</h2>
-              <span className={`text-sm ${t.textSecondary}`}>
-                {socialSetsUsed} of {socialSetsAllowed} used
-              </span>
-            </div>
-            <div className="h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: theme.bg.elevated }}>
-              <div
-                className="h-full rounded-full transition-all"
-                style={{
-                  width: `${Math.min((socialSetsUsed / socialSetsAllowed) * 100, 100)}%`,
-                  backgroundColor: socialSetsUsed >= socialSetsAllowed ? '#ef4444' : theme.accent.primary,
-                }}
-              />
-            </div>
-            {showPayment && socialSetsUsed >= socialSetsAllowed && (
-              <p className="text-sm text-amber-400 mt-2">
-                You've used all your Social Sets. Upgrade to connect more accounts.
-              </p>
-            )}
+        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 rounded-xl border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-5">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600">
+            <FeatherCalendar className="text-[#ffffffff]" />
           </div>
-        )}
+          <div className="flex w-full flex-col items-start gap-1">
+            <span className="text-caption font-caption text-neutral-400">Scheduled</span>
+            <span className="text-heading-1 font-heading-1 text-[#ffffffff]">{upcomingPosts.length}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-caption font-caption text-neutral-400">
+              {upcomingPosts.length > 0 ? `Next: ${new Date(upcomingPosts[0].scheduledTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : 'No upcoming posts'}
+            </span>
+          </div>
+        </div>
+        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 rounded-xl border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-5">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600">
+            <FeatherSend className="text-[#ffffffff]" />
+          </div>
+          <div className="flex w-full flex-col items-start gap-1">
+            <span className="text-caption font-caption text-neutral-400">Posted</span>
+            <span className="text-heading-1 font-heading-1 text-[#ffffffff]">{postedPosts.length}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-caption font-caption text-neutral-400">
+              {postedPosts.length > 0 ? `Last: ${new Date(postedPosts[0].postedAt || postedPosts[0].scheduledTime).toLocaleString([], { month: 'short', day: 'numeric' })}` : 'No posts yet'}
+            </span>
+          </div>
+        </div>
+      </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Your Social Sets — Grouped by Handle */}
-          <div className={`p-5 rounded-xl border ${t.cardBorder} ${t.cardBg}`}>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className={`text-sm font-semibold uppercase tracking-wider ${t.textMuted}`}>Connected Accounts</h2>
-              <div className="flex gap-2">
-                {onAddManualAccounts && (
-                  <button
-                    onClick={() => setShowAddForm(!showAddForm)}
-                    className="text-xs px-3 py-1 rounded-lg transition"
-                    style={{ backgroundColor: `${theme.accent.primary}20`, color: theme.accent.primary, border: 'none', cursor: 'pointer' }}
-                  >
-                    {showAddForm ? 'Cancel' : '+ New Handle'}
-                  </button>
-                )}
-                {groupedAccounts.length > 1 && (
-                  <button
-                    onClick={() => { setEditMode(!editMode); setCheckedGroups(new Set()); }}
-                    className={`text-xs px-3 py-1 rounded-lg transition ${editMode ? 'bg-indigo-500/20 text-indigo-400' : `${t.textMuted}`}`}
-                    style={{ background: editMode ? undefined : 'none', border: 'none', cursor: 'pointer' }}
-                  >
-                    {editMode ? 'Done' : 'Edit'}
-                  </button>
-                )}
-              </div>
-            </div>
-            {/* Inline Add Account Form */}
-            {showAddForm && (
-              <div className="flex gap-2 mb-3 items-center flex-wrap">
-                <input
-                  type="text"
-                  placeholder="@handle"
-                  value={newHandle}
-                  onChange={(e) => setNewHandle(e.target.value)}
-                  className={`text-sm px-3 py-1.5 rounded-lg border ${t.border}`}
-                  style={{ backgroundColor: theme.bg.input, color: theme.text.primary, outline: 'none', flex: '1', minWidth: '120px' }}
-                />
-                <select
-                  value={newPlatform}
-                  onChange={(e) => setNewPlatform(e.target.value)}
-                  className={`text-sm px-3 py-1.5 rounded-lg border ${t.border}`}
-                  style={{ backgroundColor: theme.bg.input, color: theme.text.primary, outline: 'none' }}
-                >
-                  <option value="tiktok">TikTok</option>
-                  <option value="instagram">Instagram</option>
-                  <option value="youtube">YouTube</option>
-                  <option value="facebook">Facebook</option>
-                </select>
-                <button
-                  onClick={async () => {
-                    if (!newHandle.trim()) return;
-                    await onAddManualAccounts?.(artistId, [{ handle: newHandle.trim(), platform: newPlatform }]);
-                    setNewHandle('');
-                    setShowAddForm(false);
-                  }}
-                  className="text-xs px-4 py-1.5 rounded-lg font-medium transition"
-                  style={{ backgroundColor: theme.accent.primary, color: '#fff', border: 'none', cursor: 'pointer' }}
-                >
-                  Save
-                </button>
-              </div>
-            )}
-            {/* Merge actions */}
-            {editMode && checkedGroups.size >= 2 && (
-              <div className="flex gap-2 mb-3">
-                <button
-                  onClick={handleMergeSelected}
-                  className="text-xs px-3 py-1.5 rounded-lg font-medium"
-                  style={{ backgroundColor: `${theme.accent.primary}20`, color: theme.accent.primary, border: 'none', cursor: 'pointer' }}
-                >
-                  Merge {checkedGroups.size} Selected
-                </button>
-                <button
-                  onClick={() => setCheckedGroups(new Set())}
-                  className={`text-xs px-3 py-1.5 rounded-lg ${t.textMuted}`}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                >
-                  Clear
-                </button>
-              </div>
-            )}
-            {groupedAccounts.length > 0 ? (
-              <div className="space-y-3">
-                {groupedAccounts.map((group, gi) => (
-                  <div
-                    key={gi}
-                    className="flex items-center gap-3"
-                    draggable={editMode}
-                    onDragStart={(e) => { e.dataTransfer.setData('text/plain', String(gi)); }}
-                    onDragOver={(e) => { if (editMode) { e.preventDefault(); setDragOverGroup(gi); } }}
-                    onDragLeave={() => setDragOverGroup(null)}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      const fromIdx = parseInt(e.dataTransfer.getData('text/plain'), 10);
-                      if (!isNaN(fromIdx)) handleDragMerge(fromIdx, gi);
-                    }}
-                    style={{
-                      padding: editMode ? '8px' : undefined,
-                      borderRadius: editMode ? '8px' : undefined,
-                      border: dragOverGroup === gi ? `2px dashed ${theme.accent.primary}` : editMode ? `1px solid ${theme.bg.elevated}` : undefined,
-                      cursor: editMode ? 'grab' : undefined,
-                      transition: 'border 0.15s'
-                    }}
-                  >
-                    {/* Checkbox in edit mode */}
-                    {editMode && (
-                      <input
-                        type="checkbox"
-                        checked={checkedGroups.has(gi)}
-                        onChange={() => {
-                          setCheckedGroups(prev => {
-                            const next = new Set(prev);
-                            if (next.has(gi)) next.delete(gi); else next.add(gi);
-                            return next;
-                          });
-                        }}
-                        className="w-4 h-4 flex-shrink-0"
-                      />
-                    )}
-                    {/* Avatar */}
-                    {group.profilePic ? (
-                      <img src={group.profilePic} alt="" className="w-9 h-9 rounded-full object-cover" />
-                    ) : (
-                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold"
-                        style={{ backgroundColor: theme.bg.elevated, color: theme.text.secondary }}>
-                        {group.displayName?.[0]?.toUpperCase() || '?'}
-                      </div>
-                    )}
-                    {/* Handle + platform pills */}
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-medium ${t.textPrimary} truncate`}>
-                        {group.displayName}
-                        {group.handles.length > 1 && (
-                          <span className={`text-xs ${t.textMuted} ml-1`}>(+{group.handles.length - 1})</span>
-                        )}
-                      </p>
-                      <div className="flex gap-1.5 mt-1 flex-wrap items-center">
-                        {group.pages.map((page, pi) => {
-                          const meta = PLATFORM_META[page.platform] || { icon: '🌐', color: '#888', label: page.platform };
-                          const url = getProfileUrl(page.platform, page.handle);
-                          return (
-                            <a
-                              key={pi}
-                              href={url || '#'}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={url ? undefined : (e) => e.preventDefault()}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition hover:opacity-80"
-                              style={{
-                                backgroundColor: `${meta.color}20`,
-                                color: meta.color,
-                                textDecoration: 'none',
-                                cursor: url ? 'pointer' : 'default'
-                              }}
-                              title={`${meta.label}: ${page.handle}`}
-                            >
-                              <span>{meta.icon}</span>
-                              <span>{meta.label}</span>
-                            </a>
-                          );
-                        })}
-                        {/* Add platform "+" button — triggers Late OAuth */}
-                        {(() => {
-                          const connectedPlatforms = group.pages.map(p => p.platform);
-                          const available = ALL_PLATFORMS.filter(p => !connectedPlatforms.includes(p));
-                          if (available.length === 0) return null;
-                          return addingPlatformFor === gi ? (
-                            <div className="flex gap-1 items-center">
-                              {available.map(platform => {
-                                const meta = PLATFORM_META[platform] || { icon: '🌐', color: '#888', label: platform };
-                                const isConnecting = connectingPlatform === platform;
-                                return (
-                                  <button
-                                    key={platform}
-                                    disabled={isConnecting}
-                                    onClick={() => handleConnectPlatform(platform)}
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition hover:opacity-80"
-                                    style={{
-                                      backgroundColor: `${meta.color}15`,
-                                      color: meta.color,
-                                      border: `1px dashed ${meta.color}60`,
-                                      cursor: isConnecting ? 'wait' : 'pointer',
-                                      opacity: isConnecting ? 0.5 : 1,
-                                    }}
-                                    title={`Connect ${meta.label} via Late`}
-                                  >
-                                    <span>{meta.icon}</span>
-                                    <span>{isConnecting ? '...' : meta.label}</span>
-                                  </button>
-                                );
-                              })}
-                              <button
-                                onClick={() => setAddingPlatformFor(null)}
-                                className={`text-xs ${t.textMuted} ml-1`}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                              >
-                                &times;
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setAddingPlatformFor(gi)}
-                              className="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold transition hover:opacity-80"
-                              style={{
-                                backgroundColor: `${theme.accent.primary}15`,
-                                color: theme.accent.primary,
-                                border: `1px dashed ${theme.accent.primary}60`,
-                                cursor: 'pointer',
-                                lineHeight: 1,
-                              }}
-                              title="Add platform"
-                            >
-                              +
-                            </button>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                    {/* Followers + status + split */}
-                    <div className="text-right flex-shrink-0 flex flex-col items-end gap-1">
-                      {group.totalFollowers > 0 && (
-                        <p className={`text-sm font-semibold ${t.textPrimary}`}>{formatFollowers(group.totalFollowers)}</p>
-                      )}
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        group.pages.every(p => p.status === 'active') ? 'bg-green-500/20 text-green-400' : 'bg-zinc-500/20 text-zinc-400'
-                      }`}>
-                        {group.pages.every(p => p.status === 'active') ? 'active' : 'mixed'}
-                      </span>
-                      {editMode && group.handles.length > 1 && (
-                        <button
-                          onClick={() => handleSplit(gi)}
-                          className="text-xs px-2 py-0.5 rounded-lg"
-                          style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: '#ef4444', border: 'none', cursor: 'pointer' }}
-                        >
-                          Split
-                        </button>
+      {/* Quick Action Cards */}
+      <div className="w-full items-start gap-6 grid grid-cols-2">
+        <div className="flex grow shrink-0 basis-0 flex-col items-center gap-6 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-8 py-8">
+          <IconWithBackground variant="neutral" size="x-large" icon={<FeatherVideo />} />
+          <div className="flex w-full flex-col items-center gap-2">
+            <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Go to Studio</span>
+            <span className="text-body font-body text-neutral-400 text-center">Create new videos and content for your channels</span>
+          </div>
+          <Button className="h-10 w-full flex-none" variant="neutral-primary" size="large" icon={<FeatherPlay />} onClick={() => onNavigate?.('studio')}>
+            Open Studio
+          </Button>
+        </div>
+        <div className="flex grow shrink-0 basis-0 flex-col items-center gap-6 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-8 py-8">
+          <IconWithBackground variant="neutral" size="x-large" icon={<FeatherCalendar />} />
+          <div className="flex w-full flex-col items-center gap-2">
+            <span className="text-heading-2 font-heading-2 text-[#ffffffff]">View Schedule</span>
+            <span className="text-body font-body text-neutral-400 text-center">Manage your scheduled posts across all platforms</span>
+          </div>
+          <Button className="h-10 w-full flex-none" variant="neutral-primary" size="large" icon={<FeatherCalendar />} onClick={() => onNavigate?.('schedule')}>
+            View Calendar
+          </Button>
+        </div>
+      </div>
+
+      {/* Recent Content — 4-column grid */}
+      {recentContent.length > 0 && (
+        <div className="flex w-full flex-col items-start gap-4">
+          <span className="text-heading-2 font-heading-2 text-[#ffffffff]">
+            Recent Content
+          </span>
+          <div className="w-full items-start gap-4 grid grid-cols-4 mobile:grid mobile:grid-cols-2">
+            {recentContent.slice(0, 4).map((item, i) => {
+              const isSlideshow = item._type === 'slideshow';
+              const thumb = isSlideshow
+                ? (item.slides?.[0]?.backgroundImage || item.slides?.[0]?.imageUrl || item.slides?.[0]?.thumbnail || null)
+                : (item.thumbnail || item.thumbnailUrl || item.clips?.[0]?.thumbnail || item.clips?.[0]?.thumbnailUrl || null);
+              const status = (item.status || 'draft').toLowerCase();
+              const badgeVariant = status === 'posted' ? 'success' : status === 'scheduled' ? 'brand' : 'neutral';
+              const badgeLabel = status === 'posted' ? 'Posted' : status === 'scheduled' ? 'Scheduled' : 'Draft';
+              const timeAgo = item.createdAt ? getTimeAgo(new Date(item.createdAt)) : '';
+              return (
+                <div key={item.id || i} className="flex grow shrink-0 basis-0 flex-col items-start gap-3 overflow-hidden rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff]">
+                  {thumb ? (
+                    <img className="h-32 w-full flex-none object-cover" src={thumb} alt="" loading="lazy" />
+                  ) : (
+                    <div className="flex h-32 w-full flex-none items-center justify-center bg-neutral-900">
+                      {isSlideshow ? (
+                        <FeatherCamera className="text-neutral-600" style={{ width: 32, height: 32 }} />
+                      ) : (
+                        <FeatherVideo className="text-neutral-600" style={{ width: 32, height: 32 }} />
                       )}
                     </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className={`text-sm ${t.textMuted} italic`}>No accounts connected yet.</p>
-            )}
-          </div>
-
-          {/* Upcoming Posts */}
-          <div className={`p-5 rounded-xl border ${t.cardBorder} ${t.cardBg}`}>
-            <h2 className={`text-sm font-semibold uppercase tracking-wider ${t.textMuted} mb-4`}>Upcoming Posts</h2>
-            {upcomingPosts.length > 0 ? (
-              <div className="space-y-3">
-                {upcomingPosts.slice(0, 5).map((post, i) => {
-                  const date = post.scheduledTime ? new Date(post.scheduledTime) : null;
-                  const platformNames = Object.keys(post.platforms || {});
-                  return (
-                    <div key={post.id || i} className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-mono`}
-                        style={{ backgroundColor: theme.bg.elevated, color: theme.text.secondary }}>
-                        {date ? `${date.getMonth() + 1}/${date.getDate()}` : '—'}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm ${t.textPrimary} truncate`}>
-                          {post.contentName || post.caption || 'Untitled post'}
-                        </p>
-                        <p className={`text-xs ${t.textMuted}`}>
-                          {date ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                          {platformNames.length > 0 && ` · ${platformNames.join(', ')}`}
-                        </p>
-                      </div>
+                  )}
+                  <div className="flex w-full flex-col items-start gap-2 px-4 pb-4">
+                    <Badge variant={badgeVariant}>{badgeLabel}</Badge>
+                    <span className="text-body-bold font-body-bold text-[#ffffffff] truncate w-full">
+                      {item.name || item.title || (isSlideshow ? 'Untitled Slideshow' : 'Untitled Video')}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {isSlideshow ? (
+                        <FeatherCamera className="text-caption font-caption text-brand-600" />
+                      ) : (
+                        <FeatherPlay className="text-caption font-caption text-brand-600" />
+                      )}
+                      {item.audio && <FeatherMusic className="text-caption font-caption text-brand-600" />}
+                      <span className="text-caption font-caption text-neutral-400">{timeAgo}</span>
                     </div>
-                  );
-                })}
-                {upcomingPosts.length > 5 && (
-                  <p className={`text-xs ${t.textMuted} text-center`}>
-                    +{upcomingPosts.length - 5} more scheduled
-                  </p>
-                )}
-              </div>
-            ) : (
-              <p className={`text-sm ${t.textMuted} italic`}>No upcoming posts.</p>
-            )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
+      )}
 
-        {/* Recently Posted */}
-        <div className={`p-5 rounded-xl border ${t.cardBorder} ${t.cardBg}`}>
-          <h2 className={`text-sm font-semibold uppercase tracking-wider ${t.textMuted} mb-4`}>
-            Recently Posted{postedPosts.length > 0 && ` (${postedPosts.length})`}
-          </h2>
-          {postedPosts.length > 0 ? (
-            <div className="space-y-3">
-              {postedPosts.slice(0, 5).map((post, i) => {
-                const date = (post.postedAt || post.scheduledTime) ? new Date(post.postedAt || post.scheduledTime) : null;
-                const results = post.postResults || {};
-                return (
-                  <div key={post.id || i} className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-mono"
-                      style={{ backgroundColor: theme.bg.elevated, color: theme.text.secondary }}>
-                      {date ? `${date.getMonth() + 1}/${date.getDate()}` : '—'}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm ${t.textPrimary} truncate`}>
-                        {post.contentName || post.caption || 'Untitled post'}
-                      </p>
-                      <div className="flex gap-1.5 mt-0.5 flex-wrap">
-                        {Object.entries(results).map(([platform, result]) => (
-                          result?.url ? (
-                            <a
-                              key={platform}
-                              href={result.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs px-2 py-0.5 rounded-full font-medium inline-flex items-center gap-1 hover:opacity-80 transition"
-                              style={{
-                                backgroundColor: `${PLATFORM_COLORS[platform] || '#888'}20`,
-                                color: PLATFORM_COLORS[platform] || '#888',
-                                textDecoration: 'none'
-                              }}
-                            >
-                              {platform} ↗
-                            </a>
-                          ) : (
-                            <span
-                              key={platform}
-                              className="text-xs px-2 py-0.5 rounded-full font-medium"
-                              style={{
-                                backgroundColor: `${PLATFORM_COLORS[platform] || '#888'}20`,
-                                color: PLATFORM_COLORS[platform] || '#888'
-                              }}
-                            >
-                              {platform}
-                            </span>
-                          )
-                        ))}
-                        {Object.keys(results).length === 0 && (
-                          <span className={`text-xs ${t.textMuted}`}>
-                            {date ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-              {postedPosts.length > 5 && (
-                <p className={`text-xs ${t.textMuted} text-center`}>
-                  +{postedPosts.length - 5} more posted
-                </p>
+      {/* Social Sets Usage Bar */}
+      {socialSetsAllowed > 0 && (
+        <div className="flex w-full flex-col items-start gap-3 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-5">
+          <div className="flex w-full items-center justify-between">
+            <span className="text-body-bold font-body-bold text-[#ffffffff]">Social Set Usage</span>
+            <span className="text-caption font-caption text-neutral-400">
+              {socialSetsUsed} of {socialSetsAllowed} used
+            </span>
+          </div>
+          <div className="h-2.5 w-full rounded-full overflow-hidden bg-neutral-800">
+            <div
+              className="h-full rounded-full transition-all"
+              style={{
+                width: `${Math.min((socialSetsUsed / socialSetsAllowed) * 100, 100)}%`,
+                backgroundColor: socialSetsUsed >= socialSetsAllowed ? '#ef4444' : '#6366f1',
+              }}
+            />
+          </div>
+          {showPayment && socialSetsUsed >= socialSetsAllowed && (
+            <span className="text-caption font-caption text-amber-400">
+              You've used all your Social Sets. Upgrade to connect more accounts.
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Connected Accounts + Upcoming Posts — 2 col */}
+      <div className="w-full items-start gap-6 grid grid-cols-1 lg:grid-cols-2">
+        {/* Connected Accounts */}
+        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-5">
+          <div className="flex w-full items-center justify-between">
+            <span className="text-body-bold font-body-bold text-[#ffffffff]">Connected Accounts</span>
+            <div className="flex items-center gap-2">
+              {onAddManualAccounts && (
+                <Button size="small" variant="neutral-secondary" onClick={() => setShowAddForm(!showAddForm)}>
+                  {showAddForm ? 'Cancel' : '+ New Handle'}
+                </Button>
+              )}
+              {groupedAccounts.length > 1 && (
+                <Button size="small" variant={editMode ? 'brand-secondary' : 'neutral-tertiary'} onClick={() => { setEditMode(!editMode); setCheckedGroups(new Set()); }}>
+                  {editMode ? 'Done' : 'Edit'}
+                </Button>
               )}
             </div>
+          </div>
+          {/* Inline Add Account Form */}
+          {showAddForm && (
+            <div className="flex w-full gap-2 items-center flex-wrap">
+              <input
+                type="text"
+                placeholder="@handle"
+                value={newHandle}
+                onChange={(e) => setNewHandle(e.target.value)}
+                className="text-caption font-caption flex-1 min-w-[120px] rounded-md border border-solid border-neutral-800 bg-black px-3 py-1.5 text-[#ffffffff] outline-none"
+              />
+              <select
+                value={newPlatform}
+                onChange={(e) => setNewPlatform(e.target.value)}
+                className="text-caption font-caption rounded-md border border-solid border-neutral-800 bg-black px-3 py-1.5 text-[#ffffffff] outline-none"
+              >
+                <option value="tiktok">TikTok</option>
+                <option value="instagram">Instagram</option>
+                <option value="youtube">YouTube</option>
+                <option value="facebook">Facebook</option>
+              </select>
+              <Button size="small" variant="brand-primary" onClick={async () => {
+                if (!newHandle.trim()) return;
+                await onAddManualAccounts?.(artistId, [{ handle: newHandle.trim(), platform: newPlatform }]);
+                setNewHandle('');
+                setShowAddForm(false);
+              }}>
+                Save
+              </Button>
+            </div>
+          )}
+          {/* Merge actions */}
+          {editMode && checkedGroups.size >= 2 && (
+            <div className="flex gap-2">
+              <Button size="small" variant="brand-secondary" onClick={handleMergeSelected}>
+                Merge {checkedGroups.size} Selected
+              </Button>
+              <Button size="small" variant="neutral-tertiary" onClick={() => setCheckedGroups(new Set())}>
+                Clear
+              </Button>
+            </div>
+          )}
+          {groupedAccounts.length > 0 ? (
+            <div className="flex w-full flex-col items-start gap-3">
+              {groupedAccounts.map((group, gi) => (
+                <div
+                  key={gi}
+                  className={`flex w-full items-center gap-3 ${editMode ? 'rounded-md px-2 py-2' : ''}`}
+                  draggable={editMode}
+                  onDragStart={(e) => { e.dataTransfer.setData('text/plain', String(gi)); }}
+                  onDragOver={(e) => { if (editMode) { e.preventDefault(); setDragOverGroup(gi); } }}
+                  onDragLeave={() => setDragOverGroup(null)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const fromIdx = parseInt(e.dataTransfer.getData('text/plain'), 10);
+                    if (!isNaN(fromIdx)) handleDragMerge(fromIdx, gi);
+                  }}
+                  style={{
+                    border: dragOverGroup === gi ? '2px dashed #6366f1' : editMode ? '1px solid #2a2a2a' : undefined,
+                    cursor: editMode ? 'grab' : undefined,
+                    transition: 'border 0.15s'
+                  }}
+                >
+                  {/* Checkbox in edit mode */}
+                  {editMode && (
+                    <input
+                      type="checkbox"
+                      checked={checkedGroups.has(gi)}
+                      onChange={() => {
+                        setCheckedGroups(prev => {
+                          const next = new Set(prev);
+                          if (next.has(gi)) next.delete(gi); else next.add(gi);
+                          return next;
+                        });
+                      }}
+                      className="w-4 h-4 flex-shrink-0"
+                    />
+                  )}
+                  {/* Avatar */}
+                  {group.profilePic ? (
+                    <img src={group.profilePic} alt="" className="w-9 h-9 rounded-full object-cover flex-none" />
+                  ) : (
+                    <div className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-neutral-800 text-caption font-caption text-neutral-400 font-bold">
+                      {group.displayName?.[0]?.toUpperCase() || '?'}
+                    </div>
+                  )}
+                  {/* Handle + platform pills */}
+                  <div className="flex grow shrink-0 basis-0 flex-col items-start gap-1 min-w-0">
+                    <span className="text-body-bold font-body-bold text-[#ffffffff] truncate w-full">
+                      {group.displayName}
+                      {group.handles.length > 1 && (
+                        <span className="text-caption font-caption text-neutral-500 ml-1">(+{group.handles.length - 1})</span>
+                      )}
+                    </span>
+                    <div className="flex gap-1.5 flex-wrap items-center">
+                      {group.pages.map((page, pi) => {
+                        const meta = PLATFORM_META[page.platform] || { icon: '🌐', color: '#888', label: page.platform };
+                        const url = getProfileUrl(page.platform, page.handle);
+                        return (
+                          <a
+                            key={pi}
+                            href={url || '#'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={url ? undefined : (e) => e.preventDefault()}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition hover:opacity-80"
+                            style={{
+                              backgroundColor: `${meta.color}20`,
+                              color: meta.color,
+                              textDecoration: 'none',
+                              cursor: url ? 'pointer' : 'default'
+                            }}
+                            title={`${meta.label}: ${page.handle}`}
+                          >
+                            <span>{meta.icon}</span>
+                            <span>{meta.label}</span>
+                          </a>
+                        );
+                      })}
+                      {/* Add platform "+" button — triggers Late OAuth */}
+                      {(() => {
+                        const connectedPlatforms = group.pages.map(p => p.platform);
+                        const available = ALL_PLATFORMS.filter(p => !connectedPlatforms.includes(p));
+                        if (available.length === 0) return null;
+                        return addingPlatformFor === gi ? (
+                          <div className="flex gap-1 items-center">
+                            {available.map(platform => {
+                              const meta = PLATFORM_META[platform] || { icon: '🌐', color: '#888', label: platform };
+                              const isConnecting = connectingPlatform === platform;
+                              return (
+                                <button
+                                  key={platform}
+                                  disabled={isConnecting}
+                                  onClick={() => handleConnectPlatform(platform)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition hover:opacity-80"
+                                  style={{
+                                    backgroundColor: `${meta.color}15`,
+                                    color: meta.color,
+                                    border: `1px dashed ${meta.color}60`,
+                                    cursor: isConnecting ? 'wait' : 'pointer',
+                                    opacity: isConnecting ? 0.5 : 1,
+                                  }}
+                                  title={`Connect ${meta.label} via Late`}
+                                >
+                                  <span>{meta.icon}</span>
+                                  <span>{isConnecting ? '...' : meta.label}</span>
+                                </button>
+                              );
+                            })}
+                            <button
+                              onClick={() => setAddingPlatformFor(null)}
+                              className="text-caption font-caption text-neutral-500 ml-1 bg-transparent border-none cursor-pointer"
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setAddingPlatformFor(gi)}
+                            className="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold transition hover:opacity-80 bg-brand-600/15 text-brand-600 cursor-pointer"
+                            style={{ border: '1px dashed rgba(99,102,241,0.4)' }}
+                            title="Add platform"
+                          >
+                            +
+                          </button>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                  {/* Followers + status + split */}
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    {group.totalFollowers > 0 && (
+                      <span className="text-body-bold font-body-bold text-[#ffffffff]">{formatFollowers(group.totalFollowers)}</span>
+                    )}
+                    <Badge variant={group.pages.every(p => p.status === 'active') ? 'success' : 'neutral'}>
+                      {group.pages.every(p => p.status === 'active') ? 'active' : 'mixed'}
+                    </Badge>
+                    {editMode && group.handles.length > 1 && (
+                      <Button size="small" variant="destructive-secondary" onClick={() => handleSplit(gi)}>
+                        Split
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
-            <p className={`text-sm ${t.textMuted} italic`}>No posts published yet.</p>
+            <span className="text-body font-body text-neutral-500 italic">No accounts connected yet.</span>
           )}
         </div>
 
-        {/* Operator Contact Card */}
-        {user?.ownerOperatorId && (
-          <div className={`p-5 rounded-xl border ${t.cardBorder} ${t.cardBg}`}>
-            <h2 className={`text-sm font-semibold uppercase tracking-wider ${t.textMuted} mb-2`}>Your Operator</h2>
-            <p className={`text-sm ${t.textSecondary}`}>
-              Contact your operator for content uploads, schedule changes, or account management.
-            </p>
+        {/* Upcoming Posts */}
+        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff]">
+          <div className="flex w-full items-center justify-between px-6 pt-5">
+            <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Upcoming Posts</span>
           </div>
-        )}
-
-        {/* Upgrade CTA */}
-        {showPayment && (
-          <div className={`p-5 rounded-xl border border-indigo-500/30 ${t.cardBg} text-center`}>
-            <p className={`text-sm ${t.textSecondary} mb-3`}>
-              Need more Social Sets? Upgrade your plan to connect more accounts.
-            </p>
-            <button
-              onClick={() => toastInfo('Contact your operator to upgrade your plan')}
-              className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition ${t.btnPrimary}`}
-            >
-              Upgrade Plan
-            </button>
-          </div>
-        )}
+          {upcomingPosts.length > 0 ? (
+            <div className="flex w-full flex-col items-start">
+              {upcomingPosts.slice(0, 5).map((post, i) => {
+                const date = post.scheduledTime ? new Date(post.scheduledTime) : null;
+                const platformNames = Object.keys(post.platforms || {});
+                const postThumb = post.thumbnailUrl || post.mediaUrl || null;
+                return (
+                  <div key={post.id || i} className={`flex w-full items-center gap-4 px-6 py-4 ${i < Math.min(upcomingPosts.length, 5) - 1 ? 'border-b border-solid border-neutral-800' : ''}`}>
+                    {postThumb ? (
+                      <img className="h-16 w-16 flex-none rounded-md object-cover" src={postThumb} alt="" loading="lazy" />
+                    ) : (
+                      <div className="flex h-16 w-16 flex-none items-center justify-center rounded-md bg-neutral-800">
+                        <FeatherCalendar className="text-neutral-500" />
+                      </div>
+                    )}
+                    <div className="flex grow shrink-0 basis-0 flex-col items-start gap-2">
+                      <span className="text-body-bold font-body-bold text-[#ffffffff] truncate w-full">
+                        {post.contentName || post.caption || 'Untitled post'}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {platformNames.map(p => {
+                          const meta = PLATFORM_META[p];
+                          return meta ? (
+                            <span key={p} className="text-caption font-caption text-brand-600">{meta.icon}</span>
+                          ) : null;
+                        })}
+                        <span className="text-caption font-caption text-neutral-400">
+                          {date ? date.toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                        </span>
+                      </div>
+                    </div>
+                    <IconButton size="small" icon={<FeatherEdit2 />} onClick={() => onNavigate?.('schedule')} />
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="px-6 pb-5">
+              <span className="text-body font-body text-neutral-500 italic">No upcoming posts.</span>
+            </div>
+          )}
+          {upcomingPosts.length > 5 && (
+            <div className="flex w-full items-center justify-center px-6 pb-4">
+              <span className="text-caption font-caption text-neutral-400">
+                +{upcomingPosts.length - 5} more scheduled
+              </span>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Recently Posted */}
+      <div className="flex w-full flex-col items-start gap-4">
+        <span className="text-heading-2 font-heading-2 text-[#ffffffff]">
+          Recently Posted{postedPosts.length > 0 && ` (${postedPosts.length})`}
+        </span>
+        <div className="flex w-full flex-col items-start rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff]">
+          {postedPosts.length > 0 ? (
+            postedPosts.slice(0, 5).map((post, i) => {
+              const date = (post.postedAt || post.scheduledTime) ? new Date(post.postedAt || post.scheduledTime) : null;
+              const results = post.postResults || {};
+              return (
+                <div key={post.id || i} className={`flex w-full items-center gap-4 px-6 py-4 ${i < Math.min(postedPosts.length, 5) - 1 ? 'border-b border-solid border-neutral-800' : ''}`}>
+                  <div className="flex h-12 w-12 flex-none items-center justify-center rounded-md bg-neutral-800 text-caption font-caption text-neutral-400 font-mono">
+                    {date ? `${date.getMonth() + 1}/${date.getDate()}` : '—'}
+                  </div>
+                  <div className="flex grow shrink-0 basis-0 flex-col items-start gap-1">
+                    <span className="text-body-bold font-body-bold text-[#ffffffff] truncate w-full">
+                      {post.contentName || post.caption || 'Untitled post'}
+                    </span>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {Object.entries(results).map(([platform, result]) => (
+                        result?.url ? (
+                          <a
+                            key={platform}
+                            href={result.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs px-2 py-0.5 rounded-full font-medium inline-flex items-center gap-1 hover:opacity-80 transition"
+                            style={{
+                              backgroundColor: `${PLATFORM_COLORS[platform] || '#888'}20`,
+                              color: PLATFORM_COLORS[platform] || '#888',
+                              textDecoration: 'none'
+                            }}
+                          >
+                            {platform} ↗
+                          </a>
+                        ) : (
+                          <span
+                            key={platform}
+                            className="text-xs px-2 py-0.5 rounded-full font-medium"
+                            style={{
+                              backgroundColor: `${PLATFORM_COLORS[platform] || '#888'}20`,
+                              color: PLATFORM_COLORS[platform] || '#888'
+                            }}
+                          >
+                            {platform}
+                          </span>
+                        )
+                      ))}
+                      {Object.keys(results).length === 0 && (
+                        <span className="text-caption font-caption text-neutral-400">
+                          {date ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="px-6 py-5">
+              <span className="text-body font-body text-neutral-500 italic">No posts published yet.</span>
+            </div>
+          )}
+          {postedPosts.length > 5 && (
+            <div className="flex w-full items-center justify-center px-6 pb-4 border-t border-solid border-neutral-800">
+              <span className="text-caption font-caption text-neutral-400 pt-3">
+                +{postedPosts.length - 5} more posted
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Operator Contact Card */}
+      {user?.ownerOperatorId && (
+        <div className="flex w-full flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-5">
+          <span className="text-body-bold font-body-bold text-[#ffffffff]">Your Operator</span>
+          <span className="text-body font-body text-neutral-400">
+            Contact your operator for content uploads, schedule changes, or account management.
+          </span>
+        </div>
+      )}
+
+      {/* Upgrade CTA */}
+      {showPayment && (
+        <div className="flex w-full flex-col items-center gap-4 rounded-lg border border-solid border-brand-600/30 bg-[#1a1a1aff] px-8 py-8">
+          <span className="text-body font-body text-neutral-400 text-center">
+            Need more Social Sets? Upgrade your plan to connect more accounts.
+          </span>
+          <Button variant="brand-primary" size="large" onClick={() => toastInfo('Contact your operator to upgrade your plan')}>
+            Upgrade Plan
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

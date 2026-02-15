@@ -16,6 +16,19 @@ import { startPolling } from '../../services/postStatusPolling';
 import log from '../../utils/logger';
 import { useTheme } from '../../contexts/ThemeContext';
 import useIsMobile from '../../hooks/useIsMobile';
+import { Button } from '../../ui/components/Button';
+import { Badge } from '../../ui/components/Badge';
+import { IconButton } from '../../ui/components/IconButton';
+import { ToggleGroup } from '../../ui/components/ToggleGroup';
+import { DropdownMenu } from '../../ui/components/DropdownMenu';
+import {
+  FeatherPlus, FeatherShuffle, FeatherPause, FeatherPlay,
+  FeatherHash, FeatherList, FeatherCalendar, FeatherChevronDown,
+  FeatherTrash2, FeatherX, FeatherUser,
+  FeatherGripVertical, FeatherEdit, FeatherSend, FeatherRotateCcw,
+  FeatherLock, FeatherUnlock, FeatherChevronUp
+} from '@subframe/core';
+import * as SubframeCore from '@subframe/core';
 
 /**
  * SchedulingPage — Batch-First Command Center
@@ -44,6 +57,8 @@ const SchedulingPage = ({
 
   // ── Core State ──
   const [posts, setPosts] = useState([]);
+  const postsRef = useRef(posts);
+  postsRef.current = posts;
   const [loading, setLoading] = useState(true);
   const [expandedPostId, setExpandedPostId] = useState(null);
   const [draggedId, setDraggedId] = useState(null);
@@ -214,13 +229,14 @@ const SchedulingPage = ({
     });
 
     // Start polling for overdue SCHEDULED posts (checks if they're actually live on Late.co)
-    const stopPolling = startPolling(db, artistId, () => posts);
+    // Note: getPosts closure captures latest posts via ref to avoid re-creating subscription
+    const stopPolling = startPolling(db, artistId, () => postsRef.current);
 
     return () => {
       unsubscribe();
       stopPolling();
     };
-  }, [db, artistId, posts]);
+  }, [db, artistId]);
 
   useEffect(() => {
     const now = new Date();
@@ -1116,57 +1132,66 @@ const SchedulingPage = ({
   }
 
   return (
-    <div style={s.page}>
+    <div className="flex h-full w-full items-stretch bg-black">
+      <div style={{ ...s.page, flex: '1 1 0%', minWidth: 0 }}>
       {/* ═══ HEADER ═══ */}
-      <div style={{ ...s.header, ...(isMobile ? { flexDirection: 'column', alignItems: 'flex-start', gap: '8px' } : {}) }}>
-        <div style={s.headerLeft}>
-          <button style={s.backBtn} onClick={onBack} title="Back to Studio">
-            <span style={{ fontSize: '18px' }}>&#8592;</span>
-          </button>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <h1 style={s.pageTitle}>Schedule</h1>
-              {visibleArtists.length > 1 && onArtistChange && (
-                <select
-                  value={artistId}
-                  onChange={(e) => onArtistChange(e.target.value)}
-                  style={{
-                    backgroundColor: theme.bg.input, color: theme.text.primary,
-                    border: `1px solid ${theme.border.default}`, borderRadius: '6px',
-                    padding: '4px 8px', fontSize: '13px', cursor: 'pointer', outline: 'none',
-                    maxWidth: '180px'
-                  }}
-                >
-                  {visibleArtists.map(a => (
-                    <option key={a.id} value={a.id}>{a.name}</option>
-                  ))}
-                </select>
-              )}
+      <div className="flex w-full flex-col items-start border-b border-solid border-neutral-800 bg-black px-12 py-6" style={isMobile ? { padding: '12px 16px' } : undefined}>
+        <div className="flex w-full items-center justify-between" style={isMobile ? { flexDirection: 'column', alignItems: 'flex-start', gap: '8px' } : undefined}>
+          <div className="flex items-center gap-6">
+            <div className="flex flex-col items-start gap-1">
+              <span className="text-heading-1 font-heading-1 text-[#ffffffff]">Schedule</span>
+              <span className="text-body font-body text-neutral-400">
+                {posts.length} post{posts.length !== 1 ? 's' : ''} · {draftCount} draft{draftCount !== 1 ? 's' : ''}
+                {hasSelection && <span className="text-brand-600"> · {selectedCount} selected</span>}
+              </span>
             </div>
-            <p style={s.subtitle}>
-              {posts.length} post{posts.length !== 1 ? 's' : ''} &middot; {draftCount} draft{draftCount !== 1 ? 's' : ''}
-              {hasSelection && <span style={{ color: '#a5b4fc' }}> &middot; {selectedCount} selected</span>}
-            </p>
+            {visibleArtists.length > 1 && onArtistChange && (
+              <SubframeCore.DropdownMenu.Root>
+                <SubframeCore.DropdownMenu.Trigger asChild>
+                  <div className="flex items-center gap-3 rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2 cursor-pointer hover:bg-neutral-900">
+                    <div className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-brand-600 text-white text-xs font-semibold">
+                      {(visibleArtists.find(a => a.id === artistId)?.name || '?')[0].toUpperCase()}
+                    </div>
+                    <span className="text-body font-body text-[#ffffffff]">
+                      {visibleArtists.find(a => a.id === artistId)?.name || 'Select Artist'}
+                    </span>
+                    <FeatherChevronDown className="text-body font-body text-neutral-400" />
+                  </div>
+                </SubframeCore.DropdownMenu.Trigger>
+                <SubframeCore.DropdownMenu.Portal>
+                  <SubframeCore.DropdownMenu.Content side="bottom" align="start" sideOffset={4} asChild>
+                    <DropdownMenu>
+                      {visibleArtists.map(a => (
+                        <DropdownMenu.DropdownItem key={a.id} icon={<FeatherUser />} onClick={() => onArtistChange(a.id)}>
+                          {a.name}
+                        </DropdownMenu.DropdownItem>
+                      ))}
+                    </DropdownMenu>
+                  </SubframeCore.DropdownMenu.Content>
+                </SubframeCore.DropdownMenu.Portal>
+              </SubframeCore.DropdownMenu.Root>
+            )}
           </div>
-        </div>
-        <div style={{ ...s.headerActions, ...(isMobile ? { flexWrap: 'wrap', width: '100%' } : {}) }}>
-          {/* Selection helpers */}
-          <button style={s.actionBtnSm} onClick={selectAllVisible} title="Select all visible posts">
-            Select All
-          </button>
-          <button style={s.actionBtnSm} onClick={selectDraftsOnly} title="Select only draft posts">
-            Drafts Only
-          </button>
-          {hasSelection && (
-            <>
-              <button style={{ ...s.actionBtnSm, color: '#f87171', borderColor: '#7f1d1d' }} onClick={handleDeleteSelected}>
-                Delete ({selectedCount})
-              </button>
-              <button style={{ ...s.actionBtnSm, color: theme.text.secondary, borderColor: theme.border.default }} onClick={clearSelection}>
-                Deselect
-              </button>
-            </>
-          )}
+          <div className="flex items-center gap-3" style={isMobile ? { flexWrap: 'wrap', width: '100%' } : undefined}>
+            {!readOnly && (
+              <>
+                <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherPlus />} onClick={() => setShowAddModal(true)} />
+                <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherShuffle />} onClick={handleRandomizeOrder} />
+                <IconButton variant="neutral-tertiary" size="medium" icon={queuePaused ? <FeatherPlay /> : <FeatherPause />} onClick={() => setQueuePaused(!queuePaused)} />
+                <IconButton
+                  variant={showCaptionBank ? 'brand-tertiary' : 'neutral-tertiary'}
+                  size="medium"
+                  icon={<FeatherHash />}
+                  onClick={() => setShowCaptionBank(!showCaptionBank)}
+                />
+              </>
+            )}
+            <div className="flex h-8 w-px flex-none flex-col items-start bg-neutral-800" />
+            <ToggleGroup value={viewMode} onValueChange={(v) => v && setViewMode(v)}>
+              <ToggleGroup.Item className="h-8 w-auto flex-none" icon={<FeatherList />} value="list" />
+              <ToggleGroup.Item className="h-8 w-auto flex-none" icon={<FeatherCalendar />} value="calendar" />
+            </ToggleGroup>
+          </div>
         </div>
       </div>
 
@@ -1334,87 +1359,71 @@ const SchedulingPage = ({
         </div>
       )}
 
-      {/* ═══ STATUS FILTER TABS ═══ */}
-      <div style={{ ...s.filterBar, ...(isMobile ? { overflowX: 'auto', whiteSpace: 'nowrap', WebkitOverflowScrolling: 'touch', flexWrap: 'nowrap' } : {}) }}>
-        {[
-          { key: 'all', label: 'All' },
-          { key: POST_STATUS.DRAFT, label: 'Drafts' },
-          { key: POST_STATUS.SCHEDULED, label: 'Scheduled' },
-          { key: POST_STATUS.POSTING, label: 'Posting' },
-          { key: POST_STATUS.POSTED, label: 'Posted' },
-          { key: POST_STATUS.FAILED, label: 'Failed' }
-        ].map(tab => (
-          <button
-            key={tab.key}
-            style={{ ...s.filterTab, ...(statusFilter === tab.key ? s.filterTabActive : {}) }}
-            onClick={() => setStatusFilter(tab.key)}
-          >
-            {tab.label}
-            {statusCounts[tab.key] > 0 && (
-              <span style={s.badge}>{statusCounts[tab.key]}</span>
+      {/* ═══ FILTER + TOOLBAR ═══ */}
+      <div className="flex w-full flex-col items-start gap-6 px-12 py-6" style={isMobile ? { padding: '8px 16px', gap: '12px' } : undefined}>
+        <div className="flex w-full flex-wrap items-center gap-1">
+          {[
+            { key: 'all', label: 'All' },
+            { key: POST_STATUS.DRAFT, label: 'Drafts' },
+            { key: POST_STATUS.SCHEDULED, label: 'Scheduled' },
+            { key: POST_STATUS.POSTING, label: 'Posting' },
+            { key: POST_STATUS.POSTED, label: 'Posted' },
+            { key: POST_STATUS.FAILED, label: 'Failed' }
+          ].map(tab => {
+            const isActive = statusFilter === tab.key;
+            const count = statusCounts[tab.key] || 0;
+            return (
+              <button
+                key={tab.key}
+                className={
+                  isActive
+                    ? 'bg-[#2a2a2aff] text-[#ffffffff] rounded-lg px-3 py-1.5 text-body font-body border-none cursor-pointer flex items-center gap-1.5 transition-colors'
+                    : 'text-neutral-400 hover:text-neutral-200 rounded-lg px-3 py-1.5 text-body font-body bg-transparent border-none cursor-pointer flex items-center gap-1.5 transition-colors'
+                }
+                onClick={() => setStatusFilter(tab.key)}
+              >
+                {tab.label}
+                {count > 0 && (
+                  <Badge variant={isActive ? 'brand' : 'neutral'}>{count}</Badge>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex w-full items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={filteredPosts.length > 0 && filteredPosts.every(p => selectedPostIds.has(p.id))}
+                onChange={() => {
+                  if (filteredPosts.every(p => selectedPostIds.has(p.id))) clearSelection();
+                  else selectAllVisible();
+                }}
+                className="w-4 h-4 cursor-pointer"
+              />
+              <span className="text-body font-body text-neutral-400">Select All</span>
+            </div>
+            <div className="flex h-4 w-px flex-none flex-col items-start bg-neutral-800" />
+            <Button variant="neutral-tertiary" size="small" onClick={selectDraftsOnly}>
+              Drafts Only
+            </Button>
+            {hasSelection && (
+              <>
+                <Button variant="destructive-secondary" size="small" icon={<FeatherTrash2 />} onClick={handleDeleteSelected}>
+                  Delete ({selectedCount})
+                </Button>
+                <Button variant="neutral-tertiary" size="small" onClick={clearSelection}>
+                  Deselect
+                </Button>
+              </>
             )}
-          </button>
-        ))}
-      </div>
-
-      {/* ═══ TOOLBAR — between filters and list ═══ */}
-      <div style={{ ...s.toolbarRow, ...(isMobile ? { flexDirection: 'column', gap: '8px', alignItems: 'stretch' } : {}) }}>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', ...(isMobile ? { flexWrap: 'wrap' } : {}) }}>
-          {!readOnly && (
-            <>
-              <button style={s.toolbarBtn} onClick={() => setShowAddModal(true)}>
-                <span style={{ fontSize: '15px', lineHeight: 1 }}>+</span> Add Drafts
-              </button>
-              <button style={s.toolbarBtn} onClick={handleRandomizeOrder}>
-                <span style={{ fontSize: '14px', lineHeight: 1 }}>🔀</span> Shuffle
-              </button>
-              <button
-                style={{ ...s.toolbarBtn, ...(queuePaused ? { backgroundColor: '#78350f', borderColor: '#f59e0b', color: '#fbbf24' } : {}) }}
-                onClick={() => setQueuePaused(!queuePaused)}
-              >
-                <span style={{ fontSize: '14px', lineHeight: 1 }}>{queuePaused ? '▶' : '⏸'}</span> {queuePaused ? 'Resume' : 'Pause'}
-              </button>
-              <button
-                style={{ ...s.toolbarBtn, ...(showCaptionBank ? { backgroundColor: '#312e81', borderColor: '#6366f1', color: '#a5b4fc' } : {}) }}
-                onClick={() => setShowCaptionBank(!showCaptionBank)}
-              >
-                <span style={{ fontSize: '14px', lineHeight: 1 }}>#</span> Caption Bank
-              </button>
-            </>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: '2px', alignItems: 'center', backgroundColor: theme.bg.surface, borderRadius: '8px', padding: '3px', border: `1px solid ${theme.border.default}` }}>
-          <button
-            style={{ ...s.viewToggleBtn, ...(viewMode === 'list' ? s.viewToggleBtnActive : {}) }}
-            onClick={() => setViewMode('list')}
-          >
-            List
-          </button>
-          <button
-            style={{ ...s.viewToggleBtn, ...(viewMode === 'calendar' ? s.viewToggleBtnActive : {}) }}
-            onClick={() => setViewMode('calendar')}
-          >
-            Calendar
-          </button>
+          </div>
+          <span className="text-caption font-caption text-neutral-400">
+            {filteredPosts.length} item{filteredPosts.length !== 1 ? 's' : ''}
+          </span>
         </div>
       </div>
-
-      {/* ═══ CAPTION/HASHTAG BANK PANEL ═══ */}
-      {showCaptionBank && (
-        <div style={{ borderBottom: `1px solid ${theme.border.default}`, maxHeight: '350px', overflow: 'hidden' }}>
-          <CaptionHashtagBank
-            db={db}
-            artistId={artistId}
-            compact={true}
-            onBankChange={() => { loadAlwaysOnFromTemplates(); }}
-            draftCount={selectedPostIds.size > 0
-              ? posts.filter(p => p.status === POST_STATUS.DRAFT && selectedPostIds.has(p.id)).length
-              : posts.filter(p => p.status === POST_STATUS.DRAFT).length}
-            onApplyToDrafts={handleApplyCategory}
-          />
-        </div>
-      )}
-
 
       {/* ═══ MAIN CONTENT ═══ */}
       <div style={s.content}>
@@ -1529,6 +1538,29 @@ const SchedulingPage = ({
         onConfirm={confirmDialog.onConfirm}
         onCancel={() => setConfirmDialog({ isOpen: false })}
       />
+      </div>{/* end main column */}
+
+      {/* ═══ CAPTION BANK SIDEBAR ═══ */}
+      {showCaptionBank && !isMobile && (
+        <div className="flex w-96 flex-none flex-col items-start self-stretch border-l border-solid border-neutral-800 bg-[#1a1a1aff] overflow-auto">
+          <div className="flex w-full items-center justify-between border-b border-solid border-neutral-800 px-6 py-4">
+            <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Caption Bank</span>
+            <IconButton variant="neutral-tertiary" size="small" icon={<FeatherX />} onClick={() => setShowCaptionBank(false)} />
+          </div>
+          <div className="flex w-full grow shrink-0 basis-0 flex-col items-start overflow-auto">
+            <CaptionHashtagBank
+              db={db}
+              artistId={artistId}
+              compact={false}
+              onBankChange={() => { loadAlwaysOnFromTemplates(); }}
+              draftCount={selectedPostIds.size > 0
+                ? posts.filter(p => p.status === POST_STATUS.DRAFT && selectedPostIds.has(p.id)).length
+                : posts.filter(p => p.status === POST_STATUS.DRAFT).length}
+              onApplyToDrafts={handleApplyCategory}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1609,13 +1641,14 @@ const PostRow = ({
   const previewImage = post.editorState?.exportedImages?.[0]?.url || post.thumbnail || post.editorState?.thumbnail || post.editorState?.slides?.[0]?.backgroundImage || null;
 
   return (
-    <div style={{ borderBottom: '1px solid #1e1e22' }}>
+    <div className="rounded-lg border border-solid border-neutral-800 mb-1 mx-2 overflow-hidden">
       <div
         draggable
         onDragStart={onDragStart}
         onDragOver={onDragOver}
         onDrop={onDrop}
         onDragEnd={onDragEnd}
+        className="hover:bg-[#1a1a1aff] transition-colors"
         style={{
           ...s.row,
           ...(isDragOver ? { borderColor: '#a5b4fc', backgroundColor: '#1e1e30' } : {}),
@@ -1657,7 +1690,7 @@ const PostRow = ({
 
         {/* Drag Handle + Number */}
         <div style={{ ...s.dragHandle, ...(isMobile ? { display: 'none' } : {}) }}>
-          <span style={{ color: '#52525b', fontSize: '12px', cursor: 'grab' }}>{'\u2630'}</span>
+          <FeatherGripVertical className="text-neutral-600" style={{ width: '14px', height: '14px', cursor: 'grab' }} />
           <span style={{ color: '#3f3f46', fontSize: '10px', fontWeight: '600' }}>#{index + 1}</span>
         </div>
 
@@ -1778,22 +1811,39 @@ const PostRow = ({
 
         {/* Status */}
         <div style={{ width: isMobile ? 'auto' : '80px', textAlign: 'center', flexShrink: 0 }}>
-          <span style={{ ...s.statusPill, backgroundColor: statusBg, color: statusColor }}>{post.status}</span>
+          <Badge variant={
+            post.status === POST_STATUS.SCHEDULED ? 'brand' :
+            post.status === POST_STATUS.POSTED ? 'success' :
+            post.status === POST_STATUS.FAILED ? 'error' :
+            post.status === POST_STATUS.POSTING ? 'warning' :
+            'neutral'
+          }>
+            {post.status}
+          </Badge>
         </div>
 
         {/* Actions */}
-        <div style={{ width: isMobile ? 'auto' : '60px', display: 'flex', gap: '4px', justifyContent: 'flex-end', flexShrink: 0 }}>
-          <button
-            style={{ ...s.rowIconBtn, color: post.locked ? '#f59e0b' : '#52525b', fontSize: '13px', ...(isMobile ? { minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}) }}
+        <div style={{ width: isMobile ? 'auto' : '80px', display: 'flex', gap: '2px', justifyContent: 'flex-end', flexShrink: 0 }}>
+          <IconButton
+            variant="neutral-tertiary"
+            size="small"
+            icon={post.locked ? <FeatherLock className="text-warning-500" /> : <FeatherUnlock />}
             onClick={(e) => { e.stopPropagation(); onUpdate({ locked: !post.locked }); }}
-            title={post.locked ? 'Unlock position' : 'Lock position (prevents reorder)'}
-          >
-            {post.locked ? '🔒' : '🔓'}
-          </button>
-          <button style={{ ...s.rowIconBtn, ...(isMobile ? { minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}) }} onClick={onToggleExpand} title="Expand details">
-            <span style={{ fontSize: '12px', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.15s' }}>▼</span>
-          </button>
-          {!readOnly && <button style={{ ...s.rowIconBtn, color: '#ef4444', ...(isMobile ? { minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}) }} onClick={(e) => { e.stopPropagation(); onDelete(); }} title="Remove">x</button>}
+          />
+          <IconButton
+            variant="neutral-tertiary"
+            size="small"
+            icon={isExpanded ? <FeatherChevronUp /> : <FeatherChevronDown />}
+            onClick={onToggleExpand}
+          />
+          {!readOnly && (
+            <IconButton
+              variant="destructive-tertiary"
+              size="small"
+              icon={<FeatherTrash2 />}
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            />
+          )}
         </div>
       </div>
 
@@ -1897,32 +1947,34 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
           </div>
           <div style={s.drawerActions}>
             {!readOnly && post.editorState && onEditDraft && (
-              <button style={s.drawerBtn} onClick={() => onEditDraft(post)}>Edit in Studio</button>
+              <Button variant="neutral-secondary" size="small" icon={<FeatherEdit />} onClick={() => onEditDraft(post)}>
+                Edit in Studio
+              </Button>
             )}
             {!readOnly && post.status === POST_STATUS.DRAFT && post.scheduledTime && (
-              <button style={{ ...s.drawerBtn, backgroundColor: '#312e81', color: '#a5b4fc', borderColor: '#6366f1' }} onClick={onPublish}>
+              <Button variant="brand-secondary" size="small" icon={<FeatherSend />} onClick={onPublish}>
                 Confirm & Push to Late
-              </button>
+              </Button>
             )}
             {!readOnly && post.status === POST_STATUS.SCHEDULED && (
               <>
-                <button style={{ ...s.drawerBtn, backgroundColor: '#064e3b', color: '#6ee7b7', borderColor: '#10b981' }} onClick={onPublish}>
+                <Button variant="brand-primary" size="small" icon={<FeatherSend />} onClick={onPublish}>
                   Publish Now
-                </button>
-                <button style={s.drawerBtn} onClick={() => onUpdate({ status: POST_STATUS.DRAFT, scheduledTime: null })}>
+                </Button>
+                <Button variant="neutral-secondary" size="small" icon={<FeatherRotateCcw />} onClick={() => onUpdate({ status: POST_STATUS.DRAFT, scheduledTime: null })}>
                   Revert to Draft
-                </button>
+                </Button>
               </>
             )}
             {!readOnly && post.status === POST_STATUS.FAILED && (
-              <button style={{ ...s.drawerBtn, backgroundColor: '#78350f', color: '#fbbf24', borderColor: '#f59e0b' }} onClick={onPublish}>
+              <Button variant="neutral-secondary" size="small" icon={<FeatherRotateCcw />} onClick={onPublish}>
                 Retry
-              </button>
+              </Button>
             )}
             {!readOnly && (post.status === POST_STATUS.POSTING || post.status === POST_STATUS.FAILED) && (
-              <button style={s.drawerBtn} onClick={() => onUpdate({ status: POST_STATUS.DRAFT, scheduledTime: null })}>
+              <Button variant="neutral-secondary" size="small" icon={<FeatherRotateCcw />} onClick={() => onUpdate({ status: POST_STATUS.DRAFT, scheduledTime: null })}>
                 Revert to Draft
-              </button>
+              </Button>
             )}
           </div>
         </div>

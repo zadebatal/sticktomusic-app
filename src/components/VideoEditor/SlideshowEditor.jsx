@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import useIsMobile from '../../hooks/useIsMobile';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
 import { subscribeToLibrary, subscribeToCollections, getCollections, getCollectionsAsync, getLibrary, getLyrics, MEDIA_TYPES, addToTextBank, removeFromTextBank, assignToBank, saveCollectionToFirestore, migrateCollectionBanks, getBankColor, getBankLabel, getPipelineBankLabel, BANK_COLORS, MAX_BANKS, MIN_BANKS, addBankToCollection, removeBankFromCollection, updateLibraryItem, getTextBankText, getTextBankStyle, addToLibraryAsync } from '../../services/libraryService';
@@ -152,7 +152,7 @@ const SlideshowEditor = ({
   // Detect if we're working with a pipeline collection (for label overrides)
   const activePipeline = useMemo(() => collections.find(c => c.isPipeline), [collections]);
   // Label helper: uses pipeline format labels (e.g. "Hook") when available, falls back to "Slide N"
-  const bankLabel = useCallback((idx) => activePipeline ? getPipelineBankLabel(activePipeline, idx) : getBankLabel(idx), [activePipeline]);
+  const bankLabel = useCallback((idx) => activePipeline ? getPipelineBankLabel(activePipeline, idx) : bankLabel(idx), [activePipeline]);
 
   // Text bank input state
   const [newTextInputs, setNewTextInputs] = useState({});

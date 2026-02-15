@@ -26,6 +26,17 @@ import {
 import log from '../../utils/logger';
 import { useTheme } from '../../contexts/ThemeContext';
 import useIsMobile from '../../hooks/useIsMobile';
+import { Button } from '../../ui/components/Button';
+import { Badge } from '../../ui/components/Badge';
+import { ToggleGroup } from '../../ui/components/ToggleGroup';
+import { DropdownMenu } from '../../ui/components/DropdownMenu';
+import {
+  FeatherRefreshCw, FeatherArrowLeft, FeatherTrendingUp,
+  FeatherBarChart, FeatherMusic, FeatherFilm, FeatherHeadphones,
+  FeatherUser, FeatherChevronDown, FeatherEye, FeatherHeart,
+  FeatherMessageCircle
+} from '@subframe/core';
+import * as SubframeCore from '@subframe/core';
 
 /**
  * AnalyticsDashboard - Main analytics view
@@ -189,11 +200,16 @@ const AnalyticsDashboard = ({
     const songData = getSongAnalytics(selectedSong);
     return (
       <div style={styles.container}>
-        <div style={styles.header}>
-          <button style={styles.backButton} onClick={() => setSelectedSong(null)}>
-            ← Back to Dashboard
-          </button>
-          <h1 style={styles.title}>🎵 Song Analytics</h1>
+        <div className="flex items-center gap-4 mb-6">
+          <Button
+            variant="neutral-tertiary"
+            size="medium"
+            icon={<FeatherArrowLeft />}
+            onClick={() => setSelectedSong(null)}
+          >
+            Back to Dashboard
+          </Button>
+          <span className="text-heading-1 font-heading-1 text-[#ffffffff]">Song Analytics</span>
         </div>
 
         {songData ? (
@@ -209,28 +225,28 @@ const AnalyticsDashboard = ({
             </div>
 
             {/* Song Stats Cards */}
-            <div style={styles.statsGrid}>
-              <div style={styles.statCard}>
-                <div style={styles.statValue}>{formatNumber(songData.totalViews)}</div>
-                <div style={styles.statLabel}>Total Views</div>
+            <div className="grid grid-cols-4 gap-4 mb-6">
+              <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+                <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{formatNumber(songData.totalViews)}</span>
+                <span className="text-caption font-caption text-neutral-400">Total Views</span>
               </div>
-              <div style={styles.statCard}>
-                <div style={styles.statValue}>{formatNumber(songData.totalLikes)}</div>
-                <div style={styles.statLabel}>Total Likes</div>
+              <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+                <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{formatNumber(songData.totalLikes)}</span>
+                <span className="text-caption font-caption text-neutral-400">Total Likes</span>
               </div>
-              <div style={styles.statCard}>
-                <div style={styles.statValue}>{formatNumber(songData.avgViewsPerVideo)}</div>
-                <div style={styles.statLabel}>Avg Views/Video</div>
+              <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+                <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{formatNumber(songData.avgViewsPerVideo)}</span>
+                <span className="text-caption font-caption text-neutral-400">Avg Views/Video</span>
               </div>
-              <div style={styles.statCard}>
-                <div style={styles.statValue}>{formatPercent(songData.avgEngagement)}</div>
-                <div style={styles.statLabel}>Avg Engagement</div>
+              <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+                <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{formatPercent(songData.avgEngagement)}</span>
+                <span className="text-caption font-caption text-neutral-400">Avg Engagement</span>
               </div>
             </div>
 
             {/* Category Breakdown */}
             <div style={styles.section}>
-              <h3 style={styles.sectionTitle}>Performance by Category</h3>
+              <h3 className="text-heading-2 font-heading-2 text-[#ffffffff] mb-4">Performance by Category</h3>
               <div style={styles.categoryList}>
                 {songData.categoryBreakdown.map(cat => (
                   <div key={cat.categoryId} style={styles.categoryRow}>
@@ -244,9 +260,9 @@ const AnalyticsDashboard = ({
 
             {/* Videos Using This Song */}
             <div style={styles.section}>
-              <h3 style={styles.sectionTitle}>Videos Using This Song</h3>
+              <h3 className="text-heading-2 font-heading-2 text-[#ffffffff] mb-4">Videos Using This Song</h3>
               <div style={styles.videoTable}>
-                <div style={styles.videoTableHeader}>
+                <div className="flex p-3 border-b border-neutral-800 text-[12px] font-semibold uppercase" style={{ color: theme.text.secondary }}>
                   <span style={styles.videoTableCell}>Video</span>
                   <span style={styles.videoTableCell}>Category</span>
                   <span style={styles.videoTableCell}>Handle</span>
@@ -254,7 +270,7 @@ const AnalyticsDashboard = ({
                   <span style={styles.videoTableCell}>Engagement</span>
                 </div>
                 {songData.videos.sort((a, b) => b.views - a.views).map(video => (
-                  <div key={video.videoId} style={styles.videoTableRow}>
+                  <div key={video.videoId} className="flex items-center p-3 border-b border-neutral-800 text-[13px] hover:bg-[#1a1a1aff] transition-colors">
                     <span style={styles.videoTableCell}>{video.videoName}</span>
                     <span style={styles.videoTableCell}>{video.categoryName}</span>
                     <span style={styles.videoTableCell}>{video.handle}</span>
@@ -287,28 +303,15 @@ const AnalyticsDashboard = ({
   // Gate: require Late connection
   if (!lateConnected) {
     return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '400px',
-        padding: '32px'
-      }}>
-        <div style={{
-          background: theme.bg.surface,
-          border: `1px solid ${theme.border.subtle}`,
-          borderRadius: '12px',
-          padding: '48px',
-          textAlign: 'center',
-          maxWidth: '420px'
-        }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
-          <h2 style={{ color: theme.text.primary, margin: '0 0 12px', fontSize: '20px' }}>
+      <div className="flex items-center justify-center min-h-[400px] p-8">
+        <div className="flex flex-col items-center gap-4 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-12 text-center max-w-[420px]">
+          <FeatherBarChart className="text-neutral-400" style={{ width: 48, height: 48 }} />
+          <span className="text-heading-3 font-heading-3 text-[#ffffffff]">
             Connect Late to View Analytics
-          </h2>
-          <p style={{ color: theme.text.secondary, margin: 0, lineHeight: '1.5' }}>
+          </span>
+          <span className="text-body font-body text-neutral-400 leading-relaxed">
             Analytics require a Late.co connection. Contact your operator to get set up.
-          </p>
+          </span>
         </div>
       </div>
     );
@@ -320,81 +323,68 @@ const AnalyticsDashboard = ({
       ...(isMobile ? { padding: '16px' } : {})
     }}>
       {/* Header */}
-      <div style={{
-        ...styles.header,
-        ...(isMobile ? { flexDirection: 'column', alignItems: 'flex-start', gap: '12px' } : {})
-      }}>
-        <div style={styles.headerLeft}>
-          <h1 style={{
-            ...styles.title,
-            ...(isMobile ? { fontSize: '22px' } : {})
-          }}>📊 Analytics Dashboard</h1>
+      <div className={`flex w-full items-center justify-between border-b border-solid border-neutral-800 pb-6 mb-6 ${isMobile ? 'flex-col items-start gap-3' : ''}`}>
+        <div className="flex items-center gap-4">
+          <span className={`text-heading-1 font-heading-1 text-[#ffffffff] ${isMobile ? 'text-[22px]' : ''}`}>Analytics</span>
 
           {/* Artist Selector - only show if multiple artists */}
           {artists.length > 1 && (
-            <div style={styles.artistSelector}>
-              <select
-                value={currentArtistId || ''}
-                onChange={(e) => handleArtistChange(e.target.value)}
-                style={styles.artistSelect}
-              >
-                {artists.map(artist => (
-                  <option key={artist.id} value={artist.id}>
-                    {artist.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <SubframeCore.DropdownMenu.Root>
+              <SubframeCore.DropdownMenu.Trigger asChild>
+                <div className="flex items-center gap-2 rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2 cursor-pointer hover:bg-neutral-900">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-white text-xs font-semibold">
+                    {(currentArtistName || '?')[0].toUpperCase()}
+                  </div>
+                  <span className="text-body-bold font-body-bold text-[#ffffffff]">{currentArtistName}</span>
+                  <FeatherChevronDown className="text-neutral-400" style={{ width: 14, height: 14 }} />
+                </div>
+              </SubframeCore.DropdownMenu.Trigger>
+              <SubframeCore.DropdownMenu.Portal>
+                <SubframeCore.DropdownMenu.Content side="bottom" align="start" sideOffset={4} asChild>
+                  <DropdownMenu>
+                    {artists.map(artist => (
+                      <DropdownMenu.DropdownItem
+                        key={artist.id}
+                        icon={<FeatherUser />}
+                        onClick={() => handleArtistChange(artist.id)}
+                      >
+                        {artist.name}
+                      </DropdownMenu.DropdownItem>
+                    ))}
+                  </DropdownMenu>
+                </SubframeCore.DropdownMenu.Content>
+              </SubframeCore.DropdownMenu.Portal>
+            </SubframeCore.DropdownMenu.Root>
           )}
 
           {/* Single artist indicator */}
           {artists.length === 1 && (
-            <span style={styles.singleArtistLabel}>
-              {artists[0]?.name}
-            </span>
+            <Badge variant="brand">{artists[0]?.name}</Badge>
           )}
 
-          <span style={styles.lastUpdated}>
+          <span className="text-caption font-caption text-neutral-500">
             Last updated: {formatDate(lastUpdated)}
           </span>
         </div>
-        <div style={styles.headerRight}>
-          <button
-            style={styles.refreshButton}
-            onClick={handleSync}
-            disabled={isSyncing}
-          >
-            {isSyncing ? (
-              <>
-                <span style={styles.miniSpinner} />
-                Syncing...
-              </>
-            ) : (
-              <>
-                🔄 Refresh
-              </>
-            )}
-          </button>
-        </div>
+        <Button
+          variant="neutral-secondary"
+          size="medium"
+          icon={<FeatherRefreshCw />}
+          disabled={isSyncing}
+          onClick={handleSync}
+        >
+          {isSyncing ? 'Syncing...' : 'Refresh'}
+        </Button>
       </div>
 
       {/* Tab Navigation */}
-      <div style={styles.tabNav}>
-        {['overview', 'songs', 'videos', 'spotify'].map(tab => (
-          <button
-            key={tab}
-            style={{
-              ...styles.tabButton,
-              ...(activeTab === tab ? styles.tabButtonActive : {})
-            }}
-            onClick={() => setActiveTab(tab)}
-          >
-            {tab === 'overview' && '📈 Overview'}
-            {tab === 'songs' && '🎵 Songs'}
-            {tab === 'videos' && '🎬 Videos'}
-            {tab === 'spotify' && '🎧 Spotify'}
-          </button>
-        ))}
+      <div className="flex items-center gap-2 mb-6">
+        <ToggleGroup value={activeTab} onValueChange={(v) => v && setActiveTab(v)}>
+          <ToggleGroup.Item icon={<FeatherTrendingUp />} value="overview">Overview</ToggleGroup.Item>
+          <ToggleGroup.Item icon={<FeatherMusic />} value="songs">Songs</ToggleGroup.Item>
+          <ToggleGroup.Item icon={<FeatherFilm />} value="videos">Videos</ToggleGroup.Item>
+          <ToggleGroup.Item icon={<FeatherHeadphones />} value="spotify">Spotify</ToggleGroup.Item>
+        </ToggleGroup>
       </div>
 
       {/* Overview Tab */}
@@ -410,33 +400,30 @@ const AnalyticsDashboard = ({
           </div>
 
           {/* Overview Stats Cards */}
-          <div style={{
-            ...styles.statsGrid,
-            ...(isMobile ? { gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' } : {})
-          }}>
-            <div style={styles.statCard}>
-              <div style={styles.statIcon}>👁️</div>
-              <div style={styles.statValue}>{formatNumber(totalStats?.totalViews)}</div>
-              <div style={styles.statLabel}>Total Views</div>
-              <div style={styles.statTrend}>↑ 12% this week</div>
+          <div className={`grid gap-4 mb-6 ${isMobile ? 'grid-cols-2 gap-3' : 'grid-cols-4'}`}>
+            <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+              <FeatherEye className="text-neutral-400" style={{ width: 20, height: 20 }} />
+              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{formatNumber(totalStats?.totalViews)}</span>
+              <span className="text-caption font-caption text-neutral-400">Total Views</span>
+              <span className="text-caption font-caption text-[#22c55e]">+12% this week</span>
             </div>
-            <div style={styles.statCard}>
-              <div style={styles.statIcon}>❤️</div>
-              <div style={styles.statValue}>{formatNumber(totalStats?.totalLikes)}</div>
-              <div style={styles.statLabel}>Total Likes</div>
-              <div style={styles.statTrend}>↑ 8% this week</div>
+            <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+              <FeatherHeart className="text-neutral-400" style={{ width: 20, height: 20 }} />
+              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{formatNumber(totalStats?.totalLikes)}</span>
+              <span className="text-caption font-caption text-neutral-400">Total Likes</span>
+              <span className="text-caption font-caption text-[#22c55e]">+8% this week</span>
             </div>
-            <div style={styles.statCard}>
-              <div style={styles.statIcon}>💬</div>
-              <div style={styles.statValue}>{formatNumber(totalStats?.totalComments)}</div>
-              <div style={styles.statLabel}>Total Comments</div>
-              <div style={styles.statTrend}>↑ 3% this week</div>
+            <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+              <FeatherMessageCircle className="text-neutral-400" style={{ width: 20, height: 20 }} />
+              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{formatNumber(totalStats?.totalComments)}</span>
+              <span className="text-caption font-caption text-neutral-400">Total Comments</span>
+              <span className="text-caption font-caption text-[#22c55e]">+3% this week</span>
             </div>
-            <div style={styles.statCard}>
-              <div style={styles.statIcon}>📈</div>
-              <div style={styles.statValue}>{formatPercent(totalStats?.avgEngagement)}</div>
-              <div style={styles.statLabel}>Avg Engagement</div>
-              <div style={styles.statTrend}>↑ 0.5% this week</div>
+            <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+              <FeatherTrendingUp className="text-neutral-400" style={{ width: 20, height: 20 }} />
+              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{formatPercent(totalStats?.avgEngagement)}</span>
+              <span className="text-caption font-caption text-neutral-400">Avg Engagement</span>
+              <span className="text-caption font-caption text-[#22c55e]">+0.5% this week</span>
             </div>
           </div>
 
@@ -448,23 +435,13 @@ const AnalyticsDashboard = ({
             {/* Left Column */}
             <div style={styles.leftColumn}>
               {/* Performance Chart */}
-              <div style={styles.chartCard}>
+              <div className="rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-5">
                 <div style={styles.chartHeader}>
-                  <h3 style={styles.cardTitle}>📈 Performance Over Time</h3>
-                  <div style={styles.periodSelector}>
-                    {['daily', 'weekly'].map(period => (
-                      <button
-                        key={period}
-                        style={{
-                          ...styles.periodButton,
-                          ...(chartPeriod === period ? styles.periodButtonActive : {})
-                        }}
-                        onClick={() => setChartPeriod(period)}
-                      >
-                        {period.charAt(0).toUpperCase() + period.slice(1)}
-                      </button>
-                    ))}
-                  </div>
+                  <h3 className="text-heading-2 font-heading-2 text-[#ffffffff] mb-4">📈 Performance Over Time</h3>
+                  <ToggleGroup value={chartPeriod} onValueChange={(v) => v && setChartPeriod(v)}>
+                    <ToggleGroup.Item value="daily">Daily</ToggleGroup.Item>
+                    <ToggleGroup.Item value="weekly">Weekly</ToggleGroup.Item>
+                  </ToggleGroup>
                 </div>
                 <div style={styles.chartContainer}>
                   {/* Simple bar chart visualization */}
@@ -497,8 +474,8 @@ const AnalyticsDashboard = ({
               </div>
 
               {/* Category Performance */}
-              <div style={styles.card}>
-                <h3 style={styles.cardTitle}>📁 Category Performance</h3>
+              <div className="rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-5">
+                <h3 className="text-heading-2 font-heading-2 text-[#ffffffff] mb-4">📁 Category Performance</h3>
                 <div style={styles.categoryPerformance}>
                   {categoryPerformance.map((cat, i) => {
                     const maxViews = categoryPerformance[0]?.totalViews || 1;
@@ -526,13 +503,13 @@ const AnalyticsDashboard = ({
             {/* Right Column */}
             <div style={styles.rightColumn}>
               {/* Top Songs */}
-              <div style={styles.card}>
-                <h3 style={styles.cardTitle}>🎵 Top Performing Songs</h3>
+              <div className="rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-5">
+                <h3 className="text-heading-2 font-heading-2 text-[#ffffffff] mb-4">🎵 Top Performing Songs</h3>
                 <div style={styles.songList}>
                   {songPerformance.slice(0, 5).map((song, i) => (
                     <div
                       key={song.audioId}
-                      style={styles.songRow}
+                      className="flex items-center gap-3 p-3 rounded-lg cursor-pointer border-b border-neutral-800 hover:bg-[#1a1a1aff] transition-colors"
                       onClick={() => setSelectedSong(song.audioId)}
                     >
                       <span style={styles.songRank}>{i + 1}</span>
@@ -549,17 +526,19 @@ const AnalyticsDashboard = ({
                     </div>
                   ))}
                 </div>
-                <button
-                  style={styles.viewAllButton}
+                <Button
+                  variant="neutral-tertiary"
+                  size="medium"
+                  className="w-full mt-3"
                   onClick={() => setActiveTab('songs')}
                 >
-                  View All Songs →
-                </button>
+                  View All Songs
+                </Button>
               </div>
 
               {/* Account Comparison */}
-              <div style={styles.card}>
-                <h3 style={styles.cardTitle}>👤 Account Performance</h3>
+              <div className="rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-5">
+                <h3 className="text-heading-2 font-heading-2 text-[#ffffffff] mb-4">👤 Account Performance</h3>
                 <div style={styles.accountList}>
                   {accountPerformance.slice(0, 4).map((acc, i) => {
                     const maxViews = accountPerformance[0]?.totalViews || 1;
@@ -591,10 +570,10 @@ const AnalyticsDashboard = ({
           <TimelineOverlayChart artistId={currentArtistId} days={30} />
 
           {/* Top Videos Table */}
-          <div style={styles.card}>
-            <h3 style={styles.cardTitle}>🔥 Top Performing Videos</h3>
+          <div className="rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-5">
+            <h3 className="text-heading-2 font-heading-2 text-[#ffffffff] mb-4">🔥 Top Performing Videos</h3>
             <div style={styles.videoTable}>
-              <div style={styles.videoTableHeader}>
+              <div className="flex p-3 border-b border-neutral-800 text-[12px] font-semibold uppercase" style={{ color: theme.text.secondary }}>
                 <span style={{ ...styles.videoTableCell, flex: 2 }}>Video</span>
                 <span style={styles.videoTableCell}>Song</span>
                 <span style={styles.videoTableCell}>Category</span>
@@ -603,7 +582,7 @@ const AnalyticsDashboard = ({
                 <span style={styles.videoTableCell}>Engagement</span>
               </div>
               {topVideos.slice(0, 8).map((video, i) => (
-                <div key={video.videoId} style={styles.videoTableRow}>
+                <div key={video.videoId} className="flex items-center p-3 border-b border-neutral-800 text-[13px] hover:bg-[#1a1a1aff] transition-colors" style={{ color: theme.text.primary }}>
                   <span style={{ ...styles.videoTableCell, flex: 2 }}>
                     <span style={styles.videoRank}>{i + 1}</span>
                     {video.videoName}
@@ -623,12 +602,14 @@ const AnalyticsDashboard = ({
                 </div>
               ))}
             </div>
-            <button
-              style={styles.viewAllButton}
+            <Button
+              variant="neutral-tertiary"
+              size="medium"
+              className="w-full mt-3"
               onClick={() => setActiveTab('videos')}
             >
-              View All Videos →
-            </button>
+              View All Videos
+            </Button>
           </div>
         </>
       )}
@@ -643,7 +624,7 @@ const AnalyticsDashboard = ({
               return (
                 <div
                   key={song.audioId}
-                  style={styles.songCard}
+                  className="rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-5 cursor-pointer hover:border-neutral-700 transition-colors"
                   onClick={() => setSelectedSong(song.audioId)}
                 >
                   <div style={styles.songCardHeader}>
@@ -692,7 +673,7 @@ const AnalyticsDashboard = ({
       {activeTab === 'videos' && (
         <div style={styles.videosTab}>
           <div style={styles.videoTable}>
-            <div style={styles.videoTableHeader}>
+            <div className="flex p-3 border-b border-neutral-800 text-[12px] font-semibold uppercase" style={{ color: theme.text.secondary }}>
               <span style={{ ...styles.videoTableCell, width: '40px' }}>#</span>
               <span style={{ ...styles.videoTableCell, flex: 2 }}>Video</span>
               <span style={styles.videoTableCell}>Song</span>
@@ -708,7 +689,7 @@ const AnalyticsDashboard = ({
               // Find attribution data for this video
               const attr = videoAttributions.find(v => v.videoId === video.videoId) || video;
               return (
-                <div key={video.videoId} style={styles.videoTableRow}>
+                <div key={video.videoId} className="flex items-center p-3 border-b border-neutral-800 text-[13px] hover:bg-[#1a1a1aff] transition-colors" style={{ color: theme.text.primary }}>
                   <span style={{ ...styles.videoTableCell, width: '40px' }}>{i + 1}</span>
                   <span style={{ ...styles.videoTableCell, flex: 2, fontWeight: '500' }}>
                     {video.videoName}
@@ -790,131 +771,7 @@ const getStyles = (theme) => ({
     color: theme.accent.hover,
     lineHeight: '1.6'
   },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '24px'
-  },
-  headerLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '16px'
-  },
-  headerRight: {
-    display: 'flex',
-    gap: '12px'
-  },
-  title: {
-    fontSize: '28px',
-    fontWeight: '700',
-    margin: 0
-  },
-  lastUpdated: {
-    fontSize: '13px',
-    color: theme.text.secondary
-  },
-  artistSelector: {
-    position: 'relative'
-  },
-  artistSelect: {
-    appearance: 'none',
-    backgroundColor: `${theme.text.primary}08`,
-    border: `1px solid ${theme.border.default}`,
-    borderRadius: '6px',
-    padding: '6px 28px 6px 10px',
-    color: theme.text.primary,
-    fontSize: '13px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    outline: 'none'
-  },
-  singleArtistLabel: {
-    fontSize: '13px',
-    fontWeight: '500',
-    color: theme.accent.hover,
-    backgroundColor: `${theme.accent.primary}18`,
-    padding: '4px 12px',
-    borderRadius: '6px'
-  },
-  refreshButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '10px 20px',
-    backgroundColor: theme.bg.elevated,
-    border: `1px solid ${theme.border.default}`,
-    borderRadius: '8px',
-    color: theme.text.primary,
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '500',
-    transition: 'all 0.2s'
-  },
-  backButton: {
-    padding: '8px 16px',
-    backgroundColor: 'transparent',
-    border: `1px solid ${theme.border.default}`,
-    borderRadius: '8px',
-    color: theme.text.secondary,
-    cursor: 'pointer',
-    fontSize: '14px',
-    marginRight: '16px'
-  },
-  tabNav: {
-    display: 'flex',
-    gap: '8px',
-    marginBottom: '24px',
-    borderBottom: `1px solid ${theme.border.default}`,
-    paddingBottom: '16px'
-  },
-  tabButton: {
-    padding: '10px 20px',
-    backgroundColor: 'transparent',
-    border: 'none',
-    borderRadius: '8px',
-    color: theme.text.secondary,
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '500',
-    transition: 'all 0.2s'
-  },
-  tabButtonActive: {
-    backgroundColor: theme.bg.elevated,
-    color: theme.text.primary
-  },
-  statsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(4, 1fr)',
-    gap: '16px',
-    marginBottom: '24px'
-  },
-  statCard: {
-    backgroundColor: theme.bg.surface,
-    border: `1px solid ${theme.border.default}`,
-    borderRadius: '12px',
-    padding: '20px',
-    textAlign: 'center'
-  },
-  statIcon: {
-    fontSize: '24px',
-    marginBottom: '8px'
-  },
-  statValue: {
-    fontSize: '32px',
-    fontWeight: '700',
-    color: theme.text.primary,
-    marginBottom: '4px'
-  },
-  statLabel: {
-    fontSize: '13px',
-    color: theme.text.secondary,
-    marginBottom: '8px'
-  },
-  statTrend: {
-    fontSize: '12px',
-    color: '#10b981'
-  },
+  // Legacy styles removed — migrated to Tailwind classes in Session 51-52
   mainGrid: {
     display: 'grid',
     gridTemplateColumns: '1.5fr 1fr',
@@ -931,51 +788,14 @@ const getStyles = (theme) => ({
     flexDirection: 'column',
     gap: '24px'
   },
-  card: {
-    backgroundColor: theme.bg.surface,
-    border: `1px solid ${theme.border.default}`,
-    borderRadius: '12px',
-    padding: '20px'
-  },
-  cardTitle: {
-    fontSize: '16px',
-    fontWeight: '600',
-    color: theme.text.primary,
-    margin: '0 0 16px 0'
-  },
-  chartCard: {
-    backgroundColor: theme.bg.surface,
-    border: `1px solid ${theme.border.default}`,
-    borderRadius: '12px',
-    padding: '20px'
-  },
+  // card, cardTitle, chartCard — migrated to Tailwind
   chartHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: '16px'
   },
-  periodSelector: {
-    display: 'flex',
-    gap: '4px',
-    backgroundColor: theme.bg.page,
-    borderRadius: '6px',
-    padding: '4px'
-  },
-  periodButton: {
-    padding: '6px 12px',
-    backgroundColor: 'transparent',
-    border: 'none',
-    borderRadius: '4px',
-    color: theme.text.secondary,
-    cursor: 'pointer',
-    fontSize: '12px',
-    fontWeight: '500'
-  },
-  periodButtonActive: {
-    backgroundColor: theme.bg.elevated,
-    color: theme.text.primary
-  },
+  // periodSelector, periodButton, periodButtonActive — migrated to ToggleGroup
   chartContainer: {
     height: '200px',
     display: 'flex',
@@ -1067,16 +887,7 @@ const getStyles = (theme) => ({
     flexDirection: 'column',
     gap: '8px'
   },
-  songRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    padding: '12px',
-    backgroundColor: theme.bg.page,
-    borderRadius: '8px',
-    cursor: 'pointer',
-    transition: 'background-color 0.2s'
-  },
+  // songRow — migrated to Tailwind
   songRank: {
     width: '24px',
     height: '24px',
@@ -1161,39 +972,12 @@ const getStyles = (theme) => ({
     fontSize: '13px',
     color: theme.text.muted
   },
-  viewAllButton: {
-    width: '100%',
-    padding: '10px',
-    backgroundColor: 'transparent',
-    border: `1px solid ${theme.border.default}`,
-    borderRadius: '8px',
-    color: theme.text.muted,
-    cursor: 'pointer',
-    fontSize: '13px',
-    marginTop: '12px',
-    transition: 'all 0.2s'
-  },
+  // viewAllButton — migrated to Subframe Button
   videoTable: {
     display: 'flex',
     flexDirection: 'column'
   },
-  videoTableHeader: {
-    display: 'flex',
-    padding: '12px',
-    borderBottom: `1px solid ${theme.border.default}`,
-    fontSize: '12px',
-    fontWeight: '600',
-    color: theme.text.secondary,
-    textTransform: 'uppercase'
-  },
-  videoTableRow: {
-    display: 'flex',
-    padding: '12px',
-    borderBottom: `1px solid ${theme.border.default}`,
-    fontSize: '13px',
-    color: theme.text.primary,
-    alignItems: 'center'
-  },
+  // videoTableHeader, videoTableRow — migrated to Tailwind
   videoTableCell: {
     flex: 1,
     minWidth: 0,
@@ -1227,14 +1011,7 @@ const getStyles = (theme) => ({
     gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
     gap: '16px'
   },
-  songCard: {
-    backgroundColor: theme.bg.surface,
-    border: `1px solid ${theme.border.default}`,
-    borderRadius: '12px',
-    padding: '20px',
-    cursor: 'pointer',
-    transition: 'all 0.2s'
-  },
+  // songCard — migrated to Tailwind
   songCardHeader: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -1346,11 +1123,7 @@ const getStyles = (theme) => ({
   section: {
     marginTop: '32px'
   },
-  sectionTitle: {
-    fontSize: '16px',
-    fontWeight: '600',
-    marginBottom: '16px'
-  },
+  // sectionTitle — migrated to Tailwind
   categoryList: {
     display: 'flex',
     flexDirection: 'column',

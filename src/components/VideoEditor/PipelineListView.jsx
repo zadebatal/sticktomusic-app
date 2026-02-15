@@ -44,6 +44,7 @@ const PipelineListView = ({
   onQuickGenerate,
   onViewContent,
   onMakeSlideshow,
+  onOpenBeatSync,
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
 
@@ -153,14 +154,19 @@ const PipelineListView = ({
     (createdContent.slideshows || []).filter(s => s.collectionId === pipelineId && !s.isTemplate).length;
 
   return (
-    <div className="flex w-full flex-col items-start px-12 py-10">
+    <div className="flex w-full flex-col items-start bg-black px-12 py-10">
       {/* Header */}
       <div className="flex w-full items-center justify-between">
-        <div className="flex flex-col gap-2">
-          <span className="text-2xl font-semibold text-white">Studio</span>
-          <span className="text-sm text-neutral-400">Your content pipelines</span>
+        <div className="flex flex-col items-start gap-2">
+          <span className="text-heading-1 font-heading-1 text-[#ffffffff]">Studio</span>
+          <span className="text-body font-body text-neutral-400">Your content pipelines</span>
         </div>
         <div className="flex items-center gap-3">
+          {onOpenBeatSync && (
+            <Button variant="neutral-secondary" size="medium" icon={<FeatherMusic />} onClick={onOpenBeatSync}>
+              Beat Sync
+            </Button>
+          )}
           {onViewContent && (
             <Button variant="neutral-secondary" size="medium" onClick={() => onViewContent({ type: 'slideshows' })}>
               View Drafts
@@ -179,31 +185,31 @@ const PipelineListView = ({
 
       {/* Stat cards */}
       <div className="flex w-full items-center gap-6 mt-6">
-        <div className="flex flex-1 flex-col gap-2 rounded-lg border border-neutral-800 bg-[#1a1a1a] px-5 py-4">
-          <span className="text-2xl font-semibold text-white">{pipelines.length}</span>
-          <span className="text-xs text-neutral-400">Pipelines</span>
+        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+          <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{pipelines.length}</span>
+          <span className="text-caption font-caption text-neutral-400">Pipelines</span>
         </div>
-        <div className="flex flex-1 flex-col gap-2 rounded-lg border border-neutral-800 bg-[#1a1a1a] px-5 py-4">
-          <span className="text-2xl font-semibold text-white">{totalDrafts}</span>
-          <span className="text-xs text-neutral-400">Drafts Ready</span>
+        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+          <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{totalDrafts}</span>
+          <span className="text-caption font-caption text-neutral-400">Drafts Ready</span>
         </div>
-        <div className="flex flex-1 flex-col gap-2 rounded-lg border border-neutral-800 bg-[#1a1a1a] px-5 py-4">
-          <span className="text-2xl font-semibold text-white">{totalAssets}</span>
-          <span className="text-xs text-neutral-400">Total Assets</span>
+        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+          <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{totalAssets}</span>
+          <span className="text-caption font-caption text-neutral-400">Total Assets</span>
         </div>
       </div>
 
       {/* Section header */}
       <div className="flex w-full items-center justify-between mt-8">
-        <span className="text-lg font-semibold text-white">All Pipelines</span>
+        <span className="text-heading-2 font-heading-2 text-[#ffffffff]">All Pipelines</span>
         <Badge variant="neutral">{pipelines.length} Pipeline{pipelines.length !== 1 ? 's' : ''}</Badge>
       </div>
 
       {/* Pipeline rows */}
       <div className="flex w-full flex-col gap-4 mt-6">
         {pipelines.length === 0 && (
-          <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed border-neutral-700 bg-[#1a1a1a] px-8 py-12">
-            <span className="text-base text-neutral-400">No pipelines yet</span>
+          <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed border-neutral-700 bg-[#1a1a1aff] px-8 py-12">
+            <span className="text-body font-body text-neutral-400">No pipelines yet</span>
             <Button
               variant="brand-primary"
               icon={<FeatherPlus />}
@@ -219,73 +225,77 @@ const PipelineListView = ({
           const status = getPipelineStatus(migrated, library);
           const counts = getPipelineAssetCounts(migrated, library);
           const draftCount = getDraftCount(pipeline.id);
-          const activeFormat = (pipeline.formats || [])[0];
+          const formats = pipeline.formats || [];
+          const hasVideo = formats.some(f => f.type === 'video');
 
           return (
             <div
               key={pipeline.id}
-              className="flex w-full items-center gap-4 rounded-lg border border-neutral-800 bg-[#1a1a1a] px-6 py-5 cursor-pointer hover:border-neutral-600 transition-colors"
+              className="flex w-full items-center gap-4 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-5 cursor-pointer hover:border-neutral-600 transition-colors"
               onClick={() => onOpenPipeline(pipeline.id)}
             >
               {/* Avatar */}
               <div
                 className="flex h-10 w-10 flex-none items-center justify-center rounded-full"
-                style={{ backgroundColor: pipeline.pipelineColor || '#6366f1' }}
+                style={{ backgroundColor: pipeline.pipelineColor || '#4f46e5' }}
               >
-                <span className="text-sm font-bold text-white">{getInitials(pipeline.name)}</span>
+                <span className="text-body-bold font-body-bold text-[#ffffffff]">{getInitials(pipeline.name)}</span>
               </div>
 
               {/* Name + linked page */}
-              <div className="flex flex-1 min-w-0 flex-col gap-1">
-                <span className="text-base font-semibold text-white truncate">{pipeline.name}</span>
+              <div className="flex grow shrink-0 basis-0 flex-col items-start gap-1">
+                <span className="text-heading-3 font-heading-3 text-[#ffffffff]">{pipeline.name}</span>
                 {pipeline.linkedPage && (
-                  <span className="text-xs text-neutral-400">
+                  <span className="text-caption font-caption text-neutral-400">
                     @{pipeline.linkedPage.handle} · {pipeline.linkedPage.platform}
                   </span>
                 )}
               </div>
 
-              {/* Format pills */}
+              {/* Content type badge */}
+              <Badge variant={hasVideo ? 'neutral' : 'brand'}>
+                {hasVideo ? 'Videos' : 'Slideshows'}
+              </Badge>
+
+              {/* Format pills — ALL formats */}
               <div className="flex items-center gap-2 flex-shrink-0">
-                {activeFormat && (
-                  <div className="flex items-center gap-1 rounded-full border border-neutral-800 bg-neutral-900 px-2.5 py-1">
-                    <span className="text-xs text-neutral-400">
-                      {activeFormat.slideCount}-Slide: {activeFormat.name}
+                {formats.map((fmt, fmtIdx) => (
+                  <div key={fmt.id || fmtIdx} className="flex items-center gap-1 rounded-full border border-solid border-neutral-800 bg-neutral-900 px-2.5 py-1">
+                    <span className="text-caption font-caption text-neutral-400">
+                      {fmt.slideCount}-Slide: {fmt.name}
                     </span>
                   </div>
-                )}
+                ))}
               </div>
 
               {/* Asset counts */}
               <div className="flex items-center gap-3 flex-shrink-0">
                 <div className="flex items-center gap-1">
-                  <FeatherImage className="text-neutral-400" style={{ width: 14, height: 14 }} />
-                  <span className="text-xs text-neutral-400">{counts.images}</span>
+                  <FeatherImage className="text-caption font-caption text-neutral-400" />
+                  <span className="text-caption font-caption text-neutral-400">{counts.images}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <FeatherMusic className="text-neutral-400" style={{ width: 14, height: 14 }} />
-                  <span className="text-xs text-neutral-400">{counts.audio}</span>
+                  <FeatherMusic className="text-caption font-caption text-neutral-400" />
+                  <span className="text-caption font-caption text-neutral-400">{counts.audio}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <FeatherType className="text-neutral-400" style={{ width: 14, height: 14 }} />
-                  <span className="text-xs text-neutral-400">{counts.text}</span>
+                  <FeatherType className="text-caption font-caption text-neutral-400" />
+                  <span className="text-caption font-caption text-neutral-400">{counts.text}</span>
                 </div>
-                {draftCount > 0 && (
-                  <div className="flex items-center gap-1">
-                    <FeatherFile className="text-indigo-400" style={{ width: 14, height: 14 }} />
-                    <span className="text-xs text-indigo-400">{draftCount}</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-1">
+                  <FeatherFile className={`text-caption font-caption ${draftCount > 0 ? 'text-brand-600' : 'text-neutral-400'}`} />
+                  <span className={`text-caption font-caption ${draftCount > 0 ? 'text-brand-600' : 'text-neutral-400'}`}>{draftCount}</span>
+                </div>
               </div>
 
               {/* Status */}
               <div className="flex items-center gap-2 flex-shrink-0">
                 <div
-                  className="h-2 w-2 rounded-full"
+                  className="flex h-2 w-2 flex-none items-start rounded-full"
                   style={{ backgroundColor: status.ready ? '#22c55e' : '#f59e0b' }}
                 />
                 <span
-                  className="text-xs"
+                  className="text-caption font-caption"
                   style={{ color: status.ready ? '#22c55e' : '#f59e0b' }}
                 >
                   {status.label}

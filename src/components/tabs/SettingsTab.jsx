@@ -1,16 +1,20 @@
 import React, { useState } from 'react';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
-import { useTheme, THEMES } from '../../contexts/ThemeContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { shouldShowPaymentUI } from '../../services/subscriptionService';
+import { Button } from '../../ui/components/Button';
+import { Badge } from '../../ui/components/Badge';
+import { TextField } from '../../ui/components/TextField';
+import { ToggleGroup } from '../../ui/components/ToggleGroup';
+import { FeatherMoon, FeatherSun, FeatherLogOut, FeatherAlertTriangle } from '@subframe/core';
 
 /**
  * SettingsTab — Profile, team management, theme picker, logout.
  */
 
 const SettingsTab = ({ user, onLogout, db, artistId }) => {
-  const { theme, themeId, setTheme } = useTheme();
-  const t = theme.tw;
+  const { themeId, setTheme } = useTheme();
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteStatus, setInviteStatus] = useState(null); // 'sending' | 'success' | 'error'
   const [inviteMessage, setInviteMessage] = useState('');
@@ -81,123 +85,116 @@ const SettingsTab = ({ user, onLogout, db, artistId }) => {
     }
   };
 
-  const themeOptions = [
-    { id: 'dark', name: 'Dark', desc: 'Deep purple accents on dark zinc', preview: ['#09090b', '#18181b', '#6366f1'] },
-    { id: 'bright', name: 'Bright', desc: 'Clean light theme with indigo accents', preview: ['#ffffff', '#f4f4f5', '#4f46e5'] },
-  ];
-
   return (
-    <div className={`flex-1 overflow-auto p-6 ${t.bgPage}`}>
-      <div className="max-w-2xl mx-auto space-y-8">
-        <h1 className={`text-2xl font-bold ${t.textPrimary}`}>Settings</h1>
+    <div className="flex-1 overflow-auto bg-black px-12 py-8">
+      <div className="flex max-w-2xl flex-col items-start gap-8">
+        <span className="text-heading-1 font-heading-1 text-[#ffffffff]">Settings</span>
 
         {/* ═══ PROFILE ═══ */}
-        <section className={`p-6 rounded-2xl border ${t.cardBorder} ${t.cardBg}`}>
-          <h2 className={`text-sm font-semibold uppercase tracking-wider ${t.textMuted} mb-4`}>Profile</h2>
+        <div className="flex w-full flex-col items-start gap-4 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-6">
+          <span className="text-caption-bold font-caption-bold uppercase tracking-widest text-neutral-400">Profile</span>
           <div className="flex items-center gap-4">
             {user?.photoURL ? (
-              <img src={user.photoURL} alt="" className="w-14 h-14 rounded-full object-cover" />
+              <img src={user.photoURL} alt="" className="h-14 w-14 rounded-full object-cover" />
             ) : (
-              <div className={`w-14 h-14 rounded-full ${t.bgElevated} flex items-center justify-center text-xl font-semibold ${t.textSecondary}`}>
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-xl font-semibold text-white">
                 {(user?.name || user?.email || '?')[0].toUpperCase()}
               </div>
             )}
-            <div>
-              <p className={`font-semibold ${t.textPrimary}`}>{user?.name || 'User'}</p>
-              <p className={`text-sm ${t.textSecondary}`}>{user?.email || ''}</p>
-              {user?.role && <p className={`text-xs ${t.textMuted} mt-0.5 capitalize`}>{user.role}</p>}
+            <div className="flex flex-col items-start gap-1">
+              <span className="text-body-bold font-body-bold text-[#ffffffff]">{user?.name || 'User'}</span>
+              <span className="text-caption font-caption text-neutral-400">{user?.email || ''}</span>
+              {user?.role && <Badge variant="neutral" className="capitalize">{user.role}</Badge>}
             </div>
           </div>
-        </section>
+        </div>
 
         {/* ═══ TEAM ═══ */}
-        <section className={`p-6 rounded-2xl border ${t.cardBorder} ${t.cardBg}`}>
-          <h2 className={`text-sm font-semibold uppercase tracking-wider ${t.textMuted} mb-4`}>Team</h2>
-          <p className={`text-sm ${t.textSecondary} mb-4`}>
+        <div className="flex w-full flex-col items-start gap-4 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-6">
+          <span className="text-caption-bold font-caption-bold uppercase tracking-widest text-neutral-400">Team</span>
+          <span className="text-body font-body text-neutral-400">
             Invite operators who can access your studio, scheduler, and analytics.
-          </p>
-          <form onSubmit={handleInvite} className="flex gap-2 mb-4">
-            <input
-              type="email"
-              placeholder="Email address"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              className={`flex-1 px-4 py-2.5 rounded-xl border ${t.inputBorder} ${t.inputFocus} outline-none text-sm transition`}
-              style={{ backgroundColor: theme.bg.input, color: theme.text.primary }}
-            />
-            <button type="submit" disabled={inviteStatus === 'sending'} className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition ${t.btnPrimary} shrink-0`}>
+          </span>
+          <div className="flex w-full items-center gap-2">
+            <TextField className="grow shrink-0 basis-0" variant="filled" label="" helpText="">
+              <TextField.Input
+                type="email"
+                placeholder="Email address"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+              />
+            </TextField>
+            <Button
+              variant="brand-primary"
+              size="medium"
+              disabled={inviteStatus === 'sending'}
+              onClick={handleInvite}
+            >
               {inviteStatus === 'sending' ? 'Inviting...' : 'Invite'}
-            </button>
-          </form>
+            </Button>
+          </div>
           {inviteMessage && (
-            <div className={`text-sm ${inviteStatus === 'success' ? 'text-green-400' : 'text-red-400'} mb-2`}>
+            <span className={`text-caption font-caption ${inviteStatus === 'success' ? 'text-success-600' : 'text-error-600'}`}>
               {inviteMessage}
-            </div>
+            </span>
           )}
           {!inviteMessage && (
-            <div className={`text-sm ${t.textMuted} italic`}>
+            <span className="text-caption font-caption italic text-neutral-500">
               Invite someone to get started.
-            </div>
+            </span>
           )}
-        </section>
+        </div>
 
-        {/* ═══ THEME ═══ */}
-        <section className={`p-6 rounded-2xl border ${t.cardBorder} ${t.cardBg}`}>
-          <h2 className={`text-sm font-semibold uppercase tracking-wider ${t.textMuted} mb-4`}>Theme</h2>
-          <div className="grid grid-cols-2 gap-3">
-            {themeOptions.map(opt => (
-              <button
-                key={opt.id}
-                onClick={() => setTheme(opt.id)}
-                className={`p-4 rounded-xl border text-left transition ${
-                  themeId === opt.id
-                    ? 'border-indigo-500 ring-1 ring-indigo-500/50'
-                    : `${t.cardBorder} ${t.hoverBg}`
-                }`}
-                style={{ backgroundColor: themeId === opt.id ? theme.accent.muted : theme.bg.elevated }}
-              >
-                {/* Color preview */}
-                <div className="flex gap-1 mb-3">
-                  {opt.preview.map((color, i) => (
-                    <div key={i} className="w-5 h-5 rounded-full border border-white/10" style={{ backgroundColor: color }} />
-                  ))}
-                </div>
-                <p className={`text-sm font-semibold ${t.textPrimary}`}>{opt.name}</p>
-                <p className={`text-xs ${t.textMuted} mt-0.5`}>{opt.desc}</p>
-              </button>
-            ))}
+        {/* ═══ APPEARANCE ═══ */}
+        <div className="flex w-full flex-col items-start gap-4 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-6">
+          <span className="text-caption-bold font-caption-bold uppercase tracking-widest text-neutral-400">Appearance</span>
+          <div className="flex w-full items-center justify-between">
+            <span className="text-body font-body text-neutral-400">Theme</span>
+            <ToggleGroup value={themeId} onValueChange={(v) => v && setTheme(v)}>
+              <ToggleGroup.Item icon={<FeatherMoon />} value="dark">Dark</ToggleGroup.Item>
+              <ToggleGroup.Item icon={<FeatherSun />} value="bright">Bright</ToggleGroup.Item>
+            </ToggleGroup>
           </div>
-        </section>
+        </div>
 
         {/* ═══ SUBSCRIPTION (cancel) ═══ */}
         {canCancel && (
-          <section className={`p-6 rounded-2xl border ${t.cardBorder} ${t.cardBg}`}>
-            <h2 className={`text-sm font-semibold uppercase tracking-wider ${t.textMuted} mb-4`}>Subscription</h2>
-            <p className={`text-sm ${t.textSecondary} mb-3`}>
+          <div className="flex w-full flex-col items-start gap-4 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-6">
+            <span className="text-caption-bold font-caption-bold uppercase tracking-widest text-neutral-400">Subscription</span>
+            <span className="text-body font-body text-neutral-400">
               Your subscription is active. Cancelling will take effect at the end of your current billing period.
-            </p>
+            </span>
             {cancelMessage && (
-              <div className={`text-sm mb-3 ${cancelMessage.includes('Failed') ? 'text-red-400' : 'text-green-400'}`}>
+              <span className={`text-caption font-caption ${cancelMessage.includes('Failed') ? 'text-error-600' : 'text-success-600'}`}>
                 {cancelMessage}
-              </div>
+              </span>
             )}
-            <button
-              onClick={handleCancelSubscription}
+            <Button
+              variant="destructive-secondary"
+              size="medium"
               disabled={cancelLoading}
-              className={`px-5 py-2 rounded-xl text-sm font-semibold transition border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-50`}
+              onClick={handleCancelSubscription}
             >
               {cancelLoading ? 'Cancelling...' : 'Cancel Subscription'}
-            </button>
-          </section>
+            </Button>
+          </div>
         )}
 
         {/* ═══ LOGOUT ═══ */}
-        <section className={`p-6 rounded-2xl border border-red-500/20 ${t.cardBg}`}>
-          <h2 className={`text-sm font-semibold uppercase tracking-wider text-red-400 mb-3`}>Danger Zone</h2>
-          <button onClick={onLogout} className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition ${t.btnDanger}`}>
+        <div className="flex w-full flex-col items-start gap-4 rounded-lg border border-solid border-error-600 bg-[#1a1a1aff] p-6">
+          <div className="flex items-center gap-2">
+            <FeatherAlertTriangle className="text-error-600" />
+            <span className="text-caption-bold font-caption-bold uppercase tracking-widest text-error-600">Danger Zone</span>
+          </div>
+          <Button
+            variant="destructive-primary"
+            size="medium"
+            icon={<FeatherLogOut />}
+            onClick={onLogout}
+          >
             Log Out
-          </button>
-        </section>
+          </Button>
+        </div>
       </div>
     </div>
   );

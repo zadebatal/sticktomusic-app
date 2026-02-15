@@ -1159,6 +1159,196 @@ export const updateCollectionHashtagBank = (artistId, collectionId, hashtagBank)
   saveCollections(artistId, collections);
 };
 
+// ============================================================================
+// PIPELINE SYSTEM — Extended collections with formats & linked pages
+// ============================================================================
+
+/**
+ * Pre-defined format templates for pipeline creation
+ */
+export const FORMAT_TEMPLATES = [
+  { id: 'single', name: 'Single Image', slideCount: 1, slideLabels: ['Image'] },
+  { id: 'hook_lyrics', name: 'Hook + Lyrics', slideCount: 2, slideLabels: ['Hook', 'Lyrics'] },
+  { id: 'carousel', name: 'Carousel', slideCount: 3, slideLabels: ['Slide 1', 'Slide 2', 'Slide 3'] },
+  { id: 'hook_vibes_lyrics', name: 'Hook + Vibes + Lyrics', slideCount: 5, slideLabels: ['Hook', 'Vibes', 'Lyrics', 'Vibes', 'CTA'] },
+];
+
+/**
+ * Accent colors for pipeline listing cards
+ */
+export const PIPELINE_COLORS = [
+  '#6366f1', // indigo
+  '#22c55e', // green
+  '#a855f7', // purple
+  '#f43f5e', // rose
+  '#f59e0b', // amber
+  '#06b6d4', // cyan
+];
+
+/**
+ * Create a pipeline (an extended collection with format + linked page)
+ * @param {Object} params
+ * @param {string} params.name
+ * @param {Object} [params.linkedPage] - { handle, platform, accountId }
+ * @param {Object[]} [params.formats] - Array of format objects with slideLabels
+ * @param {string} [params.activeFormatId]
+ * @param {string} [params.description]
+ * @param {string} [params.color] - Accent color
+ * @returns {Object} Pipeline collection object
+ */
+export const createPipeline = ({
+  name,
+  linkedPage = null,
+  formats = [FORMAT_TEMPLATES[1]], // Default: Hook + Lyrics
+  activeFormatId = null,
+  description = '',
+  color = null
+}) => {
+  const base = createCollection({ name, description, color });
+  const activeFormat = formats.find(f => f.id === activeFormatId) || formats[0];
+  const slideCount = activeFormat?.slideCount || 2;
+
+  // Pre-allocate banks to match active format's slide count
+  const banks = [];
+  const textBanks = [];
+  for (let i = 0; i < Math.max(slideCount, MIN_BANKS); i++) {
+    banks.push([]);
+    textBanks.push([]);
+  }
+
+  return {
+    ...base,
+    isPipeline: true,
+    linkedPage,
+    formats: formats.map(f => ({ ...f })),
+    activeFormatId: activeFormat?.id || null,
+    pipelineColor: color || PIPELINE_COLORS[Math.floor(Math.random() * PIPELINE_COLORS.length)],
+    banks,
+    textBanks,
+  };
+};
+
+/**
+ * Get all pipelines for an artist (collections where isPipeline === true)
+ */
+export const getPipelines = (artistId) => {
+  const collections = getUserCollections(artistId);
+  return collections.filter(c => c.isPipeline === true);
+};
+
+/**
+ * Get a specific pipeline by ID
+ */
+export const getPipelineById = (artistId, pipelineId) => {
+  const collections = getUserCollections(artistId);
+  return collections.find(c => c.id === pipelineId && c.isPipeline === true) || null;
+};
+
+/**
+ * Get a bank label using the pipeline's active format labels instead of "Slide N"
+ * Falls back to getBankLabel for non-pipeline collections or out-of-range indices
+ */
+export const getPipelineBankLabel = (pipeline, index) => {
+  if (!pipeline?.isPipeline || !pipeline.formats) return getBankLabel(index);
+  const activeFormat = pipeline.formats.find(f => f.id === pipeline.activeFormatId) || pipeline.formats[0];
+  if (activeFormat?.slideLabels && index < activeFormat.slideLabels.length) {
+    return activeFormat.slideLabels[index];
+  }
+  return getBankLabel(index);
+};
+
+/**
+ * Get pipeline readiness status based on bank contents
+ * @returns {{ ready: boolean, label: string }}
+ */
+export const getPipelineStatus = (pipeline, library) => {
+  if (!pipeline?.isPipeline) return { ready: false, label: 'Not a pipeline' };
+  const migrated = migrateCollectionBanks(pipeline);
+  const activeFormat = migrated.formats?.find(f => f.id === migrated.activeFormatId) || migrated.formats?.[0];
+  const slideCount = activeFormat?.slideCount || migrated.banks?.length || 2;
+
+  // Check that every slide position has at least one image
+  for (let i = 0; i < slideCount; i++) {
+    if (!migrated.banks[i] || migrated.banks[i].length === 0) {
+      return { ready: false, label: 'Needs media' };
+    }
+  }
+  return { ready: true, label: 'Ready to generate' };
+};
+
+/**
+ * Get asset counts for a pipeline
+ * @returns {{ images: number, audio: number, text: number }}
+ */
+export const getPipelineAssetCounts = (pipeline, library) => {
+  if (!pipeline) return { images: 0, audio: 0, text: 0 };
+  const migrated = migrateCollectionBanks(pipeline);
+
+  // Count unique images across all banks
+  const imageIds = new Set();
+  (migrated.banks || []).forEach(bank => bank.forEach(id => imageIds.add(id)));
+
+  // Count audio items in pipeline's media
+  const audioCount = (library || []).filter(item =>
+    item.type === 'audio' && (pipeline.mediaIds || []).includes(item.id)
+  ).length;
+
+  // Count text entries across all text banks
+  let textCount = 0;
+  (migrated.textBanks || []).forEach(bank => { textCount += (bank || []).length; });
+
+  return { images: imageIds.size, audio: audioCount, text: textCount };
+};
+
+/**
+ * Duplicate a pipeline with new IDs
+ */
+export const duplicatePipeline = (artistId, pipelineId) => {
+  const collections = getUserCollections(artistId);
+  const original = collections.find(c => c.id === pipelineId);
+  if (!original) return null;
+
+  const now = new Date().toISOString();
+  const newId = `collection_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const duplicate = {
+    ...JSON.parse(JSON.stringify(original)),
+    id: newId,
+    name: `${original.name} (Copy)`,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  collections.push(duplicate);
+  saveCollections(artistId, collections);
+  return duplicate;
+};
+
+/**
+ * Update a pipeline's active format and resize banks to match
+ */
+export const switchPipelineFormat = (artistId, pipelineId, formatId) => {
+  const collections = getUserCollections(artistId);
+  const pipeline = collections.find(c => c.id === pipelineId);
+  if (!pipeline || !pipeline.isPipeline) return;
+
+  const newFormat = (pipeline.formats || []).find(f => f.id === formatId);
+  if (!newFormat) return;
+
+  pipeline.activeFormatId = formatId;
+  const migrated = migrateCollectionBanks(pipeline);
+  Object.assign(pipeline, migrated);
+
+  // Extend banks if new format has more slides
+  while (pipeline.banks.length < newFormat.slideCount) pipeline.banks.push([]);
+  while ((pipeline.textBanks || []).length < newFormat.slideCount) {
+    pipeline.textBanks = pipeline.textBanks || [];
+    pipeline.textBanks.push([]);
+  }
+
+  pipeline.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
+};
+
 /**
  * Remove media from a collection
  * @param {string} artistId
@@ -3134,186 +3324,6 @@ export const migrateVideoThumbnails = async (db, artistId, libraryItems, uploadF
   return { generated, failed };
 };
 
-// ============================================================================
-// PIPELINE SYSTEM (Session 50)
-// ============================================================================
-
-/**
- * Format templates for Pipeline system
- */
-export const FORMAT_TEMPLATES = [
-  { id: 'single', name: 'Single Image', slideCount: 1, slideLabels: ['Image'] },
-  { id: 'hook_lyrics', name: 'Hook + Lyrics', slideCount: 2, slideLabels: ['Hook', 'Lyrics'] },
-  { id: 'carousel', name: 'Carousel', slideCount: 3, slideLabels: ['Slide 1', 'Slide 2', 'Slide 3'] },
-  { id: 'hook_vibes_lyrics', name: 'Hook + Vibes + Lyrics', slideCount: 5, slideLabels: ['Hook', 'Vibes', 'Lyrics', 'Vibes', 'CTA'] },
-];
-
-/**
- * Accent colors for pipeline listing cards
- */
-export const PIPELINE_COLORS = [
-  '#6366f1', // indigo
-  '#22c55e', // green
-  '#a855f7', // purple
-  '#f43f5e', // rose
-  '#f59e0b', // amber
-  '#06b6d4', // cyan
-];
-
-/**
- * Create a pipeline (an extended collection with format + linked page)
- */
-export const createPipeline = ({
-  name,
-  linkedPage = null,
-  formats = [FORMAT_TEMPLATES[1]], // Default: Hook + Lyrics
-  activeFormatId = null,
-  description = '',
-  color = null
-}) => {
-  const base = createCollection({ name, description, color });
-  const activeFormat = formats.find(f => f.id === activeFormatId) || formats[0];
-  const slideCount = activeFormat?.slideCount || 2;
-
-  // Pre-allocate banks to match active format's slide count
-  const banks = [];
-  const textBanks = [];
-  for (let i = 0; i < Math.max(slideCount, MIN_BANKS); i++) {
-    banks.push([]);
-    textBanks.push([]);
-  }
-
-  return {
-    ...base,
-    isPipeline: true,
-    linkedPage,
-    formats: formats.map(f => ({ ...f })),
-    activeFormatId: activeFormat?.id || null,
-    pipelineColor: color || PIPELINE_COLORS[Math.floor(Math.random() * PIPELINE_COLORS.length)],
-    banks,
-    textBanks,
-  };
-};
-
-/**
- * Get all pipelines for an artist (collections where isPipeline === true)
- */
-export const getPipelines = (artistId) => {
-  const collections = getUserCollections(artistId);
-  return collections.filter(c => c.isPipeline === true);
-};
-
-/**
- * Get a specific pipeline by ID
- */
-export const getPipelineById = (artistId, pipelineId) => {
-  const collections = getUserCollections(artistId);
-  return collections.find(c => c.id === pipelineId && c.isPipeline === true) || null;
-};
-
-/**
- * Get a bank label using the pipeline's active format labels instead of "Slide N"
- */
-export const getPipelineBankLabel = (pipeline, index) => {
-  if (!pipeline?.isPipeline || !pipeline.formats) return getBankLabel(index);
-  const activeFormat = pipeline.formats.find(f => f.id === pipeline.activeFormatId) || pipeline.formats[0];
-  if (activeFormat?.slideLabels && index < activeFormat.slideLabels.length) {
-    return activeFormat.slideLabels[index];
-  }
-  return getBankLabel(index);
-};
-
-/**
- * Get pipeline readiness status based on bank contents
- */
-export const getPipelineStatus = (pipeline, library) => {
-  if (!pipeline?.isPipeline) return { ready: false, label: 'Not a pipeline' };
-  const migrated = migrateCollectionBanks(pipeline);
-  const activeFormat = migrated.formats?.find(f => f.id === migrated.activeFormatId) || migrated.formats?.[0];
-  const slideCount = activeFormat?.slideCount || migrated.banks?.length || 2;
-
-  // Check that every slide position has at least one image
-  for (let i = 0; i < slideCount; i++) {
-    if (!migrated.banks[i] || migrated.banks[i].length === 0) {
-      return { ready: false, label: 'Needs media' };
-    }
-  }
-  return { ready: true, label: 'Ready to generate' };
-};
-
-/**
- * Get asset counts for a pipeline
- */
-export const getPipelineAssetCounts = (pipeline, library) => {
-  if (!pipeline) return { images: 0, audio: 0, text: 0 };
-  const migrated = migrateCollectionBanks(pipeline);
-
-  // Count unique images across all banks
-  const imageIds = new Set();
-  (migrated.banks || []).forEach(bank => bank.forEach(id => imageIds.add(id)));
-
-  // Count audio items in pipeline's media
-  const audioCount = (library || []).filter(item =>
-    item.type === 'audio' && (pipeline.mediaIds || []).includes(item.id)
-  ).length;
-
-  // Count text entries across all text banks
-  let textCount = 0;
-  (migrated.textBanks || []).forEach(bank => { textCount += (bank || []).length; });
-
-  return { images: imageIds.size, audio: audioCount, text: textCount };
-};
-
-/**
- * Duplicate a pipeline with new IDs
- */
-export const duplicatePipeline = (artistId, pipelineId) => {
-  const collections = getUserCollections(artistId);
-  const original = collections.find(c => c.id === pipelineId);
-  if (!original) return null;
-
-  const now = new Date().toISOString();
-  const newId = `collection_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  const duplicate = {
-    ...JSON.parse(JSON.stringify(original)),
-    id: newId,
-    name: `${original.name} (Copy)`,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  collections.push(duplicate);
-  saveCollections(artistId, collections);
-  return duplicate;
-};
-
-/**
- * Update a pipeline's active format and resize banks to match
- */
-export const switchPipelineFormat = (artistId, pipelineId, formatId) => {
-  const collections = getUserCollections(artistId);
-  const pipeline = collections.find(c => c.id === pipelineId);
-  if (!pipeline || !pipeline.isPipeline) return;
-
-  const newFormat = (pipeline.formats || []).find(f => f.id === formatId);
-  if (!newFormat) return;
-
-  pipeline.activeFormatId = formatId;
-  const migrated = migrateCollectionBanks(pipeline);
-  Object.assign(pipeline, migrated);
-
-  // Extend banks if new format has more slides
-  while (pipeline.banks.length < newFormat.slideCount) pipeline.banks.push([]);
-  while ((pipeline.textBanks || []).length < newFormat.slideCount) {
-    pipeline.textBanks = pipeline.textBanks || [];
-    pipeline.textBanks.push([]);
-  }
-
-  pipeline.updatedAt = new Date().toISOString();
-  saveCollections(artistId, collections);
-};
-
-// ============================================================================
 // EXPORT
 // ============================================================================
 

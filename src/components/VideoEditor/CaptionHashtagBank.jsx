@@ -7,6 +7,10 @@ import {
   getCategoryNames
 } from '../../services/contentTemplateService';
 import log from '../../utils/logger';
+import { Button } from '../../ui/components/Button';
+import { Badge } from '../../ui/components/Badge';
+import { IconButton } from '../../ui/components/IconButton';
+import { FeatherPlus, FeatherTrash2, FeatherX } from '@subframe/core';
 
 /**
  * CaptionHashtagBank - Niche-based caption and hashtag management
@@ -216,12 +220,9 @@ const CaptionHashtagBank = ({
     return (
       <div style={getStyles(theme).empty}>
         <p style={getStyles(theme).emptyText}>No categories yet. Create one to get started!</p>
-        <button
-          onClick={() => setShowAddCategory(true)}
-          style={getStyles(theme).addCategoryBtn}
-        >
-          + Add Category
-        </button>
+        <Button variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => setShowAddCategory(true)}>
+          Add Category
+        </Button>
       </div>
     );
   }
@@ -259,20 +260,16 @@ const CaptionHashtagBank = ({
             </button>
           ))}
         </div>
-        <button
+        <IconButton
+          variant="neutral-secondary"
+          size="small"
+          icon={<FeatherPlus />}
           onClick={() => setShowAddCategory(true)}
-          style={getStyles(theme).addCategoryMini}
-          title="Add category"
-        >
-          +
-        </button>
+        />
         {onApplyToDrafts && selectedCategory && draftCount > 0 && (
-          <button
-            onClick={() => onApplyToDrafts(selectedCategory)}
-            style={getStyles(theme).applyBtn}
-          >
+          <Button variant="brand-primary" size="small" onClick={() => onApplyToDrafts(selectedCategory)} style={{ marginLeft: 'auto' }}>
             Apply to {draftCount} Draft{draftCount !== 1 ? 's' : ''}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -297,22 +294,12 @@ const CaptionHashtagBank = ({
               autoFocus
             />
             <div style={getStyles(theme).modalButtons}>
-              <button
-                onClick={() => {
-                  setShowAddCategory(false);
-                  setNewCategoryName('');
-                }}
-                style={getStyles(theme).modalBtnCancel}
-              >
+              <Button variant="neutral-secondary" size="small" onClick={() => { setShowAddCategory(false); setNewCategoryName(''); }}>
                 Cancel
-              </button>
-              <button
-                onClick={handleAddCategory}
-                style={getStyles(theme).modalBtnAdd}
-                disabled={!newCategoryName.trim()}
-              >
+              </Button>
+              <Button variant="brand-primary" size="small" onClick={handleAddCategory} disabled={!newCategoryName.trim()}>
                 Add
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -326,13 +313,12 @@ const CaptionHashtagBank = ({
             <div style={getStyles(theme).sectionHeader}>
               <h4 style={getStyles(theme).sectionTitle}>Hashtags</h4>
               {selectedCategory && (
-                <button
+                <IconButton
+                  variant="destructive-tertiary"
+                  size="small"
+                  icon={<FeatherTrash2 />}
                   onClick={handleDeleteCategory}
-                  style={getStyles(theme).deleteBtn}
-                  title="Delete this category"
-                >
-                  🗑️
-                </button>
+                />
               )}
             </div>
 
@@ -342,15 +328,11 @@ const CaptionHashtagBank = ({
               <div style={getStyles(theme).chipContainer}>
                 {alwaysHashtags.length > 0 ? (
                   alwaysHashtags.map((tag, i) => (
-                    <span key={i} style={getStyles(theme).chipAlways}>
+                    <Badge key={i} variant="brand" iconRight={
+                      <FeatherX style={{ width: '10px', height: '10px', cursor: 'pointer' }} onClick={() => removeHashtagAlways(i)} />
+                    }>
                       {tag}
-                      <button
-                        onClick={() => removeHashtagAlways(i)}
-                        style={getStyles(theme).chipRemoveAlways}
-                      >
-                        ×
-                      </button>
-                    </span>
+                    </Badge>
                   ))
                 ) : (
                   <span style={getStyles(theme).emptyHint}>None yet</span>
@@ -375,15 +357,11 @@ const CaptionHashtagBank = ({
               <div style={getStyles(theme).chipContainer}>
                 {poolHashtags.length > 0 ? (
                   poolHashtags.map((tag, i) => (
-                    <span key={i} style={getStyles(theme).chipPool}>
+                    <Badge key={i} variant="neutral" iconRight={
+                      <FeatherX style={{ width: '10px', height: '10px', cursor: 'pointer' }} onClick={() => removeHashtagPool(i)} />
+                    }>
                       {tag}
-                      <button
-                        onClick={() => removeHashtagPool(i)}
-                        style={getStyles(theme).chipRemovePool}
-                      >
-                        ×
-                      </button>
-                    </span>
+                    </Badge>
                   ))
                 ) : (
                   <span style={getStyles(theme).emptyHint}>None yet</span>
@@ -413,14 +391,9 @@ const CaptionHashtagBank = ({
               <div style={getStyles(theme).itemList}>
                 {alwaysCaptions.length > 0 ? (
                   alwaysCaptions.map((cap, i) => (
-                    <div key={i} style={getStyles(theme).captionItemAlways}>
-                      <span>{cap}</span>
-                      <button
-                        onClick={() => removeCaptionAlways(i)}
-                        style={getStyles(theme).captionRemoveAlways}
-                      >
-                        ×
-                      </button>
+                    <div key={i} className="flex items-center justify-between bg-[#1a1a1aff] border border-solid border-neutral-800 rounded-lg px-3 py-2">
+                      <span className="text-caption font-caption text-brand-400" style={{ wordBreak: 'break-word' }}>{cap}</span>
+                      <IconButton variant="destructive-tertiary" size="small" icon={<FeatherX />} onClick={() => removeCaptionAlways(i)} />
                     </div>
                   ))
                 ) : (
@@ -446,14 +419,9 @@ const CaptionHashtagBank = ({
               <div style={getStyles(theme).itemList}>
                 {poolCaptions.length > 0 ? (
                   poolCaptions.map((cap, i) => (
-                    <div key={i} style={getStyles(theme).captionItemPool}>
-                      <span>{cap}</span>
-                      <button
-                        onClick={() => removeCaptionPool(i)}
-                        style={getStyles(theme).captionRemovePool}
-                      >
-                        ×
-                      </button>
+                    <div key={i} className="flex items-center justify-between bg-[#1a1a1aff] border border-solid border-neutral-800 rounded-lg px-3 py-2">
+                      <span className="text-caption font-caption text-neutral-400" style={{ wordBreak: 'break-word' }}>{cap}</span>
+                      <IconButton variant="destructive-tertiary" size="small" icon={<FeatherX />} onClick={() => removeCaptionPool(i)} />
                     </div>
                   ))
                 ) : (

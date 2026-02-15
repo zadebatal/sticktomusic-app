@@ -31,6 +31,7 @@ import PagesTab from './components/tabs/PagesTab';
 import SettingsTab from './components/tabs/SettingsTab';
 import ArtistDashboard from './components/tabs/ArtistDashboard';
 import ArtistSettingsTab from './components/tabs/ArtistSettingsTab';
+import ArtistsManagement from './components/tabs/ArtistsManagement';
 import OnboardingWizard from './components/OnboardingWizard';
 
 // Domain enforcement utilities
@@ -3215,6 +3216,9 @@ const StickToMusic = () => {
           user={user}
           onLogout={handleLogout}
           userRole={user?.role || 'artist'}
+          visibleArtists={[firestoreArtists.find(a => a.id === effectiveArtistId)].filter(Boolean)}
+          currentArtistId={effectiveArtistId}
+          onArtistChange={() => {}}
         >
           {/* Studio (full-screen overlay) */}
           {artistTab === 'studio' && (
@@ -3244,6 +3248,7 @@ const StickToMusic = () => {
                 onAddManualAccounts={handleAddManualAccounts}
                 onRemoveManualAccount={handleRemoveManualAccount}
                 onLoadLatePages={loadLatePages}
+                onNavigate={artistTabChangeHandler}
               />
             )}
 
@@ -3594,6 +3599,9 @@ const StickToMusic = () => {
           user={user}
           onLogout={handleLogout}
           userRole={user?.role || 'operator'}
+          visibleArtists={getVisibleArtists()}
+          currentArtistId={currentArtistId}
+          onArtistChange={(id) => setCurrentArtistId(id)}
         >
         <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-8">
           {/* ═══ Pages Tab (new) ═══ */}
@@ -3644,182 +3652,30 @@ const StickToMusic = () => {
           )}
 
           {/* Artists Tab */}
-          {operatorTab === 'artists' && (() => {
-            let displayArtists = firestoreArtists;
-
-            // Filter artists for operators (non-conductors) - they only see artists they own
-            if (!isConductor(user)) {
-              const currentUserRecord = allowedUsers.find(u => u.email?.toLowerCase() === user?.email?.toLowerCase());
-              const currentUserId = currentUserRecord?.id || null;
-              displayArtists = displayArtists.filter(artist =>
-                currentUserId && artist.ownerOperatorId === currentUserId
-              );
-            }
-
-            // Group artists by their operator/owner
-            const grouped = {};
-            displayArtists.forEach(artist => {
-              const ownerId = artist.ownerOperatorId || '_unassigned';
-              if (!grouped[ownerId]) grouped[ownerId] = [];
-              grouped[ownerId].push(artist);
-            });
-
-            // Build section labels: find operator name from allowedUsers, or "Conductor" for conductor-owned
-            const getOwnerLabel = (ownerId) => {
-              if (ownerId === '_unassigned') return 'Unassigned';
-              // Check if this owner is a conductor
-              const ownerUser = allowedUsers.find(u => u.id === ownerId);
-              if (ownerUser && CONDUCTOR_EMAILS.includes(ownerUser.email?.toLowerCase())) {
-                return `Conductor — ${ownerUser.name || ownerUser.email}`;
-              }
-              if (ownerUser) {
-                return `Operator — ${ownerUser.name || ownerUser.email}`;
-              }
-              return 'Operator';
-            };
-
-            // Sort sections: Conductor first, then operators alphabetically, unassigned last
-            const sectionOrder = Object.keys(grouped).sort((a, b) => {
-              if (a === '_unassigned') return 1;
-              if (b === '_unassigned') return -1;
-              const labelA = getOwnerLabel(a);
-              const labelB = getOwnerLabel(b);
-              if (labelA.startsWith('Conductor')) return -1;
-              if (labelB.startsWith('Conductor')) return 1;
-              return labelA.localeCompare(labelB);
-            });
-
-            // Get list of operators for reassign dropdown
-            const operatorUsers = allowedUsers.filter(u => u.role === 'operator' || CONDUCTOR_EMAILS.includes(u.email?.toLowerCase()));
-
-            // Render an artist card
-            const renderArtistCard = (artist) => (
-              <div
-                key={artist.id}
-                className={`group ${t.bgSurface} border rounded-xl p-4 sm:p-6 transition cursor-pointer ${t.hoverBorder} ${
-                  currentArtistId === artist.id ? 'border-violet-500' : t.border
-                }`}
-                onClick={() => handleArtistChange(artist.id)}
-              >
-                <div className="flex flex-col md:flex-row justify-between gap-4">
-                  <div className="flex items-center gap-3 sm:gap-4">
-                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-base sm:text-lg font-bold shrink-0 ${
-                      currentArtistId === artist.id ? 'bg-violet-600 text-white' : t.bgElevated
-                    }`}>
-                      {artist.name[0]}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-base sm:text-lg font-semibold">{artist.name}</h3>
-                        {currentArtistId === artist.id && (
-                          <span className="px-2 py-0.5 bg-violet-500/20 text-violet-400 text-xs rounded-full">Active</span>
-                        )}
-                      </div>
-                      <div className={`flex flex-wrap gap-x-2 gap-y-1 text-xs sm:text-sm ${t.textSecondary}`}>
-                        <span>Since {artist.activeSince || 'Feb 2026'}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4 sm:gap-6 overflow-x-auto pb-1 -mb-1">
-                    <div className="text-center shrink-0">
-                      <p className="text-xl sm:text-2xl font-bold">{artist.totalPages || 0}</p>
-                      <p className={`text-xs ${t.textSecondary}`}>Pages</p>
-                    </div>
-                    <div className="text-center shrink-0">
-                      <p className="text-xl sm:text-2xl font-bold">{formatNumber(artist.metrics?.views || 0)}</p>
-                      <p className={`text-xs ${t.textSecondary}`}>Views</p>
-                    </div>
-                    <div className="text-center shrink-0">
-                      <p className="text-xl sm:text-2xl font-bold">{artist.metrics?.rate || 0}%</p>
-                      <p className={`text-xs ${t.textSecondary}`}>Eng. Rate</p>
-                    </div>
-                    <span className={`px-2 sm:px-3 py-1 rounded-full text-xs shrink-0 ${getStatusColor(artist.status)}`}>
-                      {artist.status}
-                    </span>
-                    {/* Action buttons — visible on hover (conductor only) */}
-                    {isConductor(user) && (
-                      <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setEditArtistModal({ show: true, artist, activeSince: artist.activeSince || 'Feb 2026', isSaving: false }); }}
-                          className={`p-1.5 rounded-lg ${t.hoverBg} ${t.textSecondary} ${t.hoverText} transition`}
-                          title="Edit artist details"
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                          </svg>
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setReassignArtist({ show: true, artist }); }}
-                          className={`p-1.5 rounded-lg ${t.hoverBg} ${t.textSecondary} ${t.hoverText} transition`}
-                          title="Reassign to operator"
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M16 3h5v5"/><path d="M21 3l-7 7"/><path d="M8 21H3v-5"/><path d="M3 21l7-7"/>
-                          </svg>
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setDeleteArtistConfirm({ show: true, artist, isDeleting: false }); }}
-                          className={`p-1.5 rounded-lg hover:bg-red-900/50 ${t.textSecondary} hover:text-red-400 transition`}
-                          title="Delete artist"
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                          </svg>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-
-            return (
-              <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h1 className="text-2xl font-bold">Artists</h1>
-                    <p className={`text-sm ${t.textSecondary}`}>{displayArtists.length} active artist{displayArtists.length !== 1 ? 's' : ''}</p>
-                  </div>
-                  {/* Conductors and operators can add artists */}
-                  {(isConductor(user) || user?.role === 'operator') && (
-                    <button
-                      onClick={() => setShowAddArtistModal(true)}
-                      className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium transition flex items-center gap-2"
-                    >
-                      <span className="text-lg">+</span>
-                      Add Artist
-                    </button>
-                  )}
-                </div>
-                {displayArtists.length === 0 ? (
-                  <SharedEmptyState
-                    icon="🎵"
-                    title="No artists yet"
-                    description="Add your first artist to get started with content creation."
-                    actionLabel="Add Artist"
-                    onAction={() => setShowAddArtistModal(true)}
-                  />
-                ) : sectionOrder.length <= 1 ? (
-                  // Single group — no need for section headers
-                  grouped[sectionOrder[0]]?.map(renderArtistCard)
-                ) : (
-                  // Multiple groups — show section headers
-                  sectionOrder.map(ownerId => (
-                    <div key={ownerId} className="space-y-3">
-                      <div className="flex items-center gap-3 pt-2">
-                        <h2 className={`text-sm font-semibold ${t.textSecondary} uppercase tracking-wider`}>
-                          {getOwnerLabel(ownerId)}
-                        </h2>
-                        <span className={`text-xs ${t.textMuted}`}>({grouped[ownerId].length})</span>
-                        <div className={`flex-1 border-t ${t.border}`} />
-                      </div>
-                      {grouped[ownerId].map(renderArtistCard)}
-                    </div>
-                  ))
-                )}
-              </div>
-            );
-          })()}
+          {operatorTab === 'artists' && (
+            <ArtistsManagement
+              artists={(() => {
+                let displayArtists = firestoreArtists;
+                if (!isConductor(user)) {
+                  const currentUserRecord = allowedUsers.find(u => u.email?.toLowerCase() === user?.email?.toLowerCase());
+                  const currentUserId = currentUserRecord?.id || null;
+                  displayArtists = displayArtists.filter(artist =>
+                    currentUserId && artist.ownerOperatorId === currentUserId
+                  );
+                }
+                return displayArtists;
+              })()}
+              user={user}
+              currentArtistId={currentArtistId}
+              onArtistChange={handleArtistChange}
+              onAddArtist={() => setShowAddArtistModal(true)}
+              onEditArtist={(artist) => setEditArtistModal({ show: true, artist, activeSince: artist.activeSince || 'Feb 2026', isSaving: false })}
+              onReassignArtist={(artist) => setReassignArtist({ show: true, artist })}
+              onDeleteArtist={(artist) => setDeleteArtistConfirm({ show: true, artist, isDeleting: false })}
+              isConductor={isConductor(user)}
+              latePages={latePages}
+            />
+          )}
 
 
 
@@ -6182,6 +6038,7 @@ const StickToMusic = () => {
             artistId={currentArtistId}
             onArtistChange={handleArtistChange}
             lateAccountIds={derivedLateAccountIds}
+            latePages={latePages.filter(p => p.artistId === currentArtistId)}
             onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: currentArtistId })}
             onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, currentArtistId)}
           />
