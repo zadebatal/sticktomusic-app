@@ -18,6 +18,50 @@ import { getFirestore } from 'firebase-admin/firestore';
 
 const LATE_API_BASE = 'https://getlate.dev/api/v1';
 
+/**
+ * Fetch with timeout and retry logic for resilient network calls
+ */
+const fetchWithRetry = async (url, options, maxRetries = 2) => {
+  for (let i = 0; i <= maxRetries; i++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const res = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      // Retry on 5xx errors (unless it's the last attempt)
+      if (res.status >= 500 && i < maxRetries) {
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i))); // exponential backoff
+        continue;
+      }
+
+      return res;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        if (i === maxRetries) {
+          throw new Error('Request timeout');
+        }
+        continue;
+      }
+      if (i === maxRetries) throw error;
+      await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
+    }
+  }
+};
+
+/**
+ * Sanitize user input text (remove HTML tags, limit length)
+ */
+const sanitizeText = (str) => {
+  if (!str) return '';
+  return str.replace(/<[^>]*>/g, '').slice(0, 2200);
+};
+
 // Allowed origins - restrict CORS to your domains only
 const ALLOWED_ORIGINS = [
   'https://sticktomusic.com',
@@ -283,7 +327,7 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: 'No Late API key configured for this artist' });
         }
 
-        response = await fetch(`${LATE_API_BASE}/accounts`, {
+        response = await fetchWithRetry(`${LATE_API_BASE}/accounts`, {
           headers: { 'Authorization': `Bearer ${accountsKey}` }
         });
         break;
@@ -308,19 +352,24 @@ export default async function handler(req, res) {
           // GET /posts - Fetch scheduled posts
           const postsUrl = `${LATE_API_BASE}/posts?page=${page}&limit=50`;
           console.log('Fetching:', postsUrl);
-          response = await fetch(postsUrl, {
+          response = await fetchWithRetry(postsUrl, {
             headers: { 'Authorization': `Bearer ${postsKey}` }
           });
           console.log('Late API response status:', response.status);
         } else if (req.method === 'POST') {
-          // POST /posts - Create new scheduled post
-          response = await fetch(`${LATE_API_BASE}/posts`, {
+          // POST /posts - Create new scheduled post (sanitize input)
+          const sanitizedBody = {
+            ...body,
+            caption: sanitizeText(body.caption),
+            hashtags: (body.hashtags || []).map(sanitizeText)
+          };
+          response = await fetchWithRetry(`${LATE_API_BASE}/posts`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${postsKey}`,
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify(body)
+            body: JSON.stringify(sanitizedBody)
           });
         }
         break;
@@ -343,7 +392,7 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: 'No Late API key configured for this artist' });
         }
 
-        response = await fetch(`${LATE_API_BASE}/posts/${postId}`, {
+        response = await fetchWithRetry(`${LATE_API_BASE}/posts/${postId}`, {
           headers: { 'Authorization': `Bearer ${getPostKey}` }
         });
         break;
@@ -370,7 +419,7 @@ export default async function handler(req, res) {
         }
 
         // Update post on Late.co (PATCH method)
-        response = await fetch(`${LATE_API_BASE}/posts/${postId}`, {
+        response = await fetchWithRetry(`${LATE_API_BASE}/posts/${postId}`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${updatePostKey}`,
@@ -400,7 +449,7 @@ export default async function handler(req, res) {
         }
 
         // DELETE /posts/:id - Delete a scheduled post
-        response = await fetch(`${LATE_API_BASE}/posts/${postId}`, {
+        response = await fetchWithRetry(`${LATE_API_BASE}/posts/${postId}`, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${deleteKey}` }
         });
@@ -423,7 +472,7 @@ export default async function handler(req, res) {
         if (!profilesKey) {
           return res.status(400).json({ error: 'No Late API key configured for this artist' });
         }
-        response = await fetch(`${LATE_API_BASE}/profiles`, {
+        response = await fetchWithRetry(`${LATE_API_BASE}/profiles`, {
           headers: { 'Authorization': `Bearer ${profilesKey}` }
         });
         break;
@@ -445,13 +494,16 @@ export default async function handler(req, res) {
         if (!createProfileKey) {
           return res.status(400).json({ error: 'No Late API key configured for this artist' });
         }
-        response = await fetch(`${LATE_API_BASE}/profiles`, {
+        response = await fetchWithRetry(`${LATE_API_BASE}/profiles`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${createProfileKey}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ name: body.name || 'Default', description: body.description || '' })
+          body: JSON.stringify({
+            name: sanitizeText(body.name || 'Default'),
+            description: sanitizeText(body.description || '')
+          })
         });
         break;
       }
@@ -472,7 +524,7 @@ export default async function handler(req, res) {
         }
         const connectParams = new URLSearchParams({ profileId });
         if (redirectUrl) connectParams.set('redirect_url', redirectUrl);
-        response = await fetch(`${LATE_API_BASE}/connect/${connectPlatform}?${connectParams}`, {
+        response = await fetchWithRetry(`${LATE_API_BASE}/connect/${connectPlatform}?${connectParams}`, {
           headers: { 'Authorization': `Bearer ${connectKey}` }
         });
         break;
