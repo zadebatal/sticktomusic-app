@@ -2230,7 +2230,6 @@ const LibraryBrowser = ({
                 flex: isMobile ? 'none' : 1,
                 display: 'flex',
                 flexDirection: 'column',
-                overflow: 'hidden',
                 minWidth: 0,
                 minHeight: 0,
                 ...(isMobile ? { width: '100%' } : {})
