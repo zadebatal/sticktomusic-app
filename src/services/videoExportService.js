@@ -510,9 +510,11 @@ export const renderVideo = async (videoData, onProgress = () => {}, options = {}
     if (audio?.url || audio?.localUrl) {
       const audioLocalUrl = audio.localUrl;
       const isAudioBlobUrl = audioLocalUrl && audioLocalUrl.startsWith('blob:');
+      // Prefer non-blob localUrl, then cloud url; skip stale blob URLs entirely
       const audioUrl = isAudioBlobUrl ? audio.url : (audioLocalUrl || audio.url);
+      const isBlobUrl = audioUrl && audioUrl.startsWith('blob:');
 
-      if (audioUrl) {
+      if (audioUrl && !isBlobUrl) {
         log('[VideoExport] Pre-fetching audio in parallel...');
         audioBufferPromise = fetch(audioUrl)
           .then(res => res.arrayBuffer())

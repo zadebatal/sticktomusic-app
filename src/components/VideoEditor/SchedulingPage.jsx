@@ -534,10 +534,11 @@ const SchedulingPage = ({
 
       log('[Schedule] Rendered, uploading...', (blob.size / 1024 / 1024).toFixed(2), 'MB');
       setRenderProgress(95);
-      const isMP4 = blob.type === 'video/mp4';
+      const isMP4 = blob.type.includes('mp4');
       const ext = isMP4 ? 'mp4' : 'webm';
+      const uploadType = isMP4 ? 'video/mp4' : 'video/webm';
       const { url: cloudUrl } = await uploadFile(
-        new File([blob], `${post.contentId || post.id}.${ext}`, { type: blob.type }),
+        new File([blob], `${post.contentId || post.id}.${ext}`, { type: uploadType }),
         'videos'
       );
 
