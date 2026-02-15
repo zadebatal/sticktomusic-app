@@ -2268,11 +2268,13 @@ const LibraryBrowser = ({
                     display: 'flex',
                     flexDirection: isMobile ? 'row' : 'column',
                     gap: '8px',
-                    overflow: isMobile ? 'auto' : 'hidden',
+                    overflow: 'auto',
                     overflowX: isMobile ? 'auto' : undefined,
+                    overflowY: isMobile ? undefined : 'auto',
                     minHeight: 0,
-                    WebkitOverflowScrolling: isMobile ? 'touch' : undefined,
-                    paddingBottom: isMobile ? '8px' : undefined
+                    WebkitOverflowScrolling: 'touch',
+                    paddingBottom: isMobile ? '8px' : undefined,
+                    paddingRight: isMobile ? undefined : '4px'
                   }}>
                     {(collectionBanks?.banks || []).map((bankMedia, idx) => {
                       const color = getBankColor(idx);
@@ -2281,11 +2283,11 @@ const LibraryBrowser = ({
                         <div
                           key={idx}
                           style={{
-                            flex: isMobile ? 'none' : 1,
+                            flex: isMobile ? 'none' : '0 0 auto',
                             display: 'flex',
                             flexDirection: 'column',
                             overflow: 'hidden',
-                            minHeight: isMobile ? '120px' : 0,
+                            minHeight: isMobile ? '120px' : '280px',
                             minWidth: isMobile ? '200px' : undefined,
                             flexShrink: isMobile ? 0 : undefined,
                             borderRadius: '10px',
@@ -2400,7 +2402,7 @@ const LibraryBrowser = ({
                     )}
                   </div>
                 ) : (
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden' }}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'auto', paddingRight: '4px' }}>
                     {/* Slideshow Text Banks (only in images/slideshows mode) - Dynamic based on collection banks */}
                     {mode !== 'videos' && (() => {
                       const col = collections.find(c => c.id === activeView);
