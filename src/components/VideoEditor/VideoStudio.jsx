@@ -1572,9 +1572,17 @@ const VideoStudio = ({
 
         // Upload audio to Firebase Storage if it has a blob URL (same as scheduler mode)
         if (data.audio && (data.audio.file || data.audio.url?.startsWith('blob:'))) {
+          console.log('[VideoStudio] Safari Debug - Audio before upload:', {
+            hasFile: !!data.audio.file,
+            url: data.audio.url?.substring(0, 50),
+            id: data.audio.id,
+            name: data.audio.name
+          });
+
           try {
             const audioFile = data.audio.file;
             if (audioFile) {
+              console.log('[VideoStudio] Safari Debug - Uploading audio file to Firebase...');
               const { url: firebaseUrl } = await uploadFile(audioFile, 'audio');
               data = {
                 ...data,
@@ -1585,9 +1593,11 @@ const VideoStudio = ({
               };
               log('[VideoStudio] Uploaded audio to Firebase:', firebaseUrl);
             } else if (data.audio.url?.startsWith('blob:')) {
+              console.log('[VideoStudio] Safari Debug - No file, trying to find in library. Library has', libraryMedia.audio.length, 'audio items');
               // Blob URL without file - try to find in library by ID
               const libAudio = libraryMedia.audio.find(a => a.id === data.audio.id);
               if (libAudio && libAudio.url && !libAudio.url.startsWith('blob:')) {
+                console.log('[VideoStudio] Safari Debug - Found in library:', libAudio.name, 'URL:', libAudio.url?.substring(0, 50));
                 data = {
                   ...data,
                   audio: {
@@ -1597,12 +1607,14 @@ const VideoStudio = ({
                 };
                 log('[VideoStudio] Replaced blob URL with library URL for audio:', libAudio.name);
               } else {
-                console.warn('[VideoStudio] Audio has blob URL but no file and not found in library');
+                console.warn('[VideoStudio] Safari Debug - Audio has blob URL but not found in library. Searched for ID:', data.audio.id);
               }
             }
           } catch (err) {
             console.error('[VideoStudio] Failed to upload audio:', err);
           }
+        } else if (data.audio) {
+          console.log('[VideoStudio] Safari Debug - Audio already has valid URL:', data.audio.url?.substring(0, 50));
         }
 
         // Clean audio object for Firestore (remove non-serializable fields)
