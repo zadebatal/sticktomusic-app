@@ -1204,8 +1204,20 @@ const SchedulingPage = ({
                   <span style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '12px', opacity: 0.5 }}>📅</span>
                 </div>
                 <div style={{ position: 'relative', display: 'inline-block' }}>
-                  <input type="time" value={batchStartTime} onChange={(e) => setBatchStartTime(e.target.value)} style={{ ...s.miniInput, paddingRight: '24px' }} />
-                  <span style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '12px', opacity: 0.5 }}>🕐</span>
+                  <input
+                    type="time"
+                    value={batchStartTime}
+                    onChange={(e) => setBatchStartTime(e.target.value)}
+                    style={{ ...s.miniInput, paddingRight: '24px', cursor: 'pointer' }}
+                  />
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const input = e.currentTarget.previousElementSibling;
+                      if (input) { input.focus(); input.click(); }
+                    }}
+                    style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'auto', fontSize: '12px', opacity: 0.5, cursor: 'pointer' }}
+                  >🕐</span>
                 </div>
               </div>
             </div>
@@ -1610,8 +1622,22 @@ const PostRow = ({
                 <span style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '11px', opacity: 0.5 }}>📅</span>
               </div>
               <div style={{ position: 'relative', flex: 1, minWidth: '90px' }}>
-                <input type="time" value={schedTime} onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }} onMouseDown={(e) => e.stopPropagation()} style={{ ...s.inlineTime, width: '100%', paddingRight: '24px' }} />
-                <span style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '11px', opacity: 0.5 }}>🕐</span>
+                <input
+                  type="time"
+                  value={schedTime}
+                  onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }}
+                  onClick={(e) => e.stopPropagation()}
+                  onFocus={(e) => e.stopPropagation()}
+                  style={{ ...s.inlineTime, width: '100%', paddingRight: '24px', cursor: 'pointer' }}
+                />
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const input = e.currentTarget.previousElementSibling;
+                    if (input) { input.focus(); input.click(); }
+                  }}
+                  style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'auto', fontSize: '11px', opacity: 0.5, cursor: 'pointer' }}
+                >🕐</span>
               </div>
             </div>
             {previewTime && !post.scheduledTime && (() => {
@@ -1634,8 +1660,23 @@ const PostRow = ({
                   <span style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '10px', opacity: 0.5 }}>📅</span>
                 </div>
                 <div style={{ position: 'relative', display: 'inline-block' }}>
-                  <input type="time" value={schedTime} onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }} onMouseDown={(e) => e.stopPropagation()} style={{ ...s.inlineTime, paddingRight: '24px' }} />
-                  <span style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '10px', opacity: 0.5 }}>🕐</span>
+                  <input
+                    ref={(el) => { if (el) el.dataset.timeInput = 'true'; }}
+                    type="time"
+                    value={schedTime}
+                    onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }}
+                    onClick={(e) => e.stopPropagation()}
+                    onFocus={(e) => e.stopPropagation()}
+                    style={{ ...s.inlineTime, paddingRight: '24px', cursor: 'pointer' }}
+                  />
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const input = e.currentTarget.previousElementSibling;
+                      if (input) { input.focus(); input.click(); }
+                    }}
+                    style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'auto', fontSize: '10px', opacity: 0.5, cursor: 'pointer' }}
+                  >🕐</span>
                 </div>
               </div>
               {previewTime && !post.scheduledTime && (() => {
