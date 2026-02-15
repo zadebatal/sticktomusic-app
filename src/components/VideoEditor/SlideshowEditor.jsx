@@ -3727,7 +3727,7 @@ const SlideshowEditor = ({
                     {/* Text stroke toggle — on/off */}
                     <button
                       onClick={() => updateTextOverlay(selOverlay.id, {
-                        style: { ...selOverlay.style, textStroke: selOverlay.style.textStroke ? '' : buildStroke(0.5, '#000000') }
+                        style: { ...selOverlay.style, textStroke: selOverlay.style.textStroke ? null : buildStroke(2, '#000000') }
                       })}
                       style={{
                         padding: '4px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
@@ -3746,17 +3746,17 @@ const SlideshowEditor = ({
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '4px' }}>
                         <span style={{ color: '#9ca3af', fontSize: '11px' }}>Stroke</span>
                         <button
-                          onClick={() => { const nw = Math.round((strokeW - 0.1) * 10) / 10; if (nw >= 0.1) updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textStroke: buildStroke(nw, strokeC) } }); }}
+                          onClick={() => { const nw = Math.max(1, strokeW - 1); updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textStroke: buildStroke(nw, strokeC) } }); }}
                           style={{
                             width: '22px', height: '22px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.15)',
-                            backgroundColor: 'transparent', color: '#9ca3af', cursor: strokeW > 0.1 ? 'pointer' : 'not-allowed',
+                            backgroundColor: 'transparent', color: '#9ca3af', cursor: strokeW > 1 ? 'pointer' : 'not-allowed',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '700',
-                            opacity: strokeW > 0.1 ? 1 : 0.4
+                            opacity: strokeW > 1 ? 1 : 0.4
                           }}
                         >−</button>
                         <span style={{ color: '#fff', fontSize: '11px', minWidth: '30px', textAlign: 'center' }}>{strokeW}px</span>
                         <button
-                          onClick={() => { const nw = Math.round((strokeW + 0.1) * 10) / 10; if (nw <= 10) updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textStroke: buildStroke(nw, strokeC) } }); }}
+                          onClick={() => { const nw = Math.min(10, strokeW + 1); updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, textStroke: buildStroke(nw, strokeC) } }); }}
                           style={{
                             width: '22px', height: '22px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.15)',
                             backgroundColor: 'transparent', color: '#9ca3af', cursor: strokeW < 10 ? 'pointer' : 'not-allowed',
