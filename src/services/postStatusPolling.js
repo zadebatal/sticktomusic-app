@@ -1,0 +1,173 @@
+/**
+ * Post Status Polling Service
+ *
+ * Polls Late.co API to check if SCHEDULED posts have actually gone live.
+ * Used as fallback when webhooks aren't available.
+ *
+ * Runs:
+ * - On SchedulingPage mount
+ * - Every 5 minutes while page is active
+ * - Checks posts that are SCHEDULED but past their scheduledTime
+ */
+
+import { updateScheduledPost } from './scheduledPostsService';
+import log from '../utils/logger';
+
+/**
+ * Check a single post's status with Late.co API
+ * @param {string} latePostId - Late.co post ID
+ * @returns {Object|null} { status: 'live'|'scheduled'|'failed', publishedAt, platforms }
+ */
+async function checkLatePostStatus(latePostId) {
+  try {
+    const response = await fetch(`/api/late?action=getPost&postId=${latePostId}`);
+    if (!response.ok) {
+      console.warn('[StatusPolling] Failed to fetch post from Late.co:', latePostId);
+      return null;
+    }
+
+    const data = await response.json();
+    if (!data.success || !data.post) return null;
+
+    const post = data.post;
+
+    // Late.co post statuses: 'scheduled', 'published', 'failed', 'processing'
+    if (post.status === 'published' || post.status === 'live') {
+      return {
+        status: 'live',
+        publishedAt: post.published_at || post.publishedAt || new Date().toISOString(),
+        platforms: post.platforms || {}
+      };
+    }
+
+    if (post.status === 'failed') {
+      return {
+        status: 'failed',
+        platforms: post.platforms || {},
+        error: post.error || 'Unknown error'
+      };
+    }
+
+    return { status: 'scheduled' };
+  } catch (error) {
+    console.error('[StatusPolling] Error checking Late post:', latePostId, error);
+    return null;
+  }
+}
+
+/**
+ * Poll overdue SCHEDULED posts and update status if they're live
+ * @param {Object} db - Firestore instance
+ * @param {string} artistId
+ * @param {Array} posts - All scheduled posts
+ * @returns {number} Number of posts updated
+ */
+export async function pollOverduePosts(db, artistId, posts) {
+  const now = new Date();
+  let updatedCount = 0;
+
+  // Find SCHEDULED posts past their scheduled time (overdue by at least 5 min)
+  const overduePosts = posts.filter(p => {
+    if (p.status !== 'scheduled') return false;
+    if (!p.scheduledTime || !p.latePostId) return false;
+
+    const scheduledTime = new Date(p.scheduledTime);
+    const minutesOverdue = (now - scheduledTime) / (60 * 1000);
+
+    // Only check posts that are 5+ minutes overdue (give Late.co time to process)
+    return minutesOverdue >= 5;
+  });
+
+  if (overduePosts.length === 0) {
+    log('[StatusPolling] No overdue posts to check');
+    return 0;
+  }
+
+  log(`[StatusPolling] Checking ${overduePosts.length} overdue posts...`);
+
+  // Check each post in parallel (max 5 concurrent)
+  const chunks = [];
+  for (let i = 0; i < overduePosts.length; i += 5) {
+    chunks.push(overduePosts.slice(i, i + 5));
+  }
+
+  for (const chunk of chunks) {
+    const results = await Promise.all(
+      chunk.map(post => checkLatePostStatus(post.latePostId))
+    );
+
+    for (let i = 0; i < chunk.length; i++) {
+      const post = chunk[i];
+      const result = results[i];
+
+      if (!result) continue;
+
+      if (result.status === 'live') {
+        // Update to POSTED
+        await updateScheduledPost(db, artistId, post.id, {
+          status: 'posted',
+          postedAt: result.publishedAt,
+          postResults: result.platforms || post.postResults || {}
+        });
+        log(`[StatusPolling] ✓ Updated ${post.contentName} to POSTED`);
+        updatedCount++;
+      } else if (result.status === 'failed') {
+        // Update to FAILED
+        await updateScheduledPost(db, artistId, post.id, {
+          status: 'failed',
+          errorMessage: result.error || 'Post failed on Late.co',
+          postResults: result.platforms || {}
+        });
+        log(`[StatusPolling] ✗ Updated ${post.contentName} to FAILED`);
+        updatedCount++;
+      }
+      // If still 'scheduled', leave as-is (Late.co hasn't posted yet)
+    }
+  }
+
+  if (updatedCount > 0) {
+    log(`[StatusPolling] Updated ${updatedCount} posts`);
+  }
+
+  return updatedCount;
+}
+
+/**
+ * Start periodic polling (every 5 minutes)
+ * @param {Object} db
+ * @param {string} artistId
+ * @param {Function} getPosts - Function that returns current posts array
+ * @returns {Function} Cleanup function to stop polling
+ */
+export function startPolling(db, artistId, getPosts) {
+  let intervalId = null;
+
+  const poll = async () => {
+    try {
+      const posts = getPosts();
+      await pollOverduePosts(db, artistId, posts);
+    } catch (error) {
+      console.error('[StatusPolling] Poll error:', error);
+    }
+  };
+
+  // Run immediately on start
+  poll();
+
+  // Then every 5 minutes
+  intervalId = setInterval(poll, 5 * 60 * 1000);
+
+  // Return cleanup function
+  return () => {
+    if (intervalId) {
+      clearInterval(intervalId);
+      log('[StatusPolling] Stopped');
+    }
+  };
+}
+
+export default {
+  pollOverduePosts,
+  startPolling,
+  checkLatePostStatus
+};

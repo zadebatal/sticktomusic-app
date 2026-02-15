@@ -12,6 +12,7 @@ import { getCreatedContent, getCollections } from '../../services/libraryService
 import { renderVideo } from '../../services/videoExportService';
 import { exportSlideshowAsImages, generateSlideThumbnail } from '../../services/slideshowExportService';
 import { uploadFile } from '../../services/firebaseStorage';
+import { startPolling } from '../../services/postStatusPolling';
 import log from '../../utils/logger';
 import { useTheme } from '../../contexts/ThemeContext';
 import useIsMobile from '../../hooks/useIsMobile';
@@ -211,8 +212,15 @@ const SchedulingPage = ({
       setPosts(tagged);
       setLoading(false);
     });
-    return () => unsubscribe();
-  }, [db, artistId]);
+
+    // Start polling for overdue SCHEDULED posts (checks if they're actually live on Late.co)
+    const stopPolling = startPolling(db, artistId, () => posts);
+
+    return () => {
+      unsubscribe();
+      stopPolling();
+    };
+  }, [db, artistId, posts]);
 
   useEffect(() => {
     const now = new Date();
@@ -374,7 +382,40 @@ const SchedulingPage = ({
   const handleUpdatePost = useCallback(async (postId, updates) => {
     setPosts(prev => prev.map(p => p.id === postId ? { ...p, ...updates } : p));
     await updateScheduledPost(db, artistId, postId, updates);
-  }, [db, artistId]);
+
+    // If scheduledTime changed and post has latePostId, offer to sync to Late.co
+    if (updates.scheduledTime) {
+      const post = posts.find(p => p.id === postId);
+      if (post?.latePostId && post?.status === 'scheduled') {
+        // Sync time change to Late.co (only if post is still scheduled, not posted yet)
+        try {
+          const response = await fetch('/api/late', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${await db.app.auth().currentUser?.getIdToken()}`
+            },
+            body: JSON.stringify({
+              action: 'updatePost',
+              postId: post.latePostId,
+              artistId,
+              scheduledFor: updates.scheduledTime
+            })
+          });
+
+          if (response.ok) {
+            toastSuccess('Time updated on Late.co');
+          } else {
+            console.warn('[Schedule] Failed to sync time to Late.co:', await response.text());
+            toastSuccess('Time updated locally (Late.co sync may have failed)');
+          }
+        } catch (error) {
+          console.error('[Schedule] Error syncing time to Late.co:', error);
+          // Don't show error toast - local update succeeded
+        }
+      }
+    }
+  }, [db, artistId, posts, toastSuccess]);
 
   // ── Apply caption bank category to drafts (respects selection) ──
   const handleApplyCategory = useCallback(async (categoryKey) => {
@@ -612,12 +653,11 @@ const SchedulingPage = ({
           toastError(`Failed to publish: ${errors}`);
         } else {
           await handleUpdatePost(postId, {
-            status: POST_STATUS.POSTED,
-            postedAt: new Date().toISOString(),
+            status: POST_STATUS.SCHEDULED,
             latePostId: lastLatePostId,
             postResults: platformResults
           });
-          toastSuccess(anyFailed ? 'Partially published (some platforms failed)' : 'Published successfully!');
+          toastSuccess(anyFailed ? 'Partially scheduled (some platforms failed)' : 'Scheduled successfully!');
         }
       } else {
         // Video post — single API call for all platforms
@@ -644,12 +684,11 @@ const SchedulingPage = ({
           });
 
           await handleUpdatePost(postId, {
-            status: POST_STATUS.POSTED,
-            postedAt: new Date().toISOString(),
+            status: POST_STATUS.SCHEDULED,
             latePostId,
             postResults: platformResults
           });
-          toastSuccess('Published successfully!');
+          toastSuccess('Scheduled successfully!');
         }
       }
     } catch (err) {
@@ -680,6 +719,47 @@ const SchedulingPage = ({
 
     const startHour = startTime.getHours();
     const startMin = startTime.getMinutes();
+
+    // ── Conflict Detection: Check for existing posts on target dates ──
+    const existingPostsOnDate = posts.filter(p => {
+      if (!p.scheduledTime || selectedPostIds.has(p.id)) return false;
+      const pTime = new Date(p.scheduledTime);
+      const pDate = pTime.toDateString();
+      const startDate = startTime.toDateString();
+      // Check if post is on the same day as start date (accounting for multi-day batches)
+      const maxDays = Math.ceil(selectedCount / postsPerDay);
+      for (let d = 0; d < maxDays; d++) {
+        const checkDate = new Date(startTime);
+        checkDate.setDate(checkDate.getDate() + d);
+        if (pDate === checkDate.toDateString()) return true;
+      }
+      return false;
+    });
+
+    if (existingPostsOnDate.length > 0) {
+      // Find latest scheduled time to suggest safe start
+      const latestExisting = existingPostsOnDate.reduce((latest, p) => {
+        const t = new Date(p.scheduledTime);
+        return t > latest ? t : latest;
+      }, new Date(startTime));
+
+      // Add 30min buffer after last existing post
+      const suggestedStart = new Date(latestExisting.getTime() + 30 * 60 * 1000);
+
+      // Check if current start time would conflict
+      const wouldConflict = existingPostsOnDate.some(p => {
+        const pTime = new Date(p.scheduledTime);
+        const timeDiff = Math.abs(pTime - startTime) / 60000; // minutes
+        return timeDiff < 15; // Within 15 minutes = conflict
+      });
+
+      if (wouldConflict) {
+        toastSuccess(`⚠️ ${existingPostsOnDate.length} posts already scheduled on these dates. Auto-adjusted start time to ${suggestedStart.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} to avoid conflicts.`);
+        startTime = suggestedStart;
+      } else {
+        toastSuccess(`ℹ️ ${existingPostsOnDate.length} posts already scheduled on these dates. Times will be interspersed.`);
+      }
+    }
 
     let scheduled;
     if (spacingMode === 'random') {

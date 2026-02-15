@@ -325,6 +325,63 @@ export default async function handler(req, res) {
         }
         break;
 
+      case 'getPost':
+        // GET /posts/:postId - Fetch a single post by ID (for status polling)
+        if (!postId) {
+          return res.status(400).json({ error: 'postId required for getPost' });
+        }
+        if (!artistId) {
+          return res.status(400).json({ error: 'artistId required' });
+        }
+        const canGetPost = await canUserAccessArtist(userEmail, artistId);
+        if (!canGetPost) {
+          return res.status(403).json({ error: 'No access to this artist' });
+        }
+
+        const getPostKey = await getArtistLateKey(artistId);
+        if (!getPostKey) {
+          return res.status(400).json({ error: 'No Late API key configured for this artist' });
+        }
+
+        response = await fetch(`${LATE_API_BASE}/posts/${postId}`, {
+          headers: { 'Authorization': `Bearer ${getPostKey}` }
+        });
+        break;
+
+      case 'updatePost':
+        // PUT/PATCH /posts/:postId - Update a scheduled post's time
+        if (req.method !== 'POST') {
+          return res.status(405).json({ error: 'POST required for updatePost' });
+        }
+        if (!postId) {
+          return res.status(400).json({ error: 'postId required for updatePost' });
+        }
+        if (!artistId) {
+          return res.status(400).json({ error: 'artistId required' });
+        }
+        const canUpdatePost = await canUserAccessArtist(userEmail, artistId);
+        if (!canUpdatePost) {
+          return res.status(403).json({ error: 'No access to this artist' });
+        }
+
+        const updatePostKey = await getArtistLateKey(artistId);
+        if (!updatePostKey) {
+          return res.status(400).json({ error: 'No Late API key configured for this artist' });
+        }
+
+        // Update post on Late.co (PATCH method)
+        response = await fetch(`${LATE_API_BASE}/posts/${postId}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${updatePostKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            scheduled_for: body.scheduledFor || body.scheduled_for
+          })
+        });
+        break;
+
       case 'delete':
         if (!postId) {
           return res.status(400).json({ error: 'postId required for delete' });
@@ -422,7 +479,7 @@ export default async function handler(req, res) {
       }
 
       default:
-        return res.status(400).json({ error: 'Invalid action. Use: accounts, posts, delete, setKey, removeKey, keyStatus, profiles, createProfile, connectUrl' });
+        return res.status(400).json({ error: 'Invalid action. Use: accounts, posts, getPost, updatePost, delete, setKey, removeKey, keyStatus, profiles, createProfile, connectUrl' });
     }
 
     if (!response.ok) {
