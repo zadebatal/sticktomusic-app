@@ -44,6 +44,8 @@ const SchedulingPage = ({
 
   // ── Core State ──
   const [posts, setPosts] = useState([]);
+  const postsRef = useRef(posts);
+  postsRef.current = posts;
   const [loading, setLoading] = useState(true);
   const [expandedPostId, setExpandedPostId] = useState(null);
   const [draggedId, setDraggedId] = useState(null);
@@ -214,13 +216,14 @@ const SchedulingPage = ({
     });
 
     // Start polling for overdue SCHEDULED posts (checks if they're actually live on Late.co)
-    const stopPolling = startPolling(db, artistId, () => posts);
+    // Use ref to avoid re-creating subscription when posts change
+    const stopPolling = startPolling(db, artistId, () => postsRef.current);
 
     return () => {
       unsubscribe();
       stopPolling();
     };
-  }, [db, artistId, posts]);
+  }, [db, artistId]);
 
   useEffect(() => {
     const now = new Date();
