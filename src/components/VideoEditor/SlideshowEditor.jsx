@@ -3727,22 +3727,21 @@ const SlideshowEditor = ({
                     {/* Text stroke toggle — on/off */}
                     <button
                       onClick={() => {
-                        const hasStroke = selOverlay.style.textStroke && selOverlay.style.textStroke !== 'none';
-                        const newStyle = { ...selOverlay.style };
-                        if (hasStroke) {
-                          delete newStyle.textStroke;
-                        } else {
-                          newStyle.textStroke = buildStroke(0.1, '#000000');
-                        }
-                        updateTextOverlay(selOverlay.id, { style: newStyle });
+                        const hasStroke = selOverlay.style.textStroke && selOverlay.style.textStroke !== 'none' && selOverlay.style.textStroke !== '';
+                        updateTextOverlay(selOverlay.id, {
+                          style: {
+                            ...selOverlay.style,
+                            textStroke: hasStroke ? undefined : buildStroke(0.1, '#000000')
+                          }
+                        });
                       }}
                       style={{
                         padding: '4px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
-                        backgroundColor: (selOverlay.style.textStroke && selOverlay.style.textStroke !== 'none') ? 'rgba(99,102,241,0.3)' : 'transparent',
-                        color: (selOverlay.style.textStroke && selOverlay.style.textStroke !== 'none') ? '#a5b4fc' : '#6b7280',
+                        backgroundColor: (selOverlay.style.textStroke && selOverlay.style.textStroke !== 'none' && selOverlay.style.textStroke !== '') ? 'rgba(99,102,241,0.3)' : 'transparent',
+                        color: (selOverlay.style.textStroke && selOverlay.style.textStroke !== 'none' && selOverlay.style.textStroke !== '') ? '#a5b4fc' : '#6b7280',
                         fontSize: '11px', fontWeight: '600'
                       }}
-                      title={(selOverlay.style.textStroke && selOverlay.style.textStroke !== 'none') ? 'Remove text stroke' : 'Add text stroke'}
+                      title={(selOverlay.style.textStroke && selOverlay.style.textStroke !== 'none' && selOverlay.style.textStroke !== '') ? 'Remove text stroke' : 'Add text stroke'}
                     >St</button>
                   </div>
 
