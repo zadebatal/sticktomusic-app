@@ -1703,6 +1703,41 @@ export const loadCreatedContentAsync = async (db, artistId) => {
 export const subscribeToCreatedContent = (db, artistId, callback) => {
   if (!db || !artistId) return () => {};
 
+  // Helper to clean data loaded from Firestore (remove undefined fields)
+  const cleanLoadedData = (data) => {
+    const cleaned = { ...data };
+
+    // Clean audio object if present
+    if (cleaned.audio) {
+      const { file, localUrl, ...audioData } = cleaned.audio;
+      cleaned.audio = audioData;
+      // Remove undefined fields from audio
+      Object.keys(cleaned.audio).forEach(key => {
+        if (cleaned.audio[key] === undefined) delete cleaned.audio[key];
+      });
+      if (!cleaned.audio.url) cleaned.audio = null;
+    }
+
+    // Clean clips if present (for videos)
+    if (cleaned.clips) {
+      cleaned.clips = cleaned.clips.map(clip => {
+        const { file, localUrl, thumbnail, ...clipData } = clip;
+        const cleanedClip = clipData;
+        Object.keys(cleanedClip).forEach(key => {
+          if (cleanedClip[key] === undefined) delete cleanedClip[key];
+        });
+        return cleanedClip;
+      }).filter(c => c.url);
+    }
+
+    // Remove any undefined fields at top level
+    Object.keys(cleaned).forEach(key => {
+      if (cleaned[key] === undefined) delete cleaned[key];
+    });
+
+    return cleaned;
+  };
+
   // Run migration first, then subscribe
   loadCreatedContentAsync(db, artistId).then(() => {
     const collectionRef = collection(db, 'artists', artistId, 'library', 'data', 'createdContent');
@@ -1711,7 +1746,7 @@ export const subscribeToCreatedContent = (db, artistId, callback) => {
       const slideshows = [];
 
       snapshot.docs.forEach(doc => {
-        const data = doc.data();
+        const data = cleanLoadedData(doc.data());
         if (data.type === 'video') {
           videos.push(data);
         } else if (data.type === 'slideshow') {
