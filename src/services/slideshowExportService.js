@@ -113,16 +113,13 @@ const drawTextOverlay = (ctx, overlay, dimensions) => {
   if (style.textStroke) {
     const strokeMatch = (style.textStroke || '').match(/([\d.]+)px\s+(.*)/);
     if (strokeMatch) {
-      const strokeWidth = parseFloat(strokeMatch[1]);
-      if (strokeWidth > 0) {
-        ctx.strokeStyle = strokeMatch[2] || '#000000';
-        ctx.lineWidth = strokeWidth * 2;
-        ctx.lineJoin = 'round';
-        lines.forEach((line, i) => {
-          const lineY = y + (i - (lines.length - 1) / 2) * lineHeight;
-          ctx.strokeText(line, x, lineY);
-        });
-      }
+      ctx.strokeStyle = strokeMatch[2] || '#000000';
+      ctx.lineWidth = parseFloat(strokeMatch[1]) * 2;
+      ctx.lineJoin = 'round';
+      lines.forEach((line, i) => {
+        const lineY = y + (i - (lines.length - 1) / 2) * lineHeight;
+        ctx.strokeText(line, x, lineY);
+      });
     }
   }
 
