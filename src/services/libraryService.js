@@ -1277,9 +1277,110 @@ export const getCreatedContent = (artistId) => {
  */
 export const saveCreatedContent = (artistId, content) => {
   try {
-    localStorage.setItem(getCreatedContentKey(artistId), JSON.stringify(content));
+    // Clean data to reduce size and remove non-serializable fields
+    const cleanedContent = {
+      videos: (content.videos || []).map(v => ({
+        ...v,
+        thumbnail: null, // Remove base64 thumbnails (saved in Firebase Storage)
+        clips: (v.clips || []).map(c => ({
+          ...c,
+          thumbnail: null,
+          file: undefined,
+          localUrl: undefined,
+          url: c.url?.startsWith('blob:') ? null : c.url
+        })).filter(c => c.url)
+      })),
+      slideshows: (content.slideshows || []).map(s => ({
+        ...s,
+        thumbnail: null, // Remove base64 thumbnails
+        audio: s.audio ? {
+          ...s.audio,
+          file: undefined,
+          localUrl: undefined,
+          url: s.audio.url?.startsWith('blob:') ? null : s.audio.url
+        } : null,
+        slides: (s.slides || []).map(slide => ({
+          ...slide,
+          // Keep backgroundImage URLs (Firebase Storage), remove blob URLs
+          backgroundImage: slide.backgroundImage?.startsWith('blob:') ? null : slide.backgroundImage
+        }))
+      }))
+    };
+
+    localStorage.setItem(getCreatedContentKey(artistId), JSON.stringify(cleanedContent));
   } catch (error) {
-    console.error('Error saving created content:', error);
+    if (error?.name === 'QuotaExceededError' || error?.code === 22) {
+      console.warn('[CreatedContent] localStorage quota exceeded, attempting cleanup...');
+      try {
+        // Remove old session/temp data to free space
+        const keysToClean = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key?.startsWith('stm_session_') || key?.startsWith('stm_temp_') || key?.startsWith('stm_draft_')) {
+            keysToClean.push(key);
+          }
+        }
+        keysToClean.forEach(k => localStorage.removeItem(k));
+        log('[CreatedContent] Cleaned', keysToClean.length, 'temp keys, retrying save...');
+
+        // Retry save after cleanup with even more aggressive cleaning
+        const minimalContent = {
+          videos: (content.videos || []).map(v => ({
+            id: v.id,
+            name: v.name,
+            url: v.url?.startsWith('blob:') ? null : v.url,
+            exportedImages: v.exportedImages || [],
+            status: v.status,
+            createdAt: v.createdAt,
+            updatedAt: v.updatedAt,
+            aspectRatio: v.aspectRatio,
+            duration: v.duration
+          })).filter(v => v.url),
+          slideshows: (content.slideshows || []).map(s => ({
+            id: s.id,
+            name: s.name,
+            aspectRatio: s.aspectRatio,
+            slides: (s.slides || []).map(slide => ({
+              backgroundImage: slide.backgroundImage?.startsWith('blob:') ? null : slide.backgroundImage,
+              textOverlays: slide.textOverlays || [],
+              imageTransform: slide.imageTransform
+            })).filter(slide => slide.backgroundImage),
+            audio: s.audio ? {
+              id: s.audio.id,
+              name: s.audio.name,
+              url: s.audio.url?.startsWith('blob:') ? null : s.audio.url,
+              duration: s.audio.duration
+            } : null,
+            audioStartTime: s.audioStartTime,
+            audioEndTime: s.audioEndTime,
+            exportedImages: s.exportedImages || [],
+            status: s.status,
+            createdAt: s.createdAt,
+            updatedAt: s.updatedAt,
+            collectionId: s.collectionId,
+            collectionName: s.collectionName
+          }))
+        };
+
+        localStorage.setItem(getCreatedContentKey(artistId), JSON.stringify(minimalContent));
+        log('[CreatedContent] Saved with minimal data after cleanup');
+      } catch (retryError) {
+        console.error('[CreatedContent] Save failed even after cleanup. Storage is full:', retryError.message);
+        // Last resort: try to keep only most recent 20 items
+        try {
+          const recentContent = {
+            videos: (content.videos || []).slice(-10).map(v => ({ id: v.id, name: v.name, url: v.url, status: v.status })),
+            slideshows: (content.slideshows || []).slice(-10).map(s => ({ id: s.id, name: s.name, status: s.status }))
+          };
+          localStorage.setItem(getCreatedContentKey(artistId), JSON.stringify(recentContent));
+          console.warn('[CreatedContent] Saved only most recent 20 items due to quota');
+        } catch (finalError) {
+          console.error('[CreatedContent] CRITICAL: Cannot save to localStorage at all:', finalError.message);
+        }
+      }
+    } else {
+      console.error('Error saving created content:', error);
+    }
   }
 };
 

@@ -961,28 +961,38 @@ const SlideshowEditor = ({
     setShowAudioTrimmer(true);
   }, []);
 
-  const handleAudioTrimSave = useCallback(({ startTime, endTime, duration, trimmedFile, trimmedName }) => {
+  const handleAudioTrimSave = useCallback(async ({ startTime, endTime, duration, trimmedFile, trimmedName }) => {
     if (!audioToTrim) return;
     if (trimmedFile) {
-      // Audio was actually trimmed to a new file — use it directly (starts at 0)
-      // Use a NEW id so selectedAudioUrl doesn't replace blob URL with original library URL
-      const localUrl = URL.createObjectURL(trimmedFile);
-      const editedAudio = {
-        ...audioToTrim,
-        id: `audio_trim_${Date.now()}`,
-        name: trimmedName || trimmedFile.name,
-        file: trimmedFile,
-        url: localUrl,
-        localUrl: localUrl,
-        startTime: 0,
-        endTime: duration,
-        trimmedDuration: duration,
-        isTrimmed: false, // It's a new independent file, not metadata-trimmed
-        duration: duration
-      };
-      setSelectedAudio(editedAudio);
-      setShowAudioTrimmer(false);
-      setAudioToTrim(null);
+      // Audio was actually trimmed to a new file — upload to Firebase Storage immediately
+      try {
+        toastSuccess('Uploading trimmed audio...');
+        const { uploadFile } = await import('../../services/firebaseStorage');
+        const { url: storageUrl } = await uploadFile(trimmedFile, 'audio', (progress) => {
+          if (progress === 100) toastSuccess('Processing...');
+        });
+
+        const editedAudio = {
+          ...audioToTrim,
+          id: `audio_trim_${Date.now()}`,
+          name: trimmedName || trimmedFile.name,
+          file: undefined, // Don't store File object (non-serializable)
+          url: storageUrl, // Firebase Storage URL (persistent)
+          localUrl: storageUrl, // Same as url for consistency
+          startTime: 0,
+          endTime: duration,
+          trimmedDuration: duration,
+          isTrimmed: false, // It's a new independent file, not metadata-trimmed
+          duration: duration
+        };
+        setSelectedAudio(editedAudio);
+        setShowAudioTrimmer(false);
+        setAudioToTrim(null);
+        toastSuccess('Audio ready');
+      } catch (error) {
+        console.error('[SlideshowEditor] Failed to upload trimmed audio:', error);
+        toastError(`Failed to upload audio: ${error.message}`);
+      }
     } else {
       // Metadata-only trim (fallback or full-length selection)
       const editedAudio = {
@@ -996,7 +1006,7 @@ const SlideshowEditor = ({
       setShowAudioTrimmer(false);
       setAudioToTrim(null);
     }
-  }, [audioToTrim, db, artistId]);
+  }, [audioToTrim, db, artistId, toastSuccess, toastError]);
 
   // When audio with linkedLyricsId is selected, surface linked lyrics
   const prevAudioIdRef = useRef(null);
