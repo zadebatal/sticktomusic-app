@@ -1399,17 +1399,35 @@ export const deleteCreatedSlideshow = (artistId, slideshowId) => {
 
 /**
  * Save created content to Firestore (async backup)
- * Stores slideshows and videos in artists/{artistId}/studio/createdContent
+ * Stores slideshows and videos individually in artists/{artistId}/library/data/createdContent/{id}
  */
 export const saveCreatedContentAsync = async (db, artistId, content) => {
   if (!db || !artistId) return;
   try {
-    const docRef = doc(db, 'artists', artistId, 'studio', 'createdContent');
-    await setDoc(docRef, {
-      ...content,
-      updatedAt: serverTimestamp()
+    // New structure: save each video/slideshow as its own document
+    const batch = writeBatch(db);
+
+    // Save videos
+    (content.videos || []).forEach(video => {
+      const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', video.id);
+      batch.set(docRef, {
+        ...video,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
     });
-    log('[Library] Created content saved to Firestore');
+
+    // Save slideshows
+    (content.slideshows || []).forEach(slideshow => {
+      const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', slideshow.id);
+      batch.set(docRef, {
+        ...slideshow,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    });
+
+    await batch.commit();
+    log('[Library] Created content saved to Firestore:',
+      `${content.videos?.length || 0} videos, ${content.slideshows?.length || 0} slideshows`);
   } catch (error) {
     console.error('[Library] Firestore save created content failed:', error.message);
   }
@@ -1422,18 +1440,26 @@ export const saveCreatedContentAsync = async (db, artistId, content) => {
 export const loadCreatedContentAsync = async (db, artistId) => {
   if (!db || !artistId) return getCreatedContent(artistId);
   try {
-    const docRef = doc(db, 'artists', artistId, 'studio', 'createdContent');
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      const content = {
-        videos: data.videos || [],
-        slideshows: data.slideshows || []
-      };
-      // Also update localStorage for offline access
-      saveCreatedContent(artistId, content);
-      return content;
-    }
+    // Query all created content documents
+    const collectionRef = collection(db, 'artists', artistId, 'library', 'data', 'createdContent');
+    const snapshot = await getDocs(collectionRef);
+
+    const videos = [];
+    const slideshows = [];
+
+    snapshot.docs.forEach(doc => {
+      const data = doc.data();
+      if (data.type === 'video') {
+        videos.push(data);
+      } else if (data.type === 'slideshow') {
+        slideshows.push(data);
+      }
+    });
+
+    const content = { videos, slideshows };
+    // Also update localStorage for offline access
+    saveCreatedContent(artistId, content);
+    return content;
   } catch (error) {
     console.error('[Library] Firestore load created content failed:', error.message);
   }
@@ -1450,14 +1476,23 @@ export const loadCreatedContentAsync = async (db, artistId) => {
  */
 export const subscribeToCreatedContent = (db, artistId, callback) => {
   if (!db || !artistId) return () => {};
-  const docRef = doc(db, 'artists', artistId, 'studio', 'createdContent');
-  return onSnapshot(docRef, (snap) => {
-    if (snap.exists()) {
-      const data = snap.data();
-      const content = { videos: data.videos || [], slideshows: data.slideshows || [] };
-      saveCreatedContent(artistId, content); // sync to localStorage
-      callback(content);
-    }
+  const collectionRef = collection(db, 'artists', artistId, 'library', 'data', 'createdContent');
+  return onSnapshot(collectionRef, (snapshot) => {
+    const videos = [];
+    const slideshows = [];
+
+    snapshot.docs.forEach(doc => {
+      const data = doc.data();
+      if (data.type === 'video') {
+        videos.push(data);
+      } else if (data.type === 'slideshow') {
+        slideshows.push(data);
+      }
+    });
+
+    const content = { videos, slideshows };
+    saveCreatedContent(artistId, content); // sync to localStorage
+    callback(content);
   }, (error) => {
     console.error('[Library] Created content subscription error:', error);
   });
