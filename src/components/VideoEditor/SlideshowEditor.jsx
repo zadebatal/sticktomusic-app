@@ -1182,8 +1182,28 @@ const SlideshowEditor = ({
       loadedAudioKeyRef.current = null;
       setAudioReady(false);
       if (selectedAudio && !selectedAudioUrl) {
-        setAudioError('Audio file unavailable');
+        setAudioError('Audio file unavailable - please re-add audio');
       }
+      return;
+    }
+
+    // Check if it's an expired blob URL
+    if (selectedAudioUrl.startsWith('blob:')) {
+      console.warn('[SlideshowEditor] Audio has expired blob URL, checking library...');
+      // Try to find in library by name or ID
+      const audioName = selectedAudio?.name;
+      if (audioName && Array.isArray(libraryAudio) && libraryAudio.length > 0) {
+        const libItem = libraryAudio.find(a =>
+          a && a.name === audioName && a.url && !a.url.startsWith('blob:')
+        );
+        if (libItem) {
+          console.log('[SlideshowEditor] Found audio in library with valid URL, updating...');
+          setSelectedAudio({ ...selectedAudio, url: libItem.url, localUrl: libItem.url });
+          return;
+        }
+      }
+      console.warn('[SlideshowEditor] Could not find valid URL for audio, showing error');
+      setAudioError('Audio file expired - please re-add from library');
       return;
     }
 
@@ -3141,7 +3161,16 @@ const SlideshowEditor = ({
                   </button>
                   <div style={styles.audioPlayerInfo}>
                     <span style={styles.audioPlayerName}>
-                      {audioError ? 'Audio failed to load' : selectedAudio.name}
+                      {audioError ? (
+                        <span style={{ color: '#ef4444' }}>
+                          Audio expired - <button
+                            onClick={() => setShowAudioSelectionModal(true)}
+                            style={{ color: '#6366f1', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit' }}
+                          >
+                            select from library
+                          </button>
+                        </span>
+                      ) : selectedAudio.name}
                     </span>
                     <span style={styles.audioPlayerTime}>
                       {!audioReady && !audioError
