@@ -1436,11 +1436,39 @@ export const saveCreatedContentAsync = async (db, artistId, content) => {
 /**
  * Load created content from Firestore
  * Falls back to localStorage if Firestore is unavailable
+ * MIGRATION: Checks old path first and migrates to new structure if needed
  */
 export const loadCreatedContentAsync = async (db, artistId) => {
   if (!db || !artistId) return getCreatedContent(artistId);
   try {
-    // Query all created content documents
+    // First, check if we need to migrate from old path
+    const oldDocRef = doc(db, 'artists', artistId, 'studio', 'createdContent');
+    const oldDoc = await getDoc(oldDocRef);
+
+    if (oldDoc.exists()) {
+      // Migrate from old structure to new
+      const oldData = oldDoc.data();
+      const content = {
+        videos: oldData.videos || [],
+        slideshows: oldData.slideshows || []
+      };
+
+      log('[Library] Migrating created content from old path to new structure...');
+      await saveCreatedContentAsync(db, artistId, content);
+
+      // Delete old document after successful migration
+      try {
+        await deleteDoc(oldDocRef);
+        log('[Library] Migration complete, old document deleted');
+      } catch (err) {
+        console.warn('[Library] Could not delete old document:', err.message);
+      }
+
+      saveCreatedContent(artistId, content);
+      return content;
+    }
+
+    // Query new structure
     const collectionRef = collection(db, 'artists', artistId, 'library', 'data', 'createdContent');
     const snapshot = await getDocs(collectionRef);
 
@@ -1457,6 +1485,17 @@ export const loadCreatedContentAsync = async (db, artistId) => {
     });
 
     const content = { videos, slideshows };
+
+    // If Firestore is empty but localStorage has data, migrate from localStorage
+    if (videos.length === 0 && slideshows.length === 0) {
+      const localContent = getCreatedContent(artistId);
+      if (localContent.videos.length > 0 || localContent.slideshows.length > 0) {
+        log('[Library] Migrating created content from localStorage to Firestore...');
+        await saveCreatedContentAsync(db, artistId, localContent);
+        return localContent;
+      }
+    }
+
     // Also update localStorage for offline access
     saveCreatedContent(artistId, content);
     return content;
@@ -1476,26 +1515,38 @@ export const loadCreatedContentAsync = async (db, artistId) => {
  */
 export const subscribeToCreatedContent = (db, artistId, callback) => {
   if (!db || !artistId) return () => {};
-  const collectionRef = collection(db, 'artists', artistId, 'library', 'data', 'createdContent');
-  return onSnapshot(collectionRef, (snapshot) => {
-    const videos = [];
-    const slideshows = [];
 
-    snapshot.docs.forEach(doc => {
-      const data = doc.data();
-      if (data.type === 'video') {
-        videos.push(data);
-      } else if (data.type === 'slideshow') {
-        slideshows.push(data);
+  // Run migration first, then subscribe
+  loadCreatedContentAsync(db, artistId).then(() => {
+    const collectionRef = collection(db, 'artists', artistId, 'library', 'data', 'createdContent');
+    return onSnapshot(collectionRef, (snapshot) => {
+      const videos = [];
+      const slideshows = [];
+
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.type === 'video') {
+          videos.push(data);
+        } else if (data.type === 'slideshow') {
+          slideshows.push(data);
+        }
+      });
+
+      const content = { videos, slideshows };
+
+      // Only overwrite localStorage if we have data OR if localStorage is also empty
+      const localContent = getCreatedContent(artistId);
+      if (videos.length > 0 || slideshows.length > 0 || (localContent.videos.length === 0 && localContent.slideshows.length === 0)) {
+        saveCreatedContent(artistId, content);
       }
-    });
 
-    const content = { videos, slideshows };
-    saveCreatedContent(artistId, content); // sync to localStorage
-    callback(content);
-  }, (error) => {
-    console.error('[Library] Created content subscription error:', error);
+      callback(content);
+    }, (error) => {
+      console.error('[Library] Created content subscription error:', error);
+    });
   });
+
+  return () => {}; // Return empty unsubscribe for now
 };
 
 /**
