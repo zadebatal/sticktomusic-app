@@ -1160,15 +1160,6 @@ const SlideshowEditor = ({
       const libItem = libraryAudio.find(a => a.id === selectedAudioId);
       // If library has a non-blob URL (actual file URL), use that
       if (libItem?.url && !libItem.url.startsWith('blob:')) return libItem.url;
-      // If library has a file object, create a fresh blob URL
-      if (libItem?.file) {
-        return URL.createObjectURL(libItem.file);
-      }
-    }
-
-    // If we have a file object, create blob URL from it
-    if (selectedAudio?.file && !url.startsWith('http')) {
-      return URL.createObjectURL(selectedAudio.file);
     }
 
     return url;
