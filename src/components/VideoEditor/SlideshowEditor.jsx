@@ -152,7 +152,7 @@ const SlideshowEditor = ({
   // Detect if we're working with a pipeline collection (for label overrides)
   const activePipeline = useMemo(() => collections.find(c => c.isPipeline), [collections]);
   // Label helper: uses pipeline format labels (e.g. "Hook") when available, falls back to "Slide N"
-  const bankLabel = useCallback((idx) => activePipeline ? getPipelineBankLabel(activePipeline, idx) : bankLabel(idx), [activePipeline]);
+  const bankLabel = useCallback((idx) => activePipeline ? getPipelineBankLabel(activePipeline, idx) : getBankLabel(idx), [activePipeline]);
 
   // Text bank input state
   const [newTextInputs, setNewTextInputs] = useState({});
