@@ -72,11 +72,23 @@ const VideoEditorModal = ({
 
   // ── Multi-video state (template + generated variations) ──
   // DEFAULT_TEXT_STYLE defined outside component for stable reference
+  // Strip stale blob URLs from audio on load — prefer cloud URL
+  const sanitizeAudio = (audio) => {
+    if (!audio) return null;
+    const clean = { ...audio };
+    if (clean.localUrl && clean.localUrl.startsWith('blob:')) delete clean.localUrl;
+    if (clean.url && clean.url.startsWith('blob:')) clean.url = null;
+    if (!clean.url && !clean.localUrl && !(clean.file instanceof File || clean.file instanceof Blob)) {
+      console.warn('[VideoEditorModal] Audio has stale blob URL — cleared on load');
+      return null;
+    }
+    return clean;
+  };
   const [allVideos, setAllVideos] = useState([{
     id: 'template',
     name: existingVideo?.name || 'Template',
     clips: existingVideo?.clips || [],
-    audio: existingVideo?.audio || null,
+    audio: sanitizeAudio(existingVideo?.audio) || null,
     words: existingVideo?.words || [],
     lyrics: existingVideo?.lyrics || '',
     textStyle: existingVideo?.textStyle || { ...DEFAULT_TEXT_STYLE },
@@ -268,6 +280,24 @@ const VideoEditorModal = ({
     }));
     return () => unsubs.forEach(u => u());
   }, [db, artistId]);
+
+  // Recover audio from library if it was sanitized (had stale blob URL but has ID)
+  const audioRecoveryDoneRef = useRef(false);
+  useEffect(() => {
+    if (audioRecoveryDoneRef.current || !libraryAudio.length) return;
+    const audio = allVideos[0]?.audio;
+    if (!audio?.id || audio.url || audio.localUrl) return; // already has valid URL or no ID
+    const libItem = libraryAudio.find(a => a.id === audio.id);
+    if (libItem?.url && !libItem.url.startsWith('blob:')) {
+      audioRecoveryDoneRef.current = true;
+      setAllVideos(prev => {
+        const copy = [...prev];
+        copy[0] = { ...copy[0], audio: { ...copy[0].audio, url: libItem.url } };
+        return copy;
+      });
+      log('[VideoEditorModal] Recovered audio URL from library:', libItem.url.slice(0, 50));
+    }
+  }, [libraryAudio, allVideos]);
 
   // Computed: visible videos based on selected collection
   const visibleVideos = useMemo(() => {
@@ -489,13 +519,15 @@ const VideoEditorModal = ({
       const localUrl = selectedAudio.localUrl;
       const isBlobUrl = localUrl && localUrl.startsWith('blob:');
 
+      const isUrlBlob = selectedAudio.url && selectedAudio.url.startsWith('blob:');
+
       if (selectedAudio.file instanceof File || selectedAudio.file instanceof Blob) {
         audioSource = selectedAudio.file;
         log('[VideoEditorModal] Using file object for beat detection');
       } else if (localUrl && !isBlobUrl) {
         audioSource = localUrl;
         log('[VideoEditorModal] Using localUrl for beat detection');
-      } else if (selectedAudio.url) {
+      } else if (selectedAudio.url && !isUrlBlob) {
         audioSource = selectedAudio.url;
         log('[VideoEditorModal] Using cloud URL for beat detection');
       }
@@ -506,9 +538,11 @@ const VideoEditorModal = ({
         });
       }
 
-      // Create audio element for playback - use cloud URL if blob expired
+      // Create audio element for playback - skip any blob URLs
       if (audioRef.current) {
-        const playbackUrl = isBlobUrl ? selectedAudio.url : (localUrl || selectedAudio.url);
+        const safeLocal = localUrl && !isBlobUrl ? localUrl : null;
+        const safeCloud = selectedAudio.url && !isUrlBlob ? selectedAudio.url : null;
+        const playbackUrl = safeLocal || safeCloud;
         const start = selectedAudio.startTime || 0;
         const endProp = selectedAudio.endTime || null;
 
@@ -530,9 +564,13 @@ const VideoEditorModal = ({
         };
 
         // Set handler BEFORE load so cached audio doesn't miss the event
-        audioRef.current.onloadedmetadata = onLoadedMetadata;
-        audioRef.current.src = playbackUrl;
-        audioRef.current.load();
+        if (playbackUrl) {
+          audioRef.current.onloadedmetadata = onLoadedMetadata;
+          audioRef.current.src = playbackUrl;
+          audioRef.current.load();
+        } else {
+          console.warn('[VideoEditorModal] No valid audio URL for playback — all URLs are stale blob references');
+        }
 
         // Handle audio ended
         audioRef.current.onended = () => {

@@ -44,6 +44,12 @@ export const useBeatDetection = () => {
         log('Beat detection: Analyzing from file/blob');
         arrayBuffer = await audioSource.arrayBuffer();
       } else if (typeof audioSource === 'string') {
+        // Reject stale blob URLs early
+        if (audioSource.startsWith('blob:')) {
+          console.warn('[BeatDetection] Rejected stale blob URL');
+          setIsAnalyzing(false);
+          return;
+        }
         // It's a URL - try to fetch the audio data
         log('Beat detection: Fetching from URL:', audioSource.substring(0, 50) + '...');
 
