@@ -293,7 +293,7 @@ const VideoStudio = ({
 
   // Sync with parent when initialArtistId changes (e.g., from null to valid ID after login)
   useEffect(() => {
-    if (initialArtistId && initialArtistId !== currentArtistId) {
+    if (initialArtistId !== currentArtistId) {
       log('[VideoStudio] Syncing artistId from parent:', initialArtistId);
       setCurrentArtistId(initialArtistId);
       prevArtistIdRef.current = initialArtistId;

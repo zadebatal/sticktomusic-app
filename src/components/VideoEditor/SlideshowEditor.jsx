@@ -1787,6 +1787,35 @@ const SlideshowEditor = ({
     e.target.value = '';
   }, [db, artistId, toastSuccess, toastError]);
 
+  // Helper to clean audio object for Firestore (removes non-serializable fields and undefined values)
+  const cleanAudioForSave = (audio) => {
+    if (!audio) return null;
+
+    // Explicitly construct object with only the fields we want (no file, localUrl, etc.)
+    const cleaned = {
+      id: audio.id,
+      name: audio.name,
+      url: audio.url?.startsWith('blob:') ? null : audio.url,
+      duration: audio.duration,
+      startTime: audio.startTime || 0,
+      endTime: audio.endTime || null,
+      trimmedDuration: audio.trimmedDuration,
+      isTrimmed: audio.isTrimmed
+    };
+
+    // Remove any undefined fields (Firestore doesn't accept undefined)
+    Object.keys(cleaned).forEach(key => {
+      if (cleaned[key] === undefined) {
+        delete cleaned[key];
+      }
+    });
+
+    // Don't save if we don't have a valid URL
+    if (!cleaned.url) return null;
+
+    return cleaned;
+  };
+
   // Save active slideshow only (does NOT close editor so user can keep editing other timelines)
   const handleSave = useCallback(async () => {
     const activeSlideshow = allSlideshows[activeSlideshowIndex];
@@ -1802,22 +1831,8 @@ const SlideshowEditor = ({
       }
     }
 
-    // Clean audio object before saving (remove non-serializable fields)
-    let cleanedAudio = null;
-    if (activeSlideshow.audio) {
-      const { file, localUrl, ...audioFields } = activeSlideshow.audio;
-      cleanedAudio = {
-        ...audioFields,
-        // Ensure URL is not a blob URL
-        url: audioFields.url?.startsWith('blob:') ? null : audioFields.url,
-        startTime: activeSlideshow.audio.startTime || 0,
-        endTime: activeSlideshow.audio.endTime || null
-      };
-      // Don't save audio if it has no valid URL
-      if (!cleanedAudio.url) {
-        cleanedAudio = null;
-      }
-    }
+    // Clean audio object before saving
+    const cleanedAudio = cleanAudioForSave(activeSlideshow.audio);
 
     const slideshowData = {
       id: activeSlideshow.isTemplate ? (existingSlideshow?.id || `slideshow_${Date.now()}`) : activeSlideshow.id,
@@ -1848,22 +1863,8 @@ const SlideshowEditor = ({
           }
         }
 
-        // Clean audio object before saving (remove non-serializable fields)
-        let cleanedAudio = null;
-        if (ss.audio) {
-          const { file, localUrl, ...audioFields } = ss.audio;
-          cleanedAudio = {
-            ...audioFields,
-            // Ensure URL is not a blob URL
-            url: audioFields.url?.startsWith('blob:') ? null : audioFields.url,
-            startTime: ss.audio.startTime || 0,
-            endTime: ss.audio.endTime || null
-          };
-          // Don't save audio if it has no valid URL
-          if (!cleanedAudio.url) {
-            cleanedAudio = null;
-          }
-        }
+        // Clean audio object before saving
+        const cleanedAudio = cleanAudioForSave(ss.audio);
 
         return {
           id: ss.isTemplate ? (existingSlideshow?.id || `slideshow_${Date.now()}`) : ss.id,
