@@ -1411,7 +1411,7 @@ export const saveCreatedContent = (artistId, content) => {
  */
 export const addCreatedVideo = (artistId, videoData) => {
   const content = getCreatedContent(artistId);
-  const newVideo = videoData.id ? videoData : createCreatedVideo(videoData);
+  const newVideo = videoData.id ? { type: 'video', ...videoData } : createCreatedVideo(videoData);
   content.videos.push(newVideo);
   saveCreatedContent(artistId, content);
   return newVideo;
@@ -1463,7 +1463,7 @@ export const deleteCreatedVideo = (artistId, videoId) => {
  */
 export const addCreatedSlideshow = (artistId, slideshowData) => {
   const content = getCreatedContent(artistId);
-  const newSlideshow = slideshowData.id ? slideshowData : createCreatedSlideshow(slideshowData);
+  const newSlideshow = slideshowData.id ? { type: 'slideshow', ...slideshowData } : createCreatedSlideshow(slideshowData);
   // Upsert: update if same ID exists, otherwise add new
   const existingIndex = content.slideshows.findIndex(s => s.id === newSlideshow.id);
   if (existingIndex >= 0) {
@@ -1484,7 +1484,7 @@ export const addCreatedSlideshow = (artistId, slideshowData) => {
 export const addCreatedSlideshowsBatch = (artistId, slideshowsData) => {
   const content = getCreatedContent(artistId);
   const newSlideshows = slideshowsData.map(data =>
-    data.id ? data : createCreatedSlideshow(data)
+    data.id ? { type: 'slideshow', ...data } : createCreatedSlideshow(data)
   );
 
   // Upsert all slideshows
@@ -1664,10 +1664,12 @@ export const loadCreatedContentAsync = async (db, artistId) => {
 
     snapshot.docs.forEach(doc => {
       const data = doc.data();
-      if (data.type === 'video') {
-        videos.push(data);
-      } else if (data.type === 'slideshow') {
-        slideshows.push(data);
+      // Infer type from data shape if type field is missing (backwards compat)
+      const type = data.type || (data.slides ? 'slideshow' : data.clips ? 'video' : null);
+      if (type === 'video') {
+        videos.push({ ...data, type: 'video' });
+      } else if (type === 'slideshow') {
+        slideshows.push({ ...data, type: 'slideshow' });
       }
     });
 
@@ -1739,18 +1741,21 @@ export const subscribeToCreatedContent = (db, artistId, callback) => {
   };
 
   // Run migration first, then subscribe
+  let unsubscribeSnapshot = null;
   loadCreatedContentAsync(db, artistId).then(() => {
     const collectionRef = collection(db, 'artists', artistId, 'library', 'data', 'createdContent');
-    return onSnapshot(collectionRef, (snapshot) => {
+    unsubscribeSnapshot = onSnapshot(collectionRef, (snapshot) => {
       const videos = [];
       const slideshows = [];
 
       snapshot.docs.forEach(doc => {
         const data = cleanLoadedData(doc.data());
-        if (data.type === 'video') {
-          videos.push(data);
-        } else if (data.type === 'slideshow') {
-          slideshows.push(data);
+        // Infer type from data shape if type field is missing (backwards compat)
+        const type = data.type || (data.slides ? 'slideshow' : data.clips ? 'video' : null);
+        if (type === 'video') {
+          videos.push({ ...data, type: 'video' });
+        } else if (type === 'slideshow') {
+          slideshows.push({ ...data, type: 'slideshow' });
         }
       });
 
@@ -1768,7 +1773,7 @@ export const subscribeToCreatedContent = (db, artistId, callback) => {
     });
   });
 
-  return () => {}; // Return empty unsubscribe for now
+  return () => { if (unsubscribeSnapshot) unsubscribeSnapshot(); };
 };
 
 /**
