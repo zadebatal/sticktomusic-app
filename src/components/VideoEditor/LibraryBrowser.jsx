@@ -2410,22 +2410,50 @@ const LibraryBrowser = ({
                       const migrated = migrateCollectionBanks(col);
                       const numBanks = migrated.textBanks?.length || 0;
 
-                      return Array.from({ length: numBanks }, (_, idx) => {
-                        const bankNum = idx + 1;
-                        const bankColor = getBankColor(idx);
-                        return (
-                          <TextBankPanel
-                            key={`textbank-${idx}`}
-                            bankNum={bankNum}
-                            label={getBankLabel(idx)}
-                            color={bankColor.light}
-                            texts={migrated.textBanks?.[idx] || []}
-                            onAdd={(text) => { addToTextBank(artistId, activeView, bankNum, text); loadData(); syncCollection(activeView); }}
-                            onRemove={(index) => { removeFromTextBank(artistId, activeView, bankNum, index); loadData(); syncCollection(activeView); }}
-                            onUpdate={(texts) => { updateTextBank(artistId, activeView, bankNum, texts); loadData(); syncCollection(activeView); }}
-                          />
-                        );
-                      });
+                      return (
+                        <>
+                          {Array.from({ length: numBanks }, (_, idx) => {
+                            const bankNum = idx + 1;
+                            const bankColor = getBankColor(idx);
+                            return (
+                              <TextBankPanel
+                                key={`textbank-${idx}`}
+                                bankNum={bankNum}
+                                label={getBankLabel(idx)}
+                                color={bankColor.light}
+                                texts={migrated.textBanks?.[idx] || []}
+                                onAdd={(text) => { addToTextBank(artistId, activeView, bankNum, text); loadData(); syncCollection(activeView); }}
+                                onRemove={(index) => { removeFromTextBank(artistId, activeView, bankNum, index); loadData(); syncCollection(activeView); }}
+                                onUpdate={(texts) => { updateTextBank(artistId, activeView, bankNum, texts); loadData(); syncCollection(activeView); }}
+                                onDelete={numBanks > 2 ? () => {
+                                  if (window.confirm(`Delete ${getBankLabel(idx)}? All text entries will be removed.`)) {
+                                    removeBankFromCollection(artistId, activeView, idx);
+                                    loadData();
+                                    syncCollection(activeView);
+                                  }
+                                } : null}
+                              />
+                            );
+                          })}
+                          {/* + Add Text Bank button */}
+                          {numBanks < MAX_BANKS && (
+                            <button
+                              onClick={() => { addBankToCollection(artistId, activeView); loadData(); syncCollection(activeView); }}
+                              style={{
+                                padding: '10px', borderRadius: '10px',
+                                border: `1px dashed ${theme.text.muted}`,
+                                backgroundColor: 'transparent', color: theme.text.muted,
+                                fontSize: '12px', cursor: 'pointer', textAlign: 'center',
+                                transition: 'all 0.15s ease', flexShrink: 0
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.borderColor = `${theme.accent.primary}80`; e.currentTarget.style.color = theme.accent.hover; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.borderColor = theme.text.muted; e.currentTarget.style.color = theme.text.muted; }}
+                            >
+                              + Add Text Bank
+                            </button>
+                          )}
+                        </>
+                      );
                     })()}
                     {mode === 'videos' && (
                       <>

@@ -6,7 +6,7 @@ import React, { useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getTextBankText, getTextBankStyle } from '../../services/libraryService';
 
-const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate }) => {
+const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate, onDelete }) => {
   const { theme } = useTheme();
   const [newText, setNewText] = useState('');
   const [editingIndex, setEditingIndex] = useState(null);
@@ -31,6 +31,26 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
           <span style={{ fontSize: '13px', fontWeight: 600, color }}>{label}</span>
           <span style={{ fontSize: '11px', color: theme.text.muted }}>{texts.length}</span>
         </div>
+        {onDelete && (
+          <button
+            onClick={onDelete}
+            style={{
+              padding: '4px 8px', fontSize: '11px',
+              backgroundColor: 'transparent', border: `1px solid ${theme.border.subtle}`,
+              borderRadius: '4px', color: theme.text.muted, cursor: 'pointer',
+              transition: 'all 0.2s', display: 'flex', alignItems: 'center'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+              e.currentTarget.style.color = '#fca5a5';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = theme.border.subtle;
+              e.currentTarget.style.color = theme.text.muted;
+            }}
+            title={`Delete ${label}`}
+          >✕</button>
+        )}
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
         {texts.length === 0 ? (
