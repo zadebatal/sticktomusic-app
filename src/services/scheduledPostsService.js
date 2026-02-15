@@ -119,10 +119,12 @@ export async function createScheduledPost(db, artistId, data) {
       serverUpdatedAt: serverTimestamp()
     });
     log('[ScheduledPosts] Created:', id);
-  } catch (error) {
-    console.error('[ScheduledPosts] Create failed:', error);
-    // Save to localStorage as fallback
+    // Also update local
     saveLocalPost(artistId, post);
+  } catch (error) {
+    console.error('[ScheduledPosts] Firestore create failed:', error);
+    // Save to localStorage as fallback (mark unsynced)
+    saveLocalPost(artistId, { ...post, syncedToCloud: false });
   }
 
   return post;
@@ -143,9 +145,12 @@ export async function updateScheduledPost(db, artistId, postId, updates) {
       serverUpdatedAt: serverTimestamp()
     });
     log('[ScheduledPosts] Updated:', postId);
-  } catch (error) {
-    console.error('[ScheduledPosts] Update failed:', error);
+    // Also update local
     updateLocalPost(artistId, postId, patch);
+  } catch (error) {
+    console.error('[ScheduledPosts] Firestore update failed:', error);
+    // Update localStorage as fallback (mark unsynced)
+    updateLocalPost(artistId, postId, { ...patch, syncedToCloud: false });
   }
 
   return patch;
@@ -244,9 +249,17 @@ export async function reorderPosts(db, artistId, newOrder) {
     });
     await batch.commit();
     log('[ScheduledPosts] Reordered', newOrder.length, 'posts');
+    // Also update local
+    newOrder.forEach(({ id, queuePosition }) => {
+      updateLocalPost(artistId, id, { queuePosition });
+    });
     return true;
   } catch (error) {
-    console.error('[ScheduledPosts] Reorder failed:', error);
+    console.error('[ScheduledPosts] Firestore reorder failed:', error);
+    // Update localStorage as fallback
+    newOrder.forEach(({ id, queuePosition }) => {
+      updateLocalPost(artistId, id, { queuePosition, syncedToCloud: false });
+    });
     return false;
   }
 }
@@ -297,9 +310,12 @@ export async function addManyScheduledPosts(db, artistId, posts) {
   try {
     await batch.commit();
     log('[ScheduledPosts] Batch created', results.length, 'posts');
-  } catch (error) {
-    console.error('[ScheduledPosts] Batch create failed:', error);
+    // Also update local
     results.forEach(p => saveLocalPost(artistId, p));
+  } catch (error) {
+    console.error('[ScheduledPosts] Firestore batch create failed:', error);
+    // Save to localStorage as fallback (mark unsynced)
+    results.forEach(p => saveLocalPost(artistId, { ...p, syncedToCloud: false }));
   }
 
   return results;
@@ -375,7 +391,25 @@ function saveLocalPost(artistId, post) {
     }
     localStorage.setItem(STORAGE_KEY(artistId), JSON.stringify(posts));
   } catch (error) {
-    console.error('[ScheduledPosts] Local save failed:', error);
+    if (error?.name === 'QuotaExceededError' || error?.code === 22) {
+      console.warn('[ScheduledPosts] Quota exceeded, cleaning up...');
+      const keysToClean = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith('stm_session_') || key?.startsWith('stm_temp_')) {
+          keysToClean.push(key);
+        }
+      }
+      keysToClean.forEach(k => localStorage.removeItem(k));
+      // Retry save
+      try {
+        localStorage.setItem(STORAGE_KEY(artistId), JSON.stringify(posts));
+      } catch (retryError) {
+        console.error('[ScheduledPosts] Save failed even after cleanup:', retryError);
+      }
+    } else {
+      console.error('[ScheduledPosts] Local save failed:', error);
+    }
   }
 }
 
