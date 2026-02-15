@@ -146,9 +146,9 @@ const MultiClipEditor = ({
   // Waveform via shared hook (below)
 
   // ── Audio leveling state ──
-  const [sourceVideoMuted, setSourceVideoMuted] = useState(false);
-  const [sourceVideoVolume, setSourceVideoVolume] = useState(1.0);
-  const [externalAudioVolume, setExternalAudioVolume] = useState(1.0);
+  const [sourceVideoMuted, setSourceVideoMuted] = useState(existingVideo?.sourceVideoMuted ?? false);
+  const [sourceVideoVolume, setSourceVideoVolume] = useState(existingVideo?.sourceVideoVolume ?? 1.0);
+  const [externalAudioVolume, setExternalAudioVolume] = useState(existingVideo?.externalAudioVolume ?? 1.0);
 
   // ── Clip durations tracking ──
   const clipDurationsRef = useRef({});
@@ -943,11 +943,15 @@ const MultiClipEditor = ({
       isTemplate: video.isTemplate,
       status: 'draft',
       createdAt: existingVideo?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      // Audio mixing state
+      sourceVideoMuted,
+      sourceVideoVolume,
+      externalAudioVolume
     };
     onSave(videoData);
     toastSuccess(`Saved "${video.name || 'Multi-Clip'}"`);
-  }, [allVideos, activeVideoIndex, totalDuration, aspectRatio, selectedAudio, existingVideo, onSave, toastSuccess, toastError]);
+  }, [allVideos, activeVideoIndex, totalDuration, aspectRatio, selectedAudio, existingVideo, sourceVideoMuted, sourceVideoVolume, externalAudioVolume, onSave, toastSuccess, toastError]);
 
   // ── Save All & Close ──
   const handleSaveAllAndClose = useCallback(async () => {

@@ -12,6 +12,7 @@ import { getCreatedContent, getCollections } from '../../services/libraryService
 import { renderVideo } from '../../services/videoExportService';
 import { exportSlideshowAsImages, generateSlideThumbnail } from '../../services/slideshowExportService';
 import { uploadFile } from '../../services/firebaseStorage';
+import { startPolling } from '../../services/postStatusPolling';
 import log from '../../utils/logger';
 import { useTheme } from '../../contexts/ThemeContext';
 import useIsMobile from '../../hooks/useIsMobile';
@@ -211,8 +212,15 @@ const SchedulingPage = ({
       setPosts(tagged);
       setLoading(false);
     });
-    return () => unsubscribe();
-  }, [db, artistId]);
+
+    // Start polling for overdue SCHEDULED posts (checks if they're actually live on Late.co)
+    const stopPolling = startPolling(db, artistId, () => posts);
+
+    return () => {
+      unsubscribe();
+      stopPolling();
+    };
+  }, [db, artistId, posts]);
 
   useEffect(() => {
     const now = new Date();
@@ -374,7 +382,40 @@ const SchedulingPage = ({
   const handleUpdatePost = useCallback(async (postId, updates) => {
     setPosts(prev => prev.map(p => p.id === postId ? { ...p, ...updates } : p));
     await updateScheduledPost(db, artistId, postId, updates);
-  }, [db, artistId]);
+
+    // If scheduledTime changed and post has latePostId, offer to sync to Late.co
+    if (updates.scheduledTime) {
+      const post = posts.find(p => p.id === postId);
+      if (post?.latePostId && post?.status === 'scheduled') {
+        // Sync time change to Late.co (only if post is still scheduled, not posted yet)
+        try {
+          const response = await fetch('/api/late', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${await db.app.auth().currentUser?.getIdToken()}`
+            },
+            body: JSON.stringify({
+              action: 'updatePost',
+              postId: post.latePostId,
+              artistId,
+              scheduledFor: updates.scheduledTime
+            })
+          });
+
+          if (response.ok) {
+            toastSuccess('Time updated on Late.co');
+          } else {
+            console.warn('[Schedule] Failed to sync time to Late.co:', await response.text());
+            toastSuccess('Time updated locally (Late.co sync may have failed)');
+          }
+        } catch (error) {
+          console.error('[Schedule] Error syncing time to Late.co:', error);
+          // Don't show error toast - local update succeeded
+        }
+      }
+    }
+  }, [db, artistId, posts, toastSuccess]);
 
   // ── Apply caption bank category to drafts (respects selection) ──
   const handleApplyCategory = useCallback(async (categoryKey) => {
@@ -550,7 +591,8 @@ const SchedulingPage = ({
     }
 
     const postHashtags = Array.isArray(post.hashtags) ? post.hashtags : (post.hashtags || '').split(/\s+/).filter(Boolean);
-    const allHashtags = [...postHashtags, ...(alwaysOnHashtags || [])];
+    // Don't auto-merge always-on hashtags - let users control hashtags explicitly
+    const allHashtags = postHashtags;
     const caption = [post.caption || '', allHashtags.join(' ')].filter(Boolean).join('\n\n');
 
     try {
@@ -587,7 +629,8 @@ const SchedulingPage = ({
             platforms: [entry],
             scheduledFor: post.scheduledTime || new Date().toISOString(),
             type: 'carousel',
-            images
+            images,
+            audioUrl: post.audioUrl || post.editorState?.audio?.url || post.editorState?.audio?.localUrl || null
           });
 
           if (result?.success === false) {
@@ -610,12 +653,11 @@ const SchedulingPage = ({
           toastError(`Failed to publish: ${errors}`);
         } else {
           await handleUpdatePost(postId, {
-            status: POST_STATUS.POSTED,
-            postedAt: new Date().toISOString(),
+            status: POST_STATUS.SCHEDULED,
             latePostId: lastLatePostId,
             postResults: platformResults
           });
-          toastSuccess(anyFailed ? 'Partially published (some platforms failed)' : 'Published successfully!');
+          toastSuccess(anyFailed ? 'Partially scheduled (some platforms failed)' : 'Scheduled successfully!');
         }
       } else {
         // Video post — single API call for all platforms
@@ -642,12 +684,11 @@ const SchedulingPage = ({
           });
 
           await handleUpdatePost(postId, {
-            status: POST_STATUS.POSTED,
-            postedAt: new Date().toISOString(),
+            status: POST_STATUS.SCHEDULED,
             latePostId,
             postResults: platformResults
           });
-          toastSuccess('Published successfully!');
+          toastSuccess('Scheduled successfully!');
         }
       }
     } catch (err) {
@@ -678,6 +719,47 @@ const SchedulingPage = ({
 
     const startHour = startTime.getHours();
     const startMin = startTime.getMinutes();
+
+    // ── Conflict Detection: Check for existing posts on target dates ──
+    const existingPostsOnDate = posts.filter(p => {
+      if (!p.scheduledTime || selectedPostIds.has(p.id)) return false;
+      const pTime = new Date(p.scheduledTime);
+      const pDate = pTime.toDateString();
+      const startDate = startTime.toDateString();
+      // Check if post is on the same day as start date (accounting for multi-day batches)
+      const maxDays = Math.ceil(selectedCount / postsPerDay);
+      for (let d = 0; d < maxDays; d++) {
+        const checkDate = new Date(startTime);
+        checkDate.setDate(checkDate.getDate() + d);
+        if (pDate === checkDate.toDateString()) return true;
+      }
+      return false;
+    });
+
+    if (existingPostsOnDate.length > 0) {
+      // Find latest scheduled time to suggest safe start
+      const latestExisting = existingPostsOnDate.reduce((latest, p) => {
+        const t = new Date(p.scheduledTime);
+        return t > latest ? t : latest;
+      }, new Date(startTime));
+
+      // Add 30min buffer after last existing post
+      const suggestedStart = new Date(latestExisting.getTime() + 30 * 60 * 1000);
+
+      // Check if current start time would conflict
+      const wouldConflict = existingPostsOnDate.some(p => {
+        const pTime = new Date(p.scheduledTime);
+        const timeDiff = Math.abs(pTime - startTime) / 60000; // minutes
+        return timeDiff < 15; // Within 15 minutes = conflict
+      });
+
+      if (wouldConflict) {
+        toastSuccess(`⚠️ ${existingPostsOnDate.length} posts already scheduled on these dates. Auto-adjusted start time to ${suggestedStart.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} to avoid conflicts.`);
+        startTime = suggestedStart;
+      } else {
+        toastSuccess(`ℹ️ ${existingPostsOnDate.length} posts already scheduled on these dates. Times will be interspersed.`);
+      }
+    }
 
     let scheduled;
     if (spacingMode === 'random') {
@@ -736,11 +818,10 @@ const SchedulingPage = ({
         status: POST_STATUS.SCHEDULED
       };
 
-      // Merge hashtags: always-on + existing per-post
+      // Don't auto-merge always-on hashtags - preserve user's explicit hashtag choices
       const existingPost = posts.find(p => p.id === post.id);
       const perPostTags = toHashtagArray(existingPost?.hashtags);
-      const mergedTags = [...new Set([...alwaysOnHashtags, ...perPostTags])];
-      if (mergedTags.length > 0) updates.hashtags = mergedTags;
+      if (perPostTags.length > 0) updates.hashtags = perPostTags;
 
       // Apply batch account platforms
       if (Object.keys(platformUpdate).length > 0) {
@@ -847,9 +928,9 @@ const SchedulingPage = ({
         await handleUpdatePost(post.id, { status: POST_STATUS.POSTING });
       }
 
+      // Don't auto-merge always-on hashtags - let users control hashtags explicitly per post
       const batchPostHashtags = Array.isArray(post.hashtags) ? post.hashtags : (post.hashtags || '').split(/\s+/).filter(Boolean);
-      const allHashtags = [...batchPostHashtags, ...(alwaysOnHashtags || [])];
-      const caption = [post.caption || '', allHashtags.join(' ')].filter(Boolean).join('\n\n');
+      const caption = [post.caption || '', batchPostHashtags.join(' ')].filter(Boolean).join('\n\n');
 
       try {
         if (isSlideshow) {
@@ -1198,8 +1279,26 @@ const SchedulingPage = ({
             <div style={{ ...s.bulkSection, ...(isMobile ? { width: '100%' } : {}) }}>
               <label style={s.miniLabel}>Start</label>
               <div style={{ display: 'flex', gap: '4px' }}>
-                <input type="date" value={batchStartDate} onChange={(e) => setBatchStartDate(e.target.value)} style={s.miniInput} />
-                <input type="time" value={batchStartTime} onChange={(e) => setBatchStartTime(e.target.value)} style={s.miniInput} />
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <input type="date" value={batchStartDate} onChange={(e) => setBatchStartDate(e.target.value)} style={{ ...s.miniInput, paddingRight: '24px' }} />
+                  <span style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '12px', opacity: 0.5 }}>📅</span>
+                </div>
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <input
+                    type="time"
+                    value={batchStartTime}
+                    onChange={(e) => setBatchStartTime(e.target.value)}
+                    style={{ ...s.miniInput, paddingRight: '24px', cursor: 'pointer' }}
+                  />
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const input = e.currentTarget.previousElementSibling;
+                      if (input) { input.focus(); input.click(); }
+                    }}
+                    style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'auto', fontSize: '12px', opacity: 0.5, cursor: 'pointer' }}
+                  >🕐</span>
+                </div>
               </div>
             </div>
 
@@ -1598,8 +1697,28 @@ const PostRow = ({
         {isMobile ? (
           <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '6px', paddingLeft: '32px' }}>
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} style={{ ...s.inlineDate, flex: 1, minWidth: '120px' }} />
-              <input type="time" value={schedTime} onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }} style={{ ...s.inlineTime, flex: 1, minWidth: '90px' }} />
+              <div style={{ position: 'relative', flex: 1, minWidth: '120px' }}>
+                <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} onMouseDown={(e) => e.stopPropagation()} style={{ ...s.inlineDate, width: '100%', paddingRight: '24px' }} />
+                <span style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '11px', opacity: 0.5 }}>📅</span>
+              </div>
+              <div style={{ position: 'relative', flex: 1, minWidth: '90px' }}>
+                <input
+                  type="time"
+                  value={schedTime}
+                  onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }}
+                  onClick={(e) => e.stopPropagation()}
+                  onFocus={(e) => e.stopPropagation()}
+                  style={{ ...s.inlineTime, width: '100%', paddingRight: '24px', cursor: 'pointer' }}
+                />
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const input = e.currentTarget.previousElementSibling;
+                    if (input) { input.focus(); input.click(); }
+                  }}
+                  style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'auto', fontSize: '11px', opacity: 0.5, cursor: 'pointer' }}
+                >🕐</span>
+              </div>
             </div>
             {previewTime && !post.scheduledTime && (() => {
               const pt = new Date(previewTime);
@@ -1616,8 +1735,29 @@ const PostRow = ({
             {/* Schedule Date/Time */}
             <div style={{ width: '190px', display: 'flex', flexDirection: 'column', gap: '2px', flexShrink: 0 }}>
               <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} style={s.inlineDate} />
-                <input type="time" value={schedTime} onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }} style={s.inlineTime} />
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} onMouseDown={(e) => e.stopPropagation()} style={{ ...s.inlineDate, paddingRight: '24px' }} />
+                  <span style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '10px', opacity: 0.5 }}>📅</span>
+                </div>
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <input
+                    ref={(el) => { if (el) el.dataset.timeInput = 'true'; }}
+                    type="time"
+                    value={schedTime}
+                    onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }}
+                    onClick={(e) => e.stopPropagation()}
+                    onFocus={(e) => e.stopPropagation()}
+                    style={{ ...s.inlineTime, paddingRight: '24px', cursor: 'pointer' }}
+                  />
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const input = e.currentTarget.previousElementSibling;
+                      if (input) { input.focus(); input.click(); }
+                    }}
+                    style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'auto', fontSize: '10px', opacity: 0.5, cursor: 'pointer' }}
+                  >🕐</span>
+                </div>
               </div>
               {previewTime && !post.scheduledTime && (() => {
                 const pt = new Date(previewTime);

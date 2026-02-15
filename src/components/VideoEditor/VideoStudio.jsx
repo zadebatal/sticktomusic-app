@@ -293,7 +293,7 @@ const VideoStudio = ({
 
   // Sync with parent when initialArtistId changes (e.g., from null to valid ID after login)
   useEffect(() => {
-    if (initialArtistId && initialArtistId !== currentArtistId) {
+    if (initialArtistId !== currentArtistId) {
       log('[VideoStudio] Syncing artistId from parent:', initialArtistId);
       setCurrentArtistId(initialArtistId);
       prevArtistIdRef.current = initialArtistId;
@@ -836,6 +836,15 @@ const VideoStudio = ({
           status: VIDEO_STATUS.DRAFT
         });
         log('[VideoStudio] Saved video via library system:', savedVideo.id);
+
+        // Sync to Firestore for cross-device access
+        if (db && currentArtistId) {
+          const content = getCreatedContent(currentArtistId);
+          saveCreatedContentAsync(db, currentArtistId, content).catch(err =>
+            console.error('[VideoStudio] Failed to sync video to Firestore:', err)
+          );
+        }
+
         setCreatedContentVersion(v => v + 1);
         setShowEditor(false);
         setEditingVideo(null);
@@ -1553,17 +1562,73 @@ const VideoStudio = ({
     // Library mode: save via libraryService (with Firestore sync)
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
-        const data = {
+        let data = {
           ...slideshowData,
           id: slideshowData.id || `slideshow_${Date.now()}`,
           collectionId: slideshowData.collectionId || pullFromCollection || null,
           createdAt: slideshowData.createdAt || new Date().toISOString(),
           status: slideshowData.status || 'draft'
         };
+
+        // Upload audio to Firebase Storage if it has a blob URL (same as scheduler mode)
+        if (data.audio && (data.audio.file || data.audio.url?.startsWith('blob:'))) {
+          console.log('[VideoStudio] Safari Debug - Audio before upload:', {
+            hasFile: !!data.audio.file,
+            url: data.audio.url?.substring(0, 50),
+            id: data.audio.id,
+            name: data.audio.name
+          });
+
+          try {
+            const audioFile = data.audio.file;
+            if (audioFile) {
+              console.log('[VideoStudio] Safari Debug - Uploading audio file to Firebase...');
+              const { url: firebaseUrl } = await uploadFile(audioFile, 'audio');
+              data = {
+                ...data,
+                audio: {
+                  ...data.audio,
+                  url: firebaseUrl,
+                }
+              };
+              log('[VideoStudio] Uploaded audio to Firebase:', firebaseUrl);
+            } else if (data.audio.url?.startsWith('blob:')) {
+              console.log('[VideoStudio] Safari Debug - No file, trying to find in library. Library has', libraryMedia.audio.length, 'audio items');
+              // Blob URL without file - try to find in library by ID
+              const libAudio = libraryMedia.audio.find(a => a.id === data.audio.id);
+              if (libAudio && libAudio.url && !libAudio.url.startsWith('blob:')) {
+                console.log('[VideoStudio] Safari Debug - Found in library:', libAudio.name, 'URL:', libAudio.url?.substring(0, 50));
+                data = {
+                  ...data,
+                  audio: {
+                    ...data.audio,
+                    url: libAudio.url
+                  }
+                };
+                log('[VideoStudio] Replaced blob URL with library URL for audio:', libAudio.name);
+              } else {
+                console.warn('[VideoStudio] Safari Debug - Audio has blob URL but not found in library. Searched for ID:', data.audio.id);
+              }
+            }
+          } catch (err) {
+            console.error('[VideoStudio] Failed to upload audio:', err);
+          }
+        } else if (data.audio) {
+          console.log('[VideoStudio] Safari Debug - Audio already has valid URL:', data.audio.url?.substring(0, 50));
+        }
+
+        // Clean audio object for Firestore (remove non-serializable fields)
+        if (data.audio) {
+          const { file, localUrl, ...cleanAudio } = data.audio;
+          data = { ...data, audio: cleanAudio };
+        }
+
         const savedSlideshow = addCreatedSlideshow(currentArtistId, data);
         // Sync to Firestore for persistence across refreshes/devices
         if (db) {
-          addCreatedSlideshowAsync(db, currentArtistId, data).catch(console.error);
+          addCreatedSlideshowAsync(db, currentArtistId, data).catch((err) => {
+            console.error('[VideoStudio] Failed to sync slideshow to Firestore:', err);
+          });
         }
         log('[VideoStudio] Saved slideshow via library system:', savedSlideshow.id);
         setCreatedContentVersion(v => v + 1);

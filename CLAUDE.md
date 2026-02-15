@@ -85,3 +85,90 @@ git push                 # Auto-deploys to Vercel
 
 ## Prime Directive
 Don't break anything that works. Read before editing. Build-verify after each batch of changes.
+
+## Pre-Deploy Checklist for Data Changes
+
+**CRITICAL:** Before changing ANY function in `libraryService.js`, `scheduledPostsService.js`, or any Firestore path:
+
+### 1. Impact Analysis
+- [ ] Ran `grep -r "functionName" src/` to find all usages
+- [ ] Ran `grep -r "doc(db.*oldPath" src/` to find all Firestore reads
+- [ ] Ran `grep -r "collection(db.*oldPath" src/` to find all subscriptions
+- [ ] Identified ALL files that will be affected by this change
+
+### 2. Testing Requirements
+- [ ] Tested with **empty data** (new user scenario)
+- [ ] Tested with **existing data** (simulated old structure)
+- [ ] Tested with **localStorage populated** but Firestore empty
+- [ ] Tested with **Firestore populated** but localStorage empty
+- [ ] Tested on test artist account (not production artist)
+
+### 3. Migration Strategy
+- [ ] Written migration for **old → new** (dual-path support)
+- [ ] Migration preserves **ALL** existing data
+- [ ] Migration runs BEFORE subscription overwrites localStorage
+- [ ] Migration cleans up old data after successful copy
+- [ ] Migration logs count of migrated items for monitoring
+
+### 4. Deployment Plan
+- [ ] Have explicit **rollback plan** (git revert command ready)
+- [ ] Deploying on **Friday afternoon** (time to monitor over weekend)
+- [ ] Tagged commit with **`[MIGRATION]`** prefix
+- [ ] Phase 2 cleanup scheduled for 48 hours later
+
+### 5. Commit Format
+```
+[MIGRATION] Brief description of what's changing
+
+Phase 1: Add dual-path support for [feature]. Reads old path
+(artists/{id}/old/path) first, migrates to new path
+(artists/{id}/new/path), then deletes old. Preserves all data.
+Phase 2 cleanup will deploy in 48 hours.
+
+- Added: Migration logic in loadDataAsync()
+- Changed: saveDataAsync() to use new path
+- Tested: Empty data, existing data, localStorage fallback
+- Rollback: git revert HEAD && git push
+```
+
+## Migration Workflow
+
+See **[MIGRATIONS.md](./MIGRATIONS.md)** for detailed examples and patterns.
+
+**Two-Phase Deploy (MANDATORY for breaking changes):**
+
+### Phase 1 (Friday Week 1)
+- Deploy code that works with BOTH old and new structures
+- Migrate old data to new structure on first load
+- Monitor for 48 hours
+
+### Phase 2 (Friday Week 2)
+- Remove old path code
+- Clean implementation with only new structure
+
+**NEVER deploy a breaking change without Phase 1 migration first.**
+
+## Known Gotchas
+
+### Firestore Subscriptions
+- Run migration BEFORE subscribing to new path
+- Only overwrite localStorage if Firestore has data OR localStorage is empty
+- Check for blob URLs and replace with Firebase Storage URLs
+
+### Non-Serializable Fields
+- Firestore rejects: `File`, `Blob`, `localUrl` (blob URLs)
+- Always clean before saving: `const { file, localUrl, ...clean } = obj`
+- Upload blob URLs to Firebase Storage first, save permanent URL
+
+### localStorage vs Firestore Priority
+- **Write:** Always write to localStorage first (instant), then Firestore (async)
+- **Read:** Check Firestore first (might have newer data from other device), fallback to localStorage
+- **Subscribe:** Run migration first, then subscribe
+
+## Friday Deployment Rule
+
+Deploy risky changes on **Friday afternoon**:
+- ✅ Weekend to monitor and fix issues
+- ✅ Lower traffic for issues to surface
+- ✅ Time to rollback before Monday
+- ❌ Never deploy migrations on Monday-Thursday

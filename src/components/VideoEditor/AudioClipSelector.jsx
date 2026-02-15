@@ -25,7 +25,11 @@ const AudioClipSelector = ({
   onSaveClip, // New: callback to save clip to library
   onCancel,
   initialStart = 0,
-  initialEnd = null
+  initialEnd = null,
+  db = null,
+  artistId = null,
+  onSuccess = null,
+  onError = null
 }) => {
   // Mobile responsive detection
   const { isMobile } = useIsMobile();
@@ -528,6 +532,70 @@ const AudioClipSelector = ({
     }
   }, [audioFile, audioUrl, inPoint, outPoint, selectedDuration, onSave]);
 
+  // Save trimmed audio to library permanently
+  const handleSaveToLibrary = useCallback(async (name) => {
+    if (!db || !artistId) {
+      onError?.('Cannot save to library: missing database or artist ID');
+      return;
+    }
+
+    setIsTrimming(true);
+    setTrimProgress('Trimming audio...');
+    try {
+      // Determine audio source (prefer file, then localUrl/url)
+      const source = audioFile || audioUrl;
+      if (!source) throw new Error('No audio source available');
+
+      // Trim the audio to a new file
+      const trimmedFile = await trimAudioToFile(
+        source,
+        inPoint,
+        outPoint,
+        name || 'Trimmed Audio',
+        (msg) => setTrimProgress(msg)
+      );
+
+      setTrimProgress('Uploading to cloud storage...');
+
+      // Import services
+      const { addToLibraryAsync } = await import('../../services/libraryService');
+      const { uploadFile } = await import('../../services/firebaseStorage');
+
+      // Upload to Firebase Storage for persistence
+      const { url: storageUrl } = await uploadFile(trimmedFile, 'audio', (progress) => {
+        setTrimProgress(`Uploading... ${Math.round(progress)}%`);
+      });
+
+      setTrimProgress('Saving to library...');
+
+      // Create media item for library with persistent URL
+      const mediaItem = {
+        type: 'audio',
+        name: trimmedFile.name,
+        url: storageUrl,
+        localUrl: storageUrl,
+        duration: selectedDuration,
+        isTrimmed: true,
+        originalName: audioName,
+        createdAt: new Date().toISOString()
+      };
+
+      // Save to library (localStorage + Firestore)
+      await addToLibraryAsync(db, artistId, mediaItem);
+
+      onSuccess?.(`Saved "${trimmedFile.name}" to library`);
+      log('[AudioClipSelector] Saved trimmed audio to library:', trimmedFile.name);
+
+      // Don't close the modal - user can still use the clip for current slideshow
+    } catch (error) {
+      console.error('[AudioClipSelector] Save to library failed:', error);
+      onError?.(`Failed to save: ${error.message}`);
+    } finally {
+      setIsTrimming(false);
+      setTrimProgress('');
+    }
+  }, [audioFile, audioUrl, inPoint, outPoint, selectedDuration, audioName, db, artistId, onSuccess, onError]);
+
   return (
     <div style={{
       ...styles.overlay,
@@ -1003,6 +1071,32 @@ const AudioClipSelector = ({
                 >
                   Cancel
                 </button>
+                {db && artistId && (
+                  <button
+                    style={{
+                      padding: '12px 20px',
+                      border: 'none',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #10b981, #059669)',
+                      color: '#fff',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: (trimmedClipName.trim() && !isTrimming) ? 'pointer' : 'not-allowed',
+                      opacity: (trimmedClipName.trim() && !isTrimming) ? 1 : 0.5,
+                      flex: isMobile ? 'none' : 1,
+                      ...(isMobile ? { width: '100%', padding: '14px', fontSize: '15px' } : {})
+                    }}
+                    onClick={() => {
+                      if (trimmedClipName.trim() && !isTrimming) {
+                        handleSaveToLibrary(trimmedClipName.trim());
+                      }
+                    }}
+                    disabled={!trimmedClipName.trim() || isTrimming}
+                    title="Save trimmed audio to your library for future use"
+                  >
+                    {isTrimming ? '💾 Saving...' : '💾 Save to Library'}
+                  </button>
+                )}
                 <button
                   style={{
                     ...styles.saveButton,

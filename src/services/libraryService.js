@@ -370,6 +370,14 @@ export const createCreatedSlideshow = ({
   cropMode = '9:16',
   collectionId = null
 }) => {
+  // Validation
+  if (!slides || slides.length === 0) {
+    throw new Error('Slideshow must have at least one slide');
+  }
+  if (slides.some(s => !s.backgroundImage)) {
+    console.warn('[Library] Some slides missing background images');
+  }
+
   const now = new Date().toISOString();
   return {
     id: `slideshow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -815,7 +823,18 @@ export const migrateCollectionBanks = (collection) => {
   while (textBanks.length < MIN_BANKS) textBanks.push([]);
   for (let i = 0; i < textBanks.length; i++) if (!textBanks[i]) textBanks[i] = [];
 
-  return { ...collection, banks, textBanks };
+  // Delete legacy bank keys after migration
+  const migrated = { ...collection, banks, textBanks };
+  delete migrated.bankA;
+  delete migrated.bankB;
+  delete migrated.bankC;
+  delete migrated.bankD;
+  delete migrated.textBank1;
+  delete migrated.textBank2;
+  delete migrated.textBank3;
+  delete migrated.textBank4;
+
+  return migrated;
 };
 
 /**
@@ -1277,9 +1296,110 @@ export const getCreatedContent = (artistId) => {
  */
 export const saveCreatedContent = (artistId, content) => {
   try {
-    localStorage.setItem(getCreatedContentKey(artistId), JSON.stringify(content));
+    // Clean data to reduce size and remove non-serializable fields
+    const cleanedContent = {
+      videos: (content.videos || []).map(v => ({
+        ...v,
+        thumbnail: null, // Remove base64 thumbnails (saved in Firebase Storage)
+        clips: (v.clips || []).map(c => ({
+          ...c,
+          thumbnail: null,
+          file: undefined,
+          localUrl: undefined,
+          url: c.url?.startsWith('blob:') ? null : c.url
+        })).filter(c => c.url)
+      })),
+      slideshows: (content.slideshows || []).map(s => ({
+        ...s,
+        thumbnail: null, // Remove base64 thumbnails
+        audio: s.audio ? {
+          ...s.audio,
+          file: undefined,
+          localUrl: undefined,
+          url: s.audio.url?.startsWith('blob:') ? null : s.audio.url
+        } : null,
+        slides: (s.slides || []).map(slide => ({
+          ...slide,
+          // Keep backgroundImage URLs (Firebase Storage), remove blob URLs
+          backgroundImage: slide.backgroundImage?.startsWith('blob:') ? null : slide.backgroundImage
+        }))
+      }))
+    };
+
+    localStorage.setItem(getCreatedContentKey(artistId), JSON.stringify(cleanedContent));
   } catch (error) {
-    console.error('Error saving created content:', error);
+    if (error?.name === 'QuotaExceededError' || error?.code === 22) {
+      console.warn('[CreatedContent] localStorage quota exceeded, attempting cleanup...');
+      try {
+        // Remove old session/temp data to free space
+        const keysToClean = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key?.startsWith('stm_session_') || key?.startsWith('stm_temp_') || key?.startsWith('stm_draft_')) {
+            keysToClean.push(key);
+          }
+        }
+        keysToClean.forEach(k => localStorage.removeItem(k));
+        log('[CreatedContent] Cleaned', keysToClean.length, 'temp keys, retrying save...');
+
+        // Retry save after cleanup with even more aggressive cleaning
+        const minimalContent = {
+          videos: (content.videos || []).map(v => ({
+            id: v.id,
+            name: v.name,
+            url: v.url?.startsWith('blob:') ? null : v.url,
+            exportedImages: v.exportedImages || [],
+            status: v.status,
+            createdAt: v.createdAt,
+            updatedAt: v.updatedAt,
+            aspectRatio: v.aspectRatio,
+            duration: v.duration
+          })).filter(v => v.url),
+          slideshows: (content.slideshows || []).map(s => ({
+            id: s.id,
+            name: s.name,
+            aspectRatio: s.aspectRatio,
+            slides: (s.slides || []).map(slide => ({
+              backgroundImage: slide.backgroundImage?.startsWith('blob:') ? null : slide.backgroundImage,
+              textOverlays: slide.textOverlays || [],
+              imageTransform: slide.imageTransform
+            })).filter(slide => slide.backgroundImage),
+            audio: s.audio ? {
+              id: s.audio.id,
+              name: s.audio.name,
+              url: s.audio.url?.startsWith('blob:') ? null : s.audio.url,
+              duration: s.audio.duration
+            } : null,
+            audioStartTime: s.audioStartTime,
+            audioEndTime: s.audioEndTime,
+            exportedImages: s.exportedImages || [],
+            status: s.status,
+            createdAt: s.createdAt,
+            updatedAt: s.updatedAt,
+            collectionId: s.collectionId,
+            collectionName: s.collectionName
+          }))
+        };
+
+        localStorage.setItem(getCreatedContentKey(artistId), JSON.stringify(minimalContent));
+        log('[CreatedContent] Saved with minimal data after cleanup');
+      } catch (retryError) {
+        console.error('[CreatedContent] Save failed even after cleanup. Storage is full:', retryError.message);
+        // Last resort: try to keep only most recent 20 items
+        try {
+          const recentContent = {
+            videos: (content.videos || []).slice(-10).map(v => ({ id: v.id, name: v.name, url: v.url, status: v.status })),
+            slideshows: (content.slideshows || []).slice(-10).map(s => ({ id: s.id, name: s.name, status: s.status }))
+          };
+          localStorage.setItem(getCreatedContentKey(artistId), JSON.stringify(recentContent));
+          console.warn('[CreatedContent] Saved only most recent 20 items due to quota');
+        } catch (finalError) {
+          console.error('[CreatedContent] CRITICAL: Cannot save to localStorage at all:', finalError.message);
+        }
+      }
+    } else {
+      console.error('Error saving created content:', error);
+    }
   }
 };
 
@@ -1356,6 +1476,33 @@ export const addCreatedSlideshow = (artistId, slideshowData) => {
 };
 
 /**
+ * Add multiple created slideshows at once (batch operation)
+ * @param {string} artistId
+ * @param {Array<Object>} slideshowsData
+ * @returns {Array<Object>} Created slideshows
+ */
+export const addCreatedSlideshowsBatch = (artistId, slideshowsData) => {
+  const content = getCreatedContent(artistId);
+  const newSlideshows = slideshowsData.map(data =>
+    data.id ? data : createCreatedSlideshow(data)
+  );
+
+  // Upsert all slideshows
+  newSlideshows.forEach(newSlideshow => {
+    const existingIndex = content.slideshows.findIndex(s => s.id === newSlideshow.id);
+    if (existingIndex >= 0) {
+      content.slideshows[existingIndex] = { ...content.slideshows[existingIndex], ...newSlideshow, updatedAt: new Date().toISOString() };
+    } else {
+      content.slideshows.push(newSlideshow);
+    }
+  });
+
+  // Save once to localStorage
+  saveCreatedContent(artistId, content);
+  return newSlideshows;
+};
+
+/**
  * Update a created slideshow
  * @param {string} artistId
  * @param {string} slideshowId
@@ -1399,17 +1546,75 @@ export const deleteCreatedSlideshow = (artistId, slideshowId) => {
 
 /**
  * Save created content to Firestore (async backup)
- * Stores slideshows and videos in artists/{artistId}/studio/createdContent
+ * Stores slideshows and videos individually in artists/{artistId}/library/data/createdContent/{id}
  */
 export const saveCreatedContentAsync = async (db, artistId, content) => {
   if (!db || !artistId) return;
   try {
-    const docRef = doc(db, 'artists', artistId, 'studio', 'createdContent');
-    await setDoc(docRef, {
-      ...content,
-      updatedAt: serverTimestamp()
+    // New structure: save each video/slideshow as its own document
+    const batch = writeBatch(db);
+
+    // Save videos (strip thumbnails and blob URLs)
+    (content.videos || []).forEach(video => {
+      const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', video.id);
+
+      // Clean clips (remove non-serializable fields)
+      const cleanedClips = (video.clips || []).map(c => {
+        const { file, localUrl, thumbnail, ...clipData } = c;
+        const cleaned = {
+          ...clipData,
+          url: c.url?.startsWith('blob:') ? null : c.url
+        };
+        // Remove undefined fields
+        Object.keys(cleaned).forEach(key => {
+          if (cleaned[key] === undefined) delete cleaned[key];
+        });
+        return cleaned;
+      }).filter(c => c.url);
+
+      batch.set(docRef, {
+        ...video,
+        thumbnail: null,
+        clips: cleanedClips,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
     });
-    log('[Library] Created content saved to Firestore');
+
+    // Save slideshows (strip thumbnails and blob URLs)
+    (content.slideshows || []).forEach(slideshow => {
+      const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', slideshow.id);
+
+      // Clean audio object (remove non-serializable fields)
+      let cleanedAudio = null;
+      if (slideshow.audio) {
+        const { file, localUrl, ...audioData } = slideshow.audio;
+        cleanedAudio = {
+          ...audioData,
+          url: slideshow.audio.url?.startsWith('blob:') ? null : slideshow.audio.url
+        };
+        // Remove undefined fields
+        Object.keys(cleanedAudio).forEach(key => {
+          if (cleanedAudio[key] === undefined) delete cleanedAudio[key];
+        });
+        // Don't save if no valid URL
+        if (!cleanedAudio.url) cleanedAudio = null;
+      }
+
+      batch.set(docRef, {
+        ...slideshow,
+        thumbnail: null,
+        audio: cleanedAudio,
+        slides: (slideshow.slides || []).map(slide => ({
+          ...slide,
+          backgroundImage: slide.backgroundImage?.startsWith('blob:') ? null : slide.backgroundImage
+        })),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    });
+
+    await batch.commit();
+    log('[Library] Created content saved to Firestore:',
+      `${content.videos?.length || 0} videos, ${content.slideshows?.length || 0} slideshows`);
   } catch (error) {
     console.error('[Library] Firestore save created content failed:', error.message);
   }
@@ -1418,22 +1623,69 @@ export const saveCreatedContentAsync = async (db, artistId, content) => {
 /**
  * Load created content from Firestore
  * Falls back to localStorage if Firestore is unavailable
+ * MIGRATION: Checks old path first and migrates to new structure if needed
  */
 export const loadCreatedContentAsync = async (db, artistId) => {
   if (!db || !artistId) return getCreatedContent(artistId);
   try {
-    const docRef = doc(db, 'artists', artistId, 'studio', 'createdContent');
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      const data = docSnap.data();
+    // First, check if we need to migrate from old path
+    const oldDocRef = doc(db, 'artists', artistId, 'studio', 'createdContent');
+    const oldDoc = await getDoc(oldDocRef);
+
+    if (oldDoc.exists()) {
+      // Migrate from old structure to new
+      const oldData = oldDoc.data();
       const content = {
-        videos: data.videos || [],
-        slideshows: data.slideshows || []
+        videos: oldData.videos || [],
+        slideshows: oldData.slideshows || []
       };
-      // Also update localStorage for offline access
+
+      log('[Library] Migrating created content from old path to new structure...');
+      await saveCreatedContentAsync(db, artistId, content);
+
+      // Delete old document after successful migration
+      try {
+        await deleteDoc(oldDocRef);
+        log('[Library] Migration complete, old document deleted');
+      } catch (err) {
+        console.warn('[Library] Could not delete old document:', err.message);
+      }
+
       saveCreatedContent(artistId, content);
       return content;
     }
+
+    // Query new structure
+    const collectionRef = collection(db, 'artists', artistId, 'library', 'data', 'createdContent');
+    const snapshot = await getDocs(collectionRef);
+
+    const videos = [];
+    const slideshows = [];
+
+    snapshot.docs.forEach(doc => {
+      const data = doc.data();
+      if (data.type === 'video') {
+        videos.push(data);
+      } else if (data.type === 'slideshow') {
+        slideshows.push(data);
+      }
+    });
+
+    const content = { videos, slideshows };
+
+    // If Firestore is empty but localStorage has data, migrate from localStorage
+    if (videos.length === 0 && slideshows.length === 0) {
+      const localContent = getCreatedContent(artistId);
+      if (localContent.videos.length > 0 || localContent.slideshows.length > 0) {
+        log('[Library] Migrating created content from localStorage to Firestore...');
+        await saveCreatedContentAsync(db, artistId, localContent);
+        return localContent;
+      }
+    }
+
+    // Also update localStorage for offline access
+    saveCreatedContent(artistId, content);
+    return content;
   } catch (error) {
     console.error('[Library] Firestore load created content failed:', error.message);
   }
@@ -1450,17 +1702,73 @@ export const loadCreatedContentAsync = async (db, artistId) => {
  */
 export const subscribeToCreatedContent = (db, artistId, callback) => {
   if (!db || !artistId) return () => {};
-  const docRef = doc(db, 'artists', artistId, 'studio', 'createdContent');
-  return onSnapshot(docRef, (snap) => {
-    if (snap.exists()) {
-      const data = snap.data();
-      const content = { videos: data.videos || [], slideshows: data.slideshows || [] };
-      saveCreatedContent(artistId, content); // sync to localStorage
-      callback(content);
+
+  // Helper to clean data loaded from Firestore (remove undefined fields)
+  const cleanLoadedData = (data) => {
+    const cleaned = { ...data };
+
+    // Clean audio object if present
+    if (cleaned.audio) {
+      const { file, localUrl, ...audioData } = cleaned.audio;
+      cleaned.audio = audioData;
+      // Remove undefined fields from audio
+      Object.keys(cleaned.audio).forEach(key => {
+        if (cleaned.audio[key] === undefined) delete cleaned.audio[key];
+      });
+      if (!cleaned.audio.url) cleaned.audio = null;
     }
-  }, (error) => {
-    console.error('[Library] Created content subscription error:', error);
+
+    // Clean clips if present (for videos)
+    if (cleaned.clips) {
+      cleaned.clips = cleaned.clips.map(clip => {
+        const { file, localUrl, thumbnail, ...clipData } = clip;
+        const cleanedClip = clipData;
+        Object.keys(cleanedClip).forEach(key => {
+          if (cleanedClip[key] === undefined) delete cleanedClip[key];
+        });
+        return cleanedClip;
+      }).filter(c => c.url);
+    }
+
+    // Remove any undefined fields at top level
+    Object.keys(cleaned).forEach(key => {
+      if (cleaned[key] === undefined) delete cleaned[key];
+    });
+
+    return cleaned;
+  };
+
+  // Run migration first, then subscribe
+  loadCreatedContentAsync(db, artistId).then(() => {
+    const collectionRef = collection(db, 'artists', artistId, 'library', 'data', 'createdContent');
+    return onSnapshot(collectionRef, (snapshot) => {
+      const videos = [];
+      const slideshows = [];
+
+      snapshot.docs.forEach(doc => {
+        const data = cleanLoadedData(doc.data());
+        if (data.type === 'video') {
+          videos.push(data);
+        } else if (data.type === 'slideshow') {
+          slideshows.push(data);
+        }
+      });
+
+      const content = { videos, slideshows };
+
+      // Only overwrite localStorage if we have data OR if localStorage is also empty
+      const localContent = getCreatedContent(artistId);
+      if (videos.length > 0 || slideshows.length > 0 || (localContent.videos.length === 0 && localContent.slideshows.length === 0)) {
+        saveCreatedContent(artistId, content);
+      }
+
+      callback(content);
+    }, (error) => {
+      console.error('[Library] Created content subscription error:', error);
+    });
   });
+
+  return () => {}; // Return empty unsubscribe for now
 };
 
 /**
@@ -1469,7 +1777,12 @@ export const subscribeToCreatedContent = (db, artistId, callback) => {
 export const addCreatedSlideshowAsync = async (db, artistId, slideshowData) => {
   const result = addCreatedSlideshow(artistId, slideshowData);
   const content = getCreatedContent(artistId);
-  await saveCreatedContentAsync(db, artistId, content);
+  try {
+    await saveCreatedContentAsync(db, artistId, content);
+  } catch (error) {
+    console.error('[Library] Failed to sync slideshow to Firestore:', error);
+    // Data still saved to localStorage, mark as unsynced
+  }
   return result;
 };
 
@@ -1479,7 +1792,12 @@ export const addCreatedSlideshowAsync = async (db, artistId, slideshowData) => {
 export const updateCreatedSlideshowAsync = async (db, artistId, slideshowId, updates) => {
   const result = updateCreatedSlideshow(artistId, slideshowId, updates);
   const content = getCreatedContent(artistId);
-  await saveCreatedContentAsync(db, artistId, content);
+  try {
+    await saveCreatedContentAsync(db, artistId, content);
+  } catch (error) {
+    console.error('[Library] Failed to sync slideshow update to Firestore:', error);
+    // Data still saved to localStorage, mark as unsynced
+  }
   return result;
 };
 
@@ -1489,8 +1807,33 @@ export const updateCreatedSlideshowAsync = async (db, artistId, slideshowId, upd
 export const deleteCreatedSlideshowAsync = async (db, artistId, slideshowId) => {
   const result = deleteCreatedSlideshow(artistId, slideshowId);
   const content = getCreatedContent(artistId);
-  await saveCreatedContentAsync(db, artistId, content);
+  try {
+    await saveCreatedContentAsync(db, artistId, content);
+  } catch (error) {
+    console.error('[Library] Failed to sync slideshow deletion to Firestore:', error);
+    // Data still saved to localStorage, mark as unsynced
+  }
   return result;
+};
+
+/**
+ * Add multiple created slideshows at once (with single Firestore sync)
+ * More efficient than calling addCreatedSlideshowAsync in a loop
+ */
+export const addCreatedSlideshowsBatchAsync = async (db, artistId, slideshowsData) => {
+  // Save all to localStorage in one operation
+  const results = addCreatedSlideshowsBatch(artistId, slideshowsData);
+
+  // Then sync to Firestore once
+  const content = getCreatedContent(artistId);
+  try {
+    await saveCreatedContentAsync(db, artistId, content);
+  } catch (error) {
+    console.error('[Library] Failed to sync batch slideshows to Firestore:', error);
+    // Data still saved to localStorage, mark as unsynced
+  }
+
+  return results;
 };
 
 // ============================================================================
@@ -1998,21 +2341,25 @@ export const addManyToLibraryAsync = async (db, artistId, mediaItems) => {
   // Always save to localStorage first
   const localResult = addManyToLibrary(artistId, newItems);
 
-  // Then batch save to Firestore
+  // Then batch save to Firestore (split into chunks of 500 to avoid batch size limit)
   if (db && artistId && newItems.length > 0) {
     try {
-      const batch = writeBatch(db);
+      for (let i = 0; i < newItems.length; i += 500) {
+        const chunk = newItems.slice(i, i + 500);
+        const batch = writeBatch(db);
 
-      newItems.forEach(item => {
-        const docRef = doc(db, 'artists', artistId, 'library', 'data', 'mediaItems', item.id);
-        batch.set(docRef, {
-          ...item,
-          updatedAt: serverTimestamp()
+        chunk.forEach(item => {
+          const docRef = doc(db, 'artists', artistId, 'library', 'data', 'mediaItems', item.id);
+          batch.set(docRef, {
+            ...item,
+            updatedAt: serverTimestamp()
+          });
         });
-      });
 
-      await batch.commit();
-      log('[Library] Batch saved to Firestore:', newItems.length, 'items');
+        await batch.commit();
+        log('[Library] Batch saved chunk to Firestore:', chunk.length, 'items');
+      }
+      log('[Library] All items saved to Firestore:', newItems.length, 'total items');
       localResult.syncedToCloud = true;
     } catch (error) {
       console.error('[Library] Firestore batch write failed:', error.message);

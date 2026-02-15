@@ -496,6 +496,7 @@ const ContentLibrary = ({
                             contentName: item.name || item.title || 'Untitled Slideshow',
                             thumbnail: item.thumbnail || item.slides?.[0]?.backgroundImage || item.slides?.[0]?.imageUrl || null,
                             cloudUrl: null,
+                            audioUrl: item.audio?.url || item.audio?.localUrl || null,
                             collectionName: item.collectionName || item.collectionId || null,
                             editorState: item,
                             status: POST_STATUS.DRAFT
@@ -1368,6 +1369,8 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
               caption: fullCaption,
               images,
               scheduledFor,
+              audioUrl: slideshow.audio?.url || slideshow.audio?.localUrl || null,
+              collectionName: slideshow.collectionName || null
             });
             log(`[Schedule] ${job.label} result:`, result);
             if (result?.success === false) {

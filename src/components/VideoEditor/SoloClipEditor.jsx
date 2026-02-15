@@ -145,9 +145,9 @@ const SoloClipEditor = ({
   // Waveform via shared hook (below)
 
   // ── Audio leveling state ──
-  const [sourceVideoMuted, setSourceVideoMuted] = useState(false);
-  const [sourceVideoVolume, setSourceVideoVolume] = useState(1.0);
-  const [externalAudioVolume, setExternalAudioVolume] = useState(1.0);
+  const [sourceVideoMuted, setSourceVideoMuted] = useState(existingVideo?.sourceVideoMuted ?? false);
+  const [sourceVideoVolume, setSourceVideoVolume] = useState(existingVideo?.sourceVideoVolume ?? 1.0);
+  const [externalAudioVolume, setExternalAudioVolume] = useState(existingVideo?.externalAudioVolume ?? 1.0);
 
   // ── Playback state ──
   const [currentTime, setCurrentTime] = useState(0);
@@ -771,11 +771,15 @@ const SoloClipEditor = ({
       isTemplate: video.isTemplate,
       status: 'draft',
       createdAt: existingVideo?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      // Audio mixing state
+      sourceVideoMuted,
+      sourceVideoVolume,
+      externalAudioVolume
     };
     onSave(videoData);
     toastSuccess(`Saved "${video.name || 'Solo Clip'}"`);
-  }, [allVideos, activeVideoIndex, clipDuration, aspectRatio, selectedAudio, existingVideo, onSave, toastSuccess, toastError]);
+  }, [allVideos, activeVideoIndex, clipDuration, aspectRatio, selectedAudio, existingVideo, sourceVideoMuted, sourceVideoVolume, externalAudioVolume, onSave, toastSuccess, toastError]);
 
   // ── Save All & Close ──
   const handleSaveAllAndClose = useCallback(async () => {

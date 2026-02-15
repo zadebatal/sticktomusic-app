@@ -245,7 +245,7 @@ const lateApi = {
     }
   },
 
-  async schedulePost({ platforms, caption, videoUrl, scheduledFor, artistId = null, type = 'video', images = null }) {
+  async schedulePost({ platforms, caption, videoUrl, scheduledFor, artistId = null, type = 'video', images = null, audioUrl = null }) {
     try {
       const token = await getFirebaseToken();
       // Validate required fields
@@ -278,6 +278,11 @@ const lateApi = {
         scheduledFor,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles'
       };
+
+      // Include audioUrl if provided (for carousel posts with audio)
+      if (audioUrl) {
+        payload.audioUrl = audioUrl;
+      }
 
       log('Sending to Late:', JSON.stringify(payload, null, 2));
 
@@ -403,6 +408,18 @@ const StickToMusic = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Detect Safari private mode and check localStorage availability
+  const [showPrivateModeWarning, setShowPrivateModeWarning] = useState(false);
+  useEffect(() => {
+    try {
+      localStorage.setItem('_stm_test', '1');
+      localStorage.removeItem('_stm_test');
+    } catch (e) {
+      console.error('[App] Private mode detected or localStorage disabled');
+      setShowPrivateModeWarning(true);
+    }
+  }, []);
+
   // Detect checkout success from Stripe redirect
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -413,6 +430,18 @@ const StickToMusic = () => {
       url.searchParams.delete('session_id');
       window.history.replaceState({}, '', url.pathname);
     }
+  }, []);
+
+  // Offline detection
+  useEffect(() => {
+    const handleOnline = () => console.log('[App] Back online');
+    const handleOffline = () => console.warn('[App] Offline mode');
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   // Parse initial state from URL
@@ -7158,6 +7187,49 @@ const StickToMusic = () => {
   // Fallback — should not be reached; redirect to dashboard or landing page
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans">
+      {/* Private mode warning modal */}
+      {showPrivateModeWarning && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.9)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000
+        }}>
+          <div style={{
+            backgroundColor: '#1a1a1a',
+            padding: '32px',
+            borderRadius: '12px',
+            maxWidth: '500px',
+            textAlign: 'center'
+          }}>
+            <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>Private Browsing Not Supported</h2>
+            <p style={{ color: '#999', marginBottom: '24px' }}>
+              StickToMusic requires localStorage to function properly. Please use normal browsing mode.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                backgroundColor: '#7c3aed',
+                color: 'white',
+                padding: '12px 24px',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Legacy marketing pages — kept for reference, rarely reached */}
 
       {/* HOME */}

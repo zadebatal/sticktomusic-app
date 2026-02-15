@@ -36,6 +36,7 @@ import {
   COLLECTION_TYPES,
   SMART_COLLECTION_IDS,
   addBankToCollection,
+  removeBankFromCollection,
   getBankColor,
   getBankLabel,
   migrateCollectionBanks,
@@ -2229,7 +2230,6 @@ const LibraryBrowser = ({
                 flex: isMobile ? 'none' : 1,
                 display: 'flex',
                 flexDirection: 'column',
-                overflow: 'hidden',
                 minWidth: 0,
                 minHeight: 0,
                 ...(isMobile ? { width: '100%' } : {})
@@ -2268,11 +2268,13 @@ const LibraryBrowser = ({
                     display: 'flex',
                     flexDirection: isMobile ? 'row' : 'column',
                     gap: '8px',
-                    overflow: isMobile ? 'auto' : 'hidden',
+                    overflow: 'auto',
                     overflowX: isMobile ? 'auto' : undefined,
+                    overflowY: isMobile ? undefined : 'auto',
                     minHeight: 0,
-                    WebkitOverflowScrolling: isMobile ? 'touch' : undefined,
-                    paddingBottom: isMobile ? '8px' : undefined
+                    WebkitOverflowScrolling: 'touch',
+                    paddingBottom: isMobile ? '8px' : undefined,
+                    paddingRight: isMobile ? undefined : '4px'
                   }}>
                     {(collectionBanks?.banks || []).map((bankMedia, idx) => {
                       const color = getBankColor(idx);
@@ -2281,11 +2283,11 @@ const LibraryBrowser = ({
                         <div
                           key={idx}
                           style={{
-                            flex: isMobile ? 'none' : 1,
+                            flex: isMobile ? 'none' : '0 0 auto',
                             display: 'flex',
                             flexDirection: 'column',
                             overflow: 'hidden',
-                            minHeight: isMobile ? '120px' : 0,
+                            minHeight: isMobile ? '120px' : '280px',
                             minWidth: isMobile ? '200px' : undefined,
                             flexShrink: isMobile ? 0 : undefined,
                             borderRadius: '10px',
@@ -2340,6 +2342,33 @@ const LibraryBrowser = ({
                                 )}
                               </>
                             )}
+                            {/* Delete bank button (only show if more than 2 banks exist) */}
+                            {(collectionBanks?.banks?.length || 0) > 2 && (
+                              <button
+                                onClick={() => {
+                                  if (window.confirm(`Delete ${getBankLabel(idx)}? All images will be moved to Library.`)) {
+                                    removeBankFromCollection(artistId, activeView, idx);
+                                    loadData();
+                                    syncCollection(activeView);
+                                  }
+                                }}
+                                style={{
+                                  marginLeft: 'auto', padding: '4px 8px', fontSize: '11px',
+                                  backgroundColor: 'transparent', border: `1px solid ${theme.border.subtle}`,
+                                  borderRadius: '4px', color: theme.text.muted, cursor: 'pointer',
+                                  transition: 'all 0.2s', display: 'flex', alignItems: 'center'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+                                  e.currentTarget.style.color = '#fca5a5';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.borderColor = theme.border.subtle;
+                                  e.currentTarget.style.color = theme.text.muted;
+                                }}
+                                title={`Delete ${getBankLabel(idx)}`}
+                              >✕</button>
+                            )}
                           </div>
                           <div style={{
                             flex: 1, overflowY: 'auto', padding: '16px', minHeight: 0,
@@ -2373,40 +2402,59 @@ const LibraryBrowser = ({
                     )}
                   </div>
                 ) : (
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden' }}>
-                    {/* Slideshow Text Banks (only in images/slideshows mode) */}
-                    {mode !== 'videos' && (
-                      <>
-                        <TextBankPanel
-                          bankNum={1}
-                          label="Text Bank 1"
-                          color="#c4b5fd"
-                          texts={(() => {
-                            const col = collections.find(c => c.id === activeView);
-                            if (!col) return [];
-                            const migrated = migrateCollectionBanks(col);
-                            return migrated.textBanks?.[0] || [];
-                          })()}
-                          onAdd={(text) => { addToTextBank(artistId, activeView, 1, text); loadData(); syncCollection(activeView); }}
-                          onRemove={(index) => { removeFromTextBank(artistId, activeView, 1, index); loadData(); syncCollection(activeView); }}
-                          onUpdate={(texts) => { updateTextBank(artistId, activeView, 1, texts); loadData(); syncCollection(activeView); }}
-                        />
-                        <TextBankPanel
-                          bankNum={2}
-                          label="Text Bank 2"
-                          color="#86efac"
-                          texts={(() => {
-                            const col = collections.find(c => c.id === activeView);
-                            if (!col) return [];
-                            const migrated = migrateCollectionBanks(col);
-                            return migrated.textBanks?.[1] || [];
-                          })()}
-                          onAdd={(text) => { addToTextBank(artistId, activeView, 2, text); loadData(); syncCollection(activeView); }}
-                          onRemove={(index) => { removeFromTextBank(artistId, activeView, 2, index); loadData(); syncCollection(activeView); }}
-                          onUpdate={(texts) => { updateTextBank(artistId, activeView, 2, texts); loadData(); syncCollection(activeView); }}
-                        />
-                      </>
-                    )}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'auto', paddingRight: '4px' }}>
+                    {/* Slideshow Text Banks (only in images/slideshows mode) - Dynamic based on collection banks */}
+                    {mode !== 'videos' && (() => {
+                      const col = collections.find(c => c.id === activeView);
+                      if (!col) return null;
+                      const migrated = migrateCollectionBanks(col);
+                      const numBanks = migrated.textBanks?.length || 0;
+
+                      return (
+                        <>
+                          {Array.from({ length: numBanks }, (_, idx) => {
+                            const bankNum = idx + 1;
+                            const bankColor = getBankColor(idx);
+                            return (
+                              <TextBankPanel
+                                key={`textbank-${idx}`}
+                                bankNum={bankNum}
+                                label={getBankLabel(idx)}
+                                color={bankColor.light}
+                                texts={migrated.textBanks?.[idx] || []}
+                                onAdd={(text) => { addToTextBank(artistId, activeView, bankNum, text); loadData(); syncCollection(activeView); }}
+                                onRemove={(index) => { removeFromTextBank(artistId, activeView, bankNum, index); loadData(); syncCollection(activeView); }}
+                                onUpdate={(texts) => { updateTextBank(artistId, activeView, bankNum, texts); loadData(); syncCollection(activeView); }}
+                                onDelete={numBanks > 2 ? () => {
+                                  if (window.confirm(`Delete ${getBankLabel(idx)}? All text entries will be removed.`)) {
+                                    removeBankFromCollection(artistId, activeView, idx);
+                                    loadData();
+                                    syncCollection(activeView);
+                                  }
+                                } : null}
+                              />
+                            );
+                          })}
+                          {/* + Add Text Bank button */}
+                          {numBanks < MAX_BANKS && (
+                            <button
+                              onClick={() => { addBankToCollection(artistId, activeView); loadData(); syncCollection(activeView); }}
+                              style={{
+                                padding: '10px', borderRadius: '10px',
+                                border: `1px dashed ${theme.text.muted}`,
+                                backgroundColor: 'transparent', color: theme.text.muted,
+                                fontSize: '12px', cursor: 'pointer', textAlign: 'center',
+                                transition: 'all 0.15s ease', flexShrink: 0
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.borderColor = `${theme.accent.primary}80`; e.currentTarget.style.color = theme.accent.hover; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.borderColor = theme.text.muted; e.currentTarget.style.color = theme.text.muted; }}
+                            >
+                              + Add Text Bank
+                            </button>
+                          )}
+                        </>
+                      );
+                    })()}
                     {mode === 'videos' && (
                       <>
                         {/* Video Text Bank 1 */}

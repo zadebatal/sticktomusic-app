@@ -77,6 +77,20 @@ export async function uploadFile(file, folder = 'uploads', onProgress = null, op
     throw new Error(`Invalid file type: ${file.type}. Allowed: ${allowed.join(', ')}`);
   }
 
+  // Validate file content (magic numbers) for images
+  if (file.type.startsWith('image/')) {
+    const header = await file.slice(0, 4).arrayBuffer();
+    const bytes = new Uint8Array(header);
+    const isValidImage =
+      (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) || // JPEG
+      (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) || // PNG
+      (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) || // GIF
+      (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46); // WEBP (RIFF)
+    if (!isValidImage) {
+      throw new Error('Invalid image file - file content does not match declared type');
+    }
+  }
+
   const timestamp = Date.now();
   const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
   const path = `${folder}/${timestamp}_${safeName}`;
