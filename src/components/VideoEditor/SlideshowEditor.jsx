@@ -1797,7 +1797,11 @@ const SlideshowEditor = ({
       name: activeSlideshow.name,
       aspectRatio,
       slides: activeSlideshow.slides,
-      audio: activeSlideshow.audio,
+      audio: activeSlideshow.audio ? {
+        ...activeSlideshow.audio,
+        startTime: activeSlideshow.audio.startTime || 0,
+        endTime: activeSlideshow.audio.endTime || null
+      } : null,
       thumbnail,
       status: 'draft',
       createdAt: existingSlideshow?.createdAt || new Date().toISOString(),
@@ -1825,7 +1829,11 @@ const SlideshowEditor = ({
         name: ss.name,
         aspectRatio,
         slides: ss.slides,
-        audio: ss.audio,
+        audio: ss.audio ? {
+          ...ss.audio,
+          startTime: ss.audio.startTime || 0,
+          endTime: ss.audio.endTime || null
+        } : null,
         thumbnail,
         status: 'draft',
         createdAt: new Date().toISOString(),
