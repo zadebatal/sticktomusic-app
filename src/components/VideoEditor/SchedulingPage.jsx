@@ -1599,8 +1599,8 @@ const PostRow = ({
         {isMobile ? (
           <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '6px', paddingLeft: '32px' }}>
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} style={{ ...s.inlineDate, flex: 1, minWidth: '120px' }} />
-              <input type="time" value={schedTime} onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }} style={{ ...s.inlineTime, flex: 1, minWidth: '90px' }} />
+              <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} onMouseDown={(e) => e.stopPropagation()} style={{ ...s.inlineDate, flex: 1, minWidth: '120px' }} />
+              <input type="time" value={schedTime} onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }} onMouseDown={(e) => e.stopPropagation()} style={{ ...s.inlineTime, flex: 1, minWidth: '90px' }} />
             </div>
             {previewTime && !post.scheduledTime && (() => {
               const pt = new Date(previewTime);
@@ -1617,8 +1617,8 @@ const PostRow = ({
             {/* Schedule Date/Time */}
             <div style={{ width: '190px', display: 'flex', flexDirection: 'column', gap: '2px', flexShrink: 0 }}>
               <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} style={s.inlineDate} />
-                <input type="time" value={schedTime} onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }} style={s.inlineTime} />
+                <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} onMouseDown={(e) => e.stopPropagation()} style={s.inlineDate} />
+                <input type="time" value={schedTime} onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }} onMouseDown={(e) => e.stopPropagation()} style={s.inlineTime} />
               </div>
               {previewTime && !post.scheduledTime && (() => {
                 const pt = new Date(previewTime);
