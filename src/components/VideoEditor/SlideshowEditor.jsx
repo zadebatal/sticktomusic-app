@@ -67,13 +67,28 @@ const SlideshowEditor = ({
     textOverlays: s.textOverlays || []
   }));
   const isMultiDraftMode = !!(existingSlideshow?.multiple && Array.isArray(existingSlideshow.multiple));
+  // Strip stale blob URLs from audio on load — prefer cloud URL, null out dead blobs
+  const sanitizeAudio = (audio) => {
+    if (!audio) return null;
+    const clean = { ...audio };
+    if (clean.localUrl && clean.localUrl.startsWith('blob:')) delete clean.localUrl;
+    if (clean.url && clean.url.startsWith('blob:')) {
+      // If only URL is a blob and no cloud fallback, null out
+      if (!clean.localUrl) clean.url = null;
+    }
+    // If no usable URL left, keep metadata but mark as needing re-add
+    if (!clean.url && !clean.localUrl) {
+      console.warn('[SlideshowEditor] Audio has stale blob URL — cleared on load');
+    }
+    return clean;
+  };
   const [allSlideshows, setAllSlideshows] = useState(() => {
     if (isMultiDraftMode) {
       return existingSlideshow.multiple.map((ss, idx) => ({
         id: ss.id || `multi_${idx}`,
         name: ss.name || `Slideshow ${idx + 1}`,
         slides: ensureTextOverlays(ss.slides),
-        audio: ss.audio || null,
+        audio: sanitizeAudio(ss.audio),
         isTemplate: false
       }));
     }
@@ -81,7 +96,7 @@ const SlideshowEditor = ({
       id: 'template',
       name: existingSlideshow?.name || 'Untitled Slideshow',
       slides: ensureTextOverlays(existingSlideshow?.slides),
-      audio: existingSlideshow?.audio || initialAudio || null,
+      audio: sanitizeAudio(existingSlideshow?.audio || initialAudio || null),
       isTemplate: true
     }];
   });

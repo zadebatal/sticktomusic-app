@@ -970,7 +970,8 @@ const SchedulingPage = ({
               platforms: [entry],
               scheduledFor: post.scheduledTime || new Date().toISOString(),
               type: 'carousel',
-              images
+              images,
+              audioUrl: post.audioUrl || post.editorState?.audio?.url || post.editorState?.audio?.localUrl || null
             });
 
             if (result?.success === false) {

@@ -62,6 +62,10 @@ function sampleWaveform(rawData, samples) {
  */
 export async function generateWaveformData(source, samples = 200) {
   if (!source) return [];
+  if (typeof source === 'string' && source.startsWith('blob:')) {
+    console.warn('[Waveform] Rejected stale blob URL:', source.slice(0, 40));
+    return [];
+  }
   try {
     const buffer = await getAudioBuffer(source);
     const rawData = buffer.getChannelData(0);
@@ -80,6 +84,10 @@ export async function generateWaveformData(source, samples = 200) {
  */
 export async function generateWaveformFromUrl(url, samples = 200) {
   if (!url) return [];
+  if (url.startsWith('blob:')) {
+    console.warn('[Waveform] Rejected stale blob URL:', url.slice(0, 40));
+    return [];
+  }
   const key = `${url}::${samples}`;
   if (cache.has(key)) return cache.get(key);
   const data = await generateWaveformData(url, samples);

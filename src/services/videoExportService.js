@@ -526,6 +526,8 @@ export const renderVideo = async (videoData, onProgress = () => {}, options = {}
         audioInfo = {
           startTime: audio.startTime || 0
         };
+      } else if (isBlobUrl) {
+        console.warn('[VideoExport] Audio has stale blob URL — skipping audio. Re-add from library to include audio.');
       }
     }
 
