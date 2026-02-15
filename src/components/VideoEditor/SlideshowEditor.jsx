@@ -8,6 +8,7 @@ import LyricBank from './LyricBank';
 import AudioClipSelector from './AudioClipSelector';
 import LyricAnalyzer from './LyricAnalyzer';
 import CloudImportButton from './CloudImportButton';
+import AudioSelectionModal from './AudioSelectionModal';
 import log from '../../utils/logger';
 
 /**
@@ -219,6 +220,7 @@ const SlideshowEditor = ({
 
   // Audio picker dropdown state
   const [showAudioPicker, setShowAudioPicker] = useState(false);
+  const [showAudioSelectionModal, setShowAudioSelectionModal] = useState(false);
 
   // Text style templates state (persisted in localStorage)
   const [textTemplates, setTextTemplates] = useState(() => {
@@ -1670,27 +1672,55 @@ const SlideshowEditor = ({
   }, [selectedSlideIndex]);
 
 
-  // Handle audio file upload in slideshow editor - converts to MP3 if needed, then opens trimmer
+  // Handle audio file upload in slideshow editor - converts to MP3 if needed, saves to library, then opens trimmer
   const handleSlideshowAudioUpload = useCallback(async (e) => {
     const rawFile = e.target.files?.[0];
-    if (rawFile) {
+    if (!rawFile) return;
+
+    try {
       const { convertAudioIfNeeded } = await import('../../utils/audioConverter');
+      const {addToLibraryAsync} = await import('../../services/libraryService');
       const file = await convertAudioIfNeeded(rawFile);
       const url = URL.createObjectURL(file);
-      const audioObj = {
-        id: `audio_${Date.now()}`,
-        file,
+
+      // Get audio duration
+      const audio = new Audio(url);
+      await new Promise((resolve, reject) => {
+        audio.addEventListener('loadedmetadata', resolve);
+        audio.addEventListener('error', reject);
+      });
+
+      const duration = audio.duration;
+
+      // Create media item for library
+      const mediaItem = {
+        type: 'audio',
+        name: file.name,
         url,
         localUrl: url,
-        name: file.name,
-        startTime: 0,
-        endTime: null
+        file,
+        duration,
+        createdAt: new Date().toISOString()
       };
-      setAudioToTrim(audioObj);
+
+      // Save to library (localStorage + Firestore)
+      const savedItem = await addToLibraryAsync(db, artistId, mediaItem);
+      toastSuccess(`Added "${file.name}" to library`);
+
+      // Open trimmer with the saved library audio
+      setAudioToTrim({
+        ...savedItem,
+        startTime: 0,
+        endTime: duration
+      });
       setShowAudioTrimmer(true);
+    } catch (error) {
+      console.error('[SlideshowEditor] Audio upload failed:', error);
+      toastError(`Failed to upload audio: ${error.message}`);
     }
+
     e.target.value = '';
-  }, []);
+  }, [db, artistId, toastSuccess, toastError]);
 
   // Save active slideshow only (does NOT close editor so user can keep editing other timelines)
   const handleSave = useCallback(async () => {
@@ -3278,76 +3308,19 @@ const SlideshowEditor = ({
                   </button>
                 )}
 
-                {/* Add Audio Button with Dropdown */}
-                <div style={{ position: 'relative' }}>
-                  <button
-                    style={styles.addAudioButton}
-                    onClick={() => setShowAudioPicker(!showAudioPicker)}
-                    title="Add audio to slideshow"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M9 18V5l12-2v13"/>
-                      <circle cx="6" cy="18" r="3"/>
-                      <circle cx="18" cy="16" r="3"/>
-                    </svg>
-                    Audio
-                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="6 9 12 15 18 9"/>
-                    </svg>
-                  </button>
-
-                  {/* Audio Picker Dropdown */}
-                  {showAudioPicker && (
-                    <div style={styles.audioPickerDropdown}>
-                      <div style={styles.audioPickerHeader}>Select Audio</div>
-
-                      {/* Existing audio from bank */}
-                      {audioTracks.length > 0 ? (
-                        <div style={styles.audioPickerList}>
-                          {audioTracks.map(audio => (
-                            <button
-                              key={audio.id}
-                              style={styles.audioPickerItem}
-                              onClick={() => {
-                                setAudioToTrim(audio);
-                                setShowAudioTrimmer(true);
-                                setShowAudioPicker(false);
-                              }}
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M9 18V5l12-2v13"/>
-                                <circle cx="6" cy="18" r="3"/>
-                                <circle cx="18" cy="16" r="3"/>
-                              </svg>
-                              <span style={styles.audioPickerItemName}>{audio.name}</span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <div style={styles.audioPickerEmpty}>No audio in bank</div>
-                      )}
-
-                      {/* Divider */}
-                      <div style={styles.audioPickerDivider} />
-
-                      {/* Upload new option */}
-                      <button
-                        style={styles.audioPickerUpload}
-                        onClick={() => {
-                          slideshowAudioInputRef.current?.click();
-                          setShowAudioPicker(false);
-                        }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                          <polyline points="17 8 12 3 7 8"/>
-                          <line x1="12" y1="3" x2="12" y2="15"/>
-                        </svg>
-                        Upload New Audio
-                      </button>
-                    </div>
-                  )}
-                </div>
+                {/* Add Audio Button */}
+                <button
+                  style={styles.addAudioButton}
+                  onClick={() => setShowAudioSelectionModal(true)}
+                  title="Add audio to slideshow"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 18V5l12-2v13"/>
+                    <circle cx="6" cy="18" r="3"/>
+                    <circle cx="18" cy="16" r="3"/>
+                  </svg>
+                  Audio
+                </button>
 
                 {/* AI Transcribe Button */}
                 {selectedAudio && (
@@ -4414,6 +4387,30 @@ const SlideshowEditor = ({
               setShowAudioTrimmer(false);
               setAudioToTrim(null);
             }}
+            db={db}
+            artistId={artistId}
+            onSuccess={(msg) => toastSuccess(msg)}
+            onError={(msg) => toastError(msg)}
+          />
+        )}
+
+        {/* Audio Selection Modal */}
+        {showAudioSelectionModal && (
+          <AudioSelectionModal
+            libraryAudio={libraryAudio}
+            collections={collections}
+            selectedAudioId={selectedAudio?.id}
+            currentCollectionId={null}
+            onSelect={(audio) => {
+              setShowAudioSelectionModal(false);
+              setAudioToTrim(audio);
+              setShowAudioTrimmer(true);
+            }}
+            onUpload={() => {
+              setShowAudioSelectionModal(false);
+              slideshowAudioInputRef.current?.click();
+            }}
+            onClose={() => setShowAudioSelectionModal(false)}
           />
         )}
 
@@ -4464,7 +4461,7 @@ const SlideshowEditor = ({
                 <button
                   onClick={() => {
                     setShowAudioPrompt(false);
-                    setShowAudioPicker(true);
+                    setShowAudioSelectionModal(true);
                   }}
                   style={{
                     flex: 1, padding: '10px', borderRadius: '8px', border: 'none',
