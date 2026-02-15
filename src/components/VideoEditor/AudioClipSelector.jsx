@@ -555,21 +555,25 @@ const AudioClipSelector = ({
         (msg) => setTrimProgress(msg)
       );
 
+      setTrimProgress('Uploading to cloud storage...');
+
+      // Import services
+      const { addToLibraryAsync } = await import('../../services/libraryService');
+      const { uploadFile } = await import('../../services/firebaseStorage');
+
+      // Upload to Firebase Storage for persistence
+      const { url: storageUrl } = await uploadFile(trimmedFile, 'audio', (progress) => {
+        setTrimProgress(`Uploading... ${Math.round(progress)}%`);
+      });
+
       setTrimProgress('Saving to library...');
 
-      // Create blob URL for the trimmed file
-      const url = URL.createObjectURL(trimmedFile);
-
-      // Import library service
-      const { addToLibraryAsync } = await import('../../services/libraryService');
-
-      // Create media item for library
+      // Create media item for library with persistent URL
       const mediaItem = {
         type: 'audio',
         name: trimmedFile.name,
-        url,
-        localUrl: url,
-        file: trimmedFile,
+        url: storageUrl,
+        localUrl: storageUrl,
         duration: selectedDuration,
         isTrimmed: true,
         originalName: audioName,

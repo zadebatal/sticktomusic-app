@@ -1682,12 +1682,16 @@ const SlideshowEditor = ({
 
     try {
       const { convertAudioIfNeeded } = await import('../../utils/audioConverter');
-      const {addToLibraryAsync} = await import('../../services/libraryService');
+      const { addToLibraryAsync } = await import('../../services/libraryService');
+      const { uploadFile } = await import('../../services/firebaseStorage');
+
       const file = await convertAudioIfNeeded(rawFile);
-      const url = URL.createObjectURL(file);
+
+      // Create temporary blob URL for immediate playback
+      const tempUrl = URL.createObjectURL(file);
 
       // Get audio duration
-      const audio = new Audio(url);
+      const audio = new Audio(tempUrl);
       await new Promise((resolve, reject) => {
         audio.addEventListener('loadedmetadata', resolve);
         audio.addEventListener('error', reject);
@@ -1695,19 +1699,28 @@ const SlideshowEditor = ({
 
       const duration = audio.duration;
 
-      // Create media item for library
+      // Upload to Firebase Storage for persistence
+      toastSuccess('Uploading audio...');
+      const { url: storageUrl } = await uploadFile(file, 'audio', (progress) => {
+        if (progress === 100) toastSuccess('Processing...');
+      });
+
+      // Create media item for library with persistent URL
       const mediaItem = {
         type: 'audio',
         name: file.name,
-        url,
-        localUrl: url,
-        file,
+        url: storageUrl,
+        localUrl: storageUrl,
         duration,
         createdAt: new Date().toISOString()
       };
 
       // Save to library (localStorage + Firestore)
       const savedItem = await addToLibraryAsync(db, artistId, mediaItem);
+
+      // Clean up temp blob URL
+      URL.revokeObjectURL(tempUrl);
+
       toastSuccess(`Added "${file.name}" to library`);
 
       // Open trimmer with the saved library audio
