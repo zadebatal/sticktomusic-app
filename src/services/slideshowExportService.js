@@ -116,12 +116,19 @@ const drawTextOverlay = (ctx, overlay, dimensions) => {
       const strokeWidth = parseFloat(strokeMatch[1]);
       if (strokeWidth > 0) {
         ctx.strokeStyle = strokeMatch[2] || '#000000';
-        ctx.lineWidth = strokeWidth * 2;
+        // Use smaller multiplier to prevent Safari from eating into letters
+        // Draw stroke multiple times for better outline effect
+        ctx.lineWidth = strokeWidth;
         ctx.lineJoin = 'round';
-        lines.forEach((line, i) => {
-          const lineY = y + (i - (lines.length - 1) / 2) * lineHeight;
-          ctx.strokeText(line, x, lineY);
-        });
+        ctx.miterLimit = 2;
+
+        // Layer strokes for Safari compatibility (prevents inward encroachment)
+        for (let layer = 0; layer < 3; layer++) {
+          lines.forEach((line, i) => {
+            const lineY = y + (i - (lines.length - 1) / 2) * lineHeight;
+            ctx.strokeText(line, x, lineY);
+          });
+        }
       }
     }
   }
