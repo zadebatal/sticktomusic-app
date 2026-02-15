@@ -15,6 +15,12 @@ async function getAudioBuffer(source) {
   if (cacheKey && bufferCache.has(cacheKey)) return bufferCache.get(cacheKey);
 
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  // Safari AudioContext may start in 'suspended' state - resume on first use
+  if (audioCtx.state === 'suspended') {
+    await audioCtx.resume();
+  }
+
   let arrayBuffer;
   if (source instanceof Blob) {
     arrayBuffer = await source.arrayBuffer();
