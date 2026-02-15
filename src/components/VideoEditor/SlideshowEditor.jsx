@@ -1151,16 +1151,28 @@ const SlideshowEditor = ({
 
   const selectedAudioId = selectedAudio?.id || null;
   // Recover blob URLs that expired on page reload — look up real URL from library
-  const selectedAudioUrl = (() => {
+  const selectedAudioUrl = useMemo(() => {
     const url = selectedAudio?.url || selectedAudio?.localUrl || null;
     if (!url) return null;
+
     // If it's a blob URL, check if it's still valid by trying to find the audio in library
     if (url.startsWith('blob:') && selectedAudioId && libraryAudio.length > 0) {
       const libItem = libraryAudio.find(a => a.id === selectedAudioId);
+      // If library has a non-blob URL (actual file URL), use that
       if (libItem?.url && !libItem.url.startsWith('blob:')) return libItem.url;
+      // If library has a file object, create a fresh blob URL
+      if (libItem?.file) {
+        return URL.createObjectURL(libItem.file);
+      }
     }
+
+    // If we have a file object, create blob URL from it
+    if (selectedAudio?.file && !url.startsWith('http')) {
+      return URL.createObjectURL(selectedAudio.file);
+    }
+
     return url;
-  })();
+  }, [selectedAudio, selectedAudioId, libraryAudio]);
   const selectedAudioStart = selectedAudio?.startTime || 0;
   const selectedAudioEnd = selectedAudio?.endTime || null;
 
