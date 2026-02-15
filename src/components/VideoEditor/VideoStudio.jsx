@@ -804,13 +804,42 @@ const VideoStudio = ({
   }, []);
 
   const handleSaveVideo = useCallback(async (videoData) => {
+    // Upload audio to Firebase Storage if it has a blob URL (prevents stale blob URLs in saved drafts)
+    let data = { ...videoData };
+    if (data.audio && (data.audio.file || data.audio.url?.startsWith('blob:') || data.audio.localUrl?.startsWith('blob:'))) {
+      try {
+        const audioFile = data.audio.file;
+        if (audioFile) {
+          const { url: firebaseUrl } = await uploadFile(audioFile, 'audio');
+          data = { ...data, audio: { ...data.audio, url: firebaseUrl } };
+          log('[VideoStudio] Uploaded video audio to Firebase:', firebaseUrl);
+        } else if (data.audio.url?.startsWith('blob:') || data.audio.localUrl?.startsWith('blob:')) {
+          // No file object — try to find cloud URL in library
+          const libAudio = libraryMedia.audio.find(a => a.id === data.audio.id);
+          if (libAudio?.url && !libAudio.url.startsWith('blob:')) {
+            data = { ...data, audio: { ...data.audio, url: libAudio.url } };
+            log('[VideoStudio] Replaced blob URL with library URL for video audio:', libAudio.name);
+          } else {
+            console.warn('[VideoStudio] Video audio has blob URL but not found in library:', data.audio.id);
+          }
+        }
+      } catch (err) {
+        console.error('[VideoStudio] Failed to upload video audio:', err);
+      }
+    }
+    // Clean audio object for Firestore (remove non-serializable fields)
+    if (data.audio) {
+      const { file, localUrl, ...cleanAudio } = data.audio;
+      data = { ...data, audio: cleanAudio };
+    }
+
     // Scheduler edit mode: update the scheduledPost directly and return to scheduler
     if (schedulerEditPostId) {
       try {
         await updateScheduledPost(db, currentArtistId, schedulerEditPostId, {
-          editorState: videoData,
-          contentName: videoData.name || videoData.id || 'Edited Video',
-          thumbnail: videoData.thumbnail || null
+          editorState: data,
+          contentName: data.name || data.id || 'Edited Video',
+          thumbnail: data.thumbnail || null
         });
         log('[VideoStudio] Updated scheduledPost from editor:', schedulerEditPostId);
       } catch (err) {
@@ -829,9 +858,9 @@ const VideoStudio = ({
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
         const savedVideo = addCreatedVideo(currentArtistId, {
-          ...videoData,
-          id: videoData.id || `video_${Date.now()}`,
-          collectionId: videoData.collectionId || pullFromCollection || null,
+          ...data,
+          id: data.id || `video_${Date.now()}`,
+          collectionId: data.collectionId || pullFromCollection || null,
           createdAt: new Date().toISOString(),
           status: VIDEO_STATUS.DRAFT
         });
@@ -860,18 +889,18 @@ const VideoStudio = ({
     const updateCategory = (cat) => {
       if (cat.id !== selectedCategory.id) return cat;
 
-      const existingIndex = cat.createdVideos.findIndex(v => v.id === videoData.id);
+      const existingIndex = cat.createdVideos.findIndex(v => v.id === data.id);
       if (existingIndex >= 0) {
         // Update existing
         const newVideos = [...cat.createdVideos];
-        newVideos[existingIndex] = { ...videoData, updatedAt: new Date().toISOString() };
+        newVideos[existingIndex] = { ...data, updatedAt: new Date().toISOString() };
         return { ...cat, createdVideos: newVideos };
       } else {
         // Add new
         return {
           ...cat,
           createdVideos: [...cat.createdVideos, {
-            ...videoData,
+            ...data,
             id: `video_${Date.now()}`,
             createdAt: new Date().toISOString(),
             status: VIDEO_STATUS.DRAFT
@@ -894,7 +923,7 @@ const VideoStudio = ({
     // Navigate to drafts after saving
     setCurrentView('drafts');
     setStudioMode('videos');
-  }, [selectedCategory, currentArtistId, schedulerEditPostId, db]);
+  }, [selectedCategory, currentArtistId, schedulerEditPostId, db, libraryMedia.audio]);
 
   const handleUploadVideos = useCallback(async (files) => {
     if (!selectedCategory) return;
