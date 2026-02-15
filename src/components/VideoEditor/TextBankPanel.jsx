@@ -14,9 +14,9 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
 
   return (
     <div style={{
-      flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      flex: '0 0 auto', display: 'flex', flexDirection: 'column',
       borderRadius: '10px', border: `1px solid ${theme.border.subtle}`,
-      minHeight: 0
+      minHeight: '150px', maxHeight: '300px'
     }}>
       <div style={{
         padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
