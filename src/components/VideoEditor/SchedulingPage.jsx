@@ -1199,8 +1199,14 @@ const SchedulingPage = ({
             <div style={{ ...s.bulkSection, ...(isMobile ? { width: '100%' } : {}) }}>
               <label style={s.miniLabel}>Start</label>
               <div style={{ display: 'flex', gap: '4px' }}>
-                <input type="date" value={batchStartDate} onChange={(e) => setBatchStartDate(e.target.value)} style={s.miniInput} />
-                <input type="time" value={batchStartTime} onChange={(e) => setBatchStartTime(e.target.value)} style={s.miniInput} />
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <input type="date" value={batchStartDate} onChange={(e) => setBatchStartDate(e.target.value)} style={{ ...s.miniInput, paddingRight: '24px' }} />
+                  <span style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '12px', opacity: 0.5 }}>📅</span>
+                </div>
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <input type="time" value={batchStartTime} onChange={(e) => setBatchStartTime(e.target.value)} style={{ ...s.miniInput, paddingRight: '24px' }} />
+                  <span style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '12px', opacity: 0.5 }}>🕐</span>
+                </div>
               </div>
             </div>
 
@@ -1599,8 +1605,14 @@ const PostRow = ({
         {isMobile ? (
           <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '6px', paddingLeft: '32px' }}>
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} onMouseDown={(e) => e.stopPropagation()} style={{ ...s.inlineDate, flex: 1, minWidth: '120px' }} />
-              <input type="time" value={schedTime} onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }} onMouseDown={(e) => e.stopPropagation()} style={{ ...s.inlineTime, flex: 1, minWidth: '90px' }} />
+              <div style={{ position: 'relative', flex: 1, minWidth: '120px' }}>
+                <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} onMouseDown={(e) => e.stopPropagation()} style={{ ...s.inlineDate, width: '100%', paddingRight: '24px' }} />
+                <span style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '11px', opacity: 0.5 }}>📅</span>
+              </div>
+              <div style={{ position: 'relative', flex: 1, minWidth: '90px' }}>
+                <input type="time" value={schedTime} onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }} onMouseDown={(e) => e.stopPropagation()} style={{ ...s.inlineTime, width: '100%', paddingRight: '24px' }} />
+                <span style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '11px', opacity: 0.5 }}>🕐</span>
+              </div>
             </div>
             {previewTime && !post.scheduledTime && (() => {
               const pt = new Date(previewTime);
@@ -1617,8 +1629,14 @@ const PostRow = ({
             {/* Schedule Date/Time */}
             <div style={{ width: '190px', display: 'flex', flexDirection: 'column', gap: '2px', flexShrink: 0 }}>
               <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} onMouseDown={(e) => e.stopPropagation()} style={s.inlineDate} />
-                <input type="time" value={schedTime} onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }} onMouseDown={(e) => e.stopPropagation()} style={s.inlineTime} />
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} onMouseDown={(e) => e.stopPropagation()} style={{ ...s.inlineDate, paddingRight: '24px' }} />
+                  <span style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '10px', opacity: 0.5 }}>📅</span>
+                </div>
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <input type="time" value={schedTime} onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }} onMouseDown={(e) => e.stopPropagation()} style={{ ...s.inlineTime, paddingRight: '24px' }} />
+                  <span style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '10px', opacity: 0.5 }}>🕐</span>
+                </div>
               </div>
               {previewTime && !post.scheduledTime && (() => {
                 const pt = new Date(previewTime);
