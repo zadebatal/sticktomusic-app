@@ -1586,7 +1586,7 @@ const VideoStudio = ({
               log('[VideoStudio] Uploaded audio to Firebase:', firebaseUrl);
             } else if (data.audio.url?.startsWith('blob:')) {
               // Blob URL without file - try to find in library by ID
-              const libAudio = libraryAudio.find(a => a.id === data.audio.id);
+              const libAudio = libraryMedia.audio.find(a => a.id === data.audio.id);
               if (libAudio && libAudio.url && !libAudio.url.startsWith('blob:')) {
                 data = {
                   ...data,
