@@ -3728,9 +3728,13 @@ const SlideshowEditor = ({
                     <button
                       onClick={() => {
                         const hasStroke = selOverlay.style.textStroke && selOverlay.style.textStroke !== 'none';
-                        updateTextOverlay(selOverlay.id, {
-                          style: { ...selOverlay.style, textStroke: hasStroke ? 'none' : buildStroke(0.1, '#000000') }
-                        });
+                        const newStyle = { ...selOverlay.style };
+                        if (hasStroke) {
+                          delete newStyle.textStroke;
+                        } else {
+                          newStyle.textStroke = buildStroke(0.1, '#000000');
+                        }
+                        updateTextOverlay(selOverlay.id, { style: newStyle });
                       }}
                       style={{
                         padding: '4px 7px', borderRadius: '4px', border: 'none', cursor: 'pointer',
