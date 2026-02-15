@@ -995,8 +995,18 @@ const SlideshowEditor = ({
       }
     } else {
       // Metadata-only trim (fallback or full-length selection)
+      // IMPORTANT: Check if audio has expired blob URL and reject it
+      if (audioToTrim.url?.startsWith('blob:')) {
+        toastError('This audio has an expired URL. Please re-upload the audio file.');
+        setShowAudioTrimmer(false);
+        setAudioToTrim(null);
+        return;
+      }
+
       const editedAudio = {
         ...audioToTrim,
+        file: undefined, // Strip non-serializable fields
+        localUrl: undefined,
         startTime,
         endTime,
         trimmedDuration: endTime - startTime,
@@ -1792,16 +1802,29 @@ const SlideshowEditor = ({
       }
     }
 
+    // Clean audio object before saving (remove non-serializable fields)
+    let cleanedAudio = null;
+    if (activeSlideshow.audio) {
+      const { file, localUrl, ...audioFields } = activeSlideshow.audio;
+      cleanedAudio = {
+        ...audioFields,
+        // Ensure URL is not a blob URL
+        url: audioFields.url?.startsWith('blob:') ? null : audioFields.url,
+        startTime: activeSlideshow.audio.startTime || 0,
+        endTime: activeSlideshow.audio.endTime || null
+      };
+      // Don't save audio if it has no valid URL
+      if (!cleanedAudio.url) {
+        cleanedAudio = null;
+      }
+    }
+
     const slideshowData = {
       id: activeSlideshow.isTemplate ? (existingSlideshow?.id || `slideshow_${Date.now()}`) : activeSlideshow.id,
       name: activeSlideshow.name,
       aspectRatio,
       slides: activeSlideshow.slides,
-      audio: activeSlideshow.audio ? {
-        ...activeSlideshow.audio,
-        startTime: activeSlideshow.audio.startTime || 0,
-        endTime: activeSlideshow.audio.endTime || null
-      } : null,
+      audio: cleanedAudio,
       thumbnail,
       status: 'draft',
       createdAt: existingSlideshow?.createdAt || new Date().toISOString(),
@@ -1825,16 +1848,29 @@ const SlideshowEditor = ({
           }
         }
 
+        // Clean audio object before saving (remove non-serializable fields)
+        let cleanedAudio = null;
+        if (ss.audio) {
+          const { file, localUrl, ...audioFields } = ss.audio;
+          cleanedAudio = {
+            ...audioFields,
+            // Ensure URL is not a blob URL
+            url: audioFields.url?.startsWith('blob:') ? null : audioFields.url,
+            startTime: ss.audio.startTime || 0,
+            endTime: ss.audio.endTime || null
+          };
+          // Don't save audio if it has no valid URL
+          if (!cleanedAudio.url) {
+            cleanedAudio = null;
+          }
+        }
+
         return {
           id: ss.isTemplate ? (existingSlideshow?.id || `slideshow_${Date.now()}`) : ss.id,
           name: ss.name,
           aspectRatio,
           slides: ss.slides,
-          audio: ss.audio ? {
-            ...ss.audio,
-            startTime: ss.audio.startTime || 0,
-            endTime: ss.audio.endTime || null
-          } : null,
+          audio: cleanedAudio,
           thumbnail,
           status: 'draft',
           createdAt: new Date().toISOString(),
