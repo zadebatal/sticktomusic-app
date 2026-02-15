@@ -50,6 +50,8 @@ const SlideshowEditor = ({
   lateAccountIds = {},
   schedulerEditMode = false
 }) => {
+  console.log('[SlideshowEditor] Initializing...', { artistId, hasExisting: !!existingSlideshow });
+
   const { theme } = useTheme();
   const styles = getStyles(theme);
 
@@ -1157,8 +1159,8 @@ const SlideshowEditor = ({
       if (!url) return null;
 
       // If it's a blob URL, check if it's still valid by trying to find the audio in library
-      if (typeof url === 'string' && url.startsWith('blob:') && selectedAudioId && libraryAudio.length > 0) {
-        const libItem = libraryAudio.find(a => a.id === selectedAudioId);
+      if (typeof url === 'string' && url.startsWith('blob:') && selectedAudioId && Array.isArray(libraryAudio) && libraryAudio.length > 0) {
+        const libItem = libraryAudio.find(a => a && a.id === selectedAudioId);
         // If library has a non-blob URL (actual file URL), use that
         if (libItem?.url && typeof libItem.url === 'string' && !libItem.url.startsWith('blob:')) {
           return libItem.url;
