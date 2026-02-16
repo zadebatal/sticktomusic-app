@@ -174,6 +174,13 @@ const SlideshowEditor = ({
   const [newTextInputs, setNewTextInputs] = useState({});
   const [showAddToBankPicker, setShowAddToBankPicker] = useState(false);
 
+  // Derive active collection ID from selectedSource (needed before text bank callbacks)
+  const activeCollectionId = (() => {
+    if (selectedSource && selectedSource.includes(':bank_')) return selectedSource.split(':')[0];
+    if (selectedSource && !selectedSource.match(/^bank_\d+$/)) return selectedSource;
+    return null;
+  })();
+
   // Add text to a text bank and update local collections state
   // text can be a plain string or { text: string, style: object }
   const handleAddToTextBank = useCallback((bankNum, text) => {
@@ -181,7 +188,9 @@ const SlideshowEditor = ({
     if (!plainText.trim() || !artistId || collections.length === 0) return;
     // For plain strings, trim; for styled objects, trim the text inside
     const entry = typeof text === 'string' ? text.trim() : { ...text, text: text.text.trim() };
-    const targetCol = collections[0]; // Add to first collection
+    // Target the active collection (category prop, activeCollectionId, or first collection)
+    const targetCol = category || (activeCollectionId ? collections.find(c => c.id === activeCollectionId) : null) || collections[0];
+    if (!targetCol) return;
     addToTextBank(artistId, targetCol.id, bankNum, entry);
     // Update local state so UI refreshes immediately (write to textBanks array)
     setCollections(prev => prev.map(col => {
@@ -193,12 +202,14 @@ const SlideshowEditor = ({
       textBanks[idx] = [...textBanks[idx], entry];
       return { ...col, textBanks };
     }));
-  }, [artistId, collections]);
+  }, [artistId, collections, category, activeCollectionId]);
 
   // Delete text from a text bank
   const handleRemoveFromTextBank = useCallback((bankNum, index) => {
     if (!artistId || collections.length === 0) return;
-    const targetCol = collections[0];
+    // Target the active collection (category prop, activeCollectionId, or first collection)
+    const targetCol = category || (activeCollectionId ? collections.find(c => c.id === activeCollectionId) : null) || collections[0];
+    if (!targetCol) return;
     removeFromTextBank(artistId, targetCol.id, bankNum, index);
     setCollections(prev => prev.map(col => {
       if (col.id !== targetCol.id) return col;
@@ -210,7 +221,7 @@ const SlideshowEditor = ({
       }
       return { ...col, textBanks };
     }));
-  }, [artistId, collections]);
+  }, [artistId, collections, category, activeCollectionId]);
 
   // Filmstrip drag-and-drop state
   const [filmstripDropIndex, setFilmstripDropIndex] = useState(null);
@@ -472,11 +483,7 @@ const SlideshowEditor = ({
     if (artistId) setLibraryLyrics(getLyrics(artistId));
   }, [artistId]);
   useEffect(() => { refreshLibraryLyrics(); }, [refreshLibraryLyrics]);
-  const activeCollectionId = (() => {
-    if (selectedSource && selectedSource.includes(':bank_')) return selectedSource.split(':')[0];
-    if (selectedSource && !selectedSource.match(/^bank_\d+$/)) return selectedSource;
-    return null;
-  })();
+  // activeCollectionId is now declared earlier (before text bank callbacks)
   const lyrics = (() => {
     const catLyrics = category?.lyrics || [];
     if (catLyrics.length > 0) return catLyrics;
@@ -940,19 +947,16 @@ const SlideshowEditor = ({
     );
   }, [currentSlide, getRerollBank, setSlideBackground]);
 
-  // Gather all text bank items from collections for text reroll
+  // Gather text bank items from the active collection only (not merged across all)
   const textBanksCache = useMemo(() => {
-    const result = [];
-    for (const col of collections) {
-      const migrated = migrateCollectionBanks(col);
-      (migrated.textBanks || []).forEach((tb, i) => {
-        if (!result[i]) result[i] = [];
-        if (tb?.length > 0) result[i] = [...result[i], ...tb];
-      });
-    }
+    // Use category prop if available, otherwise find collection matching activeCollectionId
+    const activeCol = category || (activeCollectionId ? collections.find(c => c.id === activeCollectionId) : null) || collections[0];
+    if (!activeCol) { return [[], []]; }
+    const migrated = migrateCollectionBanks(activeCol);
+    const result = (migrated.textBanks || []).map(tb => tb?.length > 0 ? [...tb] : []);
     while (result.length < 2) result.push([]);
     return result;
-  }, [collections, migrateCollectionBanks]);
+  }, [category, activeCollectionId, collections, migrateCollectionBanks]);
   const getTextBanks = useCallback(() => textBanksCache, [textBanksCache]);
 
   // Re-roll text: Replace text overlays with random text from banks
