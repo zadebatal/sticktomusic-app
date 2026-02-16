@@ -565,6 +565,14 @@ const MultiClipEditor = ({
     }
   }, [isMuted, selectedAudio, sourceVideoMuted, sourceVideoVolume, externalAudioVolume]);
 
+  // Get clip URL safely (must be before useWaveform which references it)
+  const getClipUrl = useCallback((clipObj) => {
+    if (!clipObj) return null;
+    const localUrl = clipObj.localUrl;
+    const isBlobUrl = localUrl && localUrl.startsWith('blob:');
+    return isBlobUrl ? clipObj.url : (localUrl || clipObj.url || clipObj.src);
+  }, []);
+
   // Waveform data via shared hook
   const { waveformData, clipWaveforms, waveformSource } = useWaveform({
     selectedAudio,
@@ -1028,14 +1036,6 @@ const MultiClipEditor = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleCloseRequest, handlePlayPause, editingTextId]);
-
-  // Get clip URL safely
-  const getClipUrl = (clipObj) => {
-    if (!clipObj) return null;
-    const localUrl = clipObj.localUrl;
-    const isBlobUrl = localUrl && localUrl.startsWith('blob:');
-    return isBlobUrl ? clipObj.url : (localUrl || clipObj.url || clipObj.src);
-  };
 
   // Currently editing overlay
   const editingOverlay = textOverlays.find(o => o.id === editingTextId);
