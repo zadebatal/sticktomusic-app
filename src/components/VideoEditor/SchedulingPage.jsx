@@ -438,11 +438,21 @@ const SchedulingPage = ({
     const pastUnlocked = unlocked.filter(p => p.scheduledTime && new Date(p.scheduledTime) < now);
     const futureUnlocked = unlocked.filter(p => !p.scheduledTime || new Date(p.scheduledTime) >= now);
 
-    // Collect only future scheduled times for redistribution
+    // Calculate spacing from existing future times, then re-space from next upcoming slot
     const futureTimes = futureUnlocked
       .filter(p => p.scheduledTime)
-      .map(p => p.scheduledTime)
-      .sort((a, b) => new Date(a) - new Date(b));
+      .map(p => new Date(p.scheduledTime).getTime())
+      .sort((a, b) => a - b);
+
+    // Determine spacing interval: average gap between consecutive future posts, default 30 min
+    let spacingMs = 30 * 60 * 1000; // 30 minutes default
+    if (futureTimes.length >= 2) {
+      const totalSpan = futureTimes[futureTimes.length - 1] - futureTimes[0];
+      spacingMs = Math.max(totalSpan / (futureTimes.length - 1), 5 * 60 * 1000); // min 5 min
+    }
+
+    // Starting point: the earliest future time (next upcoming slot)
+    const startTime = futureTimes.length > 0 ? futureTimes[0] : now.getTime() + spacingMs;
 
     // Shuffle only future unlocked posts
     for (let i = futureUnlocked.length - 1; i > 0; i--) {
@@ -464,12 +474,13 @@ const SchedulingPage = ({
       if (!fixedPositions.has(i)) { result[i] = futureUnlocked[fi++]; }
     }
 
-    // Redistribute future times to shuffled future posts
-    let timeIdx = 0;
+    // Re-space future posts from next upcoming slot with consistent spacing
+    let slotIndex = 0;
     const timeUpdates = [];
     for (let i = 0; i < result.length; i++) {
-      if (!fixedPositions.has(i) && result[i].scheduledTime && timeIdx < futureTimes.length) {
-        const newTime = futureTimes[timeIdx++];
+      if (!fixedPositions.has(i) && result[i].scheduledTime) {
+        const newTime = new Date(startTime + slotIndex * spacingMs).toISOString();
+        slotIndex++;
         if (newTime !== result[i].scheduledTime) {
           timeUpdates.push({ id: result[i].id, scheduledTime: newTime });
           result[i] = { ...result[i], scheduledTime: newTime };
@@ -486,51 +497,39 @@ const SchedulingPage = ({
       await updateScheduledPost(db, artistId, update.id, { scheduledTime: update.scheduledTime });
     }
 
-    // Sync time changes to Late.co for posts that have a Late post ID
-    // Include any status except 'posted' (already published) and 'draft' (not yet on Late)
-    log('[Schedule] Shuffle: timeUpdates =', timeUpdates.length, ', futureUnlocked =', futureUnlocked.length);
+    // Sync time changes to Late.co
     const lateUpdates = timeUpdates.filter(u => {
       const post = result.find(p => p.id === u.id);
-      log('[Schedule] Post', u.id, ': latePostId=', post?.latePostId, ', status=', post?.status);
       return post?.latePostId && post?.status !== 'posted' && post?.status !== 'draft';
     });
-    log('[Schedule] lateUpdates to sync:', lateUpdates.length);
+
     if (lateUpdates.length > 0) {
       try {
         const token = await getAuth().currentUser?.getIdToken();
-        log('[Schedule] Got auth token:', token ? 'yes' : 'NO');
         let synced = 0;
         for (const update of lateUpdates) {
           const post = result.find(p => p.id === update.id);
           try {
-            log('[Schedule] Late sync: updating', post.latePostId, '→', update.scheduledTime);
             const resp = await fetch('/api/late', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
               body: JSON.stringify({ action: 'updatePost', postId: post.latePostId, artistId, scheduledFor: update.scheduledTime })
             });
-            if (resp.ok) {
-              synced++;
-              log('[Schedule] Late sync OK for', post.latePostId);
-            } else {
-              const errData = await resp.json().catch(() => ({}));
-              console.warn('[Schedule] Late sync FAILED:', resp.status, errData.error || errData);
-            }
+            if (resp.ok) synced++;
+            else console.warn('[Schedule] Late sync failed:', resp.status);
           } catch (syncErr) {
             console.warn('[Schedule] Late sync error:', syncErr.message);
           }
         }
         if (synced > 0) toastSuccess(`Shuffled + synced ${synced} post${synced !== 1 ? 's' : ''} to Late.co`);
-        else toastSuccess('Shuffled (Late sync failed for all posts)');
+        else toastSuccess('Queue shuffled (Late sync failed)');
       } catch (outerErr) {
-        console.error('[Schedule] Late sync outer error:', outerErr);
-        toastSuccess('Shuffled (Late sync error: ' + outerErr.message + ')');
+        console.error('[Schedule] Late sync error:', outerErr);
+        toastSuccess('Queue shuffled');
       }
     } else {
-      const reason = timeUpdates.length === 0
-        ? 'no time changes needed'
-        : 'no posts have latePostId';
-      toastSuccess(locked.length > 0 ? `Shuffled (${locked.length} locked, ${reason})` : `Queue randomized (${reason})`);
+      const msg = locked.length > 0 ? `Queue shuffled (${locked.length} locked)` : 'Queue shuffled';
+      toastSuccess(msg);
     }
   }, [posts, db, artistId, toastSuccess]);
 
