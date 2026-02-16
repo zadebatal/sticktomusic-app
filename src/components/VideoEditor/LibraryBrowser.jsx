@@ -2072,14 +2072,20 @@ const LibraryBrowser = ({
         )}
 
         {/* Content */}
-        <div style={styles.content}>
+        <div style={{
+          ...styles.content,
+          ...(isUserCollectionView && (collectionBanks || videoTextBanksAvailable) ? {
+            display: 'flex', flexDirection: 'column', overflowY: 'hidden', minHeight: 0
+          } : {})
+        }}>
           {/* Collection view: media on left, banks on right */}
           {isUserCollectionView && (collectionBanks || videoTextBanksAvailable) ? (
             <div style={{
               display: 'flex',
               flexDirection: isMobile ? 'column' : 'row',
               gap: isMobile ? '8px' : '12px',
-              height: '100%',
+              flex: 1,
+              minHeight: 0,
               overflow: isMobile ? 'auto' : 'hidden'
             }}>
               {/* Left half — all collection images */}
