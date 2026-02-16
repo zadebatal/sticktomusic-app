@@ -199,9 +199,9 @@ const MultiClipEditor = ({
   const [collections, setCollections] = useState([]);
   const [libraryMedia, setLibraryMedia] = useState([]);
 
-  // Derive library audio and video from libraryMedia
-  const libraryAudio = libraryMedia.filter(i => i.type === MEDIA_TYPES.AUDIO);
-  const libraryVideos = libraryMedia.filter(i => i.type === MEDIA_TYPES.VIDEO);
+  // Derive library audio and video from libraryMedia (memoized to avoid re-render cascades)
+  const libraryAudio = useMemo(() => libraryMedia.filter(i => i.type === MEDIA_TYPES.AUDIO), [libraryMedia]);
+  const libraryVideos = useMemo(() => libraryMedia.filter(i => i.type === MEDIA_TYPES.VIDEO), [libraryMedia]);
 
   // ── Collection dropdown state ──
   const [selectedCollection, setSelectedCollection] = useState('all');
@@ -1132,46 +1132,13 @@ const MultiClipEditor = ({
             </svg>
             {!isMobile && <span>Studio</span>}
           </button>
-          <div style={{ display: 'flex', gap: isMobile ? '4px' : '8px', alignItems: 'center' }}>
-            {/* Aspect ratio toggles */}
-            {['9:16', '1:1', '4:3'].map(ratio => (
-              <button
-                key={ratio}
-                onClick={() => setAspectRatio(ratio)}
-                style={{
-                  ...styles.ratioButton,
-                  ...(aspectRatio === ratio ? styles.ratioButtonActive : {}),
-                  ...(isMobile ? { padding: '4px 8px', fontSize: '10px', minHeight: '44px', minWidth: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' } : {})
-                }}
-              >
-                {ratio}
-              </button>
-            ))}
-            {!isMobile && <div style={{ width: '1px', height: '20px', backgroundColor: theme.border.subtle, margin: '0 4px' }} />}
-            {/* Save Draft */}
-            <button onClick={handleSaveDraft} style={{
-              ...styles.saveDraftButton,
-              ...(isMobile ? { padding: '6px 10px', fontSize: '11px', minHeight: '44px', minWidth: '44px' } : {})
-            }}>
-              {isMobile ? 'Save' : 'Save Draft'}
-            </button>
-            {/* Save All */}
-            {allVideos.length > 1 && (
-              <button onClick={handleSaveAllAndClose} style={{
-                ...styles.saveAllButton,
-                ...(isMobile ? { padding: '6px 10px', fontSize: '11px', minHeight: '44px' } : {})
-              }}>
-                {isMobile ? `All (${allVideos.length})` : `Save All (${allVideos.length})`}
-              </button>
-            )}
-            {/* Close */}
-            <button onClick={handleCloseRequest} style={styles.closeButton}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          </div>
+          {/* Close */}
+          <button onClick={handleCloseRequest} style={styles.closeButton}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
 
         {/* ── Main Content — 3 Columns (desktop) / stacked (mobile) ── */}
@@ -1556,6 +1523,331 @@ const MultiClipEditor = ({
                 </span>
               </div>
             </div>
+
+            {/* Scrollable controls section below preview */}
+            <div style={{ flexShrink: 1, overflow: 'auto', minHeight: 0 }}>
+              {/* Audio Info Bar */}
+              {selectedAudio && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '6px 12px', margin: '4px 8px',
+                  backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                  border: '1px solid rgba(139, 92, 246, 0.2)',
+                  borderRadius: '8px'
+                }}>
+                  <span style={{ fontSize: '12px', color: theme.text.primary, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {selectedAudio.name}
+                    {selectedAudio.isTrimmed && <span style={{ marginLeft: '6px', fontSize: '10px', padding: '1px 5px', backgroundColor: 'rgba(139,92,246,0.2)', borderRadius: '4px', color: '#a78bfa' }}>Trimmed</span>}
+                  </span>
+                  <button
+                    onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}
+                    style={{
+                      padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+                      border: '1px solid rgba(139,92,246,0.3)', backgroundColor: 'transparent',
+                      color: '#a78bfa', cursor: 'pointer'
+                    }}
+                  >Trim</button>
+                  <button
+                    onClick={() => {
+                      if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; }
+                      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+                      setSelectedAudio(null); setIsPlaying(false); setCurrentTime(0); setAudioDuration(0);
+                      setSourceVideoMuted(false);
+                    }}
+                    style={{
+                      padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+                      border: '1px solid rgba(239,68,68,0.3)', backgroundColor: 'transparent',
+                      color: '#ef4444', cursor: 'pointer'
+                    }}
+                  >Remove</button>
+                </div>
+              )}
+
+              {/* Timeline Section */}
+              {!isMobile && <div style={{ ...styles.timelineSection, position: 'relative' }}>
+                {/* Text Controls toggle */}
+                <button
+                  onClick={() => setShowTextPanel(p => !p)}
+                  style={{
+                    position: 'absolute', top: '4px', right: '8px', zIndex: 5,
+                    padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+                    border: `1px solid ${showTextPanel ? theme.accent.primary : theme.border.default}`,
+                    backgroundColor: showTextPanel ? theme.accent.primary + '22' : 'transparent',
+                    color: showTextPanel ? theme.accent.primary : theme.text.secondary,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Text Controls
+                </button>
+                <div
+                  ref={timelineRef}
+                  style={styles.timelineTrackArea}
+                  onClick={(e) => {
+                    if (playheadDragging) return;
+                    if (e.target === e.currentTarget || e.target.dataset.timelineClickable) {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const clickX = e.clientX - rect.left;
+                      const time = (clickX / rect.width) * (timelineDuration || 1);
+                      handleSeek(Math.max(0, Math.min(timelineDuration || 0, time)));
+                    }
+                  }}
+                >
+                  {/* Time Ruler */}
+                  <div style={styles.timelineRuler}>
+                    {timelineDuration > 0 && Array.from({ length: Math.ceil(timelineDuration) + 1 }, (_, i) => (
+                      <div key={i} style={{ position: 'absolute', left: `${(i / timelineDuration) * 100}%`, top: 0, height: '100%' }}>
+                        <div style={{ width: '1px', height: i % 5 === 0 ? '10px' : '6px', backgroundColor: theme.border.subtle }} />
+                        {i % 2 === 0 && <span style={{ fontSize: '9px', color: theme.text.muted, position: 'absolute', top: '10px', transform: 'translateX(-50%)' }}>{i}s</span>}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Text Overlay Track */}
+                  <div style={styles.textTrack} data-timeline-clickable="true">
+                    {textOverlays.map((overlay) => {
+                      const startPct = timelineDuration > 0 ? ((overlay.startTime || 0) / timelineDuration) * 100 : 0;
+                      const widthPct = timelineDuration > 0 ? (((overlay.endTime || 0) - (overlay.startTime || 0)) / timelineDuration) * 100 : 10;
+                      const isSelected = editingTextId === overlay.id;
+                      return (
+                        <div
+                          key={overlay.id}
+                          style={{
+                            position: 'absolute',
+                            left: `${startPct}%`,
+                            width: `${widthPct}%`,
+                            top: '2px',
+                            height: '24px',
+                            backgroundColor: isSelected ? '#9333ea' : theme.accent.primary,
+                            borderRadius: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            padding: '0 4px',
+                            cursor: timelineDrag ? 'grabbing' : 'grab',
+                            overflow: 'hidden',
+                            border: isSelected ? '1px solid #a855f7' : '1px solid rgba(124,58,237,0.5)',
+                            boxShadow: isSelected ? '0 2px 8px rgba(168,85,247,0.4)' : 'none',
+                            zIndex: isSelected ? 10 : 5,
+                            transition: timelineDrag ? 'none' : 'background-color 0.15s'
+                          }}
+                          onMouseDown={(e) => handleTimelineDragStart(e, overlay.id, 'move')}
+                        >
+                          {/* Left resize handle */}
+                          <div
+                            style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
+                            onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'left'); }}
+                          />
+                          <span style={{ fontSize: '10px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none', padding: '0 6px' }}>
+                            {overlay.text}
+                          </span>
+                          {/* Right resize handle */}
+                          <div
+                            style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
+                            onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'right'); }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Clip Cut Lines — visual snap guides at clip boundaries */}
+                  {clipCutPoints.slice(1, -1).map((cutTime, i) => (
+                    <div
+                      key={`cut-${i}`}
+                      style={{
+                        position: 'absolute',
+                        left: `${(cutTime / timelineDuration) * 100}%`,
+                        top: 0,
+                        bottom: 0,
+                        width: '1px',
+                        backgroundColor: 'rgba(234,179,8,0.4)',
+                        zIndex: 15,
+                        pointerEvents: 'none'
+                      }}
+                    />
+                  ))}
+
+                  {/* Clip Track — multi-clip: segments for each clip */}
+                  <div style={styles.clipTrack}>
+                    {clips.map((clipItem, idx) => {
+                      const clipId = clipItem.id || clipItem.sourceId;
+                      const clipDur = getClipDuration(clipId);
+                      let accBefore = 0;
+                      for (let j = 0; j < idx; j++) {
+                        accBefore += getClipDuration(clips[j].id || clips[j].sourceId);
+                      }
+                      const leftPct = timelineDuration > 0 ? (accBefore / timelineDuration) * 100 : 0;
+                      const widthPct = timelineDuration > 0 ? (clipDur / timelineDuration) * 100 : 100;
+                      return (
+                        <div
+                          key={idx}
+                          style={{
+                            position: 'absolute',
+                            left: `${leftPct}%`,
+                            width: `${widthPct}%`,
+                            top: '2px',
+                            height: '40px',
+                            backgroundColor: activeClipIndex === idx ? theme.bg.elevated : theme.bg.surface,
+                            borderRadius: '4px',
+                            overflow: 'hidden',
+                            border: activeClipIndex === idx ? `1px solid ${theme.accent.primary}66` : `1px solid ${theme.border.subtle}`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          {(clipItem.thumbnailUrl || clipItem.thumbnail) && (
+                            <img
+                              src={clipItem.thumbnailUrl || clipItem.thumbnail}
+                              alt=""
+                              style={{ width: '40px', height: '100%', objectFit: 'cover', opacity: 0.6, flexShrink: 0 }}
+                            />
+                          )}
+                          <span style={{ fontSize: '9px', color: theme.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 4px' }}>
+                            {clipItem.name || `Clip ${idx + 1}`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Added Audio Waveform Track (purple) — shown when external audio present */}
+                  {selectedAudio && !selectedAudio.isSourceVideo && waveformData.length > 0 && (
+                    <div style={styles.audioTrack}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)', zIndex: 2 }}>
+                        <span style={{ fontSize: '10px' }}>{'\uD83C\uDFB5'}</span>
+                        <input type="range" min="0" max="1" step="0.05" value={externalAudioVolume}
+                          onChange={e => setExternalAudioVolume(parseFloat(e.target.value))}
+                          style={{ width: '36px', height: '3px', accentColor: '#8b5cf6', cursor: 'pointer' }}
+                          title={`Added audio: ${Math.round(externalAudioVolume * 100)}%`}
+                          onClick={e => e.stopPropagation()}
+                        />
+                      </div>
+                      <div style={{ position: 'absolute', left: '68px', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: '1px' }}>
+                        {waveformData.map((amplitude, i) => (
+                          <div key={i} style={{
+                            flex: 1, minWidth: '1px', backgroundColor: 'rgba(139, 92, 246, 0.5)',
+                            height: `${amplitude * 100}%`, opacity: 0.6
+                          }} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Source Video Audio Waveform Track (blue) — shown when clips have audio */}
+                  {Object.keys(clipWaveforms).length > 0 && (() => {
+                    const hasExternal = selectedAudio && !selectedAudio.isSourceVideo;
+                    return (
+                      <div style={styles.audioTrack}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)', zIndex: 2 }}>
+                          <button
+                            onClick={e => { e.stopPropagation(); setSourceVideoMuted(m => !m); }}
+                            style={{
+                              background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '10px',
+                              opacity: (hasExternal && sourceVideoMuted) ? 0.4 : 1
+                            }}
+                            title={sourceVideoMuted ? 'Unmute source audio' : 'Mute source audio'}
+                          >{sourceVideoMuted ? '\uD83D\uDD07' : '\uD83C\uDFAC'}</button>
+                          {hasExternal && (
+                            <input type="range" min="0" max="1" step="0.05" value={sourceVideoVolume}
+                              onChange={e => setSourceVideoVolume(parseFloat(e.target.value))}
+                              style={{ width: '36px', height: '3px', accentColor: '#3b82f6', cursor: 'pointer' }}
+                              title={`Source audio: ${Math.round(sourceVideoVolume * 100)}%`}
+                              onClick={e => e.stopPropagation()}
+                            />
+                          )}
+                        </div>
+                        <div style={{ position: 'absolute', left: hasExternal ? '68px' : '20px', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center' }}>
+                          {clips.map((clipItem, idx) => {
+                            const clipId = clipItem.id || clipItem.sourceId;
+                            const clipDur = getClipDuration(clipId);
+                            let accBefore = 0;
+                            for (let j = 0; j < idx; j++) {
+                              accBefore += getClipDuration(clips[j].id || clips[j].sourceId);
+                            }
+                            const leftPct = timelineDuration > 0 ? (accBefore / timelineDuration) * 100 : 0;
+                            const widthPct = timelineDuration > 0 ? (clipDur / timelineDuration) * 100 : 100;
+                            const data = clipWaveforms[clipId] || [];
+                            return (
+                              <div key={idx} style={{
+                                position: 'absolute', left: `${leftPct}%`, width: `${widthPct}%`,
+                                top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: '1px',
+                                borderRight: idx < clips.length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none'
+                              }}>
+                                {data.map((amplitude, i) => (
+                                  <div key={i} style={{
+                                    flex: 1, minWidth: '1px', backgroundColor: 'rgba(59, 130, 246, 0.4)',
+                                    height: `${amplitude * 100}%`, opacity: (hasExternal && sourceVideoMuted) ? 0.3 : 0.6
+                                  }} />
+                                ))}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Playhead — draggable */}
+                  {timelineDuration > 0 && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: `${(currentTime / timelineDuration) * 100}%`,
+                        top: 0,
+                        bottom: 0,
+                        width: '2px',
+                        backgroundColor: '#ef4444',
+                        zIndex: 20,
+                        pointerEvents: 'auto',
+                        cursor: 'ew-resize',
+                        transition: (isPlaying && !playheadDragging) ? 'none' : playheadDragging ? 'none' : 'left 0.1s ease-out'
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setPlayheadDragging(true);
+                        document.body.style.userSelect = 'none';
+                        document.body.style.WebkitUserSelect = 'none';
+                        const wasPlaying = isPlaying;
+                        if (isPlaying) { videoRef.current?.pause(); audioRef.current?.pause(); cancelAnimationFrame(animationRef.current); setIsPlaying(false); }
+                        const handleDragMove = (moveE) => {
+                          const rect = timelineRef.current?.getBoundingClientRect();
+                          if (!rect) return;
+                          const pct = Math.max(0, Math.min(1, (moveE.clientX - rect.left) / rect.width));
+                          const t = pct * timelineDuration;
+                          handleSeek(t);
+                        };
+                        const handleDragEnd = () => {
+                          setPlayheadDragging(false);
+                          document.body.style.userSelect = '';
+                          document.body.style.WebkitUserSelect = '';
+                          window.removeEventListener('mousemove', handleDragMove);
+                          window.removeEventListener('mouseup', handleDragEnd);
+                          if (wasPlaying) { videoRef.current?.play(); if (audioRef.current?.src) audioRef.current.play().catch(() => {}); animationRef.current = requestAnimationFrame(playbackLoop); setIsPlaying(true); }
+                        };
+                        window.addEventListener('mousemove', handleDragMove);
+                        window.addEventListener('mouseup', handleDragEnd);
+                      }}
+                    >
+                      {/* Wider grab area */}
+                      <div style={{ position: 'absolute', left: '-6px', right: '-6px', top: 0, bottom: 0, cursor: 'ew-resize' }} />
+                      <div style={{
+                        position: 'absolute',
+                        top: '-2px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        width: '10px',
+                        height: '10px',
+                        backgroundColor: '#ef4444',
+                        borderRadius: '2px',
+                        clipPath: 'polygon(0 0, 100% 0, 50% 100%)',
+                        cursor: 'ew-resize'
+                      }} />
+                    </div>
+                  )}
+                </div>
+              </div>}
+            </div>
           </div>
 
           {/* ── MOBILE TOOL TOOLBAR + PANEL ── */}
@@ -1902,7 +2194,7 @@ const MultiClipEditor = ({
           )}
 
           {/* ── RIGHT PANEL: Text Overlays (collapsible) ── */}
-          {showTextPanel && !isMobile && <div style={{ ...styles.rightPanel, width: '280px' }}>
+          {showTextPanel && !isMobile && <div style={{ ...styles.rightPanel, width: '300px' }}>
             <div style={{ padding: '6px 12px', borderBottom: `1px solid ${theme.border.subtle}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: '13px', fontWeight: 600, color: theme.text.primary }}>Text Controls</span>
               <button onClick={() => setShowTextPanel(false)} style={{ background: 'none', border: 'none', color: theme.text.muted, fontSize: '18px', cursor: 'pointer', padding: '2px 6px' }}>×</button>
@@ -2114,328 +2406,6 @@ const MultiClipEditor = ({
           </div>}
         </div>
 
-        {/* ── Audio Info Bar ── */}
-        {selectedAudio && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '10px',
-            padding: '6px 12px', marginBottom: '4px',
-            backgroundColor: 'rgba(139, 92, 246, 0.1)',
-            border: '1px solid rgba(139, 92, 246, 0.2)',
-            borderRadius: '8px'
-          }}>
-            <span style={{ fontSize: '12px', color: theme.text.primary, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {selectedAudio.name}
-              {selectedAudio.isTrimmed && <span style={{ marginLeft: '6px', fontSize: '10px', padding: '1px 5px', backgroundColor: 'rgba(139,92,246,0.2)', borderRadius: '4px', color: '#a78bfa' }}>Trimmed</span>}
-            </span>
-            <button
-              onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}
-              style={{
-                padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
-                border: '1px solid rgba(139,92,246,0.3)', backgroundColor: 'transparent',
-                color: '#a78bfa', cursor: 'pointer'
-              }}
-            >Trim</button>
-            <button
-              onClick={() => {
-                if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; }
-                if (animationRef.current) cancelAnimationFrame(animationRef.current);
-                setSelectedAudio(null); setIsPlaying(false); setCurrentTime(0); setAudioDuration(0);
-                setSourceVideoMuted(false);
-              }}
-              style={{
-                padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
-                border: '1px solid rgba(239,68,68,0.3)', backgroundColor: 'transparent',
-                color: '#ef4444', cursor: 'pointer'
-              }}
-            >Remove</button>
-          </div>
-        )}
-
-        {/* ── Timeline Section ── */}
-        {!isMobile && <div style={{ ...styles.timelineSection, position: 'relative' }}>
-          {/* Text Controls toggle */}
-          <button
-            onClick={() => setShowTextPanel(p => !p)}
-            style={{
-              position: 'absolute', top: '4px', right: '8px', zIndex: 5,
-              padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
-              border: `1px solid ${showTextPanel ? theme.accent.primary : theme.border.default}`,
-              backgroundColor: showTextPanel ? theme.accent.primary + '22' : 'transparent',
-              color: showTextPanel ? theme.accent.primary : theme.text.secondary,
-              cursor: 'pointer'
-            }}
-          >
-            Text Controls
-          </button>
-          <div
-            ref={timelineRef}
-            style={styles.timelineTrackArea}
-            onClick={(e) => {
-              if (playheadDragging) return;
-              if (e.target === e.currentTarget || e.target.dataset.timelineClickable) {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const clickX = e.clientX - rect.left;
-                const time = (clickX / rect.width) * (timelineDuration || 1);
-                handleSeek(Math.max(0, Math.min(timelineDuration || 0, time)));
-              }
-            }}
-          >
-            {/* Time Ruler */}
-            <div style={styles.timelineRuler}>
-              {timelineDuration > 0 && Array.from({ length: Math.ceil(timelineDuration) + 1 }, (_, i) => (
-                <div key={i} style={{ position: 'absolute', left: `${(i / timelineDuration) * 100}%`, top: 0, height: '100%' }}>
-                  <div style={{ width: '1px', height: i % 5 === 0 ? '10px' : '6px', backgroundColor: theme.border.subtle }} />
-                  {i % 2 === 0 && <span style={{ fontSize: '9px', color: theme.text.muted, position: 'absolute', top: '10px', transform: 'translateX(-50%)' }}>{i}s</span>}
-                </div>
-              ))}
-            </div>
-
-            {/* Text Overlay Track */}
-            <div style={styles.textTrack} data-timeline-clickable="true">
-              {textOverlays.map((overlay) => {
-                const startPct = timelineDuration > 0 ? ((overlay.startTime || 0) / timelineDuration) * 100 : 0;
-                const widthPct = timelineDuration > 0 ? (((overlay.endTime || 0) - (overlay.startTime || 0)) / timelineDuration) * 100 : 10;
-                const isSelected = editingTextId === overlay.id;
-                return (
-                  <div
-                    key={overlay.id}
-                    style={{
-                      position: 'absolute',
-                      left: `${startPct}%`,
-                      width: `${widthPct}%`,
-                      top: '2px',
-                      height: '24px',
-                      backgroundColor: isSelected ? '#9333ea' : theme.accent.primary,
-                      borderRadius: '4px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      padding: '0 4px',
-                      cursor: timelineDrag ? 'grabbing' : 'grab',
-                      overflow: 'hidden',
-                      border: isSelected ? '1px solid #a855f7' : '1px solid rgba(124,58,237,0.5)',
-                      boxShadow: isSelected ? '0 2px 8px rgba(168,85,247,0.4)' : 'none',
-                      zIndex: isSelected ? 10 : 5,
-                      transition: timelineDrag ? 'none' : 'background-color 0.15s'
-                    }}
-                    onMouseDown={(e) => handleTimelineDragStart(e, overlay.id, 'move')}
-                  >
-                    {/* Left resize handle */}
-                    <div
-                      style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
-                      onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'left'); }}
-                    />
-                    <span style={{ fontSize: '10px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none', padding: '0 6px' }}>
-                      {overlay.text}
-                    </span>
-                    {/* Right resize handle */}
-                    <div
-                      style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
-                      onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'right'); }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Clip Cut Lines — visual snap guides at clip boundaries */}
-            {clipCutPoints.slice(1, -1).map((cutTime, i) => (
-              <div
-                key={`cut-${i}`}
-                style={{
-                  position: 'absolute',
-                  left: `${(cutTime / timelineDuration) * 100}%`,
-                  top: 0,
-                  bottom: 0,
-                  width: '1px',
-                  backgroundColor: 'rgba(234,179,8,0.4)',
-                  zIndex: 15,
-                  pointerEvents: 'none'
-                }}
-              />
-            ))}
-
-            {/* Clip Track — multi-clip: segments for each clip */}
-            <div style={styles.clipTrack}>
-              {clips.map((clipItem, idx) => {
-                const clipId = clipItem.id || clipItem.sourceId;
-                const clipDur = getClipDuration(clipId);
-                let accBefore = 0;
-                for (let j = 0; j < idx; j++) {
-                  accBefore += getClipDuration(clips[j].id || clips[j].sourceId);
-                }
-                const leftPct = timelineDuration > 0 ? (accBefore / timelineDuration) * 100 : 0;
-                const widthPct = timelineDuration > 0 ? (clipDur / timelineDuration) * 100 : 100;
-                return (
-                  <div
-                    key={idx}
-                    style={{
-                      position: 'absolute',
-                      left: `${leftPct}%`,
-                      width: `${widthPct}%`,
-                      top: '2px',
-                      height: '40px',
-                      backgroundColor: activeClipIndex === idx ? theme.bg.elevated : theme.bg.surface,
-                      borderRadius: '4px',
-                      overflow: 'hidden',
-                      border: activeClipIndex === idx ? `1px solid ${theme.accent.primary}66` : `1px solid ${theme.border.subtle}`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}
-                  >
-                    {(clipItem.thumbnailUrl || clipItem.thumbnail) && (
-                      <img
-                        src={clipItem.thumbnailUrl || clipItem.thumbnail}
-                        alt=""
-                        style={{ width: '40px', height: '100%', objectFit: 'cover', opacity: 0.6, flexShrink: 0 }}
-                      />
-                    )}
-                    <span style={{ fontSize: '9px', color: theme.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 4px' }}>
-                      {clipItem.name || `Clip ${idx + 1}`}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Added Audio Waveform Track (purple) — shown when external audio present */}
-            {selectedAudio && !selectedAudio.isSourceVideo && waveformData.length > 0 && (
-              <div style={styles.audioTrack}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)', zIndex: 2 }}>
-                  <span style={{ fontSize: '10px' }}>{'\uD83C\uDFB5'}</span>
-                  <input type="range" min="0" max="1" step="0.05" value={externalAudioVolume}
-                    onChange={e => setExternalAudioVolume(parseFloat(e.target.value))}
-                    style={{ width: '36px', height: '3px', accentColor: '#8b5cf6', cursor: 'pointer' }}
-                    title={`Added audio: ${Math.round(externalAudioVolume * 100)}%`}
-                    onClick={e => e.stopPropagation()}
-                  />
-                </div>
-                <div style={{ position: 'absolute', left: '68px', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: '1px' }}>
-                  {waveformData.map((amplitude, i) => (
-                    <div key={i} style={{
-                      flex: 1, minWidth: '1px', backgroundColor: 'rgba(139, 92, 246, 0.5)',
-                      height: `${amplitude * 100}%`, opacity: 0.6
-                    }} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Source Video Audio Waveform Track (blue) — shown when clips have audio */}
-            {Object.keys(clipWaveforms).length > 0 && (() => {
-              const hasExternal = selectedAudio && !selectedAudio.isSourceVideo;
-              return (
-                <div style={styles.audioTrack}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)', zIndex: 2 }}>
-                    <button
-                      onClick={e => { e.stopPropagation(); setSourceVideoMuted(m => !m); }}
-                      style={{
-                        background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '10px',
-                        opacity: (hasExternal && sourceVideoMuted) ? 0.4 : 1
-                      }}
-                      title={sourceVideoMuted ? 'Unmute source audio' : 'Mute source audio'}
-                    >{sourceVideoMuted ? '\uD83D\uDD07' : '\uD83C\uDFAC'}</button>
-                    {hasExternal && (
-                      <input type="range" min="0" max="1" step="0.05" value={sourceVideoVolume}
-                        onChange={e => setSourceVideoVolume(parseFloat(e.target.value))}
-                        style={{ width: '36px', height: '3px', accentColor: '#3b82f6', cursor: 'pointer' }}
-                        title={`Source audio: ${Math.round(sourceVideoVolume * 100)}%`}
-                        onClick={e => e.stopPropagation()}
-                      />
-                    )}
-                  </div>
-                  <div style={{ position: 'absolute', left: hasExternal ? '68px' : '20px', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center' }}>
-                    {clips.map((clipItem, idx) => {
-                      const clipId = clipItem.id || clipItem.sourceId;
-                      const clipDur = getClipDuration(clipId);
-                      let accBefore = 0;
-                      for (let j = 0; j < idx; j++) {
-                        accBefore += getClipDuration(clips[j].id || clips[j].sourceId);
-                      }
-                      const leftPct = timelineDuration > 0 ? (accBefore / timelineDuration) * 100 : 0;
-                      const widthPct = timelineDuration > 0 ? (clipDur / timelineDuration) * 100 : 100;
-                      const data = clipWaveforms[clipId] || [];
-                      return (
-                        <div key={idx} style={{
-                          position: 'absolute', left: `${leftPct}%`, width: `${widthPct}%`,
-                          top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: '1px',
-                          borderRight: idx < clips.length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none'
-                        }}>
-                          {data.map((amplitude, i) => (
-                            <div key={i} style={{
-                              flex: 1, minWidth: '1px', backgroundColor: 'rgba(59, 130, 246, 0.4)',
-                              height: `${amplitude * 100}%`, opacity: (hasExternal && sourceVideoMuted) ? 0.3 : 0.6
-                            }} />
-                          ))}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Playhead — draggable */}
-            {timelineDuration > 0 && (
-              <div
-                style={{
-                  position: 'absolute',
-                  left: `${(currentTime / timelineDuration) * 100}%`,
-                  top: 0,
-                  bottom: 0,
-                  width: '2px',
-                  backgroundColor: '#ef4444',
-                  zIndex: 20,
-                  pointerEvents: 'auto',
-                  cursor: 'ew-resize',
-                  transition: (isPlaying && !playheadDragging) ? 'none' : playheadDragging ? 'none' : 'left 0.1s ease-out'
-                }}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setPlayheadDragging(true);
-                  document.body.style.userSelect = 'none';
-                  document.body.style.WebkitUserSelect = 'none';
-                  const wasPlaying = isPlaying;
-                  if (isPlaying) { videoRef.current?.pause(); audioRef.current?.pause(); cancelAnimationFrame(animationRef.current); setIsPlaying(false); }
-                  const handleDragMove = (moveE) => {
-                    const rect = timelineRef.current?.getBoundingClientRect();
-                    if (!rect) return;
-                    const pct = Math.max(0, Math.min(1, (moveE.clientX - rect.left) / rect.width));
-                    const t = pct * timelineDuration;
-                    handleSeek(t);
-                  };
-                  const handleDragEnd = () => {
-                    setPlayheadDragging(false);
-                    document.body.style.userSelect = '';
-                    document.body.style.WebkitUserSelect = '';
-                    window.removeEventListener('mousemove', handleDragMove);
-                    window.removeEventListener('mouseup', handleDragEnd);
-                    if (wasPlaying) { videoRef.current?.play(); if (audioRef.current?.src) audioRef.current.play().catch(() => {}); animationRef.current = requestAnimationFrame(playbackLoop); setIsPlaying(true); }
-                  };
-                  window.addEventListener('mousemove', handleDragMove);
-                  window.addEventListener('mouseup', handleDragEnd);
-                }}
-              >
-                {/* Wider grab area */}
-                <div style={{ position: 'absolute', left: '-6px', right: '-6px', top: 0, bottom: 0, cursor: 'ew-resize' }} />
-                <div style={{
-                  position: 'absolute',
-                  top: '-2px',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  width: '10px',
-                  height: '10px',
-                  backgroundColor: '#ef4444',
-                  borderRadius: '2px',
-                  clipPath: 'polygon(0 0, 100% 0, 50% 100%)',
-                  cursor: 'ew-resize'
-                }} />
-              </div>
-            )}
-          </div>
-        </div>}
-
         {/* ── Editor Toolbar ── */}
         <EditorToolbar
           canUndo={canUndo}
@@ -2465,6 +2435,28 @@ const MultiClipEditor = ({
           style={{ display: 'none' }}
           onChange={handleAudioUpload}
         />
+
+        {/* ── Footer ── */}
+        <div style={styles.footer}>
+          <div style={styles.footerLeft}>
+            {!isMobile && ['9:16', '1:1', '4:3'].map(ratio => (
+              <button key={ratio} onClick={() => setAspectRatio(ratio)}
+                style={{ ...styles.ratioButton, ...(aspectRatio === ratio ? styles.ratioButtonActive : {}) }}
+              >{ratio}</button>
+            ))}
+          </div>
+          <div style={styles.footerRight}>
+            <button onClick={handleCloseRequest} style={styles.cancelButton}>Cancel</button>
+            {allVideos.length > 1 && (
+              <button onClick={handleSaveAllAndClose} style={styles.confirmButton}>
+                Save All ({allVideos.length})
+              </button>
+            )}
+            <button onClick={handleSaveDraft} style={styles.confirmButton}>
+              {isMobile ? 'Save' : 'Save Draft'}
+            </button>
+          </div>
+        </div>
 
         {/* ── Tab Bar (bottom) ── */}
         <div style={{
@@ -3311,6 +3303,45 @@ const getStyles = (theme) => ({
     padding: '0 2px',
     marginLeft: '2px',
     lineHeight: 1
+  },
+
+  // ── Footer ──
+  footer: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '12px 20px',
+    borderTop: `1px solid ${theme.border.subtle}`,
+    flexShrink: 0
+  },
+  footerLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  },
+  footerRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px'
+  },
+  cancelButton: {
+    padding: '8px 16px',
+    backgroundColor: theme.bg.surface,
+    border: 'none',
+    borderRadius: '6px',
+    color: theme.text.primary,
+    cursor: 'pointer',
+    fontSize: '13px'
+  },
+  confirmButton: {
+    padding: '8px 16px',
+    backgroundColor: theme.accent.primary,
+    border: 'none',
+    borderRadius: '6px',
+    color: '#fff',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: 500
   },
 
   // ── Confirm Modal ──
