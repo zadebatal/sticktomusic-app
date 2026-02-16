@@ -2238,6 +2238,7 @@ const LibraryBrowser = ({
                 flexDirection: 'column',
                 minWidth: 0,
                 minHeight: 0,
+                overflow: 'hidden',
                 ...(isMobile ? { width: '100%' } : {})
               }}>
                 {/* Tab bar — only for slideshow mode (videos have no image banks) */}
@@ -2408,7 +2409,7 @@ const LibraryBrowser = ({
                     )}
                   </div>
                 ) : (
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'auto', minHeight: 0, paddingRight: '4px' }}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', minHeight: 0, paddingRight: '4px' }}>
                     {/* Slideshow Text Banks (only in images/slideshows mode) - Dynamic based on collection banks */}
                     {mode !== 'videos' && (() => {
                       const col = collections.find(c => c.id === activeView);
