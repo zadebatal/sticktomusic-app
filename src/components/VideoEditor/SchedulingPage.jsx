@@ -512,16 +512,24 @@ const SchedulingPage = ({
         // Delete from Late first (if applicable)
         if (hasLateId && onDeleteLatePost) {
           try {
-            await onDeleteLatePost(post.latePostId);
+            log('[Schedule] Deleting Late post:', post.latePostId);
+            const result = await onDeleteLatePost(post.latePostId);
+            if (result?.success === false) {
+              log('[Schedule] Late delete returned failure:', result.error);
+              toastError(`Late.co delete may have failed: ${result.error || 'unknown error'}`);
+            } else {
+              log('[Schedule] Late post deleted successfully');
+            }
           } catch (err) {
-            log('[Schedule] Late delete failed (continuing local delete):', err);
+            log('[Schedule] Late delete threw error (continuing local delete):', err);
+            toastError(`Late.co delete failed: ${err.message}`);
           }
         }
         await deleteScheduledPost(db, artistId, postId);
         if (expandedPostId === postId) setExpandedPostId(null);
         setSelectedPostIds(prev => { const next = new Set(prev); next.delete(postId); return next; });
         setConfirmDialog({ isOpen: false });
-        toastSuccess('Post removed');
+        toastSuccess('Post removed' + (hasLateId ? ' (and from Late.co)' : ''));
       }
     });
   }, [posts, db, artistId, expandedPostId, onDeleteLatePost, toastSuccess]);
@@ -541,12 +549,15 @@ const SchedulingPage = ({
       variant: 'destructive',
       onConfirm: async () => {
         const ids = [...selectedPostIds];
+        let lateDeleted = 0;
         for (const id of ids) {
           const post = posts.find(p => p.id === id);
           // Delete from Late if applicable
           if (post?.latePostId && onDeleteLatePost) {
             try {
-              await onDeleteLatePost(post.latePostId);
+              log('[Schedule] Deleting Late post:', post.latePostId);
+              const result = await onDeleteLatePost(post.latePostId);
+              if (result?.success !== false) lateDeleted++;
             } catch (err) {
               log('[Schedule] Late delete failed for', id, '(continuing):', err);
             }
@@ -556,7 +567,8 @@ const SchedulingPage = ({
         setSelectedPostIds(new Set());
         if (expandedPostId && ids.includes(expandedPostId)) setExpandedPostId(null);
         setConfirmDialog({ isOpen: false });
-        toastSuccess(`Removed ${ids.length} post${ids.length !== 1 ? 's' : ''}`);
+        const lateMsg = lateDeleted > 0 ? ` (${lateDeleted} removed from Late.co)` : '';
+        toastSuccess(`Removed ${ids.length} post${ids.length !== 1 ? 's' : ''}${lateMsg}`);
       }
     });
   }, [selectedPostIds, selectedCount, posts, db, artistId, expandedPostId, onDeleteLatePost, toastSuccess]);
