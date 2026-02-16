@@ -23,6 +23,9 @@ import log from '../../utils/logger';
  * - Export as carousel images for Instagram/TikTok
  */
 
+// Stable empty array for fallbacks — prevents new [] reference on every render
+const EMPTY_SLIDES = [];
+
 // Stroke string helpers: parse "0.5px black" ↔ { width: 0.5, color: '#000000' }
 const parseStroke = (str) => {
   if (!str) return { width: 0.5, color: '#000000' };
@@ -50,7 +53,7 @@ const SlideshowEditor = ({
   lateAccountIds = {},
   schedulerEditMode = false
 }) => {
-  console.log('[SlideshowEditor] Initializing...', { artistId, hasExisting: !!existingSlideshow });
+  // Debug log removed — was firing on every render and flooding console
 
   const { theme } = useTheme();
   const styles = getStyles(theme);
@@ -107,17 +110,19 @@ const SlideshowEditor = ({
   const [keepTemplateText, setKeepTemplateText] = useState('none');
 
   // Derived reads from active slideshow (existing code reads these unchanged)
-  const slides = allSlideshows[activeSlideshowIndex]?.slides || [];
+  // Use stable empty array to prevent creating new [] reference every render
+  const slides = allSlideshows[activeSlideshowIndex]?.slides || EMPTY_SLIDES;
   const name = allSlideshows[activeSlideshowIndex]?.name || 'Untitled Slideshow';
   const selectedAudio = allSlideshows[activeSlideshowIndex]?.audio || null;
 
   // Wrapper setters that route through allSlideshows (existing setSlides/setName/setSelectedAudio calls work unchanged)
   const setSlides = useCallback((updater) => {
     setAllSlideshows(prev => {
-      const copy = [...prev];
-      const current = copy[activeSlideshowIndex];
+      const current = prev[activeSlideshowIndex];
       if (!current) return prev;
       const newSlides = typeof updater === 'function' ? updater(current.slides) : updater;
+      // Bail early if slides reference didn't change (prevents unnecessary re-renders)
+      if (newSlides === current.slides) return prev;
       // Safety: ensure slide images are never silently stripped
       const safeSlides = (newSlides || []).map((slide, i) => {
         const orig = current.slides[i];
@@ -127,6 +132,7 @@ const SlideshowEditor = ({
         }
         return slide;
       });
+      const copy = [...prev];
       copy[activeSlideshowIndex] = { ...current, slides: safeSlides };
       return copy;
     });
@@ -451,14 +457,14 @@ const SlideshowEditor = ({
   const canvasRef = useRef(null);
   const previewRef = useRef(null);
 
-  // Resolve category bank images dynamically
-  const categoryBankImages = (() => {
+  // Resolve category bank images dynamically (memoized to prevent unstable deps)
+  const categoryBankImages = useMemo(() => {
     if (!category) return [];
     const migrated = migrateCollectionBanks(category);
     return (migrated.banks || []).map(bankIds =>
       (bankIds || []).length > 0 ? libraryImages.filter(img => bankIds.includes(img.id)) : []
     );
-  })();
+  }, [category, libraryImages]);
   // Lyrics: merge category lyrics with library lyrics (for StudioHome/library mode)
   // Filter to only show lyrics tagged to the active collection
   const [libraryLyrics, setLibraryLyrics] = useState([]);
