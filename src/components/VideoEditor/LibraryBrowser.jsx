@@ -2233,11 +2233,11 @@ const LibraryBrowser = ({
 
               {/* Right half — Banks with tabs */}
               <div style={{
-                flex: isMobile ? 'none' : '1 1 0',
+                flex: isMobile ? 'none' : 1,
                 display: 'flex',
                 flexDirection: 'column',
                 minWidth: 0,
-                height: isMobile ? 'auto' : 0,
+                minHeight: 0,
                 overflow: 'hidden',
                 ...(isMobile ? { width: '100%' } : {})
               }}>
