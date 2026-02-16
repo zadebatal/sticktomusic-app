@@ -606,9 +606,11 @@ const SchedulingPage = ({
       return;
     }
 
-    // If re-publishing (post already has a Late ID), delete the old Late post first
+    // If re-publishing a fully scheduled post (not partial), delete old Late post first
     // Late.co doesn't support media updates, so we must delete + recreate
-    if (post.latePostId && onDeleteLatePost) {
+    // For partial posts, keep the old Late post (some platforms succeeded) and only retry failed ones
+    const isPartialRetry = post.postResults && (post.status === 'partial' || post.status === POST_STATUS.FAILED);
+    if (post.latePostId && onDeleteLatePost && !isPartialRetry) {
       try {
         await onDeleteLatePost(post.latePostId);
         log('[Schedule] Deleted old Late post before re-publish:', post.latePostId);
@@ -617,9 +619,20 @@ const SchedulingPage = ({
       }
     }
 
-    const platformEntries = Object.entries(post.platforms || {})
+    let platformEntries = Object.entries(post.platforms || {})
       .filter(([, v]) => v?.accountId)
       .map(([platform, v]) => ({ platform, accountId: v.accountId }));
+
+    // For partial/failed retries, only publish to platforms that failed
+    // (successful platforms already have the content — Late.co rejects duplicates)
+    if (post.postResults && (post.status === 'partial' || post.status === POST_STATUS.FAILED)) {
+      const failedPlatforms = Object.entries(post.postResults)
+        .filter(([, v]) => v.error)
+        .map(([p]) => p);
+      if (failedPlatforms.length > 0) {
+        platformEntries = platformEntries.filter(e => failedPlatforms.includes(e.platform));
+      }
+    }
 
     if (platformEntries.length === 0) {
       toastError('No platform accounts assigned. Select accounts before publishing.');
