@@ -624,7 +624,16 @@ const SlideshowEditor = ({
   };
 
   // Get current slide (defined early so callbacks can reference it)
-  const currentSlide = slides[selectedSlideIndex];
+  // Guard: clamp selectedSlideIndex to valid range to prevent undefined currentSlide
+  const safeSlideIndex = slides.length > 0 ? Math.min(selectedSlideIndex, slides.length - 1) : 0;
+  const currentSlide = slides[safeSlideIndex];
+
+  // Auto-correct out-of-bounds selectedSlideIndex
+  useEffect(() => {
+    if (slides.length > 0 && selectedSlideIndex >= slides.length) {
+      setSelectedSlideIndex(slides.length - 1);
+    }
+  }, [slides.length, selectedSlideIndex]);
 
   // Selected images in bank for bulk add — use Set for O(1) lookups
   const [selectedBankImages, setSelectedBankImages] = useState(new Set());
@@ -808,14 +817,14 @@ const SlideshowEditor = ({
   const removeSlide = useCallback((slideId) => {
     setSlides(prev => {
       const filtered = prev.filter(s => s.id !== slideId);
-      // Re-index slides
       return filtered.map((s, i) => ({ ...s, index: i }));
     });
-    // Adjust selected index if needed
-    if (selectedSlideIndex >= slides.length - 1) {
-      setSelectedSlideIndex(Math.max(0, slides.length - 2));
-    }
-  }, [slides.length, selectedSlideIndex]);
+    // Adjust selected index using functional updater to avoid stale closure
+    setSelectedSlideIndex(prev => {
+      const newLen = slides.filter(s => s.id !== slideId).length;
+      return prev >= newLen ? Math.max(0, newLen - 1) : prev;
+    });
+  }, [slides]);
 
   // Keyboard Delete/Backspace to remove current slide
   useEffect(() => {
@@ -926,7 +935,7 @@ const SlideshowEditor = ({
   }, [currentSlide, getRerollBank, setSlideBackground]);
 
   // Gather all text bank items from collections for text reroll
-  const getTextBanks = useCallback(() => {
+  const textBanksCache = useMemo(() => {
     const result = [];
     for (const col of collections) {
       const migrated = migrateCollectionBanks(col);
@@ -935,10 +944,10 @@ const SlideshowEditor = ({
         if (tb?.length > 0) result[i] = [...result[i], ...tb];
       });
     }
-    // Ensure minimum 2 entries
     while (result.length < 2) result.push([]);
     return result;
   }, [collections, migrateCollectionBanks]);
+  const getTextBanks = useCallback(() => textBanksCache, [textBanksCache]);
 
   // Re-roll text: Replace text overlays with random text from banks
   const handleTextReroll = useCallback((overlayId = null, bankSource = null) => {
