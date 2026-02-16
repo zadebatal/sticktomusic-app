@@ -2269,16 +2269,14 @@ const LibraryBrowser = ({
                   </div>
                 )}
 
+                <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
                 {mode !== 'videos' && bankTab === 'images' ? (
                   <div style={{
-                    flex: '1 1 0',
-                    height: isMobile ? 'auto' : 0,
+                    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
                     display: 'flex',
                     flexDirection: isMobile ? 'row' : 'column',
                     gap: '8px',
-                    overflow: 'auto',
-                    overflowX: isMobile ? 'auto' : undefined,
-                    overflowY: isMobile ? undefined : 'auto',
+                    overflowY: 'auto',
                     WebkitOverflowScrolling: 'touch',
                     paddingBottom: isMobile ? '8px' : undefined,
                     paddingRight: isMobile ? undefined : '4px'
@@ -2409,7 +2407,7 @@ const LibraryBrowser = ({
                     )}
                   </div>
                 ) : (
-                  <div style={{ flex: '1 1 0', height: 0, display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', paddingRight: '4px' }}>
+                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', paddingRight: '4px' }}>
                     {/* Slideshow Text Banks (only in images/slideshows mode) - Dynamic based on collection banks */}
                     {mode !== 'videos' && (() => {
                       const col = collections.find(c => c.id === activeView);
@@ -2517,6 +2515,7 @@ const LibraryBrowser = ({
                     </div>
                   </div>
                 )}
+                </div>
               </div>
             </div>
           ) : displayedMedia.length === 0 ? (
