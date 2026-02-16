@@ -2661,47 +2661,45 @@ const VideoEditorModal = ({
               </div>
             </div>
 
-            {/* Controls + Timeline — scrollable to give preview more space */}
+            {/* Controls + Timeline — compact scrollable section */}
             <div style={{ flexShrink: 1, overflow: 'auto', minHeight: 0 }}>
 
-            {/* Preset Selector - Hide on mobile to save space (moved to styles tab) */}
-            <div style={styles.presetSection}>
-              <span style={styles.presetLabel}>Apply preset</span>
+            {/* Preset + Audio compact bar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderTop: `1px solid ${theme.border.subtle}` }}>
+              <span style={{ fontSize: '11px', color: theme.text.muted, whiteSpace: 'nowrap' }}>Preset</span>
               <select
                 value={selectedPreset?.id || ''}
                 onChange={(e) => {
                   const preset = presets.find(p => p.id === e.target.value);
                   if (preset) handleApplyPreset(preset);
                 }}
-                style={styles.presetSelect}
+                style={{ ...styles.presetSelect, padding: '4px 8px', fontSize: '11px', flex: '0 1 200px' }}
               >
                 <option value="">Choose a preset...</option>
                 {presets.map(preset => (
                   <option key={preset.id} value={preset.id}>{preset.name}</option>
                 ))}
               </select>
+              {!isMobile && (
+                <button
+                  style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+                  onClick={() => { setPresetPromptValue(''); setShowPresetPrompt(true); }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                  </svg>
+                  Save preset
+                </button>
+              )}
             </div>
-
-            {!isMobile && (
-              <button style={styles.makePresetButton} onClick={() => {
-                setPresetPromptValue('');
-                setShowPresetPrompt(true);
-              }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-                </svg>
-                Make this a preset
-              </button>
-            )}
 
             {/* ── Audio Info Bar ── */}
             {selectedAudio && (
               <div style={{
-                display: 'flex', alignItems: 'center', gap: '10px',
-                padding: '6px 12px', margin: '0 8px 4px',
-                backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                border: '1px solid rgba(139, 92, 246, 0.2)',
-                borderRadius: '8px'
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '4px 12px',
+                backgroundColor: 'rgba(139, 92, 246, 0.08)',
+                borderBottom: '1px solid rgba(139, 92, 246, 0.15)'
               }}>
                 <span style={{ fontSize: '12px', color: theme.text.primary, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {selectedAudio.name}
@@ -4151,8 +4149,9 @@ const getStyles = (theme) => ({
   },
   modal: {
     width: '100%',
-    maxWidth: '1200px',
-    maxHeight: '90vh',
+    maxWidth: '1400px',
+    maxHeight: '95vh',
+    height: '95vh',
     backgroundColor: theme.bg.input,
     borderRadius: '12px',
     display: 'flex',
@@ -4205,12 +4204,13 @@ const getStyles = (theme) => ({
   },
   // ── Left sidebar styles (matching SlideshowEditor) ──
   leftPanel: {
-    width: '300px',
+    width: '256px',
     backgroundColor: theme.bg.input,
     borderRight: `1px solid ${theme.border.subtle}`,
     display: 'flex',
     flexDirection: 'column',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    flexShrink: 0
   },
   sourceDropdown: {
     width: '100%',
@@ -4333,24 +4333,27 @@ const getStyles = (theme) => ({
     flexDirection: 'column'
   },
   previewContainer: {
-    marginBottom: '0',
     flex: 1,
     display: 'flex',
-    justifyContent: 'center',
+    flexDirection: 'column',
     alignItems: 'center',
-    minHeight: '35vh',
+    justifyContent: 'center',
+    minHeight: 0,
     overflow: 'hidden',
-    padding: '12px'
+    padding: '16px 24px 8px',
+    backgroundColor: theme.bg.page
   },
   preview: {
     position: 'relative',
     aspectRatio: '9/16',
-    backgroundColor: theme.bg.page,
-    borderRadius: '8px',
+    backgroundColor: '#000',
+    borderRadius: '12px',
     overflow: 'hidden',
-    height: '100%',
+    flex: 1,
+    minHeight: 0,
     width: 'auto',
-    alignSelf: 'center'
+    maxWidth: '100%',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
   },
   previewVideo: {
     width: '100%',
@@ -4400,10 +4403,11 @@ const getStyles = (theme) => ({
   progressBarContainer: {
     position: 'relative',
     width: '100%',
-    height: '6px',
-    backgroundColor: theme.bg.surface,
-    borderRadius: '3px',
-    marginTop: '8px',
+    maxWidth: '400px',
+    height: '4px',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: '2px',
+    marginTop: '10px',
     cursor: 'pointer'
   },
   progressBar: {
@@ -4428,20 +4432,23 @@ const getStyles = (theme) => ({
   playbackControls: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    marginTop: '8px'
+    justifyContent: 'center',
+    gap: '12px',
+    marginTop: '6px',
+    paddingBottom: '4px'
   },
   playButton: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '32px',
-    height: '32px',
-    backgroundColor: theme.bg.surface,
+    width: '36px',
+    height: '36px',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     border: 'none',
-    borderRadius: '6px',
+    borderRadius: '50%',
     color: theme.text.primary,
-    cursor: 'pointer'
+    cursor: 'pointer',
+    transition: 'background-color 0.15s'
   },
   muteButton: {
     display: 'flex',
@@ -4475,7 +4482,7 @@ const getStyles = (theme) => ({
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    marginBottom: '12px'
+    padding: '6px 12px'
   },
   presetLabel: {
     fontSize: '13px',
@@ -4663,10 +4670,12 @@ const getStyles = (theme) => ({
     marginTop: '20px'
   },
   sectionTitle: {
-    fontSize: '13px',
+    fontSize: '11px',
     fontWeight: '600',
-    color: theme.text.secondary,
-    margin: '0 0 12px 0'
+    color: theme.text.muted,
+    margin: 0,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em'
   },
   textOverlaysList: {
     backgroundColor: theme.bg.page,
@@ -4815,14 +4824,14 @@ const getStyles = (theme) => ({
     borderRadius: '4px'
   },
   clipsSection: {
-    borderTop: `1px solid ${theme.bg.surface}`,
-    paddingTop: '16px'
+    borderTop: `1px solid ${theme.border.subtle}`,
+    padding: '8px 12px 4px'
   },
   clipsSectionHeader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: '12px'
+    marginBottom: '6px'
   },
   clipsFilter: {
     display: 'flex',
@@ -4844,9 +4853,9 @@ const getStyles = (theme) => ({
   },
   clipsTimeline: {
     backgroundColor: theme.bg.page,
-    borderRadius: '8px',
-    padding: '12px',
-    marginBottom: '12px',
+    borderRadius: '6px',
+    padding: '8px',
+    marginBottom: '6px',
     overflowX: 'auto',
     userSelect: 'none',
     WebkitUserSelect: 'none'
@@ -4863,7 +4872,7 @@ const getStyles = (theme) => ({
   },
   clipItem: {
     position: 'relative',
-    height: '64px',
+    height: '48px',
     backgroundColor: theme.bg.surface,
     borderRadius: '4px',
     overflow: 'hidden',
@@ -4898,27 +4907,27 @@ const getStyles = (theme) => ({
   clipActions: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    marginBottom: '12px',
+    gap: '6px',
+    marginBottom: '6px',
     flexWrap: 'wrap'
   },
   clipAction: {
-    padding: '6px 12px',
+    padding: '4px 10px',
     backgroundColor: theme.bg.surface,
     border: `1px solid ${theme.bg.elevated}`,
     borderRadius: '4px',
     color: theme.text.primary,
     cursor: 'pointer',
-    fontSize: '12px'
+    fontSize: '11px'
   },
   clipActionDanger: {
-    padding: '6px 12px',
+    padding: '4px 10px',
     backgroundColor: '#7f1d1d',
     border: '1px solid #991b1b',
     borderRadius: '4px',
     color: '#fff',
     cursor: 'pointer',
-    fontSize: '12px'
+    fontSize: '11px'
   },
   scaleControl: {
     display: 'flex',
@@ -4946,13 +4955,13 @@ const getStyles = (theme) => ({
     gap: '8px'
   },
   cutButton: {
-    padding: '8px 16px',
+    padding: '4px 12px',
     backgroundColor: theme.bg.surface,
     border: `1px solid ${theme.bg.elevated}`,
-    borderRadius: '6px',
+    borderRadius: '4px',
     color: theme.text.primary,
     cursor: 'pointer',
-    fontSize: '12px'
+    fontSize: '11px'
   },
   footer: {
     display: 'flex',
