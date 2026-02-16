@@ -268,6 +268,7 @@ const lateApi = {
         : [{ type: 'video', url: videoUrl }];
 
       // Late API payload — only include fields Late expects (platform + accountId)
+      const hasTikTok = platforms.some(p => p.platform === 'tiktok');
       const payload = {
         content: caption || '',
         mediaItems,
@@ -279,9 +280,15 @@ const lateApi = {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles'
       };
 
-      // Include audioUrl if provided (for carousel posts with audio)
-      if (audioUrl) {
-        payload.audioUrl = audioUrl;
+      // TikTok requires specific settings for all posts
+      if (hasTikTok) {
+        payload.tiktokSettings = {
+          privacy_level: 'PUBLIC_TO_EVERYONE',
+          allow_comment: true,
+          content_preview_confirmed: true,
+          express_consent_given: true,
+          ...(type === 'carousel' ? { auto_add_music: true } : { allow_duet: true, allow_stitch: true })
+        };
       }
 
       log('Sending to Late:', JSON.stringify(payload, null, 2));
