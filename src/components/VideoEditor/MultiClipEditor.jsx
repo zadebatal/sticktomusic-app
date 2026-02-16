@@ -1114,32 +1114,24 @@ const MultiClipEditor = ({
         ...(isMobile ? { borderRadius: 0, maxWidth: '100%', height: '100vh', width: '100vw', border: 'none' } : {})
       }}>
 
-        {/* ── Header ── */}
+        {/* ── Header (matches Montage) ── */}
         <div style={{
           ...styles.header,
-          ...(isMobile ? { padding: '8px 10px' } : {})
+          ...(isMobile ? { padding: '12px 16px' } : {})
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '12px' }}>
-            <button onClick={handleCloseRequest} style={{
-              ...styles.backButton,
-              ...(isMobile ? { minWidth: '44px', minHeight: '44px', justifyContent: 'center' } : {})
-            }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M19 12H5M12 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <div>
-              <h2 style={{
-                ...styles.headerTitle,
-                ...(isMobile ? { fontSize: '13px' } : {})
-              }}>Multi-Clip Editor</h2>
-              {!isMobile && (
-                <span style={styles.headerSubtitle}>
-                  {allVideos.length === 1 ? 'Design your template' : `${allVideos.length} videos (1 template + ${allVideos.length - 1} generated)`}
-                </span>
-              )}
-            </div>
-          </div>
+          <button
+            style={{
+              ...styles.studioButton,
+              ...(isMobile ? { padding: '6px 10px', fontSize: '14px' } : {})
+            }}
+            onClick={handleCloseRequest}
+            title="Back to Studio"
+          >
+            <svg width={isMobile ? 18 : 20} height={isMobile ? 18 : 20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polygon points="5,3 19,12 5,21" fill="currentColor"/>
+            </svg>
+            {!isMobile && <span>Studio</span>}
+          </button>
           <div style={{ display: 'flex', gap: isMobile ? '4px' : '8px', alignItems: 'center' }}>
             {/* Aspect ratio toggles */}
             {['9:16', '1:1', '4:3'].map(ratio => (
@@ -1173,11 +1165,8 @@ const MultiClipEditor = ({
               </button>
             )}
             {/* Close */}
-            <button onClick={handleCloseRequest} style={{
-              ...styles.closeButton,
-              ...(isMobile ? { minWidth: '44px', minHeight: '44px', justifyContent: 'center' } : {})
-            }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <button onClick={handleCloseRequest} style={styles.closeButton}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -1424,55 +1413,52 @@ const MultiClipEditor = ({
             </div>
           </div>}
 
-          {/* ── CENTER: Video Preview ── */}
+          {/* ── CENTER: Video Preview (matches Montage layout) ── */}
           <div style={{
-            ...styles.previewArea,
-            ...(isMobile ? { padding: '8px', flex: 'none', width: '100%' } : {})
+            display: 'flex',
+            flex: 1,
+            flexDirection: 'column',
+            overflow: 'hidden',
+            position: 'relative',
+            ...(isMobile ? { width: '100%', flexShrink: 0 } : {})
           }}>
-            <div
-              ref={previewRef}
-              style={{
-                ...styles.previewContainer,
-                width: previewDims.width,
-                height: previewDims.height
-              }}
-              onClick={() => setEditingTextId(null)}
-            >
-              {currentClip ? (
-                <video
-                  ref={videoRef}
-                  src={getClipUrl(currentClip)}
-                  onLoadedMetadata={handleVideoLoaded}
-                  onEnded={() => {
-                    if (activeClipIndex < clips.length - 1) {
-                      setActiveClipIndex(prev => prev + 1);
-                      if (videoRef.current) videoRef.current.currentTime = 0;
-                    } else {
-                      // Last clip ended — check if audio is still playing (longer than total clips)
-                      if (audioRef.current && audioRef.current.src && !audioRef.current.paused && audioRef.current.duration > totalDuration) {
-                        return; // Audio continues — playbackLoop will switch to audio time
+            <div style={styles.previewContainer}>
+              <div
+                ref={previewRef}
+                style={styles.preview}
+                onClick={() => setEditingTextId(null)}
+              >
+                {currentClip ? (
+                  <video
+                    ref={videoRef}
+                    src={getClipUrl(currentClip)}
+                    onLoadedMetadata={handleVideoLoaded}
+                    onEnded={() => {
+                      if (activeClipIndex < clips.length - 1) {
+                        setActiveClipIndex(prev => prev + 1);
+                        if (videoRef.current) videoRef.current.currentTime = 0;
+                      } else {
+                        if (audioRef.current && audioRef.current.src && !audioRef.current.paused && audioRef.current.duration > totalDuration) {
+                          return;
+                        }
+                        setIsPlaying(false);
+                        if (animationRef.current) cancelAnimationFrame(animationRef.current);
                       }
-                      setIsPlaying(false);
-                      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-                    }
-                  }}
-                  loop={false}
-                  playsInline
-                  style={{
-                    ...getVideoCropStyle(),
-                    borderRadius: '8px'
-                  }}
-                  crossOrigin="anonymous"
-                />
-              ) : (
-                <div style={styles.previewPlaceholder}>
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
-                    <rect x="2" y="4" width="20" height="16" rx="2" />
-                    <path d="M10 9l5 3-5 3V9z" />
-                  </svg>
-                  <p style={{ color: theme.text.muted, marginTop: 8, fontSize: 12 }}>No clips in timeline</p>
-                </div>
-              )}
+                    }}
+                    loop={false}
+                    playsInline
+                    style={styles.previewVideo}
+                    crossOrigin="anonymous"
+                  />
+                ) : (
+                  <div style={styles.previewPlaceholder}>
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={theme.text.muted} strokeWidth="1.5">
+                      <rect x="2" y="4" width="20" height="16" rx="2" />
+                      <path d="M10 9l5 3-5 3V9z" />
+                    </svg>
+                    <p style={{ color: theme.text.muted, marginTop: 8, fontSize: 12 }}>No clips in timeline</p>
+                  </div>
+                )}
 
               {/* Text Overlays on video */}
               {textOverlays.map((overlay) => {
@@ -1523,62 +1509,52 @@ const MultiClipEditor = ({
               })}
             </div>
 
-            {/* Playback Controls */}
-            <div style={{
-              ...styles.playbackControls,
-              ...(isMobile ? { maxWidth: '100%', width: '100%' } : {})
-            }}>
-              <button onClick={handlePlayPause} style={{
-                ...styles.playButton,
-                ...(isMobile ? { width: '44px', height: '44px' } : {})
-              }}>
-                {isPlaying ? (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <rect x="6" y="4" width="4" height="16" />
-                    <rect x="14" y="4" width="4" height="16" />
-                  </svg>
-                ) : (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <polygon points="5,3 19,12 5,21" />
-                  </svg>
-                )}
-              </button>
-
+              {/* Progress Bar */}
               <div
-                style={{
-                  ...styles.progressBar,
-                  ...(isMobile ? { height: '12px', borderRadius: '6px' } : {})
-                }}
+                style={styles.progressBarContainer}
                 onClick={(e) => {
                   const rect = e.currentTarget.getBoundingClientRect();
-                  const percent = ((e.touches ? e.touches[0].clientX : e.clientX) - rect.left) / rect.width;
+                  const percent = (e.clientX - rect.left) / rect.width;
                   handleSeek(percent * timelineDuration);
                 }}
               >
-                <div style={{ ...styles.progressFill, width: `${timelineDuration > 0 ? (currentTime / timelineDuration) * 100 : 0}%` }} />
+                <div style={{ ...styles.progressBar, width: `${timelineDuration > 0 ? (currentTime / timelineDuration) * 100 : 0}%` }} />
+                <div style={{ ...styles.progressHandle, left: `${timelineDuration > 0 ? (currentTime / timelineDuration) * 100 : 0}%` }} />
               </div>
 
-              <span style={styles.timeDisplay}>
-                {formatTime(currentTime)} / {formatTime(timelineDuration)}
-              </span>
-
-              <button onClick={() => setIsMuted(!isMuted)} style={{
-                ...styles.muteButton,
-                ...(isMobile ? { minWidth: '44px', minHeight: '44px', justifyContent: 'center' } : {})
-              }}>
-                {isMuted ? (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" fill="currentColor" />
-                    <line x1="23" y1="9" x2="17" y2="15" />
-                    <line x1="17" y1="9" x2="23" y2="15" />
-                  </svg>
-                ) : (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" fill="currentColor" />
-                    <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" />
-                  </svg>
-                )}
-              </button>
+              {/* Playback Controls */}
+              <div style={styles.playbackControls}>
+                <button onClick={handlePlayPause} style={styles.playButton}>
+                  {isPlaying ? (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <rect x="6" y="4" width="4" height="16" />
+                      <rect x="14" y="4" width="4" height="16" />
+                    </svg>
+                  ) : (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="5,3 19,12 5,21" />
+                    </svg>
+                  )}
+                </button>
+                <button onClick={() => setIsMuted(!isMuted)} style={styles.muteButton}>
+                  {isMuted ? (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                      <line x1="23" y1="9" x2="17" y2="15"/>
+                      <line x1="17" y1="9" x2="23" y2="15"/>
+                    </svg>
+                  ) : (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                      <path d="M15.54 8.46a5 5 0 010 7.07"/>
+                      <path d="M19.07 4.93a10 10 0 010 14.14"/>
+                    </svg>
+                  )}
+                </button>
+                <span style={styles.timeDisplay}>
+                  {formatTime(currentTime)} / {formatTime(timelineDuration)}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -2655,15 +2631,15 @@ const getStyles = (theme) => ({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10000,
-    padding: '10px'
+    padding: '20px'
   },
   modal: {
     backgroundColor: theme.bg.input,
     borderRadius: '12px',
-    border: `1px solid ${theme.border.subtle}`,
     width: '100%',
     maxWidth: '1400px',
-    height: '92vh',
+    maxHeight: '95vh',
+    height: '95vh',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden'
@@ -2672,29 +2648,23 @@ const getStyles = (theme) => ({
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '10px 16px',
-    borderBottom: `1px solid ${theme.border.subtle}`,
+    padding: '16px 20px',
+    borderBottom: `1px solid ${theme.bg.surface}`,
     flexShrink: 0
   },
-  headerTitle: {
-    margin: 0,
+  studioButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 12px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: theme.text.primary,
+    cursor: 'pointer',
+    borderRadius: '8px',
     fontSize: '15px',
     fontWeight: '600',
-    color: theme.text.primary
-  },
-  headerSubtitle: {
-    fontSize: '11px',
-    color: theme.text.secondary
-  },
-  backButton: {
-    background: 'none',
-    border: 'none',
-    color: theme.text.secondary,
-    cursor: 'pointer',
-    padding: '6px',
-    borderRadius: '6px',
-    display: 'flex',
-    alignItems: 'center'
+    transition: 'background-color 0.2s'
   },
   ratioButton: {
     padding: '4px 10px',
@@ -2743,14 +2713,16 @@ const getStyles = (theme) => ({
     cursor: 'pointer'
   },
   closeButton: {
-    background: 'none',
-    border: 'none',
-    color: theme.text.muted,
-    cursor: 'pointer',
-    padding: '6px',
-    borderRadius: '6px',
     display: 'flex',
-    alignItems: 'center'
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '32px',
+    height: '32px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: theme.text.secondary,
+    cursor: 'pointer',
+    borderRadius: '6px'
   },
   mainContent: {
     display: 'flex',
@@ -2758,52 +2730,51 @@ const getStyles = (theme) => ({
     overflow: 'hidden'
   },
 
-  // ── Left Panel ──
+  // ── Left Panel (matches Montage layout) ──
   leftPanel: {
-    width: '300px',
+    width: '256px',
+    backgroundColor: theme.bg.input,
     borderRight: `1px solid ${theme.border.subtle}`,
     display: 'flex',
     flexDirection: 'column',
     flexShrink: 0,
-    overflow: 'hidden',
-    backgroundColor: theme.bg.input
+    overflow: 'hidden'
   },
   sourceDropdown: {
     width: '100%',
-    padding: '8px 10px',
-    borderRadius: '6px',
+    padding: '8px 12px',
+    backgroundColor: theme.bg.page,
     border: `1px solid ${theme.border.subtle}`,
-    backgroundColor: theme.bg.surface,
+    borderRadius: '8px',
     color: theme.text.primary,
-    fontSize: '12px',
-    cursor: 'pointer',
-    outline: 'none'
+    fontSize: '13px',
+    outline: 'none',
+    cursor: 'pointer'
   },
   bankContent: {
     flex: 1,
     overflowY: 'auto',
+    overflowX: 'hidden',
     padding: '12px'
   },
   sidebarClipGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(2, 1fr)',
-    gap: '8px',
-    marginBottom: '8px'
+    gap: '8px'
   },
   sidebarClip: {
-    borderRadius: '6px',
-    overflow: 'hidden',
-    border: `1px solid transparent`,
     cursor: 'pointer',
-    transition: 'border-color 0.15s',
-    padding: '4px'
+    padding: '4px',
+    borderRadius: '6px',
+    border: '2px solid transparent',
+    transition: 'border-color 0.15s ease'
   },
   textBankInput: {
     flex: 1,
-    padding: '6px 8px',
+    padding: '6px 10px',
     borderRadius: '6px',
     border: `1px solid ${theme.border.subtle}`,
-    backgroundColor: theme.bg.surface,
+    backgroundColor: theme.bg.page,
     color: theme.text.primary,
     fontSize: '12px',
     outline: 'none'
@@ -2811,13 +2782,11 @@ const getStyles = (theme) => ({
   textBankItem: {
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
     padding: '6px 8px',
     borderRadius: '6px',
     backgroundColor: theme.hover.bg,
     marginBottom: '4px',
-    fontSize: '12px',
-    color: theme.text.primary
+    color: theme.text.secondary
   },
   clipGrid: {
     display: 'grid',
@@ -2910,89 +2879,117 @@ const getStyles = (theme) => ({
     cursor: 'pointer'
   },
 
-  // ── Center Preview ──
-  previewArea: {
+  // ── Center Preview (matches Montage layout) ──
+  previewContainer: {
     flex: 1,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '16px',
-    overflow: 'hidden'
-  },
-  previewContainer: {
-    position: 'relative',
-    borderRadius: '10px',
+    minHeight: 0,
     overflow: 'hidden',
-    backgroundColor: theme.bg.input,
-    flexShrink: 0
+    padding: '16px 24px 8px',
+    backgroundColor: theme.bg.page
+  },
+  preview: {
+    position: 'relative',
+    aspectRatio: '9/16',
+    backgroundColor: '#000',
+    borderRadius: '12px',
+    overflow: 'hidden',
+    flex: 1,
+    minHeight: 0,
+    width: 'auto',
+    maxWidth: '100%',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
+  },
+  previewVideo: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover'
   },
   previewPlaceholder: {
+    position: 'absolute',
+    inset: 0,
     width: '100%',
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    backgroundColor: theme.bg.page
+  },
+  progressBarContainer: {
+    position: 'relative',
+    width: '100%',
+    maxWidth: '400px',
+    height: '4px',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: '2px',
+    marginTop: '10px',
+    cursor: 'pointer'
+  },
+  progressBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    height: '100%',
+    backgroundColor: theme.accent.primary,
+    borderRadius: '3px',
+    transition: 'width 0.1s linear'
+  },
+  progressHandle: {
+    position: 'absolute',
+    top: '50%',
+    transform: 'translate(-50%, -50%)',
+    width: '12px',
+    height: '12px',
+    backgroundColor: theme.text.primary,
+    borderRadius: '50%',
+    boxShadow: `0 2px 4px ${theme.overlay.light}`
   },
   playbackControls: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
-    marginTop: '12px',
-    width: '100%',
-    maxWidth: '480px'
+    justifyContent: 'center',
+    gap: '12px',
+    marginTop: '6px',
+    paddingBottom: '4px'
   },
   playButton: {
-    width: '32px',
-    height: '32px',
-    borderRadius: '50%',
-    border: 'none',
-    backgroundColor: theme.border.subtle,
-    color: theme.text.primary,
-    cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0
-  },
-  progressBar: {
-    flex: 1,
-    height: '6px',
-    borderRadius: '3px',
-    backgroundColor: theme.border.subtle,
+    width: '36px',
+    height: '36px',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    border: 'none',
+    borderRadius: '50%',
+    color: theme.text.primary,
     cursor: 'pointer',
-    position: 'relative',
-    overflow: 'hidden'
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: '3px',
-    background: `linear-gradient(90deg, ${theme.accent.primary}, #8b5cf6)`,
-    transition: 'width 0.1s linear'
+    transition: 'background-color 0.15s'
   },
   timeDisplay: {
-    fontSize: '11px',
+    flex: 1,
+    fontSize: '12px',
     color: theme.text.secondary,
-    fontFamily: 'monospace',
-    minWidth: '80px',
-    textAlign: 'center',
-    flexShrink: 0
+    textAlign: 'center'
   },
   muteButton: {
-    background: 'none',
-    border: 'none',
-    color: theme.text.secondary,
-    cursor: 'pointer',
-    padding: '4px',
     display: 'flex',
     alignItems: 'center',
-    flexShrink: 0
+    justifyContent: 'center',
+    width: '32px',
+    height: '32px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: theme.text.muted,
+    cursor: 'pointer'
   },
 
   // ── Right Panel ──
   rightPanel: {
-    width: '320px',
+    width: '256px',
     borderLeft: `1px solid ${theme.border.subtle}`,
     display: 'flex',
     flexDirection: 'column',
