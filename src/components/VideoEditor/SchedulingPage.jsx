@@ -13,6 +13,7 @@ import { renderVideo } from '../../services/videoExportService';
 import { exportSlideshowAsImages, generateSlideThumbnail } from '../../services/slideshowExportService';
 import { uploadFile } from '../../services/firebaseStorage';
 import { startPolling } from '../../services/postStatusPolling';
+import { getAuth } from 'firebase/auth';
 import log from '../../utils/logger';
 import { useTheme } from '../../contexts/ThemeContext';
 import useIsMobile from '../../hooks/useIsMobile';
@@ -396,7 +397,7 @@ const SchedulingPage = ({
     });
     if (lateUpdates.length > 0) {
       try {
-        const token = await db.app.auth().currentUser?.getIdToken();
+        const token = await getAuth().currentUser?.getIdToken();
         let synced = 0;
         for (const update of lateUpdates) {
           const post = result.find(p => p.id === update.id);
@@ -443,7 +444,7 @@ const SchedulingPage = ({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${await db.app.auth().currentUser?.getIdToken()}`
+            'Authorization': `Bearer ${await getAuth().currentUser?.getIdToken()}`
           },
           body: JSON.stringify({
             action: 'updatePost',
