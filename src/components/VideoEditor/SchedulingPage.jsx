@@ -739,8 +739,10 @@ const SchedulingPage = ({
             platformResults[entry.platform] = { postId: null, url: null, error: result.error };
             anyFailed = true;
           } else {
-            const latePost = result?.post || {};
+            log('[Schedule] Late create response:', JSON.stringify(result?.post));
+            const latePost = result?.post?.post || result?.post?.data || result?.post || {};
             lastLatePostId = latePost._id || latePost.id || null;
+            log('[Schedule] Extracted latePostId:', lastLatePostId);
             platformResults[entry.platform] = {
               postId: lastLatePostId,
               url: latePost.url || latePost.permalink || null,
@@ -774,8 +776,10 @@ const SchedulingPage = ({
           await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: result.error || 'Unknown error' });
           toastError(`Failed to publish: ${result.error || 'Unknown error'}`);
         } else {
-          const latePost = result?.post || {};
+          log('[Schedule] Late create response:', JSON.stringify(result?.post));
+          const latePost = result?.post?.post || result?.post?.data || result?.post || {};
           const latePostId = latePost._id || latePost.id || null;
+          log('[Schedule] Extracted latePostId:', latePostId);
           const platformResults = {};
           platformEntries.forEach(({ platform }) => {
             platformResults[platform] = {
@@ -1076,7 +1080,7 @@ const SchedulingPage = ({
               platformResults[entry.platform] = { postId: null, url: null, error: result.error };
               postFailed = true;
             } else {
-              const latePost = result?.post || {};
+              const latePost = result?.post?.post || result?.post?.data || result?.post || {};
               lastLatePostId = latePost._id || latePost.id || null;
               platformResults[entry.platform] = {
                 postId: lastLatePostId,
@@ -1112,7 +1116,7 @@ const SchedulingPage = ({
             await handleUpdatePost(post.id, { status: POST_STATUS.FAILED, errorMessage: result.error || 'Unknown error' });
             failed++;
           } else {
-            const latePost = result?.post || {};
+            const latePost = result?.post?.post || result?.post?.data || result?.post || {};
             const latePostId = latePost._id || latePost.id || null;
             const platformResults = {};
             platformEntries.forEach(({ platform }) => {
