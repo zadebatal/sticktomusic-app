@@ -378,7 +378,34 @@ const SchedulingPage = ({
       await updateScheduledPost(db, artistId, update.id, { scheduledTime: update.scheduledTime });
     }
 
-    toastSuccess(locked.length > 0 ? `Shuffled (${locked.length} locked)` : 'Queue randomized');
+    // Sync time changes to Late.co for posts that are already scheduled there
+    const lateUpdates = timeUpdates.filter(u => {
+      const post = result.find(p => p.id === u.id);
+      return post?.latePostId && post?.status === 'scheduled';
+    });
+    if (lateUpdates.length > 0) {
+      try {
+        const token = await db.app.auth().currentUser?.getIdToken();
+        let synced = 0;
+        for (const update of lateUpdates) {
+          const post = result.find(p => p.id === update.id);
+          try {
+            const resp = await fetch('/api/late', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ action: 'updatePost', postId: post.latePostId, artistId, scheduledFor: update.scheduledTime })
+            });
+            if (resp.ok) synced++;
+          } catch { /* continue with next */ }
+        }
+        if (synced > 0) toastSuccess(`Shuffled + synced ${synced} post${synced !== 1 ? 's' : ''} to Late.co`);
+        else toastSuccess(locked.length > 0 ? `Shuffled (${locked.length} locked)` : 'Queue randomized');
+      } catch {
+        toastSuccess(locked.length > 0 ? `Shuffled (${locked.length} locked)` : 'Queue randomized');
+      }
+    } else {
+      toastSuccess(locked.length > 0 ? `Shuffled (${locked.length} locked)` : 'Queue randomized');
+    }
   }, [posts, db, artistId, toastSuccess]);
 
   // ── CRUD Handlers ──

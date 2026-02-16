@@ -333,6 +333,34 @@ export async function schedulePost({ videoUrl, caption, accountIds, scheduledTim
   return proxyRequest('posts', 'POST', payload, artistId);
 }
 
+export async function updatePost(postId, updates, user, artistId = null) {
+  assertLateAccess(user, 'updatePost');
+
+  const token = await getFirebaseToken();
+  const url = new URL(LATE_PROXY, window.location.origin);
+  url.searchParams.set('action', 'updatePost');
+  url.searchParams.set('postId', postId);
+  if (artistId) {
+    url.searchParams.set('artistId', artistId);
+  }
+
+  const response = await fetch(url.toString(), {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(updates)
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to update post on Late.co');
+  }
+
+  return response.json();
+}
+
 export async function deletePost(postId, user, artistId = null) {
   assertLateAccess(user, 'deletePost');
 
