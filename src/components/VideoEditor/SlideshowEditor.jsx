@@ -188,8 +188,10 @@ const SlideshowEditor = ({
     if (!plainText.trim() || !artistId || collections.length === 0) return;
     // For plain strings, trim; for styled objects, trim the text inside
     const entry = typeof text === 'string' ? text.trim() : { ...text, text: text.text.trim() };
-    // Target the active collection (category prop, activeCollectionId, or first collection)
-    const targetCol = category || (activeCollectionId ? collections.find(c => c.id === activeCollectionId) : null) || collections[0];
+    // Target the active collection from collections state (must be a real Firestore collection)
+    const colFromSource = activeCollectionId ? collections.find(c => c.id === activeCollectionId) : null;
+    const colFromCategory = category?.id ? collections.find(c => c.id === category.id) : null;
+    const targetCol = colFromSource || colFromCategory || collections[0];
     if (!targetCol) return;
     addToTextBank(artistId, targetCol.id, bankNum, entry);
     // Update local state so UI refreshes immediately (write to textBanks array)
@@ -207,8 +209,10 @@ const SlideshowEditor = ({
   // Delete text from a text bank
   const handleRemoveFromTextBank = useCallback((bankNum, index) => {
     if (!artistId || collections.length === 0) return;
-    // Target the active collection (category prop, activeCollectionId, or first collection)
-    const targetCol = category || (activeCollectionId ? collections.find(c => c.id === activeCollectionId) : null) || collections[0];
+    // Target the active collection from collections state (must be a real Firestore collection)
+    const colFromSource = activeCollectionId ? collections.find(c => c.id === activeCollectionId) : null;
+    const colFromCategory = category?.id ? collections.find(c => c.id === category.id) : null;
+    const targetCol = colFromSource || colFromCategory || collections[0];
     if (!targetCol) return;
     removeFromTextBank(artistId, targetCol.id, bankNum, index);
     setCollections(prev => prev.map(col => {
@@ -949,8 +953,14 @@ const SlideshowEditor = ({
 
   // Gather text bank items from the active collection only (not merged across all)
   const textBanksCache = useMemo(() => {
-    // Use category prop if available, otherwise find collection matching activeCollectionId
-    const activeCol = category || (activeCollectionId ? collections.find(c => c.id === activeCollectionId) : null) || collections[0];
+    // Priority: 1) collection matching activeCollectionId (from source dropdown)
+    // 2) category prop if it has textBanks (real collection passed from parent)
+    // 3) category.id match in collections (Firestore version has textBanks)
+    // 4) first collection as fallback
+    const colFromSource = activeCollectionId ? collections.find(c => c.id === activeCollectionId) : null;
+    const catHasTextBanks = category && (category.textBanks || []).some(tb => tb?.length > 0);
+    const colFromCategory = category?.id ? collections.find(c => c.id === category.id) : null;
+    const activeCol = colFromSource || (catHasTextBanks ? category : null) || colFromCategory || collections[0];
     if (!activeCol) { return [[], []]; }
     const migrated = migrateCollectionBanks(activeCol);
     const result = (migrated.textBanks || []).map(tb => tb?.length > 0 ? [...tb] : []);
