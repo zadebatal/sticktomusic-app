@@ -402,13 +402,22 @@ const SchedulingPage = ({
         for (const update of lateUpdates) {
           const post = result.find(p => p.id === update.id);
           try {
+            log('[Schedule] Late sync: updating', post.latePostId, '→', update.scheduledTime);
             const resp = await fetch('/api/late', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
               body: JSON.stringify({ action: 'updatePost', postId: post.latePostId, artistId, scheduledFor: update.scheduledTime })
             });
-            if (resp.ok) synced++;
-          } catch { /* continue with next */ }
+            if (resp.ok) {
+              synced++;
+              log('[Schedule] Late sync OK for', post.latePostId);
+            } else {
+              const errData = await resp.json().catch(() => ({}));
+              console.warn('[Schedule] Late sync failed:', resp.status, errData.error || errData);
+            }
+          } catch (syncErr) {
+            console.warn('[Schedule] Late sync error:', syncErr.message);
+          }
         }
         if (synced > 0) toastSuccess(`Shuffled + synced ${synced} post${synced !== 1 ? 's' : ''} to Late.co`);
         else toastSuccess(locked.length > 0 ? `Shuffled (${locked.length} locked)` : 'Queue randomized');

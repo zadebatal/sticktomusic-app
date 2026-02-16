@@ -426,6 +426,7 @@ export default async function handler(req, res) {
         if (body.content) {
           updatePayload.content = body.content;
         }
+        console.log(`[Late] Updating post ${postId}:`, JSON.stringify(updatePayload));
         response = await fetchWithRetry(`${LATE_API_BASE}/posts/${postId}`, {
           method: 'PUT',
           headers: {
@@ -434,6 +435,7 @@ export default async function handler(req, res) {
           },
           body: JSON.stringify(updatePayload)
         });
+        console.log(`[Late] Update response: ${response.status}`);
         break;
 
       case 'delete':
