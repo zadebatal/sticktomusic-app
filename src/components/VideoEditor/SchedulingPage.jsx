@@ -226,6 +226,103 @@ const SchedulingPage = ({
     };
   }, [db, artistId]);
 
+  // ── Backfill latePostId from Late.co for posts missing it ──
+  const backfillRanRef = useRef(false);
+  useEffect(() => {
+    if (backfillRanRef.current || loading || posts.length === 0 || !artistId) return;
+    // Only run if some scheduled posts are missing latePostId
+    const scheduled = posts.filter(p => p.status === 'scheduled' || p.status === 'partial');
+    const missing = scheduled.filter(p => !p.latePostId);
+    if (missing.length === 0) return;
+    backfillRanRef.current = true;
+
+    (async () => {
+      try {
+        log('[Schedule] Backfill: found', missing.length, 'scheduled posts without latePostId');
+        const token = await getAuth().currentUser?.getIdToken();
+        if (!token) return;
+
+        // Fetch all posts from Late.co
+        let allLatePosts = [];
+        let page = 1;
+        let hasMore = true;
+        while (hasMore) {
+          const resp = await fetch(`/api/late?action=posts&page=${page}&artistId=${artistId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (!resp.ok) break;
+          const data = await resp.json();
+          const latePosts = data.posts || data.data || [];
+          if (Array.isArray(latePosts) && latePosts.length > 0) {
+            allLatePosts = [...allLatePosts, ...latePosts];
+            page++;
+            if (latePosts.length < 50) hasMore = false;
+          } else {
+            hasMore = false;
+          }
+          if (page > 10) hasMore = false;
+        }
+
+        if (allLatePosts.length === 0) {
+          log('[Schedule] Backfill: no Late posts found');
+          return;
+        }
+        log('[Schedule] Backfill: fetched', allLatePosts.length, 'Late posts');
+
+        // Log first Late post structure for debugging
+        if (allLatePosts[0]) {
+          log('[Schedule] Late post sample keys:', Object.keys(allLatePosts[0]).join(', '));
+          log('[Schedule] Late post sample:', JSON.stringify(allLatePosts[0]).substring(0, 500));
+        }
+
+        // Match by scheduledTime (within 2 min tolerance) + content similarity
+        let matched = 0;
+        for (const localPost of missing) {
+          const localTime = localPost.scheduledTime ? new Date(localPost.scheduledTime).getTime() : 0;
+          const localCaption = (localPost.caption || '').toLowerCase().trim();
+
+          const match = allLatePosts.find(lp => {
+            const lateId = lp._id || lp.id;
+            // Skip already-matched Late posts
+            if (!lateId) return false;
+
+            // Match by time (within 2 minutes)
+            const lateTime = lp.scheduledFor ? new Date(lp.scheduledFor).getTime() : 0;
+            const timeDiff = Math.abs(localTime - lateTime);
+            if (timeDiff > 120000) return false;
+
+            // Match by content if available
+            const lateContent = (lp.content || '').toLowerCase().trim();
+            if (localCaption && lateContent) {
+              return lateContent.includes(localCaption.substring(0, 20));
+            }
+            // If no caption to compare, time match is enough
+            return true;
+          });
+
+          if (match) {
+            const latePostId = match._id || match.id;
+            log('[Schedule] Backfill matched:', localPost.id, '→', latePostId);
+            await updateScheduledPost(db, artistId, localPost.id, { latePostId });
+            matched++;
+            // Remove from pool so it's not matched again
+            const idx = allLatePosts.indexOf(match);
+            if (idx >= 0) allLatePosts.splice(idx, 1);
+          }
+        }
+
+        if (matched > 0) {
+          log('[Schedule] Backfill complete:', matched, 'posts linked to Late.co');
+          toastSuccess(`Linked ${matched} post${matched !== 1 ? 's' : ''} to Late.co`);
+        } else {
+          log('[Schedule] Backfill: no matches found');
+        }
+      } catch (err) {
+        console.warn('[Schedule] Backfill error:', err);
+      }
+    })();
+  }, [posts, loading, artistId, db, toastSuccess]);
+
   useEffect(() => {
     const now = new Date();
     setBatchStartDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
