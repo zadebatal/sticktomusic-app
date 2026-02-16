@@ -2661,6 +2661,9 @@ const VideoEditorModal = ({
               </div>
             </div>
 
+            {/* Controls + Timeline — scrollable to give preview more space */}
+            <div style={{ flexShrink: 1, overflow: 'auto', minHeight: 0 }}>
+
             {/* Preset Selector - Hide on mobile to save space (moved to styles tab) */}
             <div style={styles.presetSection}>
               <span style={styles.presetLabel}>Apply preset</span>
@@ -2732,7 +2735,7 @@ const VideoEditorModal = ({
             )}
 
             {/* ── Timeline Section (moved from right panel to main area) ── */}
-            <div style={{ ...styles.clipsSection, borderTop: `1px solid ${theme.border.subtle}`, flexShrink: 0 }}>
+            <div style={{ ...styles.clipsSection, borderTop: `1px solid ${theme.border.subtle}` }}>
               <div style={styles.clipsSectionHeader}>
                 <h4 style={styles.sectionTitle}>Timeline ({clips.length} clips)</h4>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -3091,6 +3094,7 @@ const VideoEditorModal = ({
                 </div>
               </div>
             </div>
+            </div>{/* end scrollable controls+timeline wrapper */}
           </div>
 
           {/* ── Floating Text Controls Panel ── */}
@@ -4329,12 +4333,12 @@ const getStyles = (theme) => ({
     flexDirection: 'column'
   },
   previewContainer: {
-    marginBottom: '16px',
+    marginBottom: '0',
     flex: 1,
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
-    minHeight: 0,
+    minHeight: '35vh',
     overflow: 'hidden',
     padding: '12px'
   },
