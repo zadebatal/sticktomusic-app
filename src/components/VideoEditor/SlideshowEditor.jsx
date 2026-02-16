@@ -951,31 +951,43 @@ const SlideshowEditor = ({
 
   // Re-roll text: Replace text overlays with random text from banks
   const handleTextReroll = useCallback((overlayId = null, bankSource = null) => {
-    const textBanks = getTextBanks();
-    if (textBanks.length === 0 || !textBanks.some(b => b?.length > 0)) return;
+    try {
+      const textBanks = getTextBanks();
+      if (!textBanks || textBanks.length === 0 || !textBanks.some(b => b?.length > 0)) return;
 
-    setSlides(prev => prev.map((slide, i) => {
-      if (i !== selectedSlideIndex) return slide;
-      const updatedOverlays = (slide.textOverlays || []).map((overlay, idx) => {
-        // If a specific overlay ID is given, only reroll that one
-        if (overlayId && overlay.id !== overlayId) return overlay;
+      setSlides(prev => prev.map((slide, i) => {
+        if (i !== selectedSlideIndex) return slide;
+        const updatedOverlays = (slide.textOverlays || []).map((overlay, idx) => {
+          if (!overlay?.id) return overlay;
+          // If a specific overlay ID is given, only reroll that one
+          if (overlayId && overlay.id !== overlayId) return overlay;
 
-        // Use specified bank source, or auto-assign based on overlay index
-        let bank;
-        if (bankSource !== null && bankSource !== undefined) bank = textBanks[bankSource] || [];
-        else bank = textBanks[idx] || textBanks[0] || [];
-        if (bank.length === 0) return overlay;
+          // Use specified bank source, or auto-assign based on overlay index
+          let bank;
+          if (bankSource !== null && bankSource !== undefined) bank = textBanks[bankSource] || [];
+          else bank = textBanks[idx] || textBanks[0] || [];
+          if (!bank || bank.length === 0) return overlay;
 
-        // Pick random entry different from current if possible
-        const others = bank.filter(t => getTextBankText(t) !== overlay.text);
-        const pool = others.length > 0 ? others : bank;
-        const randomEntry = pool[Math.floor(Math.random() * pool.length)];
-        const randomText = getTextBankText(randomEntry);
-        const randomStyle = getTextBankStyle(randomEntry);
-        return { ...overlay, text: randomText, ...(randomStyle ? { style: { ...overlay.style, ...randomStyle } } : {}) };
-      });
-      return { ...slide, textOverlays: updatedOverlays };
-    }));
+          // Pick random entry different from current if possible
+          const others = bank.filter(t => getTextBankText(t) !== overlay.text);
+          const pool = others.length > 0 ? others : bank;
+          const randomEntry = pool[Math.floor(Math.random() * pool.length)];
+          if (!randomEntry) return overlay;
+          const randomText = getTextBankText(randomEntry) || overlay.text;
+          const randomStyle = getTextBankStyle(randomEntry);
+          const baseStyle = overlay.style || { fontSize: 48, fontFamily: 'Inter, sans-serif', fontWeight: '700', color: '#ffffff', textAlign: 'center' };
+          return {
+            ...overlay,
+            text: randomText,
+            style: randomStyle ? { ...baseStyle, ...randomStyle } : baseStyle,
+            position: overlay.position || { x: 50, y: 50, width: 80 }
+          };
+        });
+        return { ...slide, textOverlays: updatedOverlays };
+      }));
+    } catch (err) {
+      console.error('[SlideshowEditor] Text reroll error:', err);
+    }
   }, [selectedSlideIndex, getTextBanks]);
 
   // Audio playback controls - just add audio directly, user can trim later
@@ -3140,6 +3152,9 @@ const SlideshowEditor = ({
 
                 {/* Text Overlays — draggable */}
                 {(currentSlide?.textOverlays || []).map(overlay => {
+                  if (!overlay?.id) return null;
+                  const pos = overlay.position || { x: 50, y: 50, width: 80 };
+                  const st = overlay.style || { fontSize: 48, fontFamily: 'Inter, sans-serif', fontWeight: '700', color: '#ffffff', textAlign: 'center' };
                   const isSelected = editingTextId === overlay.id;
                   const isDragging = draggingTextId === overlay.id;
                   return (
@@ -3147,24 +3162,24 @@ const SlideshowEditor = ({
                       key={overlay.id}
                       style={{
                         ...styles.textOverlay,
-                        left: `${overlay.position.x}%`,
-                        top: `${overlay.position.y}%`,
+                        left: `${pos.x}%`,
+                        top: `${pos.y}%`,
                         transform: 'translate(-50%, -50%)',
-                        width: `${overlay.position.width || 80}%`,
-                        fontSize: `${overlay.style.fontSize * previewScale}px`,
-                        fontFamily: overlay.style.fontFamily,
-                        fontWeight: overlay.style.fontWeight,
-                        color: overlay.style.color,
-                        textAlign: overlay.style.textAlign,
-                        textTransform: overlay.style.textTransform || 'none',
+                        width: `${pos.width || 80}%`,
+                        fontSize: `${(st.fontSize || 48) * previewScale}px`,
+                        fontFamily: st.fontFamily || 'Inter, sans-serif',
+                        fontWeight: st.fontWeight || '700',
+                        color: st.color || '#ffffff',
+                        textAlign: st.textAlign || 'center',
+                        textTransform: st.textTransform || 'none',
                         WebkitTextStroke: (() => {
-                          const stroke = overlay.style.textStroke;
+                          const stroke = st.textStroke;
                           if (!stroke) return 'none';
                           const parsed = parseStroke(stroke);
                           return parsed.width > 0 ? stroke : 'none';
                         })(),
-                        textShadow: overlay.style.outline
-                          ? `0 0 ${4 * previewScale}px ${overlay.style.outlineColor}`
+                        textShadow: st.outline
+                          ? `0 0 ${4 * previewScale}px ${st.outlineColor || 'rgba(0,0,0,0.5)'}`
                           : 'none',
                         cursor: isDragging ? 'grabbing' : 'grab',
                         border: isSelected ? '1px dashed rgba(99,102,241,0.8)' : '1px dashed transparent',
@@ -3183,7 +3198,7 @@ const SlideshowEditor = ({
                         handleTextClick(e, overlay.id);
                       }}
                     >
-                      {overlay.text}
+                      {overlay.text || ''}
                       {isSelected && (
                         <>
                           <div style={{
@@ -4791,7 +4806,7 @@ const TextEditorPanel = ({
               onClick={() => onSelectOverlay(overlay.id)}
             >
               <div style={textPanelStyles.textPreview}>
-                {overlay.text.slice(0, 50)}{overlay.text.length > 50 ? '...' : ''}
+                {(overlay.text || '').slice(0, 50)}{(overlay.text || '').length > 50 ? '...' : ''}
               </div>
               <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0 }}>
                 {canReroll && (
@@ -4823,12 +4838,14 @@ const TextEditorPanel = ({
       </div>
 
       {/* Selected Text Editor */}
-      {selectedOverlay && (
+      {selectedOverlay && (() => {
+        const st = selectedOverlay.style || { fontSize: 48, fontFamily: 'Inter, sans-serif', fontWeight: '700', color: '#ffffff', textAlign: 'center' };
+        return (
         <div style={textPanelStyles.editor}>
           <div style={textPanelStyles.sectionHeader}>Edit Text</div>
 
           <textarea
-            value={selectedOverlay.text}
+            value={selectedOverlay.text || ''}
             onChange={(e) => onUpdateOverlay(selectedOverlay.id, { text: e.target.value })}
             style={textPanelStyles.textarea}
             placeholder="Enter text..."
@@ -4847,7 +4864,7 @@ const TextEditorPanel = ({
                     color: '#c4b5fd', cursor: 'pointer', fontSize: '11px',
                     transition: 'all 0.15s'
                   }}
-                  onClick={() => onRerollText(selectedOverlay.id, 1)}
+                  onClick={() => onRerollText(selectedOverlay.id, 0)}
                   title={`Pick random text from Text Bank 1 (${textBank1.length} items)`}
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(139, 92, 246, 0.2)'}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(139, 92, 246, 0.1)'}
@@ -4869,7 +4886,7 @@ const TextEditorPanel = ({
                     color: '#a5b4fc', cursor: 'pointer', fontSize: '11px',
                     transition: 'all 0.15s'
                   }}
-                  onClick={() => onRerollText(selectedOverlay.id, 2)}
+                  onClick={() => onRerollText(selectedOverlay.id, 1)}
                   title={`Pick random text from Text Bank 2 (${textBank2.length} items)`}
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.2)'}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.1)'}
@@ -4889,19 +4906,19 @@ const TextEditorPanel = ({
           <div style={textPanelStyles.control}>
             <div style={textPanelStyles.controlHeader}>
               <span>Size</span>
-              <span style={textPanelStyles.controlValue}>{selectedOverlay.style.fontSize}px</span>
+              <span style={textPanelStyles.controlValue}>{st.fontSize}px</span>
             </div>
             <div style={textPanelStyles.sizeButtons}>
               <button
                 style={textPanelStyles.sizeBtn}
                 onClick={() => onUpdateOverlay(selectedOverlay.id, {
-                  style: { ...selectedOverlay.style, fontSize: Math.max(12, selectedOverlay.style.fontSize - 4) }
+                  style: { ...st, fontSize: Math.max(12, (st.fontSize || 48) - 4) }
                 })}
               >A-</button>
               <button
                 style={textPanelStyles.sizeBtn}
                 onClick={() => onUpdateOverlay(selectedOverlay.id, {
-                  style: { ...selectedOverlay.style, fontSize: Math.min(120, selectedOverlay.style.fontSize + 4) }
+                  style: { ...st, fontSize: Math.min(120, (st.fontSize || 48) + 4) }
                 })}
               >A+</button>
             </div>
@@ -4911,9 +4928,9 @@ const TextEditorPanel = ({
           <div style={textPanelStyles.control}>
             <span>Font</span>
             <select
-              value={selectedOverlay.style.fontFamily}
+              value={st.fontFamily}
               onChange={(e) => onUpdateOverlay(selectedOverlay.id, {
-                style: { ...selectedOverlay.style, fontFamily: e.target.value }
+                style: { ...st, fontFamily: e.target.value }
               })}
               style={textPanelStyles.fontSelect}
             >
@@ -4934,10 +4951,10 @@ const TextEditorPanel = ({
                   key={align}
                   style={{
                     ...textPanelStyles.alignBtn,
-                    ...(selectedOverlay.style.textAlign === align ? textPanelStyles.alignBtnActive : {})
+                    ...(st.textAlign === align ? textPanelStyles.alignBtnActive : {})
                   }}
                   onClick={() => onUpdateOverlay(selectedOverlay.id, {
-                    style: { ...selectedOverlay.style, textAlign: align }
+                    style: { ...st, textAlign: align }
                   })}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -4955,9 +4972,9 @@ const TextEditorPanel = ({
             <span>Color</span>
             <input
               type="color"
-              value={selectedOverlay.style.color}
+              value={st.color || '#ffffff'}
               onChange={(e) => onUpdateOverlay(selectedOverlay.id, {
-                style: { ...selectedOverlay.style, color: e.target.value }
+                style: { ...st, color: e.target.value }
               })}
               style={textPanelStyles.colorPicker}
             />
@@ -4970,7 +4987,7 @@ const TextEditorPanel = ({
               style={textPanelStyles.saveTemplateBtn}
               onClick={() => {
                 if (onRequestSaveTemplate && selectedOverlay) {
-                  onRequestSaveTemplate(selectedOverlay.style);
+                  onRequestSaveTemplate(st);
                 }
               }}
             >
@@ -5020,14 +5037,14 @@ const TextEditorPanel = ({
           </div>
 
           {/* Save to Lyric Bank */}
-          {onAddLyrics && selectedOverlay.text.trim() && (
+          {onAddLyrics && (selectedOverlay.text || '').trim() && (
             <button
               style={textPanelStyles.saveToLyricBankBtn}
               onClick={() => {
                 handleAddLyricsAndRefresh({
                   id: `lyric_${Date.now()}`,
-                  title: selectedOverlay.text.split('\n')[0].slice(0, 30) || 'Saved Lyrics',
-                  content: selectedOverlay.text.trim(),
+                  title: (selectedOverlay.text || '').split('\n')[0].slice(0, 30) || 'Saved Lyrics',
+                  content: (selectedOverlay.text || '').trim(),
                   createdAt: new Date().toISOString()
                 });
                 toastSuccess('Saved to Lyric Bank!');
@@ -5043,7 +5060,8 @@ const TextEditorPanel = ({
             </button>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* Pull from Lyric Bank Section */}
       <div style={textPanelStyles.lyricSection}>
