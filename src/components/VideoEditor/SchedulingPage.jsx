@@ -391,13 +391,17 @@ const SchedulingPage = ({
 
     // Sync time changes to Late.co for posts that have a Late post ID
     // Include any status except 'posted' (already published) and 'draft' (not yet on Late)
+    log('[Schedule] Shuffle: timeUpdates =', timeUpdates.length, ', futureUnlocked =', futureUnlocked.length);
     const lateUpdates = timeUpdates.filter(u => {
       const post = result.find(p => p.id === u.id);
+      log('[Schedule] Post', u.id, ': latePostId=', post?.latePostId, ', status=', post?.status);
       return post?.latePostId && post?.status !== 'posted' && post?.status !== 'draft';
     });
+    log('[Schedule] lateUpdates to sync:', lateUpdates.length);
     if (lateUpdates.length > 0) {
       try {
         const token = await getAuth().currentUser?.getIdToken();
+        log('[Schedule] Got auth token:', token ? 'yes' : 'NO');
         let synced = 0;
         for (const update of lateUpdates) {
           const post = result.find(p => p.id === update.id);
@@ -413,19 +417,23 @@ const SchedulingPage = ({
               log('[Schedule] Late sync OK for', post.latePostId);
             } else {
               const errData = await resp.json().catch(() => ({}));
-              console.warn('[Schedule] Late sync failed:', resp.status, errData.error || errData);
+              console.warn('[Schedule] Late sync FAILED:', resp.status, errData.error || errData);
             }
           } catch (syncErr) {
             console.warn('[Schedule] Late sync error:', syncErr.message);
           }
         }
         if (synced > 0) toastSuccess(`Shuffled + synced ${synced} post${synced !== 1 ? 's' : ''} to Late.co`);
-        else toastSuccess(locked.length > 0 ? `Shuffled (${locked.length} locked)` : 'Queue randomized');
-      } catch {
-        toastSuccess(locked.length > 0 ? `Shuffled (${locked.length} locked)` : 'Queue randomized');
+        else toastSuccess('Shuffled (Late sync failed for all posts)');
+      } catch (outerErr) {
+        console.error('[Schedule] Late sync outer error:', outerErr);
+        toastSuccess('Shuffled (Late sync error: ' + outerErr.message + ')');
       }
     } else {
-      toastSuccess(locked.length > 0 ? `Shuffled (${locked.length} locked)` : 'Queue randomized');
+      const reason = timeUpdates.length === 0
+        ? 'no time changes needed'
+        : 'no posts have latePostId';
+      toastSuccess(locked.length > 0 ? `Shuffled (${locked.length} locked, ${reason})` : `Queue randomized (${reason})`);
     }
   }, [posts, db, artistId, toastSuccess]);
 
