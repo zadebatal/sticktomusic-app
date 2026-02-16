@@ -335,33 +335,43 @@ const SchedulingPage = ({
     const locked = posts.filter(p => p.locked);
     const unlocked = posts.filter(p => !p.locked);
 
-    // Collect existing scheduled times from unlocked posts (sorted chronologically)
-    const existingTimes = unlocked
+    // Split unlocked posts into past (keep in place) and future (shuffle)
+    const now = new Date();
+    const pastUnlocked = unlocked.filter(p => p.scheduledTime && new Date(p.scheduledTime) < now);
+    const futureUnlocked = unlocked.filter(p => !p.scheduledTime || new Date(p.scheduledTime) >= now);
+
+    // Collect only future scheduled times for redistribution
+    const futureTimes = futureUnlocked
       .filter(p => p.scheduledTime)
       .map(p => p.scheduledTime)
       .sort((a, b) => new Date(a) - new Date(b));
 
-    // Shuffle only unlocked posts
-    for (let i = unlocked.length - 1; i > 0; i--) {
+    // Shuffle only future unlocked posts
+    for (let i = futureUnlocked.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [unlocked[i], unlocked[j]] = [unlocked[j], unlocked[i]];
+      [futureUnlocked[i], futureUnlocked[j]] = [futureUnlocked[j], futureUnlocked[i]];
     }
 
-    // Rebuild the full list: locked posts stay at their original indices
+    // Rebuild the full list: locked + past-unlocked stay at original indices, future-unlocked get shuffled
     const result = new Array(posts.length);
-    const lockedPositions = new Set();
-    posts.forEach((p, i) => { if (p.locked) { result[i] = p; lockedPositions.add(i); } });
-    let ui = 0;
+    const fixedPositions = new Set();
+    posts.forEach((p, i) => {
+      if (p.locked || (pastUnlocked.some(pp => pp.id === p.id))) {
+        result[i] = p;
+        fixedPositions.add(i);
+      }
+    });
+    let fi = 0;
     for (let i = 0; i < result.length; i++) {
-      if (!lockedPositions.has(i)) { result[i] = unlocked[ui++]; }
+      if (!fixedPositions.has(i)) { result[i] = futureUnlocked[fi++]; }
     }
 
-    // Redistribute scheduled times: assign sorted times to unlocked posts in new order
+    // Redistribute future times to shuffled future posts
     let timeIdx = 0;
     const timeUpdates = [];
     for (let i = 0; i < result.length; i++) {
-      if (!lockedPositions.has(i) && result[i].scheduledTime && timeIdx < existingTimes.length) {
-        const newTime = existingTimes[timeIdx++];
+      if (!fixedPositions.has(i) && result[i].scheduledTime && timeIdx < futureTimes.length) {
+        const newTime = futureTimes[timeIdx++];
         if (newTime !== result[i].scheduledTime) {
           timeUpdates.push({ id: result[i].id, scheduledTime: newTime });
           result[i] = { ...result[i], scheduledTime: newTime };
