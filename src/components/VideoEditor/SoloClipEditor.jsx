@@ -6,10 +6,15 @@ import {
 } from '../../services/libraryService';
 import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
+import { ToggleGroup } from '../../ui/components/ToggleGroup';
+import { FeatherArrowLeft, FeatherX, FeatherPlay, FeatherPause, FeatherVolume2, FeatherVolumeX, FeatherPlus, FeatherTrash2, FeatherSave, FeatherDownload, FeatherRotateCcw, FeatherRotateCw, FeatherChevronDown, FeatherRefreshCw, FeatherMusic, FeatherUpload, FeatherDatabase, FeatherMic, FeatherScissors, FeatherSkipBack, FeatherSkipForward } from '@subframe/core';
+import { TextField } from '../../ui/components/TextField';
+import { Badge } from '../../ui/components/Badge';
 import useIsMobile from '../../hooks/useIsMobile';
 import AudioClipSelector from './AudioClipSelector';
 import CloudImportButton from './CloudImportButton';
-import EditorToolbar from './EditorToolbar';
 import LyricBank from './LyricBank';
 import LyricAnalyzer from './LyricAnalyzer';
 import useEditorHistory from '../../hooks/useEditorHistory';
@@ -42,7 +47,6 @@ const SoloClipEditor = ({
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
-  const styles = useMemo(() => getStyles(theme), [theme]);
 
   // ── Multi-video state (mirrors SlideshowEditor allSlideshows) ──
   const [allVideos, setAllVideos] = useState(() => {
@@ -164,7 +168,6 @@ const SoloClipEditor = ({
 
   // ── Text editing state ──
   const [editingTextId, setEditingTextId] = useState(null);
-  const [showTextPanel, setShowTextPanel] = useState(false);
   const [editingTextValue, setEditingTextValue] = useState('');
   const [draggingTextId, setDraggingTextId] = useState(null);
   const dragStartRef = useRef(null);
@@ -210,6 +213,27 @@ const SoloClipEditor = ({
 
   // ── Transcriber state ──
   const [showTranscriber, setShowTranscriber] = useState(false);
+
+  // ── Video name state ──
+  const [videoName, setVideoName] = useState(existingVideo?.name || 'Untitled Solo Clip');
+
+  // ── Collapsible sidebar sections ──
+  const [openSections, setOpenSections] = useState({
+    audio: true, clips: true, lyrics: false, textStyle: false
+  });
+  const toggleSection = useCallback((key) => {
+    setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+  const renderCollapsibleSection = (key, title, content) => (
+    <div className="w-full border-t border-neutral-800">
+      <button onClick={() => toggleSection(key)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-transparent border-none text-white text-heading-3 font-heading-3 cursor-pointer">
+        <span>{title}</span>
+        <FeatherChevronDown className={`w-4 h-4 text-neutral-500 flex-shrink-0 transition-transform duration-150 ${openSections[key] ? 'rotate-180' : ''}`} />
+      </button>
+      {openSections[key] && (<div className="px-4 pb-4">{content}</div>)}
+    </div>
+  );
 
   // ── Mobile detection ──
   const { isMobile } = useIsMobile();
@@ -915,1230 +939,588 @@ const SoloClipEditor = ({
 
   // ── RENDER ──
   return (
-    <div style={{
-      ...styles.overlay,
-      ...(isMobile ? { padding: 0 } : {})
-    }} onClick={(e) => e.target === e.currentTarget && handleCloseRequest()}>
-      <div style={{
-        ...styles.modal,
-        ...(isMobile ? {
-          borderRadius: 0,
-          maxWidth: '100%',
-          height: '100vh',
-          width: '100vw',
-          border: 'none'
-        } : {})
-      }}>
+    <div className={`fixed inset-0 bg-black/80 flex items-center justify-center z-[10000] ${isMobile ? 'p-0' : 'p-5'}`} onClick={(e) => e.target === e.currentTarget && handleCloseRequest()}>
+      <div className="w-full h-screen bg-black flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
 
-        {/* ── Header ── */}
-        <div style={{
-          ...styles.header,
-          ...(isMobile ? { padding: '8px 10px', gap: '6px' } : {})
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '12px', minWidth: 0 }}>
-            <button onClick={handleCloseRequest} style={{
-              ...styles.backButton,
-              ...(isMobile ? { minWidth: '44px', minHeight: '44px', justifyContent: 'center' } : {})
-            }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M19 12H5M12 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <div style={{ minWidth: 0 }}>
-              <h2 style={{
-                ...styles.headerTitle,
-                ...(isMobile ? { fontSize: '13px' } : {})
-              }}>Solo Clip Editor</h2>
-              {!isMobile && (
-                <span style={styles.headerSubtitle}>
-                  {allVideos.length === 1 ? 'Design your template' : `${allVideos.length} videos (1 template + ${allVideos.length - 1} generated)`}
-                </span>
-              )}
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: isMobile ? '4px' : '8px', alignItems: 'center', flexShrink: 0 }}>
-            {/* Aspect ratio toggles — hide on mobile */}
-            {!isMobile && ['9:16', '1:1', '4:3'].map(ratio => (
-              <button
-                key={ratio}
-                onClick={() => setAspectRatio(ratio)}
-                style={{
-                  ...styles.ratioButton,
-                  ...(aspectRatio === ratio ? styles.ratioButtonActive : {})
-                }}
-              >
-                {ratio}
-              </button>
-            ))}
+        {/* ═══ TOP BAR ═══ */}
+        <div className="flex w-full items-center justify-between border-b border-neutral-800 bg-black px-6 py-4">
+          <div className="flex items-center gap-4">
+            <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherArrowLeft />} onClick={handleCloseRequest} />
             {!isMobile && (
-              <div style={{ width: '1px', height: '20px', backgroundColor: theme.border.subtle, margin: '0 4px' }} />
+              <TextField className="w-80" variant="filled" label="" helpText="">
+                <TextField.Input placeholder="Untitled Solo Clip" value={videoName} onChange={(e) => setVideoName(e.target.value)} />
+              </TextField>
             )}
-            {/* Save Draft */}
-            <button onClick={handleSaveDraft} style={{
-              ...styles.saveDraftButton,
-              ...(isMobile ? { minWidth: '44px', minHeight: '44px', padding: '6px 10px', fontSize: '11px' } : {})
-            }}>
-              {isMobile ? 'Save' : 'Save Draft'}
-            </button>
-            {/* Save All */}
-            {allVideos.length > 1 && (
-              <button onClick={handleSaveAllAndClose} style={{
-                ...styles.saveAllButton,
-                ...(isMobile ? { minWidth: '44px', minHeight: '44px', padding: '6px 10px', fontSize: '11px' } : {})
-              }}>
-                {isMobile ? `All (${allVideos.length})` : `Save All (${allVideos.length})`}
-              </button>
-            )}
-            {/* Close */}
-            <button onClick={handleCloseRequest} style={{
-              ...styles.closeButton,
-              ...(isMobile ? { minWidth: '44px', minHeight: '44px', justifyContent: 'center' } : {})
-            }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
+          </div>
+          <div className="flex items-center gap-3">
+            <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherRotateCcw />} disabled={!canUndo} onClick={handleUndo} title="Undo (⌘Z)" />
+            <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherRotateCw />} disabled={!canRedo} onClick={handleRedo} title="Redo (⌘⇧Z)" />
+            <Button variant="neutral-secondary" size="medium" icon={<FeatherSave />} onClick={handleSaveDraft}>Save</Button>
+            <Button variant="brand-primary" size="medium" icon={<FeatherDownload />} onClick={handleSaveDraft}>Export</Button>
           </div>
         </div>
 
-        {/* ── Main Content — 3 Columns (desktop) / stacked (mobile) ── */}
-        <div style={{
-          ...styles.mainContent,
-          ...(isMobile ? { flexDirection: 'column', overflow: 'auto' } : {})
-        }}>
+        {/* ═══ MAIN CONTENT ═══ */}
+        <div className="flex grow shrink-0 basis-0 self-stretch overflow-hidden">
 
-          {/* ── LEFT PANEL: Collection dropdown + Video grid + Text Banks (desktop only) ── */}
-          {!isMobile && (
-          <div style={styles.leftPanel}>
-            {/* Collection dropdown */}
-            <div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.border.subtle}` }}>
-              <select
-                value={selectedCollection}
-                onChange={(e) => setSelectedCollection(e.target.value)}
-                style={styles.sourceDropdown}
-              >
-                <option value="category">Selected Clips</option>
-                <option value="all">All Videos (Library)</option>
-                {collections.map(col => (
-                  <option key={col.id} value={col.id}>{col.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Videos + Text Banks */}
-            <div style={styles.bankContent}>
-              {/* ── Videos section ── */}
-              {visibleVideos.length === 0 ? (
-                <div style={{ padding: '24px', textAlign: 'center', color: theme.text.muted, fontSize: '13px' }}>
-                  No videos in this collection
-                </div>
-              ) : (
-                <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '11px', color: theme.text.muted }}>{visibleVideos.length} clips</span>
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      <CloudImportButton
-                        artistId={artistId}
-                        db={db}
-                        mediaType="video"
-                        compact
-                        onImportMedia={(files) => {
-                          const newVids = files.map((f, i) => ({
-                            id: `import_${Date.now()}_${i}`,
-                            name: f.name,
-                            url: f.url,
-                            localUrl: f.localUrl,
-                            type: 'video'
-                          }));
-                          setLibraryMedia(prev => [...prev, ...newVids]);
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div style={styles.sidebarClipGrid}>
-                    {visibleVideos.map((video, i) => {
-                      const isActive = clip?.id === video.id;
-                      return (
-                        <div
-                          key={video.id || i}
-                          style={{ ...styles.sidebarClip, position: 'relative', border: isActive ? `2px solid ${theme.accent.primary}` : '2px solid transparent' }}
-                          onClick={() => {
-                            setClip(video);
-                            if (video.id && artistId) incrementUseCount(artistId, video.id);
-                          }}
-                          onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.borderColor = 'rgba(20,184,166,0.5)'; }}
-                          onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.borderColor = 'transparent'; }}
-                        >
-                          {isActive && (
-                            <div style={{
-                              position: 'absolute', top: 3, right: 3, zIndex: 2,
-                              width: '18px', height: '18px', borderRadius: '50%',
-                              backgroundColor: theme.accent.primary, display: 'flex',
-                              alignItems: 'center', justifyContent: 'center',
-                              fontSize: '11px', color: '#fff', fontWeight: 'bold',
-                              boxShadow: `0 1px 4px ${theme.overlay.light}`
-                            }}>✓</div>
-                          )}
-                          <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: '4px', overflow: 'hidden', backgroundColor: theme.bg.page }}>
-                            {(video.thumbnailUrl || video.thumbnail) ? (
-                              <img src={video.thumbnailUrl || video.thumbnail} alt={video.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            ) : (
-                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>🎬</div>
-                            )}
-                          </div>
-                          <div style={{ fontSize: '10px', color: theme.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '4px' }}>
-                            {(video.name || video.metadata?.originalName || 'Clip').substring(0, 20)}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-
-              {/* ── Text Banks (always visible below videos) ── */}
-              {(() => {
-                const { videoTextBank1, videoTextBank2 } = getVideoTextBanks();
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${theme.border.subtle}` }}>
-                    {/* Text Bank A */}
-                    <div>
-                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#14b8a6', marginBottom: '8px' }}>Text Bank A</div>
-                      <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
-                        <input
-                          value={newTextA}
-                          onChange={(e) => setNewTextA(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
-                          placeholder="Add text..."
-                          style={styles.textBankInput}
-                        />
-                        <button
-                          onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
-                          style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', backgroundColor: '#14b8a6', color: '#fff', cursor: 'pointer', fontSize: '12px', flexShrink: 0 }}
-                        >+</button>
-                      </div>
-                      {videoTextBank1.map((text, idx) => (
-                        <div key={idx} style={styles.textBankItem}>
-                          <span
-                            style={{ flex: 1, fontSize: '12px', cursor: 'pointer' }}
-                            onClick={() => addTextOverlay(text)}
-                            title="Click to add as overlay"
-                          >{text}</span>
-                          <button
-                            onClick={() => handleRemoveFromVideoTextBank(1, idx)}
-                            style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '14px', padding: '0 2px' }}
-                          >×</button>
-                        </div>
-                      ))}
-                      {videoTextBank1.length === 0 && <div style={{ fontSize: '11px', color: theme.text.muted }}>No text added yet</div>}
-                    </div>
-                    {/* Text Bank B */}
-                    <div>
-                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#f59e0b', marginBottom: '8px' }}>Text Bank B</div>
-                      <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
-                        <input
-                          value={newTextB}
-                          onChange={(e) => setNewTextB(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
-                          placeholder="Add text..."
-                          style={styles.textBankInput}
-                        />
-                        <button
-                          onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
-                          style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', backgroundColor: '#f59e0b', color: '#fff', cursor: 'pointer', fontSize: '12px', flexShrink: 0 }}
-                        >+</button>
-                      </div>
-                      {videoTextBank2.map((text, idx) => (
-                        <div key={idx} style={styles.textBankItem}>
-                          <span
-                            style={{ flex: 1, fontSize: '12px', cursor: 'pointer' }}
-                            onClick={() => addTextOverlay(text)}
-                            title="Click to add as overlay"
-                          >{text}</span>
-                          <button
-                            onClick={() => handleRemoveFromVideoTextBank(2, idx)}
-                            style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '14px', padding: '0 2px' }}
-                          >×</button>
-                        </div>
-                      ))}
-                      {videoTextBank2.length === 0 && <div style={{ fontSize: '11px', color: theme.text.muted }}>No text added yet</div>}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
-          )}
-
-          {/* ── CENTER: Video Preview ── */}
-          <div style={{
-            ...styles.previewArea,
-            ...(isMobile ? { padding: '8px', flexShrink: 0 } : {})
-          }}>
-            <div
-              ref={previewRef}
-              style={{
-                ...styles.previewContainer,
-                width: previewDims.width,
-                height: previewDims.height
-              }}
-              onClick={() => setEditingTextId(null)}
-            >
-              {clip ? (
-                <video
-                  ref={videoRef}
-                  src={getClipUrl(clip)}
-                  onLoadedMetadata={handleVideoLoaded}
-                  onEnded={() => {
-                    // If audio is still playing (longer than video), keep the playback loop going
-                    if (audioRef.current && audioRef.current.src && !audioRef.current.paused && audioRef.current.duration > clipDuration) {
-                      // Video ended but audio continues — playbackLoop will switch to audio time
-                      return;
-                    }
-                    setIsPlaying(false);
-                    if (animationRef.current) cancelAnimationFrame(animationRef.current);
-                  }}
-                  loop={false}
-                  playsInline
-                  style={{
-                    ...getVideoCropStyle(),
-                    borderRadius: '8px'
-                  }}
-                  crossOrigin="anonymous"
-                />
-              ) : (
-                <div style={styles.previewPlaceholder}>
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
-                    <rect x="2" y="4" width="20" height="16" rx="2" />
-                    <path d="M10 9l5 3-5 3V9z" />
-                  </svg>
-                  <p style={{ color: theme.text.muted, marginTop: 8, fontSize: 12 }}>No clip selected</p>
-                </div>
-              )}
-
-              {/* Text Overlays on video */}
-              {textOverlays.map((overlay) => {
-                const style = overlay.style || {};
-                const pos = overlay.position || { x: 50, y: 50 };
-                // Only show overlay during its time range
-                if (overlay.startTime !== undefined && overlay.endTime !== undefined) {
-                  if (currentTime < overlay.startTime || currentTime >= overlay.endTime) return null;
-                }
-                const displayText = style.textCase === 'upper' ? overlay.text.toUpperCase()
-                  : style.textCase === 'lower' ? overlay.text.toLowerCase()
-                  : overlay.text;
-
-                return (
-                  <div
-                    key={overlay.id}
-                    onMouseDown={(e) => handleTextMouseDown(e, overlay.id)}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingTextId(overlay.id);
-                      setEditingTextValue(overlay.text);
-                    }}
-                    style={{
-                      position: 'absolute',
-                      left: `${pos.x}%`,
-                      top: `${pos.y}%`,
-                      transform: 'translate(-50%, -50%)',
-                      cursor: draggingTextId === overlay.id ? 'grabbing' : 'grab',
-                      fontSize: `${(style.fontSize || 48) * (previewDims.width / 1080) * 2}px`,
-                      fontFamily: style.fontFamily || 'Inter, sans-serif',
-                      fontWeight: style.fontWeight || '600',
-                      color: style.color || '#ffffff',
-                      textAlign: style.textAlign || 'center',
-                      textShadow: style.outline
-                        ? `2px 2px 0 ${style.outlineColor || '#000'}, -2px -2px 0 ${style.outlineColor || '#000'}, 2px -2px 0 ${style.outlineColor || '#000'}, -2px 2px 0 ${style.outlineColor || '#000'}`
-                        : 'none',
-                      userSelect: 'none',
-                      WebkitUserSelect: 'none',
-                      whiteSpace: 'nowrap',
-                      zIndex: 10,
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      border: editingTextId === overlay.id ? `1px dashed ${theme.accent.primary}99` : '1px dashed transparent',
-                      transition: 'border-color 0.15s'
-                    }}
-                  >
-                    {displayText}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Playback Controls */}
-            <div style={{
-              ...styles.playbackControls,
-              ...(isMobile ? { maxWidth: '100%' } : {})
-            }}>
-              <button onClick={handlePlayPause} style={{
-                ...styles.playButton,
-                ...(isMobile ? { minWidth: '44px', minHeight: '44px', width: '44px', height: '44px' } : {})
-              }}>
-                {isPlaying ? (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <rect x="6" y="4" width="4" height="16" />
-                    <rect x="14" y="4" width="4" height="16" />
-                  </svg>
-                ) : (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <polygon points="5,3 19,12 5,21" />
-                  </svg>
-                )}
-              </button>
-
+          {/* LEFT: Preview + Controls */}
+          <div className="flex grow shrink-0 basis-0 flex-col items-center bg-black overflow-hidden">
+            <div className="flex w-full max-w-[448px] grow flex-col items-center gap-4 py-6 px-4 overflow-auto">
+              {/* Video Preview */}
               <div
-                style={styles.progressBar}
-                onClick={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const percent = (e.clientX - rect.left) / rect.width;
-                  handleSeek(percent * timelineDuration);
-                }}
+                ref={previewRef}
+                className="flex items-center justify-center rounded-lg bg-[#1a1a1aff] border border-neutral-800 relative overflow-hidden"
+                style={{ aspectRatio: '9/16', height: '50vh' }}
+                onClick={() => setEditingTextId(null)}
               >
-                <div style={{ ...styles.progressFill, width: `${timelineDuration > 0 ? (currentTime / timelineDuration) * 100 : 0}%` }} />
-              </div>
-
-              <span style={styles.timeDisplay}>
-                {formatTime(currentTime)} / {formatTime(timelineDuration)}
-              </span>
-
-              <button onClick={() => setIsMuted(!isMuted)} style={{
-                ...styles.muteButton,
-                ...(isMobile ? { minWidth: '44px', minHeight: '44px', justifyContent: 'center' } : {})
-              }}>
-                {isMuted ? (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" fill="currentColor" />
-                    <line x1="23" y1="9" x2="17" y2="15" />
-                    <line x1="17" y1="9" x2="23" y2="15" />
-                  </svg>
+                {clip ? (
+                  <video
+                    ref={videoRef}
+                    src={getClipUrl(clip)}
+                    onLoadedMetadata={handleVideoLoaded}
+                    onEnded={() => {
+                      if (audioRef.current && audioRef.current.src && !audioRef.current.paused && audioRef.current.duration > clipDuration) return;
+                      setIsPlaying(false);
+                      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+                    }}
+                    loop={false}
+                    playsInline
+                    style={{ ...getVideoCropStyle(), borderRadius: '8px' }}
+                    crossOrigin="anonymous"
+                  />
                 ) : (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polygon points="11,5 6,9 2,9 2,15 6,15 11,19" fill="currentColor" />
-                    <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" />
-                  </svg>
+                  <div className="w-full h-full flex flex-col items-center justify-center">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
+                      <rect x="2" y="4" width="20" height="16" rx="2" />
+                      <path d="M10 9l5 3-5 3V9z" />
+                    </svg>
+                    <p className="text-neutral-500 mt-2 text-[12px]">No clip selected</p>
+                  </div>
                 )}
-              </button>
-            </div>
-          </div>
 
-          {/* ── MOBILE TOOL TOOLBAR ── */}
-          {isMobile && (
-            <div style={styles.mobileToolbar}>
-              {[
-                { id: 'clips', label: 'Clips', icon: '\uD83C\uDFAC' },
-                { id: 'text', label: 'Text', icon: '\uD83D\uDCDD' }
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setMobileToolTab(mobileToolTab === tab.id ? null : tab.id)}
-                  style={{
-                    ...styles.mobileToolbarTab,
-                    ...(mobileToolTab === tab.id ? styles.mobileToolbarTabActive : {})
-                  }}
-                >
-                  <span style={{ fontSize: '16px' }}>{tab.icon}</span>
-                  <span style={{ fontSize: '10px' }}>{tab.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* ── MOBILE TOOL PANEL (shown when a tool tab is active) ── */}
-          {isMobile && mobileToolTab && (
-            <div style={styles.mobileToolPanel}>
-              {/* Clips tab — collection dropdown + video grid + text banks */}
-              {mobileToolTab === 'clips' && (
-                <div style={{ padding: '12px' }}>
-                  {/* Collection dropdown */}
-                  <select
-                    value={selectedCollection}
-                    onChange={(e) => setSelectedCollection(e.target.value)}
-                    style={{ ...styles.sourceDropdown, marginBottom: '8px', minHeight: '44px' }}
-                  >
-                    <option value="category">Selected Clips</option>
-                    <option value="all">All Videos (Library)</option>
-                    {collections.map(col => (
-                      <option key={col.id} value={col.id}>{col.name}</option>
-                    ))}
-                  </select>
-
-                  <div style={{ fontSize: '11px', color: theme.text.secondary, marginBottom: '8px' }}>
-                    Tap to set as template clip
-                  </div>
-                  <div style={{ ...styles.sidebarClipGrid, gridTemplateColumns: 'repeat(3, 1fr)' }}>
-                    {visibleVideos.map((video, i) => {
-                      const isActive = clip?.id === video.id;
-                      return (
-                        <div
-                          key={video.id || i}
-                          onClick={() => setClip(video)}
-                          style={{ ...styles.sidebarClip, border: isActive ? `2px solid ${theme.accent.primary}` : '2px solid transparent', minHeight: '44px' }}
-                        >
-                          <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: '4px', overflow: 'hidden', backgroundColor: theme.bg.page }}>
-                            {(video.thumbnailUrl || video.thumbnail) ? (
-                              <img src={video.thumbnailUrl || video.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            ) : (
-                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>🎬</div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {visibleVideos.length === 0 && (
-                    <div style={{ padding: '16px', textAlign: 'center', color: theme.text.muted, fontSize: '12px' }}>No videos in this collection</div>
-                  )}
-
-                  {/* Text Banks */}
-                  {(() => {
-                    const { videoTextBank1: tb1, videoTextBank2: tb2 } = getVideoTextBanks();
-                    return (
-                      <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${theme.border.subtle}` }}>
-                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#14b8a6', marginBottom: '6px' }}>Text Bank A</div>
-                        <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                          <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
-                            placeholder="Add text..." style={{ ...styles.textBankInput, minHeight: '44px' }} />
-                          <button onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
-                            style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', backgroundColor: '#14b8a6', color: '#fff', cursor: 'pointer', fontSize: '12px', minWidth: '44px', minHeight: '44px' }}>+</button>
-                        </div>
-                        {tb1.map((text, idx) => (
-                          <div key={idx} style={{ ...styles.textBankItem, minHeight: '44px' }}>
-                            <span style={{ flex: 1, fontSize: '12px', cursor: 'pointer' }} onClick={() => addTextOverlay(text)}>{text}</span>
-                            <button onClick={() => handleRemoveFromVideoTextBank(1, idx)} style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '14px', minWidth: '44px', minHeight: '44px' }}>×</button>
-                          </div>
-                        ))}
-                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#f59e0b', marginBottom: '6px', marginTop: '12px' }}>Text Bank B</div>
-                        <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-                          <input value={newTextB} onChange={(e) => setNewTextB(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
-                            placeholder="Add text..." style={{ ...styles.textBankInput, minHeight: '44px' }} />
-                          <button onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
-                            style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', backgroundColor: '#f59e0b', color: '#fff', cursor: 'pointer', fontSize: '12px', minWidth: '44px', minHeight: '44px' }}>+</button>
-                        </div>
-                        {tb2.map((text, idx) => (
-                          <div key={idx} style={{ ...styles.textBankItem, minHeight: '44px' }}>
-                            <span style={{ flex: 1, fontSize: '12px', cursor: 'pointer' }} onClick={() => addTextOverlay(text)}>{text}</span>
-                            <button onClick={() => handleRemoveFromVideoTextBank(2, idx)} style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '14px', minWidth: '44px', minHeight: '44px' }}>×</button>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-
-              {/* Text tab */}
-              {mobileToolTab === 'text' && (
-                <div style={{ padding: '0 0 12px 0' }}>
-                  <div style={styles.sectionHeader}>
-                    <span>Text Overlays</span>
-                    <span style={{ fontSize: '10px', color: theme.text.muted }}>{textOverlays.length}</span>
-                  </div>
-
-                  {textOverlays.length === 0 && (
-                    <div style={{ fontSize: '12px', color: theme.text.muted, textAlign: 'center', padding: '16px 12px' }}>
-                      No text overlays yet. Add one to start designing.
-                    </div>
-                  )}
-
-                  {textOverlays.map((overlay, idx) => {
-                    const isSelected = editingTextId === overlay.id;
-                    return (
-                      <div
-                        key={overlay.id}
-                        onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
-                        style={{
-                          ...styles.overlayCard,
-                          ...(isSelected ? styles.overlayCardActive : {})
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <span style={{ fontSize: '11px', color: theme.text.secondary, fontWeight: 500 }}>
-                            Overlay {idx + 1}
-                            {overlay.startTime !== undefined && (
-                              <span style={{ marginLeft: '6px', fontSize: '9px', color: theme.text.muted }}>
-                                {overlay.startTime.toFixed(1)}s - {overlay.endTime.toFixed(1)}s
-                              </span>
-                            )}
-                          </span>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }}
-                            style={{ ...styles.removeOverlayButton, minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                          >x</button>
-                        </div>
-                        {isSelected ? (
-                          <input
-                            value={editingTextValue}
-                            onChange={(e) => setEditingTextValue(e.target.value)}
-                            onBlur={() => updateTextOverlay(overlay.id, { text: editingTextValue })}
-                            onKeyDown={(e) => { if (e.key === 'Enter') { updateTextOverlay(overlay.id, { text: editingTextValue }); e.target.blur(); } }}
-                            style={{ ...styles.textEditInput, minHeight: '44px' }}
-                            autoFocus
-                          />
-                        ) : (
-                          <div style={{ fontSize: '13px', color: theme.text.primary }}>{overlay.text}</div>
-                        )}
-                        {isSelected && (
-                          <div style={styles.styleControls}>
-                            <div style={styles.controlRow}>
-                              <span style={styles.controlLabel}>Font</span>
-                              <select
-                                value={overlay.style.fontFamily}
-                                onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, fontFamily: e.target.value } })}
-                                style={{ ...styles.selectInput, minHeight: '44px' }}
-                              >
-                                <option value="Inter, sans-serif">Sans</option>
-                                <option value="'Playfair Display', serif">Serif</option>
-                                <option value="'Space Grotesk', sans-serif">Grotesk</option>
-                                <option value="monospace">Mono</option>
-                              </select>
-                            </div>
-                            <div style={styles.controlRow}>
-                              <span style={styles.controlLabel}>Size</span>
-                              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                                <button
-                                  style={{ ...styles.sizeButton, minWidth: '44px', minHeight: '44px' }}
-                                  onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.max(16, overlay.style.fontSize - 4) } }); }}
-                                >A-</button>
-                                <span style={{ fontSize: '11px', color: theme.text.primary, minWidth: '26px', textAlign: 'center' }}>{overlay.style.fontSize}</span>
-                                <button
-                                  style={{ ...styles.sizeButton, minWidth: '44px', minHeight: '44px' }}
-                                  onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.min(120, overlay.style.fontSize + 4) } }); }}
-                                >A+</button>
-                              </div>
-                            </div>
-                            <div style={styles.controlRow}>
-                              <span style={styles.controlLabel}>Color</span>
-                              <input
-                                type="color"
-                                value={overlay.style.color}
-                                onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, color: e.target.value } })}
-                                style={{ ...styles.colorInput, minWidth: '44px', minHeight: '44px' }}
-                              />
-                              <span style={{ ...styles.controlLabel, marginLeft: '8px' }}>Outline</span>
-                              <button
-                                style={{
-                                  ...styles.toggleButton,
-                                  ...(overlay.style.outline ? styles.toggleButtonActive : {}),
-                                  minWidth: '44px',
-                                  minHeight: '44px'
-                                }}
-                                onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, outline: !overlay.style.outline } }); }}
-                              >{overlay.style.outline ? 'On' : 'Off'}</button>
-                            </div>
-                            <div style={styles.controlRow}>
-                              <span style={styles.controlLabel}>Align</span>
-                              <div style={{ display: 'flex', gap: '3px' }}>
-                                {['left', 'center', 'right'].map(align => (
-                                  <button
-                                    key={align}
-                                    style={{
-                                      ...styles.toggleButton,
-                                      ...(overlay.style.textAlign === align ? styles.toggleButtonActive : {}),
-                                      minWidth: '44px',
-                                      minHeight: '44px'
-                                    }}
-                                    onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, textAlign: align } }); }}
-                                  >
-                                    {align.charAt(0).toUpperCase() + align.slice(1)}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                            <div style={styles.controlRow}>
-                              <span style={styles.controlLabel}>Case</span>
-                              <div style={{ display: 'flex', gap: '3px' }}>
-                                {[
-                                  { id: 'default', label: 'Aa' },
-                                  { id: 'upper', label: 'AA' },
-                                  { id: 'lower', label: 'aa' }
-                                ].map(opt => (
-                                  <button
-                                    key={opt.id}
-                                    style={{
-                                      ...styles.toggleButton,
-                                      ...(overlay.style.textCase === opt.id ? styles.toggleButtonActive : {}),
-                                      minWidth: '44px',
-                                      minHeight: '44px'
-                                    }}
-                                    onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, textCase: opt.id } }); }}
-                                  >
-                                    {opt.label}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  <button onClick={() => addTextOverlay()} style={{ ...styles.addTextButton, minHeight: '44px' }}>
-                    + Add Text Overlay
-                  </button>
-                </div>
-              )}
-
-              {/* Audio and Banks tabs removed — handled by EditorToolbar */}
-            </div>
-          )}
-
-          {/* ── RIGHT PANEL: Text Overlays + Style (collapsible, desktop only) ── */}
-          {showTextPanel && !isMobile && (
-          <div style={{ ...styles.rightPanel, width: '280px' }}>
-            <div style={{ padding: '6px 12px', borderBottom: `1px solid ${theme.border.subtle}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: theme.text.primary }}>Text Controls</span>
-              <button onClick={() => setShowTextPanel(false)} style={{ background: 'none', border: 'none', color: theme.text.muted, fontSize: '18px', cursor: 'pointer', padding: '2px 6px' }}>×</button>
-            </div>
-            <div style={styles.rightPanelScroll}>
-
-              {/* ── TEXT OVERLAYS SECTION ── */}
-              <div style={styles.sectionHeader}>
-                <span>Text Overlays</span>
-                <span style={{ fontSize: '10px', color: theme.text.muted }}>{textOverlays.length}</span>
-              </div>
-
-              {textOverlays.length === 0 && (
-                <div style={{ fontSize: '12px', color: theme.text.muted, textAlign: 'center', padding: '16px 12px' }}>
-                  No text overlays yet. Add one to start designing.
-                </div>
-              )}
-
-              {textOverlays.map((overlay, idx) => {
-                const isSelected = editingTextId === overlay.id;
-                return (
-                  <div
-                    key={overlay.id}
-                    onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
-                    style={{
-                      ...styles.overlayCard,
-                      ...(isSelected ? styles.overlayCardActive : {})
-                    }}
-                  >
-                    {/* Overlay header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '11px', color: theme.text.secondary, fontWeight: 500 }}>
-                        Overlay {idx + 1}
-                        {overlay.startTime !== undefined && (
-                          <span style={{ marginLeft: '6px', fontSize: '9px', color: theme.text.muted }}>
-                            {overlay.startTime.toFixed(1)}s – {overlay.endTime.toFixed(1)}s
-                          </span>
-                        )}
-                      </span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }}
-                        style={styles.removeOverlayButton}
-                      >×</button>
-                    </div>
-
-                    {/* Inline text edit */}
-                    {isSelected ? (
-                      <input
-                        value={editingTextValue}
-                        onChange={(e) => setEditingTextValue(e.target.value)}
-                        onBlur={() => updateTextOverlay(overlay.id, { text: editingTextValue })}
-                        onKeyDown={(e) => { if (e.key === 'Enter') { updateTextOverlay(overlay.id, { text: editingTextValue }); e.target.blur(); } }}
-                        style={styles.textEditInput}
-                        autoFocus
-                      />
-                    ) : (
-                      <div style={{ fontSize: '13px', color: theme.text.primary }}>{overlay.text}</div>
-                    )}
-
-                    {/* Style controls — always shown for selected overlay */}
-                    {isSelected && (
-                      <div style={styles.styleControls}>
-                        {/* Font Family */}
-                        <div style={styles.controlRow}>
-                          <span style={styles.controlLabel}>Font</span>
-                          <select
-                            value={overlay.style.fontFamily}
-                            onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, fontFamily: e.target.value } })}
-                            style={styles.selectInput}
-                          >
-                            <option value="Inter, sans-serif">Sans</option>
-                            <option value="'Playfair Display', serif">Serif</option>
-                            <option value="'Space Grotesk', sans-serif">Grotesk</option>
-                            <option value="monospace">Mono</option>
-                          </select>
-                        </div>
-
-                        {/* Font Size */}
-                        <div style={styles.controlRow}>
-                          <span style={styles.controlLabel}>Size</span>
-                          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                            <button
-                              style={styles.sizeButton}
-                              onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.max(16, overlay.style.fontSize - 4) } }); }}
-                            >A-</button>
-                            <span style={{ fontSize: '11px', color: theme.text.primary, minWidth: '26px', textAlign: 'center' }}>{overlay.style.fontSize}</span>
-                            <button
-                              style={styles.sizeButton}
-                              onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.min(120, overlay.style.fontSize + 4) } }); }}
-                            >A+</button>
-                          </div>
-                        </div>
-
-                        {/* Color + Outline */}
-                        <div style={styles.controlRow}>
-                          <span style={styles.controlLabel}>Color</span>
-                          <input
-                            type="color"
-                            value={overlay.style.color}
-                            onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, color: e.target.value } })}
-                            style={styles.colorInput}
-                          />
-                          <span style={{ ...styles.controlLabel, marginLeft: '8px' }}>Outline</span>
-                          <button
-                            style={{
-                              ...styles.toggleButton,
-                              ...(overlay.style.outline ? styles.toggleButtonActive : {})
-                            }}
-                            onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, outline: !overlay.style.outline } }); }}
-                          >{overlay.style.outline ? 'On' : 'Off'}</button>
-                          {overlay.style.outline && (
-                            <input
-                              type="color"
-                              value={overlay.style.outlineColor}
-                              onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, outlineColor: e.target.value } })}
-                              style={styles.colorInput}
-                            />
-                          )}
-                        </div>
-
-                        {/* Align */}
-                        <div style={styles.controlRow}>
-                          <span style={styles.controlLabel}>Align</span>
-                          <div style={{ display: 'flex', gap: '3px' }}>
-                            {['left', 'center', 'right'].map(align => (
-                              <button
-                                key={align}
-                                style={{
-                                  ...styles.toggleButton,
-                                  ...(overlay.style.textAlign === align ? styles.toggleButtonActive : {})
-                                }}
-                                onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, textAlign: align } }); }}
-                              >
-                                {align.charAt(0).toUpperCase() + align.slice(1)}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Case */}
-                        <div style={styles.controlRow}>
-                          <span style={styles.controlLabel}>Case</span>
-                          <div style={{ display: 'flex', gap: '3px' }}>
-                            {[
-                              { id: 'default', label: 'Aa' },
-                              { id: 'upper', label: 'AA' },
-                              { id: 'lower', label: 'aa' }
-                            ].map(opt => (
-                              <button
-                                key={opt.id}
-                                style={{
-                                  ...styles.toggleButton,
-                                  ...(overlay.style.textCase === opt.id ? styles.toggleButtonActive : {})
-                                }}
-                                onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, textCase: opt.id } }); }}
-                              >
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Save to Bank */}
-                        <div style={{ ...styles.controlRow, borderTop: `1px solid ${theme.border.subtle}`, paddingTop: '6px', marginTop: '2px' }}>
-                          <span style={{ fontSize: '10px', color: theme.text.secondary }}>Save to:</span>
-                          <button
-                            style={{ ...styles.toggleButton, borderColor: 'rgba(20,184,166,0.3)', color: '#14b8a6', fontSize: '10px' }}
-                            onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(1, overlay.text); toastSuccess('Saved to Bank A'); }}
-                          >Bank A</button>
-                          <button
-                            style={{ ...styles.toggleButton, borderColor: 'rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '10px' }}
-                            onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(2, overlay.text); toastSuccess('Saved to Bank B'); }}
-                          >Bank B</button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              <button onClick={() => addTextOverlay()} style={styles.addTextButton}>
-                + Add Text Overlay
-              </button>
-            </div>
-          </div>
-          )}
-        </div>
-
-        {/* ── Audio Info Bar ── */}
-        {selectedAudio && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '10px',
-            padding: '6px 12px', marginBottom: '4px',
-            backgroundColor: 'rgba(139, 92, 246, 0.1)',
-            border: '1px solid rgba(139, 92, 246, 0.2)',
-            borderRadius: '8px'
-          }}>
-            <span style={{ fontSize: '12px', color: theme.text.primary, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {selectedAudio.name}
-              {selectedAudio.isTrimmed && <span style={{ marginLeft: '6px', fontSize: '10px', padding: '1px 5px', backgroundColor: 'rgba(139,92,246,0.2)', borderRadius: '4px', color: '#a78bfa' }}>Trimmed</span>}
-            </span>
-            <button
-              onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}
-              style={{
-                padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
-                border: '1px solid rgba(139,92,246,0.3)', backgroundColor: 'transparent',
-                color: '#a78bfa', cursor: 'pointer'
-              }}
-            >Trim</button>
-            <button
-              onClick={() => {
-                if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; }
-                if (animationRef.current) cancelAnimationFrame(animationRef.current);
-                setSelectedAudio(null); setIsPlaying(false); setCurrentTime(0); setAudioDuration(0);
-                setSourceVideoMuted(false);
-              }}
-              style={{
-                padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
-                border: '1px solid rgba(239,68,68,0.3)', backgroundColor: 'transparent',
-                color: '#ef4444', cursor: 'pointer'
-              }}
-            >Remove</button>
-          </div>
-        )}
-
-        {/* ── Timeline Section ── */}
-        <div style={{ ...styles.timelineSection, position: 'relative' }}>
-          {/* Text Controls toggle */}
-          {!isMobile && (
-            <button
-              onClick={() => setShowTextPanel(p => !p)}
-              style={{
-                position: 'absolute', top: '4px', right: '8px', zIndex: 5,
-                padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
-                border: `1px solid ${showTextPanel ? theme.accent.primary : theme.border.default}`,
-                backgroundColor: showTextPanel ? theme.accent.primary + '22' : 'transparent',
-                color: showTextPanel ? theme.accent.primary : theme.text.secondary,
-                cursor: 'pointer'
-              }}
-            >
-              Text Controls
-            </button>
-          )}
-          <div
-            ref={timelineRef}
-            style={styles.timelineTrackArea}
-            onClick={(e) => {
-              if (playheadDragging) return;
-              if (e.target === e.currentTarget || e.target.dataset.timelineClickable) {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const clickX = e.clientX - rect.left;
-                const time = (clickX / rect.width) * (timelineDuration || 1);
-                handleSeek(Math.max(0, Math.min(timelineDuration || 0, time)));
-              }
-            }}
-          >
-            {/* Time Ruler */}
-            <div style={styles.timelineRuler}>
-              {timelineDuration > 0 && Array.from({ length: Math.ceil(timelineDuration) + 1 }, (_, i) => (
-                <div key={i} style={{ position: 'absolute', left: `${(i / timelineDuration) * 100}%`, top: 0, height: '100%' }}>
-                  <div style={{ width: '1px', height: i % 5 === 0 ? '10px' : '6px', backgroundColor: theme.border.subtle }} />
-                  {i % 2 === 0 && <span style={{ fontSize: '9px', color: theme.text.muted, position: 'absolute', top: '10px', transform: 'translateX(-50%)' }}>{i}s</span>}
-                </div>
-              ))}
-            </div>
-
-            {/* Text Overlay Track */}
-            <div style={styles.textTrack} data-timeline-clickable="true">
-              {textOverlays.map((overlay) => {
-                const startPct = timelineDuration > 0 ? (overlay.startTime / timelineDuration) * 100 : 0;
-                const widthPct = timelineDuration > 0 ? ((overlay.endTime - overlay.startTime) / timelineDuration) * 100 : 10;
-                const isSelected = editingTextId === overlay.id;
-                return (
-                  <div
-                    key={overlay.id}
-                    style={{
-                      position: 'absolute',
-                      left: `${startPct}%`,
-                      width: `${widthPct}%`,
-                      top: '2px',
-                      height: '24px',
-                      backgroundColor: isSelected ? '#9333ea' : theme.accent.primary,
-                      borderRadius: '4px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      padding: '0 4px',
-                      cursor: timelineDrag ? 'grabbing' : 'grab',
-                      overflow: 'hidden',
-                      border: isSelected ? '1px solid #a855f7' : '1px solid rgba(124,58,237,0.5)',
-                      boxShadow: isSelected ? '0 2px 8px rgba(168,85,247,0.4)' : 'none',
-                      zIndex: isSelected ? 10 : 5,
-                      transition: timelineDrag ? 'none' : 'background-color 0.15s'
-                    }}
-                    onMouseDown={(e) => handleTimelineDragStart(e, overlay.id, 'move')}
-                  >
-                    {/* Left resize handle */}
+                {/* Text Overlays on video */}
+                {textOverlays.map((overlay) => {
+                  const style = overlay.style || {};
+                  const pos = overlay.position || { x: 50, y: 50 };
+                  if (overlay.startTime !== undefined && overlay.endTime !== undefined) {
+                    if (currentTime < overlay.startTime || currentTime >= overlay.endTime) return null;
+                  }
+                  const displayText = style.textCase === 'upper' ? overlay.text.toUpperCase()
+                    : style.textCase === 'lower' ? overlay.text.toLowerCase()
+                    : overlay.text;
+                  return (
                     <div
-                      style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
-                      onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'left'); }}
-                    />
-                    <span style={{ fontSize: '10px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none', padding: '0 6px' }}>
-                      {overlay.text}
-                    </span>
-                    {/* Right resize handle */}
-                    <div
-                      style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
-                      onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'right'); }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Clip Track */}
-            <div style={styles.clipTrack}>
-              <div style={{
-                position: 'absolute', left: 0, top: '2px', right: 0, height: '40px',
-                backgroundColor: theme.bg.surface, borderRadius: '4px', overflow: 'hidden',
-                border: `1px solid ${theme.border.subtle}`
-              }}>
-                {clip && (clip.thumbnailUrl || clip.thumbnail) && (
-                  <img
-                    src={clip.thumbnailUrl || clip.thumbnail}
-                    alt=""
-                    style={{ width: '60px', height: '100%', objectFit: 'cover', opacity: 0.6 }}
-                  />
-                )}
-                <span style={{ position: 'absolute', left: '68px', top: '50%', transform: 'translateY(-50%)', fontSize: '10px', color: theme.text.secondary }}>
-                  {clip ? 'Clip' : 'No clip'}
-                </span>
-              </div>
-            </div>
-
-            {/* Added Audio Waveform Track (purple) — shown when external audio present */}
-            {selectedAudio && !selectedAudio.isSourceVideo && waveformData.length > 0 && (
-              <div style={styles.audioTrack}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)', zIndex: 2 }}>
-                  <span style={{ fontSize: '10px' }}>{'\uD83C\uDFB5'}</span>
-                  <input type="range" min="0" max="1" step="0.05" value={externalAudioVolume}
-                    onChange={e => setExternalAudioVolume(parseFloat(e.target.value))}
-                    style={{ width: '36px', height: '3px', accentColor: '#8b5cf6', cursor: 'pointer' }}
-                    title={`Added audio: ${Math.round(externalAudioVolume * 100)}%`}
-                    onClick={e => e.stopPropagation()}
-                  />
-                </div>
-                <div style={{ position: 'absolute', left: '68px', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: '1px' }}>
-                  {waveformData.map((amplitude, i) => (
-                    <div key={i} style={{
-                      flex: 1, minWidth: '1px', backgroundColor: 'rgba(139, 92, 246, 0.5)',
-                      height: `${amplitude * 100}%`, opacity: 0.6
-                    }} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Source Video Audio Waveform Track (blue) — shown when clip has audio */}
-            {clip && (clipWaveforms[clip.id || clip.sourceId] || []).length > 0 && (() => {
-              const data = clipWaveforms[clip.id || clip.sourceId] || [];
-              const hasExternal = selectedAudio && !selectedAudio.isSourceVideo;
-              return (
-                <div style={styles.audioTrack}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)', zIndex: 2 }}>
-                    <button
-                      onClick={e => { e.stopPropagation(); setSourceVideoMuted(m => !m); }}
+                      key={overlay.id}
+                      onMouseDown={(e) => handleTextMouseDown(e, overlay.id)}
+                      onClick={(e) => { e.stopPropagation(); setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
                       style={{
-                        background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '10px',
-                        opacity: (hasExternal && sourceVideoMuted) ? 0.4 : 1
+                        position: 'absolute', left: `${pos.x}%`, top: `${pos.y}%`, transform: 'translate(-50%, -50%)',
+                        cursor: draggingTextId === overlay.id ? 'grabbing' : 'grab',
+                        fontSize: `${(style.fontSize || 48) * (previewDims.width / 1080) * 2}px`,
+                        fontFamily: style.fontFamily || 'Inter, sans-serif', fontWeight: style.fontWeight || '600',
+                        color: style.color || '#ffffff', textAlign: style.textAlign || 'center',
+                        textShadow: style.outline ? `2px 2px 0 ${style.outlineColor || '#000'}, -2px -2px 0 ${style.outlineColor || '#000'}, 2px -2px 0 ${style.outlineColor || '#000'}, -2px 2px 0 ${style.outlineColor || '#000'}` : 'none',
+                        userSelect: 'none', WebkitUserSelect: 'none', whiteSpace: 'nowrap', zIndex: 10,
+                        padding: '4px 8px', borderRadius: '4px',
+                        border: editingTextId === overlay.id ? `1px dashed ${theme.accent.primary}99` : '1px dashed transparent'
                       }}
-                      title={sourceVideoMuted ? 'Unmute source audio' : 'Mute source audio'}
-                    >{sourceVideoMuted ? '\uD83D\uDD07' : '\uD83C\uDFAC'}</button>
-                    {hasExternal && (
-                      <input type="range" min="0" max="1" step="0.05" value={sourceVideoVolume}
-                        onChange={e => setSourceVideoVolume(parseFloat(e.target.value))}
-                        style={{ width: '36px', height: '3px', accentColor: '#3b82f6', cursor: 'pointer' }}
-                        title={`Source audio: ${Math.round(sourceVideoVolume * 100)}%`}
-                        onClick={e => e.stopPropagation()}
-                      />
+                    >
+                      {displayText}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Variation Tabs */}
+              <div className="flex w-full overflow-auto gap-1">
+                {allVideos.map((video, idx) => (
+                  <div
+                    key={video.id}
+                    onClick={() => switchToVideo(idx)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium cursor-pointer whitespace-nowrap flex-shrink-0 transition-all ${idx === activeVideoIndex ? 'bg-brand-600/15 border border-brand-600/30 text-[#ffffffff]' : 'bg-neutral-800/50 border border-transparent text-neutral-400'}`}
+                  >
+                    {video.isTemplate ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" /></svg>
+                    ) : (
+                      <span style={{ fontSize: '10px', opacity: 0.6 }}>#{idx}</span>
+                    )}
+                    <span>{video.isTemplate ? 'Template' : video.name || `Video ${idx}`}</span>
+                    {!video.isTemplate && (
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteVideo(idx); }} className="bg-transparent border-none text-neutral-500 text-[14px] cursor-pointer px-0.5 ml-0.5 leading-none">×</button>
                     )}
                   </div>
-                  <div style={{ position: 'absolute', left: hasExternal ? '68px' : '20px', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: '1px' }}>
-                    {data.map((amplitude, i) => (
-                      <div key={i} style={{
-                        flex: 1, minWidth: '1px', backgroundColor: 'rgba(59, 130, 246, 0.4)',
-                        height: `${amplitude * 100}%`, opacity: (hasExternal && sourceVideoMuted) ? 0.3 : 0.6
-                      }} />
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
+                ))}
+              </div>
 
-            {/* Playhead — draggable */}
-            {timelineDuration > 0 && (
-              <div
-                style={{
-                  position: 'absolute',
-                  left: `${(currentTime / timelineDuration) * 100}%`,
-                  top: 0,
-                  bottom: 0,
-                  width: '2px',
-                  backgroundColor: '#ef4444',
-                  zIndex: 20,
-                  pointerEvents: 'auto',
-                  cursor: 'ew-resize',
-                  transition: (isPlaying && !playheadDragging) ? 'none' : playheadDragging ? 'none' : 'left 0.1s ease-out'
-                }}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setPlayheadDragging(true);
-                  document.body.style.userSelect = 'none';
-                  document.body.style.WebkitUserSelect = 'none';
-                  const wasPlaying = isPlaying;
-                  if (isPlaying) { videoRef.current?.pause(); audioRef.current?.pause(); cancelAnimationFrame(animationRef.current); setIsPlaying(false); }
-                  const handleDragMove = (moveE) => {
-                    const rect = timelineRef.current?.getBoundingClientRect();
-                    if (!rect) return;
-                    const pct = Math.max(0, Math.min(1, (moveE.clientX - rect.left) / rect.width));
-                    const t = pct * timelineDuration;
-                    handleSeek(t);
-                  };
-                  const handleDragEnd = () => {
-                    setPlayheadDragging(false);
-                    document.body.style.userSelect = '';
-                    document.body.style.WebkitUserSelect = '';
-                    window.removeEventListener('mousemove', handleDragMove);
-                    window.removeEventListener('mouseup', handleDragEnd);
-                    if (wasPlaying) { videoRef.current?.play(); if (audioRef.current?.src) audioRef.current.play().catch(() => {}); animationRef.current = requestAnimationFrame(playbackLoop); setIsPlaying(true); }
-                  };
-                  window.addEventListener('mousemove', handleDragMove);
-                  window.addEventListener('mouseup', handleDragEnd);
-                }}
-              >
-                {/* Wider grab area */}
-                <div style={{ position: 'absolute', left: '-6px', right: '-6px', top: 0, bottom: 0, cursor: 'ew-resize' }} />
-                <div style={{
-                  position: 'absolute',
-                  top: '-2px',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  width: '10px',
-                  height: '10px',
-                  backgroundColor: '#ef4444',
-                  borderRadius: '2px',
-                  clipPath: 'polygon(0 0, 100% 0, 50% 100%)',
-                  cursor: 'ew-resize'
-                }} />
+              {/* Generation Controls */}
+              <div className="flex w-full items-center gap-2">
+                <ToggleGroup value={keepTemplateText} onValueChange={(v) => v && setKeepTemplateText(v)}>
+                  <ToggleGroup.Item value="none">Random</ToggleGroup.Item>
+                  <ToggleGroup.Item value="all">Keep Text</ToggleGroup.Item>
+                </ToggleGroup>
+                <input
+                  type="number" min={1} max={50} value={generateCount}
+                  onChange={(e) => setGenerateCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
+                  className="w-12 px-2 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[13px] text-center outline-none"
+                />
+                <Button variant="brand-primary" size="small" onClick={executeGeneration} disabled={isGenerating}>
+                  {isGenerating ? 'Remixing...' : 'Remix'}
+                </Button>
+              </div>
+
+              {/* Reroll */}
+              {(visibleVideos.length > 0 || (category?.videos?.length || 0) > 1) && (
+                <Button variant="neutral-secondary" size="small" icon={<FeatherRefreshCw />} onClick={handleReroll}>Re-roll</Button>
+              )}
+
+              {/* Playback Controls */}
+              <div className="flex w-full items-center justify-center gap-3">
+                <IconButton variant="neutral-tertiary" size="small" icon={<FeatherSkipBack />} onClick={() => handleSeek(0)} />
+                <IconButton variant="neutral-secondary" size="medium" icon={isPlaying ? <FeatherPause /> : <FeatherPlay />} onClick={handlePlayPause} />
+                <IconButton variant="neutral-tertiary" size="small" icon={<FeatherSkipForward />} onClick={() => handleSeek(timelineDuration)} />
+                <IconButton variant="neutral-tertiary" size="small" icon={isMuted ? <FeatherVolumeX /> : <FeatherVolume2 />} onClick={() => setIsMuted(!isMuted)} />
+              </div>
+
+            </div>
+
+            {/* ── MOBILE TOOL TOOLBAR ── */}
+            {isMobile && (
+              <div className="flex justify-around items-center border-t border-b border-neutral-800 bg-[#0a0a0aff] flex-shrink-0 py-1">
+                {[
+                  { id: 'clips', label: 'Clips', icon: '\uD83C\uDFAC' },
+                  { id: 'text', label: 'Text', icon: '\uD83D\uDCDD' }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setMobileToolTab(mobileToolTab === tab.id ? null : tab.id)}
+                    className={`flex flex-col items-center justify-center gap-0.5 min-w-[44px] min-h-[44px] px-3 py-1.5 rounded-lg border-none cursor-pointer transition-all ${mobileToolTab === tab.id ? 'bg-brand-600/20 text-brand-400' : 'bg-transparent text-neutral-400'}`}
+                  >
+                    <span style={{ fontSize: '16px' }}>{tab.icon}</span>
+                    <span style={{ fontSize: '10px' }}>{tab.label}</span>
+                  </button>
+                ))}
               </div>
             )}
-          </div>
-        </div>
 
-        {/* ── Editor Toolbar ── */}
-        <EditorToolbar
-          canUndo={canUndo}
-          canRedo={canRedo}
-          onUndo={handleUndo}
-          onRedo={handleRedo}
-          onReroll={visibleVideos.length > 0 || category?.videos?.length > 1 ? handleReroll : null}
-          rerollDisabled={!visibleVideos.length && !category?.videos?.length}
-          onAddText={() => addTextOverlay()}
-          onDelete={null}
-          audioTracks={libraryAudio}
-          onSelectAudio={(audio) => {
-            setAudioToTrim(audio);
-            setShowAudioTrimmer(true);
-          }}
-          onUploadAudio={() => audioFileInputRef.current?.click()}
-          lyrics={lyricsBank}
-          onSelectLyric={(lyric) => addTextOverlay(lyric.content || lyric.title || '')}
-          onAddNewLyrics={onAddLyrics ? () => onAddLyrics({ title: 'New Lyrics', content: '' }) : null}
-        />
-
-        {/* Hidden audio file input */}
-        <input
-          ref={audioFileInputRef}
-          type="file"
-          accept="audio/*"
-          style={{ display: 'none' }}
-          onChange={handleAudioUpload}
-        />
-
-        {/* ── Tab Bar (bottom) with Generate + keepText ── */}
-        <div style={styles.tabBar}>
-          <div style={styles.tabScroll}>
-            {allVideos.map((video, idx) => (
-              <div
-                key={video.id}
-                onClick={() => switchToVideo(idx)}
-                style={{
-                  ...styles.tab,
-                  ...(idx === activeVideoIndex ? styles.tabActive : {})
-                }}
-              >
-                {video.isTemplate ? (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                    <line x1="3" y1="9" x2="21" y2="9" />
-                    <line x1="9" y1="21" x2="9" y2="9" />
-                  </svg>
-                ) : (
-                  <span style={{ fontSize: '10px', opacity: 0.6 }}>#{idx}</span>
+            {/* ── MOBILE TOOL PANEL ── */}
+            {isMobile && mobileToolTab && (
+              <div className="flex-1 overflow-auto bg-[#1a1a1aff] border-t border-neutral-800 min-h-0">
+                {mobileToolTab === 'clips' && (
+                  <div className="p-3">
+                    <select value={selectedCollection} onChange={(e) => setSelectedCollection(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#0a0a0aff] border border-neutral-800 rounded-lg text-[#ffffffff] text-[13px] outline-none cursor-pointer mb-2 min-h-[44px]">
+                      <option value="category">Selected Clips</option>
+                      <option value="all">All Videos (Library)</option>
+                      {collections.map(col => (<option key={col.id} value={col.id}>{col.name}</option>))}
+                    </select>
+                    <div className="grid grid-cols-3 gap-2">
+                      {visibleVideos.map((video, i) => (
+                        <div key={video.id || i} onClick={() => setClip(video)}
+                          className={`cursor-pointer p-1 rounded-md border-2 min-h-[44px] ${clip?.id === video.id ? 'border-brand-600' : 'border-transparent'}`}>
+                          <div className="w-full aspect-video rounded overflow-hidden bg-[#0a0a0aff]">
+                            {(video.thumbnailUrl || video.thumbnail) ? (
+                              <img src={video.thumbnailUrl || video.thumbnail} alt="" className="w-full h-full object-cover" />
+                            ) : (<div className="w-full h-full flex items-center justify-center text-xl">🎬</div>)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
-                <span>{video.isTemplate ? 'Template' : video.name || `Video ${idx}`}</span>
-                {!video.isTemplate && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDeleteVideo(idx); }}
-                    style={styles.tabDeleteButton}
-                  >×</button>
+                {mobileToolTab === 'text' && (
+                  <div className="p-3">
+                    {textOverlays.map((overlay, idx) => (
+                      <div key={overlay.id} onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
+                        className={`mb-1.5 p-2.5 rounded-lg cursor-pointer ${editingTextId === overlay.id ? 'bg-brand-600/10 border border-brand-600/30' : 'bg-neutral-800/50 border border-neutral-800'}`}>
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-[11px] text-neutral-400">Overlay {idx + 1}</span>
+                          <button onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }}
+                            className="bg-transparent border-none text-neutral-500 text-[16px] cursor-pointer min-w-[44px] min-h-[44px]">×</button>
+                        </div>
+                        <div className="text-[13px] text-[#ffffffff]">{overlay.text}</div>
+                      </div>
+                    ))}
+                    <button onClick={() => addTextOverlay()} className="w-full p-2.5 rounded-lg border border-dashed border-brand-600/40 bg-transparent text-brand-400 text-[12px] cursor-pointer min-h-[44px]">+ Add Text</button>
+                  </div>
                 )}
               </div>
-            ))}
-          </div>
-          {/* keepText + Generate */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-            {[
-              { value: 'none', label: 'Random' },
-              { value: 'all', label: 'Keep Text' }
-            ].map(opt => (
-              <button
-                key={opt.value}
-                onClick={() => setKeepTemplateText(opt.value)}
-                style={{
-                  padding: '3px 6px', borderRadius: '4px', border: 'none',
-                  backgroundColor: keepTemplateText === opt.value ? 'rgba(99,102,241,0.6)' : 'transparent',
-                  color: keepTemplateText === opt.value ? '#fff' : theme.text.muted,
-                  fontSize: '10px', fontWeight: keepTemplateText === opt.value ? '700' : '500',
-                  cursor: 'pointer'
+            )}
+
+            {/* ═══ TIMELINE ═══ */}
+            <div className="flex w-full flex-col items-start border-t border-neutral-800 bg-[#1a1a1aff] px-6 py-4 flex-shrink-0">
+              <div className="flex w-full items-center justify-between mb-3">
+                <span className="text-heading-3 font-heading-3 text-[#ffffffff]">Timeline</span>
+              </div>
+              <div
+                ref={timelineRef}
+                className="flex w-full flex-col gap-2 relative"
+                style={{ minHeight: '140px', cursor: 'pointer', userSelect: 'none' }}
+                onClick={(e) => {
+                  if (playheadDragging) return;
+                  if (e.target === e.currentTarget || e.target.dataset.timelineClickable) {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const clickX = e.clientX - rect.left;
+                    const time = (clickX / rect.width) * (timelineDuration || 1);
+                    handleSeek(Math.max(0, Math.min(timelineDuration || 0, time)));
+                  }
                 }}
-              >{opt.label}</button>
-            ))}
-            <input
-              type="number" min={1} max={50} value={generateCount}
-              onChange={(e) => setGenerateCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
-              style={{ width: '40px', padding: '3px 4px', borderRadius: '4px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.input, color: theme.text.primary, fontSize: '11px', textAlign: 'center' }}
-            />
-            <button
-              onClick={executeGeneration}
-              disabled={isGenerating}
-              style={{
-                padding: '3px 10px', borderRadius: '4px', border: 'none',
-                background: isGenerating ? theme.bg.elevated : 'linear-gradient(135deg, #8B5CF6, #7C3AED)',
-                color: '#fff', fontSize: '11px', fontWeight: '600',
-                cursor: isGenerating ? 'not-allowed' : 'pointer'
-              }}
-            >{isGenerating ? '...' : 'Generate'}</button>
+              >
+                {/* Text Track */}
+                <div className="flex w-full items-center gap-3">
+                  <span className="w-20 text-caption font-caption text-neutral-400 text-right shrink-0">Text</span>
+                  <div className="flex-1 h-7 rounded-md border border-neutral-800 bg-black relative" data-timeline-clickable="true">
+                    {textOverlays.map((overlay) => {
+                      const startPct = timelineDuration > 0 ? (overlay.startTime / timelineDuration) * 100 : 0;
+                      const widthPct = timelineDuration > 0 ? ((overlay.endTime - overlay.startTime) / timelineDuration) * 100 : 10;
+                      const isSelected = editingTextId === overlay.id;
+                      return (
+                        <div key={overlay.id} style={{
+                          position: 'absolute', left: `${startPct}%`, width: `${widthPct}%`, top: '2px', height: '24px',
+                          backgroundColor: isSelected ? '#9333ea' : theme.accent.primary, borderRadius: '4px',
+                          display: 'flex', alignItems: 'center', padding: '0 4px', cursor: timelineDrag ? 'grabbing' : 'grab', overflow: 'hidden',
+                          border: isSelected ? '1px solid #a855f7' : '1px solid rgba(124,58,237,0.5)',
+                          zIndex: isSelected ? 10 : 5
+                        }} onMouseDown={(e) => handleTimelineDragStart(e, overlay.id, 'move')}>
+                          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
+                            onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'left'); }} />
+                          <span style={{ fontSize: '10px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none', padding: '0 6px' }}>{overlay.text}</span>
+                          <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
+                            onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'right'); }} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Clip Track */}
+                <div className="flex w-full items-center gap-3">
+                  <span className="w-20 text-caption font-caption text-neutral-400 text-right shrink-0">Clip</span>
+                  <div className="flex-1 h-10 rounded-md border border-neutral-800 bg-black relative overflow-hidden">
+                    {clip && (clip.thumbnailUrl || clip.thumbnail) && (
+                      <img src={clip.thumbnailUrl || clip.thumbnail} alt="" style={{ width: '60px', height: '100%', objectFit: 'cover', opacity: 0.6 }} />
+                    )}
+                    <span style={{ position: 'absolute', left: '68px', top: '50%', transform: 'translateY(-50%)', fontSize: '10px', color: theme.text.secondary }}>
+                      {clip ? 'Clip' : 'No clip'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Audio Track (external) */}
+                {selectedAudio && !selectedAudio.isSourceVideo && waveformData.length > 0 && (
+                  <div className="flex w-full items-center gap-3">
+                    <span className="w-20 text-caption font-caption text-neutral-400 text-right shrink-0">Audio</span>
+                    <div className="flex-1 h-8 rounded-md border border-neutral-800 bg-black relative overflow-hidden">
+                      <div style={{ position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', gap: '3px', zIndex: 3, backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: '4px', padding: '2px 5px' }}>
+                        <span style={{ fontSize: '10px' }}>{'\uD83C\uDFB5'}</span>
+                        <input type="range" min="0" max="1" step="0.05" value={externalAudioVolume}
+                          onChange={e => setExternalAudioVolume(parseFloat(e.target.value))}
+                          style={{ width: '36px', height: '3px', accentColor: '#22c55e', cursor: 'pointer' }}
+                          onClick={e => e.stopPropagation()} />
+                      </div>
+                      <div style={{ position: 'absolute', left: '68px', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: '1px' }}>
+                        {waveformData.map((amplitude, i) => (
+                          <div key={i} style={{ flex: 1, minWidth: '1px', backgroundColor: 'rgba(34, 197, 94, 0.5)', height: `${amplitude * 100}%`, opacity: 0.6 }} />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Source Audio Track */}
+                {clip && (clipWaveforms[clip.id || clip.sourceId] || []).length > 0 && (() => {
+                  const data = clipWaveforms[clip.id || clip.sourceId] || [];
+                  const hasExternal = selectedAudio && !selectedAudio.isSourceVideo;
+                  return (
+                    <div className="flex w-full items-center gap-3">
+                      <span className="w-20 text-caption font-caption text-neutral-400 text-right shrink-0">Source</span>
+                      <div className="flex-1 h-8 rounded-md border border-neutral-800 bg-black relative overflow-hidden">
+                        <div style={{ position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', gap: '3px', zIndex: 3, backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: '4px', padding: '2px 5px' }}>
+                          <button onClick={e => { e.stopPropagation(); setSourceVideoMuted(m => !m); }}
+                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '10px', opacity: (hasExternal && sourceVideoMuted) ? 0.4 : 1 }}
+                          >{sourceVideoMuted ? '\uD83D\uDD07' : '\uD83C\uDFAC'}</button>
+                          {hasExternal && (
+                            <input type="range" min="0" max="1" step="0.05" value={sourceVideoVolume}
+                              onChange={e => setSourceVideoVolume(parseFloat(e.target.value))}
+                              style={{ width: '36px', height: '3px', accentColor: '#f59e0b', cursor: 'pointer' }}
+                              onClick={e => e.stopPropagation()} />
+                          )}
+                        </div>
+                        <div style={{ position: 'absolute', left: hasExternal ? '68px' : '20px', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: '1px' }}>
+                          {data.map((amplitude, i) => (
+                            <div key={i} style={{ flex: 1, minWidth: '1px', backgroundColor: 'rgba(245, 158, 11, 0.4)', height: `${amplitude * 100}%`, opacity: (hasExternal && sourceVideoMuted) ? 0.3 : 0.6 }} />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Playhead */}
+                {timelineDuration > 0 && (
+                  <div style={{
+                    position: 'absolute', left: `${(currentTime / timelineDuration) * 100}%`, top: 0, bottom: 0,
+                    width: '2px', backgroundColor: '#ef4444', zIndex: 20, pointerEvents: 'auto', cursor: 'ew-resize',
+                    transition: (isPlaying && !playheadDragging) ? 'none' : playheadDragging ? 'none' : 'left 0.1s ease-out'
+                  }} onMouseDown={(e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    setPlayheadDragging(true);
+                    document.body.style.userSelect = 'none';
+                    const wasPlaying = isPlaying;
+                    if (isPlaying) { videoRef.current?.pause(); audioRef.current?.pause(); cancelAnimationFrame(animationRef.current); setIsPlaying(false); }
+                    const handleDragMove = (moveE) => {
+                      const rect = timelineRef.current?.getBoundingClientRect();
+                      if (!rect) return;
+                      const pct = Math.max(0, Math.min(1, (moveE.clientX - rect.left) / rect.width));
+                      handleSeek(pct * timelineDuration);
+                    };
+                    const handleDragEnd = () => {
+                      setPlayheadDragging(false); document.body.style.userSelect = '';
+                      window.removeEventListener('mousemove', handleDragMove);
+                      window.removeEventListener('mouseup', handleDragEnd);
+                      if (wasPlaying) { videoRef.current?.play(); if (audioRef.current?.src) audioRef.current.play().catch(() => {}); animationRef.current = requestAnimationFrame(playbackLoop); setIsPlaying(true); }
+                    };
+                    window.addEventListener('mousemove', handleDragMove);
+                    window.addEventListener('mouseup', handleDragEnd);
+                  }}>
+                    <div style={{ position: 'absolute', left: '-6px', right: '-6px', top: 0, bottom: 0, cursor: 'ew-resize' }} />
+                    <div style={{ position: 'absolute', top: '-2px', left: '50%', transform: 'translateX(-50%)', width: '10px', height: '10px', backgroundColor: '#ef4444', borderRadius: '2px', clipPath: 'polygon(0 0, 100% 0, 50% 100%)' }} />
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
+
+          {/* RIGHT: Sidebar */}
+          {!isMobile && (
+            <div className="flex w-96 flex-none flex-col items-start self-stretch border-l border-neutral-800 bg-[#1a1a1aff] overflow-auto">
+              <div className="flex w-full flex-col items-start">
+                {renderCollapsibleSection('audio', 'Audio', (
+                  <div className="flex flex-col gap-3">
+                    {selectedAudio ? (
+                      <div className="flex items-center gap-2 rounded-md border border-neutral-800 bg-black px-3 py-2">
+                        <FeatherMusic className="text-neutral-400" style={{ width: 16, height: 16 }} />
+                        <span className="text-body font-body text-[#ffffffff] truncate flex-1">{selectedAudio.name}</span>
+                        {selectedAudio.isTrimmed && <Badge variant="neutral">Trimmed</Badge>}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 rounded-md border border-neutral-800 bg-black px-3 py-2">
+                        <FeatherMusic className="text-neutral-500" style={{ width: 16, height: 16 }} />
+                        <span className="text-body font-body text-neutral-500">No audio selected</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      {selectedAudio && (
+                        <>
+                          <Button variant="neutral-secondary" size="small" icon={<FeatherScissors />} onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}>Trim</Button>
+                          <Button variant="destructive-tertiary" size="small" icon={<FeatherTrash2 />} onClick={() => {
+                            if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; }
+                            if (animationRef.current) cancelAnimationFrame(animationRef.current);
+                            setSelectedAudio(null); setIsPlaying(false); setCurrentTime(0); setAudioDuration(0); setSourceVideoMuted(false);
+                          }}>Remove</Button>
+                        </>
+                      )}
+                    </div>
+                    <Button className="w-full" variant="neutral-secondary" size="small" icon={<FeatherUpload />} onClick={() => audioFileInputRef.current?.click()}>
+                      {selectedAudio ? 'Change Audio' : 'Upload Audio'}
+                    </Button>
+                    {libraryAudio.length > 0 && (
+                      <div className="flex flex-col gap-1 max-h-[120px] overflow-y-auto">
+                        <span className="text-caption font-caption text-neutral-400">Library Audio</span>
+                        {libraryAudio.map(audio => (
+                          <div key={audio.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-neutral-800 text-[12px] text-[#ffffffff]"
+                            onClick={() => { setAudioToTrim(audio); setShowAudioTrimmer(true); }}>
+                            <FeatherMusic className="w-3.5 h-3.5 opacity-60 flex-shrink-0" />
+                            <span className="truncate">{audio.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {renderCollapsibleSection('clips', 'Clips', (
+                  <div className="flex flex-col gap-3">
+                    <select value={selectedCollection} onChange={(e) => setSelectedCollection(e.target.value)}
+                      className="w-full px-3 py-2 bg-black border border-neutral-800 rounded-md text-[#ffffffff] text-[13px] outline-none cursor-pointer">
+                      <option value="category">Selected Clips</option>
+                      <option value="all">All Videos (Library)</option>
+                      {collections.map(col => (<option key={col.id} value={col.id}>{col.name}</option>))}
+                    </select>
+                    <div className="flex justify-between items-center">
+                      <span className="text-caption font-caption text-neutral-400">{visibleVideos.length} clips</span>
+                      <CloudImportButton artistId={artistId} db={db} mediaType="video" compact onImportMedia={(files) => {
+                        const newVids = files.map((f, i) => ({ id: `import_${Date.now()}_${i}`, name: f.name, url: f.url, localUrl: f.localUrl, type: 'video' }));
+                        setLibraryMedia(prev => [...prev, ...newVids]);
+                      }} />
+                    </div>
+                    {visibleVideos.length === 0 ? (
+                      <div className="py-4 text-center text-neutral-500 text-[13px]">No videos in this collection</div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {visibleVideos.map((video, i) => {
+                          const isActive = clip?.id === video.id;
+                          return (
+                            <div key={video.id || i}
+                              className={`cursor-pointer p-1 rounded-md border-2 transition-colors relative ${isActive ? 'border-brand-600' : 'border-transparent'}`}
+                              onClick={() => { setClip(video); if (video.id && artistId) incrementUseCount(artistId, video.id); }}>
+                              {isActive && <div className="absolute top-1 right-1 z-[2] w-[18px] h-[18px] rounded-full bg-brand-600 flex items-center justify-center text-[11px] text-white font-bold">✓</div>}
+                              <div className="w-full aspect-video rounded overflow-hidden bg-[#0a0a0aff]">
+                                {(video.thumbnailUrl || video.thumbnail) ? (
+                                  <img src={video.thumbnailUrl || video.thumbnail} alt={video.name} className="w-full h-full object-cover" />
+                                ) : (<div className="w-full h-full flex items-center justify-center text-xl">🎬</div>)}
+                              </div>
+                              <div className="text-[10px] text-neutral-400 overflow-hidden text-ellipsis whitespace-nowrap mt-1">
+                                {(video.name || video.metadata?.originalName || 'Clip').substring(0, 20)}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {/* Text Banks */}
+                    {(() => {
+                      return (
+                        <div className="flex flex-col gap-3 pt-3 border-t border-neutral-800">
+                          <div>
+                            <div className="text-body-bold font-body-bold text-teal-400 mb-2">Text Bank A</div>
+                            <div className="flex gap-1.5 mb-2">
+                              <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
+                                placeholder="Add text..." className="flex-1 px-2.5 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[12px] outline-none" />
+                              <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} />
+                            </div>
+                            {videoTextBank1.map((text, idx) => (
+                              <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-300">
+                                <span className="flex-1 text-[12px] cursor-pointer" onClick={() => addTextOverlay(text)}>{text}</span>
+                                <button onClick={() => handleRemoveFromVideoTextBank(1, idx)} className="bg-transparent border-none text-neutral-500 text-[14px] cursor-pointer px-1">×</button>
+                              </div>
+                            ))}
+                            {videoTextBank1.length === 0 && <div className="text-[11px] text-neutral-500">No text added yet</div>}
+                          </div>
+                          <div>
+                            <div className="text-body-bold font-body-bold text-amber-400 mb-2">Text Bank B</div>
+                            <div className="flex gap-1.5 mb-2">
+                              <input value={newTextB} onChange={(e) => setNewTextB(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
+                                placeholder="Add text..." className="flex-1 px-2.5 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[12px] outline-none" />
+                              <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} />
+                            </div>
+                            {videoTextBank2.map((text, idx) => (
+                              <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-300">
+                                <span className="flex-1 text-[12px] cursor-pointer" onClick={() => addTextOverlay(text)}>{text}</span>
+                                <button onClick={() => handleRemoveFromVideoTextBank(2, idx)} className="bg-transparent border-none text-neutral-500 text-[14px] cursor-pointer px-1">×</button>
+                              </div>
+                            ))}
+                            {videoTextBank2.length === 0 && <div className="text-[11px] text-neutral-500">No text added yet</div>}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ))}
+
+                {renderCollapsibleSection('lyrics', 'Lyrics', (
+                  <div className="flex flex-col gap-3">
+                    <span className="text-body font-body text-neutral-400">
+                      {lyricsBank.length > 0 ? `${lyricsBank.length} lyrics in bank` : 'No lyrics in bank'}
+                    </span>
+                    {lyricsBank.map(lyric => (
+                      <div key={lyric.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-neutral-800 text-[12px] text-[#ffffffff]"
+                        onClick={() => addTextOverlay(lyric.content || lyric.title || '')}>
+                        <FeatherDatabase className="w-3.5 h-3.5 opacity-60 flex-shrink-0" />
+                        <span className="truncate">{lyric.title || lyric.content?.slice(0, 30) || 'Untitled'}</span>
+                      </div>
+                    ))}
+                    {selectedAudio && (
+                      <Button variant="neutral-secondary" size="small" icon={<FeatherMic />} onClick={() => setShowTranscriber(true)}>
+                        AI Transcribe
+                      </Button>
+                    )}
+                  </div>
+                ))}
+
+                {renderCollapsibleSection('textStyle', 'Text Style', (
+                  <div className="flex flex-col gap-3">
+                    <Button variant="brand-secondary" size="small" icon={<FeatherPlus />} onClick={() => addTextOverlay()}>Add Text Overlay</Button>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-body-bold font-body-bold text-[#ffffffff] mb-1">Text Overlays</span>
+                      {textOverlays.length === 0 && <p className="text-[12px] text-neutral-500">No text overlays yet</p>}
+                      {textOverlays.map((overlay, idx) => {
+                        const isSelected = editingTextId === overlay.id;
+                        return (
+                          <div key={overlay.id} onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
+                            className={`p-2.5 rounded-lg cursor-pointer transition-all ${isSelected ? 'bg-brand-600/10 border border-brand-600/30' : 'bg-neutral-800/50 border border-neutral-800'}`}>
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-[11px] text-neutral-400">
+                                Overlay {idx + 1}
+                                {overlay.startTime !== undefined && <span className="ml-1.5 text-[9px] text-neutral-500">{overlay.startTime.toFixed(1)}s – {overlay.endTime.toFixed(1)}s</span>}
+                              </span>
+                              <button onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} className="bg-transparent border-none text-neutral-500 text-[16px] cursor-pointer px-1">×</button>
+                            </div>
+                            {isSelected ? (
+                              <input value={editingTextValue} onChange={(e) => setEditingTextValue(e.target.value)}
+                                onBlur={() => updateTextOverlay(overlay.id, { text: editingTextValue })}
+                                onKeyDown={(e) => { if (e.key === 'Enter') { updateTextOverlay(overlay.id, { text: editingTextValue }); e.target.blur(); } }}
+                                className="w-full px-2 py-1.5 rounded border border-brand-600/30 bg-black text-[#ffffffff] text-[13px] outline-none" autoFocus />
+                            ) : (
+                              <div className="text-[13px] text-[#ffffffff]">{overlay.text}</div>
+                            )}
+                            {isSelected && (
+                              <div className="mt-2 flex flex-col gap-1.5 pt-2 border-t border-neutral-800">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] text-neutral-400 min-w-[34px]">Font</span>
+                                  <select value={overlay.style.fontFamily} onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, fontFamily: e.target.value } })}
+                                    className="flex-1 px-1.5 py-0.5 rounded border border-neutral-800 bg-black text-[#ffffffff] text-[11px]">
+                                    <option value="Inter, sans-serif">Sans</option>
+                                    <option value="'Playfair Display', serif">Serif</option>
+                                    <option value="'Space Grotesk', sans-serif">Grotesk</option>
+                                    <option value="monospace">Mono</option>
+                                  </select>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] text-neutral-400 min-w-[34px]">Size</span>
+                                  <button className="px-2 py-0.5 rounded border border-neutral-800 bg-neutral-800/50 text-[#ffffffff] text-[11px] cursor-pointer"
+                                    onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.max(16, overlay.style.fontSize - 4) } }); }}>A-</button>
+                                  <span className="text-[11px] text-[#ffffffff] min-w-[26px] text-center">{overlay.style.fontSize}</span>
+                                  <button className="px-2 py-0.5 rounded border border-neutral-800 bg-neutral-800/50 text-[#ffffffff] text-[11px] cursor-pointer"
+                                    onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.min(120, overlay.style.fontSize + 4) } }); }}>A+</button>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] text-neutral-400 min-w-[34px]">Color</span>
+                                  <input type="color" value={overlay.style.color} onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, color: e.target.value } })} className="w-6 h-6 rounded border-0 cursor-pointer" />
+                                  <span className="text-[10px] text-neutral-400 ml-2">Outline</span>
+                                  <button className={`px-2 py-0.5 rounded border text-[10px] cursor-pointer ${overlay.style.outline ? 'bg-brand-600/20 border-brand-600 text-brand-400' : 'border-neutral-800 text-neutral-400'}`}
+                                    onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, outline: !overlay.style.outline } }); }}>
+                                    {overlay.style.outline ? 'On' : 'Off'}
+                                  </button>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] text-neutral-400 min-w-[34px]">Align</span>
+                                  {['left', 'center', 'right'].map(align => (
+                                    <button key={align} className={`px-2 py-0.5 rounded border text-[10px] cursor-pointer ${overlay.style.textAlign === align ? 'bg-brand-600/20 border-brand-600 text-brand-400' : 'border-neutral-800 text-neutral-400'}`}
+                                      onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, textAlign: align } }); }}>
+                                      {align.charAt(0).toUpperCase() + align.slice(1)}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="flex items-center gap-1 border-t border-neutral-800 pt-1.5 mt-0.5">
+                                  <span className="text-[10px] text-neutral-400">Save to:</span>
+                                  <button className="px-2 py-0.5 rounded border border-teal-500/30 text-teal-500 text-[10px] cursor-pointer bg-transparent"
+                                    onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(1, overlay.text); toastSuccess('Saved to Bank A'); }}>Bank A</button>
+                                  <button className="px-2 py-0.5 rounded border border-amber-500/30 text-amber-500 text-[10px] cursor-pointer bg-transparent"
+                                    onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(2, overlay.text); toastSuccess('Saved to Bank B'); }}>Bank B</button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Hidden Audio Element ── */}
@@ -2175,15 +1557,15 @@ const SoloClipEditor = ({
 
         {/* ── Close Confirmation ── */}
         {showCloseConfirm && (
-          <div style={styles.confirmOverlay}>
-            <div style={styles.confirmModal}>
+          <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-[100]">
+            <div className="bg-neutral-900 rounded-xl p-6 max-w-[360px] w-full border border-neutral-800">
               <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', color: theme.text.primary }}>Close editor?</h3>
               <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: theme.text.secondary }}>
                 You have unsaved work. Are you sure you want to close?
               </p>
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                <button onClick={() => setShowCloseConfirm(false)} style={styles.confirmKeepButton}>Keep Editing</button>
-                <button onClick={() => { setShowCloseConfirm(false); onClose(); }} style={styles.confirmCloseButton}>Close Anyway</button>
+                <Button variant="neutral-secondary" size="small" onClick={() => setShowCloseConfirm(false)}>Keep Editing</Button>
+                <Button variant="destructive-primary" size="small" onClick={() => { setShowCloseConfirm(false); onClose(); }}>Close Anyway</Button>
               </div>
             </div>
           </div>
@@ -2192,686 +1574,5 @@ const SoloClipEditor = ({
     </div>
   );
 };
-
-// ── Styles ──
-const getStyles = (theme) => ({
-  overlay: {
-    position: 'fixed',
-    inset: 0,
-    backgroundColor: theme.overlay.heavy,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10000,
-    padding: '10px'
-  },
-  modal: {
-    backgroundColor: theme.bg.input,
-    borderRadius: '12px',
-    border: `1px solid ${theme.border.subtle}`,
-    width: '100%',
-    maxWidth: '1400px',
-    height: '92vh',
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden'
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '10px 16px',
-    borderBottom: `1px solid ${theme.border.subtle}`,
-    flexShrink: 0
-  },
-  headerTitle: {
-    margin: 0,
-    fontSize: '15px',
-    fontWeight: '600',
-    color: theme.text.primary
-  },
-  headerSubtitle: {
-    fontSize: '11px',
-    color: theme.text.secondary
-  },
-  backButton: {
-    background: 'none',
-    border: 'none',
-    color: theme.text.secondary,
-    cursor: 'pointer',
-    padding: '6px',
-    borderRadius: '6px',
-    display: 'flex',
-    alignItems: 'center'
-  },
-  ratioButton: {
-    padding: '4px 10px',
-    borderRadius: '6px',
-    border: `1px solid ${theme.border.subtle}`,
-    backgroundColor: 'transparent',
-    color: theme.text.secondary,
-    fontSize: '11px',
-    cursor: 'pointer',
-    transition: 'all 0.15s'
-  },
-  ratioButtonActive: {
-    backgroundColor: `${theme.accent.primary}33`,
-    borderColor: theme.accent.primary,
-    color: theme.accent.hover
-  },
-  exportButton: {
-    padding: '6px 14px',
-    borderRadius: '8px',
-    border: `1px solid ${theme.border.subtle}`,
-    backgroundColor: theme.hover.bg,
-    color: theme.text.primary,
-    fontSize: '12px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    transition: 'all 0.15s'
-  },
-  saveDraftButton: {
-    padding: '6px 14px',
-    borderRadius: '8px',
-    border: 'none',
-    backgroundColor: '#059669',
-    color: '#fff',
-    fontSize: '12px',
-    fontWeight: '600',
-    cursor: 'pointer'
-  },
-  saveAllButton: {
-    padding: '6px 14px',
-    borderRadius: '8px',
-    border: 'none',
-    background: `linear-gradient(135deg, ${theme.accent.primary}, #8b5cf6)`,
-    color: '#fff',
-    fontSize: '12px',
-    fontWeight: '600',
-    cursor: 'pointer'
-  },
-  closeButton: {
-    background: 'none',
-    border: 'none',
-    color: theme.text.muted,
-    cursor: 'pointer',
-    padding: '6px',
-    borderRadius: '6px',
-    display: 'flex',
-    alignItems: 'center'
-  },
-  mainContent: {
-    display: 'flex',
-    flex: 1,
-    overflow: 'hidden'
-  },
-
-  // ── Left Panel (matches Montage layout) ──
-  leftPanel: {
-    width: '300px',
-    backgroundColor: theme.bg.input,
-    borderRight: `1px solid ${theme.border.subtle}`,
-    display: 'flex',
-    flexDirection: 'column',
-    flexShrink: 0,
-    overflow: 'hidden'
-  },
-  sourceDropdown: {
-    width: '100%',
-    padding: '8px 12px',
-    backgroundColor: theme.bg.page,
-    border: `1px solid ${theme.border.subtle}`,
-    borderRadius: '8px',
-    color: theme.text.primary,
-    fontSize: '13px',
-    outline: 'none',
-    cursor: 'pointer'
-  },
-  bankContent: {
-    flex: 1,
-    overflowY: 'auto',
-    overflowX: 'hidden',
-    padding: '12px'
-  },
-  sidebarClipGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(2, 1fr)',
-    gap: '8px'
-  },
-  sidebarClip: {
-    cursor: 'pointer',
-    padding: '4px',
-    borderRadius: '6px',
-    border: '2px solid transparent',
-    transition: 'border-color 0.15s ease'
-  },
-  textBankInput: {
-    flex: 1,
-    padding: '6px 10px',
-    borderRadius: '6px',
-    border: `1px solid ${theme.border.subtle}`,
-    backgroundColor: theme.bg.page,
-    color: theme.text.primary,
-    fontSize: '12px',
-    outline: 'none'
-  },
-  textBankItem: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '6px 8px',
-    borderRadius: '6px',
-    backgroundColor: theme.hover.bg,
-    marginBottom: '4px',
-    color: theme.text.secondary
-  },
-  generateSection: {
-    padding: '12px',
-    backgroundColor: `${theme.accent.primary}14`,
-    borderRadius: '8px',
-    border: `1px solid ${theme.accent.primary}26`
-  },
-  generateInput: {
-    width: '50px',
-    padding: '4px 6px',
-    borderRadius: '4px',
-    border: `1px solid ${theme.border.subtle}`,
-    backgroundColor: theme.bg.input,
-    color: theme.text.primary,
-    fontSize: '12px',
-    textAlign: 'center'
-  },
-  generateButton: {
-    padding: '6px 14px',
-    borderRadius: '6px',
-    border: 'none',
-    background: `linear-gradient(135deg, ${theme.accent.primary}, #8b5cf6)`,
-    color: '#fff',
-    fontSize: '12px',
-    fontWeight: '600',
-    cursor: 'pointer'
-  },
-
-  // ── Center Preview ──
-  previewArea: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '16px',
-    overflow: 'hidden'
-  },
-  previewContainer: {
-    position: 'relative',
-    borderRadius: '10px',
-    overflow: 'hidden',
-    backgroundColor: theme.bg.input,
-    flexShrink: 0
-  },
-  previewPlaceholder: {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  playbackControls: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    marginTop: '12px',
-    width: '100%',
-    maxWidth: '480px'
-  },
-  playButton: {
-    width: '32px',
-    height: '32px',
-    borderRadius: '50%',
-    border: 'none',
-    backgroundColor: theme.border.subtle,
-    color: '#fff',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0
-  },
-  progressBar: {
-    flex: 1,
-    height: '6px',
-    borderRadius: '3px',
-    backgroundColor: theme.border.subtle,
-    cursor: 'pointer',
-    position: 'relative',
-    overflow: 'hidden'
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: '3px',
-    background: `linear-gradient(90deg, ${theme.accent.primary}, #8b5cf6)`,
-    transition: 'width 0.1s linear'
-  },
-  timeDisplay: {
-    fontSize: '11px',
-    color: theme.text.secondary,
-    fontFamily: 'monospace',
-    minWidth: '80px',
-    textAlign: 'center',
-    flexShrink: 0
-  },
-  muteButton: {
-    background: 'none',
-    border: 'none',
-    color: theme.text.secondary,
-    cursor: 'pointer',
-    padding: '4px',
-    display: 'flex',
-    alignItems: 'center',
-    flexShrink: 0
-  },
-
-  // ── Right Panel ──
-  rightPanel: {
-    width: '320px',
-    borderLeft: `1px solid ${theme.border.subtle}`,
-    display: 'flex',
-    flexDirection: 'column',
-    flexShrink: 0,
-    overflow: 'hidden'
-  },
-  rightPanelScroll: {
-    flex: 1,
-    overflow: 'auto',
-    padding: '0 0 12px 0'
-  },
-  sectionHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '12px 12px 6px',
-    fontSize: '12px',
-    fontWeight: 600,
-    color: theme.text.primary,
-    letterSpacing: '-0.01em'
-  },
-  divider: {
-    height: '1px',
-    backgroundColor: theme.border.subtle,
-    margin: '12px 0'
-  },
-
-  // ── Overlay cards ──
-  overlayCard: {
-    margin: '0 8px 6px',
-    padding: '10px',
-    borderRadius: '8px',
-    backgroundColor: theme.hover.bg,
-    border: `1px solid ${theme.border.subtle}`,
-    cursor: 'pointer',
-    transition: 'all 0.15s'
-  },
-  overlayCardActive: {
-    backgroundColor: `${theme.accent.primary}1a`,
-    borderColor: `${theme.accent.primary}4d`
-  },
-  removeOverlayButton: {
-    background: 'none',
-    border: 'none',
-    color: theme.text.muted,
-    fontSize: '16px',
-    cursor: 'pointer',
-    padding: '0 4px',
-    lineHeight: 1
-  },
-  textEditInput: {
-    width: '100%',
-    padding: '6px 8px',
-    borderRadius: '4px',
-    border: `1px solid ${theme.accent.primary}4d`,
-    backgroundColor: theme.bg.input,
-    color: '#fff',
-    fontSize: '13px',
-    outline: 'none',
-    boxSizing: 'border-box'
-  },
-  styleControls: {
-    marginTop: '8px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-    paddingTop: '8px',
-    borderTop: `1px solid ${theme.border.subtle}`
-  },
-  controlRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    flexWrap: 'wrap'
-  },
-  controlLabel: {
-    fontSize: '10px',
-    color: theme.text.secondary,
-    minWidth: '34px'
-  },
-  selectInput: {
-    flex: 1,
-    padding: '3px 6px',
-    borderRadius: '4px',
-    border: `1px solid ${theme.border.subtle}`,
-    backgroundColor: theme.bg.input,
-    color: '#fff',
-    fontSize: '11px'
-  },
-  sizeButton: {
-    padding: '3px 8px',
-    borderRadius: '4px',
-    border: `1px solid ${theme.border.subtle}`,
-    backgroundColor: theme.hover.bg,
-    color: theme.text.primary,
-    fontSize: '11px',
-    cursor: 'pointer'
-  },
-  colorInput: {
-    width: '24px',
-    height: '24px',
-    borderRadius: '4px',
-    border: `1px solid ${theme.border.subtle}`,
-    cursor: 'pointer',
-    backgroundColor: 'transparent',
-    padding: 0
-  },
-  toggleButton: {
-    padding: '3px 8px',
-    borderRadius: '4px',
-    border: `1px solid ${theme.border.subtle}`,
-    backgroundColor: 'transparent',
-    color: theme.text.secondary,
-    fontSize: '10px',
-    cursor: 'pointer',
-    transition: 'all 0.15s'
-  },
-  toggleButtonActive: {
-    backgroundColor: `${theme.accent.primary}33`,
-    borderColor: theme.accent.primary,
-    color: theme.accent.hover
-  },
-  addTextButton: {
-    margin: '6px 8px',
-    padding: '10px',
-    borderRadius: '8px',
-    border: `1px dashed ${theme.accent.primary}66`,
-    backgroundColor: 'transparent',
-    color: theme.accent.hover,
-    fontSize: '12px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    textAlign: 'center',
-    transition: 'all 0.15s'
-  },
-
-  // ── Audio section ──
-  audioSection: {
-    margin: '0 12px 4px',
-    padding: '10px',
-    borderRadius: '8px',
-    backgroundColor: theme.hover.bg,
-    border: `1px solid ${theme.hover.bg}`,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px'
-  },
-  audioTrackButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '8px 10px',
-    borderRadius: '8px',
-    border: `1px solid ${theme.border.subtle}`,
-    backgroundColor: theme.hover.bg,
-    color: theme.text.primary,
-    fontSize: '12px',
-    cursor: 'pointer',
-    transition: 'all 0.15s',
-    width: '100%',
-    textAlign: 'left'
-  },
-  audioTrackButtonActive: {
-    borderColor: '#8b5cf6',
-    backgroundColor: 'rgba(139,92,246,0.1)',
-    color: '#8b5cf6'
-  },
-  audioNowPlaying: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '6px 10px',
-    borderRadius: '6px',
-    backgroundColor: 'rgba(34,197,94,0.1)',
-    border: '1px solid rgba(34,197,94,0.25)',
-    color: theme.text.primary,
-    fontSize: '11px'
-  },
-
-  // ── Text banks ──
-  bankContainer: {
-    margin: '0 12px 10px',
-    padding: '10px',
-    borderRadius: '8px',
-    backgroundColor: theme.hover.bg,
-    border: `1px solid ${theme.hover.bg}`
-  },
-  textBankInput: {
-    flex: 1,
-    padding: '5px 8px',
-    borderRadius: '6px',
-    border: `1px solid ${theme.border.subtle}`,
-    backgroundColor: theme.bg.input,
-    color: '#fff',
-    fontSize: '12px',
-    outline: 'none'
-  },
-  textBankAddButton: {
-    padding: '4px 10px',
-    borderRadius: '6px',
-    border: 'none',
-    backgroundColor: '#14b8a6',
-    color: '#fff',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    flexShrink: 0
-  },
-  textBankList: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '4px'
-  },
-  textBankTag: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: '3px 8px',
-    borderRadius: '6px',
-    backgroundColor: 'rgba(20,184,166,0.1)',
-    border: '1px solid rgba(20,184,166,0.2)',
-    color: theme.text.primary,
-    fontSize: '11px'
-  },
-  textBankRemove: {
-    background: 'none',
-    border: 'none',
-    color: theme.text.muted,
-    fontSize: '13px',
-    cursor: 'pointer',
-    padding: '0 2px',
-    lineHeight: 1
-  },
-
-  // ── Timeline ──
-  timelineSection: {
-    borderTop: `1px solid ${theme.border.subtle}`,
-    flexShrink: 0,
-    backgroundColor: theme.bg.page,
-    padding: '0 8px'
-  },
-  timelineTrackArea: {
-    position: 'relative',
-    height: '140px',
-    cursor: 'pointer',
-    userSelect: 'none',
-    WebkitUserSelect: 'none'
-  },
-  timelineRuler: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '22px',
-    borderBottom: `1px solid ${theme.border.subtle}`
-  },
-  textTrack: {
-    position: 'absolute',
-    top: '22px',
-    left: 0,
-    right: 0,
-    height: '28px'
-  },
-  clipTrack: {
-    position: 'absolute',
-    top: '54px',
-    left: 0,
-    right: 0,
-    height: '44px'
-  },
-  audioTrack: {
-    position: 'absolute',
-    top: '102px',
-    left: 0,
-    right: 0,
-    height: '30px',
-    borderTop: `1px solid ${theme.border.subtle}`
-  },
-
-  // ── Tab Bar ──
-  tabBar: {
-    borderTop: `1px solid ${theme.border.subtle}`,
-    flexShrink: 0,
-    backgroundColor: theme.overlay.light
-  },
-  tabScroll: {
-    display: 'flex',
-    overflow: 'auto',
-    padding: '6px 8px',
-    gap: '4px'
-  },
-  tab: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '6px 12px',
-    borderRadius: '6px',
-    backgroundColor: theme.hover.bg,
-    border: '1px solid transparent',
-    color: theme.text.secondary,
-    fontSize: '11px',
-    fontWeight: '500',
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-    transition: 'all 0.15s',
-    flexShrink: 0
-  },
-  tabActive: {
-    backgroundColor: `${theme.accent.primary}26`,
-    borderColor: `${theme.accent.primary}4d`,
-    color: theme.text.primary
-  },
-  tabDeleteButton: {
-    background: 'none',
-    border: 'none',
-    color: theme.text.muted,
-    fontSize: '14px',
-    cursor: 'pointer',
-    padding: '0 2px',
-    marginLeft: '2px',
-    lineHeight: 1
-  },
-
-  // ── Confirm Modal ──
-  confirmOverlay: {
-    position: 'absolute',
-    inset: 0,
-    backgroundColor: theme.overlay.heavy,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 100
-  },
-  confirmModal: {
-    backgroundColor: theme.bg.elevated,
-    borderRadius: '12px',
-    padding: '24px',
-    maxWidth: '360px',
-    width: '100%',
-    border: `1px solid ${theme.border.subtle}`
-  },
-  confirmKeepButton: {
-    padding: '8px 16px',
-    borderRadius: '8px',
-    border: `1px solid ${theme.border.subtle}`,
-    backgroundColor: 'transparent',
-    color: theme.text.primary,
-    fontSize: '13px',
-    cursor: 'pointer'
-  },
-  confirmCloseButton: {
-    padding: '8px 16px',
-    borderRadius: '8px',
-    border: 'none',
-    backgroundColor: '#dc2626',
-    color: '#fff',
-    fontSize: '13px',
-    cursor: 'pointer'
-  },
-
-  // ── Mobile Tool Toolbar ──
-  mobileToolbar: {
-    display: 'flex',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    borderTop: `1px solid ${theme.border.subtle}`,
-    borderBottom: `1px solid ${theme.border.subtle}`,
-    backgroundColor: theme.bg.page,
-    flexShrink: 0,
-    padding: '4px 0'
-  },
-  mobileToolbarTab: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '2px',
-    minWidth: '44px',
-    minHeight: '44px',
-    padding: '6px 12px',
-    borderRadius: '8px',
-    border: 'none',
-    backgroundColor: 'transparent',
-    color: theme.text.secondary,
-    cursor: 'pointer',
-    transition: 'all 0.15s'
-  },
-  mobileToolbarTabActive: {
-    backgroundColor: `${theme.accent.primary}33`,
-    color: theme.accent.hover
-  },
-  mobileToolPanel: {
-    flex: 1,
-    overflow: 'auto',
-    backgroundColor: theme.bg.input,
-    borderTop: `1px solid ${theme.border.subtle}`,
-    minHeight: 0
-  }
-});
 
 export default SoloClipEditor;

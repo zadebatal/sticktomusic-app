@@ -79,42 +79,42 @@ const AppShell = ({
       {!isMobile && (
         <div className="flex w-64 flex-none flex-col items-start self-stretch border-r border-solid border-neutral-900 bg-black">
           {/* Logo + Artist Selector */}
-          <div className="flex w-full flex-col items-start gap-8 px-6 py-6">
+          <div className="flex w-full flex-col items-start gap-6 px-6 py-6">
             <span className="text-heading-2 font-heading-2 text-[#ffffffff]">StickToMusic</span>
 
             {/* Artist selector dropdown */}
             {visibleArtists.length > 0 && (
-              <SubframeCore.DropdownMenu.Root>
-                <SubframeCore.DropdownMenu.Trigger asChild>
-                  <div className="flex w-full items-center gap-3 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-4 py-3 cursor-pointer hover:bg-neutral-900">
-                    <Avatar size="medium" className="bg-brand-600 flex-none">
-                      {(currentArtist?.name || '?')[0].toUpperCase()}
-                    </Avatar>
-                    <div className="flex grow shrink-0 basis-0 flex-col items-start gap-1">
-                      <span className="text-body-bold font-body-bold text-[#ffffffff] truncate">
+              <div className="flex w-full flex-col items-start gap-2">
+                <span className="text-caption font-caption text-neutral-500 uppercase tracking-wider">Artist</span>
+                <SubframeCore.DropdownMenu.Root>
+                  <SubframeCore.DropdownMenu.Trigger asChild>
+                    <div className="flex w-full items-center gap-3 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2.5 cursor-pointer hover:bg-neutral-900">
+                      <Avatar size="small" className="bg-brand-600 flex-none">
+                        {(currentArtist?.name || '?')[0].toUpperCase()}
+                      </Avatar>
+                      <span className="text-body-bold font-body-bold text-[#ffffffff] truncate grow">
                         {currentArtist?.name || 'Select Artist'}
                       </span>
-                      <Badge variant="neutral">{getRoleBadge()}</Badge>
+                      <FeatherChevronDown className="text-neutral-400 flex-none" style={{ width: 16, height: 16 }} />
                     </div>
-                    <FeatherChevronDown className="text-body font-body text-neutral-400" />
-                  </div>
-                </SubframeCore.DropdownMenu.Trigger>
-                <SubframeCore.DropdownMenu.Portal>
-                  <SubframeCore.DropdownMenu.Content side="bottom" align="start" sideOffset={4} asChild>
-                    <DropdownMenu>
-                      {visibleArtists.map(artist => (
-                        <DropdownMenu.DropdownItem
-                          key={artist.id}
-                          icon={<FeatherUser />}
-                          onClick={() => onArtistChange && onArtistChange(artist.id)}
-                        >
-                          {artist.name}
-                        </DropdownMenu.DropdownItem>
-                      ))}
-                    </DropdownMenu>
-                  </SubframeCore.DropdownMenu.Content>
-                </SubframeCore.DropdownMenu.Portal>
-              </SubframeCore.DropdownMenu.Root>
+                  </SubframeCore.DropdownMenu.Trigger>
+                  <SubframeCore.DropdownMenu.Portal>
+                    <SubframeCore.DropdownMenu.Content side="bottom" align="start" sideOffset={4} asChild>
+                      <DropdownMenu>
+                        {visibleArtists.map(artist => (
+                          <DropdownMenu.DropdownItem
+                            key={artist.id}
+                            icon={<FeatherUser />}
+                            onClick={() => onArtistChange && onArtistChange(artist.id)}
+                          >
+                            {artist.name}
+                          </DropdownMenu.DropdownItem>
+                        ))}
+                      </DropdownMenu>
+                    </SubframeCore.DropdownMenu.Content>
+                  </SubframeCore.DropdownMenu.Portal>
+                </SubframeCore.DropdownMenu.Root>
+              </div>
             )}
           </div>
 
@@ -141,12 +141,12 @@ const AppShell = ({
           </div>
 
           {/* User Footer */}
-          <div className="flex w-full flex-col items-start border-t border-solid border-neutral-900 px-6 py-6">
+          <div className="flex w-full flex-col items-start border-t border-solid border-neutral-900 px-6 py-4">
             <SubframeCore.DropdownMenu.Root>
               <SubframeCore.DropdownMenu.Trigger asChild>
                 <div className="flex w-full items-center gap-3 cursor-pointer">
                   <Avatar
-                    size="medium"
+                    size="small"
                     image={user?.photoURL || undefined}
                     className="flex-none"
                   >
@@ -156,11 +156,11 @@ const AppShell = ({
                     <span className="text-body-bold font-body-bold text-[#ffffffff] truncate w-full">
                       {user?.name || user?.email || 'User'}
                     </span>
-                    <span className="text-caption font-caption text-neutral-400 truncate w-full">
-                      {user?.email || getRoleBadge()}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="neutral">{getRoleBadge()}</Badge>
+                    </div>
                   </div>
-                  <FeatherMoreVertical className="text-body font-body text-neutral-400 flex-none" />
+                  <FeatherMoreVertical className="text-neutral-400 flex-none" style={{ width: 16, height: 16 }} />
                 </div>
               </SubframeCore.DropdownMenu.Trigger>
               <SubframeCore.DropdownMenu.Portal>

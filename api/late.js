@@ -82,10 +82,11 @@ const isLocalhostOrigin = (origin) => {
   return origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
 };
 
-// Initialize Firebase Admin (only once)
+// Initialize Firebase Admin lazily (env vars may not be available at module load in vercel dev)
 let db = null;
-if (!getApps().length) {
-  try {
+function ensureFirebaseAdmin() {
+  if (db) return db;
+  if (!getApps().length) {
     initializeApp({
       credential: cert({
         projectId: process.env.FIREBASE_PROJECT_ID,
@@ -93,12 +94,9 @@ if (!getApps().length) {
         privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
       }),
     });
-    db = getFirestore();
-  } catch (error) {
-    console.error('Firebase Admin init error:', error.message);
   }
-} else {
   db = getFirestore();
+  return db;
 }
 
 /**
@@ -211,6 +209,14 @@ export default async function handler(req, res) {
   // Handle preflight
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
+  }
+
+  // Initialize Firebase Admin lazily
+  try {
+    ensureFirebaseAdmin();
+  } catch (error) {
+    console.error('Firebase Admin init error:', error.message);
+    return res.status(500).json({ error: `Firebase init failed: ${error.message}` });
   }
 
   // Verify authentication

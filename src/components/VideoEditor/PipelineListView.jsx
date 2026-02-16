@@ -1,6 +1,7 @@
 /**
- * PipelineListView — Pipeline listing with stat cards, format pills, status indicators
- * Replaces StudioHome as default Studio landing when pipelines exist
+ * StudioHome — Page-centric studio landing
+ * Shows connected accounts/pages as cards. Click a page → pick format → workspace.
+ * Unlinked legacy collections shown below for migration.
  */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
@@ -8,11 +9,12 @@ import {
   getUserCollections,
   getLibrary,
   getCreatedContent,
-  getPipelines,
-  getPipelineStatus,
+  getUnlinkedCollections,
+  getPageWorkspaces,
+  getOrCreatePageWorkspace,
+  getWorkspaceStatus,
   getPipelineAssetCounts,
-  getPipelineBankLabel,
-  duplicatePipeline,
+  linkCollectionToPage,
   migrateCollectionBanks,
   saveCollections,
   saveCollectionToFirestore,
@@ -20,7 +22,7 @@ import {
   subscribeToCollections,
   subscribeToLibrary,
   subscribeToCreatedContent,
-  MEDIA_TYPES,
+  FORMAT_TEMPLATES,
 } from '../../services/libraryService';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
@@ -28,23 +30,49 @@ import { Badge } from '../../ui/components/Badge';
 import { DropdownMenu } from '../../ui/components/DropdownMenu';
 import {
   FeatherPlus, FeatherZap, FeatherEdit, FeatherMoreVertical,
-  FeatherCopy, FeatherTrash, FeatherImage, FeatherMusic,
-  FeatherType, FeatherFile, FeatherUpload, FeatherVideo
+  FeatherTrash, FeatherImage, FeatherMusic,
+  FeatherType, FeatherFile, FeatherUpload, FeatherArrowRight,
+  FeatherLink, FeatherLayers, FeatherChevronDown, FeatherChevronUp
 } from '@subframe/core';
 import * as SubframeCore from '@subframe/core';
 import { useToast, ConfirmDialog } from '../ui';
-import CreatePipelineModal from './CreatePipelineModal';
-import { createNewCollectionAsync } from '../../services/libraryService';
+
+// Platform icon colors
+const PLATFORM_COLORS = {
+  instagram: '#E1306C',
+  tiktok: '#000000',
+  youtube: '#FF0000',
+  twitter: '#1DA1F2',
+  facebook: '#1877F2',
+  x: '#000000',
+};
+
+const getPlatformColor = (platform) => PLATFORM_COLORS[platform?.toLowerCase()] || '#6366f1';
+
+// Group latePages by unique handle (some handles have multiple platforms)
+const groupPagesByHandle = (pages) => {
+  const map = {};
+  pages.forEach(p => {
+    const key = p.handle?.replace('@', '') || p.id;
+    if (!map[key]) {
+      map[key] = { handle: p.handle, pages: [], platforms: [] };
+    }
+    map[key].pages.push(p);
+    if (!map[key].platforms.includes(p.platform)) {
+      map[key].platforms.push(p.platform);
+    }
+  });
+  return Object.values(map);
+};
 
 const PipelineListView = ({
   db,
   artistId,
   latePages = [],
-  onOpenPipeline,
-  onQuickGenerate,
+  manualAccounts = [],
+  onOpenWorkspace,
+  onOpenVideoEditor,
   onViewContent,
-  onMakeSlideshow,
-  onOpenBeatSync,
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
 
@@ -54,9 +82,10 @@ const PipelineListView = ({
   const [createdContent, setCreatedContent] = useState({ videos: [], slideshows: [] });
 
   // UI state
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [editingPipeline, setEditingPipeline] = useState(null);
+  const [formatPickerPage, setFormatPickerPage] = useState(null); // page object when format picker is open
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [linkingCollection, setLinkingCollection] = useState(null); // collection being assigned to a page
+  const [showUnlinked, setShowUnlinked] = useState(true);
 
   // Load data + subscribe
   useEffect(() => {
@@ -74,307 +103,443 @@ const PipelineListView = ({
     return () => unsubs.forEach(u => u && u());
   }, [db, artistId]);
 
-  // Derive pipelines from collections
-  const pipelines = useMemo(
-    () => collections.filter(c => c.isPipeline === true),
+  // Connected pages for this artist
+  const artistPages = useMemo(() => latePages.filter(p => p.artistId === artistId), [latePages, artistId]);
+
+  // Merge Late pages + manual accounts into a unified list
+  const allAccounts = useMemo(() => {
+    const accounts = [...artistPages];
+    // Add manual accounts that aren't covered by Late
+    (manualAccounts || []).forEach(ma => {
+      const handle = ma.handle?.replace('@', '');
+      const alreadyCovered = artistPages.some(lp =>
+        lp.handle?.replace('@', '') === handle
+      );
+      if (!alreadyCovered) {
+        (ma.platforms || []).forEach(plat => {
+          accounts.push({
+            id: `manual-${ma.handle}-${plat}`,
+            handle: ma.handle?.startsWith('@') ? ma.handle : `@${ma.handle}`,
+            platform: plat,
+            artist: '',
+            artistId,
+            status: 'active',
+            isManual: true,
+          });
+        });
+      }
+    });
+    return accounts;
+  }, [artistPages, manualAccounts, artistId]);
+
+  // Group accounts by handle
+  const handleGroups = useMemo(() => groupPagesByHandle(allAccounts), [allAccounts]);
+
+  // Unlinked collections (legacy, not assigned to any page)
+  const unlinkedCollections = useMemo(
+    () => collections.filter(c => !c.pageId && c.type !== 'smart'),
     [collections]
   );
 
-  // Stat totals
+  // Workspaces per page (for showing format pills on page cards)
+  const workspacesByPage = useMemo(() => {
+    const map = {};
+    collections.filter(c => c.pageId).forEach(c => {
+      if (!map[c.pageId]) map[c.pageId] = [];
+      map[c.pageId].push(c);
+    });
+    return map;
+  }, [collections]);
+
+  // Stats
   const totalDrafts = useMemo(() => {
-    let count = 0;
-    pipelines.forEach(p => {
-      const drafts = (createdContent.slideshows || []).filter(
-        s => s.collectionId === p.id && !s.isTemplate
-      );
-      count += drafts.length;
-    });
-    return count;
-  }, [pipelines, createdContent]);
+    return (createdContent.slideshows || []).filter(s => !s.isTemplate).length +
+           (createdContent.videos || []).length;
+  }, [createdContent]);
 
-  const totalAssets = useMemo(() => {
-    let count = 0;
-    pipelines.forEach(p => {
-      const counts = getPipelineAssetCounts(p, library);
-      count += counts.images + counts.audio + counts.text;
-    });
-    return count;
-  }, [pipelines, library]);
-
-  // Create pipeline
-  const handleCreatePipeline = useCallback(async (pipelineData) => {
+  // Handle format selection → open or create workspace
+  const handleSelectFormat = useCallback(async (page, format) => {
     try {
-      await createNewCollectionAsync(db, artistId, pipelineData);
-      setShowCreateModal(false);
-      setEditingPipeline(null);
-      toastSuccess('Pipeline created');
+      const workspace = getOrCreatePageWorkspace(artistId, page, format);
+      if (db) await saveCollectionToFirestore(db, artistId, workspace);
+      setFormatPickerPage(null);
+      onOpenWorkspace(workspace.id);
     } catch (err) {
-      toastError('Failed to create pipeline');
+      toastError('Failed to create workspace');
     }
-  }, [db, artistId, toastSuccess, toastError]);
+  }, [artistId, db, onOpenWorkspace, toastError]);
 
-  // Update pipeline (edit mode)
-  const handleUpdatePipeline = useCallback(async (pipelineData) => {
-    const cols = getUserCollections(artistId);
-    const idx = cols.findIndex(c => c.id === pipelineData.id);
-    if (idx === -1) return;
-    cols[idx] = { ...cols[idx], ...pipelineData, updatedAt: new Date().toISOString() };
-    saveCollections(artistId, cols);
-    if (db) await saveCollectionToFirestore(db, artistId, cols[idx]);
-    setEditingPipeline(null);
-    toastSuccess('Pipeline updated');
-  }, [db, artistId, toastSuccess]);
-
-  // Duplicate
-  const handleDuplicate = useCallback(async (pipelineId) => {
-    const dup = duplicatePipeline(artistId, pipelineId);
-    if (dup && db) await saveCollectionToFirestore(db, artistId, dup);
-    toastSuccess('Pipeline duplicated');
-  }, [db, artistId, toastSuccess]);
+  // Handle linking a legacy collection to a page
+  const handleLinkCollection = useCallback(async (collection, page, format) => {
+    try {
+      const linked = linkCollectionToPage(artistId, collection.id, page, format);
+      if (linked && db) await saveCollectionToFirestore(db, artistId, linked);
+      setLinkingCollection(null);
+      toastSuccess(`Linked "${collection.name}" to ${page.handle}`);
+    } catch (err) {
+      toastError('Failed to link collection');
+    }
+  }, [artistId, db, toastSuccess, toastError]);
 
   // Delete
-  const handleDelete = useCallback(async (pipelineId) => {
+  const handleDelete = useCallback(async (collectionId) => {
     const cols = getUserCollections(artistId);
-    const filtered = cols.filter(c => c.id !== pipelineId);
+    const filtered = cols.filter(c => c.id !== collectionId);
     saveCollections(artistId, filtered);
-    if (db) await deleteCollectionFromFirestore(db, artistId, pipelineId);
+    if (db) await deleteCollectionFromFirestore(db, artistId, collectionId);
     setConfirmDelete(null);
-    toastSuccess('Pipeline deleted');
+    toastSuccess('Collection deleted');
   }, [db, artistId, toastSuccess]);
 
-  // Get initials for avatar
-  const getInitials = (name) => {
-    const words = (name || '').split(/\s+/).filter(Boolean);
-    if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
-    return (name || 'P').substring(0, 2).toUpperCase();
-  };
+  // Draft count for a workspace
+  const getDraftCount = (workspaceId) =>
+    (createdContent.slideshows || []).filter(s => s.collectionId === workspaceId && !s.isTemplate).length;
 
-  // Draft count per pipeline
-  const getDraftCount = (pipelineId) =>
-    (createdContent.slideshows || []).filter(s => s.collectionId === pipelineId && !s.isTemplate).length;
+  // Slideshow-only format templates for the picker
+  const slideshowFormats = FORMAT_TEMPLATES.filter(f => f.type === 'slideshow');
+  const videoFormats = FORMAT_TEMPLATES.filter(f => f.type === 'video');
 
   return (
-    <div className="flex w-full flex-col items-start bg-black px-12 py-10">
+    <div className="flex w-full flex-col items-start bg-black px-12 py-10 overflow-y-auto" style={{ maxHeight: '100%' }}>
       {/* Header */}
       <div className="flex w-full items-center justify-between">
         <div className="flex flex-col items-start gap-2">
           <span className="text-heading-1 font-heading-1 text-[#ffffffff]">Studio</span>
-          <span className="text-body font-body text-neutral-400">Your content pipelines</span>
+          <span className="text-body font-body text-neutral-400">
+            {allAccounts.length} connected account{allAccounts.length !== 1 ? 's' : ''}
+          </span>
         </div>
         <div className="flex items-center gap-3">
-          {onOpenBeatSync && (
-            <Button variant="neutral-secondary" size="medium" icon={<FeatherMusic />} onClick={onOpenBeatSync}>
-              Beat Sync
-            </Button>
-          )}
           {onViewContent && (
-            <Button variant="neutral-secondary" size="medium" onClick={() => onViewContent({ type: 'slideshows' })}>
+            <Button variant="neutral-secondary" size="medium" icon={<FeatherLayers />} onClick={() => onViewContent({ type: 'slideshows' })}>
               View Drafts
             </Button>
           )}
-          <Button
-            variant="brand-primary"
-            size="large"
-            icon={<FeatherPlus />}
-            onClick={() => setShowCreateModal(true)}
-          >
-            New Pipeline
-          </Button>
         </div>
       </div>
 
       {/* Stat cards */}
       <div className="flex w-full items-center gap-6 mt-6">
         <div className="flex grow shrink-0 basis-0 flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
-          <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{pipelines.length}</span>
-          <span className="text-caption font-caption text-neutral-400">Pipelines</span>
+          <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{allAccounts.length}</span>
+          <span className="text-caption font-caption text-neutral-400">Accounts</span>
         </div>
         <div className="flex grow shrink-0 basis-0 flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
           <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{totalDrafts}</span>
-          <span className="text-caption font-caption text-neutral-400">Drafts Ready</span>
+          <span className="text-caption font-caption text-neutral-400">Total Drafts</span>
         </div>
         <div className="flex grow shrink-0 basis-0 flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
-          <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{totalAssets}</span>
-          <span className="text-caption font-caption text-neutral-400">Total Assets</span>
+          <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{library.length}</span>
+          <span className="text-caption font-caption text-neutral-400">Media Items</span>
         </div>
       </div>
 
-      {/* Section header */}
+      {/* ═══ YOUR PAGES ═══ */}
       <div className="flex w-full items-center justify-between mt-8">
-        <span className="text-heading-2 font-heading-2 text-[#ffffffff]">All Pipelines</span>
-        <Badge variant="neutral">{pipelines.length} Pipeline{pipelines.length !== 1 ? 's' : ''}</Badge>
+        <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Your Pages</span>
+        <Badge variant="neutral">{handleGroups.length} Page{handleGroups.length !== 1 ? 's' : ''}</Badge>
       </div>
 
-      {/* Pipeline rows */}
-      <div className="flex w-full flex-col gap-4 mt-6">
-        {pipelines.length === 0 && (
-          <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed border-neutral-700 bg-[#1a1a1aff] px-8 py-12">
-            <span className="text-body font-body text-neutral-400">No pipelines yet</span>
-            <Button
-              variant="brand-primary"
-              icon={<FeatherPlus />}
-              onClick={() => setShowCreateModal(true)}
-            >
-              Create Your First Pipeline
-            </Button>
+      <div className="grid w-full grid-cols-2 gap-4 mt-4">
+        {handleGroups.length === 0 && (
+          <div className="col-span-2 flex flex-col items-center gap-4 rounded-lg border border-dashed border-neutral-700 bg-[#1a1a1aff] px-8 py-12">
+            <span className="text-body font-body text-neutral-400">No connected accounts yet</span>
+            <span className="text-caption font-caption text-neutral-500">Connect accounts in the Pages tab to start creating content</span>
           </div>
         )}
 
-        {pipelines.map(pipeline => {
-          const migrated = migrateCollectionBanks(pipeline);
-          const status = getPipelineStatus(migrated, library);
-          const counts = getPipelineAssetCounts(migrated, library);
-          const draftCount = getDraftCount(pipeline.id);
-          const formats = pipeline.formats || [];
-          const hasVideo = formats.some(f => f.type === 'video');
+        {handleGroups.map(group => {
+          const primaryPage = group.pages[0];
+          const pageWorkspaces = group.pages.flatMap(p => workspacesByPage[p.id] || []);
+          const totalPageDrafts = pageWorkspaces.reduce((sum, ws) => sum + getDraftCount(ws.id), 0);
 
           return (
             <div
-              key={pipeline.id}
-              className="flex w-full items-center gap-4 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-5 cursor-pointer hover:border-neutral-600 transition-colors"
-              onClick={() => onOpenPipeline(pipeline.id)}
+              key={primaryPage.handle}
+              className="flex flex-col items-start gap-4 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-5 cursor-pointer hover:border-neutral-600 transition-colors"
+              onClick={() => setFormatPickerPage(primaryPage)}
             >
-              {/* Avatar */}
-              <div
-                className="flex h-10 w-10 flex-none items-center justify-center rounded-full"
-                style={{ backgroundColor: pipeline.pipelineColor || '#4f46e5' }}
-              >
-                <span className="text-body-bold font-body-bold text-[#ffffffff]">{getInitials(pipeline.name)}</span>
-              </div>
-
-              {/* Name + linked page */}
-              <div className="flex grow shrink-0 basis-0 flex-col items-start gap-1">
-                <span className="text-heading-3 font-heading-3 text-[#ffffffff]">{pipeline.name}</span>
-                {pipeline.linkedPage && (
-                  <span className="text-caption font-caption text-neutral-400">
-                    @{pipeline.linkedPage.handle} · {pipeline.linkedPage.platform}
-                  </span>
-                )}
-              </div>
-
-              {/* Content type badge */}
-              <Badge variant={hasVideo ? 'neutral' : 'brand'}>
-                {hasVideo ? 'Videos' : 'Slideshows'}
-              </Badge>
-
-              {/* Format pills — ALL formats */}
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {formats.map((fmt, fmtIdx) => (
-                  <div key={fmt.id || fmtIdx} className="flex items-center gap-1 rounded-full border border-solid border-neutral-800 bg-neutral-900 px-2.5 py-1">
-                    <span className="text-caption font-caption text-neutral-400">
-                      {fmt.slideCount}-Slide: {fmt.name}
+              {/* Page identity */}
+              <div className="flex w-full items-center gap-3">
+                {primaryPage.profileImage ? (
+                  <img
+                    src={primaryPage.profileImage}
+                    alt=""
+                    className="h-10 w-10 flex-none rounded-full object-cover"
+                  />
+                ) : (
+                  <div
+                    className="flex h-10 w-10 flex-none items-center justify-center rounded-full"
+                    style={{ backgroundColor: getPlatformColor(primaryPage.platform) }}
+                  >
+                    <span className="text-body-bold font-body-bold text-[#ffffffff]">
+                      {(primaryPage.handle || '?').replace('@', '')[0]?.toUpperCase()}
                     </span>
                   </div>
-                ))}
-              </div>
-
-              {/* Asset counts */}
-              <div className="flex items-center gap-3 flex-shrink-0">
-                <div className="flex items-center gap-1">
-                  <FeatherImage className="text-caption font-caption text-neutral-400" />
-                  <span className="text-caption font-caption text-neutral-400">{counts.images}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <FeatherMusic className="text-caption font-caption text-neutral-400" />
-                  <span className="text-caption font-caption text-neutral-400">{counts.audio}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <FeatherType className="text-caption font-caption text-neutral-400" />
-                  <span className="text-caption font-caption text-neutral-400">{counts.text}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <FeatherFile className={`text-caption font-caption ${draftCount > 0 ? 'text-brand-600' : 'text-neutral-400'}`} />
-                  <span className={`text-caption font-caption ${draftCount > 0 ? 'text-brand-600' : 'text-neutral-400'}`}>{draftCount}</span>
-                </div>
-              </div>
-
-              {/* Status */}
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <div
-                  className="flex h-2 w-2 flex-none items-start rounded-full"
-                  style={{ backgroundColor: status.ready ? '#22c55e' : '#f59e0b' }}
-                />
-                <span
-                  className="text-caption font-caption"
-                  style={{ color: status.ready ? '#22c55e' : '#f59e0b' }}
-                >
-                  {status.label}
-                </span>
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
-                {status.ready ? (
-                  <Button
-                    variant="brand-primary"
-                    size="small"
-                    icon={<FeatherZap />}
-                    onClick={() => onQuickGenerate && onQuickGenerate(pipeline)}
-                  >
-                    Quick Generate
-                  </Button>
-                ) : (
-                  <Button
-                    variant="neutral-secondary"
-                    size="small"
-                    icon={<FeatherUpload />}
-                    onClick={() => onOpenPipeline(pipeline.id)}
-                  >
-                    Add Media
-                  </Button>
                 )}
-                <IconButton
-                  variant="neutral-tertiary"
-                  size="small"
-                  icon={<FeatherEdit />}
-                  onClick={() => setEditingPipeline(pipeline)}
-                />
-                <SubframeCore.DropdownMenu.Root>
-                  <SubframeCore.DropdownMenu.Trigger asChild>
-                    <IconButton
-                      variant="neutral-tertiary"
-                      size="small"
-                      icon={<FeatherMoreVertical />}
-                    />
-                  </SubframeCore.DropdownMenu.Trigger>
-                  <SubframeCore.DropdownMenu.Portal>
-                    <SubframeCore.DropdownMenu.Content side="bottom" align="end" sideOffset={4} asChild>
-                      <DropdownMenu>
-                        <DropdownMenu.DropdownItem icon={<FeatherEdit />} onClick={() => setEditingPipeline(pipeline)}>
-                          Edit
-                        </DropdownMenu.DropdownItem>
-                        <DropdownMenu.DropdownItem icon={<FeatherCopy />} onClick={() => handleDuplicate(pipeline.id)}>
-                          Duplicate
-                        </DropdownMenu.DropdownItem>
-                        <DropdownMenu.DropdownDivider />
-                        <DropdownMenu.DropdownItem icon={<FeatherTrash />} onClick={() => setConfirmDelete(pipeline)}>
-                          Delete
-                        </DropdownMenu.DropdownItem>
-                      </DropdownMenu>
-                    </SubframeCore.DropdownMenu.Content>
-                  </SubframeCore.DropdownMenu.Portal>
-                </SubframeCore.DropdownMenu.Root>
+                <div className="flex grow flex-col items-start gap-0.5">
+                  <span className="text-heading-3 font-heading-3 text-[#ffffffff]">{primaryPage.handle}</span>
+                  <div className="flex items-center gap-1.5">
+                    {group.platforms.map(plat => (
+                      <Badge key={plat} variant="neutral" className="capitalize">{plat}</Badge>
+                    ))}
+                    {primaryPage.isManual && <Badge variant="neutral">Manual</Badge>}
+                  </div>
+                </div>
+                <FeatherArrowRight className="text-neutral-500 flex-none" style={{ width: 20, height: 20 }} />
+              </div>
+
+              {/* Active workspaces / format pills */}
+              {pageWorkspaces.length > 0 && (
+                <div className="flex w-full flex-wrap items-center gap-2">
+                  {pageWorkspaces.map(ws => {
+                    const fmt = ws.formats?.[0];
+                    const status = getWorkspaceStatus(ws, library);
+                    return (
+                      <div
+                        key={ws.id}
+                        className="flex items-center gap-1.5 rounded-full border border-solid border-neutral-700 bg-neutral-900 px-2.5 py-1 cursor-pointer hover:border-neutral-500 transition-colors"
+                        onClick={(e) => { e.stopPropagation(); onOpenWorkspace(ws.id); }}
+                      >
+                        <div
+                          className="h-1.5 w-1.5 rounded-full flex-none"
+                          style={{ backgroundColor: status.ready ? '#22c55e' : '#f59e0b' }}
+                        />
+                        <span className="text-caption font-caption text-neutral-300">
+                          {fmt?.name || 'Workspace'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Stats row */}
+              <div className="flex w-full items-center justify-between">
+                <span className="text-caption font-caption text-neutral-400">
+                  {pageWorkspaces.length} format{pageWorkspaces.length !== 1 ? 's' : ''} set up
+                </span>
+                {totalPageDrafts > 0 && (
+                  <Badge variant="brand">{totalPageDrafts} draft{totalPageDrafts !== 1 ? 's' : ''}</Badge>
+                )}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Create/Edit modal */}
-      {(showCreateModal || editingPipeline) && (
-        <CreatePipelineModal
-          latePages={latePages}
-          existingPipeline={editingPipeline}
-          onClose={() => { setShowCreateModal(false); setEditingPipeline(null); }}
-          onSave={editingPipeline ? handleUpdatePipeline : handleCreatePipeline}
-        />
+      {/* ═══ EXISTING COLLECTIONS (unlinked) ═══ */}
+      {unlinkedCollections.length > 0 && (
+        <>
+          <div
+            className="flex w-full items-center justify-between mt-10 cursor-pointer"
+            onClick={() => setShowUnlinked(!showUnlinked)}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Existing Collections</span>
+              <Badge variant="neutral">{unlinkedCollections.length}</Badge>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-caption font-caption text-neutral-400">Assign to a page to migrate</span>
+              {showUnlinked
+                ? <FeatherChevronUp className="text-neutral-400" style={{ width: 16, height: 16 }} />
+                : <FeatherChevronDown className="text-neutral-400" style={{ width: 16, height: 16 }} />
+              }
+            </div>
+          </div>
+
+          {showUnlinked && (
+            <div className="flex w-full flex-col gap-3 mt-4">
+              {unlinkedCollections.map(col => {
+                const migrated = migrateCollectionBanks(col);
+                const bankCount = (migrated.banks || []).filter(b => b?.length > 0).length;
+                const textCount = (migrated.textBanks || []).reduce((sum, b) => sum + (b?.length || 0), 0);
+                const mediaCount = (col.mediaIds || []).length;
+                const draftCount = getDraftCount(col.id);
+
+                return (
+                  <div
+                    key={col.id}
+                    className="flex w-full items-center gap-4 rounded-lg border border-dashed border-neutral-700 bg-[#1a1a1aff] px-5 py-4"
+                  >
+                    {/* Name */}
+                    <div className="flex grow flex-col items-start gap-0.5">
+                      <span className="text-body-bold font-body-bold text-[#ffffffff]">{col.name}</span>
+                      <span className="text-caption font-caption text-neutral-500">
+                        {bankCount} bank{bankCount !== 1 ? 's' : ''} · {mediaCount} media · {textCount} text · {draftCount} draft{draftCount !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                      <Button
+                        variant="brand-secondary"
+                        size="small"
+                        icon={<FeatherLink />}
+                        onClick={() => setLinkingCollection(col)}
+                      >
+                        Assign to Page
+                      </Button>
+                      <Button
+                        variant="neutral-secondary"
+                        size="small"
+                        onClick={() => onOpenWorkspace(col.id)}
+                      >
+                        Open
+                      </Button>
+                      <IconButton
+                        variant="neutral-tertiary"
+                        size="small"
+                        icon={<FeatherTrash />}
+                        onClick={() => setConfirmDelete(col)}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ═══ FORMAT PICKER MODAL ═══ */}
+      {formatPickerPage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setFormatPickerPage(null)}>
+          <div className="w-full max-w-lg rounded-xl border border-neutral-800 bg-[#111111] p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex flex-col gap-1">
+                <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Create Content</span>
+                <span className="text-body font-body text-neutral-400">
+                  Choose a format for {formatPickerPage.handle}
+                </span>
+              </div>
+              <IconButton
+                variant="neutral-tertiary"
+                size="medium"
+                icon={<SubframeCore.FeatherX />}
+                onClick={() => setFormatPickerPage(null)}
+              />
+            </div>
+
+            {/* Slideshow formats */}
+            <span className="text-body-bold font-body-bold text-neutral-300 mb-3 block">Slideshows</span>
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              {slideshowFormats.map(fmt => {
+                // Check if workspace already exists for this page+format
+                const existing = (workspacesByPage[formatPickerPage.id] || []).find(ws => ws.formatId === fmt.id);
+                return (
+                  <div
+                    key={fmt.id}
+                    className={`flex flex-col items-start gap-3 rounded-lg border border-solid px-4 py-4 cursor-pointer transition-colors ${
+                      existing ? 'border-brand-600 bg-brand-600/5' : 'border-neutral-800 bg-[#1a1a1aff] hover:border-neutral-600'
+                    }`}
+                    onClick={() => handleSelectFormat(formatPickerPage, fmt)}
+                  >
+                    {/* Slide preview blocks */}
+                    <div className="flex items-center gap-1">
+                      {fmt.slideLabels.map((label, i) => (
+                        <div
+                          key={i}
+                          className="h-8 rounded"
+                          style={{
+                            width: `${Math.max(24, 80 / fmt.slideCount)}px`,
+                            backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#a855f7', '#f43f5e'][i % 5] + '33',
+                            border: `1px solid ${['#6366f1', '#10b981', '#f59e0b', '#a855f7', '#f43f5e'][i % 5]}55`,
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-body-bold font-body-bold text-[#ffffffff]">{fmt.name}</span>
+                      <span className="text-caption font-caption text-neutral-400">
+                        {fmt.slideCount} slide{fmt.slideCount !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    {existing && (
+                      <Badge variant="brand" className="mt-auto">Active workspace</Badge>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Video formats */}
+            <span className="text-body-bold font-body-bold text-neutral-300 mb-3 block">Videos</span>
+            <div className="grid grid-cols-3 gap-3">
+              {videoFormats.map(fmt => (
+                <div
+                  key={fmt.id}
+                  className="flex flex-col items-center gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-4 py-4 cursor-pointer hover:border-neutral-600 transition-colors"
+                  onClick={() => {
+                    setFormatPickerPage(null);
+                    onOpenVideoEditor?.(fmt);
+                  }}
+                >
+                  <FeatherImage className="text-neutral-400" style={{ width: 24, height: 24 }} />
+                  <span className="text-body-bold font-body-bold text-[#ffffffff]">{fmt.name}</span>
+                  <span className="text-caption font-caption text-neutral-400">{fmt.slideCount} clip{fmt.slideCount !== 1 ? 's' : ''}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ LINK COLLECTION MODAL ═══ */}
+      {linkingCollection && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setLinkingCollection(null)}>
+          <div className="w-full max-w-md rounded-xl border border-neutral-800 bg-[#111111] p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">
+                Assign "{linkingCollection.name}"
+              </span>
+              <IconButton
+                variant="neutral-tertiary"
+                size="medium"
+                icon={<SubframeCore.FeatherX />}
+                onClick={() => setLinkingCollection(null)}
+              />
+            </div>
+            <span className="text-body font-body text-neutral-400 mb-4 block">
+              Choose a page and format to assign this collection to. All media and banks will be preserved.
+            </span>
+
+            {/* Page list */}
+            <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
+              {allAccounts.map(page => (
+                <div key={page.id} className="flex flex-col gap-2">
+                  <span className="text-body-bold font-body-bold text-[#ffffffff] mt-2">
+                    {page.handle} · {page.platform}
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {slideshowFormats.map(fmt => (
+                      <Button
+                        key={`${page.id}-${fmt.id}`}
+                        variant="neutral-secondary"
+                        size="small"
+                        onClick={() => handleLinkCollection(linkingCollection, page, fmt)}
+                      >
+                        {fmt.name}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {allAccounts.length === 0 && (
+                <span className="text-body font-body text-neutral-500 py-4 text-center">
+                  No connected accounts. Connect accounts in the Pages tab first.
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Confirm delete */}
       <ConfirmDialog
         isOpen={!!confirmDelete}
-        title="Delete Pipeline"
-        message={`Delete "${confirmDelete?.name}"? This will remove the pipeline but keep all media in your library.`}
+        title="Delete Collection"
+        message={`Delete "${confirmDelete?.name}"? This will remove the collection but keep all media in your library.`}
         variant="destructive"
         confirmText="Delete"
         onConfirm={() => handleDelete(confirmDelete.id)}

@@ -180,18 +180,18 @@ const ArtistsManagement = ({
                     >
                       {(artist.name || '?')[0].toUpperCase()}
                     </Avatar>
-                    <div className="flex grow flex-col items-start gap-1">
+                    <div className="flex grow shrink-0 basis-0 flex-col items-start gap-2">
                       <span className="text-heading-3 font-heading-3 text-[#ffffffff]">{artist.name}</span>
                       <div className="flex items-center gap-2">
                         <Badge variant={tier.variant}>{tier.label}</Badge>
                         {isActive ? (
                           <div className="flex items-center gap-1">
-                            <FeatherCheck className="text-[#22c55e]" style={{ width: 14, height: 14 }} />
-                            <span className="text-caption font-caption text-[#22c55e]">Active</span>
+                            <FeatherCheck className="text-body font-body text-[#22c55eff]" />
+                            <span className="text-caption font-caption text-neutral-400">Active</span>
                           </div>
                         ) : (
                           <div className="flex items-center gap-1">
-                            <span className="h-2 w-2 rounded-full bg-neutral-500" />
+                            <span className="h-2 w-2 rounded-full bg-neutral-400" />
                             <span className="text-caption font-caption text-neutral-400">Inactive</span>
                           </div>
                         )}
@@ -248,18 +248,18 @@ const ArtistsManagement = ({
                         {getSocialSetsCount(artist)} Sets
                       </span>
                     </div>
-                    <div className="flex flex-col items-end gap-1">
+                    <div className="flex flex-col items-start gap-1">
                       <span className="text-caption font-caption text-neutral-400">Late.co Status</span>
                       <div className="flex items-center gap-1">
                         {isConnected ? (
                           <>
-                            <FeatherCheck className="text-[#22c55e]" style={{ width: 14, height: 14 }} />
+                            <FeatherCheck className="text-body font-body text-[#22c55eff]" />
                             <span className="text-body-bold font-body-bold text-[#ffffffff]">Connected</span>
                           </>
                         ) : (
                           <>
-                            <FeatherX className="text-neutral-400" style={{ width: 14, height: 14 }} />
-                            <span className="text-body-bold font-body-bold text-neutral-400">Not Connected</span>
+                            <FeatherX className="text-body font-body text-neutral-400" />
+                            <span className="text-body-bold font-body-bold text-[#ffffffff]">Not Connected</span>
                           </>
                         )}
                       </div>

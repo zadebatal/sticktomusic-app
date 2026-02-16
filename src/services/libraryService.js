@@ -1164,13 +1164,16 @@ export const updateCollectionHashtagBank = (artistId, collectionId, hashtagBank)
 // ============================================================================
 
 /**
- * Pre-defined format templates for pipeline creation
+ * Pre-defined content format templates
  */
 export const FORMAT_TEMPLATES = [
-  { id: 'single', name: 'Single Image', slideCount: 1, slideLabels: ['Image'] },
-  { id: 'hook_lyrics', name: 'Hook + Lyrics', slideCount: 2, slideLabels: ['Hook', 'Lyrics'] },
-  { id: 'carousel', name: 'Carousel', slideCount: 3, slideLabels: ['Slide 1', 'Slide 2', 'Slide 3'] },
-  { id: 'hook_vibes_lyrics', name: 'Hook + Vibes + Lyrics', slideCount: 5, slideLabels: ['Hook', 'Vibes', 'Lyrics', 'Vibes', 'CTA'] },
+  { id: 'single', name: 'Single Image', slideCount: 1, slideLabels: ['Image'], type: 'slideshow' },
+  { id: 'hook_lyrics', name: 'Hook + Lyrics', slideCount: 2, slideLabels: ['Hook', 'Lyrics'], type: 'slideshow' },
+  { id: 'carousel', name: 'Carousel', slideCount: 3, slideLabels: ['Slide 1', 'Slide 2', 'Slide 3'], type: 'slideshow' },
+  { id: 'hook_vibes_lyrics', name: 'Hook + Vibes + Lyrics', slideCount: 5, slideLabels: ['Hook', 'Vibes', 'Lyrics', 'Vibes', 'CTA'], type: 'slideshow' },
+  { id: 'montage', name: 'Montage', slideCount: 0, slideLabels: [], type: 'video' },
+  { id: 'solo_clip', name: 'Solo Clip', slideCount: 0, slideLabels: [], type: 'video' },
+  { id: 'multi_clip', name: 'Multi Clip', slideCount: 0, slideLabels: [], type: 'video' },
 ];
 
 /**
@@ -1347,6 +1350,169 @@ export const switchPipelineFormat = (artistId, pipelineId, formatId) => {
 
   pipeline.updatedAt = new Date().toISOString();
   saveCollections(artistId, collections);
+};
+
+// ============================================================================
+// PAGE-CENTRIC WORKSPACE SYSTEM
+// ============================================================================
+
+/**
+ * Create or get a workspace (collection) for a page + format combination.
+ * If one already exists, returns it. Otherwise creates a new one.
+ * @param {string} artistId
+ * @param {Object} page - { handle, platform, id, profileImage, lateAccountId }
+ * @param {Object} format - FORMAT_TEMPLATE entry
+ * @returns {Object} The workspace collection
+ */
+export const getOrCreatePageWorkspace = (artistId, page, format) => {
+  const collections = getUserCollections(artistId);
+  // Look for existing workspace matching this page+format
+  const existing = collections.find(c =>
+    c.pageId === page.id && c.formatId === format.id
+  );
+  if (existing) return migrateCollectionBanks(existing);
+
+  // Create new workspace
+  const base = createCollection({
+    name: `${page.handle} · ${format.name}`,
+    description: '',
+  });
+  const slideCount = format.slideCount || 2;
+  const banks = [];
+  const textBanks = [];
+  for (let i = 0; i < Math.max(slideCount, MIN_BANKS); i++) {
+    banks.push([]);
+    textBanks.push([]);
+  }
+
+  const workspace = {
+    ...base,
+    isPipeline: true, // backwards compat — workspace IS a pipeline internally
+    pageId: page.id,
+    formatId: format.id,
+    pageHandle: page.handle,
+    pagePlatform: page.platform,
+    pageProfileImage: page.profileImage || null,
+    linkedPage: { handle: page.handle, platform: page.platform, accountId: page.lateAccountId },
+    formats: [{ ...format }],
+    activeFormatId: format.id,
+    pipelineColor: PIPELINE_COLORS[Math.floor(Math.random() * PIPELINE_COLORS.length)],
+    banks,
+    textBanks,
+  };
+
+  collections.push(workspace);
+  saveCollections(artistId, collections);
+  return workspace;
+};
+
+/**
+ * Get all workspaces for a specific page
+ * @param {string} artistId
+ * @param {string} pageId
+ * @returns {Object[]} Array of workspace collections
+ */
+export const getPageWorkspaces = (artistId, pageId) => {
+  const collections = getUserCollections(artistId);
+  return collections.filter(c => c.pageId === pageId);
+};
+
+/**
+ * Get all unlinked collections (not assigned to any page)
+ * These are legacy collections that existed before the page system
+ */
+export const getUnlinkedCollections = (artistId) => {
+  const collections = getUserCollections(artistId);
+  return collections.filter(c => !c.pageId);
+};
+
+/**
+ * Link an existing collection to a page + format
+ * Used for migrating old collections into the page system
+ */
+export const linkCollectionToPage = (artistId, collectionId, page, format) => {
+  const collections = getUserCollections(artistId);
+  const col = collections.find(c => c.id === collectionId);
+  if (!col) return null;
+
+  col.pageId = page.id;
+  col.formatId = format.id;
+  col.pageHandle = page.handle;
+  col.pagePlatform = page.platform;
+  col.pageProfileImage = page.profileImage || null;
+  col.linkedPage = { handle: page.handle, platform: page.platform, accountId: page.lateAccountId };
+  col.isPipeline = true;
+  col.formats = [{ ...format }];
+  col.activeFormatId = format.id;
+  col.updatedAt = new Date().toISOString();
+
+  // Tag all media in banks with pageId
+  const library = getLibrary(artistId);
+  const mediaIdsInBanks = new Set();
+  (col.banks || []).forEach(bank => (bank || []).forEach(id => mediaIdsInBanks.add(id)));
+  (col.mediaIds || []).forEach(id => mediaIdsInBanks.add(id));
+
+  let changed = false;
+  library.forEach(item => {
+    if (mediaIdsInBanks.has(item.id) && item.pageId !== page.id) {
+      item.pageId = page.id;
+      changed = true;
+    }
+  });
+  if (changed) saveLibrary(artistId, library);
+
+  saveCollections(artistId, collections);
+  return col;
+};
+
+/**
+ * Tag media items with a pageId (used when uploading within a page workspace)
+ */
+export const tagMediaWithPage = (artistId, mediaIds, pageId) => {
+  const ids = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
+  const library = getLibrary(artistId);
+  let changed = false;
+  library.forEach(item => {
+    if (ids.includes(item.id) && item.pageId !== pageId) {
+      item.pageId = pageId;
+      changed = true;
+    }
+  });
+  if (changed) saveLibrary(artistId, library);
+};
+
+/**
+ * Get media pool for a specific page (all media tagged with this pageId)
+ */
+export const getPageMedia = (artistId, pageId) => {
+  const library = getLibrary(artistId);
+  return library.filter(item => item.pageId === pageId);
+};
+
+/**
+ * Get workspace bank label using format's slide labels
+ */
+export const getWorkspaceBankLabel = (workspace, index) => {
+  if (!workspace?.formats) return getBankLabel(index);
+  const fmt = workspace.formats.find(f => f.id === workspace.activeFormatId) || workspace.formats[0];
+  if (fmt?.slideLabels && index < fmt.slideLabels.length) return fmt.slideLabels[index];
+  return getBankLabel(index);
+};
+
+/**
+ * Get workspace readiness (all banks have at least one image)
+ */
+export const getWorkspaceStatus = (workspace, library) => {
+  if (!workspace) return { ready: false, label: 'No workspace' };
+  const migrated = migrateCollectionBanks(workspace);
+  const fmt = migrated.formats?.find(f => f.id === migrated.activeFormatId) || migrated.formats?.[0];
+  const slideCount = fmt?.slideCount || migrated.banks?.length || 2;
+  for (let i = 0; i < slideCount; i++) {
+    if (!migrated.banks[i] || migrated.banks[i].length === 0) {
+      return { ready: false, label: 'Needs media' };
+    }
+  }
+  return { ready: true, label: 'Ready' };
 };
 
 /**

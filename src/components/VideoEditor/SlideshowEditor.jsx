@@ -2219,7 +2219,7 @@ const SlideshowEditor = ({
 
       <div className={`flex items-center ${isMobile ? 'order-2 gap-2' : 'gap-3'}`}>
         <Button
-          variant="neutral-secondary"
+          variant="brand-primary"
           icon={isExporting ? null : <FeatherDownload />}
           loading={isExporting}
           onClick={handleExport}
@@ -3600,7 +3600,7 @@ const SlideshowEditor = ({
   // ═══════════════════════════════════════════
   return (
     <div className={`fixed inset-0 bg-black/95 z-[10000] flex items-center justify-center ${isMobile ? 'p-0' : ''}`}>
-      <div className={`bg-neutral-0 flex flex-col overflow-hidden border border-neutral-200 ${isMobile ? 'w-full h-screen rounded-none' : 'w-[95vw] h-[95vh] rounded-2xl'}`}>
+      <div className={`bg-neutral-0 flex flex-col overflow-hidden border border-neutral-200 ${isMobile ? 'w-full h-screen rounded-none' : 'w-[95vw] h-screen rounded-2xl'}`}>
         {renderTopBar()}
         {renderDraftTabsBar()}
 
@@ -3658,15 +3658,17 @@ const SlideshowEditor = ({
               borderLeft: isMobile ? 'none' : '1px solid #262626',
               display: 'flex', flexDirection: 'column',
               backgroundColor: '#000000',
-              overflowY: 'auto',
+              overflow: 'hidden',
               flexShrink: 0
             }}>
-              {renderCollapsibleSection('source', 'Source', renderSidebarSource())}
-              {renderCollapsibleSection('audio', 'Audio', renderSidebarAudio())}
-              {renderCollapsibleSection('textStyle', 'Text Style', renderSidebarTextStyle())}
-              {renderCollapsibleSection('textBanks', 'Text Banks', renderSidebarTextBanks())}
-              {renderCollapsibleSection('slideBanks', 'Slide Banks', renderSidebarSlideBanks())}
-              {renderCollapsibleSection('lyrics', 'Lyrics', renderSidebarLyrics())}
+              <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
+                {renderCollapsibleSection('source', 'Source', renderSidebarSource())}
+                {renderCollapsibleSection('audio', 'Audio', renderSidebarAudio())}
+                {renderCollapsibleSection('textStyle', 'Text Style', renderSidebarTextStyle())}
+                {renderCollapsibleSection('textBanks', 'Text Banks', renderSidebarTextBanks())}
+                {renderCollapsibleSection('slideBanks', 'Slide Banks', renderSidebarSlideBanks())}
+                {renderCollapsibleSection('lyrics', 'Lyrics', renderSidebarLyrics())}
+              </div>
             </div>
           )}
 

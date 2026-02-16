@@ -4,9 +4,10 @@ import { calculateOperatorPrice } from '../services/subscriptionService';
 import { Button } from '../ui/components/Button';
 import { Badge } from '../ui/components/Badge';
 import { TextField } from '../ui/components/TextField';
+import { IconWithBackground } from '../ui/components/IconWithBackground';
 import {
   FeatherArrowRight, FeatherPlay, FeatherVideo, FeatherCalendar,
-  FeatherBarChart2, FeatherCheck, FeatherX
+  FeatherBarChart, FeatherCheck, FeatherX
 } from '@subframe/core';
 
 /**
@@ -62,106 +63,127 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
   };
 
   const tierCards = [
-    { name: 'Starter', price: '$500', sets: 5, features: ['5 Social Sets', 'Unlimited videos', 'Basic analytics'] },
-    { name: 'Growth', price: '$1,000', sets: 10, features: ['10 Social Sets', 'Unlimited videos', 'Advanced analytics'], popular: true },
-    { name: 'Scale', price: '$2,500', sets: 25, features: ['25 Social Sets', 'Unlimited videos', 'Priority support'] },
-    { name: 'Sensation', price: '$5,000', sets: 50, features: ['50 Social Sets', 'Unlimited videos', 'Dedicated support'] },
+    { name: 'Starter', price: '$500', sets: 5, features: ['5 Social Sets', 'Unlimited posts', 'Full analytics', 'Priority support'] },
+    { name: 'Growth', price: '$1,000', sets: 10, features: ['10 Social Sets', 'Unlimited posts', 'Full analytics', 'Priority support'], popular: true },
+    { name: 'Scale', price: '$2,500', sets: 25, features: ['25 Social Sets', 'Unlimited posts', 'Full analytics', 'Priority support'] },
+    { name: 'Sensation', price: '$5,000', sets: 50, features: ['50 Social Sets', 'Unlimited posts', 'Full analytics', 'Priority support'] },
   ];
 
   return (
     <div className="flex h-full w-full flex-col items-center bg-black">
       {/* NAV */}
-      <div className="flex w-full items-center justify-between border-b border-solid border-neutral-800 bg-black px-8 py-4">
+      <div className="flex w-full items-center justify-between border-b border-solid border-neutral-800 bg-black px-12 py-4">
         <span className="text-heading-2 font-heading-2 text-[#ffffffff]">StickToMusic</span>
         <div className="flex items-center gap-3">
-          <Button variant="neutral-tertiary" size="medium" onClick={() => { setAuthMode('login'); setShowAuth(true); }}>
+          <Button variant="brand-tertiary" size="medium" onClick={() => { setAuthMode('login'); setShowAuth(true); }}>
             Log in
           </Button>
-          <Button variant="brand-primary" size="medium" onClick={() => { setAuthMode('signup'); setShowAuth(true); }}>
+          <Button variant="neutral-secondary" size="medium" onClick={() => { setAuthMode('signup'); setShowAuth(true); }}>
             Get Started
           </Button>
         </div>
       </div>
 
-      {/* HERO */}
-      <div className="flex w-full flex-col items-center bg-black px-8 py-24 text-center">
-        <span className="max-w-4xl font-['Outfit'] text-[72px] font-[700] leading-tight text-[#ffffffff] -tracking-[0.02em]">
-          Your music, everywhere.
-        </span>
-        <span className="text-xl text-neutral-400 max-w-2xl mx-auto mt-6">
-          Create videos in seconds, schedule posts across every platform,
-          and grow your audience systematically — all in one place.
-        </span>
-        <div className="flex items-center gap-4 mt-10">
-          <Button variant="brand-primary" size="large" iconRight={<FeatherArrowRight />} onClick={() => { setAuthMode('signup'); setShowAuth(true); }}>
-            Start Creating
-          </Button>
-          <Button variant="neutral-secondary" size="large" icon={<FeatherPlay />} onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}>
-            See How
-          </Button>
-        </div>
-      </div>
+      {/* MAIN CONTENT — single centered container */}
+      <div className="flex w-full max-w-[1280px] flex-col items-center gap-32 bg-black px-12 py-24">
 
-      {/* FEATURES */}
-      <div className="bg-[#0a0a0aff] px-8 py-20 w-full" id="features">
-        <span className="text-heading-1 font-heading-1 text-[#ffffffff] text-center block">
-          Everything you need
-        </span>
-        <p className="text-body font-body text-neutral-400 text-center mt-4 max-w-2xl mx-auto">
-          One tool to create, schedule, and grow across every platform.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto mt-12">
-          {[
-            { icon: <FeatherVideo className="text-white w-6 h-6" />, title: 'Studio', desc: 'Batch-create beat-synced videos and slideshows in minutes. Upload your music, add visuals, and export ready-to-post content.' },
-            { icon: <FeatherCalendar className="text-white w-6 h-6" />, title: 'Scheduler', desc: 'Schedule posts across TikTok, Instagram, YouTube, and Facebook from one dashboard. Stay consistent without the daily grind.' },
-            { icon: <FeatherBarChart2 className="text-white w-6 h-6" />, title: 'Analytics', desc: 'Track performance across all platforms. See what works, optimize your strategy, and grow your audience systematically.' },
-          ].map((f, i) => (
-            <div key={i} className="rounded-xl border border-neutral-800 bg-[#1a1a1aff] px-8 py-8">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand-600 mb-4">
-                {f.icon}
-              </div>
-              <span className="text-heading-3 font-heading-3 text-[#ffffffff] block">{f.title}</span>
-              <span className="text-body font-body text-neutral-400 mt-2 block">{f.desc}</span>
+        {/* ═══ HERO ═══ */}
+        <div className="flex w-full flex-col items-center gap-12">
+          <div className="flex w-full max-w-[768px] flex-col items-center gap-8">
+            <div className="flex w-full flex-col items-center gap-6">
+              <span className="w-full font-['Outfit'] text-[72px] font-[700] leading-[80px] text-[#ffffffff] text-center -tracking-[0.02em]">
+                Your music, everywhere.
+              </span>
+              <span className="w-full text-heading-2 font-heading-2 text-brand-700 text-center">
+                Create videos in seconds, schedule posts across every platform,
+                and grow your audience systematically — all in one place.
+              </span>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* HOW IT WORKS */}
-      <div className="bg-black px-8 py-20 w-full">
-        <span className="text-heading-1 font-heading-1 text-[#ffffffff] text-center block">How it works</span>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto mt-12">
-          {[
-            { num: '1', title: 'Connect your pages', desc: 'Link your TikTok, Instagram, YouTube, and Facebook accounts in seconds.' },
-            { num: '2', title: 'Create content', desc: 'Use our studio to remix your videos and slideshows that sync perfectly to the music of your choice.' },
-            { num: '3', title: 'Schedule & grow', desc: 'Queue your posts, track analytics, and watch your audience grow across every platform.' },
-          ].map((step, i) => (
-            <div key={i} className="flex flex-col items-center gap-4 text-center">
-              <div className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-brand-600">
-                <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{step.num}</span>
-              </div>
-              <span className="text-heading-3 font-heading-3 text-[#ffffffff]">{step.title}</span>
-              <span className="text-body font-body text-neutral-400">{step.desc}</span>
+            <div className="flex items-center gap-4">
+              <Button variant="brand-tertiary" size="large" iconRight={<FeatherArrowRight />} onClick={() => { setAuthMode('signup'); setShowAuth(true); }}>
+                Start Creating
+              </Button>
+              <Button variant="neutral-secondary" size="large" onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}>
+                See How
+              </Button>
             </div>
-          ))}
+          </div>
         </div>
-      </div>
 
-      {/* PRICING */}
-      <div className="bg-black px-8 py-20 w-full" id="pricing">
-        <span className="text-heading-1 font-heading-1 text-[#ffffffff] text-center block">Simple pricing</span>
-        <p className="text-body font-body text-neutral-400 text-center mt-4 max-w-2xl mx-auto">
-          1 Social Set = Facebook + TikTok + Twitter + Instagram. Scale as you grow.
-        </p>
+        {/* ═══ FEATURES ═══ */}
+        <div className="flex w-full flex-col items-center gap-16" id="features">
+          <div className="flex w-full max-w-[768px] flex-col items-center gap-4">
+            <span className="text-heading-1 font-heading-1 text-[#ffffffff] text-center">
+              Everything you need
+            </span>
+            <span className="text-body font-body text-brand-900 text-center">
+              One tool to create, schedule, and grow across every platform.
+            </span>
+          </div>
+          <div className="w-full items-start gap-8 grid grid-cols-3">
+            {[
+              { icon: <FeatherVideo />, title: 'Studio', desc: 'Drop in your clips, photos, and tracks. Our studio remixes your own media into hundreds of ready-to-post videos and slideshows — professionally cut, perfectly synced, at the click of a button.' },
+              { icon: <FeatherCalendar />, title: 'Scheduler', desc: 'Schedule posts across TikTok, Instagram, YouTube, and Facebook from one dashboard. Stay consistent without the daily grind.' },
+              { icon: <FeatherBarChart />, title: 'Analytics', desc: 'Track performance across all platforms. See what works, optimize your strategy, and grow your audience systematically.' },
+            ].map((f, i) => (
+              <div key={i} className="flex grow shrink-0 basis-0 flex-col items-start gap-4">
+                <IconWithBackground className="h-12 w-12 flex-none mx-auto" variant="neutral" size="large" icon={f.icon} square={false} />
+                <div className="flex w-full flex-col items-start gap-2">
+                  <span className="w-full text-heading-2 font-heading-2 text-[#ffffffff] text-center">{f.title}</span>
+                  <span className="text-body font-body text-brand-900 text-center">{f.desc}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
 
-        {/* Tab toggle */}
-        <div className="flex items-center justify-center mt-10">
+        {/* ═══ HOW IT WORKS ═══ */}
+        <div className="flex w-full flex-col items-center gap-16">
+          <div className="flex w-full max-w-[768px] flex-col items-center gap-4">
+            <span className="text-heading-1 font-heading-1 text-[#ffffffff] text-center">
+              How it works
+            </span>
+          </div>
+          <div className="w-full items-start gap-8 grid grid-cols-3">
+            {[
+              { num: '1', title: 'Connect your pages', desc: 'Link your TikTok, Instagram, YouTube, and Facebook accounts in seconds.' },
+              { num: '2', title: 'Create content', desc: 'Drop in your clips, photos, and tracks — our studio remixes them into hundreds of ready-to-post videos and slideshows at the click of a button.' },
+              { num: '3', title: 'Schedule & grow', desc: 'Queue your posts, track analytics, and watch your audience grow across every platform.' },
+            ].map((step, i) => (
+              <div key={i} className="flex grow shrink-0 basis-0 flex-col items-center gap-4">
+                <div className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-neutral-800">
+                  <span className="text-heading-2 font-heading-2 text-[#000000ff]">{step.num}</span>
+                </div>
+                <div className="flex w-full flex-col items-center gap-2">
+                  <span className="text-heading-3 font-heading-3 text-[#ffffffff] text-center">{step.title}</span>
+                  <span className="text-body font-body text-brand-900 text-center">{step.desc}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ═══ PRICING ═══ */}
+        <div className="flex w-full flex-col items-center gap-12">
+          <div className="flex w-full max-w-[768px] flex-col items-center gap-4">
+            <span className="text-heading-1 font-heading-1 text-[#ffffffff] text-center">
+              Simple pricing
+            </span>
+            <span className="text-body font-body text-brand-900 text-center">
+              Every plan includes unlimited posts, full analytics, and priority support. Pick the plan that fits how many pages you manage.
+            </span>
+            <span className="text-caption font-caption text-brand-700 text-center mt-1">
+              1 Social Set = Facebook + TikTok + Twitter + Instagram
+            </span>
+          </div>
+
+          {/* Tab toggle */}
           <div className="flex items-center rounded-lg border border-solid border-neutral-800 bg-black px-1 py-1">
             <div
               className={`flex h-10 items-center justify-center rounded-md px-4 py-2 cursor-pointer ${pricingTab === 'artist' ? 'bg-neutral-100' : ''}`}
               onClick={() => setPricingTab('artist')}
             >
-              <span className={`${pricingTab === 'artist' ? 'text-body-bold font-body-bold text-default-font' : 'text-body font-body text-neutral-400'}`}>
+              <span className={`${pricingTab === 'artist' ? 'text-body-bold font-body-bold text-default-font' : 'text-body font-body text-brand-700'}`}>
                 Artist
               </span>
             </div>
@@ -169,114 +191,113 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
               className={`flex h-10 items-center justify-center rounded-md px-4 py-2 cursor-pointer ${pricingTab === 'operator' ? 'bg-neutral-100' : ''}`}
               onClick={() => setPricingTab('operator')}
             >
-              <span className={`${pricingTab === 'operator' ? 'text-body-bold font-body-bold text-default-font' : 'text-body font-body text-neutral-400'}`}>
+              <span className={`${pricingTab === 'operator' ? 'text-body-bold font-body-bold text-default-font' : 'text-body font-body text-brand-700'}`}>
                 Operator
               </span>
             </div>
           </div>
-        </div>
 
-        {/* Tier cards */}
-        {pricingTab === 'artist' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto mt-12">
-            {tierCards.map((tier, i) => (
-              <div
-                key={i}
-                className={`rounded-xl px-6 py-8 flex flex-col ${
-                  tier.popular
-                    ? 'border-2 border-solid border-brand-600 bg-[#1a1a1aff]'
-                    : 'border border-solid border-neutral-800 bg-[#1a1a1aff]'
-                }`}
-              >
-                <div className="flex w-full flex-col items-start gap-2 mb-6">
-                  {tier.popular ? (
-                    <div className="flex w-full items-center gap-2">
-                      <span className="grow shrink-0 basis-0 text-heading-3 font-heading-3 text-[#ffffffff]">{tier.name}</span>
-                      <Badge variant="brand">Popular</Badge>
+          {/* Pricing container */}
+          <div className="flex w-full flex-col items-start gap-6 rounded-lg border border-solid border-neutral-800 bg-[#000000ff] px-8 py-8">
+            {/* Tier cards */}
+            {pricingTab === 'artist' && (
+              <div className="w-full items-start gap-6 grid grid-cols-4">
+                {tierCards.map((tier, i) => (
+                  <div
+                    key={i}
+                    className={`flex grow shrink-0 basis-0 flex-col items-start gap-6 rounded-md px-6 py-8 ${
+                      tier.popular
+                        ? 'border-2 border-solid border-brand-primary bg-black'
+                        : 'border border-solid border-neutral-800 bg-black'
+                    }`}
+                  >
+                    <div className="flex w-full flex-col items-start gap-2">
+                      {tier.popular ? (
+                        <div className="flex w-full items-center gap-2">
+                          <span className="grow shrink-0 basis-0 text-heading-3 font-heading-3 text-[#ffffffff]">{tier.name}</span>
+                          <Badge variant="brand">POPULAR</Badge>
+                        </div>
+                      ) : (
+                        <span className="text-heading-3 font-heading-3 text-[#ffffffff]">{tier.name}</span>
+                      )}
+                      <div className="flex gap-1 items-baseline">
+                        <span className="font-['Outfit'] text-[36px] font-[700] leading-[40px] text-[#ffffffff]">{tier.price}</span>
+                        <span className="text-body font-body text-brand-900">/mo</span>
+                      </div>
                     </div>
-                  ) : (
-                    <span className="text-heading-3 font-heading-3 text-[#ffffffff]">{tier.name}</span>
-                  )}
-                  <div className="flex gap-1 items-baseline">
-                    <span className="text-heading-1 font-heading-1 text-[#ffffffff]">{tier.price}</span>
-                    <span className="text-body font-body text-neutral-400">/mo</span>
+                    <div className="flex w-full flex-col items-start gap-3">
+                      {tier.features.map((f, j) => (
+                        <div key={j} className="flex items-center gap-2">
+                          <FeatherCheck className="text-body font-body text-[#ffffffff]" />
+                          <span className="text-body font-body text-brand-900">{f}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <Button
+                      className="h-10 w-full flex-none"
+                      variant="neutral-secondary"
+                      size="large"
+                      onClick={() => handleTierClick(tier)}
+                    >
+                      Get Started
+                    </Button>
                   </div>
-                </div>
-                <div className="flex w-full flex-col items-start gap-3 mb-8">
-                  {tier.features.map((f, j) => (
-                    <div key={j} className="flex items-center gap-2">
-                      <FeatherCheck className="text-brand-600 w-4 h-4 flex-none" />
-                      <span className="text-body font-body text-neutral-400">{f}</span>
-                    </div>
-                  ))}
-                </div>
-                <Button
-                  className="w-full mt-auto"
-                  variant={tier.popular ? 'brand-primary' : 'neutral-secondary'}
-                  size="large"
-                  onClick={() => handleTierClick(tier)}
-                >
-                  Get Started
-                </Button>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            )}
 
-        {/* Operator calculator */}
-        {pricingTab === 'operator' && (
-          <div className="max-w-2xl mx-auto mt-12 rounded-xl border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-8">
-            <span className="text-heading-3 font-heading-3 text-[#ffffffff] block mb-2">Operator Pricing</span>
-            <span className="text-body font-body text-neutral-400 block mb-6">
-              Managing multiple artists? Pay only for what you need: Artists x Social Sets x $100/set per month.
-            </span>
-            <div className="flex w-full items-center gap-4 mb-4">
-              <TextField className="h-auto grow shrink-0 basis-0" label="Number of Artists">
-                <TextField.Input
-                  placeholder="e.g. 5"
-                  value={opArtists}
-                  onChange={(e) => setOpArtists(e.target.value)}
-                />
-              </TextField>
-              <TextField className="h-auto grow shrink-0 basis-0" label="Sets per Artist">
-                <TextField.Input
-                  placeholder="e.g. 10"
-                  value={opSetsPerArtist}
-                  onChange={(e) => setOpSetsPerArtist(e.target.value)}
-                />
-              </TextField>
-            </div>
-            <div className="flex w-full gap-2 items-baseline mb-6">
-              <span className="text-caption font-caption text-neutral-400">Estimated monthly cost:</span>
-              <span className="font-['Outfit'] text-[28px] font-[700] leading-[32px] text-[#ffffffff]">
-                ${operatorPrice.toLocaleString()}
-              </span>
-              <span className="text-body font-body text-neutral-400">/mo</span>
-            </div>
-            <Button className="w-full" variant="brand-primary" size="large" onClick={() => { setAuthMode('signup'); setShowAuth(true); }}>
-              Get Started as Operator
-            </Button>
-          </div>
-        )}
-      </div>
-
-      {/* CTA */}
-      <div className="bg-[#0a0a0aff] px-8 py-20 w-full">
-        <div className="max-w-3xl mx-auto text-center">
-          <span className="text-heading-1 font-heading-1 text-[#ffffffff] block">Ready to create?</span>
-          <span className="text-body font-body text-neutral-400 block mt-4">
-            Join hundreds of artists growing their audience with StickToMusic.
-          </span>
-          <div className="mt-8 flex justify-center">
-            <Button variant="brand-primary" size="large" iconRight={<FeatherArrowRight />} onClick={() => { setAuthMode('signup'); setShowAuth(true); }}>
-              Get Started
-            </Button>
+            {/* Operator calculator */}
+            {pricingTab === 'operator' && (
+              <div className="flex w-full flex-col items-start gap-4 rounded-md border border-solid border-neutral-800 bg-black px-6 py-6">
+                <span className="text-heading-3 font-heading-3 text-[#ffffffff]">Operator Pricing</span>
+                <span className="text-body font-body text-brand-900">
+                  Managing multiple artists? Pay only for what you need: Artists × Social Sets × $100/set per month.
+                </span>
+                <div className="flex w-full items-center gap-4">
+                  <TextField className="h-auto grow shrink-0 basis-0" label="Number of Artists" helpText="">
+                    <TextField.Input
+                      placeholder="e.g. 5"
+                      value={opArtists}
+                      onChange={(e) => setOpArtists(e.target.value)}
+                    />
+                  </TextField>
+                  <TextField className="h-auto grow shrink-0 basis-0" label="Sets per Artist" helpText="">
+                    <TextField.Input
+                      placeholder="e.g. 10"
+                      value={opSetsPerArtist}
+                      onChange={(e) => setOpSetsPerArtist(e.target.value)}
+                    />
+                  </TextField>
+                </div>
+                <div className="flex w-full gap-2 items-baseline">
+                  <span className="text-caption font-caption text-brand-900">Estimated monthly cost:</span>
+                  <span className="font-['Outfit'] text-[28px] font-[700] leading-[32px] text-[#ffffffff]">
+                    ${operatorPrice.toLocaleString()}
+                  </span>
+                  <span className="text-body font-body text-brand-900">/mo</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* ═══ CTA ═══ */}
+        <div className="flex w-full flex-col items-center gap-6 rounded-lg bg-[#000000ff] px-12 py-16">
+          <div className="flex w-full max-w-[768px] flex-col items-center gap-4">
+            <span className="text-heading-1 font-heading-1 text-[#ffffffff] text-center">Ready to create?</span>
+            <span className="text-body font-body text-brand-900 text-center">
+              Join hundreds of artists growing their audience with StickToMusic.
+            </span>
+          </div>
+          <Button variant="brand-tertiary" size="large" iconRight={<FeatherArrowRight />} onClick={() => { setAuthMode('signup'); setShowAuth(true); }}>
+            Get Started
+          </Button>
+        </div>
+
       </div>
 
       {/* FOOTER */}
-      <div className="flex w-full items-center justify-center border-t border-solid border-neutral-800 bg-black px-8 py-8">
+      <div className="flex w-full items-center justify-center border-t border-solid border-neutral-800 bg-black px-12 py-8">
         <span className="text-caption font-caption text-neutral-400">&copy; 2026 StickToMusic</span>
       </div>
 

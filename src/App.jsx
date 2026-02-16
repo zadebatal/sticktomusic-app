@@ -1909,13 +1909,13 @@ const StickToMusic = () => {
       setUser({
         email: email,
         role: role,
-        name: artistInfo?.name || signupForm.name,
+        name: signupForm.name || userCredential.user.displayName || email.split('@')[0],
         photoURL: userCredential.user.photoURL || null,
         artistId: artistInfo?.artistId || null
       });
       setShowSignupModal(false);
       setSignupForm({ email: '', password: '', name: '', role: 'artist', error: null });
-      showToast(`Welcome to StickToMusic, ${artistInfo?.name || signupForm.name}!`, 'success');
+      showToast(`Welcome to StickToMusic, ${signupForm.name || userCredential.user.displayName || email.split('@')[0]}!`, 'success');
 
       setCurrentPage((role === 'artist' || role === 'collaborator') ? 'artist-dashboard' : 'operator');
     } catch (error) {
@@ -1997,12 +1997,12 @@ const StickToMusic = () => {
       setUser({
         email: userEmail,
         role: role,
-        name: artistInfo?.name || name,
+        name: name || userCredential.user.displayName || userEmail.split('@')[0],
         photoURL: userCredential.user.photoURL || null,
         artistId: artistInfo?.artistId || null
       });
       setCurrentPage((role === 'artist' || role === 'collaborator') ? 'artist-dashboard' : 'operator');
-      showToast(`Welcome, ${artistInfo?.name || name}!`, 'success');
+      showToast(`Welcome, ${name || userCredential.user.displayName || userEmail.split('@')[0]}!`, 'success');
     } catch (error) {
       let msg = 'Signup failed';
       if (error.code === 'auth/email-already-in-use') msg = 'Email already exists. Try logging in';
@@ -6039,6 +6039,7 @@ const StickToMusic = () => {
             onArtistChange={handleArtistChange}
             lateAccountIds={derivedLateAccountIds}
             latePages={latePages.filter(p => p.artistId === currentArtistId)}
+            manualAccounts={manualAccountsByArtist[currentArtistId] || []}
             onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: currentArtistId })}
             onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, currentArtistId)}
           />
