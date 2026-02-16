@@ -4333,6 +4333,7 @@ const getStyles = (theme) => ({
     flex: 1,
     display: 'flex',
     justifyContent: 'center',
+    alignItems: 'center',
     minHeight: 0,
     overflow: 'hidden',
     padding: '12px'
@@ -4343,8 +4344,8 @@ const getStyles = (theme) => ({
     backgroundColor: theme.bg.page,
     borderRadius: '8px',
     overflow: 'hidden',
-    maxWidth: '360px',
-    width: '100%',
+    height: '100%',
+    width: 'auto',
     alignSelf: 'center'
   },
   previewVideo: {
