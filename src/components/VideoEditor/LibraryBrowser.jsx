@@ -2233,11 +2233,11 @@ const LibraryBrowser = ({
 
               {/* Right half — Banks with tabs */}
               <div style={{
-                flex: isMobile ? 'none' : 1,
+                flex: isMobile ? 'none' : '1 1 0',
                 display: 'flex',
                 flexDirection: 'column',
                 minWidth: 0,
-                minHeight: 0,
+                height: isMobile ? 'auto' : 0,
                 overflow: 'hidden',
                 ...(isMobile ? { width: '100%' } : {})
               }}>
@@ -2271,14 +2271,14 @@ const LibraryBrowser = ({
 
                 {mode !== 'videos' && bankTab === 'images' ? (
                   <div style={{
-                    flex: 1,
+                    flex: '1 1 0',
+                    height: isMobile ? 'auto' : 0,
                     display: 'flex',
                     flexDirection: isMobile ? 'row' : 'column',
                     gap: '8px',
                     overflow: 'auto',
                     overflowX: isMobile ? 'auto' : undefined,
                     overflowY: isMobile ? undefined : 'auto',
-                    minHeight: 0,
                     WebkitOverflowScrolling: 'touch',
                     paddingBottom: isMobile ? '8px' : undefined,
                     paddingRight: isMobile ? undefined : '4px'
@@ -2409,7 +2409,7 @@ const LibraryBrowser = ({
                     )}
                   </div>
                 ) : (
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', minHeight: 0, paddingRight: '4px' }}>
+                  <div style={{ flex: '1 1 0', height: 0, display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', paddingRight: '4px' }}>
                     {/* Slideshow Text Banks (only in images/slideshows mode) - Dynamic based on collection banks */}
                     {mode !== 'videos' && (() => {
                       const col = collections.find(c => c.id === activeView);
