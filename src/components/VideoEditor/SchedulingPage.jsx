@@ -378,10 +378,11 @@ const SchedulingPage = ({
       await updateScheduledPost(db, artistId, update.id, { scheduledTime: update.scheduledTime });
     }
 
-    // Sync time changes to Late.co for posts that are already scheduled there
+    // Sync time changes to Late.co for posts that have a Late post ID
+    // Include any status except 'posted' (already published) and 'draft' (not yet on Late)
     const lateUpdates = timeUpdates.filter(u => {
       const post = result.find(p => p.id === u.id);
-      return post?.latePostId && post?.status === 'scheduled';
+      return post?.latePostId && post?.status !== 'posted' && post?.status !== 'draft';
     });
     if (lateUpdates.length > 0) {
       try {
@@ -416,8 +417,8 @@ const SchedulingPage = ({
     // If scheduledTime changed and post has latePostId, offer to sync to Late.co
     if (updates.scheduledTime) {
       const post = posts.find(p => p.id === postId);
-      if (post?.latePostId && post?.status === 'scheduled') {
-        // Sync time change to Late.co (only if post is still scheduled, not posted yet)
+      if (post?.latePostId && post?.status !== 'posted' && post?.status !== 'draft') {
+        // Sync time change to Late.co (any post on Late that hasn't been published yet)
         try {
           const response = await fetch('/api/late', {
             method: 'POST',
