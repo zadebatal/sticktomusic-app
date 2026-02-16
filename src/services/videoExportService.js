@@ -75,11 +75,8 @@ const loadFFmpeg = async (onProgress = () => {}) => {
 const processVideo = async (videoBlob, onProgress = () => {}, audioInfo = null, isNativeMP4 = false) => {
   const hasAudio = !!audioInfo?.buffer;
 
-  // If native MP4 and no audio needed, return as-is
-  if (isNativeMP4 && !hasAudio) {
-    log('[VideoExport] Native MP4 with no audio, returning as-is');
-    return videoBlob;
-  }
+  // Always process through FFmpeg to ensure correct frame rate metadata (TikTok requires 23-60 FPS)
+  // Previously returned native MP4 as-is, but captureStream(0) can produce broken frame rate metadata
 
   // If native MP4 with audio, just mux audio (fast)
   // If WebM, need to convert to MP4 (slower but necessary)
@@ -111,18 +108,25 @@ const processVideo = async (videoBlob, onProgress = () => {}, audioInfo = null, 
       ffmpegArgs.push('-ss', String(audioStart), '-i', audioName);
     }
 
-    // Video encoding
+    // Video encoding — always set output frame rate to 30fps for TikTok compatibility
     if (needsVideoConversion) {
       // Need to re-encode WebM to H.264
       ffmpegArgs.push(
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-crf', '28',           // Higher CRF = faster, slightly lower quality
-        '-pix_fmt', 'yuv420p'
+        '-pix_fmt', 'yuv420p',
+        '-r', '30'              // Force 30fps output for TikTok (requires 23-60)
       );
     } else {
-      // Native MP4 - just copy video stream
-      ffmpegArgs.push('-c:v', 'copy');
+      // Native MP4 — re-encode to fix frame rate metadata from captureStream(0)
+      ffmpegArgs.push(
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '23',           // Better quality since input is already MP4
+        '-pix_fmt', 'yuv420p',
+        '-r', '30'              // Force 30fps output for TikTok (requires 23-60)
+      );
     }
 
     // Audio encoding
@@ -335,7 +339,7 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
   };
 
   // Render configuration
-  const FPS = 24; // 24fps is standard for video, faster than 30fps
+  const FPS = 30; // 30fps — standard for social media, within TikTok's 23-60 FPS requirement
   const frameInterval = 1 / FPS;
   const totalFrames = Math.ceil(safeDuration * FPS);
 
@@ -464,8 +468,9 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
         return;
       }
 
-      // Draw the frame
+      // Draw the frame and explicitly request capture
       drawFrameAtTime(currentTime);
+      if (videoTrack.requestFrame) videoTrack.requestFrame();
       currentFrame++;
 
       // Process next frame immediately (faster than requestAnimationFrame)
