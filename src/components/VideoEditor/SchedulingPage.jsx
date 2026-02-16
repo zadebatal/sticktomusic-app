@@ -414,36 +414,43 @@ const SchedulingPage = ({
     setPosts(prev => prev.map(p => p.id === postId ? { ...p, ...updates } : p));
     await updateScheduledPost(db, artistId, postId, updates);
 
-    // If scheduledTime changed and post has latePostId, offer to sync to Late.co
-    if (updates.scheduledTime) {
-      const post = posts.find(p => p.id === postId);
-      if (post?.latePostId && post?.status !== 'posted' && post?.status !== 'draft') {
-        // Sync time change to Late.co (any post on Late that hasn't been published yet)
-        try {
-          const response = await fetch('/api/late', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${await db.app.auth().currentUser?.getIdToken()}`
-            },
-            body: JSON.stringify({
-              action: 'updatePost',
-              postId: post.latePostId,
-              artistId,
-              scheduledFor: updates.scheduledTime
-            })
-          });
-
-          if (response.ok) {
-            toastSuccess('Time updated on Late.co');
-          } else {
-            console.warn('[Schedule] Failed to sync time to Late.co:', await response.text());
-            toastSuccess('Time updated locally (Late.co sync may have failed)');
-          }
-        } catch (error) {
-          console.error('[Schedule] Error syncing time to Late.co:', error);
-          // Don't show error toast - local update succeeded
+    // Sync changes to Late.co if post is on Late (has latePostId and isn't posted/draft)
+    const post = posts.find(p => p.id === postId);
+    const hasLateSync = post?.latePostId && post?.status !== 'posted' && post?.status !== 'draft';
+    if (hasLateSync && (updates.scheduledTime || updates.caption !== undefined || updates.hashtags !== undefined)) {
+      try {
+        const lateUpdates = {};
+        if (updates.scheduledTime) lateUpdates.scheduledFor = updates.scheduledTime;
+        if (updates.caption !== undefined || updates.hashtags !== undefined) {
+          // Rebuild full caption with hashtags for Late.co
+          const newCaption = updates.caption !== undefined ? updates.caption : (post.caption || '');
+          const newHashtags = updates.hashtags !== undefined ? updates.hashtags : (post.hashtags || []);
+          const hashtagStr = Array.isArray(newHashtags) ? newHashtags.join(' ') : newHashtags;
+          lateUpdates.content = [newCaption, hashtagStr].filter(Boolean).join('\n\n');
         }
+
+        const response = await fetch('/api/late', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${await db.app.auth().currentUser?.getIdToken()}`
+          },
+          body: JSON.stringify({
+            action: 'updatePost',
+            postId: post.latePostId,
+            artistId,
+            ...lateUpdates
+          })
+        });
+
+        if (response.ok) {
+          const what = updates.scheduledTime ? 'Time' : 'Caption';
+          toastSuccess(`${what} updated on Late.co`);
+        } else {
+          console.warn('[Schedule] Failed to sync to Late.co:', await response.text());
+        }
+      } catch (error) {
+        console.error('[Schedule] Error syncing to Late.co:', error);
       }
     }
   }, [db, artistId, posts, toastSuccess]);
@@ -482,13 +489,12 @@ const SchedulingPage = ({
 
   const handleDeletePost = useCallback((postId) => {
     const post = posts.find(p => p.id === postId);
-    const isPostedOrScheduled = post?.status === POST_STATUS.POSTED || post?.status === POST_STATUS.SCHEDULED;
     const hasLateId = !!post?.latePostId;
 
     setConfirmDialog({
       isOpen: true,
       title: 'Remove Post',
-      message: hasLateId && isPostedOrScheduled
+      message: hasLateId
         ? `Remove "${post?.contentName || 'this post'}" from the queue AND from Late.co?`
         : `Remove "${post?.contentName || 'this post'}" from the queue?`,
       variant: 'destructive',
@@ -514,7 +520,7 @@ const SchedulingPage = ({
   const handleDeleteSelected = useCallback(() => {
     if (selectedCount === 0) return;
     const selectedList = posts.filter(p => selectedPostIds.has(p.id));
-    const lateCount = selectedList.filter(p => p.latePostId && (p.status === POST_STATUS.POSTED || p.status === POST_STATUS.SCHEDULED)).length;
+    const lateCount = selectedList.filter(p => p.latePostId).length;
 
     setConfirmDialog({
       isOpen: true,
@@ -588,6 +594,17 @@ const SchedulingPage = ({
     if (!onSchedulePost) {
       toastError('Scheduling not available. Late API not connected.');
       return;
+    }
+
+    // If re-publishing (post already has a Late ID), delete the old Late post first
+    // Late.co doesn't support media updates, so we must delete + recreate
+    if (post.latePostId && onDeleteLatePost) {
+      try {
+        await onDeleteLatePost(post.latePostId);
+        log('[Schedule] Deleted old Late post before re-publish:', post.latePostId);
+      } catch (err) {
+        log('[Schedule] Failed to delete old Late post (continuing with new publish):', err);
+      }
     }
 
     const platformEntries = Object.entries(post.platforms || {})
@@ -728,7 +745,7 @@ const SchedulingPage = ({
       await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: err.message });
       toastError(`Publish failed: ${err.message}`);
     }
-  }, [posts, onSchedulePost, alwaysOnHashtags, handleUpdatePost, autoRenderPost, toastSuccess, toastError]);
+  }, [posts, onSchedulePost, onDeleteLatePost, alwaysOnHashtags, handleUpdatePost, autoRenderPost, toastSuccess, toastError]);
 
   // ── Batch Schedule Selected ──
   const handleBatchScheduleSelected = useCallback(async () => {

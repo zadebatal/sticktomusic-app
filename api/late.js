@@ -418,16 +418,21 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: 'No Late API key configured for this artist' });
         }
 
-        // Update post on Late.co (PATCH method)
+        // Update post on Late.co (PUT method — supports content + scheduledFor)
+        const updatePayload = {};
+        if (body.scheduledFor || body.scheduled_for) {
+          updatePayload.scheduledFor = body.scheduledFor || body.scheduled_for;
+        }
+        if (body.content) {
+          updatePayload.content = body.content;
+        }
         response = await fetchWithRetry(`${LATE_API_BASE}/posts/${postId}`, {
-          method: 'PATCH',
+          method: 'PUT',
           headers: {
             'Authorization': `Bearer ${updatePostKey}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            scheduled_for: body.scheduledFor || body.scheduled_for
-          })
+          body: JSON.stringify(updatePayload)
         });
         break;
 
