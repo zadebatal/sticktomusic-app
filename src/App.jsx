@@ -288,7 +288,12 @@ const lateApi = {
           content_preview_confirmed: true,
           express_consent_given: true,
           ...(type === 'carousel'
-            ? { draft: true, auto_add_music: true }
+            ? {
+                draft: true,
+                media_type: 'photo',
+                photo_cover_index: 0,
+                auto_add_music: true
+              }
             : { allow_duet: true, allow_stitch: true })
         };
       }
