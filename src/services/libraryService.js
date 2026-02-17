@@ -1810,12 +1810,12 @@ export const updateCreatedSlideshowAsync = async (db, artistId, slideshowId, upd
  */
 export const deleteCreatedSlideshowAsync = async (db, artistId, slideshowId) => {
   const result = deleteCreatedSlideshow(artistId, slideshowId);
-  const content = getCreatedContent(artistId);
   try {
-    await saveCreatedContentAsync(db, artistId, content);
+    // Delete the specific document from Firestore
+    const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', slideshowId);
+    await deleteDoc(docRef);
   } catch (error) {
-    console.error('[Library] Failed to sync slideshow deletion to Firestore:', error);
-    // Data still saved to localStorage, mark as unsynced
+    console.error('[Library] Failed to delete slideshow from Firestore:', error);
   }
   return result;
 };

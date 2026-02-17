@@ -1187,6 +1187,12 @@ const VideoStudio = ({
         if (video?.storagePath) await deleteFile(video.storagePath);
         if (video?.thumbnailPath) await deleteFile(video.thumbnailPath);
         deleteCreatedVideo(currentArtistId, videoId);
+        // Delete from Firestore too
+        if (db) {
+          const { doc: firestoreDoc, deleteDoc } = await import('firebase/firestore');
+          const docRef = firestoreDoc(db, 'artists', currentArtistId, 'library', 'data', 'createdContent', videoId);
+          deleteDoc(docRef).catch(err => console.warn('[VideoStudio] Firestore video delete failed:', err));
+        }
         setCreatedContentVersion(v => v + 1);
         // Cascade: remove any scheduled posts referencing this draft
         if (db && currentArtistId) {
