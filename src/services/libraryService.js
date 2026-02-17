@@ -1574,6 +1574,7 @@ export const saveCreatedContentAsync = async (db, artistId, content) => {
 
       batch.set(docRef, {
         ...video,
+        type: 'video',
         thumbnail: null,
         clips: cleanedClips,
         updatedAt: serverTimestamp()
@@ -1602,6 +1603,7 @@ export const saveCreatedContentAsync = async (db, artistId, content) => {
 
       batch.set(docRef, {
         ...slideshow,
+        type: 'slideshow',
         thumbnail: null,
         audio: cleanedAudio,
         slides: (slideshow.slides || []).map(slide => ({
@@ -1664,10 +1666,11 @@ export const loadCreatedContentAsync = async (db, artistId) => {
 
     snapshot.docs.forEach(doc => {
       const data = doc.data();
-      if (data.type === 'video') {
-        videos.push(data);
-      } else if (data.type === 'slideshow') {
-        slideshows.push(data);
+      const type = data.type || (data.clips ? 'video' : 'slideshow');
+      if (type === 'video') {
+        videos.push({ ...data, type: 'video' });
+      } else {
+        slideshows.push({ ...data, type: 'slideshow' });
       }
     });
 
@@ -1747,10 +1750,11 @@ export const subscribeToCreatedContent = (db, artistId, callback) => {
 
       snapshot.docs.forEach(doc => {
         const data = cleanLoadedData(doc.data());
-        if (data.type === 'video') {
-          videos.push(data);
-        } else if (data.type === 'slideshow') {
-          slideshows.push(data);
+        const type = data.type || (data.clips ? 'video' : 'slideshow');
+        if (type === 'video') {
+          videos.push({ ...data, type: 'video' });
+        } else {
+          slideshows.push({ ...data, type: 'slideshow' });
         }
       });
 
