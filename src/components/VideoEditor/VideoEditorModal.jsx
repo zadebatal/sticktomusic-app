@@ -2419,8 +2419,10 @@ const VideoEditorModal = ({
                       preload="auto"
                       autoPlay={isPlaying && activeVideoRef.current === 'A'}
                       crossOrigin="anonymous"
-                      onLoadStart={() => { if (activeVideoRef.current === 'A') { setVideoLoading(true); setVideoError(null); } }}
+                      onLoadStart={() => { if (activeVideoRef.current === 'A' && !isPlaying) { setVideoLoading(true); setVideoError(null); } }}
                       onCanPlay={() => { if (activeVideoRef.current === 'A') setVideoLoading(false); }}
+                      onLoadedData={() => { if (activeVideoRef.current === 'A') setVideoLoading(false); }}
+                      onPlaying={() => setVideoLoading(false)}
                       onError={(e) => {
                         console.error('Video A load error:', e);
                         if (activeVideoRef.current === 'A') {
@@ -2445,8 +2447,10 @@ const VideoEditorModal = ({
                       preload="auto"
                       autoPlay={isPlaying && activeVideoRef.current === 'B'}
                       crossOrigin="anonymous"
-                      onLoadStart={() => { if (activeVideoRef.current === 'B') { setVideoLoading(true); setVideoError(null); } }}
+                      onLoadStart={() => { if (activeVideoRef.current === 'B' && !isPlaying) { setVideoLoading(true); setVideoError(null); } }}
                       onCanPlay={() => { if (activeVideoRef.current === 'B') setVideoLoading(false); }}
+                      onLoadedData={() => { if (activeVideoRef.current === 'B') setVideoLoading(false); }}
+                      onPlaying={() => setVideoLoading(false)}
                       onError={(e) => {
                         console.error('Video B load error:', e);
                         if (activeVideoRef.current === 'B') {
@@ -2942,7 +2946,7 @@ const VideoEditorModal = ({
                         {/* Right-edge resize handle */}
                         {!clip.locked && (
                           <div
-                            onPointerDown={(e) => handleClipResizeStart(e, index)}
+                            onPointerDown={(e) => handleResizeStart(e, index, 'right')}
                             style={{
                               position: 'absolute', top: 0, right: 0, width: '8px', height: '100%',
                               cursor: 'col-resize',
