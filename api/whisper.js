@@ -66,13 +66,11 @@ async function verifyAuth(req) {
   }
 }
 
-async function isOperatorOrAbove(userEmail) {
+async function isAllowedUser(userEmail) {
   if (!db || !userEmail) return false;
   try {
     const userDoc = await db.collection('allowedUsers').doc(userEmail).get();
-    if (!userDoc.exists) return false;
-    const role = userDoc.data().role;
-    return role === 'conductor' || role === 'operator';
+    return userDoc.exists;
   } catch (error) {
     console.error('Error checking user role:', error.message);
     return false;
@@ -105,10 +103,10 @@ export default async function handler(req, res) {
 
   const userEmail = authResult.user.email;
 
-  // Check if user is operator or conductor
-  const hasAccess = await isOperatorOrAbove(userEmail);
+  // Check if user is in allowedUsers
+  const hasAccess = await isAllowedUser(userEmail);
   if (!hasAccess) {
-    return res.status(403).json({ error: 'Operators and conductors only' });
+    return res.status(403).json({ error: 'Not an authorized user' });
   }
 
   const { action } = req.query;

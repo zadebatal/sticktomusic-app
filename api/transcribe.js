@@ -62,13 +62,11 @@ async function verifyAuth(req) {
   }
 }
 
-async function isOperatorOrAbove(userEmail) {
+async function isAllowedUser(userEmail) {
   if (!db || !userEmail) return false;
   try {
     const userDoc = await db.collection('allowedUsers').doc(userEmail).get();
-    if (!userDoc.exists) return false;
-    const role = userDoc.data().role;
-    return role === 'conductor' || role === 'operator';
+    return userDoc.exists;
   } catch (error) {
     console.error('Error checking user role:', error.message);
     return false;
@@ -106,9 +104,9 @@ export default async function handler(req, res) {
     return res.status(authResult.status).json({ error: authResult.error });
   }
 
-  const hasAccess = await isOperatorOrAbove(authResult.user.email);
+  const hasAccess = await isAllowedUser(authResult.user.email);
   if (!hasAccess) {
-    return res.status(403).json({ error: 'Operators and conductors only' });
+    return res.status(403).json({ error: 'Not an authorized user' });
   }
 
   const openaiKey = process.env.OPENAI_API_KEY;
