@@ -1256,6 +1256,25 @@ const SchedulingPage = ({
     ).length;
   }, [posts, selectedPostIds]);
 
+  const revertableCount = useMemo(() => {
+    return posts.filter(p =>
+      selectedPostIds.has(p.id) && p.status !== POST_STATUS.DRAFT && p.status !== POST_STATUS.POSTED
+    ).length;
+  }, [posts, selectedPostIds]);
+
+  const handleBulkRevertToDraft = useCallback(async () => {
+    const revertable = posts.filter(p =>
+      selectedPostIds.has(p.id) && p.status !== POST_STATUS.DRAFT && p.status !== POST_STATUS.POSTED
+    );
+    if (revertable.length === 0) return;
+
+    for (const post of revertable) {
+      await handleUpdatePost(post.id, { status: POST_STATUS.DRAFT, scheduledTime: null });
+    }
+    toastSuccess(`Reverted ${revertable.length} post${revertable.length !== 1 ? 's' : ''} to draft`);
+    clearSelection();
+  }, [posts, selectedPostIds, handleUpdatePost, toastSuccess, clearSelection]);
+
   // ── Add from drafts handler ──
   const handleAddFromDrafts = useCallback(async (selectedItems) => {
     try {
@@ -1531,6 +1550,14 @@ const SchedulingPage = ({
                 onClick={handleBulkPublish}
               >
                 Publish {publishableCount} Now
+              </button>
+            )}
+            {revertableCount > 0 && (
+              <button
+                style={{ ...s.applyBtn, backgroundColor: '#78350f', borderColor: '#f59e0b', color: '#fbbf24' }}
+                onClick={handleBulkRevertToDraft}
+              >
+                Revert {revertableCount} to Draft
               </button>
             )}
           </div>
