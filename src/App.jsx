@@ -284,20 +284,24 @@ const lateApi = {
       // TikTok requires specific settings for all posts
       if (hasTikTok) {
         payload.tiktokSettings = {
-          privacy_level: 'PUBLIC_TO_EVERYONE',
-          allow_comment: true,
-          content_preview_confirmed: true,
-          express_consent_given: true,
+          privacyLevel: 'PUBLIC_TO_EVERYONE',
+          allowComment: true,
+          contentPreviewConfirmed: true,
+          expressConsentGiven: true,
           ...(isCarousel
             ? {
                 // Send to TikTok creator inbox (not publish directly)
                 draft: true,
-                media_type: 'photo',
-                photo_cover_index: 0,
-                auto_add_music: true
+                mediaType: 'photo',
+                photoCoverIndex: 0,
+                autoAddMusic: true
               }
-            : { allow_duet: true, allow_stitch: true })
+            : { allowDuet: true, allowStitch: true })
         };
+        // Root-level isDraft flag — belt-and-suspenders for carousel drafts
+        if (isCarousel) {
+          payload.isDraft = true;
+        }
       }
 
       log('Sending to Late:', JSON.stringify(payload, null, 2));
