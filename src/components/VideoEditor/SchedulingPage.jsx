@@ -795,7 +795,14 @@ const SchedulingPage = ({
 
     try {
       if (isSlideshow) {
-        // Export at correct aspect ratio per platform (Instagram=4:5, TikTok=9:16)
+        // Slideshows go to TikTok only as draft — filter to TikTok platform
+        const tiktokEntry = platformEntries.find(e => e.platform === 'tiktok');
+        if (!tiktokEntry) {
+          await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: 'Slideshows can only be posted to TikTok as draft' });
+          toastError('Slideshows can only be posted to TikTok as draft');
+          return;
+        }
+
         const slides = post.editorState?.slides || [];
         const slideshowName = post.editorState?.name || post.name || 'slideshow';
         const existingRatio = post.editorState?.aspectRatio || '9:16';
@@ -804,46 +811,47 @@ const SchedulingPage = ({
         let lastLatePostId = null;
         let anyFailed = false;
 
-        for (const entry of platformEntries) {
-          const targetRatio = entry.platform === 'instagram' ? '4:5' : '9:16';
+        // Only TikTok — always 9:16
+        const entry = tiktokEntry;
+        {
           let images;
-
-          if (existingImages?.length && existingRatio === targetRatio) {
+          if (existingImages?.length && existingRatio === '9:16') {
             images = existingImages;
           } else if (slides.some(s => s.backgroundImage || s.imageUrl)) {
-            log(`[Schedule] Re-exporting slideshow at ${targetRatio} for ${entry.platform}`);
+            log(`[Schedule] Re-exporting slideshow at 9:16 for TikTok`);
             images = await exportSlideshowAsImages(
-              { slides, aspectRatio: targetRatio, name: slideshowName },
+              { slides, aspectRatio: '9:16', name: slideshowName },
               () => {}
             );
           } else {
-            platformResults[entry.platform] = { postId: null, url: null, error: 'No slide images' };
+            platformResults.tiktok = { postId: null, url: null, error: 'No slide images' };
             anyFailed = true;
-            continue;
           }
 
-          const result = await onSchedulePost({
-            caption,
-            platforms: [entry],
-            scheduledFor: post.scheduledTime || new Date().toISOString(),
-            type: 'carousel',
-            images,
-            audioUrl: post.audioUrl || post.editorState?.audio?.url || post.editorState?.audio?.localUrl || null
-          });
+          if (images) {
+            const result = await onSchedulePost({
+              caption,
+              platforms: [entry],
+              scheduledFor: post.scheduledTime || new Date().toISOString(),
+              type: 'carousel',
+              images,
+              audioUrl: post.audioUrl || post.editorState?.audio?.url || post.editorState?.audio?.localUrl || null
+            });
 
-          if (result?.success === false) {
-            platformResults[entry.platform] = { postId: null, url: null, error: result.error };
-            anyFailed = true;
-          } else {
-            log('[Schedule] Late create response:', JSON.stringify(result?.post));
-            const latePost = result?.post?.post || result?.post?.data || result?.post || {};
-            lastLatePostId = latePost._id || latePost.id || null;
-            log('[Schedule] Extracted latePostId:', lastLatePostId);
-            platformResults[entry.platform] = {
-              postId: lastLatePostId,
-              url: latePost.url || latePost.permalink || null,
-              error: null
-            };
+            if (result?.success === false) {
+              platformResults[entry.platform] = { postId: null, url: null, error: result.error };
+              anyFailed = true;
+            } else {
+              log('[Schedule] Late create response:', JSON.stringify(result?.post));
+              const latePost = result?.post?.post || result?.post?.data || result?.post || {};
+              lastLatePostId = latePost._id || latePost.id || null;
+              log('[Schedule] Extracted latePostId:', lastLatePostId);
+              platformResults[entry.platform] = {
+                postId: lastLatePostId,
+                url: latePost.url || latePost.permalink || null,
+                error: null
+              };
+            }
           }
         }
 

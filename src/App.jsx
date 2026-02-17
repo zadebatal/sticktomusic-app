@@ -287,7 +287,9 @@ const lateApi = {
           allow_comment: true,
           content_preview_confirmed: true,
           express_consent_given: true,
-          ...(type === 'carousel' ? { auto_add_music: true } : { allow_duet: true, allow_stitch: true })
+          ...(type === 'carousel'
+            ? { draft: true, auto_add_music: true }
+            : { allow_duet: true, allow_stitch: true })
         };
       }
 

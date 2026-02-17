@@ -460,7 +460,7 @@ const SlideshowEditor = ({
   const [selectedHandle, setSelectedHandle] = useState('');
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('14:00');
-  const [platforms, setPlatforms] = useState({ tiktok: true, instagram: true });
+  const [platforms, setPlatforms] = useState({ tiktok: true, instagram: false });
   const [isScheduling, setIsScheduling] = useState(false);
   const [caption, setCaption] = useState('');
   const [hashtags, setHashtags] = useState('#carousel #slideshow #fyp');
@@ -2254,26 +2254,16 @@ const SlideshowEditor = ({
       const scheduledFor = new Date(`${scheduleDate}T${scheduleTime}`);
       const fullCaption = `${caption}\n\n${hashtags}`.trim();
 
-      // Build platforms array
-      const platformsArray = [];
-      if (platforms.tiktok && accountMapping.tiktok) {
-        platformsArray.push({
-          platform: 'tiktok',
-          accountId: accountMapping.tiktok
-        });
-      }
-      if (platforms.instagram && accountMapping.instagram) {
-        platformsArray.push({
-          platform: 'instagram',
-          accountId: accountMapping.instagram
-        });
-      }
-
-      if (platformsArray.length === 0) {
-        toastError('Please select at least one platform');
+      // Slideshows go to TikTok as draft only
+      if (!accountMapping.tiktok) {
+        toastError('No TikTok account linked to this handle');
         setIsScheduling(false);
         return;
       }
+      const platformsArray = [{
+        platform: 'tiktok',
+        accountId: accountMapping.tiktok
+      }];
 
       // Schedule as carousel (array of image URLs)
       const result = await onSchedulePost({
@@ -4489,9 +4479,9 @@ const SlideshowEditor = ({
                 />
               </div>
 
-              {/* Platforms */}
+              {/* Platform — TikTok draft only for slideshows */}
               <div style={styles.scheduleField}>
-                <label style={styles.scheduleLabel}>Platforms</label>
+                <label style={styles.scheduleLabel}>Platform</label>
                 <div style={styles.platformCheckboxes}>
                   <label style={styles.platformCheck}>
                     <input
@@ -4499,15 +4489,7 @@ const SlideshowEditor = ({
                       checked={platforms.tiktok}
                       onChange={(e) => setPlatforms(p => ({ ...p, tiktok: e.target.checked }))}
                     />
-                    TikTok
-                  </label>
-                  <label style={styles.platformCheck}>
-                    <input
-                      type="checkbox"
-                      checked={platforms.instagram}
-                      onChange={(e) => setPlatforms(p => ({ ...p, instagram: e.target.checked }))}
-                    />
-                    Instagram
+                    TikTok (sent as draft)
                   </label>
                 </div>
               </div>
