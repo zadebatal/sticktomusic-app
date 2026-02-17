@@ -45,7 +45,11 @@ const ContentLibrary = ({
   // Posting module props
   accounts = [],
   lateAccountIds = {},
-  artistId = null
+  artistId = null,
+  // Trash / soft-delete props
+  onRestoreContent,
+  onPermanentDelete,
+  onGetDeletedContent
 }) => {
   // BUG-034: Toast notifications instead of alert()
   const { success: toastSuccess, error: toastError } = useToast();
@@ -60,6 +64,12 @@ const ContentLibrary = ({
   const [exportingVideo, setExportingVideo] = useState(null);
   const [previewingVideo, setPreviewingVideo] = useState(null);
   const [previewingSlideshow, setPreviewingSlideshow] = useState(null);
+
+  // Trash view state
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashItems, setTrashItems] = useState([]);
+  const [loadingTrash, setLoadingTrash] = useState(false);
+  const [restoringId, setRestoringId] = useState(null);
 
   // Rendering state
   const [renderingVideoId, setRenderingVideoId] = useState(null);
@@ -291,7 +301,32 @@ const ContentLibrary = ({
 
   const clearSelection = () => setSelectedVideoIds(new Set());
 
-  const filteredItems = items.filter(item => {
+  // Identify drafts that have been posted via scheduled posts
+  const postedContentIds = useMemo(() => {
+    const ids = new Set();
+    scheduledPosts.forEach(p => {
+      if (p.status === 'posted' && p.contentId) ids.add(p.contentId);
+    });
+    return ids;
+  }, [scheduledPosts]);
+
+  // Split items into posted and unposted
+  const [showPosted, setShowPosted] = useState(false);
+
+  const { unpostedItems, postedItems } = useMemo(() => {
+    const posted = [];
+    const unposted = [];
+    items.forEach(item => {
+      if (postedContentIds.has(item.id)) {
+        posted.push(item);
+      } else {
+        unposted.push(item);
+      }
+    });
+    return { unpostedItems: unposted, postedItems: posted };
+  }, [items, postedContentIds]);
+
+  const filteredItems = unpostedItems.filter(item => {
     if (filter !== 'all' && item.status !== filter) return false;
     if (dateRange !== 'all') {
       const created = new Date(item.createdAt);
@@ -443,6 +478,39 @@ const ContentLibrary = ({
             <option value="completed">Completed</option>
             <option value="approved">Approved</option>
           </select>
+          {onGetDeletedContent && (
+            <button
+              style={{
+                ...styles.secondaryButton,
+                fontSize: '12px',
+                padding: '4px 10px',
+                gap: '4px',
+                opacity: showTrash ? 1 : 0.7
+              }}
+              onClick={async () => {
+                if (showTrash) {
+                  setShowTrash(false);
+                  return;
+                }
+                setLoadingTrash(true);
+                try {
+                  const deleted = await onGetDeletedContent();
+                  const items = isSlideshow ? deleted.slideshows : deleted.videos;
+                  setTrashItems(items);
+                  setShowTrash(true);
+                } catch (err) {
+                  toastError('Failed to load trash');
+                } finally {
+                  setLoadingTrash(false);
+                }
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+              {loadingTrash ? 'Loading...' : showTrash ? 'Hide Trash' : 'Trash'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -478,6 +546,114 @@ const ContentLibrary = ({
                   >×</button>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Trash Panel */}
+      {showTrash && (
+        <div style={{ padding: '16px 24px', borderBottom: `1px solid ${theme.border.subtle}`, backgroundColor: `${theme.bg.elevated}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: theme.text.primary }}>
+              Trash ({trashItems.length} {isSlideshow ? 'slideshow' : 'video'}{trashItems.length !== 1 ? 's' : ''})
+            </h3>
+            <button
+              onClick={() => setShowTrash(false)}
+              style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '18px', padding: '4px 8px' }}
+            >
+              ×
+            </button>
+          </div>
+          {trashItems.length === 0 ? (
+            <p style={{ color: theme.text.muted, fontSize: '12px', margin: 0 }}>Trash is empty</p>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {trashItems.map(item => {
+                const thumb = isSlideshow
+                  ? (item.slides?.[0]?.backgroundImage || item.slides?.[0]?.imageA?.url || item.thumbnail)
+                  : (item.thumbnail || item.thumbnailUrl);
+                const name = item.name || item.textOverlay || item.collectionName || 'Untitled';
+                const deletedDate = item.deletedAt?.toDate ? item.deletedAt.toDate() : (item.deletedAt ? new Date(item.deletedAt) : null);
+                return (
+                  <div
+                    key={item.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '8px',
+                      padding: '6px 10px',
+                      backgroundColor: 'rgba(239,68,68,0.08)',
+                      border: '1px solid rgba(239,68,68,0.2)',
+                      borderRadius: '8px', fontSize: '11px', color: theme.text.secondary,
+                      maxWidth: '280px'
+                    }}
+                  >
+                    {thumb && (
+                      <img
+                        src={thumb}
+                        alt=""
+                        style={{ width: '32px', height: '40px', borderRadius: '4px', objectFit: 'cover', flexShrink: 0 }}
+                      />
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: '500', color: theme.text.primary }}>
+                        {name}
+                      </div>
+                      {deletedDate && (
+                        <div style={{ fontSize: '10px', color: theme.text.muted }}>
+                          Deleted {deletedDate.toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={async () => {
+                        setRestoringId(item.id);
+                        try {
+                          const success = await onRestoreContent(item.id);
+                          if (success) {
+                            setTrashItems(prev => prev.filter(t => t.id !== item.id));
+                            toastSuccess('Restored');
+                          } else {
+                            toastError('Restore failed');
+                          }
+                        } catch (err) {
+                          toastError('Restore failed');
+                        } finally {
+                          setRestoringId(null);
+                        }
+                      }}
+                      disabled={restoringId === item.id}
+                      style={{
+                        background: 'none', border: `1px solid ${theme.accent.primary}`,
+                        color: theme.accent.primary, cursor: 'pointer',
+                        fontSize: '10px', fontWeight: '600', padding: '3px 8px',
+                        borderRadius: '4px', flexShrink: 0, opacity: restoringId === item.id ? 0.5 : 1
+                      }}
+                    >
+                      {restoringId === item.id ? '...' : 'Restore'}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm('Permanently delete? This cannot be undone.')) return;
+                        try {
+                          await onPermanentDelete(item.id);
+                          setTrashItems(prev => prev.filter(t => t.id !== item.id));
+                          toastSuccess('Permanently deleted');
+                        } catch (err) {
+                          toastError('Delete failed');
+                        }
+                      }}
+                      style={{
+                        background: 'none', border: 'none',
+                        color: '#ef4444', cursor: 'pointer',
+                        fontSize: '14px', padding: '2px 4px', flexShrink: 0
+                      }}
+                      title="Permanently delete"
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -613,6 +789,91 @@ const ContentLibrary = ({
           </div>
         )}
       </div>
+
+      {/* Already Posted Section */}
+      {isDraftsView && postedItems.length > 0 && (
+        <div style={{ borderTop: `1px solid ${theme.border.subtle}` }}>
+          <button
+            onClick={() => setShowPosted(!showPosted)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              padding: '12px 24px', background: 'none', border: 'none',
+              color: theme.text.secondary, cursor: 'pointer',
+              fontSize: '13px', fontWeight: '600', width: '100%'
+            }}
+          >
+            <span style={{ transform: showPosted ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', fontSize: '10px' }}>▶</span>
+            Already Posted ({postedItems.length})
+          </button>
+          {showPosted && (
+            <div style={{
+              padding: '0 24px 16px',
+              display: 'grid',
+              gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(200px, 1fr))',
+              gap: isMobile ? '10px' : '16px'
+            }}>
+              {postedItems.map((item, index) => {
+                const postInfo = scheduledPosts.find(p => p.contentId === item.id && p.status === 'posted');
+                return (
+                  <div key={item.id} style={{ position: 'relative' }}>
+                    {isSlideshow ? (
+                      <SlideshowCard
+                        slideshow={item}
+                        isSelected={false}
+                        onToggleSelect={() => {}}
+                        onPreview={() => setPreviewingSlideshow(item)}
+                        onEdit={() => {
+                          // Duplicate as new draft — new ID, new timestamps
+                          const duplicate = {
+                            ...item,
+                            id: `slideshow_${Date.now()}`,
+                            name: `${item.name || 'Untitled'} (copy)`,
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString()
+                          };
+                          onEditSlideshow?.(duplicate);
+                        }}
+                        onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
+                        isMobile={isMobile}
+                        draftNumber={null}
+                      />
+                    ) : (
+                      <VideoCard
+                        video={item}
+                        isSelected={false}
+                        onToggleSelect={() => {}}
+                        onEdit={() => {
+                          const duplicate = {
+                            ...item,
+                            id: `video_${Date.now()}`,
+                            name: `${item.name || 'Untitled'} (copy)`,
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString()
+                          };
+                          onEditVideo?.(duplicate);
+                        }}
+                        onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
+                        isMobile={isMobile}
+                        onPreview={() => setPreviewingVideo(item)}
+                      />
+                    )}
+                    {/* Posted badge overlay */}
+                    <div style={{
+                      position: 'absolute', top: '6px', left: '6px',
+                      backgroundColor: 'rgba(34,197,94,0.9)',
+                      color: '#fff', fontSize: '9px', fontWeight: '700',
+                      padding: '2px 6px', borderRadius: '4px',
+                      letterSpacing: '0.5px', textTransform: 'uppercase'
+                    }}>
+                      Posted{postInfo?.postedAt ? ` ${new Date(postInfo.postedAt).toLocaleDateString()}` : ''}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Batch Action Bar */}
       {selectedItems.length > 0 && (
@@ -885,8 +1146,8 @@ const ContentLibrary = ({
           : `Delete ${isSlideshow ? 'slideshow' : 'video'}?`
         }
         message={deleteConfirm.isBulk
-          ? `This will permanently remove ${selectedItems.length} ${isSlideshow ? 'slideshow' : 'video'}${selectedItems.length > 1 ? 's' : ''} from the library. This action cannot be undone.`
-          : `This will permanently remove this ${isSlideshow ? 'slideshow' : 'video'} from the library. This action cannot be undone.`
+          ? `This will move ${selectedItems.length} ${isSlideshow ? 'slideshow' : 'video'}${selectedItems.length > 1 ? 's' : ''} to the trash. You can restore ${selectedItems.length > 1 ? 'them' : 'it'} later from the Trash button.`
+          : `This will move this ${isSlideshow ? 'slideshow' : 'video'} to the trash. You can restore it later from the Trash button.`
         }
         confirmLabel={deleteConfirm.isBulk ? `Delete ${selectedItems.length}` : "Delete"}
         confirmVariant="destructive"

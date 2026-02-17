@@ -31,6 +31,10 @@ import {
   deleteCreatedSlideshow,
   addCreatedSlideshowAsync,
   deleteCreatedSlideshowAsync,
+  softDeleteCreatedVideoAsync,
+  restoreCreatedContentAsync,
+  getDeletedContentAsync,
+  permanentlyDeleteContentAsync,
   loadCreatedContentAsync,
   saveCreatedContentAsync,
   addLyricsAsync,
@@ -262,6 +266,9 @@ const DraftsView = (props) => {
           accounts={props.accounts}
           lateAccountIds={props.lateAccountIds}
           artistId={props.artistId}
+          onRestoreContent={props.onRestoreContent}
+          onPermanentDelete={props.onPermanentDelete}
+          onGetDeletedContent={props.onGetDeletedContent}
         />
       </div>
     </div>
@@ -1179,19 +1186,15 @@ const VideoStudio = ({
   }, [selectedCategory]);
 
   const handleDeleteVideo = useCallback(async (videoId) => {
-    // Library mode: delete via libraryService
+    // Library mode: soft-delete via libraryService
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
-        const content = getCreatedContent(currentArtistId);
-        const video = content.videos.find(v => v.id === videoId);
-        if (video?.storagePath) await deleteFile(video.storagePath);
-        if (video?.thumbnailPath) await deleteFile(video.thumbnailPath);
-        deleteCreatedVideo(currentArtistId, videoId);
-        // Delete from Firestore too
         if (db) {
-          const { doc: firestoreDoc, deleteDoc } = await import('firebase/firestore');
-          const docRef = firestoreDoc(db, 'artists', currentArtistId, 'library', 'data', 'createdContent', videoId);
-          deleteDoc(docRef).catch(err => console.warn('[VideoStudio] Firestore video delete failed:', err));
+          softDeleteCreatedVideoAsync(db, currentArtistId, videoId).catch(err =>
+            console.warn('[VideoStudio] Firestore video soft-delete failed:', err)
+          );
+        } else {
+          deleteCreatedVideo(currentArtistId, videoId);
         }
         setCreatedContentVersion(v => v + 1);
         // Cascade: remove any scheduled posts referencing this draft
@@ -1234,6 +1237,33 @@ const VideoStudio = ({
       );
     }
   }, [selectedCategory, currentArtistId, db]);
+
+  // Restore a soft-deleted content item from trash
+  const handleRestoreContent = useCallback(async (itemId) => {
+    if (!db || !currentArtistId || !itemId) return;
+    const success = await restoreCreatedContentAsync(db, currentArtistId, itemId);
+    if (success) {
+      setCreatedContentVersion(v => v + 1);
+    }
+    return success;
+  }, [db, currentArtistId]);
+
+  // Permanently delete a content item from trash
+  const handlePermanentDelete = useCallback(async (itemId) => {
+    if (!db || !currentArtistId || !itemId) return;
+    // Also delete storage files
+    const deleted = await getDeletedContentAsync(db, currentArtistId);
+    const item = [...deleted.videos, ...deleted.slideshows].find(i => i.id === itemId);
+    if (item?.storagePath) await deleteFile(item.storagePath);
+    if (item?.thumbnailPath) await deleteFile(item.thumbnailPath);
+    return permanentlyDeleteContentAsync(db, currentArtistId, itemId);
+  }, [db, currentArtistId]);
+
+  // Get deleted (trash) content
+  const handleGetDeletedContent = useCallback(async () => {
+    if (!db || !currentArtistId) return { videos: [], slideshows: [] };
+    return getDeletedContentAsync(db, currentArtistId);
+  }, [db, currentArtistId]);
 
   // Delete a video clip from the bank (source videos)
   const handleDeleteBankVideo = useCallback(async (videoId) => {
@@ -1789,14 +1819,15 @@ const VideoStudio = ({
     } : prev);
   }, [selectedCategory]);
 
-  // Delete a slideshow
+  // Delete a slideshow (soft-delete: stays in Firestore with deletedAt, removed from UI)
   const handleDeleteSlideshow = useCallback((slideshowId) => {
-    // Library mode: delete via libraryService (with Firestore sync)
+    // Library mode: soft-delete via libraryService
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
-        deleteCreatedSlideshow(currentArtistId, slideshowId);
         if (db) {
           deleteCreatedSlideshowAsync(db, currentArtistId, slideshowId).catch(console.error);
+        } else {
+          deleteCreatedSlideshow(currentArtistId, slideshowId);
         }
         setCreatedContentVersion(v => v + 1);
         // Cascade: remove any scheduled posts referencing this draft
@@ -2449,6 +2480,9 @@ const VideoStudio = ({
             accounts={accounts}
             lateAccountIds={lateAccountIds}
             artistId={currentArtistId}
+            onRestoreContent={handleRestoreContent}
+            onPermanentDelete={handlePermanentDelete}
+            onGetDeletedContent={handleGetDeletedContent}
           />
         )}
 
@@ -2471,6 +2505,9 @@ const VideoStudio = ({
             accounts={accounts}
             lateAccountIds={lateAccountIds}
             artistId={currentArtistId}
+            onRestoreContent={handleRestoreContent}
+            onPermanentDelete={handlePermanentDelete}
+            onGetDeletedContent={handleGetDeletedContent}
           />
         )}
 
@@ -2496,6 +2533,9 @@ const VideoStudio = ({
             accounts={accounts}
             lateAccountIds={lateAccountIds}
             artistId={currentArtistId}
+            onRestoreContent={handleRestoreContent}
+            onPermanentDelete={handlePermanentDelete}
+            onGetDeletedContent={handleGetDeletedContent}
           />
         )}
 
