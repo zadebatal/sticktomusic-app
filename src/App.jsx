@@ -298,10 +298,9 @@ const lateApi = {
               }
             : { allowDuet: true, allowStitch: true })
         };
-        // Root-level isDraft flag — belt-and-suspenders for carousel drafts
-        if (isCarousel) {
-          payload.isDraft = true;
-        }
+        // NOTE: Do NOT set isDraft=true at root level — that creates a Late draft.
+        // tiktokSettings.draft=true tells Late to use TikTok's Creator Inbox
+        // (MEDIA_UPLOAD mode) so the artist can add music/effects before posting.
       }
 
       log('Sending to Late:', JSON.stringify(payload, null, 2));
