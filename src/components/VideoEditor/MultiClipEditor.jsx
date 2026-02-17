@@ -184,6 +184,20 @@ const MultiClipEditor = ({
   // ── Aspect ratio ──
   const [aspectRatio, setAspectRatio] = useState(existingVideo?.cropMode || '9:16');
 
+  // ── Global text style (matches Montage editor pattern) ──
+  const [textStyle, setTextStyle] = useState({
+    fontSize: 48,
+    fontFamily: 'Inter, sans-serif',
+    fontWeight: '600',
+    color: '#ffffff',
+    outline: true,
+    outlineColor: '#000000',
+    textAlign: 'center',
+    textCase: 'default',
+    displayMode: 'word'
+  });
+  const [activeTab, setActiveTab] = useState('caption');
+
   // ── Text editing state ──
   const [editingTextId, setEditingTextId] = useState(null);
   const [showTextPanel, setShowTextPanel] = useState(false);
@@ -517,15 +531,38 @@ const MultiClipEditor = ({
 
   // ── Text overlay CRUD ──
   const getDefaultTextStyle = useCallback(() => ({
-    fontSize: 48,
-    fontFamily: 'Inter, sans-serif',
-    fontWeight: '600',
-    color: '#ffffff',
-    outline: true,
-    outlineColor: '#000000',
-    textAlign: 'center',
-    textCase: 'default'
-  }), []);
+    fontSize: textStyle.fontSize,
+    fontFamily: textStyle.fontFamily,
+    fontWeight: textStyle.fontWeight,
+    color: textStyle.color,
+    outline: textStyle.outline,
+    outlineColor: textStyle.outlineColor,
+    textAlign: textStyle.textAlign,
+    textCase: textStyle.textCase
+  }), [textStyle]);
+
+  // Propagate global style changes to all existing overlays
+  const applyStyleToAll = useCallback((styleUpdates) => {
+    setTextOverlays(prev => prev.map(o => ({
+      ...o,
+      style: { ...o.style, ...styleUpdates }
+    })));
+  }, [setTextOverlays]);
+
+  // Wrapper: update global textStyle AND propagate to all overlays
+  const updateGlobalStyle = useCallback((updater) => {
+    setTextStyle(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
+      const diff = {};
+      for (const key of Object.keys(next)) {
+        if (next[key] !== prev[key]) diff[key] = next[key];
+      }
+      if (Object.keys(diff).length > 0) {
+        setTimeout(() => applyStyleToAll(diff), 0);
+      }
+      return next;
+    });
+  }, [applyStyleToAll]);
 
   // ── AI Transcription handler ──
   const handleTranscriptionComplete = useCallback((result) => {
@@ -2046,149 +2083,69 @@ const MultiClipEditor = ({
 
                   {/* ── TEXT TAB ── */}
                   {mobileToolTab === 'text' && (
-                    <div style={{ padding: '12px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '8px' }}>
-                        Text Overlays ({textOverlays.length})
+                    <div style={{ padding: '8px' }}>
+                      {/* Mobile tabs */}
+                      <div style={{ ...styles.tcTabs, padding: '0 0 8px' }}>
+                        <button style={activeTab === 'caption' ? styles.tcTabActive : styles.tcTab} onClick={() => setActiveTab('caption')}>Caption</button>
+                        <button style={activeTab === 'styles' ? styles.tcTabActive : styles.tcTab} onClick={() => setActiveTab('styles')}>Styles</button>
+                        <button style={activeTab === 'lyrics' ? {...styles.tcTabActive, color: '#a78bfa'} : {...styles.tcTab, color: '#8b5cf6'}} onClick={() => setActiveTab('lyrics')}>Lyrics</button>
                       </div>
 
-                      {textOverlays.length === 0 && (
-                        <div style={{ fontSize: '12px', color: theme.text.muted, textAlign: 'center', padding: '16px 12px' }}>
-                          No text overlays yet. Add one to start designing.
+                      {activeTab === 'caption' && (
+                        <div>
+                          <div style={styles.tcControlRow}>
+                            <div style={styles.tcControlGroup}>
+                              <button style={{ ...styles.tcSizeButton, minHeight: '44px' }} onClick={() => updateGlobalStyle(s => ({ ...s, fontSize: Math.max(24, s.fontSize - 4) }))}>A-</button>
+                              <button style={{ ...styles.tcSizeButton, minHeight: '44px' }} onClick={() => updateGlobalStyle(s => ({ ...s, fontSize: Math.min(120, s.fontSize + 4) }))}>A+</button>
+                            </div>
+                            <select value={textStyle.fontFamily} onChange={(e) => updateGlobalStyle({ fontFamily: e.target.value })} style={{ ...styles.tcFontSelect, minHeight: '44px' }}>
+                              <option value="Inter, sans-serif">Sans</option>
+                              <option value="'Playfair Display', serif">Serif</option>
+                              <option value="'Space Grotesk', sans-serif">Grotesk</option>
+                              <option value="monospace">Mono</option>
+                              <option value="'Arial Narrow', Arial, sans-serif">Arial Narrow</option>
+                              <option value="Georgia, serif">Georgia</option>
+                            </select>
+                          </div>
+                          <div style={styles.tcControlRow}>
+                            <button style={{ ...(!textStyle.outline ? styles.tcOptionButtonActive : styles.tcOptionButton), minHeight: '44px' }} onClick={() => updateGlobalStyle({ outline: false })}>No outline</button>
+                            <button style={{ ...(textStyle.outline ? styles.tcOptionButtonActive : styles.tcOptionButton), minHeight: '44px' }} onClick={() => updateGlobalStyle({ outline: true })}>Outline</button>
+                          </div>
+                          <div style={styles.tcControlRow}>
+                            <button style={{ ...(textStyle.textCase === 'default' ? styles.tcCaseButtonActive : styles.tcCaseButton), minHeight: '44px' }} onClick={() => updateGlobalStyle({ textCase: 'default' })}>Default</button>
+                            <button style={{ ...(textStyle.textCase === 'lower' ? styles.tcCaseButtonActive : styles.tcCaseButton), minHeight: '44px' }} onClick={() => updateGlobalStyle({ textCase: 'lower' })}>lower</button>
+                            <button style={{ ...(textStyle.textCase === 'upper' ? styles.tcCaseButtonActive : styles.tcCaseButton), minHeight: '44px' }} onClick={() => updateGlobalStyle({ textCase: 'upper' })}>UPPER</button>
+                          </div>
+                          {textOverlays.map((overlay, idx) => (
+                            <div key={overlay.id} onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
+                              style={{ ...styles.tcOverlayItem, ...(editingTextId === overlay.id ? { backgroundColor: theme.accent.primary + '22' } : {}) }}>
+                              <span style={{ fontSize: '12px', color: theme.text.muted }}>{overlay.startTime !== undefined ? `${overlay.startTime.toFixed(1)}s` : `#${idx+1}`}</span>
+                              <span style={{ flex: 1, fontSize: '12px', color: theme.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{overlay.text}</span>
+                              <button onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '14px', minWidth: '44px', minHeight: '44px' }}>×</button>
+                            </div>
+                          ))}
+                          <button onClick={() => addTextOverlay()} style={{ ...styles.addTextButton, minHeight: '44px' }}>+ Add Text Overlay</button>
                         </div>
                       )}
 
-                      {textOverlays.map((overlay, idx) => {
-                        const isSelected = editingTextId === overlay.id;
-                        return (
-                          <div
-                            key={overlay.id}
-                            onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
-                            style={{
-                              ...styles.overlayCard,
-                              margin: '0 0 6px',
-                              ...(isSelected ? styles.overlayCardActive : {})
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                              <span style={{ fontSize: '11px', color: theme.text.secondary, fontWeight: 500 }}>
-                                Overlay {idx + 1}
-                              </span>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }}
-                                style={{ ...styles.removeOverlayButton, minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                              >&#215;</button>
-                            </div>
-                            {isSelected ? (
-                              <input
-                                value={editingTextValue}
-                                onChange={(e) => setEditingTextValue(e.target.value)}
-                                onBlur={() => updateTextOverlay(overlay.id, { text: editingTextValue })}
-                                onKeyDown={(e) => { if (e.key === 'Enter') { updateTextOverlay(overlay.id, { text: editingTextValue }); e.target.blur(); } }}
-                                style={{ ...styles.textEditInput, minHeight: '44px', fontSize: '14px' }}
-                                autoFocus
-                              />
-                            ) : (
-                              <div style={{ fontSize: '13px', color: theme.text.primary }}>{overlay.text}</div>
-                            )}
+                      {activeTab === 'styles' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
+                          <label style={styles.tcColorLabel}>Text Color <input type="color" value={textStyle.color} onChange={(e) => updateGlobalStyle({ color: e.target.value })} style={{ ...styles.tcColorInput, minWidth: '44px', minHeight: '44px' }} /></label>
+                          {textStyle.outline && <label style={styles.tcColorLabel}>Outline Color <input type="color" value={textStyle.outlineColor} onChange={(e) => updateGlobalStyle({ outlineColor: e.target.value })} style={{ ...styles.tcColorInput, minWidth: '44px', minHeight: '44px' }} /></label>}
+                        </div>
+                      )}
 
-                            {isSelected && (
-                              <div style={styles.styleControls}>
-                                {/* Font Family */}
-                                <div style={styles.controlRow}>
-                                  <span style={styles.controlLabel}>Font</span>
-                                  <select
-                                    value={overlay.style.fontFamily}
-                                    onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, fontFamily: e.target.value } })}
-                                    style={{ ...styles.selectInput, minHeight: '44px' }}
-                                  >
-                                    <option value="Inter, sans-serif">Sans</option>
-                                    <option value="'Playfair Display', serif">Serif</option>
-                                    <option value="'Space Grotesk', sans-serif">Grotesk</option>
-                                    <option value="monospace">Mono</option>
-                                    <option value="'Arial Narrow', Arial, sans-serif">Arial Narrow</option>
-                                    <option value="Georgia, serif">Georgia</option>
-                                  </select>
-                                </div>
-                                {/* Font Size */}
-                                <div style={styles.controlRow}>
-                                  <span style={styles.controlLabel}>Size</span>
-                                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                                    <button
-                                      style={{ ...styles.sizeButton, minWidth: '44px', minHeight: '44px' }}
-                                      onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.max(16, overlay.style.fontSize - 4) } }); }}
-                                    >A-</button>
-                                    <span style={{ fontSize: '11px', color: theme.text.primary, minWidth: '26px', textAlign: 'center' }}>{overlay.style.fontSize}</span>
-                                    <button
-                                      style={{ ...styles.sizeButton, minWidth: '44px', minHeight: '44px' }}
-                                      onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.min(120, overlay.style.fontSize + 4) } }); }}
-                                    >A+</button>
-                                  </div>
-                                </div>
-                                {/* Color + Outline */}
-                                <div style={styles.controlRow}>
-                                  <span style={styles.controlLabel}>Color</span>
-                                  <input
-                                    type="color"
-                                    value={overlay.style.color}
-                                    onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, color: e.target.value } })}
-                                    style={{ ...styles.colorInput, width: '44px', height: '44px' }}
-                                  />
-                                  <span style={{ ...styles.controlLabel, marginLeft: '8px' }}>Outline</span>
-                                  <button
-                                    style={{
-                                      ...styles.toggleButton,
-                                      ...(overlay.style.outline ? styles.toggleButtonActive : {}),
-                                      minWidth: '44px', minHeight: '44px'
-                                    }}
-                                    onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, outline: !overlay.style.outline } }); }}
-                                  >{overlay.style.outline ? 'On' : 'Off'}</button>
-                                </div>
-                                {/* Scope */}
-                                <div style={styles.controlRow}>
-                                  <span style={styles.controlLabel}>Scope</span>
-                                  <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
-                                    <button
-                                      style={{
-                                        ...styles.toggleButton,
-                                        ...(overlay.scope === 'full' ? styles.toggleButtonActive : {}),
-                                        minHeight: '44px', padding: '6px 10px'
-                                      }}
-                                      onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { scope: 'full' }); }}
-                                    >Full Video</button>
-                                    {clips.map((_, i) => (
-                                      <button
-                                        key={i}
-                                        style={{
-                                          ...styles.toggleButton,
-                                          ...(overlay.scope === i ? styles.toggleButtonActive : {}),
-                                          minHeight: '44px', padding: '6px 10px'
-                                        }}
-                                        onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { scope: i }); }}
-                                      >Clip {i + 1}</button>
-                                    ))}
-                                  </div>
-                                </div>
-                                {/* Save to Bank */}
-                                <div style={{ ...styles.controlRow, borderTop: `1px solid ${theme.border.subtle}`, paddingTop: '6px', marginTop: '2px' }}>
-                                  <span style={{ fontSize: '10px', color: theme.text.secondary }}>Save to:</span>
-                                  <button
-                                    style={{ ...styles.toggleButton, borderColor: 'rgba(20,184,166,0.3)', color: '#14b8a6', fontSize: '10px', minHeight: '44px', padding: '6px 10px' }}
-                                    onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(1, overlay.text); toastSuccess('Saved to Bank A'); }}
-                                  >Bank A</button>
-                                  <button
-                                    style={{ ...styles.toggleButton, borderColor: 'rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '10px', minHeight: '44px', padding: '6px 10px' }}
-                                    onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(2, overlay.text); toastSuccess('Saved to Bank B'); }}
-                                  >Bank B</button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-
-                      <button onClick={() => addTextOverlay()} style={{ ...styles.addTextButton, minHeight: '44px', margin: '6px 0' }}>
-                        + Add Text Overlay
-                      </button>
+                      {activeTab === 'lyrics' && (
+                        <LyricBank
+                          lyrics={category?.lyrics || lyricsBank || []}
+                          onAddLyrics={onAddLyrics}
+                          onUpdateLyrics={onUpdateLyrics}
+                          onDeleteLyrics={onDeleteLyrics}
+                          onSelectText={(selectedText) => { addTextOverlay(selectedText); setActiveTab('caption'); toastSuccess('Lyrics added as text overlay'); }}
+                          compact={false}
+                          showAddForm={true}
+                        />
+                      )}
                     </div>
                   )}
                 </div>
@@ -2196,219 +2153,159 @@ const MultiClipEditor = ({
             </div>
           )}
 
-          {/* ── RIGHT PANEL: Text Overlays (collapsible) ── */}
-          {showTextPanel && !isMobile && <div style={{ ...styles.rightPanel, width: '300px' }}>
-            <div style={{ padding: '6px 12px', borderBottom: `1px solid ${theme.border.subtle}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* ── RIGHT PANEL: Text Controls with Caption/Styles/Lyrics tabs (desktop only) ── */}
+          {showTextPanel && !isMobile && (
+          <div style={{
+            width: '300px',
+            borderLeft: `1px solid ${theme.border.subtle}`,
+            backgroundColor: theme.bg.surface,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'auto'
+          }}>
+            <div style={{ padding: '8px 12px', borderBottom: `1px solid ${theme.border.subtle}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: '13px', fontWeight: 600, color: theme.text.primary }}>Text Controls</span>
               <button onClick={() => setShowTextPanel(false)} style={{ background: 'none', border: 'none', color: theme.text.muted, fontSize: '18px', cursor: 'pointer', padding: '2px 6px' }}>×</button>
             </div>
-            <div style={styles.rightPanelScroll}>
 
-              {/* ── TEXT OVERLAYS SECTION ── */}
-              <div style={styles.sectionHeader}>
-                <span>Text Overlays</span>
-                <span style={{ fontSize: '10px', color: theme.text.muted }}>{textOverlays.length}</span>
-              </div>
-
-              {textOverlays.length === 0 && (
-                <div style={{ fontSize: '12px', color: theme.text.muted, textAlign: 'center', padding: '16px 12px' }}>
-                  No text overlays yet. Add one to start designing.
+                {/* Tabs */}
+                <div style={styles.tcTabs}>
+                  <button style={activeTab === 'caption' ? styles.tcTabActive : styles.tcTab} onClick={() => setActiveTab('caption')}>Caption</button>
+                  <button style={activeTab === 'styles' ? styles.tcTabActive : styles.tcTab} onClick={() => setActiveTab('styles')}>Styles</button>
+                  <button style={activeTab === 'lyrics' ? {...styles.tcTabActive, color: '#a78bfa'} : {...styles.tcTab, color: '#8b5cf6'}} onClick={() => setActiveTab('lyrics')}>Lyrics</button>
                 </div>
-              )}
 
-              {textOverlays.map((overlay, idx) => {
-                const isSelected = editingTextId === overlay.id;
-                return (
-                  <div
-                    key={overlay.id}
-                    onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
-                    style={{
-                      ...styles.overlayCard,
-                      ...(isSelected ? styles.overlayCardActive : {})
-                    }}
-                  >
-                    {/* Overlay header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '11px', color: theme.text.secondary, fontWeight: 500 }}>
-                        Overlay {idx + 1}
-                        {overlay.startTime !== undefined && (
-                          <span style={{ marginLeft: '6px', fontSize: '9px', color: theme.text.muted }}>
-                            {overlay.startTime.toFixed(1)}s – {overlay.endTime.toFixed(1)}s
-                          </span>
-                        )}
-                      </span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }}
-                        style={styles.removeOverlayButton}
-                      >×</button>
+                {activeTab === 'caption' && (
+                  <div style={styles.tcTabContent}>
+                    {/* Font */}
+                    <div style={styles.tcControlRow}>
+                      <div style={styles.tcControlGroup}>
+                        <button style={styles.tcSizeButton} onClick={() => updateGlobalStyle(s => ({ ...s, fontSize: Math.max(24, s.fontSize - 4) }))}>A-</button>
+                        <button style={styles.tcSizeButton} onClick={() => updateGlobalStyle(s => ({ ...s, fontSize: Math.min(120, s.fontSize + 4) }))}>A+</button>
+                      </div>
+                      <select value={textStyle.fontFamily} onChange={(e) => updateGlobalStyle({ fontFamily: e.target.value })} style={styles.tcFontSelect}>
+                        <option value="Inter, sans-serif">Sans</option>
+                        <option value="'Playfair Display', serif">Serif</option>
+                        <option value="'Space Grotesk', sans-serif">Grotesk</option>
+                        <option value="monospace">Mono</option>
+                        <option value="'Arial Narrow', Arial, sans-serif">Arial Narrow</option>
+                        <option value="Georgia, serif">Georgia</option>
+                      </select>
                     </div>
 
-                    {/* Inline text edit */}
-                    {isSelected ? (
-                      <input
-                        value={editingTextValue}
-                        onChange={(e) => setEditingTextValue(e.target.value)}
-                        onBlur={() => updateTextOverlay(overlay.id, { text: editingTextValue })}
-                        onKeyDown={(e) => { if (e.key === 'Enter') { updateTextOverlay(overlay.id, { text: editingTextValue }); e.target.blur(); } }}
-                        style={styles.textEditInput}
-                        autoFocus
-                      />
-                    ) : (
-                      <div style={{ fontSize: '13px', color: theme.text.primary }}>{overlay.text}</div>
-                    )}
+                    {/* Outline */}
+                    <div style={styles.tcControlRow}>
+                      <button style={!textStyle.outline ? styles.tcOptionButtonActive : styles.tcOptionButton} onClick={() => updateGlobalStyle({ outline: false })}>No outline</button>
+                      <button style={textStyle.outline ? styles.tcOptionButtonActive : styles.tcOptionButton} onClick={() => updateGlobalStyle({ outline: true })}>Outline</button>
+                    </div>
 
-                    {/* Style controls — always shown for selected overlay */}
-                    {isSelected && (
-                      <div style={styles.styleControls}>
-                        {/* Font Family */}
-                        <div style={styles.controlRow}>
-                          <span style={styles.controlLabel}>Font</span>
-                          <select
-                            value={overlay.style.fontFamily}
-                            onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, fontFamily: e.target.value } })}
-                            style={styles.selectInput}
-                          >
-                            <option value="Inter, sans-serif">Sans</option>
-                            <option value="'Playfair Display', serif">Serif</option>
-                            <option value="'Space Grotesk', sans-serif">Grotesk</option>
-                            <option value="monospace">Mono</option>
-                            <option value="'Arial Narrow', Arial, sans-serif">Arial Narrow</option>
-                            <option value="Georgia, serif">Georgia</option>
-                          </select>
-                        </div>
+                    {/* Crop Mode */}
+                    <div style={styles.tcControlRow}>
+                      <span style={styles.tcControlLabel}>Crop mode</span>
+                      <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} style={styles.tcSelect}>
+                        <option value="9:16">9:16 (Full)</option>
+                        <option value="4:3">4:3 (Crop)</option>
+                        <option value="1:1">1:1 (Crop)</option>
+                      </select>
+                    </div>
 
-                        {/* Font Size */}
-                        <div style={styles.controlRow}>
-                          <span style={styles.controlLabel}>Size</span>
-                          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                            <button
-                              style={styles.sizeButton}
-                              onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.max(16, overlay.style.fontSize - 4) } }); }}
-                            >A-</button>
-                            <span style={{ fontSize: '11px', color: theme.text.primary, minWidth: '26px', textAlign: 'center' }}>{overlay.style.fontSize}</span>
-                            <button
-                              style={styles.sizeButton}
-                              onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.min(120, overlay.style.fontSize + 4) } }); }}
-                            >A+</button>
-                          </div>
-                        </div>
+                    {/* Case */}
+                    <div style={styles.tcControlRow}>
+                      <button style={textStyle.textCase === 'default' ? styles.tcCaseButtonActive : styles.tcCaseButton} onClick={() => updateGlobalStyle({ textCase: 'default' })}>Default</button>
+                      <button style={textStyle.textCase === 'lower' ? styles.tcCaseButtonActive : styles.tcCaseButton} onClick={() => updateGlobalStyle({ textCase: 'lower' })}>lower</button>
+                      <button style={textStyle.textCase === 'upper' ? styles.tcCaseButtonActive : styles.tcCaseButton} onClick={() => updateGlobalStyle({ textCase: 'upper' })}>UPPER</button>
+                    </div>
 
-                        {/* Color + Outline */}
-                        <div style={styles.controlRow}>
-                          <span style={styles.controlLabel}>Color</span>
-                          <input
-                            type="color"
-                            value={overlay.style.color}
-                            onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, color: e.target.value } })}
-                            style={styles.colorInput}
-                          />
-                          <span style={{ ...styles.controlLabel, marginLeft: '8px' }}>Outline</span>
-                          <button
-                            style={{
-                              ...styles.toggleButton,
-                              ...(overlay.style.outline ? styles.toggleButtonActive : {})
-                            }}
-                            onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, outline: !overlay.style.outline } }); }}
-                          >{overlay.style.outline ? 'On' : 'Off'}</button>
-                          {overlay.style.outline && (
-                            <input
-                              type="color"
-                              value={overlay.style.outlineColor}
-                              onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, outlineColor: e.target.value } })}
-                              style={styles.colorInput}
-                            />
-                          )}
-                        </div>
-
-                        {/* Align */}
-                        <div style={styles.controlRow}>
-                          <span style={styles.controlLabel}>Align</span>
-                          <div style={{ display: 'flex', gap: '3px' }}>
-                            {['left', 'center', 'right'].map(align => (
-                              <button
-                                key={align}
-                                style={{
-                                  ...styles.toggleButton,
-                                  ...(overlay.style.textAlign === align ? styles.toggleButtonActive : {})
-                                }}
-                                onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, textAlign: align } }); }}
-                              >
-                                {align.charAt(0).toUpperCase() + align.slice(1)}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Case */}
-                        <div style={styles.controlRow}>
-                          <span style={styles.controlLabel}>Case</span>
-                          <div style={{ display: 'flex', gap: '3px' }}>
-                            {[
-                              { id: 'default', label: 'Aa' },
-                              { id: 'upper', label: 'AA' },
-                              { id: 'lower', label: 'aa' }
-                            ].map(opt => (
-                              <button
-                                key={opt.id}
-                                style={{
-                                  ...styles.toggleButton,
-                                  ...(overlay.style.textCase === opt.id ? styles.toggleButtonActive : {})
-                                }}
-                                onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, textCase: opt.id } }); }}
-                              >
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Scope */}
-                        <div style={styles.controlRow}>
-                          <span style={styles.controlLabel}>Scope</span>
-                          <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
-                            <button
+                    {/* Text Overlays */}
+                    <div style={{ marginTop: '20px' }}>
+                      <h4 style={styles.tcSectionTitle}>Text overlays</h4>
+                      <div style={styles.tcOverlaysList}>
+                        {textOverlays.length > 0 ? textOverlays.map((overlay, idx) => {
+                          const isSelected = editingTextId === overlay.id;
+                          return (
+                            <div
+                              key={overlay.id}
+                              onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
                               style={{
-                                ...styles.toggleButton,
-                                ...(overlay.scope === 'full' ? styles.toggleButtonActive : {})
+                                ...styles.tcOverlayItem,
+                                ...(isSelected ? { backgroundColor: theme.accent.primary + '22', borderColor: theme.accent.primary } : {})
                               }}
-                              onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { scope: 'full' }); }}
-                            >Full Video</button>
-                            {clips.map((_, i) => (
+                            >
+                              <span style={{ fontSize: '12px', color: theme.text.muted, minWidth: '40px' }}>
+                                {overlay.startTime !== undefined ? `${overlay.startTime.toFixed(1)}s` : `#${idx + 1}`}
+                              </span>
+                              {isSelected ? (
+                                <input
+                                  value={editingTextValue}
+                                  onChange={(e) => setEditingTextValue(e.target.value)}
+                                  onBlur={() => updateTextOverlay(overlay.id, { text: editingTextValue })}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') { updateTextOverlay(overlay.id, { text: editingTextValue }); e.target.blur(); } }}
+                                  style={{ flex: 1, background: 'transparent', border: 'none', color: theme.text.primary, fontSize: '12px', outline: 'none' }}
+                                  autoFocus
+                                />
+                              ) : (
+                                <span style={{ flex: 1, fontSize: '12px', color: theme.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {overlay.text}
+                                </span>
+                              )}
                               <button
-                                key={i}
-                                style={{
-                                  ...styles.toggleButton,
-                                  ...(overlay.scope === i ? styles.toggleButtonActive : {})
-                                }}
-                                onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { scope: i }); }}
-                              >Clip {i + 1}</button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Save to Bank */}
-                        <div style={{ ...styles.controlRow, borderTop: `1px solid ${theme.border.subtle}`, paddingTop: '6px', marginTop: '2px' }}>
-                          <span style={{ fontSize: '10px', color: theme.text.secondary }}>Save to:</span>
-                          <button
-                            style={{ ...styles.toggleButton, borderColor: 'rgba(20,184,166,0.3)', color: '#14b8a6', fontSize: '10px' }}
-                            onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(1, overlay.text); toastSuccess('Saved to Bank A'); }}
-                          >Bank A</button>
-                          <button
-                            style={{ ...styles.toggleButton, borderColor: 'rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '10px' }}
-                            onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(2, overlay.text); toastSuccess('Saved to Bank B'); }}
-                          >Bank B</button>
-                        </div>
+                                onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }}
+                                style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '14px', padding: '0 4px' }}
+                              >×</button>
+                            </div>
+                          );
+                        }) : (
+                          <p style={{ fontSize: '13px', color: theme.text.muted, margin: 0 }}>No text overlays yet</p>
+                        )}
                       </div>
+                      <button onClick={() => addTextOverlay()} style={styles.addTextButton}>
+                        + Add Text Overlay
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'styles' && (
+                  <div style={styles.tcTabContent}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <label style={styles.tcColorLabel}>
+                        Text Color
+                        <input type="color" value={textStyle.color} onChange={(e) => updateGlobalStyle({ color: e.target.value })} style={styles.tcColorInput} />
+                      </label>
+                      {textStyle.outline && (
+                        <label style={styles.tcColorLabel}>
+                          Outline Color
+                          <input type="color" value={textStyle.outlineColor} onChange={(e) => updateGlobalStyle({ outlineColor: e.target.value })} style={styles.tcColorInput} />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'lyrics' && (
+                  <div style={styles.tcTabContent}>
+                    <LyricBank
+                      lyrics={category?.lyrics || lyricsBank || []}
+                      onAddLyrics={onAddLyrics}
+                      onUpdateLyrics={onUpdateLyrics}
+                      onDeleteLyrics={onDeleteLyrics}
+                      onSelectText={(selectedText) => {
+                        addTextOverlay(selectedText);
+                        setActiveTab('caption');
+                        toastSuccess('Lyrics added as text overlay');
+                      }}
+                      compact={false}
+                      showAddForm={true}
+                    />
+                    {(category?.lyrics?.length || 0) === 0 && (lyricsBank?.length || 0) === 0 && (
+                      <p style={{ color: theme.text.muted, fontSize: '12px', marginTop: '12px', textAlign: 'center' }}>
+                        No lyrics saved yet. Add them here or use AI Transcribe.
+                      </p>
                     )}
                   </div>
-                );
-              })}
-
-              <button onClick={() => addTextOverlay()} style={styles.addTextButton}>
-                + Add Text Overlay
-              </button>
-            </div>
-          </div>}
+                )}
+          </div>
+          )}
         </div>
 
         {/* ── Editor Toolbar ── */}
@@ -3385,6 +3282,161 @@ const getStyles = (theme) => ({
     color: '#fff',
     fontSize: '13px',
     cursor: 'pointer'
+  },
+
+  // ── Text Controls panel (tc* prefix — matches Montage editor) ──
+  tcTabs: {
+    display: 'flex',
+    gap: '4px',
+    padding: '8px 12px 0',
+    marginBottom: '8px'
+  },
+  tcTab: {
+    padding: '8px 16px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    borderRadius: '6px',
+    color: theme.text.muted,
+    cursor: 'pointer',
+    fontSize: '13px'
+  },
+  tcTabActive: {
+    padding: '8px 16px',
+    backgroundColor: theme.bg.page,
+    border: 'none',
+    borderRadius: '6px',
+    color: theme.text.primary,
+    cursor: 'pointer',
+    fontSize: '13px'
+  },
+  tcTabContent: {
+    padding: '12px',
+    overflow: 'auto',
+    flex: 1
+  },
+  tcControlRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '12px'
+  },
+  tcControlGroup: {
+    display: 'flex',
+    backgroundColor: theme.bg.page,
+    borderRadius: '6px',
+    overflow: 'hidden'
+  },
+  tcSizeButton: {
+    padding: '8px 12px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: theme.text.primary,
+    cursor: 'pointer',
+    fontSize: '13px',
+    borderRight: `1px solid ${theme.bg.elevated}`
+  },
+  tcFontSelect: {
+    flex: 1,
+    padding: '8px 12px',
+    backgroundColor: theme.bg.page,
+    border: `1px solid ${theme.bg.elevated}`,
+    borderRadius: '6px',
+    color: theme.text.primary,
+    fontSize: '13px',
+    outline: 'none'
+  },
+  tcOptionButton: {
+    flex: 1,
+    padding: '8px 12px',
+    backgroundColor: theme.bg.page,
+    border: `1px solid ${theme.bg.elevated}`,
+    borderRadius: '6px',
+    color: theme.text.secondary,
+    cursor: 'pointer',
+    fontSize: '13px'
+  },
+  tcOptionButtonActive: {
+    flex: 1,
+    padding: '8px 12px',
+    backgroundColor: theme.accent.primary,
+    border: 'none',
+    borderRadius: '6px',
+    color: theme.text.primary,
+    cursor: 'pointer',
+    fontSize: '13px'
+  },
+  tcControlLabel: {
+    fontSize: '13px',
+    color: theme.text.secondary,
+    marginRight: '8px'
+  },
+  tcSelect: {
+    flex: 1,
+    padding: '8px 12px',
+    backgroundColor: theme.bg.page,
+    border: `1px solid ${theme.bg.elevated}`,
+    borderRadius: '6px',
+    color: theme.text.primary,
+    fontSize: '13px',
+    outline: 'none'
+  },
+  tcCaseButton: {
+    padding: '8px 16px',
+    backgroundColor: theme.bg.page,
+    border: `1px solid ${theme.bg.elevated}`,
+    borderRadius: '6px',
+    color: theme.text.secondary,
+    cursor: 'pointer',
+    fontSize: '12px'
+  },
+  tcCaseButtonActive: {
+    padding: '8px 16px',
+    backgroundColor: theme.accent.primary,
+    border: 'none',
+    borderRadius: '6px',
+    color: theme.text.primary,
+    cursor: 'pointer',
+    fontSize: '12px'
+  },
+  tcSectionTitle: {
+    fontSize: '11px',
+    fontWeight: '600',
+    color: theme.text.muted,
+    margin: '0 0 8px 0',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em'
+  },
+  tcOverlaysList: {
+    backgroundColor: theme.bg.page,
+    borderRadius: '6px',
+    padding: '8px',
+    marginBottom: '8px'
+  },
+  tcOverlayItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '6px 8px',
+    borderRadius: '4px',
+    border: `1px solid transparent`,
+    cursor: 'pointer',
+    marginBottom: '4px'
+  },
+  tcColorLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    fontSize: '13px',
+    color: theme.text.secondary
+  },
+  tcColorInput: {
+    width: '40px',
+    height: '40px',
+    padding: 0,
+    border: `2px solid ${theme.bg.elevated}`,
+    borderRadius: '8px',
+    cursor: 'pointer',
+    backgroundColor: 'transparent'
   }
 });
 
