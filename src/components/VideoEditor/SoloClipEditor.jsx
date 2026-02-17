@@ -2,7 +2,8 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   subscribeToLibrary, subscribeToCollections, getCollections, getLibrary, getLyrics,
   addToVideoTextBank, removeFromVideoTextBank, updateVideoTextBank,
-  addToLibraryAsync, incrementUseCount, MEDIA_TYPES
+  addToLibraryAsync, incrementUseCount, MEDIA_TYPES,
+  getTextBankText, getTextBankStyle
 } from '../../services/libraryService';
 import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -1080,9 +1081,9 @@ const SoloClipEditor = ({
                         <div key={idx} style={styles.textBankItem}>
                           <span
                             style={{ flex: 1, fontSize: '12px', cursor: 'pointer' }}
-                            onClick={() => addTextOverlay(text)}
+                            onClick={() => addTextOverlay(getTextBankText(text))}
                             title="Click to add as overlay"
-                          >{text}</span>
+                          >{getTextBankText(text)}</span>
                           <button
                             onClick={() => handleRemoveFromVideoTextBank(1, idx)}
                             style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '14px', padding: '0 2px' }}
@@ -1111,9 +1112,9 @@ const SoloClipEditor = ({
                         <div key={idx} style={styles.textBankItem}>
                           <span
                             style={{ flex: 1, fontSize: '12px', cursor: 'pointer' }}
-                            onClick={() => addTextOverlay(text)}
+                            onClick={() => addTextOverlay(getTextBankText(text))}
                             title="Click to add as overlay"
-                          >{text}</span>
+                          >{getTextBankText(text)}</span>
                           <button
                             onClick={() => handleRemoveFromVideoTextBank(2, idx)}
                             style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '14px', padding: '0 2px' }}
@@ -1622,7 +1623,7 @@ const SoloClipEditor = ({
                         </div>
                         {tb1.map((text, idx) => (
                           <div key={idx} style={{ ...styles.textBankItem, minHeight: '44px' }}>
-                            <span style={{ flex: 1, fontSize: '12px', cursor: 'pointer' }} onClick={() => addTextOverlay(text)}>{text}</span>
+                            <span style={{ flex: 1, fontSize: '12px', cursor: 'pointer' }} onClick={() => addTextOverlay(getTextBankText(text))}>{getTextBankText(text)}</span>
                             <button onClick={() => handleRemoveFromVideoTextBank(1, idx)} style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '14px', minWidth: '44px', minHeight: '44px' }}>×</button>
                           </div>
                         ))}
@@ -1636,7 +1637,7 @@ const SoloClipEditor = ({
                         </div>
                         {tb2.map((text, idx) => (
                           <div key={idx} style={{ ...styles.textBankItem, minHeight: '44px' }}>
-                            <span style={{ flex: 1, fontSize: '12px', cursor: 'pointer' }} onClick={() => addTextOverlay(text)}>{text}</span>
+                            <span style={{ flex: 1, fontSize: '12px', cursor: 'pointer' }} onClick={() => addTextOverlay(getTextBankText(text))}>{getTextBankText(text)}</span>
                             <button onClick={() => handleRemoveFromVideoTextBank(2, idx)} style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '14px', minWidth: '44px', minHeight: '44px' }}>×</button>
                           </div>
                         ))}

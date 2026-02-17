@@ -15,7 +15,8 @@ import { saveApiKey, loadApiKey } from '../../services/storageService';
 import { ErrorPanel, EmptyState as SharedEmptyState, useToast } from '../ui';
 import {
   incrementUseCount, getLibrary, getCollections, getLyrics,
-  subscribeToLibrary, subscribeToCollections, addToTextBank, MEDIA_TYPES
+  subscribeToLibrary, subscribeToCollections, addToTextBank, MEDIA_TYPES,
+  getTextBankText, getTextBankStyle
 } from '../../services/libraryService';
 import {
   getTrimHash,
@@ -1204,7 +1205,8 @@ const VideoEditorModal = ({
       // Cycle text from banks if available (unless keepTemplateText is active)
       let genWords = [...template.words];
       if (keepTemplateText === 'none' && textBank1.length > 0 && genWords.length > 0) {
-        const bankText = textBank1[g % textBank1.length];
+        const bankEntry = textBank1[g % textBank1.length];
+        const bankText = getTextBankText(bankEntry);
         if (bankText) {
           // Replace first word with cycled text
           genWords = genWords.map((w, i) => i === 0 ? { ...w, text: bankText } : w);
@@ -2329,7 +2331,15 @@ const VideoEditorModal = ({
                         </div>
                         {textBank1.map((text, idx) => (
                           <div key={idx} style={styles.textBankItem}>
-                            <span style={{ flex: 1, fontSize: '12px' }}>{text}</span>
+                            <span
+                              style={{ flex: 1, fontSize: '12px', cursor: 'pointer' }}
+                              onClick={() => {
+                                const t = getTextBankText(text);
+                                const newWord = { id: `word_${Date.now()}`, text: t, startTime: currentTime, duration: 2 };
+                                setWords(prev => [...prev, newWord]);
+                              }}
+                              title="Click to add as word at playhead"
+                            >{getTextBankText(text)}</span>
                           </div>
                         ))}
                         {textBank1.length === 0 && <div style={{ fontSize: '11px', color: theme.text.muted }}>No text added yet</div>}
@@ -2352,7 +2362,15 @@ const VideoEditorModal = ({
                         </div>
                         {textBank2.map((text, idx) => (
                           <div key={idx} style={styles.textBankItem}>
-                            <span style={{ flex: 1, fontSize: '12px' }}>{text}</span>
+                            <span
+                              style={{ flex: 1, fontSize: '12px', cursor: 'pointer' }}
+                              onClick={() => {
+                                const t = getTextBankText(text);
+                                const newWord = { id: `word_${Date.now()}`, text: t, startTime: currentTime, duration: 2 };
+                                setWords(prev => [...prev, newWord]);
+                              }}
+                              title="Click to add as word at playhead"
+                            >{getTextBankText(text)}</span>
                           </div>
                         ))}
                         {textBank2.length === 0 && <div style={{ fontSize: '11px', color: theme.text.muted }}>No text added yet</div>}
