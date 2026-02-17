@@ -363,8 +363,7 @@ export default async function handler(req, res) {
             caption: sanitizeText(body.caption),
             hashtags: (body.hashtags || []).map(sanitizeText)
           };
-          console.log('[Late POST /posts] tiktokSettings:', JSON.stringify(sanitizedBody.tiktokSettings || 'NONE'));
-          console.log('[Late POST /posts] payload keys:', Object.keys(sanitizedBody).join(', '));
+          console.log('[Late POST /posts] FULL PAYLOAD:', JSON.stringify(sanitizedBody, null, 2));
           response = await fetchWithRetry(`${LATE_API_BASE}/posts`, {
             method: 'POST',
             headers: {
@@ -373,6 +372,9 @@ export default async function handler(req, res) {
             },
             body: JSON.stringify(sanitizedBody)
           });
+          const responseClone = response.clone();
+          const responseBody = await responseClone.text();
+          console.log('[Late POST /posts] RESPONSE:', response.status, responseBody);
         }
         break;
 

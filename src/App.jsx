@@ -269,6 +269,7 @@ const lateApi = {
 
       // Late API payload — only include fields Late expects (platform + accountId)
       const hasTikTok = platforms.some(p => p.platform === 'tiktok');
+      const isCarousel = type === 'carousel';
       const payload = {
         content: caption || '',
         mediaItems,
@@ -277,17 +278,19 @@ const lateApi = {
           accountId: p.accountId
         })),
         scheduledFor,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles'
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles',
+        // Carousels → TikTok creator inbox as draft (top-level Late flag)
+        ...(isCarousel ? { isDraft: true } : {})
       };
 
       // TikTok requires specific settings for all posts
       if (hasTikTok) {
         payload.tiktokSettings = {
-          privacy_level: 'PUBLIC_TO_EVERYONE',
+          privacy_level: 'SELF_ONLY',
           allow_comment: true,
           content_preview_confirmed: true,
           express_consent_given: true,
-          ...(type === 'carousel'
+          ...(isCarousel
             ? {
                 draft: true,
                 media_type: 'photo',
