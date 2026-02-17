@@ -1869,11 +1869,19 @@ const VideoStudio = ({
     // Library mode: save via libraryService (Firestore + localStorage)
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
-        return addLyricsAsync(db, currentArtistId, {
+        const newEntry = await addLyricsAsync(db, currentArtistId, {
           title: lyricsData.title || 'Untitled Lyrics',
           content: lyricsData.content || '',
           words: lyricsData.words || null
         });
+        // Also update selectedLibraryMedia so the editor sees the new lyric immediately
+        if (newEntry) {
+          setSelectedLibraryMedia(prev => ({
+            ...prev,
+            lyrics: [...(prev.lyrics || []), newEntry]
+          }));
+        }
+        return newEntry;
       }
       return;
     }
@@ -1907,6 +1915,13 @@ const VideoStudio = ({
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
         await updateLyricsAsync(db, currentArtistId, lyricsId, updates);
+        // Also update selectedLibraryMedia so the editor sees saved word timings immediately
+        setSelectedLibraryMedia(prev => ({
+          ...prev,
+          lyrics: (prev.lyrics || []).map(l =>
+            l.id === lyricsId ? { ...l, ...updates, updatedAt: new Date().toISOString() } : l
+          )
+        }));
       }
       return;
     }

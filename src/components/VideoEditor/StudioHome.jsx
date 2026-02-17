@@ -1039,6 +1039,11 @@ const StudioHome = ({
       }
     }
 
+    // Always include all lyrics so the lyric bank is available in the editor
+    if (lyricsForEditor.length === 0 && lyrics.length > 0) {
+      lyricsForEditor = lyrics;
+    }
+
     // Mark media as used
     videosForEditor.forEach(v => incrementUseCount(artistId, v.id));
     if (audioForEditor) incrementUseCount(artistId, audioForEditor.id);
@@ -1082,6 +1087,11 @@ const StudioHome = ({
       lyricsForEditor = lyrics.filter(l =>
         (l.collectionIds || []).includes(selectedCollection)
       );
+    }
+
+    // Always include all lyrics so the lyric bank is available in the editor
+    if (lyricsForEditor.length === 0 && lyrics.length > 0) {
+      lyricsForEditor = lyrics;
     }
 
     // Mark images as used

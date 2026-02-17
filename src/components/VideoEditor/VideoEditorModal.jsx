@@ -1347,14 +1347,14 @@ const VideoEditorModal = ({
   // Handle when user selects beats from the BeatSelector modal
   // Note: selectedBeatTimes are now in LOCAL time (0 to trimmedDuration)
   const handleBeatSelectionApply = useCallback((selectedBeatTimes) => {
-    if (!selectedBeatTimes.length || !category?.videos?.length) {
+    const availableClips = visibleVideos.length > 0 ? visibleVideos : (category?.videos || []);
+    if (!selectedBeatTimes.length || !availableClips.length) {
       setShowBeatSelector(false);
       return;
     }
 
     // Calculate trimmed duration for the end boundary
     const effectiveDuration = (selectedAudio?.endTime || selectedAudio?.duration || duration) - (selectedAudio?.startTime || 0);
-    const availableClips = category.videos;
     const newClips = [];
 
     // Create clips for each selected beat (cut points) - all times are LOCAL
@@ -1379,19 +1379,19 @@ const VideoEditorModal = ({
 
     setClips(newClips);
     setShowBeatSelector(false);
-  }, [category?.videos, duration, selectedAudio]);
+  }, [visibleVideos, category?.videos, duration, selectedAudio]);
 
   const handleCutByWord = useCallback(() => {
     if (!words.length) {
       toast.error('No words to cut by. Add lyrics first.');
       return;
     }
-    if (!category?.videos?.length) {
+    const availableClips = visibleVideos.length > 0 ? visibleVideos : (category?.videos || []);
+    if (!availableClips.length) {
       toast.error('No clips in bank. Upload videos first.');
       return;
     }
 
-    const availableClips = category.videos;
     const newClips = words.map((word, i) => {
       const randomClip = availableClips[Math.floor(Math.random() * availableClips.length)];
       return {
@@ -1408,7 +1408,7 @@ const VideoEditorModal = ({
 
     setClips(newClips);
     toast.success(`Created ${newClips.length} clips from words`);
-  }, [words, category?.videos, toast]);
+  }, [words, visibleVideos, category?.videos, toast]);
 
   const handleReroll = useCallback(() => {
     // Pull from visible collection (respects dropdown selection), fall back to category
