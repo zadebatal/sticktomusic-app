@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import ExportAndPostModal from './ExportAndPostModal';
 import ScheduleQueue from './ScheduleQueue';
 import { StatusPill, ConfirmDialog, EmptyState as SharedEmptyState, useToast } from '../ui';
@@ -7,6 +7,7 @@ import { renderVideo } from '../../services/videoExportService';
 import { uploadFile } from '../../services/firebaseStorage';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
 import { createScheduledPost, deleteScheduledPost, getScheduledPosts, POST_STATUS } from '../../services/scheduledPostsService';
+import { getLibraryAsync, saveCreatedContentAsync } from '../../services/libraryService';
 import log from '../../utils/logger';
 import {
   initGoogleDrive, authenticate as driveAuth, isAuthenticated as isDriveAuth,
@@ -193,6 +194,74 @@ const ContentLibrary = ({
 
   // Legacy: postingSlideshow kept for single-slideshow post button
   const [postingSlideshow, setPostingSlideshow] = useState(null);
+
+  // Bulk audio assign state
+  const [showAudioAssign, setShowAudioAssign] = useState(false);
+  const [audioLibrary, setAudioLibrary] = useState([]);
+  const [assigningAudio, setAssigningAudio] = useState(false);
+
+  // Load audio library when bulk assign panel opens
+  useEffect(() => {
+    if (showAudioAssign && db && artistId && audioLibrary.length === 0) {
+      getLibraryAsync(db, artistId).then(media => {
+        const audioItems = (media || []).filter(m =>
+          m.type === 'audio' || m.name?.match(/\.(mp3|wav|m4a|aac|ogg)$/i) || m.mimeType?.includes('audio')
+        ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        setAudioLibrary(audioItems);
+      }).catch(err => console.error('[ContentLibrary] Failed to load audio library:', err));
+    }
+  }, [showAudioAssign, db, artistId, audioLibrary.length]);
+
+  // Bulk assign audio to selected drafts
+  const handleBulkAudioAssign = useCallback(async (audioItem) => {
+    if (!db || !artistId || selectedVideoIds.size === 0) return;
+    setAssigningAudio(true);
+    try {
+      const selected = items.filter(item => selectedVideoIds.has(item.id));
+      // Update each selected item's audio
+      const updatedSlideshows = selected.map(item => ({
+        ...item,
+        audio: {
+          id: audioItem.id,
+          name: audioItem.name,
+          url: audioItem.url,
+          duration: audioItem.duration,
+          isTrimmed: false,
+          startTime: 0,
+          endTime: audioItem.duration || null,
+        }
+      }));
+
+      // Save to Firestore
+      await saveCreatedContentAsync(db, artistId, { videos: [], slideshows: updatedSlideshows });
+
+      // Update local state via category
+      if (category?.slideshows) {
+        const audioData = {
+          id: audioItem.id,
+          name: audioItem.name,
+          url: audioItem.url,
+          duration: audioItem.duration,
+          isTrimmed: false,
+          startTime: 0,
+          endTime: audioItem.duration || null,
+        };
+        category.slideshows.forEach(ss => {
+          if (selectedVideoIds.has(ss.id)) {
+            ss.audio = audioData;
+          }
+        });
+      }
+
+      toastSuccess(`Assigned "${audioItem.name}" to ${selectedVideoIds.size} drafts`);
+      setShowAudioAssign(false);
+    } catch (err) {
+      console.error('[ContentLibrary] Bulk audio assign failed:', err);
+      toastError(`Failed to assign audio: ${err.message}`);
+    } finally {
+      setAssigningAudio(false);
+    }
+  }, [db, artistId, selectedVideoIds, items, category, toastSuccess, toastError]);
 
   // Get content array based on type — reverse chronological (newest first)
   const items = useMemo(() => {
@@ -486,6 +555,7 @@ const ContentLibrary = ({
                     onExportToDrive={driveConfigured ? () => handleExportToDrive(item) : null}
                     isDriveExporting={driveExporting === item.id}
                     isMobile={isMobile}
+                    draftNumber={index + 1}
                     onPost={async () => {
                       if (onViewScheduling && db && artistId) {
                         // Create a scheduled post and navigate to scheduling page
@@ -610,6 +680,18 @@ const ContentLibrary = ({
                 Edit {selectedItems.length} in Editor
               </button>
             )}
+            {isSlideshow && selectedItems.length >= 1 && db && artistId && (
+              <button
+                style={{ ...styles.batchBtnExport, borderColor: theme.accent.primary, color: theme.accent.hover }}
+                onClick={() => setShowAudioAssign(true)}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 18V5l12-2v13"/>
+                  <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+                </svg>
+                Assign Audio ({selectedItems.length})
+              </button>
+            )}
             <button style={styles.batchBtnPost} onClick={async () => {
               if (onViewScheduling && db && artistId) {
                 // Create scheduled posts for ALL selected items
@@ -649,6 +731,158 @@ const ContentLibrary = ({
 
       {/* Footer — removed dead "Edit category" and "Upload your own videos" buttons (C-10)
          Category editing is available in the sidebar; uploads via the header upload buttons. */}
+
+      {/* Bulk Audio Assign Panel */}
+      {showAudioAssign && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(4px)',
+        }} onClick={() => setShowAudioAssign(false)}>
+          <div style={{
+            background: theme.bg.surface,
+            borderRadius: '12px',
+            border: `1px solid ${theme.border.default}`,
+            width: '480px',
+            maxHeight: '70vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }} onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{
+              padding: '16px 20px',
+              borderBottom: `1px solid ${theme.border.subtle}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}>
+              <div>
+                <div style={{ fontSize: '15px', fontWeight: '600', color: theme.text.primary }}>
+                  Assign Audio to {selectedVideoIds.size} Draft{selectedVideoIds.size !== 1 ? 's' : ''}
+                </div>
+                <div style={{ fontSize: '12px', color: theme.text.muted, marginTop: '2px' }}>
+                  Select a song from your library
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAudioAssign(false)}
+                style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '18px', padding: '4px 8px' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Audio List */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+              {audioLibrary.length === 0 ? (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: theme.text.muted, fontSize: '13px' }}>
+                  Loading audio library...
+                </div>
+              ) : (
+                <>
+                  {/* "Remove Audio" option */}
+                  <button
+                    onClick={async () => {
+                      if (!db || !artistId || selectedVideoIds.size === 0) return;
+                      setAssigningAudio(true);
+                      try {
+                        const selected = items.filter(item => selectedVideoIds.has(item.id));
+                        const cleared = selected.map(item => ({ ...item, audio: null }));
+                        await saveCreatedContentAsync(db, artistId, { videos: [], slideshows: cleared });
+                        if (category?.slideshows) {
+                          category.slideshows.forEach(ss => {
+                            if (selectedVideoIds.has(ss.id)) { ss.audio = null; }
+                          });
+                        }
+                        toastSuccess(`Removed audio from ${selectedVideoIds.size} drafts`);
+                        setShowAudioAssign(false);
+                      } catch (err) {
+                        toastError(`Failed: ${err.message}`);
+                      } finally { setAssigningAudio(false); }
+                    }}
+                    disabled={assigningAudio}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      width: '100%',
+                      padding: '10px 20px',
+                      background: 'none',
+                      border: 'none',
+                      cursor: assigningAudio ? 'wait' : 'pointer',
+                      color: '#f87171',
+                      fontSize: '13px',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                    Remove Audio
+                  </button>
+
+                  <div style={{ height: '1px', background: theme.border.subtle, margin: '4px 20px' }} />
+
+                  {audioLibrary.map(audio => (
+                    <button
+                      key={audio.id}
+                      onClick={() => handleBulkAudioAssign(audio)}
+                      disabled={assigningAudio}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        width: '100%',
+                        padding: '10px 20px',
+                        background: 'none',
+                        border: 'none',
+                        cursor: assigningAudio ? 'wait' : 'pointer',
+                        color: theme.text.primary,
+                        fontSize: '13px',
+                        textAlign: 'left',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = theme.bg.elevated}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    >
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '6px',
+                        background: `${theme.accent.primary}22`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.accent.hover} strokeWidth="2">
+                          <path d="M9 18V5l12-2v13"/>
+                          <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+                        </svg>
+                      </div>
+                      <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: '500' }}>
+                          {(audio.name || 'Untitled').replace(' Audio Extracted', '').replace('.mp3', '')}
+                        </div>
+                        {audio.duration && (
+                          <div style={{ fontSize: '11px', color: theme.text.muted, marginTop: '1px' }}>
+                            {Math.floor(audio.duration / 60)}:{String(Math.floor(audio.duration % 60)).padStart(2, '0')}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Export/Post Modal */}
       {exportingVideo && (
@@ -1033,7 +1267,7 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
   );
 };
 
-const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdit, onDelete, onPost, onExportToDrive, isDriveExporting, isMobile = false }) => {
+const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdit, onDelete, onPost, onExportToDrive, isDriveExporting, isMobile = false, draftNumber }) => {
   const { theme } = useTheme();
   const [showActions, setShowActions] = useState(false);
   const actionsVisible = isMobile || showActions;
@@ -1164,6 +1398,26 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
           </div>
         )}
 
+        {/* Draft number badge - top left */}
+        {draftNumber != null && (
+          <div style={{
+            position: 'absolute',
+            top: '8px',
+            left: '8px',
+            background: 'rgba(0, 0, 0, 0.75)',
+            color: '#fff',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            fontSize: '10px',
+            fontWeight: '700',
+            backdropFilter: 'blur(4px)',
+            minWidth: '20px',
+            textAlign: 'center',
+          }}>
+            #{draftNumber}
+          </div>
+        )}
+
         {/* Carousel badge - bottom left */}
         <div style={{
           position: 'absolute',
@@ -1246,7 +1500,7 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
         )}
       </div>
 
-      {/* Name + Status */}
+      {/* Name + Audio + Status */}
       <div style={styles.statusBadgeContainer}>
         {slideshow.name && (
           <div style={{
@@ -1259,6 +1513,26 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
             whiteSpace: 'nowrap',
           }}>
             {slideshow.name}
+          </div>
+        )}
+        {slideshow.audio?.name && (
+          <div style={{
+            padding: '2px 12px 0',
+            fontSize: '10px',
+            fontWeight: '500',
+            color: theme.accent.hover,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '3px',
+          }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 18V5l12-2v13"/>
+              <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+            </svg>
+            {slideshow.audio.name.replace(' Audio Extracted', '').replace('.mp3', '')}
           </div>
         )}
         <StatusPill status={slideshow.status || VIDEO_STATUS.DRAFT} />
