@@ -2013,6 +2013,7 @@ const SoloClipEditor = ({
           lyrics={lyricsBank}
           onSelectLyric={(lyric) => addTextOverlay(lyric.content || lyric.title || '')}
           onAddNewLyrics={onAddLyrics ? () => onAddLyrics({ title: 'New Lyrics', content: '' }) : null}
+          onAITranscribe={selectedAudio ? () => setShowTranscriber(true) : null}
         />
 
         {/* Hidden audio file input */}

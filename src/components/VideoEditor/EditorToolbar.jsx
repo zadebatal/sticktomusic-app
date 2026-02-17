@@ -21,7 +21,9 @@ const EditorToolbar = ({
   onUploadAudio,
   lyrics = [],
   onSelectLyric,
-  onAddNewLyrics
+  onAddNewLyrics,
+  onAITranscribe = null,
+  isTranscribing = false
 }) => {
   const { theme } = useTheme();
   const styles = getStyles(theme);
@@ -245,6 +247,28 @@ const EditorToolbar = ({
           )}
         </div>
       )}
+
+      {/* AI Transcribe */}
+      {onAITranscribe && (
+        <button
+          style={{
+            ...styles.transcribeButton,
+            opacity: isTranscribing ? 0.6 : 1,
+            cursor: isTranscribing ? 'wait' : 'pointer'
+          }}
+          onClick={onAITranscribe}
+          disabled={isTranscribing}
+          title="AI transcribe audio to add lyrics"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
+            <path d="M19 10v2a7 7 0 01-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+          {isTranscribing ? 'Transcribing...' : 'AI Transcribe'}
+        </button>
+      )}
     </div>
   );
 };
@@ -448,6 +472,18 @@ const getStyles = (theme) => ({
     cursor: 'pointer',
     borderTop: '1px solid rgba(139, 92, 246, 0.2)',
     transition: 'background 0.15s'
+  },
+  transcribeButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '4px 8px',
+    background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(109, 40, 217, 0.3))',
+    border: '1px solid rgba(139, 92, 246, 0.5)',
+    borderRadius: '6px',
+    color: '#c4b5fd',
+    cursor: 'pointer',
+    fontSize: '11px'
   }
 });
 
