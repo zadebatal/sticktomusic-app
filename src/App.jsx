@@ -278,20 +278,19 @@ const lateApi = {
           accountId: p.accountId
         })),
         scheduledFor,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles',
-        // Carousels → TikTok creator inbox as draft (top-level Late flag)
-        ...(isCarousel ? { isDraft: true } : {})
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles'
       };
 
       // TikTok requires specific settings for all posts
       if (hasTikTok) {
         payload.tiktokSettings = {
-          privacy_level: 'SELF_ONLY',
+          privacy_level: 'PUBLIC_TO_EVERYONE',
           allow_comment: true,
           content_preview_confirmed: true,
           express_consent_given: true,
           ...(isCarousel
             ? {
+                // Send to TikTok creator inbox (not publish directly)
                 draft: true,
                 media_type: 'photo',
                 photo_cover_index: 0,
