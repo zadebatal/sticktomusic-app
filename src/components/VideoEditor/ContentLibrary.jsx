@@ -200,69 +200,6 @@ const ContentLibrary = ({
   const [audioLibrary, setAudioLibrary] = useState([]);
   const [assigningAudio, setAssigningAudio] = useState(false);
 
-  // Load audio library when bulk assign panel opens
-  useEffect(() => {
-    if (showAudioAssign && db && artistId && audioLibrary.length === 0) {
-      getLibraryAsync(db, artistId).then(media => {
-        const audioItems = (media || []).filter(m =>
-          m.type === 'audio' || m.name?.match(/\.(mp3|wav|m4a|aac|ogg)$/i) || m.mimeType?.includes('audio')
-        ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-        setAudioLibrary(audioItems);
-      }).catch(err => console.error('[ContentLibrary] Failed to load audio library:', err));
-    }
-  }, [showAudioAssign, db, artistId, audioLibrary.length]);
-
-  // Bulk assign audio to selected drafts
-  const handleBulkAudioAssign = useCallback(async (audioItem) => {
-    if (!db || !artistId || selectedVideoIds.size === 0) return;
-    setAssigningAudio(true);
-    try {
-      const selected = items.filter(item => selectedVideoIds.has(item.id));
-      // Update each selected item's audio
-      const updatedSlideshows = selected.map(item => ({
-        ...item,
-        audio: {
-          id: audioItem.id,
-          name: audioItem.name,
-          url: audioItem.url,
-          duration: audioItem.duration,
-          isTrimmed: false,
-          startTime: 0,
-          endTime: audioItem.duration || null,
-        }
-      }));
-
-      // Save to Firestore
-      await saveCreatedContentAsync(db, artistId, { videos: [], slideshows: updatedSlideshows });
-
-      // Update local state via category
-      if (category?.slideshows) {
-        const audioData = {
-          id: audioItem.id,
-          name: audioItem.name,
-          url: audioItem.url,
-          duration: audioItem.duration,
-          isTrimmed: false,
-          startTime: 0,
-          endTime: audioItem.duration || null,
-        };
-        category.slideshows.forEach(ss => {
-          if (selectedVideoIds.has(ss.id)) {
-            ss.audio = audioData;
-          }
-        });
-      }
-
-      toastSuccess(`Assigned "${audioItem.name}" to ${selectedVideoIds.size} drafts`);
-      setShowAudioAssign(false);
-    } catch (err) {
-      console.error('[ContentLibrary] Bulk audio assign failed:', err);
-      toastError(`Failed to assign audio: ${err.message}`);
-    } finally {
-      setAssigningAudio(false);
-    }
-  }, [db, artistId, selectedVideoIds, items, category, toastSuccess, toastError]);
-
   // Get content array based on type — reverse chronological (newest first)
   const items = useMemo(() => {
     const raw = isSlideshow
@@ -285,6 +222,51 @@ const ContentLibrary = ({
 
   // Backwards compat alias
   const selectedVideos = isSlideshow ? [] : selectedItems;
+
+  // Load audio library when bulk assign panel opens
+  useEffect(() => {
+    if (showAudioAssign && db && artistId && audioLibrary.length === 0) {
+      getLibraryAsync(db, artistId).then(media => {
+        const audioItems = (media || []).filter(m =>
+          m.type === 'audio' || m.name?.match(/\.(mp3|wav|m4a|aac|ogg)$/i) || m.mimeType?.includes('audio')
+        ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        setAudioLibrary(audioItems);
+      }).catch(err => console.error('[ContentLibrary] Failed to load audio library:', err));
+    }
+  }, [showAudioAssign, db, artistId, audioLibrary.length]);
+
+  // Bulk assign audio to selected drafts
+  const handleBulkAudioAssign = useCallback(async (audioItem) => {
+    if (!db || !artistId || selectedVideoIds.size === 0) return;
+    setAssigningAudio(true);
+    try {
+      const selected = items.filter(item => selectedVideoIds.has(item.id));
+      const updatedSlideshows = selected.map(item => ({
+        ...item,
+        audio: {
+          id: audioItem.id,
+          name: audioItem.name,
+          url: audioItem.url,
+          duration: audioItem.duration,
+          isTrimmed: false,
+          startTime: 0,
+          endTime: audioItem.duration || null,
+        }
+      }));
+      await saveCreatedContentAsync(db, artistId, { videos: [], slideshows: updatedSlideshows });
+      if (category?.slideshows) {
+        const audioData = { id: audioItem.id, name: audioItem.name, url: audioItem.url, duration: audioItem.duration, isTrimmed: false, startTime: 0, endTime: audioItem.duration || null };
+        category.slideshows.forEach(ss => {
+          if (selectedVideoIds.has(ss.id)) { ss.audio = audioData; }
+        });
+      }
+      toastSuccess(`Assigned "${audioItem.name}" to ${selectedVideoIds.size} drafts`);
+      setShowAudioAssign(false);
+    } catch (err) {
+      console.error('[ContentLibrary] Bulk audio assign failed:', err);
+      toastError(`Failed to assign audio: ${err.message}`);
+    } finally { setAssigningAudio(false); }
+  }, [db, artistId, selectedVideoIds, items, category, toastSuccess, toastError]);
 
   const toggleItemSelection = (itemId) => {
     setSelectedVideoIds(prev => {
