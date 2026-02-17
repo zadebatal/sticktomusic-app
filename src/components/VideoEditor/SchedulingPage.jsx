@@ -2560,7 +2560,7 @@ const getS = (theme) => ({
   dragHandle: { width: '28px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px', flexShrink: 0 },
   thumb: { width: '44px', height: '56px', borderRadius: '6px', overflow: 'hidden', backgroundColor: theme.bg.input, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
   thumbImg: { width: '100%', height: '100%', objectFit: 'cover' },
-  contentName: { fontSize: '13px', fontWeight: '500', color: theme.bg.elevated, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  contentName: { fontSize: '13px', fontWeight: '500', color: theme.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
 
   // Inline controls
   inlineDate: { width: '105px', padding: '4px 6px', borderRadius: '6px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.surface, color: theme.text.secondary, fontSize: '11px' },
@@ -2590,7 +2590,7 @@ const getS = (theme) => ({
   hashtagPill: { fontSize: '11px', color: theme.accent.hover, backgroundColor: theme.accent.muted, padding: '2px 8px', borderRadius: '10px' },
   hashtagSetBtn: { padding: '3px 8px', borderRadius: '5px', border: `1px solid ${theme.accent.primary}`, backgroundColor: theme.accent.muted, color: theme.accent.hover, fontSize: '11px', fontWeight: '500', cursor: 'pointer' },
   linkBtn: { background: 'none', border: 'none', color: theme.accent.primary, fontSize: '11px', cursor: 'pointer', padding: '2px 0' },
-  accountSelect: { flex: 1, padding: '4px 8px', borderRadius: '5px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.input, color: theme.bg.elevated, fontSize: '11px', cursor: 'pointer' },
+  accountSelect: { flex: 1, padding: '4px 8px', borderRadius: '5px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.input, color: theme.text.primary, fontSize: '11px', cursor: 'pointer' },
   resultRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', backgroundColor: theme.bg.input, borderRadius: '6px', marginBottom: '4px' },
 
   // Modal

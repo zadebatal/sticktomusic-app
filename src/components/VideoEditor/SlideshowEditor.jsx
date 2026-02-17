@@ -3316,7 +3316,17 @@ const SlideshowEditor = ({
                       }
                     </span>
                   </div>
-                  <div style={styles.audioProgressBar}>
+                  <div
+                    style={{ ...styles.audioProgressBar, cursor: 'pointer' }}
+                    onClick={(e) => {
+                      if (!audioRef.current || !audioDuration) return;
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                      const seekTime = pct * audioDuration;
+                      audioRef.current.currentTime = seekTime;
+                      setCurrentTime(seekTime);
+                    }}
+                  >
                     <div
                       style={{
                         ...styles.audioProgressFill,
@@ -4482,15 +4492,8 @@ const SlideshowEditor = ({
               {/* Platform — TikTok draft only for slideshows */}
               <div style={styles.scheduleField}>
                 <label style={styles.scheduleLabel}>Platform</label>
-                <div style={styles.platformCheckboxes}>
-                  <label style={styles.platformCheck}>
-                    <input
-                      type="checkbox"
-                      checked={platforms.tiktok}
-                      onChange={(e) => setPlatforms(p => ({ ...p, tiktok: e.target.checked }))}
-                    />
-                    TikTok (sent as draft)
-                  </label>
+                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', padding: '4px 0' }}>
+                  TikTok (sent as draft)
                 </div>
               </div>
             </div>

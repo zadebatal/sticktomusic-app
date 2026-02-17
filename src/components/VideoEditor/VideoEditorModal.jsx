@@ -2647,7 +2647,7 @@ const VideoEditorModal = ({
                 </span>
                 {!isMobile && (
                   <button style={styles.fullscreenButton} onClick={() => {
-                    const el = document.querySelector('video[data-preview]') || document.querySelector('.video-preview');
+                    const el = activeVideoRef.current === 'A' ? videoRef.current : videoRefB.current;
                     if (el?.requestFullscreen) el.requestFullscreen();
                   }} title="Fullscreen">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -3679,7 +3679,7 @@ const VideoEditorModal = ({
             {!isMobile && <button style={styles.resetButton} onClick={() => {
               if (window.confirm('Reset all changes to last saved state?')) {
                 // Restore from auto-saved draft if available
-                const key = `video_editor_autosave_${selectedAudio?.name || 'default'}`;
+                const key = autoSaveKey;
                 try {
                   const saved = localStorage.getItem(key);
                   if (saved) {

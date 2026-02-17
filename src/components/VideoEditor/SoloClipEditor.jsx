@@ -812,7 +812,7 @@ const SoloClipEditor = ({
     } finally {
       setIsGenerating(false);
     }
-  }, [allVideos, generateCount, category, getVideoTextBanks, toastSuccess, toastError]);
+  }, [allVideos, generateCount, category, getVideoTextBanks, keepTemplateText, toastSuccess, toastError]);
 
   // ── Save Draft (active video only) ──
   const handleSaveDraft = useCallback(() => {

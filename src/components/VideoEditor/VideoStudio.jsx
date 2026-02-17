@@ -2563,6 +2563,11 @@ const VideoStudio = ({
             lateAccountIds={lateAccountIds}
             onSchedulePost={onSchedulePost}
             onDeleteLatePost={onDeleteLatePost}
+            visibleArtists={artists}
+            onArtistChange={(id) => {
+              setCurrentArtistId(id);
+              if (onArtistChange) onArtistChange(id);
+            }}
             onEditDraft={(post) => {
               if (post.editorState) {
                 setSchedulerEditPostId(post.id); // Track which scheduledPost we're editing
