@@ -2104,6 +2104,8 @@ const MultiClipEditor = ({
                                     <option value="'Playfair Display', serif">Serif</option>
                                     <option value="'Space Grotesk', sans-serif">Grotesk</option>
                                     <option value="monospace">Mono</option>
+                                    <option value="'Arial Narrow', Arial, sans-serif">Arial Narrow</option>
+                                    <option value="Georgia, serif">Georgia</option>
                                   </select>
                                 </div>
                                 {/* Font Size */}
@@ -2269,6 +2271,8 @@ const MultiClipEditor = ({
                             <option value="'Playfair Display', serif">Serif</option>
                             <option value="'Space Grotesk', sans-serif">Grotesk</option>
                             <option value="monospace">Mono</option>
+                            <option value="'Arial Narrow', Arial, sans-serif">Arial Narrow</option>
+                            <option value="Georgia, serif">Georgia</option>
                           </select>
                         </div>
 

@@ -1263,7 +1263,7 @@ const VideoEditorModal = ({
 
   // Get current visible text
   const currentText = words.find(w =>
-    currentTime >= w.startTime && currentTime < w.startTime + (w.duration || 0.5)
+    currentTime >= w.startTime && currentTime < w.startTime + (w.duration || 2)
   );
 
   // Handlers
@@ -1399,7 +1399,7 @@ const VideoEditorModal = ({
         localUrl: randomClip.localUrl, // Include localUrl for CORS fallback
         thumbnail: randomClip.thumbnail,
         startTime: word.startTime,
-        duration: word.duration || 0.5,
+        duration: word.duration || 2,
         locked: false
       };
     });
@@ -3178,6 +3178,8 @@ const VideoEditorModal = ({
                         <option value="'Playfair Display', serif">Serif</option>
                         <option value="'Space Grotesk', sans-serif">Grotesk</option>
                         <option value="monospace">Mono</option>
+                        <option value="'Arial Narrow', Arial, sans-serif">Arial Narrow</option>
+                        <option value="Georgia, serif">Georgia</option>
                       </select>
                     </div>
 
@@ -3361,7 +3363,7 @@ const VideoEditorModal = ({
                                   } else {
                                     // Parse lyrics into words stacked at beginning with 0.5s duration each
                                     const lyricWords = content.split(/\s+/).filter(w => w.trim().length > 0);
-                                    const wordDuration = 0.5;
+                                    const wordDuration = 2;
 
                                     newWords = lyricWords.map((text, i) => ({
                                       id: `word_${Date.now()}_${i}`,
@@ -3635,6 +3637,8 @@ const VideoEditorModal = ({
             setShowLyricBankPicker(false);
             if (onAddLyrics) onAddLyrics({ title: 'New Lyrics', content: '' });
           } : null}
+          onAITranscribe={selectedAudio ? handleAITranscribe : null}
+          isTranscribing={isTranscribing}
         />
 
         {/* Footer */}

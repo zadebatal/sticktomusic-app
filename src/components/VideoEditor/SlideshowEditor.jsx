@@ -4738,6 +4738,7 @@ const SlideshowEditor = ({
 const AVAILABLE_FONTS = [
   { name: 'Inter', value: "'Inter', sans-serif" },
   { name: 'Arial', value: 'Arial, sans-serif' },
+  { name: 'Arial Narrow', value: "'Arial Narrow', Arial, sans-serif" },
   { name: 'Georgia', value: 'Georgia, serif' },
   { name: 'Times New Roman', value: "'Times New Roman', serif" },
   { name: 'Courier New', value: "'Courier New', monospace" },
