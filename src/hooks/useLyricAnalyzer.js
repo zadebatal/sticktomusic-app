@@ -15,9 +15,12 @@ export function useLyricAnalyzer() {
       const key = apiKey || getStoredApiKey();
       if (!key) throw new Error('API_KEY_REQUIRED');
 
-      setProgress('Validating API key...');
-      const isValid = await validateApiKey(key);
-      if (!isValid) throw new Error('Invalid API key format');
+      // Skip validation for 'team' sentinel — proxy handles auth server-side
+      if (key !== 'team') {
+        setProgress('Validating API key...');
+        const isValid = await validateApiKey(key);
+        if (!isValid) throw new Error('Invalid API key format');
+      }
 
       if (apiKey) storeApiKey(apiKey);
 

@@ -307,8 +307,8 @@ const MultiClipEditor = ({
     }
   }, [activeClipIndex, clips]);
 
-  // Effective timeline duration = max(totalClipsDuration, audioDuration) so audio can extend past video
-  const timelineDuration = Math.max(totalDuration || 0, audioDuration || 0) || totalDuration || 1;
+  // Timeline duration dictated by audio; falls back to total clip length when no audio
+  const timelineDuration = audioDuration > 0 ? audioDuration : (totalDuration || 1);
 
   const playbackLoop = useCallback(() => {
     const startBoundary = selectedAudio?.startTime || 0;

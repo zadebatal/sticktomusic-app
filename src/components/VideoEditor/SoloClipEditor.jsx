@@ -278,8 +278,8 @@ const SoloClipEditor = ({
     }
   }, []);
 
-  // Effective timeline duration = max(clip, audio) so audio can extend past video
-  const timelineDuration = Math.max(clipDuration || 0, audioDuration || 0) || clipDuration || 1;
+  // Timeline duration dictated by audio; falls back to clip length when no audio
+  const timelineDuration = audioDuration > 0 ? audioDuration : (clipDuration || 1);
 
   const playbackLoop = useCallback(() => {
     const startBoundary = selectedAudio?.startTime || 0;
