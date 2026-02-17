@@ -641,6 +641,29 @@ const MultiClipEditor = ({
     setEditingTextValue(newOverlay.text);
   }, [getDefaultTextStyle, setTextOverlays, currentTime, totalDuration]);
 
+  // Add lyrics as timed word overlays (one per word, evenly spread across total duration)
+  const addLyricsAsTimedOverlays = useCallback((lyricsText) => {
+    const words = lyricsText.split(/\s+/).filter(w => w.trim().length > 0);
+    if (!words.length) return;
+
+    const dur = totalDuration || 13;
+    const wordDuration = dur / words.length;
+    const timestamp = Date.now();
+
+    const newOverlays = words.map((word, i) => ({
+      id: `text_${timestamp}_${i}`,
+      text: word,
+      style: getDefaultTextStyle(),
+      position: { x: 50, y: 50, width: 80, height: 20 },
+      scope: 'full',
+      startTime: i * wordDuration,
+      endTime: (i + 1) * wordDuration
+    }));
+
+    setTextOverlays(newOverlays);
+    toastSuccess(`Created ${newOverlays.length} timed word overlays`);
+  }, [totalDuration, getDefaultTextStyle, setTextOverlays, toastSuccess]);
+
   // ── Reroll: swap active clip with random from visible videos (collection-aware) ──
   const handleReroll = useCallback(() => {
     const availableClips = visibleVideos.length > 0 ? visibleVideos : (category?.videos || []);
@@ -2141,7 +2164,7 @@ const MultiClipEditor = ({
                           onAddLyrics={onAddLyrics}
                           onUpdateLyrics={onUpdateLyrics}
                           onDeleteLyrics={onDeleteLyrics}
-                          onSelectText={(selectedText) => { addTextOverlay(selectedText); setActiveTab('caption'); toastSuccess('Lyrics added as text overlay'); }}
+                          onSelectText={(selectedText) => { addLyricsAsTimedOverlays(selectedText); setActiveTab('caption'); }}
                           compact={false}
                           showAddForm={true}
                         />
@@ -2290,9 +2313,8 @@ const MultiClipEditor = ({
                       onUpdateLyrics={onUpdateLyrics}
                       onDeleteLyrics={onDeleteLyrics}
                       onSelectText={(selectedText) => {
-                        addTextOverlay(selectedText);
+                        addLyricsAsTimedOverlays(selectedText);
                         setActiveTab('caption');
-                        toastSuccess('Lyrics added as text overlay');
                       }}
                       compact={false}
                       showAddForm={true}
