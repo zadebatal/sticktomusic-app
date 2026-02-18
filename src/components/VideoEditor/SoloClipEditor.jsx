@@ -13,6 +13,7 @@ import CloudImportButton from './CloudImportButton';
 import EditorToolbar from './EditorToolbar';
 import LyricBank from './LyricBank';
 import LyricAnalyzer from './LyricAnalyzer';
+import WordTimeline from './WordTimeline';
 import useEditorHistory from '../../hooks/useEditorHistory';
 import useWaveform from '../../hooks/useWaveform';
 
@@ -63,6 +64,7 @@ const SoloClipEditor = ({
         name: 'Template',
         clip: existingClip,
         textOverlays: existingVideo.textOverlays || [],
+        words: existingVideo.words || [],
         isTemplate: true
       }];
     }
@@ -72,6 +74,7 @@ const SoloClipEditor = ({
       name: 'Template',
       clip: firstClip,
       textOverlays: [],
+      words: [],
       isTemplate: true
     }];
   });
@@ -86,6 +89,7 @@ const SoloClipEditor = ({
   const activeVideo = allVideos[activeVideoIndex];
   const clip = activeVideo?.clip;
   const textOverlays = activeVideo?.textOverlays || [];
+  const words = activeVideo?.words || [];
 
   // Wrapper setters (route through allVideos)
   const setTextOverlays = useCallback((updater) => {
@@ -98,6 +102,19 @@ const SoloClipEditor = ({
         textOverlays: typeof updater === 'function'
           ? updater(current.textOverlays || [])
           : updater
+      };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
+  const setWords = useCallback((updater) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const current = copy[activeVideoIndex];
+      if (!current) return prev;
+      copy[activeVideoIndex] = {
+        ...current,
+        words: typeof updater === 'function' ? updater(current.words || []) : updater
       };
       return copy;
     });
@@ -116,7 +133,7 @@ const SoloClipEditor = ({
   // ── Undo/Redo history ──
   const getHistorySnapshot = useCallback(() => {
     const v = allVideos[activeVideoIndex];
-    return v ? { clip: v.clip, textOverlays: v.textOverlays } : null;
+    return v ? { clip: v.clip, textOverlays: v.textOverlays, words: v.words } : null;
   }, [allVideos, activeVideoIndex]);
 
   const restoreHistorySnapshot = useCallback((snapshot) => {
@@ -215,6 +232,10 @@ const SoloClipEditor = ({
 
   // ── Close confirmation ──
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+
+  // ── Word Timeline state ──
+  const [showWordTimeline, setShowWordTimeline] = useState(false);
+  const [loadedBankLyricId, setLoadedBankLyricId] = useState(null);
 
   // ── Lyrics state ──
   const [lyricsBank, setLyricsBank] = useState([]);
@@ -510,9 +531,16 @@ const SoloClipEditor = ({
       };
       setTextOverlays(prev => [...prev, newOverlay]);
     });
+    // Also set words for WordTimeline
+    setWords(result.words.map((w, i) => ({
+      id: `word_${Date.now()}_${i}`,
+      text: w.text,
+      startTime: Math.min(w.startTime || 0, dur),
+      duration: w.duration || 0.5
+    })));
     toastSuccess(`Added ${result.words.length} text overlays from transcription`);
     setShowTranscriber(false);
-  }, [clipDuration, getDefaultTextStyle, setTextOverlays, toastSuccess, toastError]);
+  }, [clipDuration, getDefaultTextStyle, setTextOverlays, setWords, toastSuccess, toastError]);
 
   useEffect(() => {
     const hasLibraryAudio = selectedAudio && !selectedAudio.isSourceVideo;
@@ -837,6 +865,7 @@ const SoloClipEditor = ({
         locked: true
       }],
       textOverlays: video.textOverlays,
+      words: video.words || [],
       audio: selectedAudio,
       cropMode: aspectRatio,
       duration: clipDuration || 5,
@@ -875,6 +904,7 @@ const SoloClipEditor = ({
           locked: true
         }],
         textOverlays: video.textOverlays,
+        words: video.words || [],
         audio: selectedAudio,
         cropMode: aspectRatio,
         duration: clipDuration || 5,
@@ -2026,6 +2056,7 @@ const SoloClipEditor = ({
           onSelectLyric={(lyric) => addTextOverlay(lyric.content || lyric.title || '')}
           onAddNewLyrics={onAddLyrics ? () => onAddLyrics({ title: 'New Lyrics', content: '' }) : null}
           onAITranscribe={selectedAudio ? () => setShowTranscriber(true) : null}
+          onWordTimeline={(words.length > 0 || selectedAudio) ? () => setShowWordTimeline(true) : null}
         />
 
         {/* Hidden audio file input */}
@@ -2156,6 +2187,32 @@ const SoloClipEditor = ({
             audioUrl={selectedAudio.localUrl || selectedAudio.url}
             onComplete={handleTranscriptionComplete}
             onClose={() => setShowTranscriber(false)}
+          />
+        )}
+
+        {/* ── Word Timeline Modal ── */}
+        {showWordTimeline && (
+          <WordTimeline
+            words={words}
+            setWords={setWords}
+            duration={timelineDuration}
+            currentTime={currentTime}
+            onSeek={handleSeek}
+            isPlaying={isPlaying}
+            onPlayPause={handlePlayPause}
+            onClose={() => setShowWordTimeline(false)}
+            audioRef={audioRef}
+            loadedBankLyricId={loadedBankLyricId}
+            onSaveToBank={(lyricId, wordsToSave) => {
+              if (lyricId && onUpdateLyrics) {
+                onUpdateLyrics(lyricId, { words: wordsToSave });
+              }
+            }}
+            onAddToBank={(lyricData) => {
+              if (onAddLyrics) {
+                onAddLyrics({ title: lyricData.title, content: lyricData.content, words: lyricData.words });
+              }
+            }}
           />
         )}
 

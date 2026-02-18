@@ -13,6 +13,7 @@ import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
 import useIsMobile from '../../hooks/useIsMobile';
 import EditorToolbar from './EditorToolbar';
+import WordTimeline from './WordTimeline';
 import LyricAnalyzer from './LyricAnalyzer';
 import CloudImportButton from './CloudImportButton';
 import log from '../../utils/logger';
@@ -87,6 +88,11 @@ const PhotoMontageEditor = ({
     textCase: 'default'
   });
 
+  // ── Words state (for WordTimeline) ──
+  const [words, setWords] = useState(existingVideo?.words || []);
+  const [showWordTimeline, setShowWordTimeline] = useState(false);
+  const [loadedBankLyricId, setLoadedBankLyricId] = useState(null);
+
   // ── Beat detection ──
   const { beats, bpm, isAnalyzing: beatAnalyzing, analyzeAudio } = useBeatDetection();
 
@@ -116,20 +122,21 @@ const PhotoMontageEditor = ({
 
   // ── Undo/Redo history ──
   const getHistorySnapshot = useCallback(() => ({
-    photos, textOverlays, selectedAudio, textStyle
-  }), [photos, textOverlays, selectedAudio, textStyle]);
+    photos, textOverlays, selectedAudio, textStyle, words
+  }), [photos, textOverlays, selectedAudio, textStyle, words]);
 
   const restoreHistorySnapshot = useCallback((snapshot) => {
     if (snapshot.photos !== undefined) setPhotos(snapshot.photos);
     if (snapshot.textOverlays !== undefined) setTextOverlays(snapshot.textOverlays);
     if (snapshot.selectedAudio !== undefined) setSelectedAudio(snapshot.selectedAudio);
     if (snapshot.textStyle !== undefined) setTextStyle(snapshot.textStyle);
+    if (snapshot.words !== undefined) setWords(snapshot.words);
   }, []);
 
   const { canUndo, canRedo, handleUndo, handleRedo } = useEditorHistory({
     getSnapshot: getHistorySnapshot,
     restoreSnapshot: restoreHistorySnapshot,
-    deps: [photos, textOverlays, selectedAudio, textStyle],
+    deps: [photos, textOverlays, selectedAudio, textStyle, words],
     isEditingText: !!editingTextId
   });
 
@@ -235,6 +242,19 @@ const PhotoMontageEditor = ({
       audioRef.current.pause();
     }
   }, []);
+
+  // Wrappers for WordTimeline compatibility
+  const handlePlayPause = useCallback(() => {
+    if (isPlaying) stopPlayback();
+    else startPlayback();
+  }, [isPlaying, startPlayback, stopPlayback]);
+
+  const handleSeek = useCallback((time) => {
+    setCurrentTime(Math.max(0, Math.min(time, totalDuration || 0)));
+    if (audioRef.current && selectedAudio?.url) {
+      audioRef.current.currentTime = (selectedAudio.startTime || 0) + time;
+    }
+  }, [totalDuration, selectedAudio]);
 
   // Cleanup on unmount
   useEffect(() => () => {
@@ -514,6 +534,13 @@ const PhotoMontageEditor = ({
       };
     });
     setTextOverlays(newOverlays);
+    // Also set words for WordTimeline
+    setWords(result.words.map((w, i) => ({
+      id: `word_${Date.now()}_${i}`,
+      text: w.text,
+      startTime: Math.min(w.startTime || 0, dur),
+      duration: w.duration || 0.5
+    })));
     toastSuccess(`Added ${newOverlays.length} text overlays from transcription`);
     setShowTranscriber(false);
   }, [totalDuration, getDefaultTextStyle, toastSuccess, toastError]);
@@ -622,6 +649,7 @@ const PhotoMontageEditor = ({
         montageBeatSync: beatSyncEnabled,
         textOverlays,
         textStyle,
+        words,
         status: 'ready',
         cloudUrl
       };
@@ -1170,6 +1198,7 @@ const PhotoMontageEditor = ({
           onSelectLyric={(lyric) => addLyricsAsTimedOverlays(lyric.content || lyric.title || '')}
           onAddNewLyrics={onAddLyrics ? () => onAddLyrics({ title: 'New Lyrics', content: '' }) : null}
           onAITranscribe={selectedAudio ? () => setShowTranscriber(true) : null}
+          onWordTimeline={(words.length > 0 || selectedAudio) ? () => setShowWordTimeline(true) : null}
         />
 
         {/* Hidden audio file input */}
@@ -1190,6 +1219,32 @@ const PhotoMontageEditor = ({
             audioUrl={selectedAudio.localUrl || selectedAudio.url}
             onComplete={handleTranscriptionComplete}
             onClose={() => setShowTranscriber(false)}
+          />
+        )}
+
+        {/* ── Word Timeline Modal ── */}
+        {showWordTimeline && (
+          <WordTimeline
+            words={words}
+            setWords={setWords}
+            duration={totalDuration}
+            currentTime={currentTime}
+            onSeek={handleSeek}
+            isPlaying={isPlaying}
+            onPlayPause={handlePlayPause}
+            onClose={() => setShowWordTimeline(false)}
+            audioRef={audioRef}
+            loadedBankLyricId={loadedBankLyricId}
+            onSaveToBank={(lyricId, wordsToSave) => {
+              if (lyricId && onUpdateLyrics) {
+                onUpdateLyrics(lyricId, { words: wordsToSave });
+              }
+            }}
+            onAddToBank={(lyricData) => {
+              if (onAddLyrics) {
+                onAddLyrics({ title: lyricData.title, content: lyricData.content, words: lyricData.words });
+              }
+            }}
           />
         )}
 

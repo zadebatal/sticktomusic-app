@@ -13,6 +13,7 @@ import CloudImportButton from './CloudImportButton';
 import EditorToolbar from './EditorToolbar';
 import LyricBank from './LyricBank';
 import LyricAnalyzer from './LyricAnalyzer';
+import WordTimeline from './WordTimeline';
 import useEditorHistory from '../../hooks/useEditorHistory';
 import useWaveform from '../../hooks/useWaveform';
 
@@ -60,6 +61,7 @@ const MultiClipEditor = ({
         name: 'Template',
         clips: existingVideo.clips || [],
         textOverlays: existingVideo.textOverlays || [],
+        words: existingVideo.words || [],
         isTemplate: true
       }];
     }
@@ -70,6 +72,7 @@ const MultiClipEditor = ({
       name: 'Template',
       clips: firstClip ? [firstClip] : [],
       textOverlays: [],
+      words: [],
       isTemplate: true
     }];
   });
@@ -84,6 +87,7 @@ const MultiClipEditor = ({
   const activeVideo = allVideos[activeVideoIndex];
   const clips = activeVideo?.clips || [];
   const textOverlays = activeVideo?.textOverlays || [];
+  const words = activeVideo?.words || [];
 
   // Wrapper setters (route through allVideos)
   const setClips = useCallback((updater) => {
@@ -114,10 +118,23 @@ const MultiClipEditor = ({
     });
   }, [activeVideoIndex]);
 
+  const setWords = useCallback((updater) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const current = copy[activeVideoIndex];
+      if (!current) return prev;
+      copy[activeVideoIndex] = {
+        ...current,
+        words: typeof updater === 'function' ? updater(current.words || []) : updater
+      };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
   // ── Undo/Redo history ──
   const getHistorySnapshot = useCallback(() => {
     const v = allVideos[activeVideoIndex];
-    return v ? { clips: v.clips, textOverlays: v.textOverlays } : null;
+    return v ? { clips: v.clips, textOverlays: v.textOverlays, words: v.words } : null;
   }, [allVideos, activeVideoIndex]);
 
   const restoreHistorySnapshot = useCallback((snapshot) => {
@@ -236,6 +253,10 @@ const MultiClipEditor = ({
 
   // ── Close confirmation ──
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+
+  // ── Word Timeline state ──
+  const [showWordTimeline, setShowWordTimeline] = useState(false);
+  const [loadedBankLyricId, setLoadedBankLyricId] = useState(null);
 
   // ── Lyrics state ──
   const [lyricsBank, setLyricsBank] = useState([]);
@@ -586,9 +607,16 @@ const MultiClipEditor = ({
       };
       setTextOverlays(prev => [...prev, newOverlay]);
     });
+    // Also set words for WordTimeline
+    setWords(result.words.map((w, i) => ({
+      id: `word_${Date.now()}_${i}`,
+      text: w.text,
+      startTime: Math.min(w.startTime || 0, dur),
+      duration: w.duration || 0.5
+    })));
     toastSuccess(`Added ${result.words.length} text overlays from transcription`);
     setShowTranscriber(false);
-  }, [totalDuration, getDefaultTextStyle, setTextOverlays, toastSuccess, toastError]);
+  }, [totalDuration, getDefaultTextStyle, setTextOverlays, setWords, toastSuccess, toastError]);
 
   useEffect(() => {
     const hasLibraryAudio = selectedAudio && !selectedAudio.isSourceVideo;
@@ -1005,6 +1033,7 @@ const MultiClipEditor = ({
         };
       }),
       textOverlays: video.textOverlays,
+      words: video.words || [],
       audio: selectedAudio,
       cropMode: aspectRatio,
       duration: totalDuration,
@@ -1047,6 +1076,7 @@ const MultiClipEditor = ({
           };
         }),
         textOverlays: video.textOverlays,
+        words: video.words || [],
         audio: selectedAudio,
         cropMode: aspectRatio,
         duration: totalDuration,
@@ -2350,6 +2380,7 @@ const MultiClipEditor = ({
           onSelectLyric={(lyric) => addTextOverlay(lyric.content || lyric.title || '')}
           onAddNewLyrics={onAddLyrics ? () => onAddLyrics({ title: 'New Lyrics', content: '' }) : null}
           onAITranscribe={selectedAudio ? () => setShowTranscriber(true) : null}
+          onWordTimeline={(words.length > 0 || selectedAudio) ? () => setShowWordTimeline(true) : null}
         />
 
         {/* Hidden audio file input */}
@@ -2515,6 +2546,32 @@ const MultiClipEditor = ({
             audioUrl={selectedAudio.localUrl || selectedAudio.url}
             onComplete={handleTranscriptionComplete}
             onClose={() => setShowTranscriber(false)}
+          />
+        )}
+
+        {/* ── Word Timeline Modal ── */}
+        {showWordTimeline && (
+          <WordTimeline
+            words={words}
+            setWords={setWords}
+            duration={timelineDuration}
+            currentTime={currentTime}
+            onSeek={handleSeek}
+            isPlaying={isPlaying}
+            onPlayPause={handlePlayPause}
+            onClose={() => setShowWordTimeline(false)}
+            audioRef={audioRef}
+            loadedBankLyricId={loadedBankLyricId}
+            onSaveToBank={(lyricId, wordsToSave) => {
+              if (lyricId && onUpdateLyrics) {
+                onUpdateLyrics(lyricId, { words: wordsToSave });
+              }
+            }}
+            onAddToBank={(lyricData) => {
+              if (onAddLyrics) {
+                onAddLyrics({ title: lyricData.title, content: lyricData.content, words: lyricData.words });
+              }
+            }}
           />
         )}
 

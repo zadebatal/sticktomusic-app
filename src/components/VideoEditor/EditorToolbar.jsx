@@ -23,7 +23,8 @@ const EditorToolbar = ({
   onSelectLyric,
   onAddNewLyrics,
   onAITranscribe = null,
-  isTranscribing = false
+  isTranscribing = false,
+  onWordTimeline = null
 }) => {
   const { theme } = useTheme();
   const styles = getStyles(theme);
@@ -246,6 +247,20 @@ const EditorToolbar = ({
             </div>
           )}
         </div>
+      )}
+
+      {/* Word Timeline */}
+      {onWordTimeline && (
+        <button style={styles.wordTimelineButton} onClick={onWordTimeline} title="Open word timeline editor">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+            <line x1="1" y1="10" x2="23" y2="10"/>
+            <line x1="6" y1="4" x2="6" y2="20"/>
+            <line x1="12" y1="4" x2="12" y2="20"/>
+            <line x1="18" y1="4" x2="18" y2="20"/>
+          </svg>
+          Word Timeline
+        </button>
       )}
 
       {/* AI Transcribe */}
@@ -472,6 +487,18 @@ const getStyles = (theme) => ({
     cursor: 'pointer',
     borderTop: '1px solid rgba(139, 92, 246, 0.2)',
     transition: 'background 0.15s'
+  },
+  wordTimelineButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '4px 8px',
+    backgroundColor: 'rgba(6, 182, 212, 0.2)',
+    border: '1px solid rgba(6, 182, 212, 0.5)',
+    borderRadius: '6px',
+    color: '#67e8f9',
+    cursor: 'pointer',
+    fontSize: '11px'
   },
   transcribeButton: {
     display: 'flex',
