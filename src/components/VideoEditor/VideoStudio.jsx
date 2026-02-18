@@ -249,6 +249,7 @@ const DraftsView = (props) => {
           category={props.category}
           contentType={draftsTab}
           isDraftsView={true}
+          collectionFilter={props.collectionFilter}
           onBack={props.onBack}
           onMakeVideo={props.onMakeVideo}
           onEditVideo={props.onEditVideo}
@@ -377,6 +378,7 @@ const VideoStudio = ({
   const [selectedArtist, setSelectedArtist] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [createdContentVersion, setCreatedContentVersion] = useState(0); // Bump to refresh library dashboard
+  const [draftsCollectionFilter, setDraftsCollectionFilter] = useState(null); // Collection filter for drafts view
   const [firestoreContentLoaded, setFirestoreContentLoaded] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null); // Track upload progress
   const [sessionRestored, setSessionRestored] = useState(false);
@@ -2416,6 +2418,13 @@ const VideoStudio = ({
             }}
             onViewContent={(options) => {
               const isSlideshows = options?.type === 'slideshows';
+              // Support collection-filtered drafts view
+              if (options?.collectionFilter !== undefined) {
+                setDraftsCollectionFilter(options.collectionFilter);
+                setCurrentView('drafts');
+                return;
+              }
+              setDraftsCollectionFilter(null);
               setCurrentView(isSlideshows ? 'slideshows' : 'library');
               setStudioMode(isSlideshows ? 'slideshows' : 'videos');
               if (isSlideshows) {
@@ -2530,8 +2539,9 @@ const VideoStudio = ({
         {currentView === 'drafts' && (selectedCategory || (USE_LIBRARY_SYSTEM && libraryCategory)) && (
           <DraftsView
             category={selectedCategory || libraryCategory}
+            collectionFilter={draftsCollectionFilter}
             isMobile={isMobile}
-            onBack={() => setCurrentView('home')}
+            onBack={() => { setCurrentView('home'); setDraftsCollectionFilter(null); }}
             onMakeVideo={handleMakeVideo}
             onEditVideo={handleMakeVideo}
             onDeleteVideo={handleDeleteVideo}

@@ -6,6 +6,7 @@ import LyricBank from './LyricBank';
 import TemplatePicker from './TemplatePicker';
 import SoloClipEditor from './SoloClipEditor';
 import MultiClipEditor from './MultiClipEditor';
+import PhotoMontageEditor from './PhotoMontageEditor';
 import AudioClipSelector from './AudioClipSelector';
 import CloudImportButton from './CloudImportButton';
 import EditorToolbar from './EditorToolbar';
@@ -2125,6 +2126,20 @@ const VideoEditorModal = ({
         onAddLyrics={onAddLyrics}
         onUpdateLyrics={onUpdateLyrics}
         onDeleteLyrics={onDeleteLyrics}
+      />
+    );
+  }
+
+  // ── Photo Montage mode ──
+  if (editorMode === 'photo-montage') {
+    return (
+      <PhotoMontageEditor
+        category={category}
+        existingVideo={existingVideo}
+        onSave={onSave}
+        onClose={onClose}
+        artistId={artistId}
+        db={db}
       />
     );
   }

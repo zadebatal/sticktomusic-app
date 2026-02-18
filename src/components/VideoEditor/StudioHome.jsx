@@ -1264,9 +1264,25 @@ const StudioHome = ({
 
   const videoCount = createdContent.videos.length;
   const slideshowCount = createdContent.slideshows.length;
-  const draftVideos = createdContent.videos.filter(v => v.status === 'draft' || v.status === 'DRAFT');
-  const draftSlideshows = createdContent.slideshows.filter(s => s.status === 'draft' || s.status === 'DRAFT');
+  const draftVideos = createdContent.videos.filter(v => (v.status === 'draft' || v.status === 'DRAFT') && !v.scheduledPostId);
+  const draftSlideshows = createdContent.slideshows.filter(s => (s.status === 'draft' || s.status === 'DRAFT') && !s.scheduledPostId);
   const totalDrafts = draftVideos.length + draftSlideshows.length;
+
+  // Per-collection draft counts (excludes scheduled items)
+  const collectionDraftCounts = useMemo(() => {
+    const counts = {};
+    let uncategorized = 0;
+    const allDrafts = [...draftVideos, ...draftSlideshows];
+    allDrafts.forEach(item => {
+      if (item.collectionId) {
+        counts[item.collectionId] = (counts[item.collectionId] || 0) + 1;
+      } else {
+        uncategorized++;
+      }
+    });
+    counts._uncategorized = uncategorized;
+    return counts;
+  }, [draftVideos, draftSlideshows]);
 
   const libraryVideos = library.filter(m => m.type === MEDIA_TYPES.VIDEO);
   const libraryAudio = library.filter(m => m.type === MEDIA_TYPES.AUDIO);
@@ -1796,6 +1812,36 @@ const StudioHome = ({
                       </button>
                     )}
                   </div>
+                  {/* Per-collection draft counts */}
+                  {collections.filter(c => c.type !== 'smart' && collectionDraftCounts[c.id] > 0).length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px', width: '100%' }}>
+                      {collections.filter(c => c.type !== 'smart' && collectionDraftCounts[c.id] > 0).map(col => (
+                        <button
+                          key={col.id}
+                          onClick={(e) => { e.stopPropagation(); onViewContent?.({ collectionFilter: col.id }); }}
+                          style={{
+                            padding: '3px 8px', fontSize: '10px', fontWeight: 500,
+                            backgroundColor: 'rgba(255,255,255,0.06)', border: `1px solid ${theme.border.subtle}`,
+                            borderRadius: '4px', color: theme.text.secondary, cursor: 'pointer'
+                          }}
+                        >
+                          {col.name} ({collectionDraftCounts[col.id]})
+                        </button>
+                      ))}
+                      {collectionDraftCounts._uncategorized > 0 && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onViewContent?.({ collectionFilter: 'uncategorized' }); }}
+                          style={{
+                            padding: '3px 8px', fontSize: '10px', fontWeight: 500,
+                            backgroundColor: 'rgba(255,255,255,0.06)', border: `1px solid ${theme.border.subtle}`,
+                            borderRadius: '4px', color: theme.text.muted, cursor: 'pointer'
+                          }}
+                        >
+                          Uncategorized ({collectionDraftCounts._uncategorized})
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

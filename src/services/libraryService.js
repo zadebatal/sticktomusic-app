@@ -352,6 +352,9 @@ export const createCreatedVideo = ({
     // Posting info
     postedTo: [], // Array of { platform, accountId, postId, postedAt }
 
+    // Scheduling link
+    scheduledPostId: null, // ID of linked scheduled post (null = unscheduled)
+
     // Timestamps
     createdAt: now,
     updatedAt: now
@@ -401,6 +404,9 @@ export const createCreatedSlideshow = ({
 
     // Posting info
     postedTo: [],
+
+    // Scheduling link
+    scheduledPostId: null, // ID of linked scheduled post (null = unscheduled)
 
     // Timestamps
     createdAt: now,
@@ -1941,6 +1947,67 @@ export const addCreatedSlideshowsBatchAsync = async (db, artistId, slideshowsDat
   }
 
   return results;
+};
+
+// ============================================================================
+// SCHEDULING LINK HELPERS
+// ============================================================================
+
+/**
+ * Mark a draft as scheduled by linking it to a scheduled post
+ * @param {string} artistId
+ * @param {string} contentId - Video or slideshow ID
+ * @param {string} scheduledPostId - The scheduled post this content is linked to
+ */
+export const markContentScheduled = (artistId, contentId, scheduledPostId) => {
+  const content = getCreatedContent(artistId);
+  // Check videos
+  const videoIdx = content.videos.findIndex(v => v.id === contentId);
+  if (videoIdx >= 0) {
+    content.videos[videoIdx] = { ...content.videos[videoIdx], scheduledPostId, updatedAt: new Date().toISOString() };
+    saveCreatedContent(artistId, content);
+    return true;
+  }
+  // Check slideshows
+  const slideshowIdx = content.slideshows.findIndex(s => s.id === contentId);
+  if (slideshowIdx >= 0) {
+    content.slideshows[slideshowIdx] = { ...content.slideshows[slideshowIdx], scheduledPostId, updatedAt: new Date().toISOString() };
+    saveCreatedContent(artistId, content);
+    return true;
+  }
+  return false;
+};
+
+/**
+ * Mark a draft as scheduled + sync to Firestore
+ */
+export const markContentScheduledAsync = async (db, artistId, contentId, scheduledPostId) => {
+  const result = markContentScheduled(artistId, contentId, scheduledPostId);
+  if (result && db) {
+    try {
+      const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', contentId);
+      await updateDoc(docRef, { scheduledPostId, updatedAt: serverTimestamp() });
+    } catch (error) {
+      console.warn('[Library] Failed to sync scheduledPostId to Firestore:', error.message);
+    }
+  }
+  return result;
+};
+
+/**
+ * Clear the scheduling link from a draft
+ * @param {string} artistId
+ * @param {string} contentId - Video or slideshow ID
+ */
+export const unmarkContentScheduled = (artistId, contentId) => {
+  return markContentScheduled(artistId, contentId, null);
+};
+
+/**
+ * Clear the scheduling link from a draft + sync to Firestore
+ */
+export const unmarkContentScheduledAsync = async (db, artistId, contentId) => {
+  return markContentScheduledAsync(db, artistId, contentId, null);
 };
 
 // ============================================================================

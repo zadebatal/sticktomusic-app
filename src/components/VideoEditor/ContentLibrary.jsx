@@ -7,7 +7,7 @@ import { renderVideo } from '../../services/videoExportService';
 import { uploadFile } from '../../services/firebaseStorage';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
 import { createScheduledPost, deleteScheduledPost, getScheduledPosts, POST_STATUS } from '../../services/scheduledPostsService';
-import { getLibraryAsync, saveCreatedContentAsync } from '../../services/libraryService';
+import { getLibraryAsync, saveCreatedContentAsync, markContentScheduledAsync, unmarkContentScheduledAsync } from '../../services/libraryService';
 import log from '../../utils/logger';
 import {
   initGoogleDrive, authenticate as driveAuth, isAuthenticated as isDriveAuth,
@@ -41,6 +41,7 @@ const ContentLibrary = ({
   onShowBatchPipeline, // Open the main batch create workflow
   onViewScheduling, // Navigate to scheduling page
   isDraftsView = false, // When true, hide Make buttons and show Delete Selected
+  collectionFilter = null, // null=all, string=collectionId, 'uncategorized'=no collection
   db = null, // Firestore instance for creating scheduled posts
   // Posting module props
   accounts = [],
@@ -211,16 +212,22 @@ const ContentLibrary = ({
   const [assigningAudio, setAssigningAudio] = useState(false);
 
   // Get content array based on type — reverse chronological (newest first)
+  // When collectionFilter is set, only show items from that collection
   const items = useMemo(() => {
     const raw = isSlideshow
       ? (category?.slideshows || [])
       : (category?.createdVideos || []);
-    return [...raw].sort((a, b) => {
+    const sorted = [...raw].sort((a, b) => {
       const ta = new Date(b.createdAt || 0).getTime();
       const tb = new Date(a.createdAt || 0).getTime();
       return ta - tb;
     });
-  }, [isSlideshow, category?.slideshows, category?.createdVideos]);
+    if (!collectionFilter) return sorted;
+    if (collectionFilter === 'uncategorized') {
+      return sorted.filter(item => !item.collectionId);
+    }
+    return sorted.filter(item => item.collectionId === collectionFilter);
+  }, [isSlideshow, category?.slideshows, category?.createdVideos, collectionFilter]);
 
   // For backwards compatibility, also alias as videos for video-specific logic
   const videos = isSlideshow ? [] : items;
@@ -301,7 +308,7 @@ const ContentLibrary = ({
 
   const clearSelection = () => setSelectedVideoIds(new Set());
 
-  // Identify drafts that have been posted via scheduled posts
+  // Identify drafts that have been posted or scheduled via scheduled posts
   const postedContentIds = useMemo(() => {
     const ids = new Set();
     scheduledPosts.forEach(p => {
@@ -310,21 +317,33 @@ const ContentLibrary = ({
     return ids;
   }, [scheduledPosts]);
 
-  // Split items into posted and unposted
-  const [showPosted, setShowPosted] = useState(false);
+  const scheduledContentIds = useMemo(() => {
+    const ids = new Set();
+    scheduledPosts.forEach(p => {
+      if ((p.status === 'scheduled' || p.status === 'draft') && p.contentId) ids.add(p.contentId);
+    });
+    return ids;
+  }, [scheduledPosts]);
 
-  const { unpostedItems, postedItems } = useMemo(() => {
+  // Split items into posted, scheduled, and unposted
+  const [showPosted, setShowPosted] = useState(false);
+  const [showScheduledItems, setShowScheduledItems] = useState(true);
+
+  const { unpostedItems, scheduledItems, postedItems } = useMemo(() => {
     const posted = [];
+    const scheduled = [];
     const unposted = [];
     items.forEach(item => {
       if (postedContentIds.has(item.id)) {
         posted.push(item);
+      } else if (scheduledContentIds.has(item.id) || item.scheduledPostId) {
+        scheduled.push(item);
       } else {
         unposted.push(item);
       }
     });
-    return { unpostedItems: unposted, postedItems: posted };
-  }, [items, postedContentIds]);
+    return { unpostedItems: unposted, scheduledItems: scheduled, postedItems: posted };
+  }, [items, postedContentIds, scheduledContentIds]);
 
   const filteredItems = unpostedItems.filter(item => {
     if (filter !== 'all' && item.status !== filter) return false;
@@ -537,6 +556,9 @@ const ContentLibrary = ({
                     onClick={async () => {
                       if (confirm('Remove from schedule?')) {
                         await deleteScheduledPost(db, artistId, post.id);
+                        if (post.contentId) {
+                          await unmarkContentScheduledAsync(db, artistId, post.contentId);
+                        }
                         setScheduledPosts(prev => prev.filter(p => p.id !== post.id));
                         toastSuccess('Removed from schedule');
                       }
@@ -718,7 +740,7 @@ const ContentLibrary = ({
                       if (onViewScheduling && db && artistId) {
                         // Create a scheduled post and navigate to scheduling page
                         try {
-                          await createScheduledPost(db, artistId, {
+                          const post = await createScheduledPost(db, artistId, {
                             contentId: item.id,
                             contentType: 'slideshow',
                             contentName: item.name || item.title || 'Untitled Slideshow',
@@ -729,6 +751,10 @@ const ContentLibrary = ({
                             editorState: item,
                             status: POST_STATUS.DRAFT
                           });
+                          // Link draft → scheduled post
+                          if (post?.id) {
+                            await markContentScheduledAsync(db, artistId, item.id, post.id);
+                          }
                           toastSuccess('Added to schedule queue');
                         } catch (err) {
                           console.error('[ContentLibrary] Failed to create scheduled post:', err);
@@ -759,7 +785,7 @@ const ContentLibrary = ({
                       if (onViewScheduling && db && artistId) {
                         // Create a scheduled post and navigate to scheduling page
                         try {
-                          await createScheduledPost(db, artistId, {
+                          const post = await createScheduledPost(db, artistId, {
                             contentId: item.id,
                             contentType: 'video',
                             contentName: item.name || item.title || 'Untitled Video',
@@ -769,6 +795,10 @@ const ContentLibrary = ({
                             editorState: item,
                             status: POST_STATUS.DRAFT
                           });
+                          // Link draft → scheduled post
+                          if (post?.id) {
+                            await markContentScheduledAsync(db, artistId, item.id, post.id);
+                          }
                           toastSuccess('Added to schedule queue');
                         } catch (err) {
                           console.error('[ContentLibrary] Failed to create scheduled post:', err);
@@ -789,6 +819,96 @@ const ContentLibrary = ({
           </div>
         )}
       </div>
+
+      {/* Scheduled Drafts Section */}
+      {isDraftsView && scheduledItems.length > 0 && (
+        <div style={{ borderTop: `1px solid ${theme.border.subtle}` }}>
+          <button
+            onClick={() => setShowScheduledItems(!showScheduledItems)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              padding: '12px 24px', background: 'none', border: 'none',
+              color: theme.text.secondary, cursor: 'pointer',
+              fontSize: '13px', fontWeight: '600', width: '100%'
+            }}
+          >
+            <span style={{ transform: showScheduledItems ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', fontSize: '10px' }}>▶</span>
+            Scheduled ({scheduledItems.length})
+          </button>
+          {showScheduledItems && (
+            <div style={{
+              padding: '0 24px 16px',
+              display: 'grid',
+              gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(200px, 1fr))',
+              gap: isMobile ? '10px' : '16px'
+            }}>
+              {scheduledItems.map((item) => {
+                const postInfo = scheduledPosts.find(p => p.contentId === item.id && (p.status === 'scheduled' || p.status === 'draft'));
+                return (
+                  <div key={item.id} style={{ position: 'relative' }}>
+                    {/* Schedule badge */}
+                    <div style={{
+                      position: 'absolute', top: '8px', right: '8px', zIndex: 2,
+                      display: 'flex', alignItems: 'center', gap: '4px',
+                      padding: '3px 8px', borderRadius: '6px',
+                      backgroundColor: `${theme.accent.primary}cc`, color: '#fff',
+                      fontSize: '10px', fontWeight: '600'
+                    }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                      </svg>
+                      {postInfo?.scheduledTime ? new Date(postInfo.scheduledTime).toLocaleDateString() : 'Scheduled'}
+                    </div>
+                    {isSlideshow ? (
+                      <SlideshowCard
+                        slideshow={item}
+                        isSelected={false}
+                        onToggleSelect={() => {}}
+                        onPreview={() => setPreviewingSlideshow(item)}
+                        onEdit={() => onEditSlideshow?.(item)}
+                        isMobile={isMobile}
+                      />
+                    ) : (
+                      <VideoCard
+                        video={item}
+                        isSelected={false}
+                        onToggleSelect={() => {}}
+                        onEdit={() => onEditVideo?.(item)}
+                        onPreview={() => setPreviewingVideo(item)}
+                        isMobile={isMobile}
+                      />
+                    )}
+                    {/* Unschedule action */}
+                    <button
+                      onClick={async () => {
+                        const postToRemove = postInfo || scheduledPosts.find(p => p.contentId === item.id);
+                        if (postToRemove) {
+                          await deleteScheduledPost(db, artistId, postToRemove.id);
+                          setScheduledPosts(prev => prev.filter(p => p.id !== postToRemove.id));
+                        }
+                        if (item.scheduledPostId && db && artistId) {
+                          await unmarkContentScheduledAsync(db, artistId, item.id);
+                          item.scheduledPostId = null;
+                        }
+                        toastSuccess('Unscheduled');
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                        width: '100%', marginTop: '4px', padding: '6px', background: 'none',
+                        border: `1px solid ${theme.border.subtle}`, borderRadius: '6px',
+                        color: theme.text.secondary, cursor: 'pointer', fontSize: '11px', fontWeight: '500',
+                        minHeight: '32px'
+                      }}
+                    >
+                      Unschedule
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Already Posted Section */}
       {isDraftsView && postedItems.length > 0 && (
