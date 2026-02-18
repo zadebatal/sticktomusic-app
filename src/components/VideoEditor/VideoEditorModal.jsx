@@ -3680,6 +3680,7 @@ const VideoEditorModal = ({
           } : null}
           onAITranscribe={selectedAudio ? handleAITranscribe : null}
           isTranscribing={isTranscribing}
+          onWordTimeline={(words.length > 0 || selectedAudio) ? () => setShowWordTimeline(true) : null}
         />
 
         {/* Footer */}
