@@ -46,7 +46,9 @@ const MultiClipEditor = ({
   onSaveLyrics,
   onAddLyrics,
   onUpdateLyrics,
-  onDeleteLyrics
+  onDeleteLyrics,
+  presets = [],
+  onSavePreset
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
@@ -267,6 +269,11 @@ const MultiClipEditor = ({
 
   // ── Transcriber state ──
   const [showTranscriber, setShowTranscriber] = useState(false);
+
+  // ── Preset state ──
+  const [selectedPreset, setSelectedPreset] = useState(null);
+  const [showPresetPrompt, setShowPresetPrompt] = useState(false);
+  const [presetPromptValue, setPresetPromptValue] = useState('');
 
   // ── Mobile detection ──
   const { isMobile } = useIsMobile();
@@ -549,6 +556,15 @@ const MultiClipEditor = ({
     setLibraryMedia(getLibrary(artistId));
     toastSuccess(`Saved clip "${clipData.name}" to library`);
   }, [selectedAudio, artistId, toastSuccess]);
+
+  // ── Preset handler ──
+  const handleApplyPreset = useCallback((preset) => {
+    setSelectedPreset(preset);
+    if (preset.settings) {
+      setTextStyle(prev => ({ ...prev, ...preset.settings }));
+      if (preset.settings.cropMode) setAspectRatio(preset.settings.cropMode);
+    }
+  }, []);
 
   // ── Text overlay CRUD ──
   const getDefaultTextStyle = useCallback(() => ({
@@ -1612,6 +1628,16 @@ const MultiClipEditor = ({
                 <span style={styles.timeDisplay}>
                   {formatTime(currentTime)} / {formatTime(timelineDuration)}
                 </span>
+                {!isMobile && (
+                  <button style={styles.fullscreenButton} onClick={() => videoRef.current?.requestFullscreen()} title="Fullscreen">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="15 3 21 3 21 9"/>
+                      <polyline points="9 21 3 21 3 15"/>
+                      <line x1="21" y1="3" x2="14" y2="10"/>
+                      <line x1="3" y1="21" x2="10" y2="14"/>
+                    </svg>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -2360,6 +2386,35 @@ const MultiClipEditor = ({
           )}
         </div>
 
+        {/* ── Preset Bar ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderTop: `1px solid ${theme.border.subtle}` }}>
+          <span style={{ fontSize: '11px', color: theme.text.muted, whiteSpace: 'nowrap' }}>Preset</span>
+          <select
+            value={selectedPreset?.id || ''}
+            onChange={(e) => {
+              const preset = presets.find(p => p.id === e.target.value);
+              if (preset) handleApplyPreset(preset);
+            }}
+            style={{ ...styles.presetSelect, padding: '4px 8px', fontSize: '11px', flex: '0 1 200px' }}
+          >
+            <option value="">Choose a preset...</option>
+            {presets.map(preset => (
+              <option key={preset.id} value={preset.id}>{preset.name}</option>
+            ))}
+          </select>
+          {!isMobile && (
+            <button
+              style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+              onClick={() => { setPresetPromptValue(''); setShowPresetPrompt(true); }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+              Save preset
+            </button>
+          )}
+        </div>
+
         {/* ── Editor Toolbar ── */}
         <EditorToolbar
           canUndo={canUndo}
@@ -2586,6 +2641,48 @@ const MultiClipEditor = ({
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                 <button onClick={() => setShowCloseConfirm(false)} style={styles.confirmKeepButton}>Keep Editing</button>
                 <button onClick={() => { setShowCloseConfirm(false); onClose(); }} style={styles.confirmCloseButton}>Close Anyway</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Preset Save Modal ── */}
+        {showPresetPrompt && (
+          <div style={{ position: 'fixed', inset: 0, background: theme.overlay.heavy, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onClick={() => setShowPresetPrompt(false)}>
+            <div style={{ background: theme.bg.input, borderRadius: 12, padding: 24, width: 360, maxWidth: '90vw' }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ color: theme.text.primary, fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Save Preset</div>
+              <input
+                autoFocus
+                value={presetPromptValue}
+                onChange={e => setPresetPromptValue(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') setShowPresetPrompt(false);
+                  if (e.key === 'Enter' && presetPromptValue.trim()) {
+                    onSavePreset?.({ name: presetPromptValue.trim(), settings: { ...textStyle, cropMode: aspectRatio } });
+                    toastSuccess(`Preset "${presetPromptValue.trim()}" saved!`);
+                    setShowPresetPrompt(false);
+                  }
+                }}
+                placeholder="Preset name..."
+                style={{ width: '100%', background: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, borderRadius: 8, padding: '10px 12px', color: theme.text.primary, fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
+              />
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+                <button onClick={() => setShowPresetPrompt(false)}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${theme.bg.elevated}`, background: 'transparent', color: theme.text.secondary, cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button onClick={() => {
+                  if (presetPromptValue.trim()) {
+                    onSavePreset?.({ name: presetPromptValue.trim(), settings: { ...textStyle, cropMode: aspectRatio } });
+                    toastSuccess(`Preset "${presetPromptValue.trim()}" saved!`);
+                  }
+                  setShowPresetPrompt(false);
+                }}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: theme.accent.primary, color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+                  Save
+                </button>
               </div>
             </div>
           </div>
@@ -2948,6 +3045,27 @@ const getStyles = (theme) => ({
     fontSize: '12px',
     color: theme.text.secondary,
     textAlign: 'center'
+  },
+  presetSelect: {
+    flex: 1,
+    padding: '8px 12px',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
+    borderRadius: '6px',
+    color: theme.text.primary,
+    fontSize: '13px',
+    outline: 'none'
+  },
+  fullscreenButton: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '32px',
+    height: '32px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: theme.text.muted,
+    cursor: 'pointer'
   },
   muteButton: {
     display: 'flex',

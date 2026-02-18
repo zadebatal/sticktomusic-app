@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   subscribeToLibrary, subscribeToCollections, getCollections, getLibrary, getLyrics,
-  incrementUseCount, MEDIA_TYPES,
+  incrementUseCount, MEDIA_TYPES, addToLibraryAsync,
   addCreatedVideo, saveCreatedContentAsync
 } from '../../services/libraryService';
 import { uploadFile } from '../../services/firebaseStorage';
@@ -12,7 +12,9 @@ import useWaveform from '../../hooks/useWaveform';
 import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
 import useIsMobile from '../../hooks/useIsMobile';
+import AudioClipSelector from './AudioClipSelector';
 import EditorToolbar from './EditorToolbar';
+import LyricBank from './LyricBank';
 import WordTimeline from './WordTimeline';
 import LyricAnalyzer from './LyricAnalyzer';
 import CloudImportButton from './CloudImportButton';
@@ -40,7 +42,9 @@ const PhotoMontageEditor = ({
   onSaveLyrics,
   onAddLyrics,
   onUpdateLyrics,
-  onDeleteLyrics
+  onDeleteLyrics,
+  presets = [],
+  onSavePreset
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
@@ -115,6 +119,18 @@ const PhotoMontageEditor = ({
   // ── Modals ──
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showTranscriber, setShowTranscriber] = useState(false);
+
+  // ── Preset state ──
+  const [selectedPreset, setSelectedPreset] = useState(null);
+  const [showPresetPrompt, setShowPresetPrompt] = useState(false);
+  const [presetPromptValue, setPresetPromptValue] = useState('');
+
+  // ── Audio trimmer state ──
+  const [showAudioTrimmer, setShowAudioTrimmer] = useState(false);
+  const [audioToTrim, setAudioToTrim] = useState(null);
+
+  // ── Audio volume state ──
+  const [externalAudioVolume, setExternalAudioVolume] = useState(1.0);
 
   // ── Drag reorder ──
   const [dragIndex, setDragIndex] = useState(null);
@@ -479,6 +495,15 @@ const PhotoMontageEditor = ({
     };
   }, [timelineDrag, totalDuration, updateTextOverlay]);
 
+  // ── Preset handler ──
+  const handleApplyPreset = useCallback((preset) => {
+    setSelectedPreset(preset);
+    if (preset.settings) {
+      setTextStyle(prev => ({ ...prev, ...preset.settings }));
+      if (preset.settings.cropMode) setAspectRatio(preset.settings.cropMode);
+    }
+  }, []);
+
   // ── Audio handling ──
   const handleAudioUpload = useCallback((e) => {
     const file = e.target.files?.[0];
@@ -499,6 +524,51 @@ const PhotoMontageEditor = ({
     setBeatSyncEnabled(false);
   }, [selectedAudio]);
 
+  // ── Audio trim save handler ──
+  const handleAudioTrimSave = useCallback(({ startTime, endTime, trimmedFile, trimmedName }) => {
+    if (!audioToTrim) return;
+    if (trimmedFile) {
+      const localUrl = URL.createObjectURL(trimmedFile);
+      handleAudioSelect({
+        ...audioToTrim,
+        id: `audio_trim_${Date.now()}`,
+        name: trimmedName || trimmedFile.name,
+        file: trimmedFile,
+        localUrl,
+        url: localUrl,
+        startTime: 0,
+        endTime: null,
+        isTrimmed: true
+      });
+    } else {
+      handleAudioSelect({
+        ...audioToTrim,
+        startTime,
+        endTime,
+        trimmedDuration: endTime - startTime,
+        isTrimmed: startTime > 0 || (audioToTrim.duration && Math.abs(endTime - audioToTrim.duration) > 0.1)
+      });
+    }
+    setShowAudioTrimmer(false);
+    setAudioToTrim(null);
+  }, [audioToTrim, handleAudioSelect]);
+
+  const handleAudioSaveClip = useCallback(async (clipData) => {
+    if (!selectedAudio || !artistId) return;
+    const savedClip = {
+      id: `audio_clip_${Date.now()}`,
+      type: MEDIA_TYPES.AUDIO,
+      name: clipData.name,
+      url: selectedAudio.url || selectedAudio.localUrl,
+      localUrl: selectedAudio.localUrl || selectedAudio.url,
+      duration: clipData.clipDuration,
+      startTime: clipData.startTime,
+      endTime: clipData.endTime
+    };
+    await addToLibraryAsync(db, artistId, savedClip);
+    toastSuccess(`Saved clip "${clipData.name}" to library`);
+  }, [selectedAudio, artistId, db, toastSuccess]);
+
   // ── Audio element config ──
   useEffect(() => {
     const el = audioRef.current;
@@ -512,6 +582,13 @@ const PhotoMontageEditor = ({
     el.src = url;
     el.load();
   }, [selectedAudio]);
+
+  // ── Sync audio volume ──
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = externalAudioVolume;
+    }
+  }, [externalAudioVolume]);
 
   // ── AI Transcription handler — creates text overlays (matches SoloClipEditor) ──
   const handleTranscriptionComplete = useCallback((result) => {
@@ -940,6 +1017,16 @@ const PhotoMontageEditor = ({
               <span style={styles.timeDisplay}>
                 {currentTime.toFixed(1)}s / {totalDuration.toFixed(1)}s
               </span>
+              {!isMobile && (
+                <button style={styles.fullscreenButton} onClick={() => previewRef.current?.requestFullscreen()} title="Fullscreen">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="15 3 21 3 21 9"/>
+                    <polyline points="9 21 3 21 3 15"/>
+                    <line x1="21" y1="3" x2="14" y2="10"/>
+                    <line x1="3" y1="21" x2="10" y2="14"/>
+                  </svg>
+                </button>
+              )}
             </div>
 
             {/* Photo filmstrip timeline */}
@@ -1018,6 +1105,37 @@ const PhotoMontageEditor = ({
                   ...styles.filmstripPlayhead,
                   left: totalDuration > 0 ? `${(currentTime / totalDuration) * 100}%` : '0%'
                 }} />
+              </div>
+            )}
+
+            {/* Audio waveform track */}
+            {waveformData.length > 0 && selectedAudio && (
+              <div style={styles.audioTrack}>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={externalAudioVolume}
+                  onChange={(e) => setExternalAudioVolume(parseFloat(e.target.value))}
+                  title={`Volume: ${Math.round(externalAudioVolume * 100)}%`}
+                  style={{ width: '40px', accentColor: '#9333ea', flexShrink: 0 }}
+                />
+                <div style={styles.waveformContainer}>
+                  {waveformData.map((val, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        flex: 1,
+                        height: `${Math.max(2, val * 100)}%`,
+                        backgroundColor: (i / waveformData.length) <= (totalDuration > 0 ? currentTime / totalDuration : 0)
+                          ? '#9333ea' : 'rgba(147, 51, 234, 0.3)',
+                        borderRadius: '1px',
+                        minWidth: '1px'
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
             )}
 
@@ -1173,6 +1291,20 @@ const PhotoMontageEditor = ({
               </div>
             )}
 
+            {/* Lyrics */}
+            <div style={styles.settingsSection}>
+              <div style={styles.settingsLabel}>Lyrics</div>
+              <LyricBank
+                lyrics={category?.lyrics || lyricsBank || []}
+                onAddLyrics={onAddLyrics}
+                onUpdateLyrics={onUpdateLyrics}
+                onDeleteLyrics={onDeleteLyrics}
+                onSelectText={(selectedText) => addLyricsAsTimedOverlays(selectedText)}
+                compact={true}
+                showAddForm={true}
+              />
+            </div>
+
             {/* Summary */}
             <div style={{ ...styles.settingsSection, borderTop: `1px solid ${theme.border.subtle}`, paddingTop: '12px', marginTop: '8px' }}>
               <div style={{ fontSize: '11px', color: theme.text.muted }}>
@@ -1184,6 +1316,35 @@ const PhotoMontageEditor = ({
           </div>
         </div>
 
+        {/* ── Preset Bar ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderTop: `1px solid ${theme.border.subtle}` }}>
+          <span style={{ fontSize: '11px', color: theme.text.muted, whiteSpace: 'nowrap' }}>Preset</span>
+          <select
+            value={selectedPreset?.id || ''}
+            onChange={(e) => {
+              const preset = presets.find(p => p.id === e.target.value);
+              if (preset) handleApplyPreset(preset);
+            }}
+            style={{ ...styles.presetSelect, padding: '4px 8px', fontSize: '11px', flex: '0 1 200px' }}
+          >
+            <option value="">Choose a preset...</option>
+            {presets.map(preset => (
+              <option key={preset.id} value={preset.id}>{preset.name}</option>
+            ))}
+          </select>
+          {!isMobile && (
+            <button
+              style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+              onClick={() => { setPresetPromptValue(''); setShowPresetPrompt(true); }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+              Save preset
+            </button>
+          )}
+        </div>
+
         {/* EditorToolbar */}
         <EditorToolbar
           canUndo={canUndo}
@@ -1192,7 +1353,10 @@ const PhotoMontageEditor = ({
           onRedo={handleRedo}
           onAddText={() => addTextOverlay()}
           audioTracks={libraryAudio}
-          onSelectAudio={handleAudioSelect}
+          onSelectAudio={(audio) => {
+            setAudioToTrim(audio);
+            setShowAudioTrimmer(true);
+          }}
           onUploadAudio={() => audioFileInputRef.current?.click()}
           lyrics={lyricsBank}
           onSelectLyric={(lyric) => addLyricsAsTimedOverlays(lyric.content || lyric.title || '')}
@@ -1212,6 +1376,26 @@ const PhotoMontageEditor = ({
 
         {/* Hidden audio element for preview playback */}
         <audio ref={audioRef} preload="auto" />
+
+        {/* ── Audio Trimmer Modal ── */}
+        {showAudioTrimmer && (audioToTrim || selectedAudio) && (() => {
+          const trimTarget = audioToTrim || selectedAudio;
+          return (
+            <AudioClipSelector
+              audioFile={trimTarget.file}
+              audioUrl={trimTarget.localUrl || trimTarget.url}
+              audioName={trimTarget.name || trimTarget.fileName || 'Audio'}
+              initialStart={trimTarget.startTime || 0}
+              initialEnd={trimTarget.endTime || null}
+              onSave={handleAudioTrimSave}
+              onSaveClip={handleAudioSaveClip}
+              onCancel={() => {
+                setShowAudioTrimmer(false);
+                setAudioToTrim(null);
+              }}
+            />
+          );
+        })()}
 
         {/* ── Lyric Analyzer Modal ── */}
         {showTranscriber && selectedAudio && (
@@ -1259,6 +1443,48 @@ const PhotoMontageEditor = ({
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                 <button onClick={() => setShowCloseConfirm(false)} style={styles.confirmKeepButton}>Keep Editing</button>
                 <button onClick={() => { setShowCloseConfirm(false); onClose(); }} style={styles.confirmCloseButton}>Close Anyway</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Preset Save Modal ── */}
+        {showPresetPrompt && (
+          <div style={{ position: 'fixed', inset: 0, background: theme.overlay.heavy, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onClick={() => setShowPresetPrompt(false)}>
+            <div style={{ background: theme.bg.input, borderRadius: 12, padding: 24, width: 360, maxWidth: '90vw' }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ color: theme.text.primary, fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Save Preset</div>
+              <input
+                autoFocus
+                value={presetPromptValue}
+                onChange={e => setPresetPromptValue(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') setShowPresetPrompt(false);
+                  if (e.key === 'Enter' && presetPromptValue.trim()) {
+                    onSavePreset?.({ name: presetPromptValue.trim(), settings: { ...textStyle, cropMode: aspectRatio } });
+                    toastSuccess(`Preset "${presetPromptValue.trim()}" saved!`);
+                    setShowPresetPrompt(false);
+                  }
+                }}
+                placeholder="Preset name..."
+                style={{ width: '100%', background: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, borderRadius: 8, padding: '10px 12px', color: theme.text.primary, fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
+              />
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+                <button onClick={() => setShowPresetPrompt(false)}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${theme.bg.elevated}`, background: 'transparent', color: theme.text.secondary, cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button onClick={() => {
+                  if (presetPromptValue.trim()) {
+                    onSavePreset?.({ name: presetPromptValue.trim(), settings: { ...textStyle, cropMode: aspectRatio } });
+                    toastSuccess(`Preset "${presetPromptValue.trim()}" saved!`);
+                  }
+                  setShowPresetPrompt(false);
+                }}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: theme.accent.primary, color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+                  Save
+                </button>
               </div>
             </div>
           </div>
@@ -1448,6 +1674,48 @@ const getStyles = (theme, isMobile) => ({
   timeDisplay: {
     fontSize: '11px', color: theme.text.muted, fontVariantNumeric: 'tabular-nums',
     whiteSpace: 'nowrap', minWidth: '80px', textAlign: 'right'
+  },
+  presetSelect: {
+    flex: 1,
+    padding: '8px 12px',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.bg.elevated}`,
+    borderRadius: '6px',
+    color: theme.text.primary,
+    fontSize: '13px',
+    outline: 'none'
+  },
+  fullscreenButton: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '32px',
+    height: '32px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: theme.text.muted,
+    cursor: 'pointer'
+  },
+  audioTrack: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    width: '100%',
+    maxWidth: '500px',
+    height: '28px',
+    marginTop: '6px',
+    flexShrink: 0
+  },
+  waveformContainer: {
+    flex: 1,
+    height: '100%',
+    display: 'flex',
+    alignItems: 'flex-end',
+    gap: '1px',
+    backgroundColor: theme.bg.input,
+    borderRadius: '4px',
+    padding: '2px',
+    overflow: 'hidden'
   },
   // Filmstrip timeline
   filmstrip: {

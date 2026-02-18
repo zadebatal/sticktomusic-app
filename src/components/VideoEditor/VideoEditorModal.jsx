@@ -2108,6 +2108,8 @@ const VideoEditorModal = ({
         onAddLyrics={onAddLyrics}
         onUpdateLyrics={onUpdateLyrics}
         onDeleteLyrics={onDeleteLyrics}
+        presets={presets}
+        onSavePreset={onSavePreset}
       />
     );
   }
@@ -2126,6 +2128,8 @@ const VideoEditorModal = ({
         onAddLyrics={onAddLyrics}
         onUpdateLyrics={onUpdateLyrics}
         onDeleteLyrics={onDeleteLyrics}
+        presets={presets}
+        onSavePreset={onSavePreset}
       />
     );
   }
@@ -2144,6 +2148,8 @@ const VideoEditorModal = ({
         onAddLyrics={onAddLyrics}
         onUpdateLyrics={onUpdateLyrics}
         onDeleteLyrics={onDeleteLyrics}
+        presets={presets}
+        onSavePreset={onSavePreset}
       />
     );
   }
