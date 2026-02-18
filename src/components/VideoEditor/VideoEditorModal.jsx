@@ -2140,6 +2140,10 @@ const VideoEditorModal = ({
         onClose={onClose}
         artistId={artistId}
         db={db}
+        onSaveLyrics={onSaveLyrics}
+        onAddLyrics={onAddLyrics}
+        onUpdateLyrics={onUpdateLyrics}
+        onDeleteLyrics={onDeleteLyrics}
       />
     );
   }

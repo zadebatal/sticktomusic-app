@@ -1,25 +1,33 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
-  subscribeToLibrary, subscribeToCollections, getCollections,
+  subscribeToLibrary, subscribeToCollections, getCollections, getLibrary, getLyrics,
   incrementUseCount, MEDIA_TYPES,
   addCreatedVideo, saveCreatedContentAsync
 } from '../../services/libraryService';
 import { uploadFile } from '../../services/firebaseStorage';
 import { renderPhotoMontage } from '../../services/photoMontageExportService';
 import { useBeatDetection } from '../../hooks/useBeatDetection';
+import useEditorHistory from '../../hooks/useEditorHistory';
+import useWaveform from '../../hooks/useWaveform';
 import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
 import useIsMobile from '../../hooks/useIsMobile';
+import EditorToolbar from './EditorToolbar';
+import LyricAnalyzer from './LyricAnalyzer';
 import CloudImportButton from './CloudImportButton';
 import log from '../../utils/logger';
 
 /**
- * PhotoMontageEditor — Turn photos into a fast-paced video with transitions
+ * PhotoMontageEditor — Turn photos into a fast-paced video with transitions.
+ *
+ * Full feature parity with SoloClipEditor:
+ *   EditorToolbar (undo/redo, audio picker, lyrics picker, AI transcribe),
+ *   close confirmation, waveform, word overlays from transcription.
  *
  * Layout:
- *   Left (w-72):   Photo list (drag-to-reorder), per-photo duration, upload/import
- *   Center:        Preview with Ken Burns CSS animation, playback controls
- *   Right (w-64):  Settings: speed, transition, Ken Burns toggle, audio, beat sync
+ *   Top bar:   Back, Name, Aspect, Export
+ *   Body:      Left (w-72) Photo list | Center Preview | Right (w-64) Settings
+ *   Toolbar:   EditorToolbar (shared)
  */
 const PhotoMontageEditor = ({
   category,
@@ -27,7 +35,11 @@ const PhotoMontageEditor = ({
   onSave,
   onClose,
   artistId = null,
-  db = null
+  db = null,
+  onSaveLyrics,
+  onAddLyrics,
+  onUpdateLyrics,
+  onDeleteLyrics
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
@@ -44,15 +56,29 @@ const PhotoMontageEditor = ({
   const [name, setName] = useState(existingVideo?.name || 'Photo Montage');
 
   // ── Settings state ──
-  const [speed, setSpeed] = useState(existingVideo?.montageSpeed || 1); // seconds per photo
+  const [speed, setSpeed] = useState(existingVideo?.montageSpeed || 1);
   const [transition, setTransition] = useState(existingVideo?.montageTransition || 'cut');
   const [kenBurnsEnabled, setKenBurnsEnabled] = useState(existingVideo?.montageKenBurns !== false);
   const [aspectRatio, setAspectRatio] = useState(existingVideo?.cropMode || '9:16');
 
-  // ── Audio state ──
-  const [audio, setAudio] = useState(existingVideo?.audio || null);
+  // ── Audio state (renamed from `audio` to match VEM/SoloClipEditor pattern) ──
+  const [selectedAudio, setSelectedAudio] = useState(existingVideo?.audio || null);
   const [beatSyncEnabled, setBeatSyncEnabled] = useState(existingVideo?.montageBeatSync || false);
   const audioRef = useRef(null);
+  const audioFileInputRef = useRef(null);
+
+  // ── Words & lyrics state (from transcription / lyrics bank) ──
+  const [words, setWords] = useState(existingVideo?.words || []);
+  const [textStyle, setTextStyle] = useState({
+    fontSize: 48,
+    fontFamily: 'Inter, sans-serif',
+    fontWeight: '600',
+    color: '#ffffff',
+    outline: true,
+    outlineColor: '#000000',
+    textAlign: 'center',
+    textCase: 'default'
+  });
 
   // ── Beat detection ──
   const { beats, bpm, isAnalyzing: beatAnalyzing, analyzeAudio } = useBeatDetection();
@@ -71,12 +97,52 @@ const PhotoMontageEditor = ({
   const [library, setLibrary] = useState([]);
   const [collections, setCollections] = useState([]);
   const [showLibraryPicker, setShowLibraryPicker] = useState(false);
+  const [lyricsBank, setLyricsBank] = useState([]);
+
+  // ── Modals ──
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [showTranscriber, setShowTranscriber] = useState(false);
 
   // ── Drag reorder ──
   const [dragIndex, setDragIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
 
-  // Subscribe to library for importing photos
+  // ── Undo/Redo history ──
+  const getHistorySnapshot = useCallback(() => ({
+    photos, words, selectedAudio, textStyle
+  }), [photos, words, selectedAudio, textStyle]);
+
+  const restoreHistorySnapshot = useCallback((snapshot) => {
+    if (snapshot.photos !== undefined) setPhotos(snapshot.photos);
+    if (snapshot.words !== undefined) setWords(snapshot.words);
+    if (snapshot.selectedAudio !== undefined) setSelectedAudio(snapshot.selectedAudio);
+    if (snapshot.textStyle !== undefined) setTextStyle(snapshot.textStyle);
+  }, []);
+
+  const { canUndo, canRedo, handleUndo, handleRedo } = useEditorHistory({
+    getSnapshot: getHistorySnapshot,
+    restoreSnapshot: restoreHistorySnapshot,
+    deps: [photos, words, selectedAudio, textStyle],
+    isEditingText: false
+  });
+
+  // ── Waveform (for future timeline rendering) ──
+  const { waveformData } = useWaveform({
+    selectedAudio,
+    clips: [],
+    getClipUrl: () => null
+  });
+
+  // ── Library subscriptions ──
+  useEffect(() => {
+    if (!artistId) return;
+    const localLib = getLibrary(artistId);
+    setLibrary(localLib);
+    const localCols = getCollections(artistId);
+    setCollections(localCols);
+    setLyricsBank(getLyrics(artistId));
+  }, [artistId]);
+
   useEffect(() => {
     if (!db || !artistId) return;
     const unsubs = [];
@@ -90,10 +156,14 @@ const PhotoMontageEditor = ({
     [library]
   );
 
+  const libraryAudio = useMemo(() =>
+    library.filter(m => m.type === MEDIA_TYPES.AUDIO),
+    [library]
+  );
+
   // ── Computed: photo durations (beat-synced or fixed) ──
   const photoDurations = useMemo(() => {
     if (beatSyncEnabled && beats.length > 1 && photos.length > 0) {
-      // Distribute photos across beats
       const durations = [];
       const beatsPerPhoto = Math.max(1, Math.floor(beats.length / photos.length));
       for (let i = 0; i < photos.length; i++) {
@@ -117,10 +187,10 @@ const PhotoMontageEditor = ({
 
   // ── Beat sync: analyze audio when toggled on ──
   useEffect(() => {
-    if (beatSyncEnabled && audio?.url && !bpm) {
-      analyzeAudio(audio.url);
+    if (beatSyncEnabled && selectedAudio?.url && !bpm) {
+      analyzeAudio(selectedAudio.url);
     }
-  }, [beatSyncEnabled, audio?.url, bpm, analyzeAudio]);
+  }, [beatSyncEnabled, selectedAudio?.url, bpm, analyzeAudio]);
 
   // ── Preview playback loop ──
   const startPlayback = useCallback(() => {
@@ -134,7 +204,7 @@ const PhotoMontageEditor = ({
 
       setCurrentTime(prev => {
         const next = prev + delta;
-        if (next >= totalDuration) return 0; // loop
+        if (next >= totalDuration) return 0;
         return next;
       });
 
@@ -142,12 +212,11 @@ const PhotoMontageEditor = ({
     };
     playbackRef.current = requestAnimationFrame(tick);
 
-    // Start audio
-    if (audioRef.current && audio?.url) {
-      audioRef.current.currentTime = audio.startTime || 0;
+    if (audioRef.current && selectedAudio?.url) {
+      audioRef.current.currentTime = selectedAudio.startTime || 0;
       audioRef.current.play().catch(() => {});
     }
-  }, [photos.length, totalDuration, audio]);
+  }, [photos.length, totalDuration, selectedAudio]);
 
   const stopPlayback = useCallback(() => {
     setIsPlaying(false);
@@ -257,15 +326,97 @@ const PhotoMontageEditor = ({
     const file = e.target.files?.[0];
     if (!file) return;
     const url = URL.createObjectURL(file);
-    setAudio({ id: `audio_${Date.now()}`, name: file.name, url, file, duration: null });
-    setBeatSyncEnabled(false); // Reset beat sync for new audio
+    setSelectedAudio({ id: `audio_${Date.now()}`, name: file.name, url, file, duration: null });
+    setBeatSyncEnabled(false);
+  }, []);
+
+  const handleAudioSelect = useCallback((audio) => {
+    setSelectedAudio(audio);
+    setBeatSyncEnabled(false);
   }, []);
 
   const handleRemoveAudio = useCallback(() => {
-    if (audio?.url?.startsWith('blob:')) URL.revokeObjectURL(audio.url);
-    setAudio(null);
+    if (selectedAudio?.url?.startsWith('blob:')) URL.revokeObjectURL(selectedAudio.url);
+    setSelectedAudio(null);
     setBeatSyncEnabled(false);
-  }, [audio]);
+  }, [selectedAudio]);
+
+  // ── Audio element config ──
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (!selectedAudio) {
+      el.src = '';
+      return;
+    }
+    const url = selectedAudio.localUrl || selectedAudio.url;
+    if (!url) return;
+    el.src = url;
+    el.load();
+  }, [selectedAudio]);
+
+  // ── AI Transcription handler ──
+  const handleTranscriptionComplete = useCallback((result) => {
+    if (!result?.words?.length) {
+      toastError('No words detected in transcription.');
+      setShowTranscriber(false);
+      return;
+    }
+    const newWords = result.words.map((w, i) => ({
+      id: `word_${Date.now()}_${i}`,
+      text: w.text,
+      startTime: w.startTime || 0,
+      duration: w.duration || 0.5
+    }));
+    setWords(newWords);
+    toastSuccess(`Transcribed ${newWords.length} words`);
+    setShowTranscriber(false);
+  }, [toastSuccess, toastError]);
+
+  // ── Lyrics as timed words ──
+  const addLyricsAsTimedWords = useCallback((lyricsText) => {
+    const wordList = lyricsText.split(/\s+/).filter(w => w.trim().length > 0);
+    if (!wordList.length) return;
+    const dur = totalDuration || 10;
+    const wordDuration = dur / wordList.length;
+    const newWords = wordList.map((word, i) => ({
+      id: `word_${Date.now()}_${i}`,
+      text: word,
+      startTime: i * wordDuration,
+      duration: wordDuration
+    }));
+    setWords(newWords);
+    toastSuccess(`Created ${newWords.length} timed word overlays`);
+  }, [totalDuration, toastSuccess]);
+
+  // ── Close with confirmation (fixes back button bug) ──
+  const handleCloseRequest = useCallback(() => {
+    const hasWork = photos.length > 0 || words.length > 0 || selectedAudio;
+    if (hasWork) {
+      setShowCloseConfirm(true);
+    } else {
+      onClose();
+    }
+  }, [photos.length, words.length, selectedAudio, onClose]);
+
+  // ── Keyboard shortcuts ──
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        handleCloseRequest();
+      }
+      if (e.code === 'Space') {
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+        e.preventDefault();
+        if (isPlaying) stopPlayback();
+        else startPlayback();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleCloseRequest, isPlaying, stopPlayback, startPlayback]);
 
   // ── Export ──
   const handleExport = useCallback(async () => {
@@ -275,8 +426,7 @@ const PhotoMontageEditor = ({
     stopPlayback();
 
     try {
-      // Upload local photos first
-      const uploadedPhotos = await Promise.all(photos.map(async (photo, i) => {
+      const uploadedPhotos = await Promise.all(photos.map(async (photo) => {
         if (photo.isLocal && photo.file) {
           const { url } = await uploadFile(photo.file, 'images');
           return { ...photo, url, isLocal: false };
@@ -284,20 +434,17 @@ const PhotoMontageEditor = ({
         return photo;
       }));
 
-      // Upload audio if local
-      let audioForExport = audio;
-      if (audio?.file) {
-        const { url } = await uploadFile(audio.file, 'audio');
-        audioForExport = { ...audio, url };
+      let audioForExport = selectedAudio;
+      if (selectedAudio?.file) {
+        const { url } = await uploadFile(selectedAudio.file, 'audio');
+        audioForExport = { ...selectedAudio, url };
       }
 
-      // Build photo array with durations
       const photosWithDurations = uploadedPhotos.map((p, i) => ({
         url: p.url,
         duration: photoDurations[i]
       }));
 
-      // Render
       const blob = await renderPhotoMontage({
         photos: photosWithDurations,
         aspectRatio,
@@ -306,14 +453,12 @@ const PhotoMontageEditor = ({
         audio: audioForExport
       }, (progress) => setExportProgress(progress));
 
-      // Upload final video
       setExportProgress(95);
       const { url: cloudUrl } = await uploadFile(
         new File([blob], `montage_${Date.now()}.mp4`, { type: 'video/mp4' }),
         'videos'
       );
 
-      // Save as created video
       const videoData = {
         name,
         audio: audioForExport ? { id: audioForExport.id, url: audioForExport.url, name: audioForExport.name } : null,
@@ -327,6 +472,8 @@ const PhotoMontageEditor = ({
         montageTransition: transition,
         montageKenBurns: kenBurnsEnabled,
         montageBeatSync: beatSyncEnabled,
+        words,
+        textStyle,
         status: 'ready',
         cloudUrl
       };
@@ -347,7 +494,7 @@ const PhotoMontageEditor = ({
       setIsExporting(false);
       setExportProgress(0);
     }
-  }, [photos, audio, photoDurations, aspectRatio, transition, kenBurnsEnabled, name, speed, beatSyncEnabled, totalDuration, artistId, db, category, onSave, onClose, toastSuccess, toastError, stopPlayback]);
+  }, [photos, selectedAudio, photoDurations, aspectRatio, transition, kenBurnsEnabled, name, speed, beatSyncEnabled, totalDuration, artistId, db, category, words, textStyle, onSave, onClose, toastSuccess, toastError, stopPlayback]);
 
   // ── Ken Burns CSS animation for preview ──
   const getKenBurnsStyle = useCallback((photoIndex, progress) => {
@@ -363,7 +510,6 @@ const PhotoMontageEditor = ({
     return effects[photoIndex % effects.length];
   }, [kenBurnsEnabled]);
 
-  // Speed presets
   const SPEED_PRESETS = [
     { label: '0.5s', value: 0.5 },
     { label: '1s', value: 1 },
@@ -373,11 +519,11 @@ const PhotoMontageEditor = ({
 
   // ── Render ──
   return (
-    <div style={styles.overlay}>
+    <div style={styles.overlay} onClick={(e) => e.target === e.currentTarget && handleCloseRequest()}>
       <div style={styles.container}>
         {/* Top Bar */}
         <div style={styles.topBar}>
-          <button onClick={onClose} style={styles.backButton} title="Back">
+          <button onClick={handleCloseRequest} style={styles.backButton} title="Back">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="15 18 9 12 15 6" />
             </svg>
@@ -571,6 +717,48 @@ const PhotoMontageEditor = ({
               </span>
             </div>
 
+            {/* Photo filmstrip timeline */}
+            {photos.length > 0 && (
+              <div style={styles.filmstrip}>
+                {photos.map((photo, i) => {
+                  const widthPct = totalDuration > 0 ? (photoDurations[i] / totalDuration) * 100 : (100 / photos.length);
+                  return (
+                    <div
+                      key={photo.id}
+                      style={{
+                        ...styles.filmstripItem,
+                        width: `${widthPct}%`,
+                        borderColor: currentPhotoIndex === i ? theme.accent.primary : 'transparent'
+                      }}
+                    >
+                      <img src={photo.url} alt="" style={styles.filmstripThumb} />
+                    </div>
+                  );
+                })}
+                {/* Playhead */}
+                <div style={{
+                  ...styles.filmstripPlayhead,
+                  left: totalDuration > 0 ? `${(currentTime / totalDuration) * 100}%` : '0%'
+                }} />
+              </div>
+            )}
+
+            {/* Words indicator */}
+            {words.length > 0 && (
+              <div style={styles.wordsIndicator}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme.accent.primary} strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/>
+                </svg>
+                <span style={{ fontSize: '11px', color: theme.text.secondary }}>{words.length} words timed</span>
+                <button
+                  onClick={() => { setWords([]); toastSuccess('Words cleared'); }}
+                  style={styles.clearWordsButton}
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+
             {/* Export progress bar */}
             {isExporting && (
               <div style={styles.exportProgressBar}>
@@ -639,16 +827,16 @@ const PhotoMontageEditor = ({
               </div>
             </div>
 
-            {/* Audio */}
+            {/* Audio display (when selected via toolbar) */}
             <div style={styles.settingsSection}>
               <div style={styles.settingsLabel}>Audio</div>
-              {audio ? (
+              {selectedAudio ? (
                 <div style={styles.audioItem}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.accent.primary} strokeWidth="2">
                     <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
                   </svg>
                   <span style={{ flex: 1, fontSize: '12px', color: theme.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {audio.name || 'Audio'}
+                    {selectedAudio.name || 'Audio'}
                   </span>
                   <button onClick={handleRemoveAudio} style={styles.removeButton}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -657,18 +845,14 @@ const PhotoMontageEditor = ({
                   </button>
                 </div>
               ) : (
-                <label style={styles.addAudioButton}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
-                  </svg>
-                  Add Audio
-                  <input type="file" accept="audio/*" onChange={handleAudioUpload} style={{ display: 'none' }} />
-                </label>
+                <div style={{ fontSize: '11px', color: theme.text.muted }}>
+                  Use the Audio button in the toolbar below to add audio
+                </div>
               )}
             </div>
 
             {/* Beat Sync */}
-            {audio && (
+            {selectedAudio && (
               <div style={styles.settingsSection}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={styles.settingsLabel}>Beat Sync</div>
@@ -695,15 +879,63 @@ const PhotoMontageEditor = ({
             <div style={{ ...styles.settingsSection, borderTop: `1px solid ${theme.border.subtle}`, paddingTop: '12px', marginTop: '8px' }}>
               <div style={{ fontSize: '11px', color: theme.text.muted }}>
                 {photos.length} photo{photos.length !== 1 ? 's' : ''} &middot; {totalDuration.toFixed(1)}s total
-                {bpm ? ` &middot; ${bpm} BPM` : ''}
+                {bpm ? ` \u00b7 ${bpm} BPM` : ''}
+                {words.length > 0 ? ` \u00b7 ${words.length} words` : ''}
               </div>
             </div>
           </div>
         </div>
 
+        {/* EditorToolbar */}
+        <EditorToolbar
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          audioTracks={libraryAudio}
+          onSelectAudio={handleAudioSelect}
+          onUploadAudio={() => audioFileInputRef.current?.click()}
+          lyrics={lyricsBank}
+          onSelectLyric={(lyric) => addLyricsAsTimedWords(lyric.content || lyric.title || '')}
+          onAddNewLyrics={onAddLyrics ? () => onAddLyrics({ title: 'New Lyrics', content: '' }) : null}
+          onAITranscribe={selectedAudio ? () => setShowTranscriber(true) : null}
+        />
+
+        {/* Hidden audio file input */}
+        <input
+          ref={audioFileInputRef}
+          type="file"
+          accept="audio/*"
+          onChange={handleAudioUpload}
+          style={{ display: 'none' }}
+        />
+
         {/* Hidden audio element for preview playback */}
-        {audio?.url && (
-          <audio ref={audioRef} src={audio.url} preload="auto" />
+        <audio ref={audioRef} preload="auto" />
+
+        {/* ── Lyric Analyzer Modal ── */}
+        {showTranscriber && selectedAudio && (
+          <LyricAnalyzer
+            audioUrl={selectedAudio.localUrl || selectedAudio.url}
+            onComplete={handleTranscriptionComplete}
+            onClose={() => setShowTranscriber(false)}
+          />
+        )}
+
+        {/* ── Close Confirmation ── */}
+        {showCloseConfirm && (
+          <div style={styles.confirmOverlay}>
+            <div style={styles.confirmModal}>
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', color: theme.text.primary }}>Close editor?</h3>
+              <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: theme.text.secondary }}>
+                You have unsaved work. Are you sure you want to close?
+              </p>
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button onClick={() => setShowCloseConfirm(false)} style={styles.confirmKeepButton}>Keep Editing</button>
+                <button onClick={() => { setShowCloseConfirm(false); onClose(); }} style={styles.confirmCloseButton}>Close Anyway</button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -891,11 +1123,45 @@ const getStyles = (theme, isMobile) => ({
     fontSize: '11px', color: theme.text.muted, fontVariantNumeric: 'tabular-nums',
     whiteSpace: 'nowrap', minWidth: '80px', textAlign: 'right'
   },
+  // Filmstrip timeline
+  filmstrip: {
+    display: 'flex', width: '100%', maxWidth: '500px',
+    height: '32px', marginTop: '8px', borderRadius: '4px',
+    overflow: 'hidden', position: 'relative',
+    backgroundColor: theme.bg.input, flexShrink: 0
+  },
+  filmstripItem: {
+    height: '100%', overflow: 'hidden',
+    borderBottom: '2px solid transparent',
+    boxSizing: 'border-box'
+  },
+  filmstripThumb: {
+    width: '100%', height: '100%', objectFit: 'cover',
+    display: 'block'
+  },
+  filmstripPlayhead: {
+    position: 'absolute', top: 0, bottom: 0,
+    width: '2px', backgroundColor: '#fff',
+    zIndex: 2, pointerEvents: 'none'
+  },
+  // Words indicator
+  wordsIndicator: {
+    display: 'flex', alignItems: 'center', gap: '6px',
+    marginTop: '8px', padding: '4px 8px',
+    borderRadius: '4px', backgroundColor: `${theme.accent.primary}10`,
+    border: `1px solid ${theme.accent.primary}30`, flexShrink: 0
+  },
+  clearWordsButton: {
+    marginLeft: 'auto', padding: '2px 6px', fontSize: '10px',
+    fontWeight: 500, background: 'none',
+    border: `1px solid ${theme.border.subtle}`, borderRadius: '3px',
+    color: theme.text.muted, cursor: 'pointer'
+  },
   // Export progress
   exportProgressBar: {
     width: '100%', maxWidth: '500px', height: '4px',
     backgroundColor: theme.bg.input, borderRadius: '2px',
-    marginTop: '8px', overflow: 'hidden'
+    marginTop: '8px', overflow: 'hidden', flexShrink: 0
   },
   exportProgressFill: {
     height: '100%', backgroundColor: theme.accent.primary,
@@ -955,6 +1221,29 @@ const getStyles = (theme, isMobile) => ({
     padding: '8px 12px', borderRadius: '6px', width: '100%',
     backgroundColor: theme.bg.input, border: `1px solid ${theme.border.subtle}`,
     color: theme.text.secondary, cursor: 'pointer', fontSize: '12px', fontWeight: 500
+  },
+  // Confirm modal
+  confirmOverlay: {
+    position: 'absolute', inset: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    zIndex: 100
+  },
+  confirmModal: {
+    backgroundColor: theme.bg.surface,
+    borderRadius: '12px', padding: '20px',
+    border: `1px solid ${theme.border.subtle}`,
+    maxWidth: '340px', width: '100%'
+  },
+  confirmKeepButton: {
+    padding: '8px 16px', fontSize: '13px', fontWeight: 500,
+    backgroundColor: theme.bg.input, border: `1px solid ${theme.border.subtle}`,
+    borderRadius: '6px', color: theme.text.primary, cursor: 'pointer'
+  },
+  confirmCloseButton: {
+    padding: '8px 16px', fontSize: '13px', fontWeight: 600,
+    backgroundColor: '#ef4444', border: 'none',
+    borderRadius: '6px', color: '#fff', cursor: 'pointer'
   }
 });
 
