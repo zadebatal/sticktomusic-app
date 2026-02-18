@@ -67,8 +67,15 @@ const PhotoMontageEditor = ({
   const audioRef = useRef(null);
   const audioFileInputRef = useRef(null);
 
-  // ── Words & lyrics state (from transcription / lyrics bank) ──
-  const [words, setWords] = useState(existingVideo?.words || []);
+  // ── Text overlay state (same pattern as SoloClipEditor) ──
+  const [textOverlays, setTextOverlays] = useState(existingVideo?.textOverlays || []);
+  const [editingTextId, setEditingTextId] = useState(null);
+  const [editingTextValue, setEditingTextValue] = useState('');
+  const [draggingTextId, setDraggingTextId] = useState(null);
+  const dragStartRef = useRef(null);
+  const previewRef = useRef(null);
+  const timelineRef = useRef(null);
+  const [timelineDrag, setTimelineDrag] = useState(null);
   const [textStyle, setTextStyle] = useState({
     fontSize: 48,
     fontFamily: 'Inter, sans-serif',
@@ -109,12 +116,12 @@ const PhotoMontageEditor = ({
 
   // ── Undo/Redo history ──
   const getHistorySnapshot = useCallback(() => ({
-    photos, words, selectedAudio, textStyle
-  }), [photos, words, selectedAudio, textStyle]);
+    photos, textOverlays, selectedAudio, textStyle
+  }), [photos, textOverlays, selectedAudio, textStyle]);
 
   const restoreHistorySnapshot = useCallback((snapshot) => {
     if (snapshot.photos !== undefined) setPhotos(snapshot.photos);
-    if (snapshot.words !== undefined) setWords(snapshot.words);
+    if (snapshot.textOverlays !== undefined) setTextOverlays(snapshot.textOverlays);
     if (snapshot.selectedAudio !== undefined) setSelectedAudio(snapshot.selectedAudio);
     if (snapshot.textStyle !== undefined) setTextStyle(snapshot.textStyle);
   }, []);
@@ -122,8 +129,8 @@ const PhotoMontageEditor = ({
   const { canUndo, canRedo, handleUndo, handleRedo } = useEditorHistory({
     getSnapshot: getHistorySnapshot,
     restoreSnapshot: restoreHistorySnapshot,
-    deps: [photos, words, selectedAudio, textStyle],
-    isEditingText: false
+    deps: [photos, textOverlays, selectedAudio, textStyle],
+    isEditingText: !!editingTextId
   });
 
   // ── Waveform (for future timeline rendering) ──
@@ -321,6 +328,137 @@ const PhotoMontageEditor = ({
     setDragOverIndex(null);
   }, [dragIndex, movePhoto]);
 
+  // ── Text overlay CRUD (matches SoloClipEditor) ──
+  const getDefaultTextStyle = useCallback(() => ({
+    fontSize: textStyle.fontSize,
+    fontFamily: textStyle.fontFamily,
+    fontWeight: textStyle.fontWeight,
+    color: textStyle.color,
+    outline: textStyle.outline,
+    outlineColor: textStyle.outlineColor,
+    textAlign: textStyle.textAlign,
+    textCase: textStyle.textCase
+  }), [textStyle]);
+
+  const addTextOverlay = useCallback((prefillText, overrideStart, overrideEnd) => {
+    const start = overrideStart !== undefined ? overrideStart : currentTime;
+    const end = overrideEnd !== undefined ? overrideEnd : Math.min(start + 3, totalDuration || start + 3);
+    const newOverlay = {
+      id: `text_${Date.now()}`,
+      text: prefillText || 'Click to edit',
+      style: getDefaultTextStyle(),
+      position: { x: 50, y: 50, width: 80, height: 20 },
+      startTime: start,
+      endTime: end
+    };
+    setTextOverlays(prev => [...prev, newOverlay]);
+    setEditingTextId(newOverlay.id);
+    setEditingTextValue(newOverlay.text);
+  }, [getDefaultTextStyle, currentTime, totalDuration]);
+
+  const updateTextOverlay = useCallback((overlayId, updates) => {
+    setTextOverlays(prev => prev.map(o =>
+      o.id === overlayId ? { ...o, ...updates } : o
+    ));
+  }, []);
+
+  const removeTextOverlay = useCallback((overlayId) => {
+    setTextOverlays(prev => prev.filter(o => o.id !== overlayId));
+    if (editingTextId === overlayId) {
+      setEditingTextId(null);
+      setEditingTextValue('');
+    }
+  }, [editingTextId]);
+
+  // ── Text overlay dragging on preview ──
+  const handleTextMouseDown = useCallback((e, overlayId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const overlay = textOverlays.find(o => o.id === overlayId);
+    if (!overlay) return;
+    setDraggingTextId(overlayId);
+    setEditingTextId(overlayId);
+    setEditingTextValue(overlay.text);
+    dragStartRef.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      startPosX: overlay.position.x,
+      startPosY: overlay.position.y
+    };
+  }, [textOverlays]);
+
+  useEffect(() => {
+    if (!draggingTextId) return;
+    const handleMouseMove = (e) => {
+      if (!dragStartRef.current || !previewRef.current) return;
+      const rect = previewRef.current.getBoundingClientRect();
+      const dx = e.clientX - dragStartRef.current.mouseX;
+      const dy = e.clientY - dragStartRef.current.mouseY;
+      const newX = Math.max(5, Math.min(95, dragStartRef.current.startPosX + (dx / rect.width) * 100));
+      const newY = Math.max(5, Math.min(95, dragStartRef.current.startPosY + (dy / rect.height) * 100));
+      const overlay = textOverlays.find(o => o.id === draggingTextId);
+      if (overlay) {
+        updateTextOverlay(draggingTextId, { position: { ...overlay.position, x: newX, y: newY } });
+      }
+    };
+    const handleMouseUp = () => setDraggingTextId(null);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggingTextId, textOverlays, updateTextOverlay]);
+
+  // ── Timeline text block drag/resize ──
+  const handleTimelineDragStart = useCallback((e, overlayId, type) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const overlay = textOverlays.find(o => o.id === overlayId);
+    if (!overlay) return;
+    setTimelineDrag({
+      overlayId, type,
+      startX: e.clientX,
+      origStart: overlay.startTime,
+      origEnd: overlay.endTime
+    });
+    setEditingTextId(overlayId);
+    setEditingTextValue(overlay.text);
+  }, [textOverlays]);
+
+  useEffect(() => {
+    if (!timelineDrag || !timelineRef.current) return;
+    const dur = totalDuration || 1;
+    const handleMouseMove = (e) => {
+      const rect = timelineRef.current.getBoundingClientRect();
+      const deltaX = e.clientX - timelineDrag.startX;
+      const deltaSec = (deltaX / rect.width) * dur;
+      const minDur = 0.3;
+
+      if (timelineDrag.type === 'move') {
+        const length = timelineDrag.origEnd - timelineDrag.origStart;
+        let newStart = Math.max(0, timelineDrag.origStart + deltaSec);
+        let newEnd = newStart + length;
+        if (newEnd > dur) { newEnd = dur; newStart = dur - length; }
+        if (newStart < 0) newStart = 0;
+        updateTextOverlay(timelineDrag.overlayId, { startTime: newStart, endTime: newEnd });
+      } else if (timelineDrag.type === 'left') {
+        const newStart = Math.max(0, Math.min(timelineDrag.origEnd - minDur, timelineDrag.origStart + deltaSec));
+        updateTextOverlay(timelineDrag.overlayId, { startTime: newStart });
+      } else if (timelineDrag.type === 'right') {
+        const newEnd = Math.min(dur, Math.max(timelineDrag.origStart + minDur, timelineDrag.origEnd + deltaSec));
+        updateTextOverlay(timelineDrag.overlayId, { endTime: newEnd });
+      }
+    };
+    const handleMouseUp = () => setTimelineDrag(null);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [timelineDrag, totalDuration, updateTextOverlay]);
+
   // ── Audio handling ──
   const handleAudioUpload = useCallback((e) => {
     const file = e.target.files?.[0];
@@ -355,49 +493,59 @@ const PhotoMontageEditor = ({
     el.load();
   }, [selectedAudio]);
 
-  // ── AI Transcription handler ──
+  // ── AI Transcription handler — creates text overlays (matches SoloClipEditor) ──
   const handleTranscriptionComplete = useCallback((result) => {
     if (!result?.words?.length) {
       toastError('No words detected in transcription.');
       setShowTranscriber(false);
       return;
     }
-    const newWords = result.words.map((w, i) => ({
-      id: `word_${Date.now()}_${i}`,
-      text: w.text,
-      startTime: w.startTime || 0,
-      duration: w.duration || 0.5
-    }));
-    setWords(newWords);
-    toastSuccess(`Transcribed ${newWords.length} words`);
+    const dur = totalDuration || 30;
+    const newOverlays = result.words.map((w, i) => {
+      const start = Math.min(w.startTime || 0, dur);
+      const end = Math.min(start + (w.duration || 0.5), dur);
+      return {
+        id: `text_${Date.now()}_${i}`,
+        text: w.text,
+        style: getDefaultTextStyle(),
+        position: { x: 50, y: 50, width: 80, height: 20 },
+        startTime: start,
+        endTime: end
+      };
+    });
+    setTextOverlays(newOverlays);
+    toastSuccess(`Added ${newOverlays.length} text overlays from transcription`);
     setShowTranscriber(false);
-  }, [toastSuccess, toastError]);
+  }, [totalDuration, getDefaultTextStyle, toastSuccess, toastError]);
 
-  // ── Lyrics as timed words ──
-  const addLyricsAsTimedWords = useCallback((lyricsText) => {
+  // ── Lyrics as timed text overlays ──
+  const addLyricsAsTimedOverlays = useCallback((lyricsText) => {
     const wordList = lyricsText.split(/\s+/).filter(w => w.trim().length > 0);
     if (!wordList.length) return;
     const dur = totalDuration || 10;
     const wordDuration = dur / wordList.length;
-    const newWords = wordList.map((word, i) => ({
-      id: `word_${Date.now()}_${i}`,
+    const timestamp = Date.now();
+    const newOverlays = wordList.map((word, i) => ({
+      id: `text_${timestamp}_${i}`,
       text: word,
+      style: getDefaultTextStyle(),
+      position: { x: 50, y: 50, width: 80, height: 20 },
       startTime: i * wordDuration,
-      duration: wordDuration
+      endTime: (i + 1) * wordDuration
     }));
-    setWords(newWords);
-    toastSuccess(`Created ${newWords.length} timed word overlays`);
-  }, [totalDuration, toastSuccess]);
+    setTextOverlays(newOverlays);
+    toastSuccess(`Created ${newOverlays.length} timed word overlays`);
+  }, [totalDuration, getDefaultTextStyle, toastSuccess]);
 
   // ── Close with confirmation (fixes back button bug) ──
   const handleCloseRequest = useCallback(() => {
-    const hasWork = photos.length > 0 || words.length > 0 || selectedAudio;
+    const hasWork = photos.length > 0 || textOverlays.length > 0 || selectedAudio;
     if (hasWork) {
       setShowCloseConfirm(true);
     } else {
       onClose();
     }
-  }, [photos.length, words.length, selectedAudio, onClose]);
+  }, [photos.length, textOverlays.length, selectedAudio, onClose]);
 
   // ── Keyboard shortcuts ──
   useEffect(() => {
@@ -472,7 +620,7 @@ const PhotoMontageEditor = ({
         montageTransition: transition,
         montageKenBurns: kenBurnsEnabled,
         montageBeatSync: beatSyncEnabled,
-        words,
+        textOverlays,
         textStyle,
         status: 'ready',
         cloudUrl
@@ -494,7 +642,7 @@ const PhotoMontageEditor = ({
       setIsExporting(false);
       setExportProgress(0);
     }
-  }, [photos, selectedAudio, photoDurations, aspectRatio, transition, kenBurnsEnabled, name, speed, beatSyncEnabled, totalDuration, artistId, db, category, words, textStyle, onSave, onClose, toastSuccess, toastError, stopPlayback]);
+  }, [photos, selectedAudio, photoDurations, aspectRatio, transition, kenBurnsEnabled, name, speed, beatSyncEnabled, totalDuration, artistId, db, category, textOverlays, textStyle, onSave, onClose, toastSuccess, toastError, stopPlayback]);
 
   // ── Ken Burns CSS animation for preview ──
   const getKenBurnsStyle = useCallback((photoIndex, progress) => {
@@ -657,7 +805,7 @@ const PhotoMontageEditor = ({
           <div style={styles.centerPanel}>
             <div style={styles.previewContainer}>
               {photos.length > 0 ? (
-                <div style={styles.previewFrame}>
+                <div ref={previewRef} style={styles.previewFrame} onClick={() => setEditingTextId(null)}>
                   <img
                     src={photos[currentPhotoIndex]?.url}
                     alt=""
@@ -667,6 +815,55 @@ const PhotoMontageEditor = ({
                       transition: isPlaying ? 'none' : 'transform 0.3s ease'
                     }}
                   />
+
+                  {/* Text overlays on preview */}
+                  {textOverlays.map((overlay) => {
+                    const style = overlay.style || {};
+                    const pos = overlay.position || { x: 50, y: 50 };
+                    if (overlay.startTime !== undefined && overlay.endTime !== undefined) {
+                      if (currentTime < overlay.startTime || currentTime >= overlay.endTime) return null;
+                    }
+                    const displayText = style.textCase === 'upper' ? overlay.text.toUpperCase()
+                      : style.textCase === 'lower' ? overlay.text.toLowerCase()
+                      : overlay.text;
+                    return (
+                      <div
+                        key={overlay.id}
+                        onMouseDown={(e) => handleTextMouseDown(e, overlay.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingTextId(overlay.id);
+                          setEditingTextValue(overlay.text);
+                        }}
+                        style={{
+                          position: 'absolute',
+                          left: `${pos.x}%`,
+                          top: `${pos.y}%`,
+                          transform: 'translate(-50%, -50%)',
+                          cursor: draggingTextId === overlay.id ? 'grabbing' : 'grab',
+                          fontSize: `${(style.fontSize || 48) * 0.5}px`,
+                          fontFamily: style.fontFamily || 'Inter, sans-serif',
+                          fontWeight: style.fontWeight || '600',
+                          color: style.color || '#ffffff',
+                          textAlign: style.textAlign || 'center',
+                          textShadow: style.outline
+                            ? `2px 2px 0 ${style.outlineColor || '#000'}, -2px -2px 0 ${style.outlineColor || '#000'}, 2px -2px 0 ${style.outlineColor || '#000'}, -2px 2px 0 ${style.outlineColor || '#000'}`
+                            : 'none',
+                          userSelect: 'none',
+                          WebkitUserSelect: 'none',
+                          whiteSpace: 'nowrap',
+                          zIndex: 10,
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          border: editingTextId === overlay.id ? `1px dashed ${theme.accent.primary}99` : '1px dashed transparent',
+                          transition: 'border-color 0.15s'
+                        }}
+                      >
+                        {displayText}
+                      </div>
+                    );
+                  })}
+
                   {/* Photo counter */}
                   <div style={styles.photoCounter}>
                     {currentPhotoIndex + 1} / {photos.length}
@@ -743,21 +940,94 @@ const PhotoMontageEditor = ({
               </div>
             )}
 
-            {/* Words indicator */}
-            {words.length > 0 && (
-              <div style={styles.wordsIndicator}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={theme.accent.primary} strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/>
-                </svg>
-                <span style={{ fontSize: '11px', color: theme.text.secondary }}>{words.length} words timed</span>
-                <button
-                  onClick={() => { setWords([]); toastSuccess('Words cleared'); }}
-                  style={styles.clearWordsButton}
-                >
-                  Clear
-                </button>
+            {/* Text overlay timeline track */}
+            {textOverlays.length > 0 && (
+              <div ref={timelineRef} style={styles.textTimelineTrack}>
+                {textOverlays.map((overlay) => {
+                  const startPct = totalDuration > 0 ? (overlay.startTime / totalDuration) * 100 : 0;
+                  const widthPct = totalDuration > 0 ? ((overlay.endTime - overlay.startTime) / totalDuration) * 100 : 10;
+                  const isSelected = editingTextId === overlay.id;
+                  return (
+                    <div
+                      key={overlay.id}
+                      style={{
+                        position: 'absolute',
+                        left: `${startPct}%`,
+                        width: `${widthPct}%`,
+                        top: '2px',
+                        height: '20px',
+                        backgroundColor: isSelected ? '#9333ea' : theme.accent.primary,
+                        borderRadius: '3px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '0 3px',
+                        cursor: timelineDrag ? 'grabbing' : 'grab',
+                        overflow: 'hidden',
+                        border: isSelected ? '1px solid #a855f7' : '1px solid rgba(124,58,237,0.5)',
+                        zIndex: isSelected ? 10 : 5,
+                        transition: timelineDrag ? 'none' : 'background-color 0.15s'
+                      }}
+                      onMouseDown={(e) => handleTimelineDragStart(e, overlay.id, 'move')}
+                    >
+                      {/* Left resize handle */}
+                      <div
+                        style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '5px', cursor: 'col-resize', zIndex: 11 }}
+                        onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'left'); }}
+                      />
+                      <span style={{ fontSize: '9px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none', padding: '0 4px' }}>
+                        {overlay.text}
+                      </span>
+                      {/* Right resize handle */}
+                      <div
+                        style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '5px', cursor: 'col-resize', zIndex: 11 }}
+                        onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'right'); }}
+                      />
+                    </div>
+                  );
+                })}
+                {/* Playhead on text track */}
+                <div style={{
+                  ...styles.filmstripPlayhead,
+                  left: totalDuration > 0 ? `${(currentTime / totalDuration) * 100}%` : '0%'
+                }} />
               </div>
             )}
+
+            {/* Selected overlay edit bar */}
+            {editingTextId && (() => {
+              const overlay = textOverlays.find(o => o.id === editingTextId);
+              if (!overlay) return null;
+              return (
+                <div style={styles.editBar}>
+                  <input
+                    type="text"
+                    value={editingTextValue}
+                    onChange={(e) => {
+                      setEditingTextValue(e.target.value);
+                      updateTextOverlay(editingTextId, { text: e.target.value });
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') setEditingTextId(null); }}
+                    style={styles.editBarInput}
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => removeTextOverlay(editingTextId)}
+                    style={styles.editBarDelete}
+                    title="Delete overlay"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setEditingTextId(null)}
+                    style={styles.editBarDone}
+                  >
+                    Done
+                  </button>
+                </div>
+              );
+            })()}
 
             {/* Export progress bar */}
             {isExporting && (
@@ -880,7 +1150,7 @@ const PhotoMontageEditor = ({
               <div style={{ fontSize: '11px', color: theme.text.muted }}>
                 {photos.length} photo{photos.length !== 1 ? 's' : ''} &middot; {totalDuration.toFixed(1)}s total
                 {bpm ? ` \u00b7 ${bpm} BPM` : ''}
-                {words.length > 0 ? ` \u00b7 ${words.length} words` : ''}
+                {textOverlays.length > 0 ? ` \u00b7 ${textOverlays.length} texts` : ''}
               </div>
             </div>
           </div>
@@ -892,11 +1162,12 @@ const PhotoMontageEditor = ({
           canRedo={canRedo}
           onUndo={handleUndo}
           onRedo={handleRedo}
+          onAddText={() => addTextOverlay()}
           audioTracks={libraryAudio}
           onSelectAudio={handleAudioSelect}
           onUploadAudio={() => audioFileInputRef.current?.click()}
           lyrics={lyricsBank}
-          onSelectLyric={(lyric) => addLyricsAsTimedWords(lyric.content || lyric.title || '')}
+          onSelectLyric={(lyric) => addLyricsAsTimedOverlays(lyric.content || lyric.title || '')}
           onAddNewLyrics={onAddLyrics ? () => onAddLyrics({ title: 'New Lyrics', content: '' }) : null}
           onAITranscribe={selectedAudio ? () => setShowTranscriber(true) : null}
         />
@@ -1144,18 +1415,36 @@ const getStyles = (theme, isMobile) => ({
     width: '2px', backgroundColor: '#fff',
     zIndex: 2, pointerEvents: 'none'
   },
-  // Words indicator
-  wordsIndicator: {
-    display: 'flex', alignItems: 'center', gap: '6px',
-    marginTop: '8px', padding: '4px 8px',
-    borderRadius: '4px', backgroundColor: `${theme.accent.primary}10`,
-    border: `1px solid ${theme.accent.primary}30`, flexShrink: 0
+  // Text timeline track
+  textTimelineTrack: {
+    position: 'relative', width: '100%', maxWidth: '500px',
+    height: '24px', marginTop: '6px', borderRadius: '4px',
+    backgroundColor: theme.bg.input, flexShrink: 0,
+    overflow: 'visible'
   },
-  clearWordsButton: {
-    marginLeft: 'auto', padding: '2px 6px', fontSize: '10px',
-    fontWeight: 500, background: 'none',
-    border: `1px solid ${theme.border.subtle}`, borderRadius: '3px',
-    color: theme.text.muted, cursor: 'pointer'
+  // Edit bar
+  editBar: {
+    display: 'flex', alignItems: 'center', gap: '6px',
+    width: '100%', maxWidth: '500px', marginTop: '6px',
+    padding: '4px 6px', borderRadius: '6px',
+    backgroundColor: theme.bg.surface,
+    border: `1px solid ${theme.border.subtle}`, flexShrink: 0
+  },
+  editBarInput: {
+    flex: 1, padding: '4px 8px', fontSize: '12px',
+    backgroundColor: theme.bg.input, border: `1px solid ${theme.border.subtle}`,
+    borderRadius: '4px', color: theme.text.primary, outline: 'none'
+  },
+  editBarDelete: {
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    width: '28px', height: '28px', borderRadius: '4px',
+    backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+    color: '#ef4444', cursor: 'pointer'
+  },
+  editBarDone: {
+    padding: '4px 10px', fontSize: '11px', fontWeight: 600,
+    backgroundColor: theme.accent.primary, border: 'none',
+    borderRadius: '4px', color: '#fff', cursor: 'pointer'
   },
   // Export progress
   exportProgressBar: {
