@@ -135,9 +135,8 @@ const ContentLibrary = ({
     }
   }, [driveConfigured, DRIVE_CLIENT_ID, DRIVE_API_KEY, isSlideshow, category?.name, toastSuccess, toastError]);
 
-  // Scheduled posts for "Already Scheduled" section in Drafts view
+  // Scheduled posts for draft status tracking
   const [scheduledPosts, setScheduledPosts] = useState([]);
-  const [showScheduled, setShowScheduled] = useState(true);
 
   // Load scheduled posts when in drafts view
   React.useEffect(() => {
@@ -327,7 +326,7 @@ const ContentLibrary = ({
 
   // Split items into posted, scheduled, and unposted
   const [showPosted, setShowPosted] = useState(false);
-  const [showScheduledItems, setShowScheduledItems] = useState(true);
+  const [showScheduledItems, setShowScheduledItems] = useState(false);
 
   const { unpostedItems, scheduledItems, postedItems } = useMemo(() => {
     const posted = [];
@@ -532,46 +531,6 @@ const ContentLibrary = ({
           )}
         </div>
       </div>
-
-      {/* Already Scheduled section (Drafts view only) */}
-      {isDraftsView && scheduledPosts.length > 0 && (
-        <div style={{ padding: '0 24px', borderBottom: `1px solid ${theme.border.subtle}` }}>
-          <button
-            onClick={() => setShowScheduled(!showScheduled)}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 0', background: 'none', border: 'none', color: theme.text.secondary, cursor: 'pointer', fontSize: '13px', fontWeight: '600', width: '100%' }}
-          >
-            <span style={{ transform: showScheduled ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', fontSize: '10px' }}>▶</span>
-            Already Scheduled ({scheduledPosts.length})
-          </button>
-          {showScheduled && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingBottom: '12px' }}>
-              {scheduledPosts.map(post => (
-                <div key={post.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', backgroundColor: `${theme.accent.primary}1a`, border: `1px solid ${theme.accent.primary}33`, borderRadius: '8px', fontSize: '11px', color: theme.accent.hover }}>
-                  <span>{post.contentType === 'slideshow' ? '🖼️' : '🎥'}</span>
-                  <span style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.contentName}</span>
-                  <span style={{ color: theme.text.muted, fontSize: '10px' }}>
-                    {post.status === 'scheduled' && post.scheduledTime ? new Date(post.scheduledTime).toLocaleDateString() : post.status}
-                  </span>
-                  <button
-                    onClick={async () => {
-                      if (confirm('Remove from schedule?')) {
-                        await deleteScheduledPost(db, artistId, post.id);
-                        if (post.contentId) {
-                          await unmarkContentScheduledAsync(db, artistId, post.contentId);
-                        }
-                        setScheduledPosts(prev => prev.filter(p => p.id !== post.id));
-                        toastSuccess('Removed from schedule');
-                      }
-                    }}
-                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '14px', padding: '4px 8px', minWidth: '32px', minHeight: '32px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                    title="Unschedule"
-                  >×</button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Trash Panel */}
       {showTrash && (
@@ -1672,7 +1631,7 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
         flexShrink: 0,
       }}>
         {thumb ? (
-          <img src={thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img src={thumb} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${theme.bg.input}, ${theme.bg.surface})` }}>
             <span style={{ color: theme.text.muted, fontSize: '10px' }}>{idx + 1}</span>
