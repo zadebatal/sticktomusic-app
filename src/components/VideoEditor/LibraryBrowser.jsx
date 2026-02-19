@@ -72,6 +72,7 @@ import useIsMobile from '../../hooks/useIsMobile';
 import { useTheme } from '../../contexts/ThemeContext';
 import log from '../../utils/logger';
 import TextBankPanel from './TextBankPanel';
+import { Button } from '../../ui/components/Button';
 
 const LibraryBrowser = ({
   db = null, // Firestore instance for cross-device sync
@@ -2783,16 +2784,9 @@ const LibraryBrowser = ({
                 </div>
               </button>
             </div>
-            <button
-              style={{
-                marginTop: '16px', padding: '8px', borderRadius: '8px', border: 'none',
-                backgroundColor: 'transparent', color: theme.text.muted, cursor: 'pointer',
-                fontSize: '12px', width: '100%', textAlign: 'center'
-              }}
-              onClick={() => setShowDeleteModal(null)}
-            >
+            <Button variant="neutral-tertiary" className="w-full mt-4" size="small" onClick={() => setShowDeleteModal(null)}>
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -2811,29 +2805,13 @@ const LibraryBrowser = ({
               autoFocus
               onKeyDown={(e) => e.key === 'Enter' && handleCreateCollection()}
             />
-            <div style={styles.modalButtons}>
-              <button
-                style={{
-                  ...styles.modalButton,
-                  backgroundColor: 'transparent',
-                  border: `1px solid ${theme.text.muted}`,
-                  color: theme.text.secondary
-                }}
-                onClick={() => setShowNewCollectionModal(false)}
-              >
+            <div className="flex gap-2 justify-end">
+              <Button variant="neutral-secondary" onClick={() => setShowNewCollectionModal(false)}>
                 Cancel
-              </button>
-              <button
-                style={{
-                  ...styles.modalButton,
-                  backgroundColor: theme.accent.primary,
-                  border: 'none',
-                  color: '#ffffff'
-                }}
-                onClick={handleCreateCollection}
-              >
+              </Button>
+              <Button variant="brand-primary" onClick={handleCreateCollection}>
                 Create
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2953,20 +2931,22 @@ const LibraryBrowser = ({
               );
             })}
 
-            <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
-              <button
-                onClick={() => setShowTemplateEditor(false)}
-                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${theme.border.subtle}`, backgroundColor: 'transparent', color: theme.text.muted, fontSize: '13px', cursor: 'pointer' }}
-              >Cancel</button>
-              <button
+            <div className="flex gap-2 mt-4">
+              <Button variant="neutral-secondary" className="flex-1" onClick={() => setShowTemplateEditor(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="brand-primary"
+                className="flex-1"
                 onClick={() => {
                   saveTextTemplates(artistId, activeView, [editingTemplate]);
                   loadData();
                   syncCollection(activeView);
                   setShowTemplateEditor(false);
                 }}
-                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: theme.accent.primary, color: '#fff', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
-              >Save Template</button>
+              >
+                Save Template
+              </Button>
             </div>
             </div>
 

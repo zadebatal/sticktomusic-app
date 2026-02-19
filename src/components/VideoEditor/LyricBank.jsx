@@ -1,5 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { Button } from '../../ui/components/Button';
+import { FeatherPlus } from '@subframe/core';
 
 /**
  * LyricBank - Full song lyrics storage with paragraph/line selection
@@ -322,13 +324,9 @@ const LyricBank = ({
         </div>
 
         {showAddForm && !isAdding && (
-          <button style={styles.addButton} onClick={() => setIsAdding(true)}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
+          <Button variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => setIsAdding(true)}>
             Add Lyrics
-          </button>
+          </Button>
         )}
       </div>
 
@@ -350,17 +348,13 @@ const LyricBank = ({
             style={styles.contentTextarea}
             rows={8}
           />
-          <div style={styles.addFormActions}>
-            <button style={styles.cancelButton} onClick={() => setIsAdding(false)}>
+          <div className="flex gap-2 justify-end">
+            <Button variant="neutral-secondary" size="small" onClick={() => setIsAdding(false)}>
               Cancel
-            </button>
-            <button
-              style={styles.saveButton}
-              onClick={handleAdd}
-              disabled={!newContent.trim()}
-            >
+            </Button>
+            <Button variant="brand-primary" size="small" onClick={handleAdd} disabled={!newContent.trim()}>
               Save Lyrics
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -459,18 +453,12 @@ const LyricBank = ({
                       <span style={styles.selectionCount}>
                         {selectedLines.length} line{selectedLines.length !== 1 ? 's' : ''} selected
                       </span>
-                      <button
-                        style={styles.useSelectedBtn}
-                        onClick={() => handleUseSelected(lyric)}
-                      >
+                      <Button variant="brand-primary" size="small" onClick={() => handleUseSelected(lyric)}>
                         Use Selected
-                      </button>
-                      <button
-                        style={styles.clearSelectionBtn}
-                        onClick={() => setSelectedLines([])}
-                      >
+                      </Button>
+                      <Button variant="neutral-tertiary" size="small" onClick={() => setSelectedLines([])}>
                         Clear
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -492,13 +480,13 @@ const LyricBank = ({
                     style={styles.contentTextarea}
                     rows={10}
                   />
-                  <div style={styles.editFormActions}>
-                    <button style={styles.cancelButton} onClick={cancelEdit}>
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="neutral-secondary" size="small" onClick={cancelEdit}>
                       Cancel
-                    </button>
-                    <button style={styles.saveButton} onClick={handleSaveEdit}>
+                    </Button>
+                    <Button variant="brand-primary" size="small" onClick={handleSaveEdit}>
                       Save Changes
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -540,19 +528,6 @@ const getStyles = (theme) => ({
     fontSize: '13px',
     color: theme.text.muted
   },
-  addButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '6px 12px',
-    backgroundColor: theme.accent.primary,
-    border: 'none',
-    borderRadius: '6px',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '12px',
-    fontWeight: '500'
-  },
   addForm: {
     backgroundColor: theme.bg.page,
     borderRadius: '8px',
@@ -582,31 +557,6 @@ const getStyles = (theme) => ({
     resize: 'vertical',
     outline: 'none',
     lineHeight: '1.6'
-  },
-  addFormActions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '8px',
-    marginTop: '12px'
-  },
-  cancelButton: {
-    padding: '8px 16px',
-    backgroundColor: 'transparent',
-    border: `1px solid ${theme.bg.elevated}`,
-    borderRadius: '6px',
-    color: theme.text.secondary,
-    cursor: 'pointer',
-    fontSize: '13px'
-  },
-  saveButton: {
-    padding: '8px 16px',
-    backgroundColor: theme.accent.primary,
-    border: 'none',
-    borderRadius: '6px',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '13px',
-    fontWeight: '500'
   },
   lyricsList: {
     display: 'flex',
@@ -730,35 +680,10 @@ const getStyles = (theme) => ({
     fontSize: '12px',
     color: theme.accent.hover
   },
-  useSelectedBtn: {
-    padding: '6px 12px',
-    backgroundColor: theme.accent.primary,
-    border: 'none',
-    borderRadius: '4px',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '12px',
-    fontWeight: '500'
-  },
-  clearSelectionBtn: {
-    padding: '6px 12px',
-    backgroundColor: 'transparent',
-    border: `1px solid ${theme.text.muted}`,
-    borderRadius: '4px',
-    color: theme.text.secondary,
-    cursor: 'pointer',
-    fontSize: '12px'
-  },
   editForm: {
     padding: '16px',
     borderTop: `1px solid ${theme.bg.surface}`
   },
-  editFormActions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '8px',
-    marginTop: '12px'
-  }
 });
 
 // Compact styles for sidebar
