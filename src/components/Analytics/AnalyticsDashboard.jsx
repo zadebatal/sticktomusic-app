@@ -28,6 +28,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import useIsMobile from '../../hooks/useIsMobile';
 import { Button } from '../../ui/components/Button';
 import { Badge } from '../../ui/components/Badge';
+import { Loader } from '../../ui/components/Loader';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
 import { DropdownMenu } from '../../ui/components/DropdownMenu';
 import {
@@ -293,7 +294,7 @@ const AnalyticsDashboard = ({
     return (
       <div style={styles.container}>
         <div style={styles.loadingContainer}>
-          <div style={styles.spinner} />
+          <Loader size="large" />
           <p>Loading analytics...</p>
         </div>
       </div>
@@ -1161,36 +1162,11 @@ const getStyles = (theme) => ({
     height: '400px',
     color: theme.text.secondary
   },
-  spinner: {
-    width: '40px',
-    height: '40px',
-    border: `3px solid ${theme.border.default}`,
-    borderTopColor: theme.accent.primary,
-    borderRadius: '50%',
-    animation: 'spin 1s linear infinite',
-    marginBottom: '16px'
-  },
-  miniSpinner: {
-    width: '14px',
-    height: '14px',
-    border: `2px solid ${theme.border.default}`,
-    borderTopColor: theme.text.primary,
-    borderRadius: '50%',
-    animation: 'spin 1s linear infinite'
-  },
   emptyState: {
     textAlign: 'center',
     padding: '48px',
     color: theme.text.muted
   }
 });
-
-// Add keyframes for spinner
-if (typeof document !== 'undefined' && !document.getElementById('analytics-dashboard-styles')) {
-  const style = document.createElement('style');
-  style.id = 'analytics-dashboard-styles';
-  style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
-  document.head.appendChild(style);
-}
 
 export default AnalyticsDashboard;

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { Loader } from '../../ui/components/Loader';
 import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
 import { getStoredApiKey } from '../../services/whisperService';
 import { loadLyricTemplate, saveLyricTemplate } from '../../services/storageService';
@@ -433,14 +434,6 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       gap: '16px',
       padding: '32px'
     },
-    spinner: {
-      width: '40px',
-      height: '40px',
-      border: `3px solid ${theme.bg.elevated}`,
-      borderTopColor: theme.accent.primary,
-      borderRadius: '50%',
-      animation: 'spin 1s linear infinite'
-    },
     progressText: {
       color: theme.text.secondary,
       fontSize: '14px',
@@ -623,7 +616,7 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
           {/* Progress */}
           {(isAnalyzing || isTrimming) && (
             <div style={styles.progress}>
-              <div style={styles.spinner} />
+              <Loader size="large" />
               <p style={styles.progressText}>
                 {isTrimming ? '✂️ Trimming audio to selected section...' : progress}
               </p>
@@ -665,12 +658,5 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
     </div>
   );
 };
-
-if (typeof document !== 'undefined' && !document.getElementById('lyric-analyzer-styles')) {
-  const style = document.createElement('style');
-  style.id = 'lyric-analyzer-styles';
-  style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
-  document.head.appendChild(style);
-}
 
 export default LyricAnalyzer;

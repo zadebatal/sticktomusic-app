@@ -6,6 +6,7 @@ import usePointerDrag from '../../hooks/usePointerDrag';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
+import { Loader } from '../../ui/components/Loader';
 import { FeatherX, FeatherCheck, FeatherSave } from '@subframe/core';
 
 /**
@@ -675,7 +676,7 @@ const AudioClipSelector = ({
         }}>
           {isLoading ? (
             <div style={styles.loading}>
-              <div style={styles.spinner} />
+              <Loader size="medium" />
               <span>Loading audio...</span>
             </div>
           ) : (
@@ -1178,14 +1179,6 @@ const getStyles = (theme) => ({
     padding: '60px',
     color: theme.text.secondary
   },
-  spinner: {
-    width: '32px',
-    height: '32px',
-    border: `3px solid ${theme.bg.elevated}`,
-    borderTopColor: theme.accent.primary,
-    borderRadius: '50%',
-    animation: 'spin 1s linear infinite'
-  },
   canvasContainer: {
     cursor: 'crosshair',
     borderRadius: '8px',
@@ -1447,13 +1440,5 @@ const getStyles = (theme) => ({
     fontStyle: 'italic'
   },
 });
-
-// Add keyframes for spinner
-if (typeof document !== 'undefined' && !document.getElementById('audio-clip-selector-styles')) {
-  const style = document.createElement('style');
-  style.id = 'audio-clip-selector-styles';
-  style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
-  document.head.appendChild(style);
-}
 
 export default AudioClipSelector;

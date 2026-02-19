@@ -21,6 +21,7 @@ import { Button } from '../../ui/components/Button';
 import { Badge } from '../../ui/components/Badge';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
+import { Loader } from '../../ui/components/Loader';
 import { DropdownMenu } from '../../ui/components/DropdownMenu';
 import {
   FeatherPlus, FeatherShuffle, FeatherPause, FeatherPlay,
@@ -2397,7 +2398,7 @@ const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) =>
           </ToggleGroup>
         </div>
         {loadingContent ? (
-          <div style={s.modalLoading}><div style={s.spinner} /><p style={{ color: '#71717a', marginTop: '16px' }}>Loading...</p></div>
+          <div style={s.modalLoading}><Loader size="large" /><p style={{ color: '#71717a', marginTop: '16px' }}>Loading...</p></div>
         ) : (
           <>
             <div style={s.modalGrid}>
