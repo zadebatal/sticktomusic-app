@@ -4,6 +4,9 @@ import { uploadVideo } from '../../services/firebaseStorage';
 import { EXPORT_STAGE } from '../../utils/status';
 import { useFocusTrap } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
+import { FeatherX, FeatherUploadCloud, FeatherDownload, FeatherCopy, FeatherSend, FeatherArrowLeft, FeatherRefreshCw } from '@subframe/core';
 
 /**
  * ExportAndPostModal - Modal for exporting and posting videos
@@ -147,12 +150,7 @@ const ExportAndPostModal = ({
             {stage === EXPORT_STAGE.POSTING && 'Scheduling Post...'}
             {stage === EXPORT_STAGE.DONE && 'Done!'}
           </h2>
-          <button style={styles.closeButton} onClick={onClose}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
+          <IconButton size="small" icon={<FeatherX />} onClick={onClose} />
         </div>
 
         <div style={styles.body}>
@@ -210,16 +208,16 @@ const ExportAndPostModal = ({
               <p style={styles.successText}>This video was already exported!</p>
               <div style={styles.urlSection}>
                 <input type="text" value={alreadyExported} readOnly style={styles.urlInput} />
-                <button style={styles.copyButton} onClick={() => navigator.clipboard.writeText(alreadyExported)}>
+                <Button variant="neutral-secondary" size="small" icon={<FeatherCopy />} onClick={() => navigator.clipboard.writeText(alreadyExported)}>
                   Copy
-                </button>
+                </Button>
               </div>
               {onSchedulePost && (
-                <button style={styles.primaryButton} onClick={() => onSchedulePost({ videoUrl: alreadyExported, video, category })}>
-                  📤 Schedule Post via Late
-                </button>
+                <Button variant="brand-primary" className="w-full" icon={<FeatherSend />} onClick={() => onSchedulePost({ videoUrl: alreadyExported, video, category })}>
+                  Schedule Post via Late
+                </Button>
               )}
-              <button style={styles.doneButton} onClick={onClose}>Done</button>
+              <Button variant="neutral-secondary" className="w-full" onClick={onClose}>Done</Button>
             </>
           )}
 
@@ -259,35 +257,29 @@ const ExportAndPostModal = ({
               </div>
 
               {/* Export Options */}
-              <div style={styles.optionsSection}>
-                <button
-                  style={{ ...styles.primaryButton, ...(stage !== EXPORT_STAGE.OPTIONS ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="brand-primary"
+                  className="w-full"
+                  icon={<FeatherUploadCloud />}
                   onClick={handleExportAndUpload}
                   disabled={stage !== EXPORT_STAGE.OPTIONS}
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                    <polyline points="17 8 12 3 7 8"/>
-                    <line x1="12" y1="3" x2="12" y2="15"/>
-                  </svg>
                   Export & Upload to Cloud
-                </button>
+                </Button>
                 <p style={styles.optionDesc}>
                   Render video and upload to cloud storage for posting
                 </p>
 
-                <button
-                  style={{ ...styles.secondaryButton, ...(stage !== EXPORT_STAGE.OPTIONS ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+                <Button
+                  variant="neutral-secondary"
+                  className="w-full mt-2"
+                  icon={<FeatherDownload />}
                   onClick={handleExportOnly}
                   disabled={stage !== EXPORT_STAGE.OPTIONS}
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                    <polyline points="7 10 12 15 17 10"/>
-                    <line x1="12" y1="15" x2="12" y2="3"/>
-                  </svg>
                   Download Only
-                </button>
+                </Button>
                 <p style={styles.optionDesc}>
                   Download video file to your computer
                 </p>
@@ -350,9 +342,9 @@ const ExportAndPostModal = ({
                   readOnly
                   style={styles.urlInput}
                 />
-                <button style={styles.copyButton} onClick={handleCopyUrl}>
+                <Button variant="neutral-secondary" size="small" icon={<FeatherCopy />} onClick={handleCopyUrl}>
                   Copy
-                </button>
+                </Button>
               </div>
 
               {/* Caption Editor — BUG-024: Show character count with platform limits */}
@@ -378,22 +370,19 @@ const ExportAndPostModal = ({
               </div>
 
               {/* Post Actions */}
-              <div style={styles.postActions}>
+              <div className="flex flex-col gap-2">
                 {onSchedulePost ? (
-                  <button
-                    style={styles.postButton}
-                    onClick={handleSchedulePost}
-                  >
+                  <Button variant="brand-primary" className="w-full" icon={<FeatherSend />} onClick={handleSchedulePost}>
                     Schedule Post
-                  </button>
+                  </Button>
                 ) : (
                   <p style={styles.helpText}>
                     Video ready! Copy the URL above to use in your social media scheduler.
                   </p>
                 )}
-                <button style={styles.doneButton} onClick={onClose}>
+                <Button variant="neutral-secondary" className="w-full" onClick={onClose}>
                   Done
-                </button>
+                </Button>
               </div>
             </>
           )}
@@ -409,9 +398,9 @@ const ExportAndPostModal = ({
               </div>
               <h3 style={styles.doneTitle}>Success!</h3>
               <p style={styles.doneText}>Your video has been processed.</p>
-              <button style={styles.doneButton} onClick={onClose}>
+              <Button variant="neutral-secondary" className="w-full" onClick={onClose}>
                 Close
-              </button>
+              </Button>
             </>
           )}
 
@@ -427,25 +416,29 @@ const ExportAndPostModal = ({
                 <span style={styles.errorTitle}>Export Failed</span>
               </div>
               <p style={styles.errorMessage}>{error}</p>
-              <div style={styles.errorActions}>
-                <button
-                  style={styles.retryButton}
+              <div className="flex gap-2">
+                <Button
+                  variant="neutral-tertiary"
+                  size="small"
+                  icon={<FeatherArrowLeft />}
                   onClick={() => {
                     setError(null);
                     setStage(EXPORT_STAGE.OPTIONS);
                   }}
                 >
-                  ← Back to Options
-                </button>
-                <button
-                  style={styles.retryPrimaryButton}
+                  Back to Options
+                </Button>
+                <Button
+                  variant="destructive-primary"
+                  size="small"
+                  icon={<FeatherRefreshCw />}
                   onClick={() => {
                     setError(null);
                     handleExportAndUpload();
                   }}
                 >
-                  🔄 Retry Export
-                </button>
+                  Retry Export
+                </Button>
               </div>
             </div>
           )}
@@ -485,18 +478,6 @@ const getStyles = (theme) => ({
     fontWeight: '600',
     color: theme.text.primary,
     margin: 0
-  },
-  closeButton: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '32px',
-    height: '32px',
-    backgroundColor: 'transparent',
-    border: 'none',
-    color: theme.text.secondary,
-    cursor: 'pointer',
-    borderRadius: '6px'
   },
   body: {
     padding: '20px'
@@ -543,42 +524,6 @@ const getStyles = (theme) => ({
     fontSize: '14px',
     color: theme.text.primary,
     fontWeight: '600'
-  },
-  optionsSection: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px'
-  },
-  primaryButton: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    width: '100%',
-    padding: '14px',
-    backgroundColor: theme.accent.primary,
-    border: 'none',
-    borderRadius: '8px',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '600'
-  },
-  secondaryButton: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    width: '100%',
-    padding: '14px',
-    backgroundColor: theme.bg.surface,
-    border: `1px solid ${theme.bg.elevated}`,
-    borderRadius: '8px',
-    color: theme.text.primary,
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '500',
-    marginTop: '8px'
   },
   optionDesc: {
     fontSize: '12px',
@@ -642,15 +587,6 @@ const getStyles = (theme) => ({
     fontSize: '12px',
     outline: 'none'
   },
-  copyButton: {
-    padding: '10px 16px',
-    backgroundColor: theme.bg.surface,
-    border: `1px solid ${theme.bg.elevated}`,
-    borderRadius: '6px',
-    color: theme.text.primary,
-    cursor: 'pointer',
-    fontSize: '13px'
-  },
   captionSection: {
     marginBottom: '20px'
   },
@@ -671,37 +607,6 @@ const getStyles = (theme) => ({
     fontSize: '14px',
     resize: 'vertical',
     outline: 'none'
-  },
-  postActions: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px'
-  },
-  postButton: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    width: '100%',
-    padding: '14px',
-    backgroundColor: theme.accent.primary,
-    border: 'none',
-    borderRadius: '8px',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '600'
-  },
-  doneButton: {
-    width: '100%',
-    padding: '14px',
-    backgroundColor: theme.bg.surface,
-    border: `1px solid ${theme.bg.elevated}`,
-    borderRadius: '8px',
-    color: theme.text.primary,
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '500'
   },
   doneTitle: {
     fontSize: '20px',
@@ -746,29 +651,6 @@ const getStyles = (theme) => ({
     fontSize: '13px',
     margin: '0 0 12px 0',
     lineHeight: '1.5'
-  },
-  errorActions: {
-    display: 'flex',
-    gap: '8px'
-  },
-  retryButton: {
-    padding: '8px 16px',
-    backgroundColor: theme.bg.elevated,
-    border: 'none',
-    borderRadius: '6px',
-    color: theme.text.primary,
-    fontSize: '12px',
-    cursor: 'pointer'
-  },
-  retryPrimaryButton: {
-    padding: '8px 16px',
-    backgroundColor: '#dc2626',
-    border: 'none',
-    borderRadius: '6px',
-    color: '#fff',
-    fontSize: '12px',
-    fontWeight: '600',
-    cursor: 'pointer'
   },
   // UI-50: Stepper styles
   stepper: {

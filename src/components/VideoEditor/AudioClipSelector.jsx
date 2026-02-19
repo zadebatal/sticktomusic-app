@@ -4,6 +4,9 @@ import log from '../../utils/logger';
 import useIsMobile from '../../hooks/useIsMobile';
 import usePointerDrag from '../../hooks/usePointerDrag';
 import { useTheme } from '../../contexts/ThemeContext';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
+import { FeatherX, FeatherCheck, FeatherSave } from '@subframe/core';
 
 /**
  * AudioClipSelector - Professional dual-playhead audio region selector
@@ -630,14 +633,7 @@ const AudioClipSelector = ({
               {!isMobile && <p style={styles.subtitle}>Drag the green (IN) and orange (OUT) markers, or press I/O keys</p>}
             </div>
           </div>
-          <button style={{
-            ...styles.closeButton,
-            ...(isMobile ? { width: '44px', height: '44px' } : {})
-          }} onClick={onCancel}>
-            <svg width={isMobile ? 24 : 20} height={isMobile ? 24 : 20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
+          <IconButton size={isMobile ? "medium" : "small"} icon={<FeatherX />} onClick={onCancel} />
         </div>
 
         {/* Quick Presets */}
@@ -854,21 +850,12 @@ const AudioClipSelector = ({
           }}>
             Selected: <strong>{formatTime(selectedDuration)}</strong> of {formatTime(duration)}
           </div>
-          <div style={{
-            ...styles.footerActions,
-            ...(isMobile ? {
-              width: '100%',
-              flexDirection: 'column',
-              gap: '8px'
-            } : {})
-          }}>
-            <button style={{
-              ...styles.cancelButton,
-              ...(isMobile ? { width: '100%', padding: '14px', fontSize: '15px' } : {})
-            }} onClick={onCancel}>Cancel</button>
+          <div className={`flex gap-2 ${isMobile ? 'w-full flex-col' : ''}`}>
+            <Button variant="neutral-secondary" className={isMobile ? 'w-full' : ''} onClick={onCancel}>Cancel</Button>
             {onSaveClip && !isMobile && (
-              <button
-                style={styles.saveClipButton}
+              <Button
+                variant="brand-primary"
+                icon={<FeatherSave />}
                 onClick={() => {
                   const baseName = audioName || 'Audio';
                   const defaultName = `${baseName.replace(/\.[^/.]+$/, '')} (${formatTimeShort(inPoint)}-${formatTimeShort(outPoint)})`;
@@ -876,14 +863,13 @@ const AudioClipSelector = ({
                   setShowSaveClipModal(true);
                 }}
               >
-                💾 Save Clip
-              </button>
+                Save Clip
+              </Button>
             )}
-            <button
-              style={{
-                ...styles.saveButton,
-                ...(isMobile ? { width: '100%', padding: '14px', fontSize: '15px' } : {})
-              }}
+            <Button
+              variant="brand-primary"
+              className={isMobile ? 'w-full' : ''}
+              icon={<FeatherCheck />}
               disabled={isTrimming}
               onClick={() => {
                 // Check if audio was trimmed (not using full track)
@@ -908,11 +894,8 @@ const AudioClipSelector = ({
                 }
               }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
               Save
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -946,12 +929,14 @@ const AudioClipSelector = ({
                   }
                 }}
               />
-              <div style={styles.saveClipActions}>
-                <button style={styles.cancelButton} onClick={() => setShowSaveClipModal(false)}>
+              <div className="flex justify-end gap-2">
+                <Button variant="neutral-secondary" size="small" onClick={() => setShowSaveClipModal(false)}>
                   Cancel
-                </button>
-                <button
-                  style={styles.saveButton}
+                </Button>
+                <Button
+                  variant="brand-primary"
+                  size="small"
+                  icon={<FeatherSave />}
                   onClick={() => {
                     if (clipName.trim()) {
                       const clipData = {
@@ -969,7 +954,7 @@ const AudioClipSelector = ({
                   disabled={!clipName.trim()}
                 >
                   Save to Library
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -987,9 +972,9 @@ const AudioClipSelector = ({
               <p style={styles.useClipQuestion}>
                 Would you like to use this clip now?
               </p>
-              <div style={styles.useClipActions}>
-                <button
-                  style={styles.laterButton}
+              <div className="flex gap-3 justify-center">
+                <Button
+                  variant="neutral-secondary"
                   onClick={() => {
                     setShowUseClipPrompt(false);
                     setSavedClipData(null);
@@ -997,9 +982,9 @@ const AudioClipSelector = ({
                   }}
                 >
                   Save More Clips
-                </button>
-                <button
-                  style={styles.useNowButton}
+                </Button>
+                <Button
+                  variant="brand-primary"
                   onClick={() => {
                     // Use the saved clip's trim points - pass as object matching expected format
                     onSave({
@@ -1011,8 +996,8 @@ const AudioClipSelector = ({
                     setSavedClipData(null);
                   }}
                 >
-                  ✨ Use Now
-                </button>
+                  Use Now
+                </Button>
               </div>
             </div>
           </div>
@@ -1054,56 +1039,37 @@ const AudioClipSelector = ({
                   {trimProgress || 'Trimming...'}
                 </p>
               )}
-              <div style={{
-                ...styles.saveTrimmedActions,
-                ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
-              }}>
-                <button
-                  style={{
-                    ...styles.skipButton,
-                    ...(isMobile ? { width: '100%', padding: '14px', fontSize: '15px' } : {}),
-                    ...(isTrimming ? { opacity: 0.5, cursor: 'not-allowed' } : {})
-                  }}
+              <div className={`flex justify-end gap-3 ${isMobile ? 'flex-col' : ''}`}>
+                <Button
+                  variant="neutral-secondary"
+                  className={isMobile ? 'w-full' : ''}
                   disabled={isTrimming}
                   onClick={() => {
                     setShowSaveTrimmedPrompt(false);
                   }}
                 >
                   Cancel
-                </button>
+                </Button>
                 {db && artistId && (
-                  <button
-                    style={{
-                      padding: '12px 20px',
-                      border: 'none',
-                      borderRadius: '8px',
-                      background: 'linear-gradient(135deg, #10b981, #059669)',
-                      color: '#fff',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      cursor: (trimmedClipName.trim() && !isTrimming) ? 'pointer' : 'not-allowed',
-                      opacity: (trimmedClipName.trim() && !isTrimming) ? 1 : 0.5,
-                      flex: isMobile ? 'none' : 1,
-                      ...(isMobile ? { width: '100%', padding: '14px', fontSize: '15px' } : {})
-                    }}
+                  <Button
+                    variant="brand-secondary"
+                    className={isMobile ? 'w-full' : 'flex-1'}
+                    icon={<FeatherSave />}
                     onClick={() => {
                       if (trimmedClipName.trim() && !isTrimming) {
                         handleSaveToLibrary(trimmedClipName.trim());
                       }
                     }}
                     disabled={!trimmedClipName.trim() || isTrimming}
-                    title="Save trimmed audio to your library for future use"
+                    loading={isTrimming}
                   >
-                    {isTrimming ? '💾 Saving...' : '💾 Save to Library'}
-                  </button>
+                    Save to Library
+                  </Button>
                 )}
-                <button
-                  style={{
-                    ...styles.saveButton,
-                    opacity: (trimmedClipName.trim() && !isTrimming) ? 1 : 0.5,
-                    cursor: (trimmedClipName.trim() && !isTrimming) ? 'pointer' : 'not-allowed',
-                    ...(isMobile ? { width: '100%', padding: '14px', fontSize: '15px' } : {})
-                  }}
+                <Button
+                  variant="brand-primary"
+                  className={isMobile ? 'w-full' : ''}
+                  icon={<FeatherCheck />}
                   onClick={() => {
                     if (trimmedClipName.trim() && !isTrimming) {
                       handleTrimAndUse(trimmedClipName.trim());
@@ -1112,8 +1078,8 @@ const AudioClipSelector = ({
                   }}
                   disabled={!trimmedClipName.trim() || isTrimming}
                 >
-                  {isTrimming ? '⏳ Trimming...' : '✂️ Trim & Use'}
-                </button>
+                  {isTrimming ? 'Trimming...' : 'Trim & Use'}
+                </Button>
               </div>
             </div>
           </div>
@@ -1167,18 +1133,6 @@ const getStyles = (theme) => ({
     fontSize: '13px',
     color: theme.text.secondary,
     margin: '4px 0 0 0'
-  },
-  closeButton: {
-    width: '36px',
-    height: '36px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.bg.surface,
-    border: 'none',
-    borderRadius: '8px',
-    color: theme.text.secondary,
-    cursor: 'pointer'
   },
   presets: {
     display: 'flex',
@@ -1397,42 +1351,6 @@ const getStyles = (theme) => ({
     fontSize: '13px',
     color: theme.text.secondary
   },
-  footerActions: {
-    display: 'flex',
-    gap: '8px'
-  },
-  cancelButton: {
-    padding: '10px 20px',
-    backgroundColor: theme.bg.surface,
-    border: 'none',
-    borderRadius: '8px',
-    color: theme.text.primary,
-    fontSize: '14px',
-    cursor: 'pointer'
-  },
-  saveButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '10px 20px',
-    backgroundColor: '#22c55e',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#fff',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer'
-  },
-  saveClipButton: {
-    padding: '10px 20px',
-    backgroundColor: theme.accent.primary,
-    border: 'none',
-    borderRadius: '8px',
-    color: '#fff',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer'
-  },
   saveClipOverlay: {
     position: 'absolute',
     inset: 0,
@@ -1472,11 +1390,6 @@ const getStyles = (theme) => ({
     outline: 'none',
     boxSizing: 'border-box'
   },
-  saveClipActions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '8px'
-  },
   // Use Clip Now Modal styles
   useClipModal: {
     backgroundColor: theme.bg.input,
@@ -1506,31 +1419,6 @@ const getStyles = (theme) => ({
     color: theme.text.secondary,
     margin: '0 0 20px 0'
   },
-  useClipActions: {
-    display: 'flex',
-    gap: '12px',
-    justifyContent: 'center'
-  },
-  laterButton: {
-    padding: '12px 20px',
-    backgroundColor: theme.bg.surface,
-    border: `1px solid ${theme.bg.elevated}`,
-    borderRadius: '8px',
-    color: theme.text.secondary,
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '500'
-  },
-  useNowButton: {
-    padding: '12px 24px',
-    background: 'linear-gradient(135deg, #10b981, #059669)',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '600'
-  },
   // Save Trimmed Modal styles
   saveTrimmedModal: {
     backgroundColor: theme.bg.input,
@@ -1558,22 +1446,6 @@ const getStyles = (theme) => ({
     margin: '0 0 20px 0',
     fontStyle: 'italic'
   },
-  saveTrimmedActions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '12px'
-  },
-  skipButton: {
-    padding: '12px 20px',
-    backgroundColor: 'transparent',
-    border: `1px solid ${theme.text.muted}`,
-    borderRadius: '8px',
-    color: theme.text.secondary,
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '500',
-    transition: 'all 0.15s'
-  }
 });
 
 // Add keyframes for spinner
