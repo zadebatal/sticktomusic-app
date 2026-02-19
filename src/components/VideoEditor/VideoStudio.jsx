@@ -19,6 +19,8 @@ import {
   saveArtistCategories, loadArtistCategories, saveArtistPresets, loadArtistPresets,
   setLastArtistId, hasLegacyData, migrateToArtistStorage
 } from '../../services/storageService';
+import { IconButton } from '../../ui/components/IconButton';
+import { FeatherX } from '@subframe/core';
 import {
   getOnboardingStatus,
   completeOnboarding,
@@ -2314,44 +2316,26 @@ const VideoStudio = ({
           ...styles.headerRight,
           ...(isMobile ? { order: 2, marginLeft: 'auto' } : {})
         }}>
-          <button
+          <IconButton
+            size={isMobile ? "medium" : "small"}
+            icon={<FeatherX />}
             onClick={() => {
-              // Navigate back within studio before exiting entirely
               if (showEditor || showSlideshowEditor) {
-                // Close editor, go back to content library / dashboard
                 setShowEditor(false);
                 setShowSlideshowEditor(false);
                 const targetView = studioMode === 'slideshows' ? 'slideshows' : 'library';
                 setCurrentView(targetView);
               } else if (currentView === 'library' || currentView === 'slideshows') {
-                // Go back to studio home
                 setCurrentView('home');
                 setStudioMode(null);
               } else if (studioMode) {
-                // Go back to studio home
                 setCurrentView('home');
                 setStudioMode(null);
               } else {
-                // Already at home, actually close the studio
                 onClose();
               }
             }}
-            style={{
-              ...styles.closeButton,
-              ...(isMobile ? {
-                width: '44px',
-                height: '44px',
-                minWidth: '44px',
-                minHeight: '44px',
-                zIndex: 10
-              } : {})
-            }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
+          />
         </div>
       </header>
 
@@ -2924,18 +2908,6 @@ const getStyles = (theme) => ({
   breadcrumbQuickLinkActive: {
     color: theme.accent.hover,
     backgroundColor: 'rgba(99, 102, 241, 0.15)'
-  },
-  closeButton: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '36px',
-    height: '36px',
-    backgroundColor: 'transparent',
-    border: 'none',
-    color: theme.text.secondary,
-    cursor: 'pointer',
-    borderRadius: '8px'
   },
   main: {
     flex: 1,

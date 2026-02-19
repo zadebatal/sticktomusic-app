@@ -2,6 +2,9 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import log from '../../utils/logger';
 import useIsMobile from '../../hooks/useIsMobile';
 import { useTheme } from '../../contexts/ThemeContext';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
+import { FeatherX, FeatherPlus, FeatherTrash2, FeatherScissors, FeatherSave } from '@subframe/core';
 
 /**
  * WordTimeline - Flowstage-inspired word timing editor
@@ -1126,14 +1129,7 @@ const WordTimeline = ({
             ...styles.title,
             ...(isMobile ? { fontSize: '16px' } : {})
           }}>Word timeline</h2>
-          <button style={{
-            ...styles.closeButton,
-            ...(isMobile ? { width: '40px', height: '40px' } : {})
-          }} onClick={onClose}>
-            <svg width={isMobile ? 24 : 20} height={isMobile ? 24 : 20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
+          <IconButton size={isMobile ? "medium" : "small"} icon={<FeatherX />} onClick={onClose} />
         </div>
 
         <div style={{
@@ -1160,49 +1156,16 @@ const WordTimeline = ({
               flexWrap: 'nowrap'
             } : {})
           }}>
-            <button
-              style={{
-                ...styles.toolButton,
-                opacity: hasWordAtPlayhead ? 1 : 0.5,
-                cursor: hasWordAtPlayhead ? 'pointer' : 'not-allowed',
-                ...(isMobile ? { padding: '10px 14px', fontSize: '12px', whiteSpace: 'nowrap' } : {})
-              }}
-              onClick={handleCombineWords}
-              disabled={!hasWordAtPlayhead}
-              title={hasWordAtPlayhead ? 'Combine with next word' : 'Move playhead over a word'}
-            >
+            <Button variant="neutral-secondary" size="small" onClick={handleCombineWords} disabled={!hasWordAtPlayhead}>
               Combine
-            </button>
-            <button
-              style={{
-                ...styles.toolButton,
-                opacity: hasWordAtPlayhead ? 1 : 0.5,
-                cursor: hasWordAtPlayhead ? 'pointer' : 'not-allowed',
-                ...(isMobile ? { padding: '10px 14px', fontSize: '12px', whiteSpace: 'nowrap' } : {})
-              }}
-              onClick={handleCutWord}
-              disabled={!hasWordAtPlayhead}
-              title={hasWordAtPlayhead ? 'Cut word at playhead (keeps text)' : 'Move playhead over a word'}
-            >
-              ✂️ Cut
-            </button>
-            <button style={{
-              ...styles.toolButtonPrimary,
-              ...(isMobile ? { padding: '10px 16px', fontSize: '12px' } : {})
-            }} onClick={handleAddWord}>Add</button>
-            <button
-              style={{
-                ...styles.toolButton,
-                opacity: hasWordAtPlayhead ? 1 : 0.5,
-                cursor: hasWordAtPlayhead ? 'pointer' : 'not-allowed',
-                ...(isMobile ? { padding: '10px 14px', fontSize: '12px', whiteSpace: 'nowrap' } : {})
-              }}
-              onClick={handleDeleteWord}
-              disabled={!hasWordAtPlayhead}
-              title={hasWordAtPlayhead ? 'Delete word' : 'Move playhead over a word'}
-            >
+            </Button>
+            <Button variant="neutral-secondary" size="small" icon={<FeatherScissors />} onClick={handleCutWord} disabled={!hasWordAtPlayhead}>
+              Cut
+            </Button>
+            <Button variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={handleAddWord}>Add</Button>
+            <Button variant="destructive-secondary" size="small" icon={<FeatherTrash2 />} onClick={handleDeleteWord} disabled={!hasWordAtPlayhead}>
               Delete
-            </button>
+            </Button>
             {!isMobile && (
               <div style={styles.zoomControl}>
                 <span>Zoom</span>
@@ -1239,7 +1202,7 @@ const WordTimeline = ({
               >AA</button>
             </div>
             {!isMobile && (
-              <button style={styles.legatoButton} onClick={handleMakeLegato}>Make legato</button>
+              <Button variant="neutral-tertiary" size="small" onClick={handleMakeLegato}>Make legato</Button>
             )}
             {!isMobile && (
               <label style={styles.censorLabel}>
@@ -1569,18 +1532,15 @@ const WordTimeline = ({
           ...styles.footer,
           ...(isMobile ? { padding: '12px 16px' } : {})
         }}>
-          <button
-            style={{
-              ...styles.saveButton,
-              ...(isMobile ? { width: '100%', padding: '14px 20px', fontSize: '15px' } : {})
-            }}
+          <Button
+            variant="brand-primary"
+            icon={<FeatherSave />}
+            className={isMobile ? "w-full" : ""}
             onClick={() => {
-              // If loaded from bank, save back to that entry
               if (loadedBankLyricId && onSaveToBank) {
                 onSaveToBank(loadedBankLyricId, words);
                 onClose();
               } else if (words.length > 0 && onAddToBank) {
-                // Not from bank but has words - prompt to save to bank
                 setSaveToBankPrompt({ show: true, name: '' });
               } else {
                 onClose();
@@ -1588,7 +1548,7 @@ const WordTimeline = ({
             }}
           >
             Save word timings
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -1607,8 +1567,8 @@ const WordTimeline = ({
               ...styles.confirmButtons,
               ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
             }}>
-              <button style={styles.confirmCancel} onClick={cancelDelete}>Cancel</button>
-              <button style={styles.confirmDelete} onClick={confirmDelete}>Delete</button>
+              <Button variant="neutral-secondary" onClick={cancelDelete}>Cancel</Button>
+              <Button variant="destructive-primary" icon={<FeatherTrash2 />} onClick={confirmDelete}>Delete</Button>
             </div>
           </div>
         </div>
@@ -1660,25 +1620,20 @@ const WordTimeline = ({
               ...styles.confirmButtons,
               ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
             }}>
-              <button
-                style={{
-                  ...styles.confirmCancel,
-                  ...(isMobile ? { width: '100%', padding: '14px' } : {})
-                }}
+              <Button
+                variant="neutral-secondary"
+                className={isMobile ? "w-full" : ""}
                 onClick={() => {
                   setSaveToBankPrompt({ show: false, name: '' });
                   onClose();
                 }}
               >
                 Skip
-              </button>
-              <button
-                style={{
-                  ...styles.saveButton,
-                  opacity: saveToBankPrompt.name.trim() ? 1 : 0.5,
-                  cursor: saveToBankPrompt.name.trim() ? 'pointer' : 'not-allowed',
-                  ...(isMobile ? { width: '100%', padding: '14px' } : {})
-                }}
+              </Button>
+              <Button
+                variant="brand-primary"
+                icon={<FeatherSave />}
+                className={isMobile ? "w-full" : ""}
                 disabled={!saveToBankPrompt.name.trim()}
                 onClick={() => {
                   if (saveToBankPrompt.name.trim()) {
@@ -1694,7 +1649,7 @@ const WordTimeline = ({
                 }}
               >
                 Save to Bank
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1715,11 +1670,9 @@ const WordTimeline = ({
               }}
               placeholder="Enter word text..."
               style={{ width: '100%', background: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, borderRadius: 8, padding: '10px 12px', color: theme.text.primary, fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-              <button onClick={() => setShowWordPrompt(false)}
-                style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${theme.bg.elevated}`, background: 'transparent', color: theme.text.secondary, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={confirmAddWord}
-                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: theme.accent.primary, color: '#fff', cursor: 'pointer', fontWeight: 600 }}>Add</button>
+            <div className="flex gap-2 justify-end mt-3">
+              <Button variant="neutral-secondary" onClick={() => setShowWordPrompt(false)}>Cancel</Button>
+              <Button variant="brand-primary" icon={<FeatherPlus />} onClick={confirmAddWord}>Add</Button>
             </div>
           </div>
         </div>
@@ -1733,20 +1686,16 @@ const getStyles = (theme) => ({
   modal: { width: '95%', maxWidth: '1200px', maxHeight: '90vh', backgroundColor: theme.bg.input, borderRadius: '16px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: `1px solid ${theme.bg.surface}` },
   title: { margin: 0, fontSize: '18px', fontWeight: '600', color: theme.text.primary },
-  closeButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', backgroundColor: theme.bg.surface, border: 'none', borderRadius: '6px', color: theme.text.secondary, cursor: 'pointer' },
   toolbar: { display: 'flex', flexDirection: 'column', gap: '12px', padding: '12px 20px', borderBottom: `1px solid ${theme.bg.surface}`, backgroundColor: theme.bg.page },
   timeDisplay: { display: 'flex', alignItems: 'baseline', gap: '4px' },
   currentTimeText: { fontSize: '20px', fontWeight: '600', color: theme.text.primary, fontFamily: 'monospace' },
   totalTime: { fontSize: '16px', color: theme.text.muted, fontFamily: 'monospace' },
   originalTime: { fontSize: '12px', color: theme.text.muted, marginLeft: '8px' },
   toolbarButtons: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' },
-  toolButton: { padding: '6px 12px', backgroundColor: theme.bg.surface, border: `1px solid ${theme.bg.elevated}`, borderRadius: '6px', fontSize: '13px', color: theme.text.primary, cursor: 'pointer' },
-  toolButtonPrimary: { padding: '6px 12px', backgroundColor: theme.accent.primary, border: 'none', borderRadius: '6px', fontSize: '13px', color: '#fff', cursor: 'pointer' },
   zoomControl: { display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '8px', fontSize: '13px', color: theme.text.secondary },
   zoomSlider: { width: '80px', accentColor: theme.accent.primary },
   caseButtons: { display: 'flex', border: `1px solid ${theme.bg.elevated}`, borderRadius: '6px', overflow: 'hidden' },
   caseButton: { padding: '6px 10px', backgroundColor: theme.bg.surface, border: 'none', borderRight: `1px solid ${theme.bg.elevated}`, fontSize: '13px', color: theme.text.primary, cursor: 'pointer' },
-  legatoButton: { padding: '6px 12px', backgroundColor: theme.bg.surface, border: `1px solid ${theme.bg.elevated}`, borderRadius: '6px', fontSize: '13px', color: theme.text.primary, cursor: 'pointer' },
   censorLabel: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: theme.text.secondary, cursor: 'pointer' },
   selectionIndicator: { display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', backgroundColor: 'rgba(139, 92, 246, 0.2)', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '6px', fontSize: '12px', fontWeight: '500', color: theme.accent.hover },
   clearSelectionBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', backgroundColor: theme.border.subtle, border: 'none', borderRadius: '6px', color: theme.accent.hover, cursor: 'pointer', padding: 0 },
@@ -1789,15 +1738,12 @@ const getStyles = (theme) => ({
   wordEditLabel: { width: '60px', fontSize: '12px', color: theme.text.secondary },
   wordEditInput: { flex: 1, padding: '6px 10px', backgroundColor: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, borderRadius: '6px', fontSize: '12px', color: theme.text.primary, outline: 'none' },
   footer: { display: 'flex', justifyContent: 'flex-end', padding: '16px 20px', borderTop: `1px solid ${theme.bg.surface}`, backgroundColor: theme.bg.page },
-  saveButton: { padding: '10px 20px', backgroundColor: theme.accent.primary, border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', color: '#fff', cursor: 'pointer' },
   // Delete confirmation dialog
   confirmOverlay: { position: 'absolute', inset: 0, backgroundColor: theme.overlay.heavy, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200 },
   confirmDialog: { backgroundColor: theme.bg.input, borderRadius: '12px', padding: '24px', maxWidth: '320px', textAlign: 'center' },
   confirmTitle: { margin: '0 0 12px 0', fontSize: '16px', fontWeight: '600', color: theme.text.primary },
   confirmMessage: { margin: '0 0 20px 0', fontSize: '14px', color: theme.text.secondary },
   confirmButtons: { display: 'flex', gap: '12px', justifyContent: 'center' },
-  confirmCancel: { padding: '8px 16px', backgroundColor: theme.bg.elevated, border: 'none', borderRadius: '6px', fontSize: '13px', color: theme.text.primary, cursor: 'pointer' },
-  confirmDelete: { padding: '8px 16px', backgroundColor: '#ef4444', border: 'none', borderRadius: '6px', fontSize: '13px', color: '#fff', cursor: 'pointer' }
 });
 
 export default WordTimeline;
