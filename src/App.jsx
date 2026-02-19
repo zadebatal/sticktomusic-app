@@ -7975,6 +7975,32 @@ const StickToMusic = () => {
       <ToastContainer />
       <UndoToast />
       <OnboardingTooltip />
+
+      {/* Dev Environment Banner — helps QA agents identify which server they're on */}
+      {process.env.NODE_ENV === 'development' && (
+        <div style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: '28px',
+          backgroundColor: window.location.port === '3001' ? '#7c3aed' : '#0ea5e9',
+          color: '#fff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '12px',
+          fontWeight: 700,
+          letterSpacing: '0.5px',
+          zIndex: 99999,
+          fontFamily: 'monospace',
+          pointerEvents: 'none',
+        }}>
+          {window.location.port === '3001'
+            ? '◆ REDESIGN — localhost:3001 — redesign-test branch ◆'
+            : `◆ MAIN — localhost:${window.location.port || '3000'} — main branch ◆`}
+        </div>
+      )}
     </div>
   );
 };

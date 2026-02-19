@@ -417,10 +417,28 @@ const SlideshowEditor = ({
     setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
   }, [setSlides]);
 
+  // Close confirmation handler — check for unsaved work before closing
+  const handleCloseRequest = useCallback(() => {
+    const hasWork = slides.length > 0 || selectedAudio !== null || allSlideshows.length > 1;
+    if (hasWork) {
+      setShowCloseConfirm(true);
+    } else {
+      onClose?.();
+    }
+  }, [slides, selectedAudio, allSlideshows, onClose]);
+
   // Keyboard shortcut: Cmd+Z / Ctrl+Z for undo, Cmd+Shift+Z / Ctrl+Shift+Z for redo
+  // Escape key to trigger close confirmation
   // Skip if user is editing text overlays or typing in an input/textarea
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Escape key — always trigger close request
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        handleCloseRequest();
+        return;
+      }
+
       // Don't steal undo/redo from text inputs
       if (editingTextId) return;
       const tag = document.activeElement?.tagName;
@@ -437,7 +455,7 @@ const SlideshowEditor = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo, editingTextId]);
+  }, [handleUndo, handleRedo, editingTextId, handleCloseRequest]);
 
   // Image drag/resize continued state
   const [imgDragStart, setImgDragStart] = useState({ x: 0, y: 0 });
@@ -2452,13 +2470,7 @@ const SlideshowEditor = ({
             <button style={{
               ...styles.closeButton,
               ...(isMobile ? { padding: '10px' } : {})
-            }} onClick={() => {
-              if (allSlideshows.length > 1) {
-                setShowCloseConfirm(true);
-              } else {
-                onClose?.();
-              }
-            }}>
+            }} onClick={handleCloseRequest}>
               <svg width={isMobile ? 24 : 20} height={isMobile ? 24 : 20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="18" y1="6" x2="6" y2="18"/>
                 <line x1="6" y1="6" x2="18" y2="18"/>
@@ -4704,10 +4716,12 @@ const SlideshowEditor = ({
                 </svg>
               </div>
               <h3 style={{ margin: '0 0 8px', color: '#fff', fontSize: '16px', fontWeight: '600' }}>
-                You have {allSlideshows.length} unsaved slideshows
+                You have unsaved changes
               </h3>
               <p style={{ margin: '0 0 20px', color: '#9ca3af', fontSize: '13px', lineHeight: '1.5' }}>
-                Your generated variants haven't been saved yet. They'll be lost if you close now.
+                {allSlideshows.length > 1
+                  ? `Your ${allSlideshows.length} generated variants haven't been saved yet. They'll be lost if you close now.`
+                  : 'Your slideshow edits haven\'t been saved yet. They\'ll be lost if you close now.'}
               </p>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button
