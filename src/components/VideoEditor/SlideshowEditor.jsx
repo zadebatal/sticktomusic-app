@@ -3586,10 +3586,9 @@ const SlideshowEditor = ({
               <Button variant="neutral-secondary" className="flex-1" onClick={() => { setShowAudioPrompt(false); executeGeneration(); }}>
                 Skip, Generate Anyway
               </Button>
-              <button onClick={() => { setShowAudioPrompt(false); setShowAudioPicker(true); }}
-                className="flex-1 py-2.5 rounded-lg border-none bg-gradient-to-br from-orange-400 to-orange-500 text-white text-[13px] font-semibold cursor-pointer">
+              <Button variant="brand-primary" className="flex-1" onClick={() => { setShowAudioPrompt(false); setShowAudioPicker(true); }}>
                 Add Audio
-              </button>
+              </Button>
             </div>
           </div>
         </div>

@@ -2245,8 +2245,8 @@ const VideoEditorModal = ({
                     />
                     {videoLoading && !videoError && (
                       <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-[#0a0a0aff]">
-                        <div style={{ width: 32, height: 32, border: '3px solid #333', borderTopColor: '#6366f1', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                        <p style={{ color: theme.text.secondary, marginTop: 8, fontSize: 12 }}>Loading video...</p>
+                        <div className="w-8 h-8 border-[3px] border-[#333] border-t-[#6366f1] rounded-full animate-spin" />
+                        <p className="mt-2 text-xs" style={{ color: theme.text.secondary }}>Loading video...</p>
                       </div>
                     )}
                     {videoError && (
