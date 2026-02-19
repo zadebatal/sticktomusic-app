@@ -19,7 +19,7 @@ import CloudImportButton from './CloudImportButton';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
-import { FeatherArrowLeft, FeatherPlus, FeatherTrash2, FeatherDownload, FeatherEdit2, FeatherMusic, FeatherCalendar, FeatherX } from '@subframe/core';
+import { FeatherArrowLeft, FeatherPlus, FeatherTrash2, FeatherDownload, FeatherEdit2, FeatherMusic, FeatherCalendar, FeatherX, FeatherSend, FeatherUploadCloud, FeatherChevronRight } from '@subframe/core';
 
 /**
  * ContentLibrary - Shows all videos or slideshows created within a category
@@ -749,18 +749,14 @@ const ContentLibrary = ({
       {/* Scheduled Drafts Section */}
       {isDraftsView && scheduledItems.length > 0 && (
         <div style={{ borderTop: `1px solid ${theme.border.subtle}` }}>
-          <button
+          <Button
+            variant="neutral-tertiary"
             onClick={() => setShowScheduledItems(!showScheduledItems)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              padding: '12px 24px', background: 'none', border: 'none',
-              color: theme.text.secondary, cursor: 'pointer',
-              fontSize: '13px', fontWeight: '600', width: '100%'
-            }}
+            icon={<FeatherChevronRight style={{ transform: showScheduledItems ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />}
+            className="w-full justify-start px-6 py-3"
           >
-            <span style={{ transform: showScheduledItems ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', fontSize: '10px' }}>▶</span>
             Scheduled ({scheduledItems.length})
-          </button>
+          </Button>
           {showScheduledItems && (
             <div style={{
               padding: '0 24px 16px',
@@ -805,7 +801,10 @@ const ContentLibrary = ({
                       />
                     )}
                     {/* Unschedule action */}
-                    <button
+                    <Button
+                      variant="neutral-secondary"
+                      size="small"
+                      className="w-full mt-1"
                       onClick={async () => {
                         const postToRemove = postInfo || scheduledPosts.find(p => p.contentId === item.id);
                         if (postToRemove) {
@@ -818,16 +817,9 @@ const ContentLibrary = ({
                         }
                         toastSuccess('Unscheduled');
                       }}
-                      style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
-                        width: '100%', marginTop: '4px', padding: '6px', background: 'none',
-                        border: `1px solid ${theme.border.subtle}`, borderRadius: '6px',
-                        color: theme.text.secondary, cursor: 'pointer', fontSize: '11px', fontWeight: '500',
-                        minHeight: '32px'
-                      }}
                     >
                       Unschedule
-                    </button>
+                    </Button>
                   </div>
                 );
               })}
@@ -839,18 +831,14 @@ const ContentLibrary = ({
       {/* Already Posted Section */}
       {isDraftsView && postedItems.length > 0 && (
         <div style={{ borderTop: `1px solid ${theme.border.subtle}` }}>
-          <button
+          <Button
+            variant="neutral-tertiary"
             onClick={() => setShowPosted(!showPosted)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              padding: '12px 24px', background: 'none', border: 'none',
-              color: theme.text.secondary, cursor: 'pointer',
-              fontSize: '13px', fontWeight: '600', width: '100%'
-            }}
+            icon={<FeatherChevronRight style={{ transform: showPosted ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />}
+            className="w-full justify-start px-6 py-3"
           >
-            <span style={{ transform: showPosted ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', fontSize: '10px' }}>▶</span>
             Already Posted ({postedItems.length})
-          </button>
+          </Button>
           {showPosted && (
             <div style={{
               padding: '0 24px 16px',
@@ -1238,11 +1226,7 @@ const ContentLibrary = ({
               </div>
               <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                 <Button variant="brand-secondary" size="small" icon={<FeatherEdit2 />} onClick={() => { setPreviewingSlideshow(null); onEditSlideshow?.(previewingSlideshow); }}>Edit</Button>
-                <button onClick={() => setPreviewingSlideshow(null)} style={{
-                  background: theme.hover.bg, border: 'none', color: theme.text.primary,
-                  borderRadius: '50%', width: isMobile ? 44 : 32, height: isMobile ? 44 : 32, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isMobile ? 22 : 18
-                }}>×</button>
+                <IconButton size={isMobile ? "medium" : "small"} icon={<FeatherX />} onClick={() => setPreviewingSlideshow(null)} />
               </div>
             </div>
             {/* Slides */}
@@ -1306,13 +1290,9 @@ const ContentLibrary = ({
             backgroundColor: theme.bg.page, overflow: 'hidden',
             boxShadow: theme.shadow
           }} onClick={e => e.stopPropagation()}>
-            <button onClick={() => setPreviewingVideo(null)} style={{
-              position: 'absolute', top: 10, right: 10, zIndex: 10,
-              background: theme.overlay.light, border: 'none', color: theme.text.primary,
-              borderRadius: '50%', width: isMobile ? 44 : 32, height: isMobile ? 44 : 32, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isMobile ? 22 : 18,
-              backdropFilter: 'blur(4px)'
-            }}>×</button>
+            <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 10 }}>
+              <IconButton size={isMobile ? "medium" : "small"} icon={<FeatherX />} onClick={() => setPreviewingVideo(null)} />
+            </div>
             {previewingVideo.cloudUrl ? (
               <video
                 src={previewingVideo.cloudUrl}
@@ -1460,18 +1440,16 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
             ...styles.videoActions,
             ...(isMobile ? { position: 'absolute', bottom: '8px', left: '8px', right: '8px', top: 'auto', justifyContent: 'center', flexWrap: 'wrap', background: theme.overlay.light, borderRadius: '6px', padding: '4px' } : {})
           }}>
-            <button style={styles.actionBtn} onClick={(e) => handleActionClick(e, onEdit)}>Edit</button>
+            <Button variant="neutral-secondary" size="small" icon={<FeatherEdit2 />} onClick={(e) => handleActionClick(e, onEdit)}>Edit</Button>
             {needsRendering ? (
-              <button
-                style={{...styles.actionBtnPost, background: '#f59e0b'}}
-                onClick={(e) => handleActionClick(e, onRender)}
-              >
-                🎬 Export
-              </button>
+              <Button variant="brand-primary" size="small" onClick={(e) => handleActionClick(e, onRender)}>🎬 Export</Button>
             ) : (
               <>
                 {video.cloudUrl && (
-                  <button
+                  <Button
+                    variant="neutral-secondary"
+                    size="small"
+                    icon={<FeatherDownload />}
                     onClick={(e) => {
                       e.stopPropagation();
                       const a = document.createElement('a');
@@ -1482,35 +1460,26 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
                       a.click();
                       document.body.removeChild(a);
                     }}
-                    style={{
-                      padding: '4px 8px', fontSize: 11, borderRadius: 4,
-                      border: '1px solid #4ade80', color: '#4ade80',
-                      background: 'transparent', cursor: 'pointer'
-                    }}
-                    title="Download rendered video"
                   >
                     Download
-                  </button>
+                  </Button>
                 )}
                 {onExportToDrive && video.cloudUrl && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onExportToDrive(); }}
+                  <Button
+                    variant="neutral-secondary"
+                    size="small"
+                    icon={<FeatherUploadCloud />}
                     disabled={isDriveExporting}
-                    style={{
-                      padding: '4px 8px', fontSize: 11, borderRadius: 4,
-                      border: '1px solid #60a5fa', color: isDriveExporting ? theme.text.muted : '#60a5fa',
-                      background: 'transparent', cursor: isDriveExporting ? 'wait' : 'pointer',
-                      opacity: isDriveExporting ? 0.6 : 1
-                    }}
-                    title="Export to Google Drive"
+                    loading={isDriveExporting}
+                    onClick={(e) => { e.stopPropagation(); onExportToDrive(); }}
                   >
                     {isDriveExporting ? 'Saving...' : 'Drive'}
-                  </button>
+                  </Button>
                 )}
-                <button style={styles.actionBtnPost} onClick={(e) => handleActionClick(e, onPost)}>Post</button>
+                <Button variant="brand-primary" size="small" icon={<FeatherSend />} onClick={(e) => handleActionClick(e, onPost)}>Post</Button>
               </>
             )}
-            <button style={styles.actionBtnDel} onClick={(e) => handleActionClick(e, onDelete)}>✕</button>
+            <IconButton size="small" icon={<FeatherTrash2 />} onClick={(e) => handleActionClick(e, onDelete)} />
           </div>
         )}
       </div>
@@ -1734,24 +1703,21 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
             ...styles.videoActions,
             ...(isMobile ? { position: 'absolute', bottom: '8px', left: '8px', right: '8px', top: 'auto', justifyContent: 'center', flexWrap: 'wrap', background: theme.overlay.light, borderRadius: '6px', padding: '4px' } : {})
           }}>
-            <button style={styles.actionBtn} onClick={(e) => handleActionClick(e, onEdit)}>Edit</button>
+            <Button variant="neutral-secondary" size="small" icon={<FeatherEdit2 />} onClick={(e) => handleActionClick(e, onEdit)}>Edit</Button>
             {onExportToDrive && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onExportToDrive(); }}
+              <Button
+                variant="neutral-secondary"
+                size="small"
+                icon={<FeatherUploadCloud />}
                 disabled={isDriveExporting}
-                style={{
-                  padding: '6px 8px', fontSize: 11, borderRadius: 4,
-                  border: '1px solid #60a5fa', color: isDriveExporting ? theme.text.muted : '#60a5fa',
-                  background: theme.overlay.light, cursor: isDriveExporting ? 'wait' : 'pointer',
-                  opacity: isDriveExporting ? 0.6 : 1, backdropFilter: 'blur(4px)'
-                }}
-                title="Export to Google Drive"
+                loading={isDriveExporting}
+                onClick={(e) => { e.stopPropagation(); onExportToDrive(); }}
               >
                 {isDriveExporting ? 'Saving...' : 'Drive'}
-              </button>
+              </Button>
             )}
-            <button style={styles.actionBtnPost} onClick={(e) => handleActionClick(e, onPost)}>Post</button>
-            <button style={styles.actionBtnDel} onClick={(e) => handleActionClick(e, onDelete)}>✕</button>
+            <Button variant="brand-primary" size="small" icon={<FeatherSend />} onClick={(e) => handleActionClick(e, onPost)}>Post</Button>
+            <IconButton size="small" icon={<FeatherTrash2 />} onClick={(e) => handleActionClick(e, onDelete)} />
           </div>
         )}
       </div>
@@ -1981,12 +1947,7 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
             </svg>
             Schedule Carousel{slideshows.length > 1 ? 's' : ''}
           </h3>
-          <button style={slideshowPostingStyles.closeBtn} onClick={onClose}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
+          <IconButton size="small" icon={<FeatherX />} onClick={onClose} />
         </div>
 
         {/* Preview */}
@@ -2102,17 +2063,17 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
         </div>
 
         {/* Actions */}
-        <div style={slideshowPostingStyles.actions}>
-          <button style={slideshowPostingStyles.cancelBtn} onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            style={slideshowPostingStyles.scheduleBtn}
+        <div className="flex justify-end gap-3" style={{ padding: '16px 20px', borderTop: `1px solid ${theme.border.subtle}` }}>
+          <Button variant="neutral-secondary" onClick={onClose}>Cancel</Button>
+          <Button
+            variant="brand-primary"
+            icon={<FeatherCalendar />}
             onClick={handleSchedule}
             disabled={isScheduling || !selectedHandle}
+            loading={isScheduling}
           >
             {isScheduling ? (exportProgress || 'Scheduling...') : `Schedule ${slideshows.length} Carousel${slideshows.length > 1 ? 's' : ''}`}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -2156,19 +2117,6 @@ const getSlideshowPostingStyles = (theme) => ({
     fontSize: '18px',
     fontWeight: '600',
     color: theme.text.primary
-  },
-  closeBtn: {
-    padding: '8px',
-    minWidth: '44px',
-    minHeight: '44px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-    border: 'none',
-    color: theme.text.secondary,
-    cursor: 'pointer',
-    borderRadius: '8px'
   },
   preview: {
     backgroundColor: theme.hover.bg,
@@ -2271,32 +2219,6 @@ const getSlideshowPostingStyles = (theme) => ({
     fontSize: '14px',
     boxSizing: 'border-box'
   },
-  actions: {
-    display: 'flex',
-    gap: '12px',
-    marginTop: '20px'
-  },
-  cancelBtn: {
-    flex: 1,
-    padding: '12px',
-    backgroundColor: 'transparent',
-    border: `1px solid ${theme.text.muted}`,
-    borderRadius: '8px',
-    color: theme.text.secondary,
-    fontSize: '14px',
-    cursor: 'pointer'
-  },
-  scheduleBtn: {
-    flex: 1,
-    padding: '12px',
-    backgroundColor: '#22c55e',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#fff',
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer'
-  }
 });
 
 const getStyles = (theme) => ({
@@ -2333,9 +2255,6 @@ const getStyles = (theme) => ({
   videoThumbPlaceholder: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   textOverlay: { position: 'absolute', bottom: '40%', left: '50%', transform: 'translateX(-50%)', padding: '8px 16px', backgroundColor: theme.overlay.light, borderRadius: '4px', color: theme.text.primary, fontSize: '12px', fontWeight: '500' },
   videoActions: { position: 'absolute', top: '8px', right: '8px', display: 'flex', gap: '6px' },
-  actionBtn: { padding: '8px 12px', minHeight: '36px', backgroundColor: theme.bg.surface, border: 'none', borderRadius: '6px', color: theme.text.primary, cursor: 'pointer', fontSize: '12px', fontWeight: '500' },
-  actionBtnPost: { padding: '8px 14px', minHeight: '36px', backgroundColor: theme.accent.primary, border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: '600' },
-  actionBtnDel: { padding: '8px 12px', minHeight: '36px', backgroundColor: '#dc2626', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '12px' },
   statusBadge: { padding: '10px 12px', fontSize: '12px', fontWeight: '500', textAlign: 'center' },
   statusDraft: { backgroundColor: theme.bg.surface, color: theme.text.secondary },
   statusApproved: { backgroundColor: '#065f46', color: '#34d399' },

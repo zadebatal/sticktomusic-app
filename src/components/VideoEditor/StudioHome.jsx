@@ -24,6 +24,9 @@ import LyricBank from './LyricBank';
 import CloudImportButton from './CloudImportButton';
 import TextBankPanel from './TextBankPanel';
 import { useToast, ConfirmDialog } from '../ui';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
+import { FeatherX, FeatherTrash2, FeatherPlus, FeatherEye, FeatherCalendar, FeatherFilm, FeatherImage } from '@subframe/core';
 import {
   getLibrary,
   getCollections,
@@ -1521,25 +1524,6 @@ const StudioHome = ({
       flexWrap: 'wrap',
       ...(isMobile ? { justifyContent: 'stretch' } : {})
     },
-    actionButton: {
-      padding: isMobile ? '12px 16px' : '10px 24px',
-      borderRadius: '8px',
-      fontSize: isMobile ? '13px' : '14px',
-      fontWeight: '500',
-      cursor: 'pointer',
-      transition: 'all 0.2s',
-      ...(isMobile ? { flex: '1 1 auto', minHeight: '44px', textAlign: 'center' } : {})
-    },
-    primaryButton: {
-      backgroundColor: theme.accent.primary,
-      border: 'none',
-      color: theme.text.primary
-    },
-    secondaryButton: {
-      backgroundColor: 'transparent',
-      border: `1px solid ${theme.border.default}`,
-      color: theme.text.primary
-    },
     uploadOverlay: {
       position: 'fixed',
       inset: 0,
@@ -1926,103 +1910,51 @@ const StudioHome = ({
                   {selectedMedia.videos.length} clips selected
                   {selectedMedia.videos.length > 0 && (
                     <>
-                      <button
-                        onClick={() => setSelectedMedia(prev => ({ ...prev, videos: [] }))}
-                        style={{
-                          background: 'none',
-                          border: '1px solid rgba(255,255,255,0.3)',
-                          color: 'rgba(255,255,255,0.7)',
-                          fontSize: '11px',
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          marginLeft: '8px'
-                        }}
-                      >
+                      <Button variant="neutral-tertiary" size="small" className="ml-2" onClick={() => setSelectedMedia(prev => ({ ...prev, videos: [] }))}>
                         Deselect All
-                      </button>
-                      <button
-                        onClick={() => handleDeleteSelected('videos')}
-                        style={{
-                          background: 'none',
-                          border: '1px solid rgba(239,68,68,0.5)',
-                          color: '#ef4444',
-                          fontSize: '11px',
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          marginLeft: '4px'
-                        }}
-                      >
+                      </Button>
+                      <Button variant="destructive-secondary" size="small" className="ml-1" icon={<FeatherTrash2 />} onClick={() => handleDeleteSelected('videos')}>
                         Delete {selectedMedia.videos.length}
-                      </button>
+                      </Button>
                     </>
                   )}
-                  <button
-                    onClick={() => handleDeleteAll('videos')}
-                    style={{
-                      background: 'none',
-                      border: '1px solid rgba(239,68,68,0.3)',
-                      color: 'rgba(239,68,68,0.6)',
-                      fontSize: '11px',
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      marginLeft: '8px'
-                    }}
-                  >
+                  <Button variant="destructive-secondary" size="small" className="ml-2" onClick={() => handleDeleteAll('videos')}>
                     Delete All
-                  </button>
+                  </Button>
                 </div>
                 <div style={styles.actionButtons}>
                   {draftVideos.length > 0 && (
-                    <button
-                      style={{...styles.actionButton, ...styles.secondaryButton}}
-                      onClick={() => onViewContent?.({ type: 'videos' })}
-                    >
+                    <Button variant="neutral-secondary" size="small" icon={<FeatherEye />} onClick={() => onViewContent?.({ type: 'videos' })}>
                       View Drafts ({draftVideos.length})
-                    </button>
+                    </Button>
                   )}
-                  <button
-                    style={{...styles.actionButton, ...styles.secondaryButton}}
-                    onClick={() => onViewContent?.({ type: 'videos' })}
-                  >
+                  <Button variant="neutral-secondary" size="small" icon={<FeatherEye />} onClick={() => onViewContent?.({ type: 'videos' })}>
                     View Library
-                  </button>
+                  </Button>
                   {onViewScheduling && (
-                    <button
-                      style={{...styles.actionButton, ...styles.secondaryButton, borderColor: theme.accent.primary, color: theme.accent.primary}}
-                      onClick={onViewScheduling}
-                    >
+                    <Button variant="neutral-secondary" size="small" icon={<FeatherCalendar />} onClick={onViewScheduling}>
                       Scheduled Posts
-                    </button>
+                    </Button>
                   )}
                   {onImportFromDrive && (
-                    <button
-                      style={{...styles.actionButton, ...styles.secondaryButton, borderColor: '#10b981', color: '#6ee7b7'}}
-                      onClick={onImportFromDrive}
-                    >
+                    <Button variant="neutral-secondary" size="small" onClick={onImportFromDrive}>
                       {driveConnected ? 'Import from Drive' : 'Connect Drive'}
-                    </button>
+                    </Button>
                   )}
                   {onExportToDrive && selectedMedia.videos.length > 0 && driveConnected && (
-                    <button
-                      style={{...styles.actionButton, ...styles.secondaryButton, borderColor: '#10b981', color: '#6ee7b7'}}
-                      onClick={() => onExportToDrive(selectedMedia.videos)}
-                    >
+                    <Button variant="neutral-secondary" size="small" onClick={() => onExportToDrive(selectedMedia.videos)}>
                       Export to Drive
-                    </button>
+                    </Button>
                   )}
-                  <button
-                    style={{
-                      ...styles.actionButton,
-                      ...styles.primaryButton,
-                      opacity: selectedMedia.videos.length === 0 ? 0.5 : 1
-                    }}
+                  <Button
+                    variant="brand-primary"
+                    size="small"
+                    icon={<FeatherFilm />}
+                    disabled={selectedMedia.videos.length === 0}
                     onClick={() => handleLaunchVideoEditor()}
                   >
                     Create Video
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -2129,78 +2061,35 @@ const StudioHome = ({
                   {selectedMedia.images.length} images selected
                   {selectedMedia.images.length > 0 && (
                     <>
-                      <button
-                        onClick={() => setSelectedMedia(prev => ({ ...prev, images: [] }))}
-                        style={{
-                          background: 'none',
-                          border: '1px solid rgba(255,255,255,0.3)',
-                          color: 'rgba(255,255,255,0.7)',
-                          fontSize: '11px',
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          marginLeft: '8px'
-                        }}
-                      >
+                      <Button variant="neutral-tertiary" size="small" className="ml-2" onClick={() => setSelectedMedia(prev => ({ ...prev, images: [] }))}>
                         Deselect All
-                      </button>
-                      <button
-                        onClick={() => handleDeleteSelected('images')}
-                        style={{
-                          background: 'none',
-                          border: '1px solid rgba(239,68,68,0.5)',
-                          color: '#ef4444',
-                          fontSize: '11px',
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          marginLeft: '4px'
-                        }}
-                      >
+                      </Button>
+                      <Button variant="destructive-secondary" size="small" className="ml-1" icon={<FeatherTrash2 />} onClick={() => handleDeleteSelected('images')}>
                         Delete {selectedMedia.images.length}
-                      </button>
+                      </Button>
                     </>
                   )}
-                  <button
-                    onClick={() => handleDeleteAll('images')}
-                    style={{
-                      background: 'none',
-                      border: '1px solid rgba(239,68,68,0.3)',
-                      color: 'rgba(239,68,68,0.6)',
-                      fontSize: '11px',
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      marginLeft: '8px'
-                    }}
-                  >
+                  <Button variant="destructive-secondary" size="small" className="ml-2" onClick={() => handleDeleteAll('images')}>
                     Delete All
-                  </button>
+                  </Button>
                 </div>
                 <div style={styles.actionButtons}>
                   {draftSlideshows.length > 0 && (
-                    <button
-                      style={{...styles.actionButton, ...styles.secondaryButton}}
-                      onClick={() => onViewContent?.({ type: 'slideshows' })}
-                    >
+                    <Button variant="neutral-secondary" size="small" icon={<FeatherEye />} onClick={() => onViewContent?.({ type: 'slideshows' })}>
                       View Drafts ({draftSlideshows.length})
-                    </button>
+                    </Button>
                   )}
-                  <button
-                    style={{...styles.actionButton, ...styles.secondaryButton}}
-                    onClick={() => onViewContent?.({ type: 'slideshows' })}
-                  >
+                  <Button variant="neutral-secondary" size="small" icon={<FeatherEye />} onClick={() => onViewContent?.({ type: 'slideshows' })}>
                     View Library
-                  </button>
-                  <button
-                    style={{
-                      ...styles.actionButton,
-                      ...styles.primaryButton
-                    }}
+                  </Button>
+                  <Button
+                    variant="brand-primary"
+                    size="small"
+                    icon={<FeatherImage />}
                     onClick={() => handleLaunchSlideshowEditor()}
                   >
                     Create Slideshow (up to 50)
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -2250,12 +2139,9 @@ const StudioHome = ({
                   {selectedMedia.audio && `Audio: ${selectedMedia.audio.name}`}
                 </div>
                 <div style={styles.actionButtons}>
-                  <button
-                    style={{...styles.actionButton, ...styles.secondaryButton}}
-                    onClick={() => onViewContent?.({ type: 'audio' })}
-                  >
+                  <Button variant="neutral-secondary" size="small" icon={<FeatherEye />} onClick={() => onViewContent?.({ type: 'audio' })}>
                     View Library
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -2466,8 +2352,11 @@ const StudioHome = ({
                             }}
                             placeholder="Audio name"
                           />
-                          <div style={{ display: 'flex', gap: '4px' }}>
-                            <button
+                          <div className="flex gap-1">
+                            <Button
+                              variant="brand-primary"
+                              size="small"
+                              className="flex-1"
                               onClick={async () => {
                                 try {
                                   await updateLibraryItemAsync(db, artistId, audio.id, { name: editingAudio.name });
@@ -2477,15 +2366,13 @@ const StudioHome = ({
                                   console.error('Failed to update audio:', err);
                                 }
                               }}
-                              style={{
-                                flex: 1, padding: '4px 8px', borderRadius: '4px',
-                                backgroundColor: '#6366f1', border: 'none', color: '#fff',
-                                fontSize: '9px', fontWeight: 500, cursor: 'pointer', lineHeight: 1
-                              }}
                             >
                               Replace
-                            </button>
-                            <button
+                            </Button>
+                            <Button
+                              variant="brand-secondary"
+                              size="small"
+                              className="flex-1"
                               onClick={async () => {
                                 try {
                                   await addToLibraryAsync(db, artistId, { ...audio, id: undefined, name: editingAudio.name });
@@ -2495,25 +2382,12 @@ const StudioHome = ({
                                   console.error('Failed to save as new:', err);
                                 }
                               }}
-                              style={{
-                                flex: 1, padding: '4px 8px', borderRadius: '4px',
-                                backgroundColor: 'rgba(167,139,250,0.4)', border: '1px solid rgba(167,139,250,0.5)',
-                                color: '#a78bfa', fontSize: '9px', fontWeight: 500, cursor: 'pointer', lineHeight: 1
-                              }}
                             >
                               Save as New
-                            </button>
-                            <button
-                              onClick={() => setEditingAudio(null)}
-                              style={{
-                                flex: 0.6, padding: '4px 8px', borderRadius: '4px',
-                                backgroundColor: 'transparent', border: '1px solid rgba(255,255,255,0.1)',
-                                color: 'rgba(255,255,255,0.5)', fontSize: '9px', fontWeight: 500,
-                                cursor: 'pointer', lineHeight: 1
-                              }}
-                            >
+                            </Button>
+                            <Button variant="neutral-tertiary" size="small" onClick={() => setEditingAudio(null)}>
                               Cancel
-                            </button>
+                            </Button>
                           </div>
                         </div>
                       );
@@ -2864,16 +2738,17 @@ const StudioHome = ({
             </div>
 
             {/* Generate button */}
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => setShowBatchModal(false)}
-                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${theme.border.default}`, backgroundColor: 'transparent', color: theme.text.secondary, fontSize: '13px', cursor: 'pointer' }}
-              >Cancel</button>
-              <button
+            <div className="flex gap-2">
+              <Button variant="neutral-secondary" className="flex-1" onClick={() => setShowBatchModal(false)}>Cancel</Button>
+              <Button
+                variant="brand-primary"
+                className="flex-1"
                 onClick={handleBatchGenerate}
                 disabled={batchGenerating || !selectedCollection}
-                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: batchGenerating ? '#4338ca' : '#6366f1', color: '#fff', fontSize: '13px', fontWeight: 600, cursor: batchGenerating ? 'wait' : 'pointer' }}
-              >{batchGenerating ? 'Generating...' : `Generate ${batchCount} Slideshows`}</button>
+                loading={batchGenerating}
+              >
+                {batchGenerating ? 'Generating...' : `Generate ${batchCount} Slideshows`}
+              </Button>
             </div>
           </div>
         </div>
