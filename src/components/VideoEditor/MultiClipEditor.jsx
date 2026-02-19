@@ -2105,11 +2105,11 @@ const MultiClipEditor = ({
         {showCloseConfirm && (
           <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-[100]">
             <div className="bg-neutral-900 rounded-xl p-6 max-w-[360px] w-full border border-neutral-800">
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', color: theme.text.primary }}>Close editor?</h3>
-              <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: theme.text.secondary }}>
+              <h3 className="text-[16px] font-semibold mb-2" style={{ color: theme.text.primary }}>Close editor?</h3>
+              <p className="text-[13px] mb-4" style={{ color: theme.text.secondary }}>
                 You have unsaved work. Are you sure you want to close?
               </p>
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <div className="flex gap-2 justify-end">
                 <Button variant="neutral-secondary" size="small" onClick={() => setShowCloseConfirm(false)}>Keep Editing</Button>
                 <Button variant="destructive-primary" size="small" onClick={() => { setShowCloseConfirm(false); onClose(); }}>Close Anyway</Button>
               </div>

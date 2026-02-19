@@ -1696,11 +1696,11 @@ const SoloClipEditor = ({
         {showCloseConfirm && (
           <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-[100]">
             <div className="bg-neutral-900 rounded-xl p-6 max-w-[360px] w-full border border-neutral-800">
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', color: theme.text.primary }}>Close editor?</h3>
-              <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: theme.text.secondary }}>
+              <h3 className="text-[16px] font-semibold mb-2" style={{ color: theme.text.primary }}>Close editor?</h3>
+              <p className="text-[13px] mb-4" style={{ color: theme.text.secondary }}>
                 You have unsaved work. Are you sure you want to close?
               </p>
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <div className="flex gap-2 justify-end">
                 <Button variant="neutral-secondary" size="small" onClick={() => setShowCloseConfirm(false)}>Keep Editing</Button>
                 <Button variant="destructive-primary" size="small" onClick={() => { setShowCloseConfirm(false); onClose(); }}>Close Anyway</Button>
               </div>
@@ -1710,11 +1710,11 @@ const SoloClipEditor = ({
 
         {/* ── Preset Save Modal ── */}
         {showPresetPrompt && (
-          <div style={{ position: 'fixed', inset: 0, background: theme.overlay.heavy, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center" style={{ background: theme.overlay.heavy }}
             onClick={() => setShowPresetPrompt(false)}>
-            <div style={{ background: theme.bg.input, borderRadius: 12, padding: 24, width: 360, maxWidth: '90vw' }}
+            <div className="rounded-xl p-6 w-[360px] max-w-[90vw]" style={{ background: theme.bg.input }}
               onClick={e => e.stopPropagation()}>
-              <div style={{ color: theme.text.primary, fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Save Preset</div>
+              <div className="text-[16px] font-semibold mb-3" style={{ color: theme.text.primary }}>Save Preset</div>
               <input
                 autoFocus
                 value={presetPromptValue}
@@ -1728,23 +1728,22 @@ const SoloClipEditor = ({
                   }
                 }}
                 placeholder="Preset name..."
-                style={{ width: '100%', background: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, borderRadius: 8, padding: '10px 12px', color: theme.text.primary, fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
+                className="w-full rounded-lg py-2.5 px-3 text-sm outline-none"
+                style={{ background: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, color: theme.text.primary }}
               />
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-                <button onClick={() => setShowPresetPrompt(false)}
-                  style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${theme.bg.elevated}`, background: 'transparent', color: theme.text.secondary, cursor: 'pointer' }}>
+              <div className="flex gap-2 justify-end mt-3">
+                <Button variant="neutral-secondary" size="small" onClick={() => setShowPresetPrompt(false)}>
                   Cancel
-                </button>
-                <button onClick={() => {
+                </Button>
+                <Button variant="brand-primary" size="small" onClick={() => {
                   if (presetPromptValue.trim()) {
                     onSavePreset?.({ name: presetPromptValue.trim(), settings: { ...textStyle, cropMode: aspectRatio } });
                     toastSuccess(`Preset "${presetPromptValue.trim()}" saved!`);
                   }
                   setShowPresetPrompt(false);
-                }}
-                  style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: theme.accent.primary, color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+                }}>
                   Save
-                </button>
+                </Button>
               </div>
             </div>
           </div>

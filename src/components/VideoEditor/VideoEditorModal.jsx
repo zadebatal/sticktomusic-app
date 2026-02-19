@@ -3114,69 +3114,27 @@ const VideoEditorModal = ({
         {showLyricsEditor && (
           <div
             className="absolute inset-0 bg-black/80 flex items-center justify-center z-10"
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                e.preventDefault();
-                setShowLyricsEditor(false);
-              }
-            }}
+            onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); setShowLyricsEditor(false); } }}
           >
-            <div style={{
-            width: '400px', backgroundColor: '#1a1a1a', borderRadius: '12px', padding: '20px',
-            ...(isMobile ? {
-              width: '95%',
-              maxWidth: '95%',
-              maxHeight: '90vh',
-              overflow: 'auto'
-            } : {})
-          }}>
+            <div className={`bg-[#1a1a1a] rounded-xl p-5 ${isMobile ? 'w-[95%] max-w-[95%] max-h-[90vh] overflow-auto' : 'w-[400px]'}`}>
               <h3 className="text-[16px] font-semibold text-[#ffffffff] mb-4">Edit Lyrics</h3>
               <textarea
                 value={lyrics}
                 onChange={(e) => setLyrics(e.target.value)}
                 placeholder="Enter your lyrics here, one word or line per row..."
-                style={{
-                  width: '100%', height: '200px', padding: '12px', backgroundColor: '#0a0a0a', border: '1px solid #333', borderRadius: '8px', color: '#fff', fontSize: '14px', resize: 'none', outline: 'none', marginBottom: '16px',
-                  ...(isMobile ? { minHeight: '150px', fontSize: '16px' } : {})
-                }}
+                className={`w-full h-[200px] p-3 bg-[#0a0a0a] border border-neutral-700 rounded-lg text-white text-sm resize-none outline-none mb-4 ${isMobile ? 'min-h-[150px] text-base' : ''}`}
                 autoFocus={!isMobile}
               />
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontSize: '13px', color: '#a3a3a3',
-                ...(isMobile ? { flexDirection: 'column', alignItems: 'stretch', gap: '8px' } : {})
-              }}>
-                <span style={isMobile ? { marginBottom: '4px' } : {}}>Sync method:</span>
-                <div style={{ display: 'flex', gap: '8px', ...(isMobile ? { width: '100%' } : {}) }}>
-                  <button style={{
-                    padding: '8px 12px', backgroundColor: '#1f1f2e', border: '1px solid #333', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '12px',
-                    ...(isMobile ? { flex: 1, padding: '12px' } : {})
-                  }} onClick={() => handleSyncLyrics('beat')}>
-                    Sync to beats
-                  </button>
-                  <button style={{
-                    padding: '8px 12px', backgroundColor: '#1f1f2e', border: '1px solid #333', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '12px',
-                    ...(isMobile ? { flex: 1, padding: '12px' } : {})
-                  }} onClick={() => handleSyncLyrics('even')}>
-                    Spread evenly
-                  </button>
+              <div className={`flex items-center gap-2 mb-4 text-[13px] text-neutral-400 ${isMobile ? 'flex-col items-stretch' : ''}`}>
+                <span>Sync method:</span>
+                <div className={`flex gap-2 ${isMobile ? 'w-full' : ''}`}>
+                  <Button variant="neutral-secondary" size="small" className={isMobile ? 'flex-1' : ''} onClick={() => handleSyncLyrics('beat')}>Sync to beats</Button>
+                  <Button variant="neutral-secondary" size="small" className={isMobile ? 'flex-1' : ''} onClick={() => handleSyncLyrics('even')}>Spread evenly</Button>
                 </div>
               </div>
-              <div style={{
-                display: 'flex', justifyContent: 'flex-end', gap: '8px',
-                ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
-              }}>
-                <button style={{
-                  padding: '10px 20px', backgroundColor: '#1f1f2e', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px',
-                  ...(isMobile ? { width: '100%', padding: '14px' } : {})
-                }} onClick={() => setShowLyricsEditor(false)}>
-                  Cancel
-                </button>
-                <button style={{
-                  padding: '10px 20px', backgroundColor: '#6366f1', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500',
-                  ...(isMobile ? { width: '100%', padding: '14px' } : {})
-                }} onClick={() => setShowLyricsEditor(false)}>
-                  Done
-                </button>
+              <div className={`flex justify-end gap-2 ${isMobile ? 'flex-col' : ''}`}>
+                <Button variant="neutral-secondary" size="small" className={isMobile ? 'w-full' : ''} onClick={() => setShowLyricsEditor(false)}>Cancel</Button>
+                <Button variant="brand-primary" size="small" className={isMobile ? 'w-full' : ''} onClick={() => setShowLyricsEditor(false)}>Done</Button>
               </div>
             </div>
           </div>
@@ -3219,13 +3177,9 @@ const VideoEditorModal = ({
         {/* API Key Modal */}
         {showApiKeyModal && (
           <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-10">
-            <div style={{
-              width: '400px', backgroundColor: '#1a1a1a', borderRadius: '12px', padding: '20px',
-              maxWidth: '400px',
-              ...(isMobile ? { width: '95%', maxWidth: '95%' } : {})
-            }}>
-              <h3 className="text-[16px] font-semibold text-[#ffffffff] mb-4">🔑 OpenAI API Key</h3>
-              <p style={{ color: theme.text.secondary, fontSize: '14px', marginBottom: '16px' }}>
+            <div className={`bg-[#1a1a1a] rounded-xl p-5 ${isMobile ? 'w-[95%] max-w-[95%] max-h-[90vh] overflow-auto' : 'w-[400px]'}`}>
+              <h3 className="text-[16px] font-semibold text-white mb-4">🔑 OpenAI API Key</h3>
+              <p style={{ color: theme.text.secondary }} className="text-sm mb-4">
                 AI transcription uses OpenAI Whisper (great for music/vocals).
                 Get a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" style={{ color: theme.accent.primary }}>platform.openai.com</a>
               </p>
@@ -3245,38 +3199,16 @@ const VideoEditorModal = ({
                 }}
                 placeholder="Enter your OpenAI API key (sk-...)..."
                 autoFocus={!isMobile}
-                style={{
-                  width: '100%',
-                  padding: isMobile ? '14px' : '12px',
-                  background: theme.bg.surface,
-                  border: `1px solid ${theme.bg.elevated}`,
-                  borderRadius: '8px',
-                  color: theme.text.primary,
-                  fontSize: isMobile ? '16px' : '14px',
-                  marginBottom: '16px'
-                }}
+                className={`w-full rounded-lg mb-4 outline-none ${isMobile ? 'p-3.5 text-base' : 'p-3 text-sm'}`}
+                style={{ background: theme.bg.surface, border: `1px solid ${theme.bg.elevated}`, color: theme.text.primary }}
               />
-              <div style={{
-                display: 'flex', justifyContent: 'flex-end', gap: '8px',
-                ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
-              }}>
-                <button style={{
-                  padding: '10px 20px', backgroundColor: '#1f1f2e', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px',
-                  ...(isMobile ? { width: '100%', padding: '14px' } : {})
-                }} onClick={() => { setShowApiKeyModal(false); setApiKeyInput(''); }}>
+              <div className={`flex justify-end gap-2 ${isMobile ? 'flex-col' : ''}`}>
+                <Button variant="neutral-secondary" size="small" className={isMobile ? 'w-full' : ''} onClick={() => { setShowApiKeyModal(false); setApiKeyInput(''); }}>
                   Cancel
-                </button>
-                <button
-                  style={{
-                    padding: '10px 20px', backgroundColor: '#6366f1', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500',
-                    background: 'linear-gradient(135deg, #8B5CF6, #6D28D9)',
-                    ...(isMobile ? { width: '100%', padding: '14px' } : {})
-                  }}
-                  onClick={handleSaveApiKey}
-                  disabled={!apiKeyInput.trim()}
-                >
+                </Button>
+                <Button variant="brand-primary" size="small" className={isMobile ? 'w-full' : ''} onClick={handleSaveApiKey} disabled={!apiKeyInput.trim()}>
                   Save & Transcribe
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -3285,7 +3217,7 @@ const VideoEditorModal = ({
         {/* Analyzing Overlay */}
         {isAnalyzing && (
           <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center gap-4 text-[#ffffffff]">
-            <div style={{ width: 40, height: 40, border: '3px solid #333', borderTopColor: '#6366f1', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+            <div className="w-10 h-10 border-[3px] border-[#333] border-t-[#6366f1] rounded-full animate-spin" />
             <p>Analyzing beats...</p>
           </div>
         )}
@@ -3304,49 +3236,26 @@ const VideoEditorModal = ({
 
         {showRecoveryPrompt && recoveryData && (
           <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-10">
-            <div style={{width: '400px', backgroundColor: '#1a1a1a', borderRadius: '12px', padding: '20px', maxWidth: '420px'}}>
-              <h3 className="text-[16px] font-semibold text-[#ffffffff] mb-4">📝 Recover Unsaved Work?</h3>
-              <p style={{ color: theme.text.secondary, fontSize: '14px', marginBottom: '16px' }}>
+            <div className={`bg-[#1a1a1a] rounded-xl p-5 ${isMobile ? 'w-[95%] max-w-[95%] max-h-[90vh] overflow-auto' : 'w-[400px]'}`}>
+              <h3 className="text-[16px] font-semibold text-white mb-4">📝 Recover Unsaved Work?</h3>
+              <p style={{ color: theme.text.secondary }} className="text-sm mb-4">
                 We found an auto-saved draft from{' '}
                 <strong style={{ color: theme.text.primary }}>
                   {recoveryData.savedAt ? new Date(recoveryData.savedAt).toLocaleString() : 'recently'}
                 </strong>
               </p>
-              <div style={{
-                backgroundColor: theme.bg.surface,
-                padding: '12px',
-                borderRadius: '8px',
-                marginBottom: '16px',
-                fontSize: '13px',
-                color: theme.text.secondary
-              }}>
+              <div className="p-3 rounded-lg mb-4 text-[13px]" style={{ backgroundColor: theme.bg.surface, color: theme.text.secondary }}>
                 <div>🎵 Audio: {recoveryData.audio?.name || 'None'}</div>
                 <div>🎬 Clips: {recoveryData.clips?.length || 0}</div>
                 <div>💬 Words: {recoveryData.words?.length || 0}</div>
               </div>
-              <div style={{
-                display: 'flex', justifyContent: 'flex-end', gap: '8px',
-                ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
-              }}>
-                <button
-                  style={{
-                    padding: '10px 20px', backgroundColor: '#1f1f2e', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px',
-                    ...(isMobile ? { width: '100%', padding: '14px' } : {})
-                  }}
-                  onClick={handleDiscardDraft}
-                >
+              <div className={`flex justify-end gap-2 ${isMobile ? 'flex-col' : ''}`}>
+                <Button variant="neutral-secondary" size="small" className={isMobile ? 'w-full' : ''} onClick={handleDiscardDraft}>
                   Start Fresh
-                </button>
-                <button
-                  style={{
-                    padding: '10px 20px', backgroundColor: '#6366f1', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500',
-                    background: 'linear-gradient(135deg, #10b981, #059669)',
-                    ...(isMobile ? { width: '100%', padding: '14px' } : {})
-                  }}
-                  onClick={handleRestoreDraft}
-                >
-                  ✨ Restore Draft
-                </button>
+                </Button>
+                <Button variant="brand-primary" size="small" className={isMobile ? 'w-full' : ''} onClick={handleRestoreDraft}>
+                  Restore Draft
+                </Button>
               </div>
             </div>
           </div>
@@ -3355,51 +3264,25 @@ const VideoEditorModal = ({
         {/* Save Lyrics to Song Prompt */}
         {showSaveLyricsPrompt && (
           <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-10">
-            <div style={{
-              width: '400px', backgroundColor: '#1a1a1a', borderRadius: '12px', padding: '20px',
-              maxWidth: '420px',
-              ...(isMobile ? { width: '95%', maxWidth: '95%' } : {})
-            }}>
-              <h3 className="text-[16px] font-semibold text-[#ffffffff] mb-4">💾 Save Lyrics to Song?</h3>
-              <p style={{ color: theme.text.secondary, fontSize: '14px', marginBottom: '16px' }}>
+            <div className={`bg-[#1a1a1a] rounded-xl p-5 ${isMobile ? 'w-[95%] max-w-[95%] max-h-[90vh] overflow-auto' : 'w-[400px]'}`}>
+              <h3 className="text-[16px] font-semibold text-white mb-4">💾 Save Lyrics to Song?</h3>
+              <p style={{ color: theme.text.secondary }} className="text-sm mb-4">
                 You've created timed lyrics for <strong style={{ color: theme.text.primary }}>{selectedAudio?.name || 'this song'}</strong>.
                 Save them to the song so they're automatically available next time you use it?
               </p>
-              <div style={{
-                backgroundColor: theme.bg.surface,
-                padding: '12px',
-                borderRadius: '8px',
-                marginBottom: '16px',
-                fontSize: '13px',
-                color: theme.text.secondary
-              }}>
+              <div className="p-3 rounded-lg mb-4 text-[13px]" style={{ backgroundColor: theme.bg.surface, color: theme.text.secondary }}>
                 <div>🎤 {words.length} words with timing data</div>
-                <div style={{ marginTop: '4px', fontSize: '12px', color: theme.text.muted }}>
+                <div className="mt-1 text-xs" style={{ color: theme.text.muted }}>
                   "{words.slice(0, 5).map(w => w.text).join(' ')}{words.length > 5 ? '...' : ''}"
                 </div>
               </div>
-              <div style={{
-                display: 'flex', justifyContent: 'flex-end', gap: '8px',
-                ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
-              }}>
-                <button
-                  style={{
-                    padding: '10px 20px', backgroundColor: '#1f1f2e', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px',
-                    ...(isMobile ? { width: '100%', padding: '14px' } : {})
-                  }}
-                  onClick={() => handleLyricsPromptResponse(false)}
-                >
+              <div className={`flex justify-end gap-2 ${isMobile ? 'flex-col' : ''}`}>
+                <Button variant="neutral-secondary" size="small" className={isMobile ? 'w-full' : ''} onClick={() => handleLyricsPromptResponse(false)}>
                   No, Just This Video
-                </button>
-                <button
-                  style={{
-                    padding: '10px 20px', backgroundColor: '#6366f1', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500',
-                    ...(isMobile ? { width: '100%', padding: '14px' } : {})
-                  }}
-                  onClick={() => handleLyricsPromptResponse(true)}
-                >
+                </Button>
+                <Button variant="brand-primary" size="small" className={isMobile ? 'w-full' : ''} onClick={() => handleLyricsPromptResponse(true)}>
                   Yes, Save to Song
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -3424,50 +3307,23 @@ const VideoEditorModal = ({
         {/* Close Confirmation Dialog */}
         {showCloseConfirm && (
           <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-10">
-            <div style={{
-              width: '400px', backgroundColor: '#1a1a1a', borderRadius: '12px', padding: '20px',
-              maxWidth: '380px',
-              ...(isMobile ? { width: '95%', maxWidth: '95%' } : {})
-            }}>
-              <h3 className="text-[16px] font-semibold text-[#ffffffff] mb-4">Close Editor?</h3>
-              <p style={{ color: theme.text.secondary, fontSize: '14px', marginBottom: '16px' }}>
+            <div className={`bg-[#1a1a1a] rounded-xl p-5 ${isMobile ? 'w-[95%] max-w-[95%] max-h-[90vh] overflow-auto' : 'w-[380px]'}`}>
+              <h3 className="text-[16px] font-semibold text-white mb-4">Close Editor?</h3>
+              <p style={{ color: theme.text.secondary }} className="text-sm mb-4">
                 You have unsaved work. Are you sure you want to close?
               </p>
-              <div style={{
-                backgroundColor: theme.bg.surface,
-                padding: '12px',
-                borderRadius: '8px',
-                marginBottom: '16px',
-                fontSize: '13px',
-                color: theme.text.secondary
-              }}>
+              <div className="p-3 rounded-lg mb-4 text-[13px]" style={{ backgroundColor: theme.bg.surface, color: theme.text.secondary }}>
                 {selectedAudio && <div>🎵 Audio selected</div>}
                 {clips.length > 0 && <div>🎬 {clips.length} clips</div>}
                 {words.length > 0 && <div>💬 {words.length} words timed</div>}
               </div>
-              <div style={{
-                display: 'flex', justifyContent: 'flex-end', gap: '8px',
-                ...(isMobile ? { flexDirection: 'column', gap: '8px' } : {})
-              }}>
-                <button
-                  style={{
-                    padding: '10px 20px', backgroundColor: '#1f1f2e', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px',
-                    ...(isMobile ? { width: '100%', padding: '14px' } : {})
-                  }}
-                  onClick={() => setShowCloseConfirm(false)}
-                >
+              <div className={`flex justify-end gap-2 ${isMobile ? 'flex-col' : ''}`}>
+                <Button variant="neutral-secondary" size="small" className={isMobile ? 'w-full' : ''} onClick={() => setShowCloseConfirm(false)}>
                   Keep Editing
-                </button>
-                <button
-                  style={{
-                    padding: '10px 20px', backgroundColor: '#6366f1', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500',
-                    background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-                    ...(isMobile ? { width: '100%', padding: '14px' } : {})
-                  }}
-                  onClick={handleConfirmClose}
-                >
+                </Button>
+                <Button variant="destructive-primary" size="small" className={isMobile ? 'w-full' : ''} onClick={handleConfirmClose}>
                   Close Anyway
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -3475,11 +3331,11 @@ const VideoEditorModal = ({
 
         {/* Preset name prompt modal */}
         {showPresetPrompt && (
-          <div style={{ position: 'fixed', inset: 0, background: theme.overlay.heavy, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center" style={{ background: theme.overlay.heavy }}
             onClick={() => setShowPresetPrompt(false)}>
-            <div style={{ background: theme.bg.input, borderRadius: 12, padding: 24, width: 360, maxWidth: '90vw' }}
+            <div className="rounded-xl p-6 w-[360px] max-w-[90vw]" style={{ background: theme.bg.input }}
               onClick={e => e.stopPropagation()}>
-              <div style={{ color: theme.text.primary, fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Save Preset</div>
+              <div className="text-[16px] font-semibold mb-3" style={{ color: theme.text.primary }}>Save Preset</div>
               <input
                 autoFocus
                 value={presetPromptValue}
@@ -3493,23 +3349,22 @@ const VideoEditorModal = ({
                   }
                 }}
                 placeholder="Preset name..."
-                style={{ width: '100%', background: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, borderRadius: 8, padding: '10px 12px', color: theme.text.primary, fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
+                className="w-full rounded-lg py-2.5 px-3 text-sm outline-none"
+                style={{ background: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, color: theme.text.primary }}
               />
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-                <button onClick={() => setShowPresetPrompt(false)}
-                  style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${theme.bg.elevated}`, background: 'transparent', color: theme.text.secondary, cursor: 'pointer' }}>
+              <div className="flex gap-2 justify-end mt-3">
+                <Button variant="neutral-secondary" size="small" onClick={() => setShowPresetPrompt(false)}>
                   Cancel
-                </button>
-                <button onClick={() => {
+                </Button>
+                <Button variant="brand-primary" size="small" onClick={() => {
                   if (presetPromptValue.trim()) {
                     onSavePreset({ name: presetPromptValue.trim(), settings: { ...textStyle, cropMode } });
                     toast.success?.(`Preset "${presetPromptValue.trim()}" saved!`);
                   }
                   setShowPresetPrompt(false);
-                }}
-                  style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: theme.accent.primary, color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+                }}>
                   Save
-                </button>
+                </Button>
               </div>
             </div>
           </div>

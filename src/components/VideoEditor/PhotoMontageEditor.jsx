@@ -18,6 +18,7 @@ import LyricBank from './LyricBank';
 import WordTimeline from './WordTimeline';
 import LyricAnalyzer from './LyricAnalyzer';
 import CloudImportButton from './CloudImportButton';
+import { Button } from '../../ui/components/Button';
 import log from '../../utils/logger';
 
 /**
@@ -1460,15 +1461,15 @@ const PhotoMontageEditor = ({
 
         {/* ── Close Confirmation ── */}
         {showCloseConfirm && (
-          <div style={styles.confirmOverlay}>
-            <div style={styles.confirmModal}>
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', color: theme.text.primary }}>Close editor?</h3>
-              <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: theme.text.secondary }}>
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-[100]">
+            <div className="rounded-xl p-5 max-w-[340px] w-full" style={{ backgroundColor: theme.bg.surface, border: `1px solid ${theme.border.subtle}` }}>
+              <h3 className="text-[16px] font-semibold mb-2" style={{ color: theme.text.primary }}>Close editor?</h3>
+              <p className="text-[13px] mb-4" style={{ color: theme.text.secondary }}>
                 You have unsaved work. Are you sure you want to close?
               </p>
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                <button onClick={() => setShowCloseConfirm(false)} style={styles.confirmKeepButton}>Keep Editing</button>
-                <button onClick={() => { setShowCloseConfirm(false); onClose(); }} style={styles.confirmCloseButton}>Close Anyway</button>
+              <div className="flex gap-2 justify-end">
+                <Button variant="neutral-secondary" size="small" onClick={() => setShowCloseConfirm(false)}>Keep Editing</Button>
+                <Button variant="destructive-primary" size="small" onClick={() => { setShowCloseConfirm(false); onClose(); }}>Close Anyway</Button>
               </div>
             </div>
           </div>
@@ -1476,11 +1477,11 @@ const PhotoMontageEditor = ({
 
         {/* ── Preset Save Modal ── */}
         {showPresetPrompt && (
-          <div style={{ position: 'fixed', inset: 0, background: theme.overlay.heavy, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center" style={{ background: theme.overlay.heavy }}
             onClick={() => setShowPresetPrompt(false)}>
-            <div style={{ background: theme.bg.input, borderRadius: 12, padding: 24, width: 360, maxWidth: '90vw' }}
+            <div className="rounded-xl p-6 w-[360px] max-w-[90vw]" style={{ background: theme.bg.input }}
               onClick={e => e.stopPropagation()}>
-              <div style={{ color: theme.text.primary, fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Save Preset</div>
+              <div className="text-[16px] font-semibold mb-3" style={{ color: theme.text.primary }}>Save Preset</div>
               <input
                 autoFocus
                 value={presetPromptValue}
@@ -1494,23 +1495,22 @@ const PhotoMontageEditor = ({
                   }
                 }}
                 placeholder="Preset name..."
-                style={{ width: '100%', background: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, borderRadius: 8, padding: '10px 12px', color: theme.text.primary, fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
+                className="w-full rounded-lg py-2.5 px-3 text-sm outline-none"
+                style={{ background: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, color: theme.text.primary }}
               />
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-                <button onClick={() => setShowPresetPrompt(false)}
-                  style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${theme.bg.elevated}`, background: 'transparent', color: theme.text.secondary, cursor: 'pointer' }}>
+              <div className="flex gap-2 justify-end mt-3">
+                <Button variant="neutral-secondary" size="small" onClick={() => setShowPresetPrompt(false)}>
                   Cancel
-                </button>
-                <button onClick={() => {
+                </Button>
+                <Button variant="brand-primary" size="small" onClick={() => {
                   if (presetPromptValue.trim()) {
                     onSavePreset?.({ name: presetPromptValue.trim(), settings: { ...textStyle, cropMode: aspectRatio } });
                     toastSuccess(`Preset "${presetPromptValue.trim()}" saved!`);
                   }
                   setShowPresetPrompt(false);
-                }}
-                  style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: theme.accent.primary, color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+                }}>
                   Save
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -1860,29 +1860,6 @@ const getStyles = (theme, isMobile) => ({
     backgroundColor: theme.bg.input, border: `1px solid ${theme.border.subtle}`,
     color: theme.text.secondary, cursor: 'pointer', fontSize: '12px', fontWeight: 500
   },
-  // Confirm modal
-  confirmOverlay: {
-    position: 'absolute', inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    zIndex: 100
-  },
-  confirmModal: {
-    backgroundColor: theme.bg.surface,
-    borderRadius: '12px', padding: '20px',
-    border: `1px solid ${theme.border.subtle}`,
-    maxWidth: '340px', width: '100%'
-  },
-  confirmKeepButton: {
-    padding: '8px 16px', fontSize: '13px', fontWeight: 500,
-    backgroundColor: theme.bg.input, border: `1px solid ${theme.border.subtle}`,
-    borderRadius: '6px', color: theme.text.primary, cursor: 'pointer'
-  },
-  confirmCloseButton: {
-    padding: '8px 16px', fontSize: '13px', fontWeight: 600,
-    backgroundColor: '#ef4444', border: 'none',
-    borderRadius: '6px', color: '#fff', cursor: 'pointer'
-  }
 });
 
 export default PhotoMontageEditor;
