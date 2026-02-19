@@ -7,6 +7,8 @@ import React, { useState } from 'react';
 import { addToLibraryAsync, getUserCollections, addToCollectionAsync, MEDIA_TYPES } from '../../services/libraryService';
 import { uploadFile } from '../../services/firebaseStorage';
 import { useTheme } from '../../contexts/ThemeContext';
+import { Button } from '../../ui/components/Button';
+import { FeatherSave } from '@subframe/core';
 
 const SaveToLibraryButton = ({
   artistId,
@@ -71,20 +73,6 @@ const SaveToLibraryButton = ({
   };
 
   const styles = {
-    button: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '4px',
-      padding: '6px 10px',
-      backgroundColor: 'rgba(99, 102, 241, 0.2)',
-      border: '1px solid rgba(99, 102, 241, 0.3)',
-      borderRadius: '6px',
-      color: theme.accent.hover,
-      fontSize: '12px',
-      cursor: 'pointer',
-      transition: 'all 0.2s',
-      ...style
-    },
     modal: {
       position: 'fixed',
       top: 0,
@@ -147,27 +135,6 @@ const SaveToLibraryButton = ({
       gap: '12px',
       marginTop: '20px'
     },
-    cancelButton: {
-      flex: 1,
-      padding: '10px 16px',
-      backgroundColor: 'transparent',
-      border: `1px solid ${theme.text.muted}`,
-      borderRadius: '8px',
-      color: theme.text.secondary,
-      fontSize: '14px',
-      cursor: 'pointer'
-    },
-    saveButton: {
-      flex: 1,
-      padding: '10px 16px',
-      backgroundColor: theme.accent.primary,
-      border: 'none',
-      borderRadius: '8px',
-      color: theme.text.primary,
-      fontSize: '14px',
-      fontWeight: '500',
-      cursor: 'pointer'
-    },
     clipInfo: {
       padding: '12px',
       backgroundColor: theme.hover.bg,
@@ -188,23 +155,9 @@ const SaveToLibraryButton = ({
 
   return (
     <>
-      <button
-        style={styles.button}
-        onClick={() => setShowCollectionPicker(true)}
-        disabled={isSaving}
-        title="Save this clip to your library"
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.3)';
-          e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.5)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.2)';
-          e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.3)';
-        }}
-      >
-        <span>💾</span>
-        <span>{isMobile ? '' : 'Save'}</span>
-      </button>
+      <Button variant="brand-secondary" size="small" icon={<FeatherSave />} onClick={() => setShowCollectionPicker(true)} disabled={isSaving} title="Save this clip to your library">
+        {isMobile ? '' : 'Save'}
+      </Button>
 
       {showCollectionPicker && (
         <div style={styles.modal} onClick={() => setShowCollectionPicker(false)}>
@@ -251,22 +204,10 @@ const SaveToLibraryButton = ({
 
             {/* Buttons */}
             <div style={styles.buttonGroup}>
-              <button
-                style={styles.cancelButton}
-                onClick={() => setShowCollectionPicker(false)}
-              >
-                Cancel
-              </button>
-              <button
-                style={{
-                  ...styles.saveButton,
-                  opacity: isSaving ? 0.5 : 1
-                }}
-                onClick={handleSave}
-                disabled={isSaving}
-              >
+              <Button variant="neutral-secondary" onClick={() => setShowCollectionPicker(false)}>Cancel</Button>
+              <Button variant="brand-primary" onClick={handleSave} disabled={isSaving} loading={isSaving}>
                 {isSaving ? 'Saving...' : 'Save to Library'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

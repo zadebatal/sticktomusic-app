@@ -5,6 +5,8 @@
 import React, { useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getTextBankText, getTextBankStyle } from '../../services/libraryService';
+import { IconButton } from '../../ui/components/IconButton';
+import { FeatherX, FeatherPlus } from '@subframe/core';
 
 const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate, onDelete }) => {
   const { theme } = useTheme();
@@ -32,24 +34,7 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
           <span style={{ fontSize: '11px', color: theme.text.muted }}>{texts.length}</span>
         </div>
         {onDelete && (
-          <button
-            onClick={onDelete}
-            style={{
-              padding: '4px 8px', fontSize: '11px',
-              backgroundColor: 'transparent', border: `1px solid ${theme.border.subtle}`,
-              borderRadius: '4px', color: theme.text.muted, cursor: 'pointer',
-              transition: 'all 0.2s', display: 'flex', alignItems: 'center'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)';
-              e.currentTarget.style.color = '#fca5a5';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = theme.border.subtle;
-              e.currentTarget.style.color = theme.text.muted;
-            }}
-            title={`Delete ${label}`}
-          >✕</button>
+          <IconButton size="small" icon={<FeatherX />} onClick={onDelete} title={`Delete ${label}`} />
         )}
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
@@ -135,16 +120,7 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
             color: theme.text.primary, fontSize: '12px'
           }}
         />
-        <button
-          onClick={() => { if (newText.trim()) { onAdd(newText.trim()); setNewText(''); } }}
-          disabled={!newText.trim()}
-          style={{
-            padding: '6px 12px', borderRadius: '6px', border: 'none',
-            backgroundColor: newText.trim() ? `${theme.accent.primary}4d` : theme.hover.bg,
-            color: newText.trim() ? theme.accent.hover : theme.text.muted,
-            fontSize: '12px', cursor: newText.trim() ? 'pointer' : 'default'
-          }}
-        >+</button>
+        <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newText.trim()) { onAdd(newText.trim()); setNewText(''); } }} disabled={!newText.trim()} />
       </div>
     </div>
   );

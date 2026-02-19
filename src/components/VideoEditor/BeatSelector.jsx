@@ -1,5 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
+import { FeatherX, FeatherCheck } from '@subframe/core';
 
 /**
  * BeatSelector - Select which beats to cut on
@@ -119,12 +122,7 @@ const BeatSelector = ({
               Tap beats to add cut points, or use a preset to select multiple beats at once.
             </p>
           </div>
-          <button style={styles.closeButton} onClick={onCancel}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
+          <IconButton icon={<FeatherX />} onClick={onCancel} />
         </div>
 
         {/* Presets */}
@@ -188,19 +186,8 @@ const BeatSelector = ({
             {beats.length} beats within duration
           </span>
           <div style={styles.footerActions}>
-            <button style={styles.cancelButton} onClick={onCancel}>
-              Cancel
-            </button>
-            <button
-              style={styles.applyButton}
-              onClick={() => onApply(getSelectedBeatTimes())}
-              disabled={selectedBeats.size === 0}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-              Apply {selectedBeats.size} cuts
-            </button>
+            <Button variant="neutral-secondary" onClick={onCancel}>Cancel</Button>
+            <Button variant="brand-primary" icon={<FeatherCheck />} onClick={() => onApply(getSelectedBeatTimes())} disabled={selectedBeats.size === 0}>Apply {selectedBeats.size} cuts</Button>
           </div>
         </div>
       </div>
@@ -250,19 +237,6 @@ const getStyles = (theme) => ({
     color: theme.text.muted,
     margin: 0,
     maxWidth: '400px'
-  },
-  closeButton: {
-    marginLeft: 'auto',
-    width: '32px',
-    height: '32px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.bg.surface,
-    border: 'none',
-    borderRadius: '8px',
-    color: theme.text.secondary,
-    cursor: 'pointer'
   },
   presets: {
     display: 'flex',
@@ -360,29 +334,6 @@ const getStyles = (theme) => ({
     display: 'flex',
     gap: '8px'
   },
-  cancelButton: {
-    padding: '10px 20px',
-    backgroundColor: 'transparent',
-    border: `1px solid ${theme.border.subtle}`,
-    borderRadius: '8px',
-    color: theme.text.secondary,
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer'
-  },
-  applyButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '10px 20px',
-    backgroundColor: theme.accent.primary,
-    border: 'none',
-    borderRadius: '8px',
-    color: '#fff',
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer'
-  }
 });
 
 export default BeatSelector;

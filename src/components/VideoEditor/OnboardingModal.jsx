@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { STARTER_TEMPLATES, completeOnboarding, skipOnboarding } from '../../services/libraryService';
+import { Button } from '../../ui/components/Button';
 
 const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
   const { theme } = useTheme();
@@ -155,32 +156,6 @@ const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
       gap: '16px',
       flexDirection: isMobile ? 'column' : 'row'
     },
-    skipButton: {
-      padding: '12px 24px',
-      backgroundColor: 'transparent',
-      border: `1px solid ${theme.text.muted}`,
-      borderRadius: '8px',
-      color: theme.text.secondary,
-      fontSize: '14px',
-      fontWeight: '500',
-      cursor: 'pointer',
-      transition: 'all 0.2s ease',
-      width: isMobile ? '100%' : 'auto',
-      order: isMobile ? 2 : 1
-    },
-    confirmButton: {
-      padding: '12px 32px',
-      backgroundColor: selectedTemplate ? theme.accent.primary : 'rgba(99, 102, 241, 0.3)',
-      border: 'none',
-      borderRadius: '8px',
-      color: selectedTemplate ? theme.text.primary : theme.text.secondary,
-      fontSize: '14px',
-      fontWeight: '600',
-      cursor: selectedTemplate ? 'pointer' : 'not-allowed',
-      transition: 'all 0.2s ease',
-      width: isMobile ? '100%' : 'auto',
-      order: isMobile ? 1 : 2
-    },
     previewSection: {
       marginTop: '24px',
       padding: '20px',
@@ -287,36 +262,15 @@ const OnboardingModal = ({ artistId, onComplete, isMobile }) => {
         </div>
 
         <div style={styles.footer}>
-          <button
-            style={styles.skipButton}
-            onClick={handleSkip}
-            onMouseEnter={(e) => e.currentTarget.style.borderColor = theme.text.muted}
-            onMouseLeave={(e) => e.currentTarget.style.borderColor = theme.text.muted}
-          >
-            Skip for now
-          </button>
-          <button
-            style={styles.confirmButton}
-            onClick={handleConfirm}
-            disabled={!selectedTemplate}
-            onMouseEnter={(e) => {
-              if (selectedTemplate) {
-                e.currentTarget.style.backgroundColor = theme.accent.hover;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (selectedTemplate) {
-                e.currentTarget.style.backgroundColor = theme.accent.primary;
-              }
-            }}
-          >
+          <Button variant="neutral-secondary" onClick={handleSkip}>Skip for now</Button>
+          <Button variant="brand-primary" onClick={handleConfirm} disabled={!selectedTemplate}>
             {selectedTemplate?.id === 'template_custom'
               ? 'Start Fresh'
               : selectedTemplate
                 ? `Use ${selectedTemplate.name} Template`
                 : 'Select a Template'
             }
-          </button>
+          </Button>
         </div>
       </div>
     </div>

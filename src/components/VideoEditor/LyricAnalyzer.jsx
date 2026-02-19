@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Loader } from '../../ui/components/Loader';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
+import { FeatherX } from '@subframe/core';
 import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
 import { getStoredApiKey } from '../../services/whisperService';
 import { loadLyricTemplate, saveLyricTemplate } from '../../services/storageService';
@@ -273,19 +276,6 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       fontWeight: '600',
       color: theme.text.primary
     },
-    closeButton: {
-      background: 'none',
-      border: 'none',
-      fontSize: '20px',
-      cursor: 'pointer',
-      color: theme.text.muted,
-      width: '32px',
-      height: '32px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: '6px'
-    },
     content: {
       padding: '24px'
     },
@@ -361,26 +351,6 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       display: 'flex',
       gap: '8px'
     },
-    useCachedButton: {
-      flex: 1,
-      padding: '12px',
-      backgroundColor: '#22c55e',
-      border: 'none',
-      borderRadius: '8px',
-      color: '#fff',
-      fontWeight: '600',
-      cursor: 'pointer',
-      fontSize: '14px'
-    },
-    reanalyzeButton: {
-      padding: '12px 16px',
-      backgroundColor: 'transparent',
-      border: `1px solid ${theme.bg.elevated}`,
-      borderRadius: '8px',
-      color: theme.text.secondary,
-      cursor: 'pointer',
-      fontSize: '13px'
-    },
     apiKeySection: {
       marginBottom: '20px'
     },
@@ -416,16 +386,6 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       margin: '10px 0 0',
       fontSize: '12px',
       color: '#22c55e'
-    },
-    changeKeyBtn: {
-      background: 'none',
-      border: `1px solid ${theme.bg.elevated}`,
-      borderRadius: '8px',
-      color: theme.text.secondary,
-      padding: '8px 12px',
-      fontSize: '12px',
-      cursor: 'pointer',
-      marginBottom: '16px'
     },
     progress: {
       display: 'flex',
@@ -474,25 +434,6 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       borderTop: `1px solid ${theme.bg.surface}`,
       backgroundColor: theme.bg.page
     },
-    cancelBtn: {
-      padding: '10px 20px',
-      backgroundColor: theme.bg.surface,
-      border: 'none',
-      borderRadius: '8px',
-      color: theme.text.primary,
-      cursor: 'pointer',
-      fontSize: '14px'
-    },
-    analyzeBtn: {
-      padding: '10px 24px',
-      backgroundColor: theme.accent.primary,
-      border: 'none',
-      borderRadius: '8px',
-      color: '#fff',
-      fontWeight: '600',
-      cursor: 'pointer',
-      fontSize: '14px'
-    },
     // UI-40: Empty state styles
     emptyState: {
       display: 'flex',
@@ -524,7 +465,7 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       <div style={styles.modal}>
         <div style={styles.header}>
           <h2 style={styles.title}>🎤 Lyric Analyzer</h2>
-          <button style={styles.closeButton} onClick={onClose}>✕</button>
+          <IconButton icon={<FeatherX />} onClick={onClose} />
         </div>
 
         <div style={styles.content}>
@@ -574,12 +515,8 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
                 {cachedLyrics.lyrics?.slice(0, 150)}...
               </div>
               <div style={styles.cachedActions}>
-                <button style={styles.useCachedButton} onClick={handleUseCached}>
-                  ⚡ Use Cached Lyrics
-                </button>
-                <button style={styles.reanalyzeButton} onClick={handleClearCache}>
-                  🔄 Re-analyze Instead
-                </button>
+                <Button variant="brand-primary" size="small" onClick={handleUseCached}>Use Cached Lyrics</Button>
+                <Button variant="neutral-secondary" size="small" onClick={handleClearCache}>Re-analyze Instead</Button>
               </div>
             </div>
           )}
@@ -605,12 +542,7 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
           )}
           {/* Show button to change API key if one is stored but input is hidden */}
           {!showApiKeyInput && !error && !cachedLyrics && apiKey && (
-            <button
-              style={styles.changeKeyBtn}
-              onClick={() => setShowApiKeyInput(true)}
-            >
-              🔑 Change API Key
-            </button>
+            <Button variant="neutral-tertiary" size="small" onClick={() => setShowApiKeyInput(true)}>Change API Key</Button>
           )}
 
           {/* Progress */}
@@ -643,15 +575,11 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
         </div>
 
         <div style={styles.footer}>
-          <button style={styles.cancelBtn} onClick={onClose}>Cancel</button>
+          <Button variant="neutral-secondary" onClick={onClose}>Cancel</Button>
           {audioSource && !cachedLyrics && (
-            <button
-              style={styles.analyzeBtn}
-              onClick={handleAnalyze}
-              disabled={isAnalyzing || (!apiKey && !hasApiKey)}
-            >
-              {isAnalyzing ? 'Analyzing...' : '🎵 Analyze Lyrics'}
-            </button>
+            <Button variant="brand-primary" onClick={handleAnalyze} disabled={isAnalyzing || (!apiKey && !hasApiKey)} loading={isAnalyzing}>
+              {isAnalyzing ? 'Analyzing...' : 'Analyze Lyrics'}
+            </Button>
           )}
         </div>
       </div>
