@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { Button } from '../../ui/components/Button';
 import {
   getSpotifyOverview,
   getSpotifyTimeline,
@@ -540,13 +541,9 @@ export const SpotifySetupCard = ({ artistId, onConfigured }) => {
           placeholder="e.g., 0OdUWJ0sBjDrqHygGUXeCF"
           style={styles.setupInput}
         />
-        <button
-          onClick={handleValidate}
-          disabled={isValidating || !spotifyArtistId.trim()}
-          style={styles.validateButton}
-        >
+        <Button variant="neutral-secondary" onClick={handleValidate} disabled={isValidating || !spotifyArtistId.trim()} loading={isValidating}>
           {isValidating ? 'Checking...' : 'Validate'}
-        </button>
+        </Button>
       </div>
 
       {validationResult && (
@@ -579,13 +576,9 @@ export const SpotifySetupCard = ({ artistId, onConfigured }) => {
                   </span>
                 </div>
               </div>
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                style={styles.saveButton}
-              >
+              <Button variant="brand-primary" onClick={handleSave} disabled={isSaving} loading={isSaving}>
                 {isSaving ? 'Saving...' : 'Save & Connect'}
-              </button>
+              </Button>
             </>
           ) : (
             <span style={{ color: '#ef4444' }}>
@@ -702,13 +695,9 @@ export const SpotifyTab = ({ artistId }) => {
             Last synced: {lastSync ? new Date(lastSync).toLocaleString() : 'Never'}
           </span>
         </div>
-        <button
-          onClick={handleSync}
-          disabled={isSyncing}
-          style={styles.syncButton}
-        >
-          {isSyncing ? '🔄 Syncing...' : '🔄 Sync Spotify Data'}
-        </button>
+        <Button variant="neutral-secondary" onClick={handleSync} disabled={isSyncing} loading={isSyncing}>
+          {isSyncing ? 'Syncing...' : 'Sync Spotify Data'}
+        </Button>
       </div>
 
       {/* Overview Stats */}
@@ -1159,16 +1148,6 @@ const styles = {
     fontSize: '14px',
     outline: 'none'
   },
-  validateButton: {
-    padding: '12px 20px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
-    borderRadius: '8px',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '500'
-  },
   validationResult: {
     padding: '16px',
     borderRadius: '8px',
@@ -1186,17 +1165,6 @@ const styles = {
     height: '48px',
     borderRadius: '50%',
     objectFit: 'cover'
-  },
-  saveButton: {
-    width: '100%',
-    padding: '12px',
-    backgroundColor: '#10b981',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '600'
   },
   helpText: {
     marginTop: '20px',
@@ -1231,16 +1199,6 @@ const styles = {
   lastSyncText: {
     fontSize: '12px',
     color: '#6b7280'
-  },
-  syncButton: {
-    padding: '10px 20px',
-    backgroundColor: '#1f1f2e',
-    border: '1px solid #2d2d3d',
-    borderRadius: '8px',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '500'
   },
   spotifyStatsGrid: {
     display: 'grid',

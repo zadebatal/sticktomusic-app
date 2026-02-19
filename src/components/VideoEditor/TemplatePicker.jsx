@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { IconButton } from '../../ui/components/IconButton';
+import { FeatherX } from '@subframe/core';
 
 /**
  * TemplatePicker - First screen when opening the video editor
@@ -125,12 +127,7 @@ const TemplatePicker = ({ onSelect, onClose, clipCount = 0 }) => {
               {clipCount > 0 ? `${clipCount} clip${clipCount !== 1 ? 's' : ''} selected` : 'Select how to edit your clips'}
             </p>
           </div>
-          <button onClick={onClose} style={styles.closeButton}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+          <IconButton icon={<FeatherX />} onClick={onClose} />
         </div>
 
         {/* Template Cards */}
@@ -224,18 +221,6 @@ const getStyles = (theme) => ({
     margin: '6px 0 0 0',
     fontSize: '13px',
     color: theme.text.secondary
-  },
-  closeButton: {
-    background: 'none',
-    border: 'none',
-    color: theme.text.muted,
-    cursor: 'pointer',
-    padding: '4px',
-    borderRadius: '6px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'color 0.15s'
   },
   cardGrid: {
     display: 'grid',

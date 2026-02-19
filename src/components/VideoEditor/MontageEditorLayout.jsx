@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { Button } from '../../ui/components/Button';
 
 /**
  * MontageEditorLayout — NLE-style multi-panel layout for montage editor (Wave 3)
@@ -95,15 +96,6 @@ const MontageEditorLayout = ({
       display: 'flex',
       gap: '6px'
     },
-    panelControlBtn: {
-      padding: '3px 8px',
-      borderRadius: '4px',
-      border: `1px solid ${theme.text.muted}`,
-      backgroundColor: 'transparent',
-      color: theme.text.muted,
-      fontSize: '10px',
-      cursor: 'pointer'
-    },
     panelsScroll: {
       flex: 1,
       overflowY: 'auto',
@@ -140,20 +132,8 @@ const MontageEditorLayout = ({
           <div style={layoutStyles.panelControls}>
             <span style={layoutStyles.panelControlsLabel}>Panels</span>
             <div style={layoutStyles.panelControlsBtns}>
-              <button
-                style={layoutStyles.panelControlBtn}
-                onClick={expandAll}
-                title="Expand all panels"
-              >
-                Expand All
-              </button>
-              <button
-                style={layoutStyles.panelControlBtn}
-                onClick={collapseAll}
-                title="Collapse all panels"
-              >
-                Collapse All
-              </button>
+              <Button variant="neutral-tertiary" size="small" onClick={expandAll}>Expand All</Button>
+              <Button variant="neutral-tertiary" size="small" onClick={collapseAll}>Collapse All</Button>
             </div>
           </div>
 

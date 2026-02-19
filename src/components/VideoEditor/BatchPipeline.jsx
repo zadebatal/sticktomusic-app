@@ -6,6 +6,7 @@ import { VIDEO_STATUS } from '../../utils/status';
 import PreviewPlayer from './PreviewPlayer';
 import useIsMobile from '../../hooks/useIsMobile';
 import { useTheme } from '../../contexts/ThemeContext';
+import { Button } from '../../ui/components/Button';
 import log from '../../utils/logger';
 
 /**
@@ -676,15 +677,6 @@ const BatchPipeline = ({
       textTransform: 'uppercase',
       letterSpacing: '0.05em'
     },
-    selectAllBtn: {
-      padding: isMobile ? '10px 14px' : '6px 12px',
-      background: theme.bg.elevated,
-      border: `1px solid ${theme.border.subtle}`,
-      borderRadius: '6px',
-      color: theme.text.primary,
-      fontSize: isMobile ? '14px' : '12px',
-      cursor: 'pointer'
-    },
     grid: {
       display: 'grid',
       gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(70px, 1fr))' : 'repeat(auto-fill, minmax(80px, 1fr))',
@@ -763,33 +755,6 @@ const BatchPipeline = ({
       fontSize: '13px',
       color: theme.text.secondary,
       marginBottom: '6px'
-    },
-    btn: {
-      padding: isMobile ? '14px 20px' : '12px 24px',
-      borderRadius: '8px',
-      border: 'none',
-      fontWeight: '600',
-      cursor: 'pointer',
-      fontSize: isMobile ? '15px' : '14px',
-      transition: 'all 0.15s'
-    },
-    primaryBtn: {
-      background: theme.accent.primary,
-      color: 'white'
-    },
-    primaryBtnDisabled: {
-      background: '#4c4c54',
-      color: theme.text.muted,
-      cursor: 'not-allowed'
-    },
-    secondaryBtn: {
-      background: theme.bg.elevated,
-      color: theme.text.primary
-    },
-    secondaryBtnDisabled: {
-      background: theme.bg.surface,
-      color: '#52525b',
-      cursor: 'not-allowed'
     },
     footer: {
       padding: isMobile ? '16px' : '16px 24px',
@@ -991,9 +956,9 @@ const BatchPipeline = ({
                   2. Select Video Clips ({selectedClips.length}/{availableClips.length})
                 </div>
                 {availableClips.length > 0 && (
-                  <button style={styles.selectAllBtn} onClick={handleSelectAll}>
+                  <Button variant="neutral-secondary" size="small" onClick={handleSelectAll}>
                     {allSelected ? 'Deselect All' : 'Select All'}
-                  </button>
+                  </Button>
                 )}
               </div>
               {availableClips.length === 0 ? (
@@ -1106,23 +1071,7 @@ const BatchPipeline = ({
                         {initialTextStyle?.textCase && initialTextStyle.textCase !== 'default' ? ` • ${initialTextStyle.textCase.toUpperCase()}` : ''}
                       </div>
                     </div>
-                    <button
-                      onClick={() => {
-                        setUsingInitialSettings(false);
-                        setSelectedLyrics(null);
-                      }}
-                      style={{
-                        padding: '6px 12px',
-                        backgroundColor: theme.border.subtle,
-                        border: 'none',
-                        borderRadius: '6px',
-                        color: theme.text.secondary,
-                        fontSize: '12px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Use different lyrics
-                    </button>
+                    <Button variant="neutral-secondary" size="small" onClick={() => { setUsingInitialSettings(false); setSelectedLyrics(null); }}>Use different lyrics</Button>
                   </div>
                 </div>
               )}
@@ -1152,32 +1101,14 @@ const BatchPipeline = ({
           </div>
 
           <div style={styles.footer}>
-            <button style={{ ...styles.btn, ...styles.secondaryBtn }} onClick={onClose}>
-              Cancel
-            </button>
+            <Button variant="neutral-secondary" onClick={onClose}>Cancel</Button>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                style={{
-                  ...styles.btn,
-                  ...styles.secondaryBtn,
-                  ...(((!selectedAudio || selectedClips.length < 2 || isGeneratingPreview) ? styles.secondaryBtnDisabled : {}))
-                }}
-                onClick={handleGeneratePreview}
-                disabled={!selectedAudio || selectedClips.length < 2 || isGeneratingPreview}
-              >
-                {isGeneratingPreview ? 'Generating...' : '👁 Preview First'}
-              </button>
-              <button
-                style={{
-                  ...styles.btn,
-                  ...styles.primaryBtn,
-                  ...((!selectedAudio || selectedClips.length < 2) ? styles.primaryBtnDisabled : {})
-                }}
-                onClick={handleGenerate}
-                disabled={!selectedAudio || selectedClips.length < 2}
-              >
-                Generate {quantity} Video{quantity > 1 ? 's' : ''} →
-              </button>
+              <Button variant="neutral-secondary" onClick={handleGeneratePreview} disabled={!selectedAudio || selectedClips.length < 2 || isGeneratingPreview} loading={isGeneratingPreview}>
+                {isGeneratingPreview ? 'Generating...' : 'Preview First'}
+              </Button>
+              <Button variant="brand-primary" onClick={handleGenerate} disabled={!selectedAudio || selectedClips.length < 2}>
+                Generate {quantity} Video{quantity > 1 ? 's' : ''}
+              </Button>
             </div>
           </div>
         </div>
@@ -1209,18 +1140,8 @@ const BatchPipeline = ({
             </p>
           </div>
           <div style={styles.footer}>
-            <button
-              style={{ ...styles.btn, ...styles.secondaryBtn }}
-              onClick={() => setStage(STAGES.OPTIONS)}
-            >
-              ← Back to Options
-            </button>
-            <button
-              style={{ ...styles.btn, ...styles.primaryBtn }}
-              onClick={handleGenerate}
-            >
-              Looks Good - Generate {quantity} Videos →
-            </button>
+            <Button variant="neutral-secondary" onClick={() => setStage(STAGES.OPTIONS)}>Back to Options</Button>
+            <Button variant="brand-primary" onClick={handleGenerate}>Looks Good - Generate {quantity} Videos</Button>
           </div>
         </div>
       </div>
@@ -1399,42 +1320,9 @@ const BatchPipeline = ({
                     {/* Actions */}
                     <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
                       {onEditVideo && (
-                        <button
-                          style={{
-                            flex: 1,
-                            padding: '6px',
-                            background: theme.accent.primary,
-                            border: 'none',
-                            borderRadius: '6px',
-                            color: 'white',
-                            fontSize: '11px',
-                            cursor: 'pointer',
-                            fontWeight: '500'
-                          }}
-                          onClick={() => handleEditVideoClick(video, idx)}
-                        >
-                          ✏️ Edit
-                        </button>
+                        <Button variant="brand-primary" size="small" onClick={() => handleEditVideoClick(video, idx)} style={{ flex: 1 }}>Edit</Button>
                       )}
-                      <button
-                        style={{
-                          flex: 1,
-                          padding: '6px',
-                          background: theme.border.subtle,
-                          border: 'none',
-                          borderRadius: '6px',
-                          color: theme.text.primary,
-                          fontSize: '11px',
-                          cursor: 'pointer'
-                        }}
-                        onClick={() => {
-                          // Remove this video
-                          setGeneratedVideos(prev => prev.filter(v => v.id !== video.id));
-                          setCaptions(prev => prev.filter((_, i) => i !== idx));
-                        }}
-                      >
-                        🗑️ Remove
-                      </button>
+                      <Button variant="neutral-secondary" size="small" onClick={() => { setGeneratedVideos(prev => prev.filter(v => v.id !== video.id)); setCaptions(prev => prev.filter((_, i) => i !== idx)); }} style={{ flex: 1 }}>Remove</Button>
                     </div>
                   </div>
                 </div>
@@ -1449,25 +1337,10 @@ const BatchPipeline = ({
           </div>
 
           <div style={styles.footer}>
-            <button
-              style={{ ...styles.btn, ...styles.secondaryBtn }}
-              onClick={() => setStage(STAGES.OPTIONS)}
-            >
-              ← Generate More
-            </button>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                style={{
-                  ...styles.btn,
-                  ...styles.primaryBtn,
-                  ...(generatedVideos.length === 0 ? styles.primaryBtnDisabled : {})
-                }}
-                onClick={handleSaveAsDrafts}
-                disabled={generatedVideos.length === 0}
-              >
-                💾 Save as Drafts ({generatedVideos.length})
-              </button>
-            </div>
+            <Button variant="neutral-secondary" onClick={() => setStage(STAGES.OPTIONS)}>Generate More</Button>
+            <Button variant="brand-primary" onClick={handleSaveAsDrafts} disabled={generatedVideos.length === 0}>
+              Save as Drafts ({generatedVideos.length})
+            </Button>
           </div>
         </div>
       </div>

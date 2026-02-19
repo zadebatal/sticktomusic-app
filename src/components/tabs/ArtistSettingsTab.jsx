@@ -3,6 +3,7 @@ import { collection, query, where, getDocs, doc, setDoc, deleteDoc } from 'fireb
 import { getAuth } from 'firebase/auth';
 import { useTheme, THEMES } from '../../contexts/ThemeContext';
 import { useToast } from '../ui';
+import { Button } from '../../ui/components/Button';
 import { getTierForSets, shouldShowPaymentUI, computeSocialSetsUsed } from '../../services/subscriptionService';
 
 /**
@@ -184,20 +185,11 @@ const ArtistSettingsTab = ({
               )}
               {showPayment && (
                 <div className="flex gap-2 mt-3">
-                  <button
-                    onClick={() => toastInfo('Contact your operator to upgrade your plan')}
-                    className={`px-5 py-2 rounded-xl text-sm font-semibold transition ${t.btnPrimary}`}
-                  >
-                    Upgrade Plan
-                  </button>
+                  <Button variant="brand-primary" onClick={() => toastInfo('Contact your operator to upgrade your plan')}>Upgrade Plan</Button>
                   {canCancel && (
-                    <button
-                      onClick={handleCancelSubscription}
-                      disabled={cancelLoading}
-                      className="px-5 py-2 rounded-xl text-sm font-semibold transition border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-50"
-                    >
+                    <Button variant="destructive-secondary" onClick={handleCancelSubscription} disabled={cancelLoading} loading={cancelLoading}>
                       {cancelLoading ? 'Cancelling...' : 'Cancel'}
-                    </button>
+                    </Button>
                   )}
                 </div>
               )}
@@ -226,9 +218,9 @@ const ArtistSettingsTab = ({
                 className={`flex-1 px-4 py-2.5 rounded-xl border ${t.inputBorder} ${t.inputFocus} outline-none text-sm transition`}
                 style={{ backgroundColor: theme.bg.input, color: theme.text.primary }}
               />
-              <button type="submit" disabled={collabStatus === 'sending'} className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition ${t.btnPrimary} shrink-0`}>
+              <Button type="submit" variant="brand-primary" disabled={collabStatus === 'sending'} loading={collabStatus === 'sending'}>
                 {collabStatus === 'sending' ? 'Inviting...' : 'Invite'}
-              </button>
+              </Button>
             </form>
             {collabMessage && (
               <div className={`text-sm mb-3 ${collabStatus === 'success' ? 'text-green-400' : 'text-red-400'}`}>
@@ -243,12 +235,7 @@ const ArtistSettingsTab = ({
                       <p className={`text-sm ${t.textPrimary}`}>{c.name || c.email}</p>
                       <p className={`text-xs ${t.textMuted}`}>{c.email}</p>
                     </div>
-                    <button
-                      onClick={() => handleRemoveCollaborator(c.id)}
-                      className={`text-xs ${t.textMuted} hover:text-red-400 transition`}
-                    >
-                      Remove
-                    </button>
+                    <Button variant="destructive-secondary" size="small" onClick={() => handleRemoveCollaborator(c.id)}>Remove</Button>
                   </div>
                 ))}
               </div>
@@ -288,9 +275,7 @@ const ArtistSettingsTab = ({
         {/* LOGOUT */}
         <section className={`p-6 rounded-2xl border border-red-500/20 ${t.cardBg}`}>
           <h2 className="text-sm font-semibold uppercase tracking-wider text-red-400 mb-3">Danger Zone</h2>
-          <button onClick={onLogout} className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition ${t.btnDanger}`}>
-            Log Out
-          </button>
+          <Button variant="destructive-primary" onClick={onLogout}>Log Out</Button>
         </section>
       </div>
     </div>

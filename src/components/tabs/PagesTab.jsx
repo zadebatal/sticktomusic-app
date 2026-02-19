@@ -3,6 +3,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useToast } from '../ui';
 import { getLateProfiles, createLateProfile, getConnectUrl } from '../../services/lateService';
 import useIsMobile from '../../hooks/useIsMobile';
+import { Button } from '../../ui/components/Button';
 
 import { PLATFORM_META, ALL_PLATFORMS, getProfileUrl, formatFollowers } from '../../utils/platformUtils';
 
@@ -296,29 +297,12 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
                 ...(isMobile ? { paddingBottom: 'max(16px, env(safe-area-inset-bottom))', flexWrap: 'wrap', gap: 12 } : {}),
               }}
             >
-              <button
-                onClick={addRow}
-                className={`text-sm font-medium ${t.textSecondary} hover:${t.textPrimary} transition`}
-                style={isMobile ? { minHeight: 44, padding: '10px 16px' } : {}}
-              >
-                + Add Another
-              </button>
+              <Button variant="neutral-tertiary" size="small" onClick={addRow}>+ Add Another</Button>
               <div className="flex gap-3">
-                <button
-                  onClick={onClose}
-                  className={`px-5 py-2 rounded-xl text-sm font-semibold transition ${t.btnSecondary}`}
-                  style={isMobile ? { minHeight: 44 } : {}}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={saving || validRows.length === 0}
-                  className={`px-5 py-2 rounded-xl text-sm font-semibold transition ${t.btnPrimary} disabled:opacity-50`}
-                  style={isMobile ? { minHeight: 44 } : {}}
-                >
+                <Button variant="neutral-secondary" onClick={onClose}>Cancel</Button>
+                <Button variant="brand-primary" onClick={handleSave} disabled={saving || validRows.length === 0} loading={saving}>
                   {saving ? 'Saving...' : `Done (${validRows.length} handle${validRows.length !== 1 ? 's' : ''})`}
-                </button>
+                </Button>
               </div>
             </div>
           </>
@@ -362,13 +346,7 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
                 ...(isMobile ? { paddingBottom: 'max(16px, env(safe-area-inset-bottom))' } : {}),
               }}
             >
-              <button
-                onClick={onClose}
-                className={`px-5 py-2 rounded-xl text-sm font-semibold transition ${t.btnPrimary}`}
-                style={isMobile ? { minHeight: 44, width: '100%' } : {}}
-              >
-                Close
-              </button>
+              <Button variant="brand-primary" onClick={onClose}>Close</Button>
             </div>
           </>
         )}
@@ -582,14 +560,9 @@ const PagesTab = ({
               )}
             </p>
           </div>
-          <button
-            onClick={onLoadLatePages}
-            disabled={loadingLatePages}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${t.btnSecondary} disabled:opacity-50`}
-            style={isMobile ? { minHeight: 44, minWidth: 44 } : {}}
-          >
+          <Button variant="neutral-secondary" size="small" onClick={onLoadLatePages} disabled={loadingLatePages} loading={loadingLatePages}>
             {loadingLatePages ? 'Syncing...' : '↻ Sync All'}
-          </button>
+          </Button>
         </div>
 
         {/* No artists at all */}
@@ -652,13 +625,7 @@ const PagesTab = ({
                     </div>
                     <div className={`flex items-center ${isMobile ? 'gap-2' : 'gap-3'} shrink-0 flex-wrap justify-end`}>
                       {/* Add Accounts button */}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setBulkEntryArtistId(artist.id); }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${t.btnSecondary} hover:opacity-80`}
-                        style={isMobile ? { minHeight: 44 } : {}}
-                      >
-                        + Add Accounts
-                      </button>
+                      <Button variant="neutral-secondary" size="small" onClick={(e) => { e.stopPropagation(); setBulkEntryArtistId(artist.id); }}>+ Add Accounts</Button>
                       {!isMobile && isUnconfigured && !hasAnyEntries && (
                         <span className="px-3 py-1 rounded-full text-xs font-semibold bg-orange-500/15 text-orange-400">
                           Setup Required
@@ -694,20 +661,8 @@ const PagesTab = ({
                             Add a Late.co API key to manage {artist.name}'s social media pages, or add accounts manually.
                           </p>
                           <div className={`flex gap-3 justify-center ${isMobile ? 'flex-col items-stretch px-4' : ''}`}>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); onConfigureLate(artist.id); }}
-                              className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition ${t.btnPrimary}`}
-                              style={isMobile ? { minHeight: 44 } : {}}
-                            >
-                              Connect Late API Key
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setBulkEntryArtistId(artist.id); }}
-                              className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition ${t.btnSecondary}`}
-                              style={isMobile ? { minHeight: 44 } : {}}
-                            >
-                              Add Accounts Manually
-                            </button>
+                            <Button variant="brand-primary" onClick={(e) => { e.stopPropagation(); onConfigureLate(artist.id); }}>Connect Late API Key</Button>
+                            <Button variant="neutral-secondary" onClick={(e) => { e.stopPropagation(); setBulkEntryArtistId(artist.id); }}>Add Accounts Manually</Button>
                           </div>
                         </div>
                       )}
@@ -724,13 +679,7 @@ const PagesTab = ({
                               <p className={`text-sm ${t.textSecondary}`}>
                                 Connect Late to enable scheduling for {artist.name}'s accounts.
                               </p>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); onConfigureLate(artist.id); }}
-                                className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition ${t.btnPrimary} shrink-0`}
-                                style={isMobile ? { minHeight: 44 } : {}}
-                              >
-                                Connect Late
-                              </button>
+                              <Button variant="brand-primary" size="small" onClick={(e) => { e.stopPropagation(); onConfigureLate(artist.id); }}>Connect Late</Button>
                             </div>
                           )}
 

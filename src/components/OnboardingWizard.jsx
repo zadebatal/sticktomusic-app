@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
+import { Button } from '../ui/components/Button';
 import { getTierForSets } from '../services/subscriptionService';
 
 /**
@@ -103,26 +104,11 @@ const OnboardingWizard = ({ user, socialSetsAllowed = 0, onComplete }) => {
         </div>
 
         <div className="flex items-center justify-between">
-          <button
-            onClick={onComplete}
-            className={`text-sm ${t.textMuted} ${t.hoverText} transition`}
-          >
-            Skip
-          </button>
+          <Button variant="neutral-tertiary" onClick={onComplete}>Skip</Button>
           {isLast ? (
-            <button
-              onClick={onComplete}
-              className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition ${t.btnPrimary}`}
-            >
-              Get Started
-            </button>
+            <Button variant="brand-primary" onClick={onComplete}>Get Started</Button>
           ) : (
-            <button
-              onClick={() => setStep(s => s + 1)}
-              className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition ${t.btnPrimary}`}
-            >
-              Next
-            </button>
+            <Button variant="brand-primary" onClick={() => setStep(s => s + 1)}>Next</Button>
           )}
         </div>
       </div>
