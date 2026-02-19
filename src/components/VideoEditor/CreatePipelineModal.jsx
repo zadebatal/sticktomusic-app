@@ -247,7 +247,7 @@ const CreatePipelineModal = ({
               })}
 
               {/* Custom format card */}
-              <div className="flex flex-col items-center justify-center gap-4 rounded-lg border-2 border-dashed border-neutral-800 bg-[#171717] px-6 py-6 hover:border-neutral-400 cursor-pointer opacity-50">
+              <div className="flex flex-col items-center justify-center gap-4 rounded-lg border-2 border-dashed border-neutral-800 bg-[#171717] px-6 py-6 opacity-40 cursor-default">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-neutral-800">
                   <FeatherPlus className="text-neutral-400" style={{ width: 24, height: 24 }} />
                 </div>

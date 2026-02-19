@@ -58,9 +58,6 @@ const SlideshowEditor = ({
   lateAccountIds = {},
   schedulerEditMode = false
 }) => {
-  const { theme } = useTheme();
-  const styles = getStyles(theme);
-
   // Mobile responsive detection
   const { isMobile } = useIsMobile();
 
