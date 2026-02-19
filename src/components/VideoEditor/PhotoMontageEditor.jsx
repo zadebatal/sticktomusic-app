@@ -19,6 +19,8 @@ import WordTimeline from './WordTimeline';
 import LyricAnalyzer from './LyricAnalyzer';
 import CloudImportButton from './CloudImportButton';
 import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
+import { FeatherArrowLeft, FeatherMaximize2, FeatherGrid, FeatherStar } from '@subframe/core';
 import log from '../../utils/logger';
 
 /**
@@ -803,11 +805,7 @@ const PhotoMontageEditor = ({
       <div style={styles.container}>
         {/* Top Bar */}
         <div style={styles.topBar}>
-          <button onClick={handleCloseRequest} style={styles.backButton} title="Back">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-          </button>
+          <IconButton icon={<FeatherArrowLeft />} onClick={handleCloseRequest} />
 
           <input
             type="text"
@@ -829,13 +827,15 @@ const PhotoMontageEditor = ({
             ))}
           </div>
 
-          <button
+          <Button
+            variant="brand-primary"
+            size="small"
             onClick={handleExport}
             disabled={isExporting || photos.length === 0}
-            style={isExporting ? styles.exportButtonDisabled : styles.exportButton}
+            loading={isExporting}
           >
             {isExporting ? `Exporting ${exportProgress}%` : 'Export'}
-          </button>
+          </Button>
         </div>
 
         {/* Body */}
@@ -858,11 +858,7 @@ const PhotoMontageEditor = ({
                   />
                 </label>
                 {libraryImages.length > 0 && (
-                  <button onClick={() => setShowLibraryPicker(!showLibraryPicker)} style={styles.uploadButton} title="Import from library">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-                    </svg>
-                  </button>
+                  <IconButton size="small" icon={<FeatherGrid />} onClick={() => setShowLibraryPicker(!showLibraryPicker)} />
                 )}
               </div>
             </div>
@@ -884,7 +880,7 @@ const PhotoMontageEditor = ({
                     </div>
                   ))}
                 </div>
-                <button onClick={() => setShowLibraryPicker(false)} style={{ ...styles.smallButton, marginTop: '6px', width: '100%' }}>Done</button>
+                <Button variant="neutral-secondary" size="small" onClick={() => setShowLibraryPicker(false)} className="mt-1.5 w-full">Done</Button>
               </div>
             )}
 
@@ -1045,14 +1041,7 @@ const PhotoMontageEditor = ({
                 {currentTime.toFixed(1)}s / {totalDuration.toFixed(1)}s
               </span>
               {!isMobile && (
-                <button style={styles.fullscreenButton} onClick={() => previewRef.current?.requestFullscreen()} title="Fullscreen">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="15 3 21 3 21 9"/>
-                    <polyline points="9 21 3 21 3 15"/>
-                    <line x1="21" y1="3" x2="14" y2="10"/>
-                    <line x1="3" y1="21" x2="10" y2="14"/>
-                  </svg>
-                </button>
+                <IconButton size="small" icon={<FeatherMaximize2 />} onClick={() => previewRef.current?.requestFullscreen()} />
               )}
             </div>
 
@@ -1192,12 +1181,7 @@ const PhotoMontageEditor = ({
                       <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                     </svg>
                   </button>
-                  <button
-                    onClick={() => setEditingTextId(null)}
-                    style={styles.editBarDone}
-                  >
-                    Done
-                  </button>
+                  <Button variant="brand-primary" size="small" onClick={() => setEditingTextId(null)}>Done</Button>
                 </div>
               );
             })()}
@@ -1360,15 +1344,7 @@ const PhotoMontageEditor = ({
             ))}
           </select>
           {!isMobile && (
-            <button
-              style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
-              onClick={() => { setPresetPromptValue(''); setShowPresetPrompt(true); }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-              </svg>
-              Save preset
-            </button>
+            <Button variant="neutral-tertiary" size="small" icon={<FeatherStar />} onClick={() => { setPresetPromptValue(''); setShowPresetPrompt(true); }}>Save preset</Button>
           )}
         </div>
 
@@ -1543,12 +1519,6 @@ const getStyles = (theme, isMobile) => ({
     padding: '12px 16px', borderBottom: `1px solid ${theme.border.subtle}`,
     flexShrink: 0
   },
-  backButton: {
-    background: 'none', border: 'none', color: theme.text.secondary,
-    cursor: 'pointer', padding: '6px', borderRadius: '6px',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    minWidth: '32px', minHeight: '32px'
-  },
   nameInput: {
     flex: 1, background: 'none', border: `1px solid ${theme.border.subtle}`,
     borderRadius: '6px', padding: '6px 10px', color: theme.text.primary,
@@ -1567,16 +1537,6 @@ const getStyles = (theme, isMobile) => ({
     padding: '4px 10px', fontSize: '11px', fontWeight: 600,
     backgroundColor: theme.accent.primary, border: 'none', color: '#fff',
     cursor: 'pointer', borderRadius: '4px'
-  },
-  exportButton: {
-    padding: '6px 16px', fontSize: '13px', fontWeight: 600,
-    backgroundColor: theme.accent.primary, border: 'none', color: '#fff',
-    cursor: 'pointer', borderRadius: '6px', whiteSpace: 'nowrap'
-  },
-  exportButtonDisabled: {
-    padding: '6px 16px', fontSize: '13px', fontWeight: 600,
-    backgroundColor: theme.bg.elevated, border: 'none', color: theme.text.muted,
-    cursor: 'not-allowed', borderRadius: '6px', whiteSpace: 'nowrap'
   },
   // Body
   body: {
@@ -1643,11 +1603,6 @@ const getStyles = (theme, isMobile) => ({
     aspectRatio: '1', cursor: 'pointer', borderRadius: '4px', overflow: 'hidden',
     border: `1px solid ${theme.border.subtle}`
   },
-  smallButton: {
-    padding: '4px 8px', fontSize: '11px', fontWeight: 500,
-    backgroundColor: theme.bg.input, border: `1px solid ${theme.border.subtle}`,
-    borderRadius: '4px', color: theme.text.secondary, cursor: 'pointer'
-  },
   // Center panel
   centerPanel: {
     flex: 1, display: 'flex', flexDirection: 'column',
@@ -1710,17 +1665,6 @@ const getStyles = (theme, isMobile) => ({
     color: theme.text.primary,
     fontSize: '13px',
     outline: 'none'
-  },
-  fullscreenButton: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '32px',
-    height: '32px',
-    backgroundColor: 'transparent',
-    border: 'none',
-    color: theme.text.muted,
-    cursor: 'pointer'
   },
   audioTrack: {
     display: 'flex',
@@ -1789,11 +1733,6 @@ const getStyles = (theme, isMobile) => ({
     width: '28px', height: '28px', borderRadius: '4px',
     backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
     color: '#ef4444', cursor: 'pointer'
-  },
-  editBarDone: {
-    padding: '4px 10px', fontSize: '11px', fontWeight: 600,
-    backgroundColor: theme.accent.primary, border: 'none',
-    borderRadius: '4px', color: '#fff', cursor: 'pointer'
   },
   // Export progress
   exportProgressBar: {

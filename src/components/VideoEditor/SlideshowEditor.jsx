@@ -14,7 +14,7 @@ import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
 import { TextField } from '../../ui/components/TextField';
 import { Badge } from '../../ui/components/Badge';
-import { FeatherArrowLeft, FeatherX, FeatherDownload, FeatherChevronLeft, FeatherChevronRight, FeatherChevronDown, FeatherPlus, FeatherTrash2, FeatherRefreshCw, FeatherPlay, FeatherPause, FeatherScissors, FeatherUpload, FeatherCloud, FeatherMusic, FeatherMic, FeatherDatabase, FeatherAlignLeft, FeatherAlignCenter, FeatherAlignRight, FeatherLayout, FeatherCheck, FeatherCopy } from '@subframe/core';
+import { FeatherArrowLeft, FeatherX, FeatherDownload, FeatherChevronLeft, FeatherChevronRight, FeatherChevronDown, FeatherPlus, FeatherTrash2, FeatherRefreshCw, FeatherPlay, FeatherPause, FeatherScissors, FeatherUpload, FeatherCloud, FeatherMusic, FeatherMic, FeatherDatabase, FeatherAlignLeft, FeatherAlignCenter, FeatherAlignRight, FeatherLayout, FeatherCheck, FeatherCopy, FeatherSave } from '@subframe/core';
 
 /**
  * SlideshowEditor - Flowstage-style carousel/slideshow creator
@@ -2663,14 +2663,7 @@ const SlideshowEditor = ({
         />
         {/* Add to Bank */}
         <div className="relative">
-          <button
-            onClick={() => setShowAddToBankPicker(prev => !prev)}
-            className={`px-2 py-1 rounded-[5px] border border-pink-500/30 ${showAddToBankPicker ? 'bg-pink-500/20' : 'bg-pink-500/10'} text-pink-300 cursor-pointer text-[10px] font-semibold flex items-center gap-1 whitespace-nowrap`}
-            title="Save styled text to a text bank"
-          >
-            <FeatherPlus className="w-3 h-3" />
-            Bank
-          </button>
+          <Button variant="brand-secondary" size="small" icon={<FeatherPlus />} onClick={() => setShowAddToBankPicker(prev => !prev)} title="Save styled text to a text bank">Bank</Button>
           {showAddToBankPicker && (() => {
             const banks = getTextBanks();
             const bankCount = Math.max(banks.length, 2);
@@ -3862,30 +3855,20 @@ const TextEditorPanel = ({
           </svg>
           Text Editor
         </h3>
-        <button style={textPanelStyles.closeBtn} onClick={onClose}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+        <IconButton icon={<FeatherX />} onClick={onClose} />
       </div>
 
       {/* Text Blocks List */}
       <div style={textPanelStyles.textList}>
         <div style={textPanelStyles.sectionHeader}>
           <span>Text Blocks ({textOverlays.length})</span>
-          <button style={textPanelStyles.addBtn} onClick={onAddTextOverlay}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 5v14M5 12h14"/>
-            </svg>
-          </button>
+          <IconButton size="small" icon={<FeatherPlus />} onClick={onAddTextOverlay} />
         </div>
 
         {textOverlays.length === 0 ? (
           <div style={textPanelStyles.emptyText}>
             <p>No text on this slide</p>
-            <button style={textPanelStyles.addTextBtn} onClick={onAddTextOverlay}>
-              + Add Text
-            </button>
+            <Button variant="brand-secondary" size="small" icon={<FeatherPlus />} onClick={onAddTextOverlay}>Add Text</Button>
           </div>
         ) : (
           textOverlays.map((overlay, idx) => {
@@ -3905,26 +3888,9 @@ const TextEditorPanel = ({
               </div>
               <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0 }}>
                 {canReroll && (
-                  <button
-                    style={textPanelStyles.deleteBlockBtn}
-                    onClick={(e) => { e.stopPropagation(); onRerollText(overlay.id); }}
-                    title={`Reroll from Text Bank ${idx === 0 ? '1' : idx === 1 ? '2' : ''} (${bank.length} items)`}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
-                      <path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/>
-                      <path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/>
-                    </svg>
-                  </button>
+                  <IconButton size="small" icon={<FeatherRefreshCw />} onClick={(e) => { e.stopPropagation(); onRerollText(overlay.id); }} title={`Reroll from Text Bank ${idx === 0 ? '1' : idx === 1 ? '2' : ''} (${bank.length} items)`} />
                 )}
-                <button
-                  style={textPanelStyles.deleteBlockBtn}
-                  onClick={(e) => { e.stopPropagation(); onRemoveOverlay(overlay.id); }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/>
-                  </svg>
-                </button>
+                <IconButton size="small" icon={<FeatherTrash2 />} onClick={(e) => { e.stopPropagation(); onRemoveOverlay(overlay.id); }} />
               </div>
             </div>
             );
@@ -3951,48 +3917,10 @@ const TextEditorPanel = ({
           {(textBank1.length > 0 || textBank2.length > 0) && (
             <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
               {textBank1.length > 0 && (
-                <button
-                  style={{
-                    flex: 1, display: 'flex', alignItems: 'center', gap: '5px',
-                    padding: '6px 8px', border: '1px solid rgba(139, 92, 246, 0.3)',
-                    borderRadius: '6px', backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                    color: '#c4b5fd', cursor: 'pointer', fontSize: '11px',
-                    transition: 'all 0.15s'
-                  }}
-                  onClick={() => onRerollText(selectedOverlay.id, 0)}
-                  title={`Pick random text from Text Bank 1 (${textBank1.length} items)`}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(139, 92, 246, 0.2)'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(139, 92, 246, 0.1)'}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
-                    <path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/>
-                    <path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/>
-                  </svg>
-                  Bank 1 ({textBank1.length})
-                </button>
+                <Button variant="neutral-secondary" size="small" icon={<FeatherRefreshCw />} onClick={() => onRerollText(selectedOverlay.id, 0)} title={`Pick random text from Text Bank 1 (${textBank1.length} items)`} className="flex-1">Bank 1 ({textBank1.length})</Button>
               )}
               {textBank2.length > 0 && (
-                <button
-                  style={{
-                    flex: 1, display: 'flex', alignItems: 'center', gap: '5px',
-                    padding: '6px 8px', border: '1px solid rgba(99, 102, 241, 0.3)',
-                    borderRadius: '6px', backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                    color: '#a5b4fc', cursor: 'pointer', fontSize: '11px',
-                    transition: 'all 0.15s'
-                  }}
-                  onClick={() => onRerollText(selectedOverlay.id, 1)}
-                  title={`Pick random text from Text Bank 2 (${textBank2.length} items)`}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.2)'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.1)'}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
-                    <path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/>
-                    <path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/>
-                  </svg>
-                  Bank 2 ({textBank2.length})
-                </button>
+                <Button variant="neutral-secondary" size="small" icon={<FeatherRefreshCw />} onClick={() => onRerollText(selectedOverlay.id, 1)} title={`Pick random text from Text Bank 2 (${textBank2.length} items)`} className="flex-1">Bank 2 ({textBank2.length})</Button>
               )}
             </div>
           )}
@@ -4078,39 +4006,12 @@ const TextEditorPanel = ({
           {/* Template Actions */}
           <div style={textPanelStyles.templateActions}>
             {/* Save as Template */}
-            <button
-              style={textPanelStyles.saveTemplateBtn}
-              onClick={() => {
-                if (onRequestSaveTemplate && selectedOverlay) {
-                  onRequestSaveTemplate(st);
-                }
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
-                <polyline points="17,21 17,13 7,13 7,21"/>
-                <polyline points="7,3 7,8 15,8"/>
-              </svg>
-              Save as Template
-            </button>
+            <Button variant="neutral-secondary" size="small" icon={<FeatherSave />} onClick={() => { if (onRequestSaveTemplate && selectedOverlay) onRequestSaveTemplate(st); }}>Save as Template</Button>
 
             {/* Apply Template dropdown */}
             {templates.length > 0 && (
               <div style={{ position: 'relative' }}>
-                <button
-                  style={textPanelStyles.applyTemplateBtn}
-                  onClick={() => setShowTemplatePicker(!showTemplatePicker)}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2"/>
-                    <line x1="3" y1="9" x2="21" y2="9"/>
-                    <line x1="9" y1="21" x2="9" y2="9"/>
-                  </svg>
-                  Apply Template
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: '4px' }}>
-                    <polyline points="6 9 12 15 18 9"/>
-                  </svg>
-                </button>
+                <Button variant="neutral-secondary" size="small" icon={<FeatherLayout />} onClick={() => setShowTemplatePicker(!showTemplatePicker)}>Apply Template</Button>
                 {showTemplatePicker && (
                   <div style={textPanelStyles.templateDropdown}>
                     {templates.map(template => (
@@ -4133,9 +4034,7 @@ const TextEditorPanel = ({
 
           {/* Save to Lyric Bank */}
           {onAddLyrics && (selectedOverlay.text || '').trim() && (
-            <button
-              style={textPanelStyles.saveToLyricBankBtn}
-              onClick={() => {
+            <Button variant="neutral-secondary" size="small" icon={<FeatherMusic />} onClick={() => {
                 handleAddLyricsAndRefresh({
                   id: `lyric_${Date.now()}`,
                   title: (selectedOverlay.text || '').split('\n')[0].slice(0, 30) || 'Saved Lyrics',
@@ -4143,16 +4042,7 @@ const TextEditorPanel = ({
                   createdAt: new Date().toISOString()
                 });
                 toastSuccess('Saved to Lyric Bank!');
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-                <path d="M14 2v6h6"/>
-                <line x1="12" y1="11" x2="12" y2="17"/>
-                <line x1="9" y1="14" x2="15" y2="14"/>
-              </svg>
-              Save to Lyric Bank
-            </button>
+              }}>Save to Lyric Bank</Button>
           )}
         </div>
         );
@@ -4160,19 +4050,7 @@ const TextEditorPanel = ({
 
       {/* Pull from Lyric Bank Section */}
       <div style={textPanelStyles.lyricSection}>
-        <button
-          style={textPanelStyles.lyricBankBtn}
-          onClick={() => setShowLyricPicker(!showLyricPicker)}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-            <path d="M14 2v6h6"/>
-          </svg>
-          Pull from Lyric Bank
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 'auto', transform: showLyricPicker ? 'rotate(180deg)' : 'none' }}>
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-        </button>
+        <Button variant="neutral-secondary" size="small" icon={<FeatherDatabase />} onClick={() => setShowLyricPicker(!showLyricPicker)} className="w-full">Pull from Lyric Bank</Button>
 
         {showLyricPicker && (
           <div style={textPanelStyles.lyricPicker}>
@@ -4191,15 +4069,7 @@ const TextEditorPanel = ({
                   <div style={textPanelStyles.lyricPreview}>
                     {lyric.content.split('\n').slice(0, 2).join(' / ')}
                   </div>
-                  <button
-                    style={textPanelStyles.useLyricBtn}
-                    onClick={() => {
-                      onSelectText(lyric.content);
-                      setShowLyricPicker(false);
-                    }}
-                  >
-                    Use
-                  </button>
+                  <Button variant="brand-primary" size="small" onClick={() => { onSelectText(lyric.content); setShowLyricPicker(false); }}>Use</Button>
                 </div>
               ))
             )}
@@ -4245,15 +4115,6 @@ const textPanelStyles = {
     fontWeight: '600',
     color: '#f87171'
   },
-  closeBtn: {
-    padding: '6px',
-    backgroundColor: 'transparent',
-    border: 'none',
-    color: '#9ca3af',
-    cursor: 'pointer',
-    borderRadius: '6px',
-    transition: 'background 0.2s'
-  },
   textList: {
     padding: '16px',
     borderBottom: '1px solid rgba(255,255,255,0.1)'
@@ -4268,32 +4129,10 @@ const textPanelStyles = {
     color: '#9ca3af',
     textTransform: 'uppercase'
   },
-  addBtn: {
-    width: '24px',
-    height: '24px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(99, 102, 241, 0.2)',
-    border: 'none',
-    borderRadius: '6px',
-    color: '#a5b4fc',
-    cursor: 'pointer'
-  },
   emptyText: {
     textAlign: 'center',
     padding: '20px',
     color: '#6b7280'
-  },
-  addTextBtn: {
-    marginTop: '12px',
-    padding: '8px 16px',
-    backgroundColor: 'rgba(99, 102, 241, 0.2)',
-    border: '1px solid rgba(99, 102, 241, 0.3)',
-    borderRadius: '8px',
-    color: '#a5b4fc',
-    cursor: 'pointer',
-    fontSize: '13px'
   },
   textBlock: {
     display: 'flex',
@@ -4318,15 +4157,6 @@ const textPanelStyles = {
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis'
-  },
-  deleteBlockBtn: {
-    padding: '4px',
-    backgroundColor: 'transparent',
-    border: 'none',
-    color: '#6b7280',
-    cursor: 'pointer',
-    opacity: 0.6,
-    transition: 'opacity 0.2s'
   },
   editor: {
     padding: '16px',
@@ -4420,21 +4250,6 @@ const textPanelStyles = {
   lyricSection: {
     padding: '16px'
   },
-  lyricBankBtn: {
-    width: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    padding: '12px 16px',
-    backgroundColor: 'rgba(139, 92, 246, 0.1)',
-    border: '1px solid rgba(139, 92, 246, 0.3)',
-    borderRadius: '10px',
-    color: '#c4b5fd',
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: '500',
-    transition: 'all 0.2s'
-  },
   lyricPicker: {
     marginTop: '12px',
     maxHeight: '200px',
@@ -4466,44 +4281,11 @@ const textPanelStyles = {
     overflow: 'hidden',
     textOverflow: 'ellipsis'
   },
-  useLyricBtn: {
-    padding: '6px 12px',
-    backgroundColor: 'rgba(139, 92, 246, 0.2)',
-    border: '1px solid rgba(139, 92, 246, 0.3)',
-    borderRadius: '6px',
-    color: '#c4b5fd',
-    cursor: 'pointer',
-    fontSize: '12px'
-  },
   templateActions: {
     display: 'flex',
     gap: '8px',
     marginBottom: '12px',
     flexWrap: 'wrap'
-  },
-  saveTemplateBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '8px 12px',
-    backgroundColor: 'rgba(34, 197, 94, 0.2)',
-    border: '1px solid rgba(34, 197, 94, 0.3)',
-    borderRadius: '6px',
-    color: '#6ee7b7',
-    cursor: 'pointer',
-    fontSize: '12px'
-  },
-  applyTemplateBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '8px 12px',
-    backgroundColor: 'rgba(99, 102, 241, 0.2)',
-    border: '1px solid rgba(99, 102, 241, 0.3)',
-    borderRadius: '6px',
-    color: '#a5b4fc',
-    cursor: 'pointer',
-    fontSize: '12px'
   },
   templateDropdown: {
     position: 'absolute',
@@ -4526,20 +4308,6 @@ const textPanelStyles = {
     fontSize: '13px',
     textAlign: 'left',
     cursor: 'pointer'
-  },
-  saveToLyricBankBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    width: '100%',
-    padding: '10px 12px',
-    backgroundColor: 'rgba(139, 92, 246, 0.2)',
-    border: '1px solid rgba(139, 92, 246, 0.3)',
-    borderRadius: '8px',
-    color: '#c4b5fd',
-    cursor: 'pointer',
-    fontSize: '13px',
-    marginTop: '8px'
   },
 };
 

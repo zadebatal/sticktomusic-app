@@ -1245,13 +1245,12 @@ const SoloClipEditor = ({
                         className={`mb-1.5 p-2.5 rounded-lg cursor-pointer ${editingTextId === overlay.id ? 'bg-brand-600/10 border border-brand-600/30' : 'bg-neutral-800/50 border border-neutral-800'}`}>
                         <div className="flex justify-between items-center mb-1">
                           <span className="text-[11px] text-neutral-400">Overlay {idx + 1}</span>
-                          <button onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }}
-                            className="bg-transparent border-none text-neutral-500 text-[16px] cursor-pointer min-w-[44px] min-h-[44px]">×</button>
+                          <IconButton icon={<FeatherX />} onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} />
                         </div>
                         <div className="text-[13px] text-[#ffffffff]">{overlay.text}</div>
                       </div>
                     ))}
-                    <button onClick={() => addTextOverlay()} className="w-full p-2.5 rounded-lg border border-dashed border-brand-600/40 bg-transparent text-brand-400 text-[12px] cursor-pointer min-h-[44px]">+ Add Text</button>
+                    <Button variant="brand-secondary" size="small" icon={<FeatherPlus />} onClick={() => addTextOverlay()}>Add Text</Button>
                   </div>
                 )}
               </div>
@@ -1566,7 +1565,7 @@ const SoloClipEditor = ({
                                 Overlay {idx + 1}
                                 {overlay.startTime !== undefined && <span className="ml-1.5 text-[9px] text-neutral-500">{overlay.startTime.toFixed(1)}s – {overlay.endTime.toFixed(1)}s</span>}
                               </span>
-                              <button onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} className="bg-transparent border-none text-neutral-500 text-[16px] cursor-pointer px-1">×</button>
+                              <IconButton size="small" icon={<FeatherX />} onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} />
                             </div>
                             {isSelected ? (
                               <input value={editingTextValue} onChange={(e) => setEditingTextValue(e.target.value)}

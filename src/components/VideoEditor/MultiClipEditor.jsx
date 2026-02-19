@@ -1464,7 +1464,7 @@ const MultiClipEditor = ({
                               <div style={{ fontSize: '12px', fontWeight: 600, color: '#14b8a6', marginBottom: '6px' }}>Text Bank A</div>
                               <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
                                 <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} placeholder="Add text..." className="flex-1 px-2 py-1.5 rounded-md border border-neutral-800 bg-[#0a0a0aff] text-[#ffffffff] text-[12px] outline-none min-h-[44px]" />
-                                <button onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', backgroundColor: '#14b8a6', color: '#fff', cursor: 'pointer', fontSize: '12px', flexShrink: 0, minHeight: '44px' }}>+</button>
+                                <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} />
                               </div>
                               {bankA.map((text, idx) => (
                                 <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-400 min-h-[36px]">
@@ -1481,7 +1481,7 @@ const MultiClipEditor = ({
                               <div style={{ fontSize: '12px', fontWeight: 600, color: '#f59e0b', marginBottom: '6px' }}>Text Bank B</div>
                               <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
                                 <input value={newTextB} onChange={(e) => setNewTextB(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} placeholder="Add text..." className="flex-1 px-2 py-1.5 rounded-md border border-neutral-800 bg-[#0a0a0aff] text-[#ffffffff] text-[12px] outline-none min-h-[44px]" />
-                                <button onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', backgroundColor: '#f59e0b', color: '#fff', cursor: 'pointer', fontSize: '12px', flexShrink: 0, minHeight: '44px' }}>+</button>
+                                <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} />
                               </div>
                               {bankB.map((text, idx) => (
                                 <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-400 min-h-[36px]">
@@ -1623,9 +1623,7 @@ const MultiClipEditor = ({
                         );
                       })}
 
-                      <button onClick={() => addTextOverlay()} className="p-2.5 rounded-lg border border-dashed border-brand-600/40 bg-transparent text-brand-400 text-[12px] font-medium cursor-pointer text-center min-h-[44px] my-1.5">
-                        + Add Text Overlay
-                      </button>
+                      <Button variant="brand-secondary" size="small" icon={<FeatherPlus />} onClick={() => addTextOverlay()}>Add Text Overlay</Button>
                     </div>
                   )}
                 </div>
@@ -1823,10 +1821,9 @@ const MultiClipEditor = ({
                             className="flex-1 h-1 accent-blue-500 cursor-pointer" />
                           <span className="text-caption font-caption text-neutral-400 w-8">{Math.round(sourceVideoVolume * 100)}%</span>
                         </div>
-                        <button onClick={() => setSourceVideoMuted(m => !m)}
-                          className={`text-caption font-caption px-2 py-1 rounded border cursor-pointer ${sourceVideoMuted ? 'border-red-500/30 text-red-400 bg-red-500/10' : 'border-neutral-800 text-neutral-400 bg-transparent'}`}>
+                        <Button variant={sourceVideoMuted ? 'destructive-secondary' : 'neutral-tertiary'} size="small" onClick={() => setSourceVideoMuted(m => !m)}>
                           {sourceVideoMuted ? 'Source Muted' : 'Mute Source'}
-                        </button>
+                        </Button>
                       </div>
                     </>
                   ) : (
@@ -1920,8 +1917,7 @@ const MultiClipEditor = ({
                             <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)}
                               onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
                               placeholder="Add text..." className="flex-1 px-2 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[12px] outline-none" />
-                            <button onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
-                              className="px-2.5 py-1.5 rounded-md bg-teal-500 text-white text-[12px] border-none cursor-pointer">+</button>
+                            <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} />
                           </div>
                           {bankA.map((text, idx) => (
                             <div key={idx} className="flex items-center px-2 py-1 rounded-md bg-neutral-800/50 mb-1">
@@ -1937,8 +1933,7 @@ const MultiClipEditor = ({
                             <input value={newTextB} onChange={(e) => setNewTextB(e.target.value)}
                               onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
                               placeholder="Add text..." className="flex-1 px-2 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[12px] outline-none" />
-                            <button onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
-                              className="px-2.5 py-1.5 rounded-md bg-amber-500 text-white text-[12px] border-none cursor-pointer">+</button>
+                            <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} />
                           </div>
                           {bankB.map((text, idx) => (
                             <div key={idx} className="flex items-center px-2 py-1 rounded-md bg-neutral-800/50 mb-1">
@@ -1988,8 +1983,7 @@ const MultiClipEditor = ({
                             Overlay {idx + 1}
                             {overlay.startTime !== undefined && <span className="ml-1.5 text-[9px] text-neutral-600">{overlay.startTime.toFixed(1)}s &#8211; {overlay.endTime.toFixed(1)}s</span>}
                           </span>
-                          <button onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }}
-                            className="bg-transparent border-none text-neutral-600 text-[16px] cursor-pointer px-1 leading-none">&#215;</button>
+                          <IconButton size="small" icon={<FeatherX />} onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} />
                         </div>
                         {isSelected ? (
                           <input value={editingTextValue} onChange={(e) => setEditingTextValue(e.target.value)}
