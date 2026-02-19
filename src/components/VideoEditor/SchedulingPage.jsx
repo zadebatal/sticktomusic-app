@@ -27,7 +27,7 @@ import {
   FeatherHash, FeatherList, FeatherCalendar, FeatherChevronDown,
   FeatherTrash2, FeatherX, FeatherUser,
   FeatherGripVertical, FeatherEdit, FeatherSend, FeatherRotateCcw,
-  FeatherLock, FeatherUnlock, FeatherChevronUp
+  FeatherLock, FeatherUnlock, FeatherChevronUp, FeatherChevronLeft, FeatherChevronRight
 } from '@subframe/core';
 import * as SubframeCore from '@subframe/core';
 
@@ -1570,25 +1570,19 @@ const SchedulingPage = ({
           </div>
 
           {/* Schedule + Publish buttons */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px', gap: '8px' }}>
-            <button style={s.applyBtn} onClick={handleBatchScheduleSelected}>
+          <div className="flex justify-end mt-2.5 gap-2">
+            <Button variant="brand-primary" size="small" onClick={handleBatchScheduleSelected}>
               Schedule {selectedCount} Post{selectedCount !== 1 ? 's' : ''}
-            </button>
+            </Button>
             {publishableCount > 0 && (
-              <button
-                style={{ ...s.applyBtn, backgroundColor: '#059669', borderColor: '#10b981' }}
-                onClick={handleBulkPublish}
-              >
+              <Button variant="brand-primary" size="small" onClick={handleBulkPublish}>
                 Publish {publishableCount} Now
-              </button>
+              </Button>
             )}
             {revertableCount > 0 && (
-              <button
-                style={{ ...s.applyBtn, backgroundColor: '#78350f', borderColor: '#f59e0b', color: '#fbbf24' }}
-                onClick={handleBulkRevertToDraft}
-              >
+              <Button variant="neutral-secondary" size="small" onClick={handleBulkRevertToDraft}>
                 Revert {revertableCount} to Draft
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -2393,18 +2387,14 @@ const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) =>
       <div style={s.modalContent} onClick={(e) => e.stopPropagation()}>
         <div style={s.modalHeader}>
           <h2 style={s.modalTitle}>Add from Drafts</h2>
-          <button style={s.modalClose} onClick={onClose}>×</button>
+          <IconButton size="small" icon={<FeatherX />} onClick={onClose} />
         </div>
-        <div style={s.modalTabs}>
-          {['all', 'videos', 'slideshows'].map(tab => (
-            <button
-              key={tab}
-              style={{ ...s.filterTab, ...(selectedTab === tab ? s.filterTabActive : {}) }}
-              onClick={() => { setSelectedTab(tab); setSelectedItems(new Set()); }}
-            >
-              {tab === 'all' ? 'All' : tab === 'videos' ? 'Videos' : 'Slideshows'}
-            </button>
-          ))}
+        <div style={{ padding: '8px 16px', borderBottom: `1px solid ${theme.bg.elevated}` }}>
+          <ToggleGroup value={selectedTab} onValueChange={(val) => { if (val) { setSelectedTab(val); setSelectedItems(new Set()); } }}>
+            <ToggleGroup.Item value="all">All</ToggleGroup.Item>
+            <ToggleGroup.Item value="videos">Videos</ToggleGroup.Item>
+            <ToggleGroup.Item value="slideshows">Slideshows</ToggleGroup.Item>
+          </ToggleGroup>
         </div>
         {loadingContent ? (
           <div style={s.modalLoading}><div style={s.spinner} /><p style={{ color: '#71717a', marginTop: '16px' }}>Loading...</p></div>
@@ -2439,18 +2429,19 @@ const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) =>
               })}
             </div>
             <div style={s.modalFooter}>
-              <button style={s.drawerBtn} onClick={handleSelectAll}>
+              <Button variant="neutral-tertiary" size="small" onClick={handleSelectAll}>
                 {selectedItems.size === items.length ? 'Clear' : 'Select All'}
-              </button>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button style={s.drawerBtn} onClick={onClose}>Cancel</button>
-                <button
-                  style={{ ...s.applyBtn, opacity: selectedItems.size === 0 ? 0.5 : 1 }}
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="neutral-secondary" size="small" onClick={onClose}>Cancel</Button>
+                <Button
+                  variant="brand-primary"
+                  size="small"
                   onClick={() => onAdd(items.filter(i => selectedItems.has(i.id)))}
                   disabled={selectedItems.size === 0}
                 >
                   Add {selectedItems.size > 0 ? `(${selectedItems.size})` : ''} to Queue
-                </button>
+                </Button>
               </div>
             </div>
           </>
@@ -2495,10 +2486,10 @@ const CalendarView = ({ posts, expandedPostId, onSelectPost, calendarDate, onCha
   return (
     <div style={s.calView}>
       <div style={s.calHeader}>
-        <button style={{ ...s.calNavBtn, ...(isMobile ? { width: '44px', height: '44px', fontSize: '20px' } : {}) }} onClick={() => onChangeMonth(new Date(year, month - 1))}>&#8249;</button>
+        <IconButton size={isMobile ? "medium" : "small"} onClick={() => onChangeMonth(new Date(year, month - 1))} icon={<FeatherChevronLeft />} />
         <span style={s.calTitle}>{firstDay.toLocaleString('en-US', { month: 'long', year: 'numeric' })}</span>
-        <button style={{ ...s.calNavBtn, ...(isMobile ? { width: '44px', height: '44px', fontSize: '20px' } : {}) }} onClick={() => onChangeMonth(new Date(year, month + 1))}>&#8250;</button>
-        <button style={{ ...s.drawerBtn, marginLeft: '8px', padding: isMobile ? '8px 14px' : '4px 10px', minHeight: isMobile ? '44px' : 'auto' }} onClick={() => onChangeMonth(new Date())}>Today</button>
+        <IconButton size={isMobile ? "medium" : "small"} onClick={() => onChangeMonth(new Date(year, month + 1))} icon={<FeatherChevronRight />} />
+        <Button variant="neutral-tertiary" size="small" className="ml-2" onClick={() => onChangeMonth(new Date())}>Today</Button>
       </div>
       <div style={{ ...s.calGrid, ...(isMobile ? { padding: '4px' } : {}) }}>
         {(isMobile ? ['S', 'M', 'T', 'W', 'T', 'F', 'S'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']).map((d, i) => (

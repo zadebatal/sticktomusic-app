@@ -5,6 +5,9 @@ import CollectionBankEditor from './CollectionBankEditor';
 import { useToast, useFocusTrap } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
 import log from '../../utils/logger';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
+import { FeatherX, FeatherShuffle, FeatherDatabase } from '@subframe/core';
 
 /**
  * ScheduleQueue - Unified scheduling module for videos and slideshows
@@ -456,7 +459,7 @@ const ScheduleQueue = ({
               {contentType === 'mixed' && ' (videos & slideshows)'}
             </p>
           </div>
-          <button style={styles.closeButton} onClick={onClose}>×</button>
+          <IconButton size="medium" icon={<FeatherX />} onClick={onClose} />
         </div>
 
         {/* Rendering Progress */}
@@ -518,16 +521,18 @@ const ScheduleQueue = ({
                 </div>
               </div>
 
-              <button style={styles.shuffleBtn} onClick={handleShuffle}>
-                🔀 Shuffle
-              </button>
+              <Button variant="neutral-secondary" size="small" icon={<FeatherShuffle />} onClick={handleShuffle}>
+                Shuffle
+              </Button>
 
-              <button
-                style={styles.banksToggleBtn}
+              <Button
+                variant="neutral-secondary"
+                size="small"
+                icon={showBankEditor ? <FeatherX /> : <FeatherDatabase />}
                 onClick={() => setShowBankEditor(!showBankEditor)}
               >
-                {showBankEditor ? '✕ Banks' : '🏦 Banks'}
-              </button>
+                Banks
+              </Button>
             </div>
 
             {/* Schedule Settings */}
@@ -612,7 +617,7 @@ const ScheduleQueue = ({
             {error && (
               <div style={styles.errorBar}>
                 <span>⚠️ {error}</span>
-                <button onClick={() => setError(null)} style={styles.errorDismiss}>×</button>
+                <IconButton size="small" icon={<FeatherX />} onClick={() => setError(null)} />
               </div>
             )}
 
@@ -657,12 +662,7 @@ const ScheduleQueue = ({
             <div style={styles.sidebar}>
               <div style={styles.sidebarHeader}>
                 <h3 style={styles.sidebarTitle}>Collection Banks</h3>
-                <button
-                  style={styles.sidebarClose}
-                  onClick={() => setShowBankEditor(false)}
-                >
-                  ×
-                </button>
+                <IconButton size="small" icon={<FeatherX />} onClick={() => setShowBankEditor(false)} />
               </div>
 
               <div style={styles.sidebarContent}>
@@ -702,19 +702,20 @@ const ScheduleQueue = ({
 
         {/* Footer */}
         <div style={styles.footer}>
-          <button style={styles.cancelBtn} onClick={onClose}>
+          <Button variant="neutral-secondary" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            style={styles.scheduleBtn}
+          </Button>
+          <Button
+            variant="brand-primary"
             onClick={handleScheduleAll}
             disabled={isScheduling || posts.length === 0 || !selectedHandle}
+            loading={isScheduling}
           >
             {isScheduling
               ? `Scheduling... (${successCount}/${posts.length})`
               : `Schedule ${posts.length} Post${posts.length !== 1 ? 's' : ''}`
             }
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -1007,15 +1008,6 @@ const getStyles = (theme) => ({
     fontSize: '14px',
     color: theme.text.muted
   },
-  closeButton: {
-    background: 'none',
-    border: 'none',
-    color: theme.text.muted,
-    fontSize: '24px',
-    cursor: 'pointer',
-    padding: '4px 8px',
-    borderRadius: '4px'
-  },
   renderingBar: {
     backgroundColor: theme.bg.surface,
     padding: '12px 24px',
@@ -1124,26 +1116,6 @@ const getStyles = (theme) => ({
     color: theme.text.primary,
     cursor: 'pointer'
   },
-  shuffleBtn: {
-    padding: '8px 16px',
-    borderRadius: '8px',
-    border: 'none',
-    backgroundColor: theme.accent.primary,
-    color: theme.text.primary,
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer'
-  },
-  banksToggleBtn: {
-    padding: '8px 16px',
-    borderRadius: '8px',
-    border: `1px solid ${theme.border.default}`,
-    backgroundColor: theme.bg.elevated,
-    color: theme.text.primary,
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer'
-  },
   errorBar: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -1152,13 +1124,6 @@ const getStyles = (theme) => ({
     backgroundColor: '#7f1d1d',
     color: '#fecaca',
     fontSize: '14px'
-  },
-  errorDismiss: {
-    background: 'none',
-    border: 'none',
-    color: '#fecaca',
-    fontSize: '18px',
-    cursor: 'pointer'
   },
   postsList: {
     flex: 1,
@@ -1339,13 +1304,6 @@ const getStyles = (theme) => ({
     fontWeight: '600',
     color: theme.text.primary
   },
-  sidebarClose: {
-    background: 'none',
-    border: 'none',
-    color: theme.text.muted,
-    fontSize: '20px',
-    cursor: 'pointer'
-  },
   sidebarContent: {
     flex: 1,
     overflowY: 'auto',
@@ -1383,26 +1341,6 @@ const getStyles = (theme) => ({
     padding: '16px 24px',
     borderTop: `1px solid ${theme.bg.elevated}`
   },
-  cancelBtn: {
-    padding: '10px 20px',
-    borderRadius: '8px',
-    border: `1px solid ${theme.border.default}`,
-    backgroundColor: 'transparent',
-    color: theme.text.secondary,
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer'
-  },
-  scheduleBtn: {
-    padding: '10px 24px',
-    borderRadius: '8px',
-    border: 'none',
-    backgroundColor: '#22c55e',
-    color: '#fff',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer'
-  }
 });
 
 export default ScheduleQueue;
