@@ -4,6 +4,9 @@ import { useTheme } from '../../contexts/ThemeContext';
 import AudioClipSelector from './AudioClipSelector';
 import LyricBank from './LyricBank';
 import { ConfirmDialog } from '../ui';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
+import { FeatherX, FeatherArrowLeft, FeatherMenu, FeatherPlus } from '@subframe/core';
 
 /**
  * AestheticHome - Studio home with mode selection
@@ -194,17 +197,9 @@ const AestheticHome = ({
     <div style={styles.container}>
       {/* Mobile sidebar toggle button */}
       {isMobile && !mobileSidebarOpen && (
-        <button
-          onClick={() => setMobileSidebarOpen(true)}
-          style={styles.mobileSidebarToggle}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="3" y1="6" x2="21" y2="6" />
-            <line x1="3" y1="12" x2="21" y2="12" />
-            <line x1="3" y1="18" x2="21" y2="18" />
-          </svg>
-          <span style={{ marginLeft: '8px', fontSize: '13px' }}>Categories</span>
-        </button>
+        <Button variant="neutral-secondary" size="small" icon={<FeatherMenu />} onClick={() => setMobileSidebarOpen(true)} style={{ position: 'fixed', top: '12px', left: '12px', zIndex: 1000 }}>
+          Categories
+        </Button>
       )}
 
       {/* Mobile sidebar overlay */}
@@ -224,15 +219,9 @@ const AestheticHome = ({
       }}>
         {/* Mobile close button */}
         {isMobile && (
-          <button
-            onClick={() => setMobileSidebarOpen(false)}
-            style={styles.mobileSidebarClose}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '8px' }}>
+            <IconButton size="medium" icon={<FeatherX />} onClick={() => setMobileSidebarOpen(false)} />
+          </div>
         )}
         <div style={styles.sidebarSection}>
           <div style={styles.sidebarHeader}>
@@ -273,18 +262,15 @@ const AestheticHome = ({
                   style={styles.newCategoryInput}
                   autoFocus
                 />
-                <div style={styles.newCategoryActions}>
-                  <button onClick={() => setIsCreatingCategory(false)} style={styles.newCategoryCancel}>Cancel</button>
-                  <button onClick={handleCreateCategory} style={styles.newCategoryCreate} disabled={!newCategoryName.trim()}>Create</button>
+                <div className="flex gap-2 mt-2">
+                  <Button variant="neutral-tertiary" size="small" onClick={() => setIsCreatingCategory(false)}>Cancel</Button>
+                  <Button variant="brand-primary" size="small" onClick={handleCreateCategory} disabled={!newCategoryName.trim()}>Create</Button>
                 </div>
               </div>
             ) : (
-              <button style={styles.addCategoryButton} onClick={() => setIsCreatingCategory(true)}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
+              <Button variant="neutral-secondary" size="small" icon={<FeatherPlus />} className="w-full" onClick={() => setIsCreatingCategory(true)}>
                 New Category
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -299,12 +285,9 @@ const AestheticHome = ({
           <>
             {/* Header with back navigation */}
             <div style={styles.categoryHeader}>
-              <button style={styles.backButton} onClick={handleBack}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M19 12H5M12 19l-7-7 7-7"/>
-                </svg>
+              <Button variant="neutral-tertiary" size="small" icon={<FeatherArrowLeft />} onClick={handleBack}>
                 {studioMode ? 'Back to Modes' : 'Back to Categories'}
-              </button>
+              </Button>
 
               <div style={styles.categoryInfo}>
                 <div style={styles.categoryIcon}>{selectedCategory.name.charAt(0).toUpperCase()}</div>
@@ -484,42 +467,31 @@ const AestheticHome = ({
                   <div style={styles.actionsColumn}>
                     <h3 style={styles.columnTitle}>ACTIONS</h3>
 
-                    <button
-                      style={{
-                        ...styles.actionButton,
-                        ...(isMobile ? { padding: '16px', fontSize: '15px' } : {})
-                      }}
+                    <Button
+                      variant="brand-primary"
+                      className="w-full"
                       onClick={onMakeVideo || onCreateContent}
                       disabled={selectedCategory.videos?.length === 0 && selectedCategory.audio?.length === 0}
                     >
-                      <span style={styles.actionIcon}>✏️</span>
-                      Make a Video
-                    </button>
+                      ✏️ Make a Video
+                    </Button>
 
-                    <button
-                      style={{
-                        ...styles.actionButtonPurple,
-                        ...(isMobile ? { padding: '16px', fontSize: '15px' } : {})
-                      }}
+                    <Button
+                      variant="brand-secondary"
+                      className="w-full"
                       onClick={onShowBatchPipeline}
                       disabled={selectedCategory.videos?.length === 0 || selectedCategory.audio?.length === 0}
-                      title="Generate up to 10 videos at once"
                     >
-                      <span style={styles.actionIcon}>📦</span>
-                      Make 10 at once
-                    </button>
+                      📦 Make 10 at once
+                    </Button>
 
-                    <button
-                      style={{
-                        ...styles.actionButtonGreen,
-                        ...(isMobile ? { padding: '16px', fontSize: '15px' } : {})
-                      }}
+                    <Button
+                      variant="neutral-secondary"
+                      className="w-full"
                       onClick={onViewContent}
-                      title="View created videos and drafts"
                     >
-                      <span style={styles.actionIcon}>📁</span>
-                      View Content ({videoCount})
-                    </button>
+                      📁 View Content ({videoCount})
+                    </Button>
                   </div>
                 </div>
 
@@ -719,46 +691,34 @@ const AestheticHome = ({
                   <div style={styles.actionsColumn}>
                     <h3 style={styles.columnTitle}>ACTIONS</h3>
 
-                    <button
-                      style={{
-                        ...styles.actionButton,
-                        ...(isMobile ? { padding: '16px', fontSize: '15px' } : {})
-                      }}
+                    <Button
+                      variant="brand-primary"
+                      className="w-full"
                       onClick={() => onMakeSlideshow?.()}
                       disabled={(selectedCategory.imagesA || []).length === 0 && (selectedCategory.imagesB || []).length === 0}
                     >
-                      <span style={styles.actionIcon}>✏️</span>
-                      Make a Slideshow
-                    </button>
+                      ✏️ Make a Slideshow
+                    </Button>
 
-                    <button
-                      style={{
-                        ...styles.actionButtonPurple,
-                        ...(isMobile ? { padding: '16px', fontSize: '15px' } : {})
-                      }}
+                    <Button
+                      variant="brand-secondary"
+                      className="w-full"
                       onClick={() => {
                         onMakeSlideshow?.({ batch: true });
-                        // Auto-navigate to slideshow library after batch creation
                         setTimeout(() => onViewContent?.({ type: 'slideshows' }), 100);
                       }}
                       disabled={(selectedCategory.imagesA || []).length === 0 || (selectedCategory.imagesB || []).length === 0}
-                      title="Generate 10 slideshows randomly pulling from A/B banks"
                     >
-                      <span style={styles.actionIcon}>📦</span>
-                      Make 10 at once
-                    </button>
+                      📦 Make 10 at once
+                    </Button>
 
-                    <button
-                      style={{
-                        ...styles.actionButtonGreen,
-                        ...(isMobile ? { padding: '16px', fontSize: '15px' } : {})
-                      }}
-                      title="View created slideshows"
+                    <Button
+                      variant="neutral-secondary"
+                      className="w-full"
                       onClick={() => onViewContent?.({ type: 'slideshows' })}
                     >
-                      <span style={styles.actionIcon}>📁</span>
-                      View Created ({slideshowCount})
-                    </button>
+                      📁 View Created ({slideshowCount})
+                    </Button>
                   </div>
                 </div>
 
@@ -968,21 +928,15 @@ const AestheticHome = ({
               placeholder="Enter lyrics to add to bank..."
               style={{ width: '100%', minHeight: 100, background: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, borderRadius: 8, padding: 12, color: theme.text.primary, fontSize: 14, resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}
             />
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-              <button onClick={() => setShowLyricsPrompt(false)}
-                style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${theme.bg.elevated}`, background: 'transparent', color: theme.text.secondary, cursor: 'pointer' }}>
-                Cancel
-              </button>
-              <button onClick={() => {
+            <div className="flex gap-2 justify-end mt-3">
+              <Button variant="neutral-secondary" onClick={() => setShowLyricsPrompt(false)}>Cancel</Button>
+              <Button variant="brand-primary" onClick={() => {
                 const text = lyricsPromptValue;
                 if (text?.trim()) {
                   onAddLyrics?.({ title: text.split('\n')[0].slice(0, 30) || 'New Lyrics', content: text.trim() });
                 }
                 setShowLyricsPrompt(false);
-              }}
-                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: theme.accent.primary, color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
-                Add
-              </button>
+              }}>Add</Button>
             </div>
           </div>
         </div>
@@ -1097,46 +1051,12 @@ const ImageCard = ({ image, onDelete, isMobile = false }) => {
 const getStyles = (theme) => ({
   container: { display: 'flex', height: '100%', backgroundColor: theme.bg.page, position: 'relative' },
 
-  // Mobile sidebar toggle button
-  mobileSidebarToggle: {
-    position: 'fixed',
-    bottom: '20px',
-    left: '20px',
-    zIndex: 100,
-    display: 'flex',
-    alignItems: 'center',
-    padding: '12px 16px',
-    backgroundColor: theme.accent.primary,
-    border: 'none',
-    borderRadius: '12px',
-    color: '#fff',
-    cursor: 'pointer',
-    boxShadow: '0 4px 12px rgba(124, 58, 237, 0.4)'
-  },
-
   // Mobile sidebar overlay (dark backdrop)
   mobileSidebarOverlay: {
     position: 'fixed',
     inset: 0,
     backgroundColor: theme.overlay.heavy,
     zIndex: 199
-  },
-
-  // Mobile sidebar close button
-  mobileSidebarClose: {
-    position: 'absolute',
-    top: '12px',
-    right: '12px',
-    width: '32px',
-    height: '32px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.border.subtle,
-    border: 'none',
-    borderRadius: '8px',
-    color: theme.text.secondary,
-    cursor: 'pointer'
   },
 
   // Sidebar
@@ -1172,19 +1092,14 @@ const getStyles = (theme) => ({
   categoryThumbImg: { width: '100%', height: '100%', objectFit: 'cover' },
   categoryThumbPlaceholder: { width: '100%', height: '100%', backgroundColor: theme.bg.elevated, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: '600' },
   categoryName: { fontSize: '13px', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  addCategoryButton: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', backgroundColor: 'transparent', border: `1px dashed ${theme.border.default}`, borderRadius: '8px', cursor: 'pointer', color: theme.text.muted, fontSize: '13px', marginTop: '8px' },
   newCategoryForm: { padding: '12px', backgroundColor: theme.bg.surface, borderRadius: '8px' },
   newCategoryInput: { width: '100%', padding: '8px', backgroundColor: theme.bg.page, border: `1px solid ${theme.border.default}`, borderRadius: '6px', color: theme.text.primary, fontSize: '13px', marginBottom: '8px' },
-  newCategoryActions: { display: 'flex', gap: '8px' },
-  newCategoryCancel: { flex: 1, padding: '6px', backgroundColor: 'transparent', border: `1px solid ${theme.border.default}`, borderRadius: '6px', color: theme.text.secondary, cursor: 'pointer', fontSize: '12px' },
-  newCategoryCreate: { flex: 1, padding: '6px', backgroundColor: theme.accent.primary, border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '12px' },
 
   // Main content
   main: { flex: 1, overflow: 'auto', padding: '24px' },
 
   // Category Header
   categoryHeader: { marginBottom: '24px' },
-  backButton: { display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', backgroundColor: 'transparent', border: `1px solid ${theme.border.default}`, borderRadius: '6px', color: theme.text.secondary, cursor: 'pointer', fontSize: '13px', marginBottom: '16px' },
   categoryInfo: { display: 'flex', alignItems: 'center', gap: '16px' },
   categoryIcon: { width: '48px', height: '48px', backgroundColor: theme.bg.surface, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: '600' },
   categoryTitle: { fontSize: '24px', fontWeight: '700', color: theme.text.primary, margin: 0 },
@@ -1217,10 +1132,6 @@ const getStyles = (theme) => ({
   bankIcon: { fontSize: '16px' },
   bankName: { fontSize: '14px', color: theme.text.primary },
   bankAddButton: { padding: '4px 10px', backgroundColor: 'transparent', border: `1px solid ${theme.border.default}`, borderRadius: '4px', color: theme.text.secondary, cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' },
-  actionButton: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '14px 16px', backgroundColor: theme.bg.surface, border: 'none', borderRadius: '8px', color: theme.text.primary, cursor: 'pointer', fontSize: '14px', fontWeight: '500', marginBottom: '10px' },
-  actionButtonGreen: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '14px 16px', backgroundColor: '#065f46', border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '500', marginBottom: '10px' },
-  actionButtonPurple: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '14px 16px', backgroundColor: '#5b21b6', border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '500', marginBottom: '10px' },
-  actionIcon: { fontSize: '16px' },
 
   // Expanded Banks
   expandedBanks: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' },
