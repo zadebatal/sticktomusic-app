@@ -16,6 +16,10 @@ import {
 import useIsMobile from '../../hooks/useIsMobile';
 import { useTheme } from '../../contexts/ThemeContext';
 import CloudImportButton from './CloudImportButton';
+import { Button } from '../../ui/components/Button';
+import { IconButton } from '../../ui/components/IconButton';
+import { ToggleGroup } from '../../ui/components/ToggleGroup';
+import { FeatherArrowLeft, FeatherPlus, FeatherTrash2, FeatherDownload, FeatherEdit2, FeatherMusic, FeatherCalendar, FeatherX } from '@subframe/core';
 
 /**
  * ContentLibrary - Shows all videos or slideshows created within a category
@@ -389,11 +393,7 @@ const ContentLibrary = ({
         ...(isMobile ? { flexDirection: 'column', alignItems: 'stretch', gap: '12px', padding: '16px' } : {})
       }}>
         <div style={styles.headerLeft}>
-          <button style={styles.backButton} onClick={() => { setPreviewingVideo(null); setPreviewingSlideshow(null); onBack?.(); }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
-          </button>
+          <IconButton size="small" icon={<FeatherArrowLeft />} onClick={() => { setPreviewingVideo(null); setPreviewingSlideshow(null); onBack?.(); }} />
           <div style={styles.titleSection}>
             <div style={styles.categoryIcon}>{category?.name?.charAt(0).toUpperCase()}</div>
             <div>
@@ -419,43 +419,28 @@ const ContentLibrary = ({
           {isDraftsView ? (
             /* Drafts view: show prominent create CTAs + delete */
             <>
-              <button
-                style={{ ...styles.primaryButton, ...(isMobile ? { width: '100%', justifyContent: 'center' } : {}) }}
-                onClick={() => onMakeVideo?.()}
-              >
-                🎥 New Video Draft
-              </button>
-              <button
-                style={{ ...styles.primaryButton, backgroundColor: theme.accent.hover, ...(isMobile ? { width: '100%', justifyContent: 'center' } : {}) }}
-                onClick={() => onMakeSlideshow?.()}
-              >
-                🖼️ New Slideshow Draft
-              </button>
+              <Button variant="brand-primary" size="small" className={isMobile ? 'w-full justify-center' : ''} onClick={() => onMakeVideo?.()}>
+                New Video Draft
+              </Button>
+              <Button variant="brand-secondary" size="small" className={isMobile ? 'w-full justify-center' : ''} onClick={() => onMakeSlideshow?.()}>
+                New Slideshow Draft
+              </Button>
               {selectedVideoIds.size > 0 && (
-                <button
-                  style={{ ...styles.secondaryButton, backgroundColor: 'rgba(239,68,68,0.15)', color: '#f87171', borderColor: 'rgba(239,68,68,0.3)', ...(isMobile ? { width: '100%', textAlign: 'center' } : {}) }}
-                  onClick={() => setDeleteConfirm({ isOpen: true, videoId: null, isBulk: true })}
-                >
+                <Button variant="destructive-secondary" size="small" className={isMobile ? 'w-full justify-center' : ''} icon={<FeatherTrash2 />} onClick={() => setDeleteConfirm({ isOpen: true, videoId: null, isBulk: true })}>
                   Delete Selected ({selectedVideoIds.size})
-                </button>
+                </Button>
               )}
             </>
           ) : (
             /* Normal category view: show Make buttons */
             <>
-              <button
-                style={{ ...styles.primaryButton, ...(isMobile ? { width: '100%', justifyContent: 'center' } : {}) }}
-                onClick={() => isSlideshow ? onMakeSlideshow?.() : onMakeVideo?.()}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
+              <Button variant="brand-primary" size="small" className={isMobile ? 'w-full justify-center' : ''} icon={<FeatherPlus />} onClick={() => isSlideshow ? onMakeSlideshow?.() : onMakeVideo?.()}>
                 {isSlideshow ? 'Make a slideshow' : 'Make a video'}
-              </button>
+              </Button>
               {!isSlideshow && (
-                <button style={{ ...styles.secondaryButton, ...(isMobile ? { width: '100%', textAlign: 'center' } : {}) }} onClick={onShowBatchPipeline}>
+                <Button variant="neutral-secondary" size="small" className={isMobile ? 'w-full justify-center' : ''} onClick={onShowBatchPipeline}>
                   Make up to 10 at once
-                </button>
+                </Button>
               )}
             </>
           )}
@@ -467,17 +452,12 @@ const ContentLibrary = ({
         ...styles.filters,
         ...(isMobile ? { flexDirection: 'column', alignItems: 'stretch', gap: '8px', padding: '12px 16px' } : {})
       }}>
-        <div style={styles.filterGroup}>
-          {['all', 'today', 'week', 'month'].map(range => (
-            <button
-              key={range}
-              style={dateRange === range ? styles.dateFilterActive : styles.dateFilter}
-              onClick={() => setDateRange(range)}
-            >
-              {range === 'all' ? 'All time' : range === 'today' ? 'Today' : range === 'week' ? 'This week' : 'This month'}
-            </button>
-          ))}
-        </div>
+        <ToggleGroup value={dateRange} onValueChange={(val) => val && setDateRange(val)}>
+          <ToggleGroup.Item value="all">All time</ToggleGroup.Item>
+          <ToggleGroup.Item value="today">Today</ToggleGroup.Item>
+          <ToggleGroup.Item value="week">This week</ToggleGroup.Item>
+          <ToggleGroup.Item value="month">This month</ToggleGroup.Item>
+        </ToggleGroup>
         <div style={styles.filterRight}>
           {filteredItems.length > 0 && (
             <label style={styles.selectAllLabel}>
@@ -497,14 +477,12 @@ const ContentLibrary = ({
             <option value="approved">Approved</option>
           </select>
           {onGetDeletedContent && (
-            <button
-              style={{
-                ...styles.secondaryButton,
-                fontSize: '12px',
-                padding: '4px 10px',
-                gap: '4px',
-                opacity: showTrash ? 1 : 0.7
-              }}
+            <Button
+              variant="neutral-tertiary"
+              size="small"
+              icon={<FeatherTrash2 />}
+              loading={loadingTrash}
+              className={showTrash ? '' : 'opacity-70'}
               onClick={async () => {
                 if (showTrash) {
                   setShowTrash(false);
@@ -523,11 +501,8 @@ const ContentLibrary = ({
                 }
               }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-              </svg>
-              {loadingTrash ? 'Loading...' : showTrash ? 'Hide Trash' : 'Trash'}
-            </button>
+              {showTrash ? 'Hide Trash' : 'Trash'}
+            </Button>
           )}
         </div>
       </div>
@@ -539,12 +514,7 @@ const ContentLibrary = ({
             <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: theme.text.primary }}>
               Trash ({trashItems.length} {isSlideshow ? 'slideshow' : 'video'}{trashItems.length !== 1 ? 's' : ''})
             </h3>
-            <button
-              onClick={() => setShowTrash(false)}
-              style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '18px', padding: '4px 8px' }}
-            >
-              ×
-            </button>
+            <IconButton size="small" icon={<FeatherX />} onClick={() => setShowTrash(false)} />
           </div>
           {trashItems.length === 0 ? (
             <p style={{ color: theme.text.muted, fontSize: '12px', margin: 0 }}>Trash is empty</p>
@@ -667,12 +637,9 @@ const ContentLibrary = ({
                 : (isSlideshow ? 'Create your first slideshow to get started' : 'Create your first video to get started')}
             </p>
             {!isDraftsView && (
-              <button
-                style={styles.emptyButton}
-                onClick={() => isSlideshow ? onMakeSlideshow?.() : onMakeVideo?.()}
-              >
+              <Button variant="brand-primary" size="medium" icon={<FeatherPlus />} onClick={() => isSlideshow ? onMakeSlideshow?.() : onMakeVideo?.()}>
                 {isSlideshow ? 'Make a slideshow' : 'Make a video'}
-              </button>
+              </Button>
             )}
           </div>
         ) : (
@@ -974,49 +941,27 @@ const ContentLibrary = ({
             ...styles.batchRight,
             ...(isMobile ? { flexWrap: 'wrap', justifyContent: 'center', width: '100%' } : {})
           }}>
-            <button style={styles.batchBtnClear} onClick={clearSelection}>Clear</button>
-            <button
-              style={styles.batchBtnDelete}
-              onClick={() => setDeleteConfirm({ isOpen: true, videoId: null, isBulk: true })}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-              </svg>
+            <Button variant="neutral-tertiary" size="small" onClick={clearSelection}>Clear</Button>
+            <Button variant="destructive-secondary" size="small" icon={<FeatherTrash2 />} onClick={() => setDeleteConfirm({ isOpen: true, videoId: null, isBulk: true })}>
               Delete {selectedItems.length}
-            </button>
+            </Button>
             {!isSlideshow && selectedItems.length === 1 && (
-              <button style={styles.batchBtnExport} onClick={() => setExportingVideo(selectedItems[0])}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-                </svg>
+              <Button variant="neutral-secondary" size="small" icon={<FeatherDownload />} onClick={() => setExportingVideo(selectedItems[0])}>
                 Export
-              </button>
+              </Button>
             )}
             {isSlideshow && selectedItems.length >= 2 && onEditMultipleSlideshows && (
-              <button style={styles.batchBtnExport} onClick={() => onEditMultipleSlideshows(selectedItems)}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                </svg>
+              <Button variant="neutral-secondary" size="small" icon={<FeatherEdit2 />} onClick={() => onEditMultipleSlideshows(selectedItems)}>
                 Edit {selectedItems.length} in Editor
-              </button>
+              </Button>
             )}
             {isSlideshow && selectedItems.length >= 1 && db && artistId && (
-              <button
-                style={{ ...styles.batchBtnExport, borderColor: theme.accent.primary, color: theme.accent.hover }}
-                onClick={() => setShowAudioAssign(true)}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M9 18V5l12-2v13"/>
-                  <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
-                </svg>
+              <Button variant="brand-secondary" size="small" icon={<FeatherMusic />} onClick={() => setShowAudioAssign(true)}>
                 Assign Audio ({selectedItems.length})
-              </button>
+              </Button>
             )}
-            <button style={styles.batchBtnPost} onClick={async () => {
+            <Button variant="brand-primary" size="small" icon={<FeatherCalendar />} onClick={async () => {
               if (onViewScheduling && db && artistId) {
-                // Create scheduled posts for ALL selected items
                 try {
                   const postsToCreate = selectedItems.map(item => ({
                     contentId: item.id,
@@ -1039,14 +984,11 @@ const ContentLibrary = ({
               } else if (onViewScheduling) {
                 onViewScheduling();
               } else {
-                setShowScheduleQueue(true); // Fallback to modal
+                setShowScheduleQueue(true);
               }
             }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
               Schedule {selectedItems.length} {isSlideshow ? 'Carousel' : 'Post'}{selectedItems.length > 1 ? 's' : ''}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -1092,12 +1034,7 @@ const ContentLibrary = ({
                   Select a song from your library
                 </div>
               </div>
-              <button
-                onClick={() => setShowAudioAssign(false)}
-                style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '18px', padding: '4px 8px' }}
-              >
-                &times;
-              </button>
+              <IconButton size="small" icon={<FeatherX />} onClick={() => setShowAudioAssign(false)} />
             </div>
 
             {/* Audio List */}
@@ -1300,10 +1237,7 @@ const ContentLibrary = ({
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                <button onClick={() => { setPreviewingSlideshow(null); onEditSlideshow?.(previewingSlideshow); }} style={{
-                  padding: '6px 14px', borderRadius: 8, border: `1px solid ${theme.accent.primary}80`,
-                  background: `${theme.accent.primary}33`, color: theme.accent.hover, fontSize: 13, cursor: 'pointer', fontWeight: 500
-                }}>Edit</button>
+                <Button variant="brand-secondary" size="small" icon={<FeatherEdit2 />} onClick={() => { setPreviewingSlideshow(null); onEditSlideshow?.(previewingSlideshow); }}>Edit</Button>
                 <button onClick={() => setPreviewingSlideshow(null)} style={{
                   background: theme.hover.bg, border: 'none', color: theme.text.primary,
                   borderRadius: '50%', width: isMobile ? 44 : 32, height: isMobile ? 44 : 32, cursor: 'pointer',
