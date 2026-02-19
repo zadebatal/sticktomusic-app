@@ -2166,6 +2166,9 @@ const VideoStudio = ({
                           setShowSlideshowEditor(false);
                           const targetView = studioMode === 'slideshows' ? 'slideshows' : 'library';
                           setCurrentView(targetView);
+                        } else if (currentView === 'workspace') {
+                          setActivePipelineId(null);
+                          setCurrentView('home');
                         } else if (currentView === 'drafts' || currentView === 'scheduling') {
                           setCurrentView('home');
                           setStudioMode(null);
@@ -2186,6 +2189,7 @@ const VideoStudio = ({
                         ? (showSlideshowEditor ? 'Slideshow Editor' : 'Video Editor')
                         : currentView === 'scheduling' ? 'Schedule'
                         : currentView === 'drafts' ? 'Drafts'
+                        : currentView === 'workspace' ? 'Workspace'
                         : studioMode === 'videos' ? 'Videos'
                         : studioMode === 'slideshows' ? 'Slideshows'
                         : 'Studio'}
@@ -2207,10 +2211,11 @@ const VideoStudio = ({
                 <button
                   style={{
                     ...styles.breadcrumbLink,
-                    ...(currentView === 'home' && !showEditor && !showSlideshowEditor ? styles.breadcrumbCurrent : {})
+                    ...((currentView === 'home' || currentView === 'workspace') && !showEditor && !showSlideshowEditor ? styles.breadcrumbCurrent : {})
                   }}
                   onClick={() => navigateWithDraftCheck(() => {
                     setCurrentView('home');
+                    setActivePipelineId(null);
                     setStudioMode(null);
                     setShowEditor(false);
                     setShowSlideshowEditor(false);
