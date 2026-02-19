@@ -8,8 +8,6 @@ export { default as VideoEditorModal } from './VideoEditorModal';
 export { default as AudioClipSelector } from './AudioClipSelector';
 export { default as BeatSelector } from './BeatSelector';
 export { default as ExportAndPostModal } from './ExportAndPostModal';
-export { default as PostingModule } from './PostingModule';
-
 // Video Editor Components - Legacy V2
 export { default as VideoEditor } from './VideoEditorV2';
 export { default as VideoEditorV2 } from './VideoEditorV2';
