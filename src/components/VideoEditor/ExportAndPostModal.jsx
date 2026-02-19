@@ -97,7 +97,7 @@ const ExportAndPostModal = ({
 
       // Go directly to scheduler instead of showing intermediate screen
       if (onSchedulePost) {
-        onSchedulePost({ videoUrl: url, video, category });
+        await onSchedulePost({ videoUrl: url, video, category });
         onClose(); // Close this modal
       } else {
         // No scheduler available, show the ready screen as fallback
@@ -260,7 +260,11 @@ const ExportAndPostModal = ({
 
               {/* Export Options */}
               <div style={styles.optionsSection}>
-                <button style={styles.primaryButton} onClick={handleExportAndUpload}>
+                <button
+                  style={{ ...styles.primaryButton, ...(stage !== EXPORT_STAGE.OPTIONS ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+                  onClick={handleExportAndUpload}
+                  disabled={stage !== EXPORT_STAGE.OPTIONS}
+                >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
                     <polyline points="17 8 12 3 7 8"/>
@@ -272,7 +276,11 @@ const ExportAndPostModal = ({
                   Render video and upload to cloud storage for posting
                 </p>
 
-                <button style={styles.secondaryButton} onClick={handleExportOnly}>
+                <button
+                  style={{ ...styles.secondaryButton, ...(stage !== EXPORT_STAGE.OPTIONS ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+                  onClick={handleExportOnly}
+                  disabled={stage !== EXPORT_STAGE.OPTIONS}
+                >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
                     <polyline points="7 10 12 15 17 10"/>

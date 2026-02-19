@@ -13,6 +13,7 @@ import { renderVideo } from '../../services/videoExportService';
 import { exportSlideshowAsImages, generateSlideThumbnail } from '../../services/slideshowExportService';
 import { uploadFile } from '../../services/firebaseStorage';
 import { startPolling } from '../../services/postStatusPolling';
+import { getAuth } from 'firebase/auth';
 import log from '../../utils/logger';
 import { useTheme } from '../../contexts/ThemeContext';
 import useIsMobile from '../../hooks/useIsMobile';
@@ -229,7 +230,7 @@ const SchedulingPage = ({
     });
 
     // Start polling for overdue SCHEDULED posts (checks if they're actually live on Late.co)
-    // Note: getPosts closure captures latest posts via ref to avoid re-creating subscription
+    // Use ref to avoid re-creating subscription when posts change
     const stopPolling = startPolling(db, artistId, () => postsRef.current);
 
     return () => {
@@ -237,6 +238,103 @@ const SchedulingPage = ({
       stopPolling();
     };
   }, [db, artistId]);
+
+  // ── Backfill latePostId from Late.co for posts missing it ──
+  const backfillRanRef = useRef(false);
+  useEffect(() => {
+    if (backfillRanRef.current || loading || posts.length === 0 || !artistId) return;
+    // Only run if some scheduled posts are missing latePostId
+    const scheduled = posts.filter(p => p.status === 'scheduled' || p.status === 'partial');
+    const missing = scheduled.filter(p => !p.latePostId);
+    if (missing.length === 0) return;
+    backfillRanRef.current = true;
+
+    (async () => {
+      try {
+        log('[Schedule] Backfill: found', missing.length, 'scheduled posts without latePostId');
+        const token = await getAuth().currentUser?.getIdToken();
+        if (!token) return;
+
+        // Fetch all posts from Late.co
+        let allLatePosts = [];
+        let page = 1;
+        let hasMore = true;
+        while (hasMore) {
+          const resp = await fetch(`/api/late?action=posts&page=${page}&artistId=${artistId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (!resp.ok) break;
+          const data = await resp.json();
+          const latePosts = data.posts || data.data || [];
+          if (Array.isArray(latePosts) && latePosts.length > 0) {
+            allLatePosts = [...allLatePosts, ...latePosts];
+            page++;
+            if (latePosts.length < 50) hasMore = false;
+          } else {
+            hasMore = false;
+          }
+          if (page > 10) hasMore = false;
+        }
+
+        if (allLatePosts.length === 0) {
+          log('[Schedule] Backfill: no Late posts found');
+          return;
+        }
+        log('[Schedule] Backfill: fetched', allLatePosts.length, 'Late posts');
+
+        // Log first Late post structure for debugging
+        if (allLatePosts[0]) {
+          log('[Schedule] Late post sample keys:', Object.keys(allLatePosts[0]).join(', '));
+          log('[Schedule] Late post sample:', JSON.stringify(allLatePosts[0]).substring(0, 500));
+        }
+
+        // Match by scheduledTime (within 2 min tolerance) + content similarity
+        let matched = 0;
+        for (const localPost of missing) {
+          const localTime = localPost.scheduledTime ? new Date(localPost.scheduledTime).getTime() : 0;
+          const localCaption = (localPost.caption || '').toLowerCase().trim();
+
+          const match = allLatePosts.find(lp => {
+            const lateId = lp._id || lp.id;
+            // Skip already-matched Late posts
+            if (!lateId) return false;
+
+            // Match by time (within 2 minutes)
+            const lateTime = lp.scheduledFor ? new Date(lp.scheduledFor).getTime() : 0;
+            const timeDiff = Math.abs(localTime - lateTime);
+            if (timeDiff > 120000) return false;
+
+            // Match by content if available
+            const lateContent = (lp.content || '').toLowerCase().trim();
+            if (localCaption && lateContent) {
+              return lateContent.includes(localCaption.substring(0, 20));
+            }
+            // If no caption to compare, time match is enough
+            return true;
+          });
+
+          if (match) {
+            const latePostId = match._id || match.id;
+            log('[Schedule] Backfill matched:', localPost.id, '→', latePostId);
+            await updateScheduledPost(db, artistId, localPost.id, { latePostId });
+            matched++;
+            // Remove from pool so it's not matched again
+            const idx = allLatePosts.indexOf(match);
+            if (idx >= 0) allLatePosts.splice(idx, 1);
+          }
+        }
+
+        if (matched > 0) {
+          log('[Schedule] Backfill complete:', matched, 'posts linked to Late.co');
+          toastSuccess(`Linked ${matched} post${matched !== 1 ? 's' : ''} to Late.co`);
+        } else {
+          log('[Schedule] Backfill: no matches found');
+        }
+      } catch (err) {
+        console.warn('[Schedule] Backfill error:', err);
+      }
+    })();
+  }, [posts, loading, artistId, db, toastSuccess]);
 
   useEffect(() => {
     const now = new Date();
@@ -348,33 +446,54 @@ const SchedulingPage = ({
     const locked = posts.filter(p => p.locked);
     const unlocked = posts.filter(p => !p.locked);
 
-    // Collect existing scheduled times from unlocked posts (sorted chronologically)
-    const existingTimes = unlocked
+    // Split unlocked posts into past (keep in place) and future (shuffle)
+    const now = new Date();
+    const pastUnlocked = unlocked.filter(p => p.scheduledTime && new Date(p.scheduledTime) < now);
+    const futureUnlocked = unlocked.filter(p => !p.scheduledTime || new Date(p.scheduledTime) >= now);
+
+    // Calculate spacing from existing future times, then re-space from next upcoming slot
+    const futureTimes = futureUnlocked
       .filter(p => p.scheduledTime)
-      .map(p => p.scheduledTime)
-      .sort((a, b) => new Date(a) - new Date(b));
+      .map(p => new Date(p.scheduledTime).getTime())
+      .sort((a, b) => a - b);
 
-    // Shuffle only unlocked posts
-    for (let i = unlocked.length - 1; i > 0; i--) {
+    // Determine spacing interval: average gap between consecutive future posts, default 30 min
+    let spacingMs = 30 * 60 * 1000; // 30 minutes default
+    if (futureTimes.length >= 2) {
+      const totalSpan = futureTimes[futureTimes.length - 1] - futureTimes[0];
+      spacingMs = Math.max(totalSpan / (futureTimes.length - 1), 5 * 60 * 1000); // min 5 min
+    }
+
+    // Starting point: the earliest future time (next upcoming slot)
+    const startTime = futureTimes.length > 0 ? futureTimes[0] : now.getTime() + spacingMs;
+
+    // Shuffle only future unlocked posts
+    for (let i = futureUnlocked.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [unlocked[i], unlocked[j]] = [unlocked[j], unlocked[i]];
+      [futureUnlocked[i], futureUnlocked[j]] = [futureUnlocked[j], futureUnlocked[i]];
     }
 
-    // Rebuild the full list: locked posts stay at their original indices
+    // Rebuild the full list: locked + past-unlocked stay at original indices, future-unlocked get shuffled
     const result = new Array(posts.length);
-    const lockedPositions = new Set();
-    posts.forEach((p, i) => { if (p.locked) { result[i] = p; lockedPositions.add(i); } });
-    let ui = 0;
+    const fixedPositions = new Set();
+    posts.forEach((p, i) => {
+      if (p.locked || (pastUnlocked.some(pp => pp.id === p.id))) {
+        result[i] = p;
+        fixedPositions.add(i);
+      }
+    });
+    let fi = 0;
     for (let i = 0; i < result.length; i++) {
-      if (!lockedPositions.has(i)) { result[i] = unlocked[ui++]; }
+      if (!fixedPositions.has(i)) { result[i] = futureUnlocked[fi++]; }
     }
 
-    // Redistribute scheduled times: assign sorted times to unlocked posts in new order
-    let timeIdx = 0;
+    // Re-space future posts from next upcoming slot with consistent spacing
+    let slotIndex = 0;
     const timeUpdates = [];
     for (let i = 0; i < result.length; i++) {
-      if (!lockedPositions.has(i) && result[i].scheduledTime && timeIdx < existingTimes.length) {
-        const newTime = existingTimes[timeIdx++];
+      if (!fixedPositions.has(i) && result[i].scheduledTime) {
+        const newTime = new Date(startTime + slotIndex * spacingMs).toISOString();
+        slotIndex++;
         if (newTime !== result[i].scheduledTime) {
           timeUpdates.push({ id: result[i].id, scheduledTime: newTime });
           result[i] = { ...result[i], scheduledTime: newTime };
@@ -391,7 +510,40 @@ const SchedulingPage = ({
       await updateScheduledPost(db, artistId, update.id, { scheduledTime: update.scheduledTime });
     }
 
-    toastSuccess(locked.length > 0 ? `Shuffled (${locked.length} locked)` : 'Queue randomized');
+    // Sync time changes to Late.co
+    const lateUpdates = timeUpdates.filter(u => {
+      const post = result.find(p => p.id === u.id);
+      return post?.latePostId && post?.status !== 'posted' && post?.status !== 'draft';
+    });
+
+    if (lateUpdates.length > 0) {
+      try {
+        const token = await getAuth().currentUser?.getIdToken();
+        let synced = 0;
+        for (const update of lateUpdates) {
+          const post = result.find(p => p.id === update.id);
+          try {
+            const resp = await fetch('/api/late', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ action: 'updatePost', postId: post.latePostId, artistId, scheduledFor: update.scheduledTime })
+            });
+            if (resp.ok) synced++;
+            else console.warn('[Schedule] Late sync failed:', resp.status);
+          } catch (syncErr) {
+            console.warn('[Schedule] Late sync error:', syncErr.message);
+          }
+        }
+        if (synced > 0) toastSuccess(`Shuffled + synced ${synced} post${synced !== 1 ? 's' : ''} to Late.co`);
+        else toastSuccess('Queue shuffled (Late sync failed)');
+      } catch (outerErr) {
+        console.error('[Schedule] Late sync error:', outerErr);
+        toastSuccess('Queue shuffled');
+      }
+    } else {
+      const msg = locked.length > 0 ? `Queue shuffled (${locked.length} locked)` : 'Queue shuffled';
+      toastSuccess(msg);
+    }
   }, [posts, db, artistId, toastSuccess]);
 
   // ── CRUD Handlers ──
@@ -399,36 +551,43 @@ const SchedulingPage = ({
     setPosts(prev => prev.map(p => p.id === postId ? { ...p, ...updates } : p));
     await updateScheduledPost(db, artistId, postId, updates);
 
-    // If scheduledTime changed and post has latePostId, offer to sync to Late.co
-    if (updates.scheduledTime) {
-      const post = posts.find(p => p.id === postId);
-      if (post?.latePostId && post?.status === 'scheduled') {
-        // Sync time change to Late.co (only if post is still scheduled, not posted yet)
-        try {
-          const response = await fetch('/api/late', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${await db.app.auth().currentUser?.getIdToken()}`
-            },
-            body: JSON.stringify({
-              action: 'updatePost',
-              postId: post.latePostId,
-              artistId,
-              scheduledFor: updates.scheduledTime
-            })
-          });
-
-          if (response.ok) {
-            toastSuccess('Time updated on Late.co');
-          } else {
-            console.warn('[Schedule] Failed to sync time to Late.co:', await response.text());
-            toastSuccess('Time updated locally (Late.co sync may have failed)');
-          }
-        } catch (error) {
-          console.error('[Schedule] Error syncing time to Late.co:', error);
-          // Don't show error toast - local update succeeded
+    // Sync changes to Late.co if post is on Late (has latePostId and isn't posted/draft)
+    const post = posts.find(p => p.id === postId);
+    const hasLateSync = post?.latePostId && post?.status !== 'posted' && post?.status !== 'draft';
+    if (hasLateSync && (updates.scheduledTime || updates.caption !== undefined || updates.hashtags !== undefined)) {
+      try {
+        const lateUpdates = {};
+        if (updates.scheduledTime) lateUpdates.scheduledFor = updates.scheduledTime;
+        if (updates.caption !== undefined || updates.hashtags !== undefined) {
+          // Rebuild full caption with hashtags for Late.co
+          const newCaption = updates.caption !== undefined ? updates.caption : (post.caption || '');
+          const newHashtags = updates.hashtags !== undefined ? updates.hashtags : (post.hashtags || []);
+          const hashtagStr = Array.isArray(newHashtags) ? newHashtags.join(' ') : newHashtags;
+          lateUpdates.content = [newCaption, hashtagStr].filter(Boolean).join('\n\n');
         }
+
+        const response = await fetch('/api/late', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${await getAuth().currentUser?.getIdToken()}`
+          },
+          body: JSON.stringify({
+            action: 'updatePost',
+            postId: post.latePostId,
+            artistId,
+            ...lateUpdates
+          })
+        });
+
+        if (response.ok) {
+          const what = updates.scheduledTime ? 'Time' : 'Caption';
+          toastSuccess(`${what} updated on Late.co`);
+        } else {
+          console.warn('[Schedule] Failed to sync to Late.co:', await response.text());
+        }
+      } catch (error) {
+        console.error('[Schedule] Error syncing to Late.co:', error);
       }
     }
   }, [db, artistId, posts, toastSuccess]);
@@ -467,13 +626,12 @@ const SchedulingPage = ({
 
   const handleDeletePost = useCallback((postId) => {
     const post = posts.find(p => p.id === postId);
-    const isPostedOrScheduled = post?.status === POST_STATUS.POSTED || post?.status === POST_STATUS.SCHEDULED;
     const hasLateId = !!post?.latePostId;
 
     setConfirmDialog({
       isOpen: true,
       title: 'Remove Post',
-      message: hasLateId && isPostedOrScheduled
+      message: hasLateId
         ? `Remove "${post?.contentName || 'this post'}" from the queue AND from Late.co?`
         : `Remove "${post?.contentName || 'this post'}" from the queue?`,
       variant: 'destructive',
@@ -481,16 +639,24 @@ const SchedulingPage = ({
         // Delete from Late first (if applicable)
         if (hasLateId && onDeleteLatePost) {
           try {
-            await onDeleteLatePost(post.latePostId);
+            log('[Schedule] Deleting Late post:', post.latePostId);
+            const result = await onDeleteLatePost(post.latePostId);
+            if (result?.success === false) {
+              log('[Schedule] Late delete returned failure:', result.error);
+              toastError(`Late.co delete may have failed: ${result.error || 'unknown error'}`);
+            } else {
+              log('[Schedule] Late post deleted successfully');
+            }
           } catch (err) {
-            log('[Schedule] Late delete failed (continuing local delete):', err);
+            log('[Schedule] Late delete threw error (continuing local delete):', err);
+            toastError(`Late.co delete failed: ${err.message}`);
           }
         }
         await deleteScheduledPost(db, artistId, postId);
         if (expandedPostId === postId) setExpandedPostId(null);
         setSelectedPostIds(prev => { const next = new Set(prev); next.delete(postId); return next; });
         setConfirmDialog({ isOpen: false });
-        toastSuccess('Post removed');
+        toastSuccess('Post removed' + (hasLateId ? ' (and from Late.co)' : ''));
       }
     });
   }, [posts, db, artistId, expandedPostId, onDeleteLatePost, toastSuccess]);
@@ -499,7 +665,7 @@ const SchedulingPage = ({
   const handleDeleteSelected = useCallback(() => {
     if (selectedCount === 0) return;
     const selectedList = posts.filter(p => selectedPostIds.has(p.id));
-    const lateCount = selectedList.filter(p => p.latePostId && (p.status === POST_STATUS.POSTED || p.status === POST_STATUS.SCHEDULED)).length;
+    const lateCount = selectedList.filter(p => p.latePostId).length;
 
     setConfirmDialog({
       isOpen: true,
@@ -510,12 +676,15 @@ const SchedulingPage = ({
       variant: 'destructive',
       onConfirm: async () => {
         const ids = [...selectedPostIds];
+        let lateDeleted = 0;
         for (const id of ids) {
           const post = posts.find(p => p.id === id);
           // Delete from Late if applicable
           if (post?.latePostId && onDeleteLatePost) {
             try {
-              await onDeleteLatePost(post.latePostId);
+              log('[Schedule] Deleting Late post:', post.latePostId);
+              const result = await onDeleteLatePost(post.latePostId);
+              if (result?.success !== false) lateDeleted++;
             } catch (err) {
               log('[Schedule] Late delete failed for', id, '(continuing):', err);
             }
@@ -525,7 +694,8 @@ const SchedulingPage = ({
         setSelectedPostIds(new Set());
         if (expandedPostId && ids.includes(expandedPostId)) setExpandedPostId(null);
         setConfirmDialog({ isOpen: false });
-        toastSuccess(`Removed ${ids.length} post${ids.length !== 1 ? 's' : ''}`);
+        const lateMsg = lateDeleted > 0 ? ` (${lateDeleted} removed from Late.co)` : '';
+        toastSuccess(`Removed ${ids.length} post${ids.length !== 1 ? 's' : ''}${lateMsg}`);
       }
     });
   }, [selectedPostIds, selectedCount, posts, db, artistId, expandedPostId, onDeleteLatePost, toastSuccess]);
@@ -547,10 +717,11 @@ const SchedulingPage = ({
 
       log('[Schedule] Rendered, uploading...', (blob.size / 1024 / 1024).toFixed(2), 'MB');
       setRenderProgress(95);
-      const isMP4 = blob.type === 'video/mp4';
+      const isMP4 = blob.type.includes('mp4');
       const ext = isMP4 ? 'mp4' : 'webm';
+      const uploadType = isMP4 ? 'video/mp4' : 'video/webm';
       const { url: cloudUrl } = await uploadFile(
-        new File([blob], `${post.contentId || post.id}.${ext}`, { type: blob.type }),
+        new File([blob], `${post.contentId || post.id}.${ext}`, { type: uploadType }),
         'videos'
       );
 
@@ -574,9 +745,33 @@ const SchedulingPage = ({
       return;
     }
 
-    const platformEntries = Object.entries(post.platforms || {})
+    // If re-publishing a fully scheduled post (not partial), delete old Late post first
+    // Late.co doesn't support media updates, so we must delete + recreate
+    // For partial posts, keep the old Late post (some platforms succeeded) and only retry failed ones
+    const isPartialRetry = post.postResults && (post.status === 'partial' || post.status === POST_STATUS.FAILED);
+    if (post.latePostId && onDeleteLatePost && !isPartialRetry) {
+      try {
+        await onDeleteLatePost(post.latePostId);
+        log('[Schedule] Deleted old Late post before re-publish:', post.latePostId);
+      } catch (err) {
+        log('[Schedule] Failed to delete old Late post (continuing with new publish):', err);
+      }
+    }
+
+    let platformEntries = Object.entries(post.platforms || {})
       .filter(([, v]) => v?.accountId)
       .map(([platform, v]) => ({ platform, accountId: v.accountId }));
+
+    // For partial/failed retries, only publish to platforms that failed
+    // (successful platforms already have the content — Late.co rejects duplicates)
+    if (post.postResults && (post.status === 'partial' || post.status === POST_STATUS.FAILED)) {
+      const failedPlatforms = Object.entries(post.postResults)
+        .filter(([, v]) => v.error)
+        .map(([p]) => p);
+      if (failedPlatforms.length > 0) {
+        platformEntries = platformEntries.filter(e => failedPlatforms.includes(e.platform));
+      }
+    }
 
     if (platformEntries.length === 0) {
       toastError('No platform accounts assigned. Select accounts before publishing.');
@@ -613,7 +808,14 @@ const SchedulingPage = ({
 
     try {
       if (isSlideshow) {
-        // Export at correct aspect ratio per platform (Instagram=4:5, TikTok=9:16)
+        // Slideshows go to TikTok only as draft — filter to TikTok platform
+        const tiktokEntry = platformEntries.find(e => e.platform === 'tiktok');
+        if (!tiktokEntry) {
+          await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: 'Slideshows can only be posted to TikTok as draft' });
+          toastError('Slideshows can only be posted to TikTok as draft');
+          return;
+        }
+
         const slides = post.editorState?.slides || [];
         const slideshowName = post.editorState?.name || post.name || 'slideshow';
         const existingRatio = post.editorState?.aspectRatio || '9:16';
@@ -622,44 +824,47 @@ const SchedulingPage = ({
         let lastLatePostId = null;
         let anyFailed = false;
 
-        for (const entry of platformEntries) {
-          const targetRatio = entry.platform === 'instagram' ? '4:5' : '9:16';
+        // Only TikTok — always 9:16
+        const entry = tiktokEntry;
+        {
           let images;
-
-          if (existingImages?.length && existingRatio === targetRatio) {
+          if (existingImages?.length && existingRatio === '9:16') {
             images = existingImages;
           } else if (slides.some(s => s.backgroundImage || s.imageUrl)) {
-            log(`[Schedule] Re-exporting slideshow at ${targetRatio} for ${entry.platform}`);
+            log(`[Schedule] Re-exporting slideshow at 9:16 for TikTok`);
             images = await exportSlideshowAsImages(
-              { slides, aspectRatio: targetRatio, name: slideshowName },
+              { slides, aspectRatio: '9:16', name: slideshowName },
               () => {}
             );
           } else {
-            platformResults[entry.platform] = { postId: null, url: null, error: 'No slide images' };
+            platformResults.tiktok = { postId: null, url: null, error: 'No slide images' };
             anyFailed = true;
-            continue;
           }
 
-          const result = await onSchedulePost({
-            caption,
-            platforms: [entry],
-            scheduledFor: post.scheduledTime || new Date().toISOString(),
-            type: 'carousel',
-            images,
-            audioUrl: post.audioUrl || post.editorState?.audio?.url || post.editorState?.audio?.localUrl || null
-          });
+          if (images) {
+            const result = await onSchedulePost({
+              caption,
+              platforms: [entry],
+              scheduledFor: post.scheduledTime || new Date().toISOString(),
+              type: 'carousel',
+              images,
+              audioUrl: post.audioUrl || post.editorState?.audio?.url || post.editorState?.audio?.localUrl || null
+            });
 
-          if (result?.success === false) {
-            platformResults[entry.platform] = { postId: null, url: null, error: result.error };
-            anyFailed = true;
-          } else {
-            const latePost = result?.post || {};
-            lastLatePostId = latePost._id || latePost.id || null;
-            platformResults[entry.platform] = {
-              postId: lastLatePostId,
-              url: latePost.url || latePost.permalink || null,
-              error: null
-            };
+            if (result?.success === false) {
+              platformResults[entry.platform] = { postId: null, url: null, error: result.error };
+              anyFailed = true;
+            } else {
+              log('[Schedule] Late create response:', JSON.stringify(result?.post));
+              const latePost = result?.post?.post || result?.post?.data || result?.post || {};
+              lastLatePostId = latePost._id || latePost.id || null;
+              log('[Schedule] Extracted latePostId:', lastLatePostId);
+              platformResults[entry.platform] = {
+                postId: lastLatePostId,
+                url: latePost.url || latePost.permalink || null,
+                error: null
+              };
+            }
           }
         }
 
@@ -688,8 +893,10 @@ const SchedulingPage = ({
           await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: result.error || 'Unknown error' });
           toastError(`Failed to publish: ${result.error || 'Unknown error'}`);
         } else {
-          const latePost = result?.post || {};
+          log('[Schedule] Late create response:', JSON.stringify(result?.post));
+          const latePost = result?.post?.post || result?.post?.data || result?.post || {};
           const latePostId = latePost._id || latePost.id || null;
+          log('[Schedule] Extracted latePostId:', latePostId);
           const platformResults = {};
           platformEntries.forEach(({ platform }) => {
             platformResults[platform] = {
@@ -712,7 +919,7 @@ const SchedulingPage = ({
       await handleUpdatePost(postId, { status: POST_STATUS.FAILED, errorMessage: err.message });
       toastError(`Publish failed: ${err.message}`);
     }
-  }, [posts, onSchedulePost, alwaysOnHashtags, handleUpdatePost, autoRenderPost, toastSuccess, toastError]);
+  }, [posts, onSchedulePost, onDeleteLatePost, alwaysOnHashtags, handleUpdatePost, autoRenderPost, toastSuccess, toastError]);
 
   // ── Batch Schedule Selected ──
   const handleBatchScheduleSelected = useCallback(async () => {
@@ -982,14 +1189,15 @@ const SchedulingPage = ({
               platforms: [entry],
               scheduledFor: post.scheduledTime || new Date().toISOString(),
               type: 'carousel',
-              images
+              images,
+              audioUrl: post.audioUrl || post.editorState?.audio?.url || post.editorState?.audio?.localUrl || null
             });
 
             if (result?.success === false) {
               platformResults[entry.platform] = { postId: null, url: null, error: result.error };
               postFailed = true;
             } else {
-              const latePost = result?.post || {};
+              const latePost = result?.post?.post || result?.post?.data || result?.post || {};
               lastLatePostId = latePost._id || latePost.id || null;
               platformResults[entry.platform] = {
                 postId: lastLatePostId,
@@ -1025,7 +1233,7 @@ const SchedulingPage = ({
             await handleUpdatePost(post.id, { status: POST_STATUS.FAILED, errorMessage: result.error || 'Unknown error' });
             failed++;
           } else {
-            const latePost = result?.post || {};
+            const latePost = result?.post?.post || result?.post?.data || result?.post || {};
             const latePostId = latePost._id || latePost.id || null;
             const platformResults = {};
             platformEntries.forEach(({ platform }) => {
@@ -1068,6 +1276,25 @@ const SchedulingPage = ({
       selectedPostIds.has(p.id) && (p.status === POST_STATUS.SCHEDULED || p.status === POST_STATUS.FAILED)
     ).length;
   }, [posts, selectedPostIds]);
+
+  const revertableCount = useMemo(() => {
+    return posts.filter(p =>
+      selectedPostIds.has(p.id) && p.status !== POST_STATUS.DRAFT && p.status !== POST_STATUS.POSTED
+    ).length;
+  }, [posts, selectedPostIds]);
+
+  const handleBulkRevertToDraft = useCallback(async () => {
+    const revertable = posts.filter(p =>
+      selectedPostIds.has(p.id) && p.status !== POST_STATUS.DRAFT && p.status !== POST_STATUS.POSTED
+    );
+    if (revertable.length === 0) return;
+
+    for (const post of revertable) {
+      await handleUpdatePost(post.id, { status: POST_STATUS.DRAFT, scheduledTime: null });
+    }
+    toastSuccess(`Reverted ${revertable.length} post${revertable.length !== 1 ? 's' : ''} to draft`);
+    clearSelection();
+  }, [posts, selectedPostIds, handleUpdatePost, toastSuccess, clearSelection]);
 
   // ── Add from drafts handler ──
   const handleAddFromDrafts = useCallback(async (selectedItems) => {
@@ -1353,6 +1580,14 @@ const SchedulingPage = ({
                 onClick={handleBulkPublish}
               >
                 Publish {publishableCount} Now
+              </button>
+            )}
+            {revertableCount > 0 && (
+              <button
+                style={{ ...s.applyBtn, backgroundColor: '#78350f', borderColor: '#f59e0b', color: '#fbbf24' }}
+                onClick={handleBulkRevertToDraft}
+              >
+                Revert {revertableCount} to Draft
               </button>
             )}
           </div>
@@ -2374,7 +2609,7 @@ const getS = (theme) => ({
   dragHandle: { width: '28px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px', flexShrink: 0 },
   thumb: { width: '44px', height: '56px', borderRadius: '6px', overflow: 'hidden', backgroundColor: theme.bg.input, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
   thumbImg: { width: '100%', height: '100%', objectFit: 'cover' },
-  contentName: { fontSize: '13px', fontWeight: '500', color: theme.bg.elevated, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  contentName: { fontSize: '13px', fontWeight: '500', color: theme.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
 
   // Inline controls
   inlineDate: { width: '105px', padding: '4px 6px', borderRadius: '6px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.surface, color: theme.text.secondary, fontSize: '11px' },
@@ -2404,7 +2639,7 @@ const getS = (theme) => ({
   hashtagPill: { fontSize: '11px', color: theme.accent.hover, backgroundColor: theme.accent.muted, padding: '2px 8px', borderRadius: '10px' },
   hashtagSetBtn: { padding: '3px 8px', borderRadius: '5px', border: `1px solid ${theme.accent.primary}`, backgroundColor: theme.accent.muted, color: theme.accent.hover, fontSize: '11px', fontWeight: '500', cursor: 'pointer' },
   linkBtn: { background: 'none', border: 'none', color: theme.accent.primary, fontSize: '11px', cursor: 'pointer', padding: '2px 0' },
-  accountSelect: { flex: 1, padding: '4px 8px', borderRadius: '5px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.input, color: theme.bg.elevated, fontSize: '11px', cursor: 'pointer' },
+  accountSelect: { flex: 1, padding: '4px 8px', borderRadius: '5px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.input, color: theme.text.primary, fontSize: '11px', cursor: 'pointer' },
   resultRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', backgroundColor: theme.bg.input, borderRadius: '6px', marginBottom: '4px' },
 
   // Modal

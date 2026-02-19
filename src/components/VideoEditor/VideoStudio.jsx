@@ -33,6 +33,10 @@ import {
   deleteCreatedSlideshow,
   addCreatedSlideshowAsync,
   deleteCreatedSlideshowAsync,
+  softDeleteCreatedVideoAsync,
+  restoreCreatedContentAsync,
+  getDeletedContentAsync,
+  permanentlyDeleteContentAsync,
   loadCreatedContentAsync,
   saveCreatedContentAsync,
   addLyricsAsync,
@@ -247,6 +251,7 @@ const DraftsView = (props) => {
           category={props.category}
           contentType={draftsTab}
           isDraftsView={true}
+          collectionFilter={props.collectionFilter}
           onBack={props.onBack}
           onMakeVideo={props.onMakeVideo}
           onEditVideo={props.onEditVideo}
@@ -264,6 +269,9 @@ const DraftsView = (props) => {
           accounts={props.accounts}
           lateAccountIds={props.lateAccountIds}
           artistId={props.artistId}
+          onRestoreContent={props.onRestoreContent}
+          onPermanentDelete={props.onPermanentDelete}
+          onGetDeletedContent={props.onGetDeletedContent}
         />
       </div>
     </div>
@@ -377,6 +385,7 @@ const VideoStudio = ({
   const [selectedArtist, setSelectedArtist] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [createdContentVersion, setCreatedContentVersion] = useState(0); // Bump to refresh library dashboard
+  const [draftsCollectionFilter, setDraftsCollectionFilter] = useState(null); // Collection filter for drafts view
   const [firestoreContentLoaded, setFirestoreContentLoaded] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null); // Track upload progress
   const [sessionRestored, setSessionRestored] = useState(false);
@@ -811,13 +820,42 @@ const VideoStudio = ({
   }, []);
 
   const handleSaveVideo = useCallback(async (videoData) => {
+    // Upload audio to Firebase Storage if it has a blob URL (prevents stale blob URLs in saved drafts)
+    let data = { ...videoData };
+    if (data.audio && (data.audio.file || data.audio.url?.startsWith('blob:') || data.audio.localUrl?.startsWith('blob:'))) {
+      try {
+        const audioFile = data.audio.file;
+        if (audioFile) {
+          const { url: firebaseUrl } = await uploadFile(audioFile, 'audio');
+          data = { ...data, audio: { ...data.audio, url: firebaseUrl } };
+          log('[VideoStudio] Uploaded video audio to Firebase:', firebaseUrl);
+        } else if (data.audio.url?.startsWith('blob:') || data.audio.localUrl?.startsWith('blob:')) {
+          // No file object — try to find cloud URL in library
+          const libAudio = libraryMedia.audio.find(a => a.id === data.audio.id);
+          if (libAudio?.url && !libAudio.url.startsWith('blob:')) {
+            data = { ...data, audio: { ...data.audio, url: libAudio.url } };
+            log('[VideoStudio] Replaced blob URL with library URL for video audio:', libAudio.name);
+          } else {
+            console.warn('[VideoStudio] Video audio has blob URL but not found in library:', data.audio.id);
+          }
+        }
+      } catch (err) {
+        console.error('[VideoStudio] Failed to upload video audio:', err);
+      }
+    }
+    // Clean audio object for Firestore (remove non-serializable fields)
+    if (data.audio) {
+      const { file, localUrl, ...cleanAudio } = data.audio;
+      data = { ...data, audio: cleanAudio };
+    }
+
     // Scheduler edit mode: update the scheduledPost directly and return to scheduler
     if (schedulerEditPostId) {
       try {
         await updateScheduledPost(db, currentArtistId, schedulerEditPostId, {
-          editorState: videoData,
-          contentName: videoData.name || videoData.id || 'Edited Video',
-          thumbnail: videoData.thumbnail || null
+          editorState: data,
+          contentName: data.name || data.id || 'Edited Video',
+          thumbnail: data.thumbnail || null
         });
         log('[VideoStudio] Updated scheduledPost from editor:', schedulerEditPostId);
       } catch (err) {
@@ -836,9 +874,9 @@ const VideoStudio = ({
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
         const savedVideo = addCreatedVideo(currentArtistId, {
-          ...videoData,
-          id: videoData.id || `video_${Date.now()}`,
-          collectionId: videoData.collectionId || pullFromCollection || null,
+          ...data,
+          id: data.id || `video_${Date.now()}`,
+          collectionId: data.collectionId || pullFromCollection || null,
           createdAt: new Date().toISOString(),
           status: VIDEO_STATUS.DRAFT
         });
@@ -867,18 +905,18 @@ const VideoStudio = ({
     const updateCategory = (cat) => {
       if (cat.id !== selectedCategory.id) return cat;
 
-      const existingIndex = cat.createdVideos.findIndex(v => v.id === videoData.id);
+      const existingIndex = cat.createdVideos.findIndex(v => v.id === data.id);
       if (existingIndex >= 0) {
         // Update existing
         const newVideos = [...cat.createdVideos];
-        newVideos[existingIndex] = { ...videoData, updatedAt: new Date().toISOString() };
+        newVideos[existingIndex] = { ...data, updatedAt: new Date().toISOString() };
         return { ...cat, createdVideos: newVideos };
       } else {
         // Add new
         return {
           ...cat,
           createdVideos: [...cat.createdVideos, {
-            ...videoData,
+            ...data,
             id: `video_${Date.now()}`,
             createdAt: new Date().toISOString(),
             status: VIDEO_STATUS.DRAFT
@@ -901,7 +939,7 @@ const VideoStudio = ({
     // Navigate to drafts after saving
     setCurrentView('drafts');
     setStudioMode('videos');
-  }, [selectedCategory, currentArtistId, schedulerEditPostId, db]);
+  }, [selectedCategory, currentArtistId, schedulerEditPostId, db, libraryMedia.audio]);
 
   const handleUploadVideos = useCallback(async (files) => {
     if (!selectedCategory) return;
@@ -1157,14 +1195,16 @@ const VideoStudio = ({
   }, [selectedCategory]);
 
   const handleDeleteVideo = useCallback(async (videoId) => {
-    // Library mode: delete via libraryService
+    // Library mode: soft-delete via libraryService
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
-        const content = getCreatedContent(currentArtistId);
-        const video = content.videos.find(v => v.id === videoId);
-        if (video?.storagePath) await deleteFile(video.storagePath);
-        if (video?.thumbnailPath) await deleteFile(video.thumbnailPath);
-        deleteCreatedVideo(currentArtistId, videoId);
+        if (db) {
+          softDeleteCreatedVideoAsync(db, currentArtistId, videoId).catch(err =>
+            console.warn('[VideoStudio] Firestore video soft-delete failed:', err)
+          );
+        } else {
+          deleteCreatedVideo(currentArtistId, videoId);
+        }
         setCreatedContentVersion(v => v + 1);
         // Cascade: remove any scheduled posts referencing this draft
         if (db && currentArtistId) {
@@ -1206,6 +1246,33 @@ const VideoStudio = ({
       );
     }
   }, [selectedCategory, currentArtistId, db]);
+
+  // Restore a soft-deleted content item from trash
+  const handleRestoreContent = useCallback(async (itemId) => {
+    if (!db || !currentArtistId || !itemId) return;
+    const success = await restoreCreatedContentAsync(db, currentArtistId, itemId);
+    if (success) {
+      setCreatedContentVersion(v => v + 1);
+    }
+    return success;
+  }, [db, currentArtistId]);
+
+  // Permanently delete a content item from trash
+  const handlePermanentDelete = useCallback(async (itemId) => {
+    if (!db || !currentArtistId || !itemId) return;
+    // Also delete storage files
+    const deleted = await getDeletedContentAsync(db, currentArtistId);
+    const item = [...deleted.videos, ...deleted.slideshows].find(i => i.id === itemId);
+    if (item?.storagePath) await deleteFile(item.storagePath);
+    if (item?.thumbnailPath) await deleteFile(item.thumbnailPath);
+    return permanentlyDeleteContentAsync(db, currentArtistId, itemId);
+  }, [db, currentArtistId]);
+
+  // Get deleted (trash) content
+  const handleGetDeletedContent = useCallback(async () => {
+    if (!db || !currentArtistId) return { videos: [], slideshows: [] };
+    return getDeletedContentAsync(db, currentArtistId);
+  }, [db, currentArtistId]);
 
   // Delete a video clip from the bank (source videos)
   const handleDeleteBankVideo = useCallback(async (videoId) => {
@@ -1761,14 +1828,15 @@ const VideoStudio = ({
     } : prev);
   }, [selectedCategory]);
 
-  // Delete a slideshow
+  // Delete a slideshow (soft-delete: stays in Firestore with deletedAt, removed from UI)
   const handleDeleteSlideshow = useCallback((slideshowId) => {
-    // Library mode: delete via libraryService (with Firestore sync)
+    // Library mode: soft-delete via libraryService
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
-        deleteCreatedSlideshow(currentArtistId, slideshowId);
         if (db) {
           deleteCreatedSlideshowAsync(db, currentArtistId, slideshowId).catch(console.error);
+        } else {
+          deleteCreatedSlideshow(currentArtistId, slideshowId);
         }
         setCreatedContentVersion(v => v + 1);
         // Cascade: remove any scheduled posts referencing this draft
@@ -1810,11 +1878,19 @@ const VideoStudio = ({
     // Library mode: save via libraryService (Firestore + localStorage)
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
-        return addLyricsAsync(db, currentArtistId, {
+        const newEntry = await addLyricsAsync(db, currentArtistId, {
           title: lyricsData.title || 'Untitled Lyrics',
           content: lyricsData.content || '',
           words: lyricsData.words || null
         });
+        // Also update selectedLibraryMedia so the editor sees the new lyric immediately
+        if (newEntry) {
+          setSelectedLibraryMedia(prev => ({
+            ...prev,
+            lyrics: [...(prev.lyrics || []), newEntry]
+          }));
+        }
+        return newEntry;
       }
       return;
     }
@@ -1848,6 +1924,13 @@ const VideoStudio = ({
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
         await updateLyricsAsync(db, currentArtistId, lyricsId, updates);
+        // Also update selectedLibraryMedia so the editor sees saved word timings immediately
+        setSelectedLibraryMedia(prev => ({
+          ...prev,
+          lyrics: (prev.lyrics || []).map(l =>
+            l.id === lyricsId ? { ...l, ...updates, updatedAt: new Date().toISOString() } : l
+          )
+        }));
       }
       return;
     }
@@ -2320,6 +2403,13 @@ const VideoStudio = ({
             }}
             onViewContent={(options) => {
               const isSlideshows = options?.type === 'slideshows';
+              // Support collection-filtered drafts view
+              if (options?.collectionFilter !== undefined) {
+                setDraftsCollectionFilter(options.collectionFilter);
+                setCurrentView('drafts');
+                return;
+              }
+              setDraftsCollectionFilter(null);
               setCurrentView(isSlideshows ? 'slideshows' : 'library');
               setStudioMode(isSlideshows ? 'slideshows' : 'videos');
               if (isSlideshows) {
@@ -2416,6 +2506,9 @@ const VideoStudio = ({
             accounts={accounts}
             lateAccountIds={lateAccountIds}
             artistId={currentArtistId}
+            onRestoreContent={handleRestoreContent}
+            onPermanentDelete={handlePermanentDelete}
+            onGetDeletedContent={handleGetDeletedContent}
           />
         )}
 
@@ -2438,6 +2531,9 @@ const VideoStudio = ({
             accounts={accounts}
             lateAccountIds={lateAccountIds}
             artistId={currentArtistId}
+            onRestoreContent={handleRestoreContent}
+            onPermanentDelete={handlePermanentDelete}
+            onGetDeletedContent={handleGetDeletedContent}
           />
         )}
 
@@ -2445,8 +2541,9 @@ const VideoStudio = ({
         {currentView === 'drafts' && (selectedCategory || (USE_LIBRARY_SYSTEM && libraryCategory)) && (
           <DraftsView
             category={selectedCategory || libraryCategory}
+            collectionFilter={draftsCollectionFilter}
             isMobile={isMobile}
-            onBack={() => setCurrentView('home')}
+            onBack={() => { setCurrentView('home'); setDraftsCollectionFilter(null); }}
             onMakeVideo={handleMakeVideo}
             onEditVideo={handleMakeVideo}
             onDeleteVideo={handleDeleteVideo}
@@ -2463,6 +2560,9 @@ const VideoStudio = ({
             accounts={accounts}
             lateAccountIds={lateAccountIds}
             artistId={currentArtistId}
+            onRestoreContent={handleRestoreContent}
+            onPermanentDelete={handlePermanentDelete}
+            onGetDeletedContent={handleGetDeletedContent}
           />
         )}
 
@@ -2475,6 +2575,11 @@ const VideoStudio = ({
             lateAccountIds={lateAccountIds}
             onSchedulePost={onSchedulePost}
             onDeleteLatePost={onDeleteLatePost}
+            visibleArtists={artists}
+            onArtistChange={(id) => {
+              setCurrentArtistId(id);
+              if (onArtistChange) onArtistChange(id);
+            }}
             onEditDraft={(post) => {
               if (post.editorState) {
                 setSchedulerEditPostId(post.id); // Track which scheduledPost we're editing

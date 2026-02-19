@@ -352,6 +352,9 @@ export const createCreatedVideo = ({
     // Posting info
     postedTo: [], // Array of { platform, accountId, postId, postedAt }
 
+    // Scheduling link
+    scheduledPostId: null, // ID of linked scheduled post (null = unscheduled)
+
     // Timestamps
     createdAt: now,
     updatedAt: now
@@ -401,6 +404,9 @@ export const createCreatedSlideshow = ({
 
     // Posting info
     postedTo: [],
+
+    // Scheduling link
+    scheduledPostId: null, // ID of linked scheduled post (null = unscheduled)
 
     // Timestamps
     createdAt: now,
@@ -1930,6 +1936,7 @@ export const saveCreatedContentAsync = async (db, artistId, content) => {
 
       batch.set(docRef, {
         ...video,
+        type: 'video',
         thumbnail: null,
         clips: cleanedClips,
         updatedAt: serverTimestamp()
@@ -1958,6 +1965,7 @@ export const saveCreatedContentAsync = async (db, artistId, content) => {
 
       batch.set(docRef, {
         ...slideshow,
+        type: 'slideshow',
         thumbnail: null,
         audio: cleanedAudio,
         slides: (slideshow.slides || []).map(slide => ({
@@ -2020,6 +2028,7 @@ export const loadCreatedContentAsync = async (db, artistId) => {
 
     snapshot.docs.forEach(doc => {
       const data = doc.data();
+      if (data.deletedAt) return; // Skip soft-deleted items
       // Infer type from data shape if type field is missing (backwards compat)
       const type = data.type || (data.slides ? 'slideshow' : data.clips ? 'video' : null);
       if (type === 'video') {
@@ -2106,6 +2115,7 @@ export const subscribeToCreatedContent = (db, artistId, callback) => {
 
       snapshot.docs.forEach(doc => {
         const data = cleanLoadedData(doc.data());
+        if (data.deletedAt) return; // Skip soft-deleted items
         // Infer type from data shape if type field is missing (backwards compat)
         const type = data.type || (data.slides ? 'slideshow' : data.clips ? 'video' : null);
         if (type === 'video') {
@@ -2163,18 +2173,119 @@ export const updateCreatedSlideshowAsync = async (db, artistId, slideshowId, upd
 };
 
 /**
- * Delete a created slideshow (with Firestore sync)
+ * Delete a created slideshow (with Firestore soft-delete)
+ * Marks with deletedAt in Firestore instead of deleting. Removes from localStorage for immediate UI update.
  */
 export const deleteCreatedSlideshowAsync = async (db, artistId, slideshowId) => {
   const result = deleteCreatedSlideshow(artistId, slideshowId);
-  const content = getCreatedContent(artistId);
   try {
-    await saveCreatedContentAsync(db, artistId, content);
+    const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', slideshowId);
+    await updateDoc(docRef, { deletedAt: serverTimestamp() });
+    log('[Library] Soft-deleted slideshow:', slideshowId);
   } catch (error) {
-    console.error('[Library] Failed to sync slideshow deletion to Firestore:', error);
-    // Data still saved to localStorage, mark as unsynced
+    console.error('[Library] Failed to soft-delete slideshow from Firestore:', error);
   }
   return result;
+};
+
+/**
+ * Soft-delete a created video in Firestore
+ * Marks with deletedAt instead of deleting. Removes from localStorage for immediate UI update.
+ */
+export const softDeleteCreatedVideoAsync = async (db, artistId, videoId) => {
+  const result = deleteCreatedVideo(artistId, videoId);
+  try {
+    const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', videoId);
+    await updateDoc(docRef, { deletedAt: serverTimestamp() });
+    log('[Library] Soft-deleted video:', videoId);
+  } catch (error) {
+    console.error('[Library] Failed to soft-delete video from Firestore:', error);
+  }
+  return result;
+};
+
+/**
+ * Restore a soft-deleted content item from Firestore
+ * Removes deletedAt field and re-adds to localStorage
+ */
+export const restoreCreatedContentAsync = async (db, artistId, itemId) => {
+  if (!db || !artistId || !itemId) return false;
+  try {
+    const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', itemId);
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) return false;
+
+    // Remove deletedAt field
+    await updateDoc(docRef, { deletedAt: null });
+
+    // Re-add to localStorage
+    const data = docSnap.data();
+    const { deletedAt, ...cleanData } = data;
+    const type = cleanData.type || (cleanData.clips ? 'video' : 'slideshow');
+    const content = getCreatedContent(artistId);
+
+    if (type === 'video') {
+      if (!content.videos.find(v => v.id === itemId)) {
+        content.videos.push({ ...cleanData, type: 'video' });
+      }
+    } else {
+      if (!content.slideshows.find(s => s.id === itemId)) {
+        content.slideshows.push({ ...cleanData, type: 'slideshow' });
+      }
+    }
+    saveCreatedContent(artistId, content);
+    log('[Library] Restored content:', itemId);
+    return true;
+  } catch (error) {
+    console.error('[Library] Failed to restore content from Firestore:', error);
+    return false;
+  }
+};
+
+/**
+ * Get all soft-deleted content from Firestore (trash)
+ */
+export const getDeletedContentAsync = async (db, artistId) => {
+  if (!db || !artistId) return { videos: [], slideshows: [] };
+  try {
+    const collectionRef = collection(db, 'artists', artistId, 'library', 'data', 'createdContent');
+    const snapshot = await getDocs(collectionRef);
+
+    const videos = [];
+    const slideshows = [];
+
+    snapshot.docs.forEach(d => {
+      const data = d.data();
+      if (!data.deletedAt) return; // Only include deleted items
+      const type = data.type || (data.clips ? 'video' : 'slideshow');
+      if (type === 'video') {
+        videos.push({ ...data, type: 'video' });
+      } else {
+        slideshows.push({ ...data, type: 'slideshow' });
+      }
+    });
+
+    return { videos, slideshows };
+  } catch (error) {
+    console.error('[Library] Failed to load deleted content:', error);
+    return { videos: [], slideshows: [] };
+  }
+};
+
+/**
+ * Permanently delete a content item from Firestore (empty from trash)
+ */
+export const permanentlyDeleteContentAsync = async (db, artistId, itemId) => {
+  if (!db || !artistId || !itemId) return false;
+  try {
+    const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', itemId);
+    await deleteDoc(docRef);
+    log('[Library] Permanently deleted content:', itemId);
+    return true;
+  } catch (error) {
+    console.error('[Library] Failed to permanently delete content:', error);
+    return false;
+  }
 };
 
 /**
@@ -2195,6 +2306,67 @@ export const addCreatedSlideshowsBatchAsync = async (db, artistId, slideshowsDat
   }
 
   return results;
+};
+
+// ============================================================================
+// SCHEDULING LINK HELPERS
+// ============================================================================
+
+/**
+ * Mark a draft as scheduled by linking it to a scheduled post
+ * @param {string} artistId
+ * @param {string} contentId - Video or slideshow ID
+ * @param {string} scheduledPostId - The scheduled post this content is linked to
+ */
+export const markContentScheduled = (artistId, contentId, scheduledPostId) => {
+  const content = getCreatedContent(artistId);
+  // Check videos
+  const videoIdx = content.videos.findIndex(v => v.id === contentId);
+  if (videoIdx >= 0) {
+    content.videos[videoIdx] = { ...content.videos[videoIdx], scheduledPostId, updatedAt: new Date().toISOString() };
+    saveCreatedContent(artistId, content);
+    return true;
+  }
+  // Check slideshows
+  const slideshowIdx = content.slideshows.findIndex(s => s.id === contentId);
+  if (slideshowIdx >= 0) {
+    content.slideshows[slideshowIdx] = { ...content.slideshows[slideshowIdx], scheduledPostId, updatedAt: new Date().toISOString() };
+    saveCreatedContent(artistId, content);
+    return true;
+  }
+  return false;
+};
+
+/**
+ * Mark a draft as scheduled + sync to Firestore
+ */
+export const markContentScheduledAsync = async (db, artistId, contentId, scheduledPostId) => {
+  const result = markContentScheduled(artistId, contentId, scheduledPostId);
+  if (result && db) {
+    try {
+      const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', contentId);
+      await updateDoc(docRef, { scheduledPostId, updatedAt: serverTimestamp() });
+    } catch (error) {
+      console.warn('[Library] Failed to sync scheduledPostId to Firestore:', error.message);
+    }
+  }
+  return result;
+};
+
+/**
+ * Clear the scheduling link from a draft
+ * @param {string} artistId
+ * @param {string} contentId - Video or slideshow ID
+ */
+export const unmarkContentScheduled = (artistId, contentId) => {
+  return markContentScheduled(artistId, contentId, null);
+};
+
+/**
+ * Clear the scheduling link from a draft + sync to Firestore
+ */
+export const unmarkContentScheduledAsync = async (db, artistId, contentId) => {
+  return markContentScheduledAsync(db, artistId, contentId, null);
 };
 
 // ============================================================================

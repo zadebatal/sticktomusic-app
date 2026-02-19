@@ -727,7 +727,7 @@ const WordTimeline = ({
       id: `word_${Date.now()}`,
       text: wordPromptValue.trim(),
       startTime: wordPromptTime,
-      duration: 0.5
+      duration: 2
     };
     setWords(prev => [...prev, newWord].sort((a, b) => a.startTime - b.startTime));
     setShowWordPrompt(false);

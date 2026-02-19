@@ -679,11 +679,16 @@ const LibraryBrowser = ({
       }
 
       // If targeting a bank, assign uploaded items to it
-      if (targetBankIndex != null && activeView) {
+      if (targetBankIndex != null && activeView && activeView !== 'library') {
         const uploadedIds = results.filter(Boolean).map(item => item.id);
         if (uploadedIds.length > 0) {
-          assignToBankAsync(db, artistId, activeView, uploadedIds, targetBankIndex);
-          toastSuccess(`Uploaded & added ${uploadedIds.length} image${uploadedIds.length > 1 ? 's' : ''} to ${getBankLabel(targetBankIndex)}`);
+          try {
+            await assignToBankAsync(db, artistId, activeView, uploadedIds, targetBankIndex);
+            toastSuccess(`Uploaded & added ${uploadedIds.length} image${uploadedIds.length > 1 ? 's' : ''} to ${getBankLabel(targetBankIndex)}`);
+          } catch (err) {
+            console.error('[LibraryBrowser] Bank assignment failed:', err);
+            toastError(`Upload succeeded but bank assignment failed`);
+          }
         }
       }
 
@@ -2072,14 +2077,20 @@ const LibraryBrowser = ({
         )}
 
         {/* Content */}
-        <div style={styles.content}>
+        <div style={{
+          ...styles.content,
+          ...(isUserCollectionView && (collectionBanks || videoTextBanksAvailable) ? {
+            display: 'flex', flexDirection: 'column', overflowY: 'hidden', minHeight: 0
+          } : {})
+        }}>
           {/* Collection view: media on left, banks on right */}
           {isUserCollectionView && (collectionBanks || videoTextBanksAvailable) ? (
             <div style={{
               display: 'flex',
               flexDirection: isMobile ? 'column' : 'row',
               gap: isMobile ? '8px' : '12px',
-              height: '100%',
+              flex: 1,
+              minHeight: 0,
               overflow: isMobile ? 'auto' : 'hidden'
             }}>
               {/* Left half — all collection images */}
@@ -2232,6 +2243,7 @@ const LibraryBrowser = ({
                 flexDirection: 'column',
                 minWidth: 0,
                 minHeight: 0,
+                overflow: 'hidden',
                 ...(isMobile ? { width: '100%' } : {})
               }}>
                 {/* Tab bar — only for slideshow mode (videos have no image banks) */}
@@ -2262,16 +2274,14 @@ const LibraryBrowser = ({
                   </div>
                 )}
 
+                <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
                 {mode !== 'videos' && bankTab === 'images' ? (
                   <div style={{
-                    flex: 1,
+                    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
                     display: 'flex',
                     flexDirection: isMobile ? 'row' : 'column',
                     gap: '8px',
-                    overflow: 'auto',
-                    overflowX: isMobile ? 'auto' : undefined,
-                    overflowY: isMobile ? undefined : 'auto',
-                    minHeight: 0,
+                    overflowY: 'auto',
                     WebkitOverflowScrolling: 'touch',
                     paddingBottom: isMobile ? '8px' : undefined,
                     paddingRight: isMobile ? undefined : '4px'
@@ -2402,7 +2412,7 @@ const LibraryBrowser = ({
                     )}
                   </div>
                 ) : (
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'auto', paddingRight: '4px' }}>
+                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', paddingRight: '4px' }}>
                     {/* Slideshow Text Banks (only in images/slideshows mode) - Dynamic based on collection banks */}
                     {mode !== 'videos' && (() => {
                       const col = collections.find(c => c.id === activeView);
@@ -2510,6 +2520,7 @@ const LibraryBrowser = ({
                     </div>
                   </div>
                 )}
+                </div>
               </div>
             </div>
           ) : displayedMedia.length === 0 ? (

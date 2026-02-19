@@ -28,6 +28,13 @@ const TEMPLATES = [
     description: 'Multiple clips on a timeline — full duration, batch generate',
     features: ['Multi-clip timeline', 'Per-clip or full-video text scoping', 'Randomized generation'],
     icon: 'multi-clip'
+  },
+  {
+    id: 'photo-montage',
+    name: 'Photo Montage',
+    description: 'Turn photos into a fast-paced video with transitions',
+    features: ['Upload or pull from banks', 'Ken Burns pan/zoom effects', 'Beat-synced photo timing'],
+    icon: 'photo-montage'
   }
 ];
 
@@ -78,10 +85,28 @@ const MultiClipIcon = () => (
   </svg>
 );
 
+const PhotoMontageIcon = () => (
+  <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    {/* Stacked photo frames */}
+    <rect x="6" y="10" width="24" height="18" rx="2" />
+    <rect x="14" y="16" width="24" height="18" rx="2" />
+    {/* Mountains/landscape in front photo */}
+    <path d="M16 30 l6 -8 l4 5 l3 -3 l7 6" strokeWidth="1.5" fill="currentColor" opacity="0.15" />
+    {/* Sun */}
+    <circle cx="33" cy="21" r="3" fill="currentColor" opacity="0.2" stroke="none" />
+    {/* Play indicator */}
+    <polygon points="20,40 28,44 20,48" fill="currentColor" stroke="none" opacity="0.4" />
+    {/* Speed lines */}
+    <line x1="30" y1="40" x2="38" y2="40" strokeWidth="2" opacity="0.3" />
+    <line x1="32" y1="44" x2="42" y2="44" strokeWidth="2" opacity="0.3" />
+  </svg>
+);
+
 const ICON_MAP = {
   'montage': MontageIcon,
   'solo-clip': SoloClipIcon,
-  'multi-clip': MultiClipIcon
+  'multi-clip': MultiClipIcon,
+  'photo-montage': PhotoMontageIcon
 };
 
 const TemplatePicker = ({ onSelect, onClose, clipCount = 0 }) => {

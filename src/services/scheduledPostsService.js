@@ -148,6 +148,11 @@ export async function updateScheduledPost(db, artistId, postId, updates) {
     // Also update local
     updateLocalPost(artistId, postId, patch);
   } catch (error) {
+    if (error?.message?.includes('No document to update')) {
+      log('[ScheduledPosts] Post no longer exists in Firestore:', postId);
+      removeLocalPost(artistId, postId);
+      return patch;
+    }
     console.error('[ScheduledPosts] Firestore update failed:', error);
     // Update localStorage as fallback (mark unsynced)
     updateLocalPost(artistId, postId, { ...patch, syncedToCloud: false });

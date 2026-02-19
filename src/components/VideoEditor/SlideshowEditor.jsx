@@ -28,6 +28,9 @@ import { FeatherArrowLeft, FeatherX, FeatherDownload, FeatherChevronLeft, Feathe
  * - Export as carousel images for Instagram/TikTok
  */
 
+// Stable empty array for fallbacks — prevents new [] reference on every render
+const EMPTY_SLIDES = [];
+
 // Stroke string helpers: parse "0.5px black" ↔ { width: 0.5, color: '#000000' }
 const parseStroke = (str) => {
   if (!str) return { width: 0.5, color: '#000000' };
@@ -55,6 +58,9 @@ const SlideshowEditor = ({
   lateAccountIds = {},
   schedulerEditMode = false
 }) => {
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
+
   // Mobile responsive detection
   const { isMobile } = useIsMobile();
 
@@ -67,13 +73,28 @@ const SlideshowEditor = ({
     textOverlays: s.textOverlays || []
   }));
   const isMultiDraftMode = !!(existingSlideshow?.multiple && Array.isArray(existingSlideshow.multiple));
+  // Strip stale blob URLs from audio on load — prefer cloud URL, null out dead blobs
+  const sanitizeAudio = (audio) => {
+    if (!audio) return null;
+    const clean = { ...audio };
+    if (clean.localUrl && clean.localUrl.startsWith('blob:')) delete clean.localUrl;
+    if (clean.url && clean.url.startsWith('blob:')) {
+      // If only URL is a blob and no cloud fallback, null out
+      if (!clean.localUrl) clean.url = null;
+    }
+    // If no usable URL left, keep metadata but mark as needing re-add
+    if (!clean.url && !clean.localUrl) {
+      console.warn('[SlideshowEditor] Audio has stale blob URL — cleared on load');
+    }
+    return clean;
+  };
   const [allSlideshows, setAllSlideshows] = useState(() => {
     if (isMultiDraftMode) {
       return existingSlideshow.multiple.map((ss, idx) => ({
         id: ss.id || `multi_${idx}`,
         name: ss.name || `Slideshow ${idx + 1}`,
         slides: ensureTextOverlays(ss.slides),
-        audio: ss.audio || null,
+        audio: sanitizeAudio(ss.audio),
         isTemplate: false
       }));
     }
@@ -81,7 +102,7 @@ const SlideshowEditor = ({
       id: 'template',
       name: existingSlideshow?.name || 'Untitled Slideshow',
       slides: ensureTextOverlays(existingSlideshow?.slides),
-      audio: existingSlideshow?.audio || initialAudio || null,
+      audio: sanitizeAudio(existingSlideshow?.audio || initialAudio || null),
       isTemplate: true
     }];
   });
@@ -92,17 +113,19 @@ const SlideshowEditor = ({
   const [keepTemplateText, setKeepTemplateText] = useState('none');
 
   // Derived reads from active slideshow (existing code reads these unchanged)
-  const slides = allSlideshows[activeSlideshowIndex]?.slides || [];
+  // Use stable empty array to prevent creating new [] reference every render
+  const slides = allSlideshows[activeSlideshowIndex]?.slides || EMPTY_SLIDES;
   const name = allSlideshows[activeSlideshowIndex]?.name || 'Untitled Slideshow';
   const selectedAudio = allSlideshows[activeSlideshowIndex]?.audio || null;
 
   // Wrapper setters that route through allSlideshows (existing setSlides/setName/setSelectedAudio calls work unchanged)
   const setSlides = useCallback((updater) => {
     setAllSlideshows(prev => {
-      const copy = [...prev];
-      const current = copy[activeSlideshowIndex];
+      const current = prev[activeSlideshowIndex];
       if (!current) return prev;
       const newSlides = typeof updater === 'function' ? updater(current.slides) : updater;
+      // Bail early if slides reference didn't change (prevents unnecessary re-renders)
+      if (newSlides === current.slides) return prev;
       // Safety: ensure slide images are never silently stripped
       const safeSlides = (newSlides || []).map((slide, i) => {
         const orig = current.slides[i];
@@ -112,6 +135,7 @@ const SlideshowEditor = ({
         }
         return slide;
       });
+      const copy = [...prev];
       copy[activeSlideshowIndex] = { ...current, slides: safeSlides };
       return copy;
     });
@@ -158,6 +182,13 @@ const SlideshowEditor = ({
   const [newTextInputs, setNewTextInputs] = useState({});
   const [showAddToBankPicker, setShowAddToBankPicker] = useState(false);
 
+  // Derive active collection ID from selectedSource (needed before text bank callbacks)
+  const activeCollectionId = (() => {
+    if (selectedSource && selectedSource.includes(':bank_')) return selectedSource.split(':')[0];
+    if (selectedSource && !selectedSource.match(/^bank_\d+$/)) return selectedSource;
+    return null;
+  })();
+
   // Add text to a text bank and update local collections state
   // text can be a plain string or { text: string, style: object }
   const handleAddToTextBank = useCallback((bankNum, text) => {
@@ -165,7 +196,11 @@ const SlideshowEditor = ({
     if (!plainText.trim() || !artistId || collections.length === 0) return;
     // For plain strings, trim; for styled objects, trim the text inside
     const entry = typeof text === 'string' ? text.trim() : { ...text, text: text.text.trim() };
-    const targetCol = collections[0]; // Add to first collection
+    // Target the active collection from collections state (must be a real Firestore collection)
+    const colFromSource = activeCollectionId ? collections.find(c => c.id === activeCollectionId) : null;
+    const colFromCategory = category?.id ? collections.find(c => c.id === category.id) : null;
+    const targetCol = colFromSource || colFromCategory || collections[0];
+    if (!targetCol) return;
     addToTextBank(artistId, targetCol.id, bankNum, entry);
     // Update local state so UI refreshes immediately (write to textBanks array)
     setCollections(prev => prev.map(col => {
@@ -177,12 +212,16 @@ const SlideshowEditor = ({
       textBanks[idx] = [...textBanks[idx], entry];
       return { ...col, textBanks };
     }));
-  }, [artistId, collections]);
+  }, [artistId, collections, category, activeCollectionId]);
 
   // Delete text from a text bank
   const handleRemoveFromTextBank = useCallback((bankNum, index) => {
     if (!artistId || collections.length === 0) return;
-    const targetCol = collections[0];
+    // Target the active collection from collections state (must be a real Firestore collection)
+    const colFromSource = activeCollectionId ? collections.find(c => c.id === activeCollectionId) : null;
+    const colFromCategory = category?.id ? collections.find(c => c.id === category.id) : null;
+    const targetCol = colFromSource || colFromCategory || collections[0];
+    if (!targetCol) return;
     removeFromTextBank(artistId, targetCol.id, bankNum, index);
     setCollections(prev => prev.map(col => {
       if (col.id !== targetCol.id) return col;
@@ -194,7 +233,7 @@ const SlideshowEditor = ({
       }
       return { ...col, textBanks };
     }));
-  }, [artistId, collections]);
+  }, [artistId, collections, category, activeCollectionId]);
 
   // Filmstrip drag-and-drop state
   const [filmstripDropIndex, setFilmstripDropIndex] = useState(null);
@@ -385,10 +424,28 @@ const SlideshowEditor = ({
     setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
   }, [setSlides]);
 
+  // Close confirmation handler — check for unsaved work before closing
+  const handleCloseRequest = useCallback(() => {
+    const hasWork = slides.length > 0 || selectedAudio !== null || allSlideshows.length > 1;
+    if (hasWork) {
+      setShowCloseConfirm(true);
+    } else {
+      onClose?.();
+    }
+  }, [slides, selectedAudio, allSlideshows, onClose]);
+
   // Keyboard shortcut: Cmd+Z / Ctrl+Z for undo, Cmd+Shift+Z / Ctrl+Shift+Z for redo
+  // Escape key to trigger close confirmation
   // Skip if user is editing text overlays or typing in an input/textarea
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Escape key — always trigger close request
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        handleCloseRequest();
+        return;
+      }
+
       // Don't steal undo/redo from text inputs
       if (editingTextId) return;
       const tag = document.activeElement?.tagName;
@@ -405,7 +462,7 @@ const SlideshowEditor = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo, editingTextId]);
+  }, [handleUndo, handleRedo, editingTextId, handleCloseRequest]);
 
   // Image drag/resize continued state
   const [imgDragStart, setImgDragStart] = useState({ x: 0, y: 0 });
@@ -428,7 +485,7 @@ const SlideshowEditor = ({
   const [selectedHandle, setSelectedHandle] = useState('');
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('14:00');
-  const [platforms, setPlatforms] = useState({ tiktok: true, instagram: true });
+  const [platforms, setPlatforms] = useState({ tiktok: true, instagram: false });
   const [isScheduling, setIsScheduling] = useState(false);
   const [caption, setCaption] = useState('');
   const [hashtags, setHashtags] = useState('#carousel #slideshow #fyp');
@@ -442,14 +499,14 @@ const SlideshowEditor = ({
   const canvasAreaRef = useRef(null);
   const [canvasSize, setCanvasSize] = useState({ width: 480, height: 640 });
 
-  // Resolve category bank images dynamically
-  const categoryBankImages = (() => {
+  // Resolve category bank images dynamically (memoized to prevent unstable deps)
+  const categoryBankImages = useMemo(() => {
     if (!category) return [];
     const migrated = migrateCollectionBanks(category);
     return (migrated.banks || []).map(bankIds =>
       (bankIds || []).length > 0 ? libraryImages.filter(img => bankIds.includes(img.id)) : []
     );
-  })();
+  }, [category, libraryImages]);
   // Lyrics: merge category lyrics with library lyrics (for StudioHome/library mode)
   // Filter to only show lyrics tagged to the active collection
   const [libraryLyrics, setLibraryLyrics] = useState([]);
@@ -457,11 +514,7 @@ const SlideshowEditor = ({
     if (artistId) setLibraryLyrics(getLyrics(artistId));
   }, [artistId]);
   useEffect(() => { refreshLibraryLyrics(); }, [refreshLibraryLyrics]);
-  const activeCollectionId = (() => {
-    if (selectedSource && selectedSource.includes(':bank_')) return selectedSource.split(':')[0];
-    if (selectedSource && !selectedSource.match(/^bank_\d+$/)) return selectedSource;
-    return null;
-  })();
+  // activeCollectionId is now declared earlier (before text bank callbacks)
   const lyrics = (() => {
     const catLyrics = category?.lyrics || [];
     if (catLyrics.length > 0) return catLyrics;
@@ -646,7 +699,16 @@ const SlideshowEditor = ({
   }, [baseDimensions]);
 
   // Get current slide (defined early so callbacks can reference it)
-  const currentSlide = slides[selectedSlideIndex];
+  // Guard: clamp selectedSlideIndex to valid range to prevent undefined currentSlide
+  const safeSlideIndex = slides.length > 0 ? Math.min(selectedSlideIndex, slides.length - 1) : 0;
+  const currentSlide = slides[safeSlideIndex];
+
+  // Auto-correct out-of-bounds selectedSlideIndex
+  useEffect(() => {
+    if (slides.length > 0 && selectedSlideIndex >= slides.length) {
+      setSelectedSlideIndex(slides.length - 1);
+    }
+  }, [slides.length, selectedSlideIndex]);
 
   // Selected images in bank for bulk add — use Set for O(1) lookups
   const [selectedBankImages, setSelectedBankImages] = useState(new Set());
@@ -830,14 +892,14 @@ const SlideshowEditor = ({
   const removeSlide = useCallback((slideId) => {
     setSlides(prev => {
       const filtered = prev.filter(s => s.id !== slideId);
-      // Re-index slides
       return filtered.map((s, i) => ({ ...s, index: i }));
     });
-    // Adjust selected index if needed
-    if (selectedSlideIndex >= slides.length - 1) {
-      setSelectedSlideIndex(Math.max(0, slides.length - 2));
-    }
-  }, [slides.length, selectedSlideIndex]);
+    // Adjust selected index using functional updater to avoid stale closure
+    setSelectedSlideIndex(prev => {
+      const newLen = slides.filter(s => s.id !== slideId).length;
+      return prev >= newLen ? Math.max(0, newLen - 1) : prev;
+    });
+  }, [slides]);
 
   // Keyboard Delete/Backspace to remove current slide
   useEffect(() => {
@@ -947,48 +1009,63 @@ const SlideshowEditor = ({
     );
   }, [currentSlide, getRerollBank, setSlideBackground]);
 
-  // Gather all text bank items from collections for text reroll
-  const getTextBanks = useCallback(() => {
-    const result = [];
-    for (const col of collections) {
-      const migrated = migrateCollectionBanks(col);
-      (migrated.textBanks || []).forEach((tb, i) => {
-        if (!result[i]) result[i] = [];
-        if (tb?.length > 0) result[i] = [...result[i], ...tb];
-      });
-    }
-    // Ensure minimum 2 entries
+  // Gather text bank items from the active collection only (not merged across all)
+  const textBanksCache = useMemo(() => {
+    // Priority: 1) collection matching activeCollectionId (from source dropdown)
+    // 2) category prop if it has textBanks (real collection passed from parent)
+    // 3) category.id match in collections (Firestore version has textBanks)
+    // 4) first collection as fallback
+    const colFromSource = activeCollectionId ? collections.find(c => c.id === activeCollectionId) : null;
+    const catHasTextBanks = category && (category.textBanks || []).some(tb => tb?.length > 0);
+    const colFromCategory = category?.id ? collections.find(c => c.id === category.id) : null;
+    const activeCol = colFromSource || (catHasTextBanks ? category : null) || colFromCategory || collections[0];
+    if (!activeCol) { return [[], []]; }
+    const migrated = migrateCollectionBanks(activeCol);
+    const result = (migrated.textBanks || []).map(tb => tb?.length > 0 ? [...tb] : []);
     while (result.length < 2) result.push([]);
     return result;
-  }, [collections, migrateCollectionBanks]);
+  }, [category, activeCollectionId, collections, migrateCollectionBanks]);
+  const getTextBanks = useCallback(() => textBanksCache, [textBanksCache]);
 
   // Re-roll text: Replace text overlays with random text from banks
   const handleTextReroll = useCallback((overlayId = null, bankSource = null) => {
-    const textBanks = getTextBanks();
-    if (textBanks.length === 0 || !textBanks.some(b => b?.length > 0)) return;
+    try {
+      const textBanks = getTextBanks();
+      if (!textBanks || textBanks.length === 0 || !textBanks.some(b => b?.length > 0)) return;
 
-    setSlides(prev => prev.map((slide, i) => {
-      if (i !== selectedSlideIndex) return slide;
-      const updatedOverlays = (slide.textOverlays || []).map((overlay, idx) => {
-        // If a specific overlay ID is given, only reroll that one
-        if (overlayId && overlay.id !== overlayId) return overlay;
+      setSlides(prev => prev.map((slide, i) => {
+        if (i !== selectedSlideIndex) return slide;
+        const updatedOverlays = (slide.textOverlays || []).map((overlay, idx) => {
+          if (!overlay?.id) return overlay;
+          // If a specific overlay ID is given, only reroll that one
+          if (overlayId && overlay.id !== overlayId) return overlay;
 
-        // Use specified bank source, or auto-assign based on overlay index
-        let bank;
-        if (bankSource !== null && bankSource !== undefined) bank = textBanks[bankSource] || [];
-        else bank = textBanks[idx] || textBanks[0] || [];
-        if (bank.length === 0) return overlay;
+          // Use specified bank source, or auto-assign based on overlay index
+          let bank;
+          if (bankSource !== null && bankSource !== undefined) bank = textBanks[bankSource] || [];
+          else bank = textBanks[idx] || textBanks[0] || [];
+          if (!bank || bank.length === 0) return overlay;
 
-        // Pick random entry different from current if possible
-        const others = bank.filter(t => getTextBankText(t) !== overlay.text);
-        const pool = others.length > 0 ? others : bank;
-        const randomEntry = pool[Math.floor(Math.random() * pool.length)];
-        const randomText = getTextBankText(randomEntry);
-        const randomStyle = getTextBankStyle(randomEntry);
-        return { ...overlay, text: randomText, ...(randomStyle ? { style: { ...overlay.style, ...randomStyle } } : {}) };
-      });
-      return { ...slide, textOverlays: updatedOverlays };
-    }));
+          // Pick random entry different from current if possible
+          const others = bank.filter(t => getTextBankText(t) !== overlay.text);
+          const pool = others.length > 0 ? others : bank;
+          const randomEntry = pool[Math.floor(Math.random() * pool.length)];
+          if (!randomEntry) return overlay;
+          const randomText = getTextBankText(randomEntry) || overlay.text;
+          const randomStyle = getTextBankStyle(randomEntry);
+          const baseStyle = overlay.style || { fontSize: 48, fontFamily: 'Inter, sans-serif', fontWeight: '700', color: '#ffffff', textAlign: 'center' };
+          return {
+            ...overlay,
+            text: randomText,
+            style: randomStyle ? { ...baseStyle, ...randomStyle } : baseStyle,
+            position: overlay.position || { x: 50, y: 50, width: 80 }
+          };
+        });
+        return { ...slide, textOverlays: updatedOverlays };
+      }));
+    } catch (err) {
+      console.error('[SlideshowEditor] Text reroll error:', err);
+    }
   }, [selectedSlideIndex, getTextBanks]);
 
   // Audio playback controls - just add audio directly, user can trim later
@@ -1885,6 +1962,7 @@ const SlideshowEditor = ({
 
   // Generate more slideshows from template
   const [showAudioPrompt, setShowAudioPrompt] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // Core generation logic (called after any prompts are resolved)
   const executeGeneration = useCallback(() => {
@@ -2097,26 +2175,16 @@ const SlideshowEditor = ({
       const scheduledFor = new Date(`${scheduleDate}T${scheduleTime}`);
       const fullCaption = `${caption}\n\n${hashtags}`.trim();
 
-      // Build platforms array
-      const platformsArray = [];
-      if (platforms.tiktok && accountMapping.tiktok) {
-        platformsArray.push({
-          platform: 'tiktok',
-          accountId: accountMapping.tiktok
-        });
-      }
-      if (platforms.instagram && accountMapping.instagram) {
-        platformsArray.push({
-          platform: 'instagram',
-          accountId: accountMapping.instagram
-        });
-      }
-
-      if (platformsArray.length === 0) {
-        toastError('Please select at least one platform');
+      // Slideshows go to TikTok as draft only
+      if (!accountMapping.tiktok) {
+        toastError('No TikTok account linked to this handle');
         setIsScheduling(false);
         return;
       }
+      const platformsArray = [{
+        platform: 'tiktok',
+        accountId: accountMapping.tiktok
+      }];
 
       // Schedule as carousel (array of image URLs)
       const result = await onSchedulePost({
@@ -3749,6 +3817,7 @@ const SlideshowEditor = ({
 const AVAILABLE_FONTS = [
   { name: 'Inter', value: "'Inter', sans-serif" },
   { name: 'Arial', value: 'Arial, sans-serif' },
+  { name: 'Arial Narrow', value: "'Arial Narrow', Arial, sans-serif" },
   { name: 'Georgia', value: 'Georgia, serif' },
   { name: 'Times New Roman', value: "'Times New Roman', serif" },
   { name: 'Courier New', value: "'Courier New', monospace" },
@@ -3836,7 +3905,7 @@ const TextEditorPanel = ({
               onClick={() => onSelectOverlay(overlay.id)}
             >
               <div style={textPanelStyles.textPreview}>
-                {overlay.text.slice(0, 50)}{overlay.text.length > 50 ? '...' : ''}
+                {(overlay.text || '').slice(0, 50)}{(overlay.text || '').length > 50 ? '...' : ''}
               </div>
               <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0 }}>
                 {canReroll && (
@@ -3868,12 +3937,14 @@ const TextEditorPanel = ({
       </div>
 
       {/* Selected Text Editor */}
-      {selectedOverlay && (
+      {selectedOverlay && (() => {
+        const st = selectedOverlay.style || { fontSize: 48, fontFamily: 'Inter, sans-serif', fontWeight: '700', color: '#ffffff', textAlign: 'center' };
+        return (
         <div style={textPanelStyles.editor}>
           <div style={textPanelStyles.sectionHeader}>Edit Text</div>
 
           <textarea
-            value={selectedOverlay.text}
+            value={selectedOverlay.text || ''}
             onChange={(e) => onUpdateOverlay(selectedOverlay.id, { text: e.target.value })}
             style={textPanelStyles.textarea}
             placeholder="Enter text..."
@@ -3892,7 +3963,7 @@ const TextEditorPanel = ({
                     color: '#c4b5fd', cursor: 'pointer', fontSize: '11px',
                     transition: 'all 0.15s'
                   }}
-                  onClick={() => onRerollText(selectedOverlay.id, 1)}
+                  onClick={() => onRerollText(selectedOverlay.id, 0)}
                   title={`Pick random text from Text Bank 1 (${textBank1.length} items)`}
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(139, 92, 246, 0.2)'}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(139, 92, 246, 0.1)'}
@@ -3914,7 +3985,7 @@ const TextEditorPanel = ({
                     color: '#a5b4fc', cursor: 'pointer', fontSize: '11px',
                     transition: 'all 0.15s'
                   }}
-                  onClick={() => onRerollText(selectedOverlay.id, 2)}
+                  onClick={() => onRerollText(selectedOverlay.id, 1)}
                   title={`Pick random text from Text Bank 2 (${textBank2.length} items)`}
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.2)'}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.1)'}
@@ -3934,19 +4005,19 @@ const TextEditorPanel = ({
           <div style={textPanelStyles.control}>
             <div style={textPanelStyles.controlHeader}>
               <span>Size</span>
-              <span style={textPanelStyles.controlValue}>{selectedOverlay.style.fontSize}px</span>
+              <span style={textPanelStyles.controlValue}>{st.fontSize}px</span>
             </div>
             <div style={textPanelStyles.sizeButtons}>
               <button
                 style={textPanelStyles.sizeBtn}
                 onClick={() => onUpdateOverlay(selectedOverlay.id, {
-                  style: { ...selectedOverlay.style, fontSize: Math.max(12, selectedOverlay.style.fontSize - 4) }
+                  style: { ...st, fontSize: Math.max(12, (st.fontSize || 48) - 4) }
                 })}
               >A-</button>
               <button
                 style={textPanelStyles.sizeBtn}
                 onClick={() => onUpdateOverlay(selectedOverlay.id, {
-                  style: { ...selectedOverlay.style, fontSize: Math.min(120, selectedOverlay.style.fontSize + 4) }
+                  style: { ...st, fontSize: Math.min(120, (st.fontSize || 48) + 4) }
                 })}
               >A+</button>
             </div>
@@ -3956,9 +4027,9 @@ const TextEditorPanel = ({
           <div style={textPanelStyles.control}>
             <span>Font</span>
             <select
-              value={selectedOverlay.style.fontFamily}
+              value={st.fontFamily}
               onChange={(e) => onUpdateOverlay(selectedOverlay.id, {
-                style: { ...selectedOverlay.style, fontFamily: e.target.value }
+                style: { ...st, fontFamily: e.target.value }
               })}
               style={textPanelStyles.fontSelect}
             >
@@ -3979,10 +4050,10 @@ const TextEditorPanel = ({
                   key={align}
                   style={{
                     ...textPanelStyles.alignBtn,
-                    ...(selectedOverlay.style.textAlign === align ? textPanelStyles.alignBtnActive : {})
+                    ...(st.textAlign === align ? textPanelStyles.alignBtnActive : {})
                   }}
                   onClick={() => onUpdateOverlay(selectedOverlay.id, {
-                    style: { ...selectedOverlay.style, textAlign: align }
+                    style: { ...st, textAlign: align }
                   })}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -4000,9 +4071,9 @@ const TextEditorPanel = ({
             <span>Color</span>
             <input
               type="color"
-              value={selectedOverlay.style.color}
+              value={st.color || '#ffffff'}
               onChange={(e) => onUpdateOverlay(selectedOverlay.id, {
-                style: { ...selectedOverlay.style, color: e.target.value }
+                style: { ...st, color: e.target.value }
               })}
               style={textPanelStyles.colorPicker}
             />
@@ -4015,7 +4086,7 @@ const TextEditorPanel = ({
               style={textPanelStyles.saveTemplateBtn}
               onClick={() => {
                 if (onRequestSaveTemplate && selectedOverlay) {
-                  onRequestSaveTemplate(selectedOverlay.style);
+                  onRequestSaveTemplate(st);
                 }
               }}
             >
@@ -4065,14 +4136,14 @@ const TextEditorPanel = ({
           </div>
 
           {/* Save to Lyric Bank */}
-          {onAddLyrics && selectedOverlay.text.trim() && (
+          {onAddLyrics && (selectedOverlay.text || '').trim() && (
             <button
               style={textPanelStyles.saveToLyricBankBtn}
               onClick={() => {
                 handleAddLyricsAndRefresh({
                   id: `lyric_${Date.now()}`,
-                  title: selectedOverlay.text.split('\n')[0].slice(0, 30) || 'Saved Lyrics',
-                  content: selectedOverlay.text.trim(),
+                  title: (selectedOverlay.text || '').split('\n')[0].slice(0, 30) || 'Saved Lyrics',
+                  content: (selectedOverlay.text || '').trim(),
                   createdAt: new Date().toISOString()
                 });
                 toastSuccess('Saved to Lyric Bank!');
@@ -4088,7 +4159,8 @@ const TextEditorPanel = ({
             </button>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* Pull from Lyric Bank Section */}
       <div style={textPanelStyles.lyricSection}>

@@ -73,7 +73,9 @@ export async function uploadFile(file, folder = 'uploads', onProgress = null, op
   };
 
   const allowed = allowedTypes[folder] || allowedTypes.uploads;
-  if (!allowed.includes(file.type)) {
+  // Strip codec suffix (e.g. "video/mp4;codecs=avc1" → "video/mp4") for validation
+  const baseType = file.type.split(';')[0].trim();
+  if (!allowed.includes(baseType)) {
     throw new Error(`Invalid file type: ${file.type}. Allowed: ${allowed.join(', ')}`);
   }
 

@@ -2,7 +2,8 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   subscribeToLibrary, subscribeToCollections, getCollections, getLibrary, getLyrics,
   addToVideoTextBank, removeFromVideoTextBank, updateVideoTextBank,
-  addToLibraryAsync, incrementUseCount, MEDIA_TYPES
+  addToLibraryAsync, incrementUseCount, MEDIA_TYPES,
+  getTextBankText, getTextBankStyle
 } from '../../services/libraryService';
 import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -17,6 +18,7 @@ import AudioClipSelector from './AudioClipSelector';
 import CloudImportButton from './CloudImportButton';
 import LyricBank from './LyricBank';
 import LyricAnalyzer from './LyricAnalyzer';
+import WordTimeline from './WordTimeline';
 import useEditorHistory from '../../hooks/useEditorHistory';
 import useWaveform from '../../hooks/useWaveform';
 
@@ -43,7 +45,9 @@ const SoloClipEditor = ({
   onSaveLyrics,
   onAddLyrics,
   onUpdateLyrics,
-  onDeleteLyrics
+  onDeleteLyrics,
+  presets = [],
+  onSavePreset
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
@@ -66,6 +70,7 @@ const SoloClipEditor = ({
         name: 'Template',
         clip: existingClip,
         textOverlays: existingVideo.textOverlays || [],
+        words: existingVideo.words || [],
         isTemplate: true
       }];
     }
@@ -75,6 +80,7 @@ const SoloClipEditor = ({
       name: 'Template',
       clip: firstClip,
       textOverlays: [],
+      words: [],
       isTemplate: true
     }];
   });
@@ -89,6 +95,7 @@ const SoloClipEditor = ({
   const activeVideo = allVideos[activeVideoIndex];
   const clip = activeVideo?.clip;
   const textOverlays = activeVideo?.textOverlays || [];
+  const words = activeVideo?.words || [];
 
   // Wrapper setters (route through allVideos)
   const setTextOverlays = useCallback((updater) => {
@@ -101,6 +108,19 @@ const SoloClipEditor = ({
         textOverlays: typeof updater === 'function'
           ? updater(current.textOverlays || [])
           : updater
+      };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
+  const setWords = useCallback((updater) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const current = copy[activeVideoIndex];
+      if (!current) return prev;
+      copy[activeVideoIndex] = {
+        ...current,
+        words: typeof updater === 'function' ? updater(current.words || []) : updater
       };
       return copy;
     });
@@ -119,7 +139,7 @@ const SoloClipEditor = ({
   // ── Undo/Redo history ──
   const getHistorySnapshot = useCallback(() => {
     const v = allVideos[activeVideoIndex];
-    return v ? { clip: v.clip, textOverlays: v.textOverlays } : null;
+    return v ? { clip: v.clip, textOverlays: v.textOverlays, words: v.words } : null;
   }, [allVideos, activeVideoIndex]);
 
   const restoreHistorySnapshot = useCallback((snapshot) => {
@@ -166,6 +186,20 @@ const SoloClipEditor = ({
   // ── Aspect ratio ──
   const [aspectRatio, setAspectRatio] = useState(existingVideo?.cropMode || '9:16');
 
+  // ── Global text style (matches Montage editor pattern) ──
+  const [textStyle, setTextStyle] = useState({
+    fontSize: 48,
+    fontFamily: 'Inter, sans-serif',
+    fontWeight: '600',
+    color: '#ffffff',
+    outline: true,
+    outlineColor: '#000000',
+    textAlign: 'center',
+    textCase: 'default',
+    displayMode: 'word'
+  });
+  const [activeTab, setActiveTab] = useState('caption');
+
   // ── Text editing state ──
   const [editingTextId, setEditingTextId] = useState(null);
   const [editingTextValue, setEditingTextValue] = useState('');
@@ -181,9 +215,9 @@ const SoloClipEditor = ({
   const [collections, setCollections] = useState([]);
   const [libraryMedia, setLibraryMedia] = useState([]);
 
-  // Derive library audio and video from libraryMedia
-  const libraryAudio = libraryMedia.filter(i => i.type === MEDIA_TYPES.AUDIO);
-  const libraryVideos = libraryMedia.filter(i => i.type === MEDIA_TYPES.VIDEO);
+  // Derive library audio and video from libraryMedia (memoized to avoid re-render cascades)
+  const libraryAudio = useMemo(() => libraryMedia.filter(i => i.type === MEDIA_TYPES.AUDIO), [libraryMedia]);
+  const libraryVideos = useMemo(() => libraryMedia.filter(i => i.type === MEDIA_TYPES.VIDEO), [libraryMedia]);
 
   // ── Collection dropdown state ──
   const [selectedCollection, setSelectedCollection] = useState('all');
@@ -203,6 +237,10 @@ const SoloClipEditor = ({
 
   // ── Close confirmation ──
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+
+  // ── Word Timeline state ──
+  const [showWordTimeline, setShowWordTimeline] = useState(false);
+  const [loadedBankLyricId, setLoadedBankLyricId] = useState(null);
 
   // ── Lyrics state ──
   const [lyricsBank, setLyricsBank] = useState([]);
@@ -234,6 +272,11 @@ const SoloClipEditor = ({
       {openSections[key] && (<div className="px-4 pb-4">{content}</div>)}
     </div>
   );
+
+  // ── Preset state ──
+  const [selectedPreset, setSelectedPreset] = useState(null);
+  const [showPresetPrompt, setShowPresetPrompt] = useState(false);
+  const [presetPromptValue, setPresetPromptValue] = useState('');
 
   // ── Mobile detection ──
   const { isMobile } = useIsMobile();
@@ -302,8 +345,8 @@ const SoloClipEditor = ({
     }
   }, []);
 
-  // Effective timeline duration = max(clip, audio) so audio can extend past video
-  const timelineDuration = Math.max(clipDuration || 0, audioDuration || 0) || clipDuration || 1;
+  // Timeline duration dictated by audio; falls back to clip length when no audio
+  const timelineDuration = audioDuration > 0 ? audioDuration : (clipDuration || 1);
 
   const playbackLoop = useCallback(() => {
     const startBoundary = selectedAudio?.startTime || 0;
@@ -461,17 +504,51 @@ const SoloClipEditor = ({
     toastSuccess(`Saved clip "${clipData.name}" to library`);
   }, [selectedAudio, artistId, toastSuccess]);
 
+  // ── Preset handler ──
+  const handleApplyPreset = useCallback((preset) => {
+    setSelectedPreset(preset);
+    if (preset.settings) {
+      setTextStyle(prev => ({ ...prev, ...preset.settings }));
+      if (preset.settings.cropMode) setAspectRatio(preset.settings.cropMode);
+    }
+  }, []);
+
   // ── Text overlay CRUD ──
   const getDefaultTextStyle = useCallback(() => ({
-    fontSize: 48,
-    fontFamily: 'Inter, sans-serif',
-    fontWeight: '600',
-    color: '#ffffff',
-    outline: true,
-    outlineColor: '#000000',
-    textAlign: 'center',
-    textCase: 'default'
-  }), []);
+    fontSize: textStyle.fontSize,
+    fontFamily: textStyle.fontFamily,
+    fontWeight: textStyle.fontWeight,
+    color: textStyle.color,
+    outline: textStyle.outline,
+    outlineColor: textStyle.outlineColor,
+    textAlign: textStyle.textAlign,
+    textCase: textStyle.textCase
+  }), [textStyle]);
+
+  // Propagate global style changes to all existing overlays
+  const applyStyleToAll = useCallback((styleUpdates) => {
+    setTextOverlays(prev => prev.map(o => ({
+      ...o,
+      style: { ...o.style, ...styleUpdates }
+    })));
+  }, [setTextOverlays]);
+
+  // Wrapper: update global textStyle AND propagate to all overlays
+  const updateGlobalStyle = useCallback((updater) => {
+    setTextStyle(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
+      // Extract only the changed fields for overlay propagation
+      const diff = {};
+      for (const key of Object.keys(next)) {
+        if (next[key] !== prev[key]) diff[key] = next[key];
+      }
+      if (Object.keys(diff).length > 0) {
+        // Schedule overlay update after state commit
+        setTimeout(() => applyStyleToAll(diff), 0);
+      }
+      return next;
+    });
+  }, [applyStyleToAll]);
 
   // ── AI Transcription handler ──
   const handleTranscriptionComplete = useCallback((result) => {
@@ -494,9 +571,16 @@ const SoloClipEditor = ({
       };
       setTextOverlays(prev => [...prev, newOverlay]);
     });
+    // Also set words for WordTimeline
+    setWords(result.words.map((w, i) => ({
+      id: `word_${Date.now()}_${i}`,
+      text: w.text,
+      startTime: Math.min(w.startTime || 0, dur),
+      duration: w.duration || 0.5
+    })));
     toastSuccess(`Added ${result.words.length} text overlays from transcription`);
     setShowTranscriber(false);
-  }, [clipDuration, getDefaultTextStyle, setTextOverlays, toastSuccess, toastError]);
+  }, [clipDuration, getDefaultTextStyle, setTextOverlays, setWords, toastSuccess, toastError]);
 
   useEffect(() => {
     const hasLibraryAudio = selectedAudio && !selectedAudio.isSourceVideo;
@@ -511,10 +595,21 @@ const SoloClipEditor = ({
     }
   }, [isMuted, selectedAudio, sourceVideoMuted, sourceVideoVolume, externalAudioVolume]);
 
+  // Get clip URL safely (must be before useWaveform which references it)
+  const getClipUrl = useCallback((clipObj) => {
+    if (!clipObj) return null;
+    const localUrl = clipObj.localUrl;
+    const isBlobUrl = localUrl && localUrl.startsWith('blob:');
+    return isBlobUrl ? clipObj.url : (localUrl || clipObj.url || clipObj.src);
+  }, []);
+
+  // Stable clips array for useWaveform — avoids new array ref every render
+  const waveformClips = useMemo(() => clip ? [clip] : [], [clip]);
+
   // Waveform data via shared hook
   const { waveformData, clipWaveforms, waveformSource } = useWaveform({
     selectedAudio,
-    clips: clip ? [clip] : [],
+    clips: waveformClips,
     getClipUrl
   });
 
@@ -539,6 +634,28 @@ const SoloClipEditor = ({
     setEditingTextId(newOverlay.id);
     setEditingTextValue(newOverlay.text);
   }, [getDefaultTextStyle, setTextOverlays, currentTime, clipDuration]);
+
+  // Add lyrics as timed word overlays (one per word, evenly spread across clip)
+  const addLyricsAsTimedOverlays = useCallback((lyricsText) => {
+    const words = lyricsText.split(/\s+/).filter(w => w.trim().length > 0);
+    if (!words.length) return;
+
+    const dur = clipDuration || 13; // fallback to reasonable default
+    const wordDuration = dur / words.length;
+    const timestamp = Date.now();
+
+    const newOverlays = words.map((word, i) => ({
+      id: `text_${timestamp}_${i}`,
+      text: word,
+      style: getDefaultTextStyle(),
+      position: { x: 50, y: 50, width: 80, height: 20 },
+      startTime: i * wordDuration,
+      endTime: (i + 1) * wordDuration
+    }));
+
+    setTextOverlays(newOverlays);
+    toastSuccess(`Created ${newOverlays.length} timed word overlays`);
+  }, [clipDuration, getDefaultTextStyle, setTextOverlays, toastSuccess]);
 
   // ── Reroll: swap clip with random from visible videos (collection-aware) ──
   const handleReroll = useCallback(() => {
@@ -763,7 +880,7 @@ const SoloClipEditor = ({
     } finally {
       setIsGenerating(false);
     }
-  }, [allVideos, generateCount, category, getVideoTextBanks, toastSuccess, toastError]);
+  }, [allVideos, generateCount, category, getVideoTextBanks, keepTemplateText, toastSuccess, toastError]);
 
   // ── Save Draft (active video only) ──
   const handleSaveDraft = useCallback(() => {
@@ -788,6 +905,7 @@ const SoloClipEditor = ({
         locked: true
       }],
       textOverlays: video.textOverlays,
+      words: video.words || [],
       audio: selectedAudio,
       cropMode: aspectRatio,
       duration: clipDuration || 5,
@@ -826,6 +944,7 @@ const SoloClipEditor = ({
           locked: true
         }],
         textOverlays: video.textOverlays,
+        words: video.words || [],
         audio: selectedAudio,
         cropMode: aspectRatio,
         duration: clipDuration || 5,
@@ -876,14 +995,6 @@ const SoloClipEditor = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleCloseRequest, handlePlayPause, editingTextId]);
-
-  // Get clip URL safely
-  const getClipUrl = (clipObj) => {
-    if (!clipObj) return null;
-    const localUrl = clipObj.localUrl;
-    const isBlobUrl = localUrl && localUrl.startsWith('blob:');
-    return isBlobUrl ? clipObj.url : (localUrl || clipObj.url || clipObj.src);
-  };
 
   // Currently editing overlay
   const editingOverlay = textOverlays.find(o => o.id === editingTextId);
@@ -1555,6 +1666,32 @@ const SoloClipEditor = ({
           />
         )}
 
+        {/* ── Word Timeline Modal ── */}
+        {showWordTimeline && (
+          <WordTimeline
+            words={words}
+            setWords={setWords}
+            duration={timelineDuration}
+            currentTime={currentTime}
+            onSeek={handleSeek}
+            isPlaying={isPlaying}
+            onPlayPause={handlePlayPause}
+            onClose={() => setShowWordTimeline(false)}
+            audioRef={audioRef}
+            loadedBankLyricId={loadedBankLyricId}
+            onSaveToBank={(lyricId, wordsToSave) => {
+              if (lyricId && onUpdateLyrics) {
+                onUpdateLyrics(lyricId, { words: wordsToSave });
+              }
+            }}
+            onAddToBank={(lyricData) => {
+              if (onAddLyrics) {
+                onAddLyrics({ title: lyricData.title, content: lyricData.content, words: lyricData.words });
+              }
+            }}
+          />
+        )}
+
         {/* ── Close Confirmation ── */}
         {showCloseConfirm && (
           <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-[100]">
@@ -1566,6 +1703,48 @@ const SoloClipEditor = ({
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                 <Button variant="neutral-secondary" size="small" onClick={() => setShowCloseConfirm(false)}>Keep Editing</Button>
                 <Button variant="destructive-primary" size="small" onClick={() => { setShowCloseConfirm(false); onClose(); }}>Close Anyway</Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Preset Save Modal ── */}
+        {showPresetPrompt && (
+          <div style={{ position: 'fixed', inset: 0, background: theme.overlay.heavy, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onClick={() => setShowPresetPrompt(false)}>
+            <div style={{ background: theme.bg.input, borderRadius: 12, padding: 24, width: 360, maxWidth: '90vw' }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ color: theme.text.primary, fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Save Preset</div>
+              <input
+                autoFocus
+                value={presetPromptValue}
+                onChange={e => setPresetPromptValue(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') setShowPresetPrompt(false);
+                  if (e.key === 'Enter' && presetPromptValue.trim()) {
+                    onSavePreset?.({ name: presetPromptValue.trim(), settings: { ...textStyle, cropMode: aspectRatio } });
+                    toastSuccess(`Preset "${presetPromptValue.trim()}" saved!`);
+                    setShowPresetPrompt(false);
+                  }
+                }}
+                placeholder="Preset name..."
+                style={{ width: '100%', background: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, borderRadius: 8, padding: '10px 12px', color: theme.text.primary, fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
+              />
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+                <button onClick={() => setShowPresetPrompt(false)}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${theme.bg.elevated}`, background: 'transparent', color: theme.text.secondary, cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button onClick={() => {
+                  if (presetPromptValue.trim()) {
+                    onSavePreset?.({ name: presetPromptValue.trim(), settings: { ...textStyle, cropMode: aspectRatio } });
+                    toastSuccess(`Preset "${presetPromptValue.trim()}" saved!`);
+                  }
+                  setShowPresetPrompt(false);
+                }}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: theme.accent.primary, color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+                  Save
+                </button>
               </div>
             </div>
           </div>

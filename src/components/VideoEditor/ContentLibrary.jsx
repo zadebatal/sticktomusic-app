@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import ExportAndPostModal from './ExportAndPostModal';
 import ScheduleQueue from './ScheduleQueue';
 import { StatusPill, ConfirmDialog, EmptyState as SharedEmptyState, useToast } from '../ui';
@@ -7,6 +7,7 @@ import { renderVideo } from '../../services/videoExportService';
 import { uploadFile } from '../../services/firebaseStorage';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
 import { createScheduledPost, deleteScheduledPost, getScheduledPosts, POST_STATUS } from '../../services/scheduledPostsService';
+import { getLibraryAsync, saveCreatedContentAsync, markContentScheduledAsync, unmarkContentScheduledAsync } from '../../services/libraryService';
 import log from '../../utils/logger';
 import {
   initGoogleDrive, authenticate as driveAuth, isAuthenticated as isDriveAuth,
@@ -40,11 +41,16 @@ const ContentLibrary = ({
   onShowBatchPipeline, // Open the main batch create workflow
   onViewScheduling, // Navigate to scheduling page
   isDraftsView = false, // When true, hide Make buttons and show Delete Selected
+  collectionFilter = null, // null=all, string=collectionId, 'uncategorized'=no collection
   db = null, // Firestore instance for creating scheduled posts
   // Posting module props
   accounts = [],
   lateAccountIds = {},
-  artistId = null
+  artistId = null,
+  // Trash / soft-delete props
+  onRestoreContent,
+  onPermanentDelete,
+  onGetDeletedContent
 }) => {
   // BUG-034: Toast notifications instead of alert()
   const { success: toastSuccess, error: toastError } = useToast();
@@ -59,6 +65,12 @@ const ContentLibrary = ({
   const [exportingVideo, setExportingVideo] = useState(null);
   const [previewingVideo, setPreviewingVideo] = useState(null);
   const [previewingSlideshow, setPreviewingSlideshow] = useState(null);
+
+  // Trash view state
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashItems, setTrashItems] = useState([]);
+  const [loadingTrash, setLoadingTrash] = useState(false);
+  const [restoringId, setRestoringId] = useState(null);
 
   // Rendering state
   const [renderingVideoId, setRenderingVideoId] = useState(null);
@@ -123,9 +135,8 @@ const ContentLibrary = ({
     }
   }, [driveConfigured, DRIVE_CLIENT_ID, DRIVE_API_KEY, isSlideshow, category?.name, toastSuccess, toastError]);
 
-  // Scheduled posts for "Already Scheduled" section in Drafts view
+  // Scheduled posts for draft status tracking
   const [scheduledPosts, setScheduledPosts] = useState([]);
-  const [showScheduled, setShowScheduled] = useState(true);
 
   // Load scheduled posts when in drafts view
   React.useEffect(() => {
@@ -194,17 +205,28 @@ const ContentLibrary = ({
   // Legacy: postingSlideshow kept for single-slideshow post button
   const [postingSlideshow, setPostingSlideshow] = useState(null);
 
+  // Bulk audio assign state
+  const [showAudioAssign, setShowAudioAssign] = useState(false);
+  const [audioLibrary, setAudioLibrary] = useState([]);
+  const [assigningAudio, setAssigningAudio] = useState(false);
+
   // Get content array based on type — reverse chronological (newest first)
+  // When collectionFilter is set, only show items from that collection
   const items = useMemo(() => {
     const raw = isSlideshow
       ? (category?.slideshows || [])
       : (category?.createdVideos || []);
-    return [...raw].sort((a, b) => {
+    const sorted = [...raw].sort((a, b) => {
       const ta = new Date(b.createdAt || 0).getTime();
       const tb = new Date(a.createdAt || 0).getTime();
       return ta - tb;
     });
-  }, [isSlideshow, category?.slideshows, category?.createdVideos]);
+    if (!collectionFilter) return sorted;
+    if (collectionFilter === 'uncategorized') {
+      return sorted.filter(item => !item.collectionId);
+    }
+    return sorted.filter(item => item.collectionId === collectionFilter);
+  }, [isSlideshow, category?.slideshows, category?.createdVideos, collectionFilter]);
 
   // For backwards compatibility, also alias as videos for video-specific logic
   const videos = isSlideshow ? [] : items;
@@ -216,6 +238,51 @@ const ContentLibrary = ({
 
   // Backwards compat alias
   const selectedVideos = isSlideshow ? [] : selectedItems;
+
+  // Load audio library when bulk assign panel opens
+  useEffect(() => {
+    if (showAudioAssign && db && artistId && audioLibrary.length === 0) {
+      getLibraryAsync(db, artistId).then(media => {
+        const audioItems = (media || []).filter(m =>
+          m.type === 'audio' || m.name?.match(/\.(mp3|wav|m4a|aac|ogg)$/i) || m.mimeType?.includes('audio')
+        ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        setAudioLibrary(audioItems);
+      }).catch(err => console.error('[ContentLibrary] Failed to load audio library:', err));
+    }
+  }, [showAudioAssign, db, artistId, audioLibrary.length]);
+
+  // Bulk assign audio to selected drafts
+  const handleBulkAudioAssign = useCallback(async (audioItem) => {
+    if (!db || !artistId || selectedVideoIds.size === 0) return;
+    setAssigningAudio(true);
+    try {
+      const selected = items.filter(item => selectedVideoIds.has(item.id));
+      const updatedSlideshows = selected.map(item => ({
+        ...item,
+        audio: {
+          id: audioItem.id,
+          name: audioItem.name,
+          url: audioItem.url,
+          duration: audioItem.duration,
+          isTrimmed: false,
+          startTime: 0,
+          endTime: audioItem.duration || null,
+        }
+      }));
+      await saveCreatedContentAsync(db, artistId, { videos: [], slideshows: updatedSlideshows });
+      if (category?.slideshows) {
+        const audioData = { id: audioItem.id, name: audioItem.name, url: audioItem.url, duration: audioItem.duration, isTrimmed: false, startTime: 0, endTime: audioItem.duration || null };
+        category.slideshows.forEach(ss => {
+          if (selectedVideoIds.has(ss.id)) { ss.audio = audioData; }
+        });
+      }
+      toastSuccess(`Assigned "${audioItem.name}" to ${selectedVideoIds.size} drafts`);
+      setShowAudioAssign(false);
+    } catch (err) {
+      console.error('[ContentLibrary] Bulk audio assign failed:', err);
+      toastError(`Failed to assign audio: ${err.message}`);
+    } finally { setAssigningAudio(false); }
+  }, [db, artistId, selectedVideoIds, items, category, toastSuccess, toastError]);
 
   const toggleItemSelection = (itemId) => {
     setSelectedVideoIds(prev => {
@@ -240,7 +307,44 @@ const ContentLibrary = ({
 
   const clearSelection = () => setSelectedVideoIds(new Set());
 
-  const filteredItems = items.filter(item => {
+  // Identify drafts that have been posted or scheduled via scheduled posts
+  const postedContentIds = useMemo(() => {
+    const ids = new Set();
+    scheduledPosts.forEach(p => {
+      if (p.status === 'posted' && p.contentId) ids.add(p.contentId);
+    });
+    return ids;
+  }, [scheduledPosts]);
+
+  const scheduledContentIds = useMemo(() => {
+    const ids = new Set();
+    scheduledPosts.forEach(p => {
+      if ((p.status === 'scheduled' || p.status === 'draft') && p.contentId) ids.add(p.contentId);
+    });
+    return ids;
+  }, [scheduledPosts]);
+
+  // Split items into posted, scheduled, and unposted
+  const [showPosted, setShowPosted] = useState(false);
+  const [showScheduledItems, setShowScheduledItems] = useState(false);
+
+  const { unpostedItems, scheduledItems, postedItems } = useMemo(() => {
+    const posted = [];
+    const scheduled = [];
+    const unposted = [];
+    items.forEach(item => {
+      if (postedContentIds.has(item.id)) {
+        posted.push(item);
+      } else if (scheduledContentIds.has(item.id) || item.scheduledPostId) {
+        scheduled.push(item);
+      } else {
+        unposted.push(item);
+      }
+    });
+    return { unpostedItems: unposted, scheduledItems: scheduled, postedItems: posted };
+  }, [items, postedContentIds, scheduledContentIds]);
+
+  const filteredItems = unpostedItems.filter(item => {
     if (filter !== 'all' && item.status !== filter) return false;
     if (dateRange !== 'all') {
       const created = new Date(item.createdAt);
@@ -392,41 +496,145 @@ const ContentLibrary = ({
             <option value="completed">Completed</option>
             <option value="approved">Approved</option>
           </select>
+          {onGetDeletedContent && (
+            <button
+              style={{
+                ...styles.secondaryButton,
+                fontSize: '12px',
+                padding: '4px 10px',
+                gap: '4px',
+                opacity: showTrash ? 1 : 0.7
+              }}
+              onClick={async () => {
+                if (showTrash) {
+                  setShowTrash(false);
+                  return;
+                }
+                setLoadingTrash(true);
+                try {
+                  const deleted = await onGetDeletedContent();
+                  const items = isSlideshow ? deleted.slideshows : deleted.videos;
+                  setTrashItems(items);
+                  setShowTrash(true);
+                } catch (err) {
+                  toastError('Failed to load trash');
+                } finally {
+                  setLoadingTrash(false);
+                }
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+              {loadingTrash ? 'Loading...' : showTrash ? 'Hide Trash' : 'Trash'}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Already Scheduled section (Drafts view only) */}
-      {isDraftsView && scheduledPosts.length > 0 && (
-        <div style={{ padding: '0 24px', borderBottom: `1px solid ${theme.border.subtle}` }}>
-          <button
-            onClick={() => setShowScheduled(!showScheduled)}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 0', background: 'none', border: 'none', color: theme.text.secondary, cursor: 'pointer', fontSize: '13px', fontWeight: '600', width: '100%' }}
-          >
-            <span style={{ transform: showScheduled ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', fontSize: '10px' }}>▶</span>
-            Already Scheduled ({scheduledPosts.length})
-          </button>
-          {showScheduled && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingBottom: '12px' }}>
-              {scheduledPosts.map(post => (
-                <div key={post.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', backgroundColor: `${theme.accent.primary}1a`, border: `1px solid ${theme.accent.primary}33`, borderRadius: '8px', fontSize: '11px', color: theme.accent.hover }}>
-                  <span>{post.contentType === 'slideshow' ? '🖼️' : '🎥'}</span>
-                  <span style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.contentName}</span>
-                  <span style={{ color: theme.text.muted, fontSize: '10px' }}>
-                    {post.status === 'scheduled' && post.scheduledTime ? new Date(post.scheduledTime).toLocaleDateString() : post.status}
-                  </span>
-                  <button
-                    onClick={async () => {
-                      if (confirm('Remove from schedule?')) {
-                        await deleteScheduledPost(db, artistId, post.id);
-                        setScheduledPosts(prev => prev.filter(p => p.id !== post.id));
-                        toastSuccess('Removed from schedule');
-                      }
+      {/* Trash Panel */}
+      {showTrash && (
+        <div style={{ padding: '16px 24px', borderBottom: `1px solid ${theme.border.subtle}`, backgroundColor: `${theme.bg.elevated}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: theme.text.primary }}>
+              Trash ({trashItems.length} {isSlideshow ? 'slideshow' : 'video'}{trashItems.length !== 1 ? 's' : ''})
+            </h3>
+            <button
+              onClick={() => setShowTrash(false)}
+              style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '18px', padding: '4px 8px' }}
+            >
+              ×
+            </button>
+          </div>
+          {trashItems.length === 0 ? (
+            <p style={{ color: theme.text.muted, fontSize: '12px', margin: 0 }}>Trash is empty</p>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {trashItems.map(item => {
+                const thumb = isSlideshow
+                  ? (item.slides?.[0]?.backgroundImage || item.slides?.[0]?.imageA?.url || item.thumbnail)
+                  : (item.thumbnail || item.thumbnailUrl);
+                const name = item.name || item.textOverlay || item.collectionName || 'Untitled';
+                const deletedDate = item.deletedAt?.toDate ? item.deletedAt.toDate() : (item.deletedAt ? new Date(item.deletedAt) : null);
+                return (
+                  <div
+                    key={item.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '8px',
+                      padding: '6px 10px',
+                      backgroundColor: 'rgba(239,68,68,0.08)',
+                      border: '1px solid rgba(239,68,68,0.2)',
+                      borderRadius: '8px', fontSize: '11px', color: theme.text.secondary,
+                      maxWidth: '280px'
                     }}
-                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '14px', padding: '4px 8px', minWidth: '32px', minHeight: '32px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                    title="Unschedule"
-                  >×</button>
-                </div>
-              ))}
+                  >
+                    {thumb && (
+                      <img
+                        src={thumb}
+                        alt=""
+                        style={{ width: '32px', height: '40px', borderRadius: '4px', objectFit: 'cover', flexShrink: 0 }}
+                      />
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: '500', color: theme.text.primary }}>
+                        {name}
+                      </div>
+                      {deletedDate && (
+                        <div style={{ fontSize: '10px', color: theme.text.muted }}>
+                          Deleted {deletedDate.toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={async () => {
+                        setRestoringId(item.id);
+                        try {
+                          const success = await onRestoreContent(item.id);
+                          if (success) {
+                            setTrashItems(prev => prev.filter(t => t.id !== item.id));
+                            toastSuccess('Restored');
+                          } else {
+                            toastError('Restore failed');
+                          }
+                        } catch (err) {
+                          toastError('Restore failed');
+                        } finally {
+                          setRestoringId(null);
+                        }
+                      }}
+                      disabled={restoringId === item.id}
+                      style={{
+                        background: 'none', border: `1px solid ${theme.accent.primary}`,
+                        color: theme.accent.primary, cursor: 'pointer',
+                        fontSize: '10px', fontWeight: '600', padding: '3px 8px',
+                        borderRadius: '4px', flexShrink: 0, opacity: restoringId === item.id ? 0.5 : 1
+                      }}
+                    >
+                      {restoringId === item.id ? '...' : 'Restore'}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm('Permanently delete? This cannot be undone.')) return;
+                        try {
+                          await onPermanentDelete(item.id);
+                          setTrashItems(prev => prev.filter(t => t.id !== item.id));
+                          toastSuccess('Permanently deleted');
+                        } catch (err) {
+                          toastError('Delete failed');
+                        }
+                      }}
+                      style={{
+                        background: 'none', border: 'none',
+                        color: '#ef4444', cursor: 'pointer',
+                        fontSize: '14px', padding: '2px 4px', flexShrink: 0
+                      }}
+                      title="Permanently delete"
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -486,11 +694,12 @@ const ContentLibrary = ({
                     onExportToDrive={driveConfigured ? () => handleExportToDrive(item) : null}
                     isDriveExporting={driveExporting === item.id}
                     isMobile={isMobile}
+                    draftNumber={index + 1}
                     onPost={async () => {
                       if (onViewScheduling && db && artistId) {
                         // Create a scheduled post and navigate to scheduling page
                         try {
-                          await createScheduledPost(db, artistId, {
+                          const post = await createScheduledPost(db, artistId, {
                             contentId: item.id,
                             contentType: 'slideshow',
                             contentName: item.name || item.title || 'Untitled Slideshow',
@@ -501,6 +710,10 @@ const ContentLibrary = ({
                             editorState: item,
                             status: POST_STATUS.DRAFT
                           });
+                          // Link draft → scheduled post
+                          if (post?.id) {
+                            await markContentScheduledAsync(db, artistId, item.id, post.id);
+                          }
                           toastSuccess('Added to schedule queue');
                         } catch (err) {
                           console.error('[ContentLibrary] Failed to create scheduled post:', err);
@@ -531,7 +744,7 @@ const ContentLibrary = ({
                       if (onViewScheduling && db && artistId) {
                         // Create a scheduled post and navigate to scheduling page
                         try {
-                          await createScheduledPost(db, artistId, {
+                          const post = await createScheduledPost(db, artistId, {
                             contentId: item.id,
                             contentType: 'video',
                             contentName: item.name || item.title || 'Untitled Video',
@@ -541,6 +754,10 @@ const ContentLibrary = ({
                             editorState: item,
                             status: POST_STATUS.DRAFT
                           });
+                          // Link draft → scheduled post
+                          if (post?.id) {
+                            await markContentScheduledAsync(db, artistId, item.id, post.id);
+                          }
                           toastSuccess('Added to schedule queue');
                         } catch (err) {
                           console.error('[ContentLibrary] Failed to create scheduled post:', err);
@@ -561,6 +778,181 @@ const ContentLibrary = ({
           </div>
         )}
       </div>
+
+      {/* Scheduled Drafts Section */}
+      {isDraftsView && scheduledItems.length > 0 && (
+        <div style={{ borderTop: `1px solid ${theme.border.subtle}` }}>
+          <button
+            onClick={() => setShowScheduledItems(!showScheduledItems)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              padding: '12px 24px', background: 'none', border: 'none',
+              color: theme.text.secondary, cursor: 'pointer',
+              fontSize: '13px', fontWeight: '600', width: '100%'
+            }}
+          >
+            <span style={{ transform: showScheduledItems ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', fontSize: '10px' }}>▶</span>
+            Scheduled ({scheduledItems.length})
+          </button>
+          {showScheduledItems && (
+            <div style={{
+              padding: '0 24px 16px',
+              display: 'grid',
+              gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(200px, 1fr))',
+              gap: isMobile ? '10px' : '16px'
+            }}>
+              {scheduledItems.map((item) => {
+                const postInfo = scheduledPosts.find(p => p.contentId === item.id && (p.status === 'scheduled' || p.status === 'draft'));
+                return (
+                  <div key={item.id} style={{ position: 'relative' }}>
+                    {/* Schedule badge */}
+                    <div style={{
+                      position: 'absolute', top: '8px', right: '8px', zIndex: 2,
+                      display: 'flex', alignItems: 'center', gap: '4px',
+                      padding: '3px 8px', borderRadius: '6px',
+                      backgroundColor: `${theme.accent.primary}cc`, color: '#fff',
+                      fontSize: '10px', fontWeight: '600'
+                    }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                      </svg>
+                      {postInfo?.scheduledTime ? new Date(postInfo.scheduledTime).toLocaleDateString() : 'Scheduled'}
+                    </div>
+                    {isSlideshow ? (
+                      <SlideshowCard
+                        slideshow={item}
+                        isSelected={false}
+                        onToggleSelect={() => {}}
+                        onPreview={() => setPreviewingSlideshow(item)}
+                        onEdit={() => onEditSlideshow?.(item)}
+                        isMobile={isMobile}
+                      />
+                    ) : (
+                      <VideoCard
+                        video={item}
+                        isSelected={false}
+                        onToggleSelect={() => {}}
+                        onEdit={() => onEditVideo?.(item)}
+                        onPreview={() => setPreviewingVideo(item)}
+                        isMobile={isMobile}
+                      />
+                    )}
+                    {/* Unschedule action */}
+                    <button
+                      onClick={async () => {
+                        const postToRemove = postInfo || scheduledPosts.find(p => p.contentId === item.id);
+                        if (postToRemove) {
+                          await deleteScheduledPost(db, artistId, postToRemove.id);
+                          setScheduledPosts(prev => prev.filter(p => p.id !== postToRemove.id));
+                        }
+                        if (item.scheduledPostId && db && artistId) {
+                          await unmarkContentScheduledAsync(db, artistId, item.id);
+                          item.scheduledPostId = null;
+                        }
+                        toastSuccess('Unscheduled');
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                        width: '100%', marginTop: '4px', padding: '6px', background: 'none',
+                        border: `1px solid ${theme.border.subtle}`, borderRadius: '6px',
+                        color: theme.text.secondary, cursor: 'pointer', fontSize: '11px', fontWeight: '500',
+                        minHeight: '32px'
+                      }}
+                    >
+                      Unschedule
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Already Posted Section */}
+      {isDraftsView && postedItems.length > 0 && (
+        <div style={{ borderTop: `1px solid ${theme.border.subtle}` }}>
+          <button
+            onClick={() => setShowPosted(!showPosted)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              padding: '12px 24px', background: 'none', border: 'none',
+              color: theme.text.secondary, cursor: 'pointer',
+              fontSize: '13px', fontWeight: '600', width: '100%'
+            }}
+          >
+            <span style={{ transform: showPosted ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', fontSize: '10px' }}>▶</span>
+            Already Posted ({postedItems.length})
+          </button>
+          {showPosted && (
+            <div style={{
+              padding: '0 24px 16px',
+              display: 'grid',
+              gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(200px, 1fr))',
+              gap: isMobile ? '10px' : '16px'
+            }}>
+              {postedItems.map((item, index) => {
+                const postInfo = scheduledPosts.find(p => p.contentId === item.id && p.status === 'posted');
+                return (
+                  <div key={item.id} style={{ position: 'relative' }}>
+                    {isSlideshow ? (
+                      <SlideshowCard
+                        slideshow={item}
+                        isSelected={false}
+                        onToggleSelect={() => {}}
+                        onPreview={() => setPreviewingSlideshow(item)}
+                        onEdit={() => {
+                          // Duplicate as new draft — new ID, new timestamps
+                          const duplicate = {
+                            ...item,
+                            id: `slideshow_${Date.now()}`,
+                            name: `${item.name || 'Untitled'} (copy)`,
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString()
+                          };
+                          onEditSlideshow?.(duplicate);
+                        }}
+                        onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
+                        isMobile={isMobile}
+                        draftNumber={null}
+                      />
+                    ) : (
+                      <VideoCard
+                        video={item}
+                        isSelected={false}
+                        onToggleSelect={() => {}}
+                        onEdit={() => {
+                          const duplicate = {
+                            ...item,
+                            id: `video_${Date.now()}`,
+                            name: `${item.name || 'Untitled'} (copy)`,
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString()
+                          };
+                          onEditVideo?.(duplicate);
+                        }}
+                        onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
+                        isMobile={isMobile}
+                        onPreview={() => setPreviewingVideo(item)}
+                      />
+                    )}
+                    {/* Posted badge overlay */}
+                    <div style={{
+                      position: 'absolute', top: '6px', left: '6px',
+                      backgroundColor: 'rgba(34,197,94,0.9)',
+                      color: '#fff', fontSize: '9px', fontWeight: '700',
+                      padding: '2px 6px', borderRadius: '4px',
+                      letterSpacing: '0.5px', textTransform: 'uppercase'
+                    }}>
+                      Posted{postInfo?.postedAt ? ` ${new Date(postInfo.postedAt).toLocaleDateString()}` : ''}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Batch Action Bar */}
       {selectedItems.length > 0 && (
@@ -592,7 +984,7 @@ const ContentLibrary = ({
               </svg>
               Delete {selectedItems.length}
             </button>
-            {!isSlideshow && (
+            {!isSlideshow && selectedItems.length === 1 && (
               <button style={styles.batchBtnExport} onClick={() => setExportingVideo(selectedItems[0])}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -608,6 +1000,18 @@ const ContentLibrary = ({
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                 </svg>
                 Edit {selectedItems.length} in Editor
+              </button>
+            )}
+            {isSlideshow && selectedItems.length >= 1 && db && artistId && (
+              <button
+                style={{ ...styles.batchBtnExport, borderColor: theme.accent.primary, color: theme.accent.hover }}
+                onClick={() => setShowAudioAssign(true)}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 18V5l12-2v13"/>
+                  <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+                </svg>
+                Assign Audio ({selectedItems.length})
               </button>
             )}
             <button style={styles.batchBtnPost} onClick={async () => {
@@ -650,6 +1054,158 @@ const ContentLibrary = ({
       {/* Footer — removed dead "Edit category" and "Upload your own videos" buttons (C-10)
          Category editing is available in the sidebar; uploads via the header upload buttons. */}
 
+      {/* Bulk Audio Assign Panel */}
+      {showAudioAssign && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(4px)',
+        }} onClick={() => setShowAudioAssign(false)}>
+          <div style={{
+            background: theme.bg.surface,
+            borderRadius: '12px',
+            border: `1px solid ${theme.border.default}`,
+            width: '480px',
+            maxHeight: '70vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }} onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{
+              padding: '16px 20px',
+              borderBottom: `1px solid ${theme.border.subtle}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}>
+              <div>
+                <div style={{ fontSize: '15px', fontWeight: '600', color: theme.text.primary }}>
+                  Assign Audio to {selectedVideoIds.size} Draft{selectedVideoIds.size !== 1 ? 's' : ''}
+                </div>
+                <div style={{ fontSize: '12px', color: theme.text.muted, marginTop: '2px' }}>
+                  Select a song from your library
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAudioAssign(false)}
+                style={{ background: 'none', border: 'none', color: theme.text.muted, cursor: 'pointer', fontSize: '18px', padding: '4px 8px' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Audio List */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+              {audioLibrary.length === 0 ? (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: theme.text.muted, fontSize: '13px' }}>
+                  Loading audio library...
+                </div>
+              ) : (
+                <>
+                  {/* "Remove Audio" option */}
+                  <button
+                    onClick={async () => {
+                      if (!db || !artistId || selectedVideoIds.size === 0) return;
+                      setAssigningAudio(true);
+                      try {
+                        const selected = items.filter(item => selectedVideoIds.has(item.id));
+                        const cleared = selected.map(item => ({ ...item, audio: null }));
+                        await saveCreatedContentAsync(db, artistId, { videos: [], slideshows: cleared });
+                        if (category?.slideshows) {
+                          category.slideshows.forEach(ss => {
+                            if (selectedVideoIds.has(ss.id)) { ss.audio = null; }
+                          });
+                        }
+                        toastSuccess(`Removed audio from ${selectedVideoIds.size} drafts`);
+                        setShowAudioAssign(false);
+                      } catch (err) {
+                        toastError(`Failed: ${err.message}`);
+                      } finally { setAssigningAudio(false); }
+                    }}
+                    disabled={assigningAudio}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      width: '100%',
+                      padding: '10px 20px',
+                      background: 'none',
+                      border: 'none',
+                      cursor: assigningAudio ? 'wait' : 'pointer',
+                      color: '#f87171',
+                      fontSize: '13px',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                    Remove Audio
+                  </button>
+
+                  <div style={{ height: '1px', background: theme.border.subtle, margin: '4px 20px' }} />
+
+                  {audioLibrary.map(audio => (
+                    <button
+                      key={audio.id}
+                      onClick={() => handleBulkAudioAssign(audio)}
+                      disabled={assigningAudio}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        width: '100%',
+                        padding: '10px 20px',
+                        background: 'none',
+                        border: 'none',
+                        cursor: assigningAudio ? 'wait' : 'pointer',
+                        color: theme.text.primary,
+                        fontSize: '13px',
+                        textAlign: 'left',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = theme.bg.elevated}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    >
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '6px',
+                        background: `${theme.accent.primary}22`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.accent.hover} strokeWidth="2">
+                          <path d="M9 18V5l12-2v13"/>
+                          <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+                        </svg>
+                      </div>
+                      <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: '500' }}>
+                          {(audio.name || 'Untitled').replace(' Audio Extracted', '').replace('.mp3', '')}
+                        </div>
+                        {audio.duration && (
+                          <div style={{ fontSize: '11px', color: theme.text.muted, marginTop: '1px' }}>
+                            {Math.floor(audio.duration / 60)}:{String(Math.floor(audio.duration % 60)).padStart(2, '0')}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Export/Post Modal */}
       {exportingVideo && (
         <ExportAndPostModal
@@ -669,8 +1225,8 @@ const ContentLibrary = ({
           : `Delete ${isSlideshow ? 'slideshow' : 'video'}?`
         }
         message={deleteConfirm.isBulk
-          ? `This will permanently remove ${selectedItems.length} ${isSlideshow ? 'slideshow' : 'video'}${selectedItems.length > 1 ? 's' : ''} from the library. This action cannot be undone.`
-          : `This will permanently remove this ${isSlideshow ? 'slideshow' : 'video'} from the library. This action cannot be undone.`
+          ? `This will move ${selectedItems.length} ${isSlideshow ? 'slideshow' : 'video'}${selectedItems.length > 1 ? 's' : ''} to the trash. You can restore ${selectedItems.length > 1 ? 'them' : 'it'} later from the Trash button.`
+          : `This will move this ${isSlideshow ? 'slideshow' : 'video'} to the trash. You can restore it later from the Trash button.`
         }
         confirmLabel={deleteConfirm.isBulk ? `Delete ${selectedItems.length}` : "Delete"}
         confirmVariant="destructive"
@@ -832,13 +1388,24 @@ const ContentLibrary = ({
                 style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }}
               />
             ) : previewingVideo.clips?.length > 0 ? (
-              <video
-                src={previewingVideo.clips[0].url || previewingVideo.clips[0].localUrl}
-                controls
-                playsInline
-                preload="metadata"
-                style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }}
-              />
+              <>
+                <video
+                  src={previewingVideo.clips[0].url || previewingVideo.clips[0].localUrl}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  muted={!!(previewingVideo.audio?.url && !previewingVideo.audio.url.startsWith('blob:') && !previewingVideo.audio.isSourceAudio)}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }}
+                />
+                {previewingVideo.audio?.url && !previewingVideo.audio.url.startsWith('blob:') && !previewingVideo.audio.isSourceAudio && (
+                  <audio
+                    src={previewingVideo.audio.url}
+                    autoPlay
+                    controls
+                    style={{ position: 'absolute', bottom: 70, left: 16, right: 16, height: 32, opacity: 0.9 }}
+                  />
+                )}
+              </>
             ) : (
               <div style={{ padding: 40, color: theme.text.muted, textAlign: 'center' }}>
                 No preview available - video needs to be rendered first
@@ -894,6 +1461,8 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
           <img src={video.thumbnail || video.thumbnailUrl} alt="" style={styles.videoThumbImg} loading="lazy" />
         ) : video.clips?.[0]?.thumbnail || video.clips?.[0]?.thumbnailUrl ? (
           <img src={video.clips[0].thumbnail || video.clips[0].thumbnailUrl} alt="" style={styles.videoThumbImg} loading="lazy" />
+        ) : video.clips?.[0]?.url ? (
+          <video src={video.clips[0].url} style={styles.videoThumbImg} muted preload="metadata" />
         ) : (
           <div style={styles.videoThumbPlaceholder}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
@@ -1020,7 +1589,7 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
   );
 };
 
-const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdit, onDelete, onPost, onExportToDrive, isDriveExporting, isMobile = false }) => {
+const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdit, onDelete, onPost, onExportToDrive, isDriveExporting, isMobile = false, draftNumber }) => {
   const { theme } = useTheme();
   const [showActions, setShowActions] = useState(false);
   const actionsVisible = isMobile || showActions;
@@ -1062,7 +1631,7 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
         flexShrink: 0,
       }}>
         {thumb ? (
-          <img src={thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img src={thumb} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${theme.bg.input}, ${theme.bg.surface})` }}>
             <span style={{ color: theme.text.muted, fontSize: '10px' }}>{idx + 1}</span>
@@ -1151,6 +1720,26 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
           </div>
         )}
 
+        {/* Draft number badge - top left */}
+        {draftNumber != null && (
+          <div style={{
+            position: 'absolute',
+            top: '8px',
+            left: '8px',
+            background: 'rgba(0, 0, 0, 0.75)',
+            color: '#fff',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            fontSize: '10px',
+            fontWeight: '700',
+            backdropFilter: 'blur(4px)',
+            minWidth: '20px',
+            textAlign: 'center',
+          }}>
+            #{draftNumber}
+          </div>
+        )}
+
         {/* Carousel badge - bottom left */}
         <div style={{
           position: 'absolute',
@@ -1233,7 +1822,7 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
         )}
       </div>
 
-      {/* Name + Status */}
+      {/* Name + Audio + Status */}
       <div style={styles.statusBadgeContainer}>
         {slideshow.name && (
           <div style={{
@@ -1246,6 +1835,26 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
             whiteSpace: 'nowrap',
           }}>
             {slideshow.name}
+          </div>
+        )}
+        {slideshow.audio?.name && (
+          <div style={{
+            padding: '2px 12px 0',
+            fontSize: '10px',
+            fontWeight: '500',
+            color: theme.accent.hover,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '3px',
+          }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 18V5l12-2v13"/>
+              <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+            </svg>
+            {slideshow.audio.name.replace(' Audio Extracted', '').replace('.mp3', '')}
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>

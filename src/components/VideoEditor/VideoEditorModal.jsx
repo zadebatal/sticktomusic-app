@@ -343,6 +343,7 @@ const VideoEditorModal = ({
 
   // Close confirmation state
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [isSavingAll, setIsSavingAll] = useState(false);
 
   // Batch generation now uses in-editor allVideos pattern (no separate prompt)
 
@@ -1208,34 +1209,41 @@ const VideoEditorModal = ({
 
   // ── Save all videos ──
   const handleSaveAllAndClose = useCallback(async () => {
+    if (isSavingAll) return;
+    setIsSavingAll(true);
     let savedCount = 0;
-    for (const video of allVideos) {
-      const videoData = {
-        id: video.isTemplate ? existingVideo?.id : undefined,
-        audio: video.audio,
-        clips: video.clips,
-        words: video.words,
-        lyrics: video.lyrics,
-        textStyle: video.textStyle,
-        cropMode: video.cropMode,
-        duration: video.duration,
-        bpm,
-        thumbnail: video.clips[0]?.thumbnail || null,
-        textOverlay: video.words[0]?.text || video.lyrics.split('\n')[0] || ''
-      };
-      try {
-        await onSave(videoData);
-      } catch (err) {
-        console.error(`[VideoEditorModal] Failed to save video ${savedCount}:`, err);
-        toast.error(`Failed to save video. Please try again.`);
-        return; // Stop on failure so user doesn't lose context
+    try {
+      for (const video of allVideos) {
+        const videoData = {
+          id: video.isTemplate ? existingVideo?.id : undefined,
+          audio: video.audio,
+          clips: video.clips,
+          words: video.words,
+          lyrics: video.lyrics,
+          textStyle: video.textStyle,
+          cropMode: video.cropMode,
+          duration: video.duration,
+          bpm,
+          thumbnail: video.clips[0]?.thumbnail || null,
+          textOverlay: video.words[0]?.text || video.lyrics.split('\n')[0] || ''
+        };
+        try {
+          await onSave(videoData);
+        } catch (err) {
+          console.error(`[VideoEditorModal] Failed to save video ${savedCount}:`, err);
+          toast.error(`Failed to save video. Please try again.`);
+          setIsSavingAll(false);
+          return;
+        }
+        savedCount++;
       }
-      savedCount++;
+      clearAutoSave();
+      toast.success(`Saved ${savedCount} video${savedCount !== 1 ? 's' : ''}`);
+      onClose?.();
+    } finally {
+      setIsSavingAll(false);
     }
-    clearAutoSave();
-    toast.success(`Saved ${savedCount} video${savedCount !== 1 ? 's' : ''}`);
-    onClose?.();
-  }, [allVideos, existingVideo, bpm, onSave, clearAutoSave, toast, onClose]);
+  }, [allVideos, existingVideo, bpm, onSave, clearAutoSave, toast, onClose, isSavingAll]);
 
   // Get current visible text
   const currentText = words.find(w =>
@@ -3098,7 +3106,7 @@ const VideoEditorModal = ({
           </div>
           <div className="flex items-center gap-3">
             <Button variant="neutral-secondary" size="medium" onClick={onClose}>Cancel</Button>
-            <Button variant="brand-primary" size="medium" onClick={handleSaveAllAndClose}>Save All ({allVideos.length})</Button>
+            <Button variant="brand-primary" size="medium" onClick={handleSaveAllAndClose} disabled={isSavingAll}>{isSavingAll ? 'Saving...' : `Save All (${allVideos.length})`}</Button>
           </div>
         </div>
 

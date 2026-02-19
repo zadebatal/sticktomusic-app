@@ -269,6 +269,8 @@ const lateApi = {
         : [{ type: 'video', url: videoUrl }];
 
       // Late API payload — only include fields Late expects (platform + accountId)
+      const hasTikTok = platforms.some(p => p.platform === 'tiktok');
+      const isCarousel = type === 'carousel';
       const payload = {
         content: caption || '',
         mediaItems,
@@ -280,9 +282,26 @@ const lateApi = {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles'
       };
 
-      // Include audioUrl if provided (for carousel posts with audio)
-      if (audioUrl) {
-        payload.audioUrl = audioUrl;
+      // TikTok requires specific settings for all posts
+      if (hasTikTok) {
+        payload.tiktokSettings = {
+          privacyLevel: 'PUBLIC_TO_EVERYONE',
+          allowComment: true,
+          contentPreviewConfirmed: true,
+          expressConsentGiven: true,
+          ...(isCarousel
+            ? {
+                // Send to TikTok creator inbox (not publish directly)
+                draft: true,
+                mediaType: 'photo',
+                photoCoverIndex: 0,
+                autoAddMusic: true
+              }
+            : { allowDuet: true, allowStitch: true })
+        };
+        // NOTE: Do NOT set isDraft=true at root level — that creates a Late draft.
+        // tiktokSettings.draft=true tells Late to use TikTok's Creator Inbox
+        // (MEDIA_UPLOAD mode) so the artist can add music/effects before posting.
       }
 
       log('Sending to Late:', JSON.stringify(payload, null, 2));
@@ -7814,6 +7833,32 @@ const StickToMusic = () => {
       <ToastContainer />
       <UndoToast />
       <OnboardingTooltip />
+
+      {/* Dev Environment Banner — helps QA agents identify which server they're on */}
+      {process.env.NODE_ENV === 'development' && (
+        <div style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: '28px',
+          backgroundColor: window.location.port === '3001' ? '#7c3aed' : '#0ea5e9',
+          color: '#fff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '12px',
+          fontWeight: 700,
+          letterSpacing: '0.5px',
+          zIndex: 99999,
+          fontFamily: 'monospace',
+          pointerEvents: 'none',
+        }}>
+          {window.location.port === '3001'
+            ? '◆ REDESIGN — localhost:3001 — redesign-test branch ◆'
+            : `◆ MAIN — localhost:${window.location.port || '3000'} — main branch ◆`}
+        </div>
+      )}
     </div>
   );
 };
