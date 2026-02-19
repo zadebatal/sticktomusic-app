@@ -36,6 +36,7 @@ import {
 } from '@subframe/core';
 import * as SubframeCore from '@subframe/core';
 import { useToast, ConfirmDialog } from '../ui';
+import CreatePipelineModal from './CreatePipelineModal';
 
 // Platform icon colors
 const PLATFORM_COLORS = {
@@ -86,6 +87,7 @@ const PipelineListView = ({
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [linkingCollection, setLinkingCollection] = useState(null); // collection being assigned to a page
   const [showUnlinked, setShowUnlinked] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Load data + subscribe
   useEffect(() => {
@@ -191,9 +193,36 @@ const PipelineListView = ({
     toastSuccess('Collection deleted');
   }, [db, artistId, toastSuccess]);
 
+  // Save pipeline from CreatePipelineModal
+  const handleSavePipeline = useCallback(async (pipeline) => {
+    try {
+      // Add to collections
+      const cols = getUserCollections(artistId);
+      const existing = cols.findIndex(c => c.id === pipeline.id);
+      if (existing >= 0) {
+        cols[existing] = { ...cols[existing], ...pipeline };
+      } else {
+        cols.push(pipeline);
+      }
+      saveCollections(artistId, cols);
+      if (db) await saveCollectionToFirestore(db, artistId, pipeline);
+      setShowCreateModal(false);
+      toastSuccess(`Pipeline "${pipeline.name}" created`);
+      onOpenWorkspace(pipeline.id);
+    } catch (err) {
+      toastError('Failed to create pipeline');
+    }
+  }, [artistId, db, onOpenWorkspace, toastSuccess, toastError]);
+
   // Draft count for a workspace
   const getDraftCount = (workspaceId) =>
     (createdContent.slideshows || []).filter(s => s.collectionId === workspaceId && !s.isTemplate).length;
+
+  // Workspace count (pipeline collections)
+  const workspaceCount = useMemo(() =>
+    collections.filter(c => c.pageId || c.isPipeline).length,
+    [collections]
+  );
 
   // Slideshow-only format templates for the picker
   const slideshowFormats = FORMAT_TEMPLATES.filter(f => f.type === 'slideshow');
@@ -215,22 +244,29 @@ const PipelineListView = ({
               View Drafts
             </Button>
           )}
+          <Button variant="brand-primary" size="medium" icon={<FeatherPlus />} onClick={() => setShowCreateModal(true)}>
+            New Pipeline
+          </Button>
         </div>
       </div>
 
       {/* Stat cards */}
-      <div className="flex w-full items-center gap-6 mt-6">
+      <div className="flex w-full items-center gap-4 mt-6">
         <div className="flex grow shrink-0 basis-0 flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
           <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{allAccounts.length}</span>
           <span className="text-caption font-caption text-neutral-400">Accounts</span>
         </div>
         <div className="flex grow shrink-0 basis-0 flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
+          <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{workspaceCount}</span>
+          <span className="text-caption font-caption text-neutral-400">Workspaces</span>
+        </div>
+        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
           <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{totalDrafts}</span>
-          <span className="text-caption font-caption text-neutral-400">Total Drafts</span>
+          <span className="text-caption font-caption text-neutral-400">Drafts</span>
         </div>
         <div className="flex grow shrink-0 basis-0 flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
           <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{library.length}</span>
-          <span className="text-caption font-caption text-neutral-400">Media Items</span>
+          <span className="text-caption font-caption text-neutral-400">Media</span>
         </div>
       </div>
 
@@ -243,8 +279,14 @@ const PipelineListView = ({
       <div className="grid w-full grid-cols-2 gap-4 mt-4">
         {handleGroups.length === 0 && (
           <div className="col-span-2 flex flex-col items-center gap-4 rounded-lg border border-dashed border-neutral-700 bg-[#1a1a1aff] px-8 py-12">
-            <span className="text-body font-body text-neutral-400">No connected accounts yet</span>
-            <span className="text-caption font-caption text-neutral-500">Connect accounts in the Pages tab to start creating content</span>
+            <FeatherLink className="text-neutral-500" style={{ width: 32, height: 32 }} />
+            <span className="text-body-bold font-body-bold text-neutral-300">No connected accounts yet</span>
+            <span className="text-caption font-caption text-neutral-500 text-center max-w-sm">
+              Connect your social media accounts in the Pages tab, or create a standalone pipeline to start building content.
+            </span>
+            <Button variant="brand-secondary" size="medium" icon={<FeatherPlus />} onClick={() => setShowCreateModal(true)}>
+              Create Pipeline
+            </Button>
           </div>
         )}
 
@@ -327,6 +369,77 @@ const PipelineListView = ({
           );
         })}
       </div>
+
+      {/* ═══ RECENT DRAFTS ═══ */}
+      {totalDrafts > 0 && (
+        <div className="flex w-full flex-col gap-4 mt-8">
+          <div className="flex w-full items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Recent Drafts</span>
+              <Badge variant="neutral">{totalDrafts}</Badge>
+            </div>
+            {onViewContent && (
+              <Button variant="neutral-tertiary" size="small" iconRight={<FeatherArrowRight />} onClick={() => onViewContent({ type: 'slideshows' })}>
+                View All
+              </Button>
+            )}
+          </div>
+          <div className="grid w-full grid-cols-4 gap-3">
+            {(createdContent.slideshows || [])
+              .filter(s => !s.isTemplate)
+              .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+              .slice(0, 4)
+              .map(draft => {
+                const firstSlideUrl = draft.slides?.[0]?.url || draft.slides?.[0]?.thumbnailUrl;
+                const workspace = collections.find(c => c.id === draft.collectionId);
+                return (
+                  <div
+                    key={draft.id}
+                    className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
+                    onClick={() => {
+                      if (workspace) onOpenWorkspace(workspace.id);
+                      else onViewContent?.({ type: 'slideshows' });
+                    }}
+                  >
+                    {firstSlideUrl ? (
+                      <div className="w-full aspect-[9/16] bg-neutral-900">
+                        <img src={firstSlideUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      </div>
+                    ) : (
+                      <div className="w-full aspect-[9/16] bg-neutral-900 flex items-center justify-center">
+                        <FeatherImage className="text-neutral-700" style={{ width: 24, height: 24 }} />
+                      </div>
+                    )}
+                    <div className="flex w-full flex-col gap-0.5 px-3 pb-3">
+                      <span className="text-caption font-caption text-neutral-300 truncate">
+                        {draft.slides?.length || 0} slide{(draft.slides?.length || 0) !== 1 ? 's' : ''}
+                      </span>
+                      {workspace && (
+                        <span className="text-caption font-caption text-neutral-500 truncate">
+                          {workspace.name}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {/* Quick start guide — show when user has pages but no workspaces */}
+      {handleGroups.length > 0 && workspaceCount === 0 && (
+        <div className="flex w-full items-start gap-4 mt-6 rounded-lg border border-solid border-indigo-500/30 bg-indigo-500/5 px-6 py-5">
+          <FeatherZap className="text-indigo-400 flex-shrink-0 mt-0.5" style={{ width: 20, height: 20 }} />
+          <div className="flex flex-col gap-2">
+            <span className="text-body-bold font-body-bold text-[#ffffffff]">Get Started</span>
+            <span className="text-body font-body text-neutral-300">
+              Click a page card above to choose a content format and create your first workspace.
+              Each workspace organizes your slide banks, media, and drafts for a specific post style.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* ═══ EXISTING COLLECTIONS (unlinked) ═══ */}
       {unlinkedCollections.length > 0 && (
@@ -545,6 +658,15 @@ const PipelineListView = ({
         onConfirm={() => handleDelete(confirmDelete.id)}
         onCancel={() => setConfirmDelete(null)}
       />
+
+      {/* Create Pipeline Modal */}
+      {showCreateModal && (
+        <CreatePipelineModal
+          onClose={() => setShowCreateModal(false)}
+          onSave={handleSavePipeline}
+          latePages={allAccounts}
+        />
+      )}
     </div>
   );
 };

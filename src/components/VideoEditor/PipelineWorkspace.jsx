@@ -78,6 +78,9 @@ const PipelineWorkspace = ({
   // Text input per bank
   const [textInputs, setTextInputs] = useState({});
 
+  // Import from library modal
+  const [showImportModal, setShowImportModal] = useState(false);
+
   // Media pool filter
   const [mediaFilter, setMediaFilter] = useState('all'); // 'all' | 'unassigned' | 'audio'
 
@@ -275,6 +278,42 @@ const PipelineWorkspace = ({
   // Lyrics textarea state
   const [lyricsText, setLyricsText] = useState('');
 
+  // Library media NOT already in this pipeline (for import modal)
+  const availableLibraryMedia = useMemo(() => {
+    if (!pipeline) return [];
+    const pipelineMediaIds = new Set(pipeline.mediaIds || []);
+    return library.filter(item => !pipelineMediaIds.has(item.id));
+  }, [library, pipeline]);
+
+  // Import items from library into this pipeline
+  const handleImportFromLibrary = useCallback((selectedIds) => {
+    if (!selectedIds.length || !pipeline) return;
+    const cols = getUserCollections(artistId);
+    const idx = cols.findIndex(c => c.id === pipelineId);
+    if (idx === -1) return;
+    const existingIds = new Set(cols[idx].mediaIds || []);
+    const newIds = selectedIds.filter(id => !existingIds.has(id));
+    cols[idx] = { ...cols[idx], mediaIds: [...(cols[idx].mediaIds || []), ...newIds], updatedAt: new Date().toISOString() };
+    saveCollections(artistId, cols);
+    if (db) saveCollectionToFirestore(db, artistId, cols[idx]);
+    setShowImportModal(false);
+    toastSuccess(`Imported ${newIds.length} item${newIds.length !== 1 ? 's' : ''}`);
+  }, [pipeline, artistId, pipelineId, db, toastSuccess]);
+
+  // Load lyrics from text banks into textarea
+  const handleLoadFromBanks = useCallback(() => {
+    if (!pipeline?.textBanks) return;
+    const allTexts = pipeline.textBanks
+      .flatMap((bank, i) => (bank || []).map(entry => getTextBankText(entry)))
+      .filter(Boolean);
+    if (allTexts.length === 0) {
+      toastError('No text entries in banks yet');
+      return;
+    }
+    setLyricsText(allTexts.join('\n'));
+    toastSuccess(`Loaded ${allTexts.length} text entries`);
+  }, [pipeline, toastSuccess, toastError]);
+
   if (!pipeline) {
     return (
       <div className="flex h-full w-full items-center justify-center">
@@ -359,10 +398,15 @@ const PipelineWorkspace = ({
           </ToggleGroup>
         )}
 
-        {/* Right — Asset + Draft count badges */}
+        {/* Right — Actions + counts */}
         <div className="flex items-center gap-3">
           <Badge variant="brand" icon={<FeatherImage />}>{pipelineImages.length + pipelineAudio.length} Assets</Badge>
           <Badge variant="neutral" icon={<FeatherLayers />}>{pipelineDrafts.length} Draft{pipelineDrafts.length !== 1 ? 's' : ''}</Badge>
+          {onSchedule && (
+            <Button variant="neutral-secondary" size="small" onClick={onSchedule}>
+              Schedule
+            </Button>
+          )}
         </div>
       </div>
 
@@ -391,7 +435,7 @@ const PipelineWorkspace = ({
               variant="neutral-secondary"
               size="small"
               icon={<FeatherCloud />}
-              onClick={() => {/* Cloud import placeholder */}}
+              onClick={() => setShowImportModal(true)}
             >
               Import
             </Button>
@@ -475,9 +519,20 @@ const PipelineWorkspace = ({
             )}
 
             {pipelineMedia.length === 0 && (
-              <div className="flex flex-col items-center gap-2 py-8 w-full">
-                <FeatherImage className="text-neutral-600" style={{ width: 24, height: 24 }} />
-                <span className="text-caption font-caption text-neutral-500">Upload media to get started</span>
+              <div className="flex flex-col items-center gap-3 py-8 w-full">
+                <FeatherUpload className="text-neutral-500" style={{ width: 28, height: 28 }} />
+                <span className="text-body-bold font-body-bold text-neutral-400">No media yet</span>
+                <span className="text-caption font-caption text-neutral-500 text-center px-2">
+                  Upload images and audio, or import from your library
+                </span>
+                <div className="flex items-center gap-2 mt-1">
+                  <Button variant="brand-secondary" size="small" icon={<FeatherUpload />} onClick={() => fileInputRef.current?.click()}>
+                    Upload
+                  </Button>
+                  <Button variant="neutral-secondary" size="small" icon={<FeatherCloud />} onClick={() => setShowImportModal(true)}>
+                    Import
+                  </Button>
+                </div>
               </div>
             )}
           </div>
@@ -756,11 +811,146 @@ const PipelineWorkspace = ({
               variant="neutral-secondary"
               size="small"
               icon={<FeatherDatabase />}
-              onClick={() => {/* Load from bank placeholder */}}
+              onClick={handleLoadFromBanks}
             >
               Load from Bank
             </Button>
           </div>
+        </div>
+      </div>
+
+      {/* Import from Library Modal */}
+      {showImportModal && (
+        <ImportFromLibraryModal
+          items={availableLibraryMedia}
+          onImport={handleImportFromLibrary}
+          onClose={() => setShowImportModal(false)}
+        />
+      )}
+    </div>
+  );
+};
+
+// Mini modal for importing media from artist's library into this pipeline
+const ImportFromLibraryModal = ({ items, onImport, onClose }) => {
+  const [selected, setSelected] = useState(new Set());
+
+  const toggle = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (selected.size === items.length) setSelected(new Set());
+    else setSelected(new Set(items.map(i => i.id)));
+  };
+
+  const images = items.filter(i => i.type === 'image');
+  const audio = items.filter(i => i.type === 'audio');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-xl border border-neutral-800 bg-[#111111] overflow-hidden" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-neutral-800 px-6 py-4">
+          <div className="flex flex-col gap-1">
+            <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Import from Library</span>
+            <span className="text-caption font-caption text-neutral-400">
+              {items.length} item{items.length !== 1 ? 's' : ''} available
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button variant="neutral-tertiary" size="small" onClick={selectAll}>
+              {selected.size === items.length ? 'Deselect All' : 'Select All'}
+            </Button>
+            <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherX />} onClick={onClose} />
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="max-h-[60vh] overflow-y-auto p-6">
+          {items.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-12">
+              <FeatherImage className="text-neutral-500" style={{ width: 32, height: 32 }} />
+              <span className="text-body font-body text-neutral-400">No additional media in your library</span>
+              <span className="text-caption font-caption text-neutral-500">Upload media to your library first</span>
+            </div>
+          ) : (
+            <>
+              {/* Images grid */}
+              {images.length > 0 && (
+                <>
+                  <span className="text-body-bold font-body-bold text-neutral-300 mb-3 block">
+                    Images ({images.length})
+                  </span>
+                  <div className="grid grid-cols-5 gap-2 mb-6">
+                    {images.map(item => (
+                      <div
+                        key={item.id}
+                        className={`relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-colors ${
+                          selected.has(item.id) ? 'border-indigo-500' : 'border-transparent hover:border-neutral-600'
+                        }`}
+                        onClick={() => toggle(item.id)}
+                      >
+                        <img
+                          src={item.thumbnailUrl || item.url}
+                          alt={item.name}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                        {selected.has(item.id) && (
+                          <div className="absolute inset-0 bg-indigo-500/30 flex items-center justify-center">
+                            <FeatherCheck className="text-white" style={{ width: 20, height: 20 }} />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Audio list */}
+              {audio.length > 0 && (
+                <>
+                  <span className="text-body-bold font-body-bold text-neutral-300 mb-3 block">
+                    Audio ({audio.length})
+                  </span>
+                  <div className="flex flex-col gap-1">
+                    {audio.map(item => (
+                      <div
+                        key={item.id}
+                        className={`flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer transition-colors ${
+                          selected.has(item.id) ? 'bg-indigo-500/20 border border-indigo-500' : 'hover:bg-neutral-900 border border-transparent'
+                        }`}
+                        onClick={() => toggle(item.id)}
+                      >
+                        <FeatherMusic className="text-neutral-400 flex-shrink-0" style={{ width: 16, height: 16 }} />
+                        <span className="text-body font-body text-[#ffffffff] truncate flex-1">{item.name}</span>
+                        {selected.has(item.id) && <FeatherCheck className="text-indigo-400 flex-shrink-0" style={{ width: 16, height: 16 }} />}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 border-t border-neutral-800 px-6 py-4">
+          <Button variant="neutral-secondary" size="medium" onClick={onClose}>Cancel</Button>
+          <Button
+            variant="brand-primary"
+            size="medium"
+            disabled={selected.size === 0}
+            onClick={() => onImport(Array.from(selected))}
+          >
+            Import {selected.size > 0 ? `(${selected.size})` : ''}
+          </Button>
         </div>
       </div>
     </div>
