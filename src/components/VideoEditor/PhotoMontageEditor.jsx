@@ -68,6 +68,7 @@ const PhotoMontageEditor = ({
 
   // ── Audio state (renamed from `audio` to match VEM/SoloClipEditor pattern) ──
   const [selectedAudio, setSelectedAudio] = useState(existingVideo?.audio || null);
+  const [audioDuration, setAudioDuration] = useState(0);
   const [beatSyncEnabled, setBeatSyncEnabled] = useState(existingVideo?.montageBeatSync || false);
   const audioRef = useRef(null);
   const audioFileInputRef = useRef(null);
@@ -569,18 +570,43 @@ const PhotoMontageEditor = ({
     toastSuccess(`Saved clip "${clipData.name}" to library`);
   }, [selectedAudio, artistId, db, toastSuccess]);
 
-  // ── Audio element config ──
+  // ── Audio element config — runs whenever selectedAudio changes ──
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
     if (!selectedAudio) {
       el.src = '';
+      setAudioDuration(0);
       return;
     }
     const url = selectedAudio.localUrl || selectedAudio.url;
     if (!url) return;
+
+    const start = selectedAudio.startTime || 0;
+    const endProp = selectedAudio.endTime || null;
+
+    const onLoadedMetadata = () => {
+      if (!audioRef.current) return;
+      const end = endProp || audioRef.current.duration;
+      setAudioDuration(end - start);
+      if (start > 0) {
+        audioRef.current.currentTime = start;
+      }
+    };
+
+    // Set handler BEFORE load so cached audio doesn't miss the event
+    el.onloadedmetadata = onLoadedMetadata;
     el.src = url;
     el.load();
+
+    // Fallback: if audio was already cached, onloadedmetadata may not re-fire
+    const fallback = setTimeout(() => {
+      if (el.readyState >= 1 && el.duration > 0) {
+        onLoadedMetadata();
+      }
+    }, 100);
+
+    return () => clearTimeout(fallback);
   }, [selectedAudio]);
 
   // ── Sync audio volume ──
@@ -1375,7 +1401,7 @@ const PhotoMontageEditor = ({
         />
 
         {/* Hidden audio element for preview playback */}
-        <audio ref={audioRef} preload="auto" />
+        <audio ref={audioRef} style={{ display: 'none' }} crossOrigin="anonymous" preload="auto" />
 
         {/* ── Audio Trimmer Modal ── */}
         {showAudioTrimmer && (audioToTrim || selectedAudio) && (() => {

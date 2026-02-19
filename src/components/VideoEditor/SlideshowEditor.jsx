@@ -2034,6 +2034,7 @@ const SlideshowEditor = ({
 
   // Generate more slideshows from template
   const [showAudioPrompt, setShowAudioPrompt] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // Core generation logic (called after any prompts are resolved)
   const executeGeneration = useCallback(() => {
@@ -2451,7 +2452,13 @@ const SlideshowEditor = ({
             <button style={{
               ...styles.closeButton,
               ...(isMobile ? { padding: '10px' } : {})
-            }} onClick={onClose}>
+            }} onClick={() => {
+              if (allSlideshows.length > 1) {
+                setShowCloseConfirm(true);
+              } else {
+                onClose?.();
+              }
+            }}>
               <svg width={isMobile ? 24 : 20} height={isMobile ? 24 : 20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="18" y1="6" x2="6" y2="18"/>
                 <line x1="6" y1="6" x2="18" y2="18"/>
@@ -4666,6 +4673,68 @@ const SlideshowEditor = ({
                   }}
                 >
                   Add Audio
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Close Confirmation — unsaved generated variants */}
+        {showCloseConfirm && (
+          <div style={{
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)',
+            backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', zIndex: 10002
+          }}>
+            <div style={{
+              backgroundColor: '#1a1a2e', borderRadius: '16px', padding: '28px',
+              maxWidth: '380px', width: '90%', textAlign: 'center',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1)'
+            }}>
+              <div style={{
+                width: '48px', height: '48px', borderRadius: '12px',
+                background: 'linear-gradient(135deg, rgba(251,60,60,0.2), rgba(251,60,60,0.1))',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto 16px'
+              }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </div>
+              <h3 style={{ margin: '0 0 8px', color: '#fff', fontSize: '16px', fontWeight: '600' }}>
+                You have {allSlideshows.length} unsaved slideshows
+              </h3>
+              <p style={{ margin: '0 0 20px', color: '#9ca3af', fontSize: '13px', lineHeight: '1.5' }}>
+                Your generated variants haven't been saved yet. They'll be lost if you close now.
+              </p>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={() => {
+                    setShowCloseConfirm(false);
+                    onClose?.();
+                  }}
+                  style={{
+                    flex: 1, padding: '10px', borderRadius: '8px',
+                    border: '1px solid rgba(255,255,255,0.12)', backgroundColor: 'transparent',
+                    color: '#9ca3af', fontSize: '13px', cursor: 'pointer'
+                  }}
+                >
+                  Discard & Close
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCloseConfirm(false);
+                    handleSaveAllAndClose();
+                  }}
+                  style={{
+                    flex: 1, padding: '10px', borderRadius: '8px', border: 'none',
+                    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                    color: '#fff', fontSize: '13px', fontWeight: '600', cursor: 'pointer'
+                  }}
+                >
+                  Save All & Close
                 </button>
               </div>
             </div>

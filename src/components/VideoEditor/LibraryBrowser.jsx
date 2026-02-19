@@ -679,11 +679,16 @@ const LibraryBrowser = ({
       }
 
       // If targeting a bank, assign uploaded items to it
-      if (targetBankIndex != null && activeView) {
+      if (targetBankIndex != null && activeView && activeView !== 'library') {
         const uploadedIds = results.filter(Boolean).map(item => item.id);
         if (uploadedIds.length > 0) {
-          assignToBankAsync(db, artistId, activeView, uploadedIds, targetBankIndex);
-          toastSuccess(`Uploaded & added ${uploadedIds.length} image${uploadedIds.length > 1 ? 's' : ''} to ${getBankLabel(targetBankIndex)}`);
+          try {
+            await assignToBankAsync(db, artistId, activeView, uploadedIds, targetBankIndex);
+            toastSuccess(`Uploaded & added ${uploadedIds.length} image${uploadedIds.length > 1 ? 's' : ''} to ${getBankLabel(targetBankIndex)}`);
+          } catch (err) {
+            console.error('[LibraryBrowser] Bank assignment failed:', err);
+            toastError(`Upload succeeded but bank assignment failed`);
+          }
         }
       }
 
