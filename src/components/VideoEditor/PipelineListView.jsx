@@ -74,6 +74,8 @@ const PipelineListView = ({
   onOpenWorkspace,
   onOpenVideoEditor,
   onViewContent,
+  editingPipelineId,
+  onClearEditing,
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
 
@@ -88,6 +90,19 @@ const PipelineListView = ({
   const [linkingCollection, setLinkingCollection] = useState(null); // collection being assigned to a page
   const [showUnlinked, setShowUnlinked] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingPipeline, setEditingPipeline] = useState(null);
+
+  // Auto-open edit modal when editingPipelineId comes in from parent
+  useEffect(() => {
+    if (editingPipelineId && collections.length > 0) {
+      const pipeline = collections.find(c => c.id === editingPipelineId);
+      if (pipeline) {
+        setEditingPipeline(pipeline);
+        setShowCreateModal(true);
+      }
+      onClearEditing?.();
+    }
+  }, [editingPipelineId, collections, onClearEditing]);
 
   // Load data + subscribe
   useEffect(() => {
@@ -659,12 +674,16 @@ const PipelineListView = ({
         onCancel={() => setConfirmDelete(null)}
       />
 
-      {/* Create Pipeline Modal */}
+      {/* Create/Edit Pipeline Modal */}
       {showCreateModal && (
         <CreatePipelineModal
-          onClose={() => setShowCreateModal(false)}
-          onSave={handleSavePipeline}
+          onClose={() => { setShowCreateModal(false); setEditingPipeline(null); }}
+          onSave={(pipeline) => {
+            handleSavePipeline(pipeline);
+            setEditingPipeline(null);
+          }}
           latePages={allAccounts}
+          existingPipeline={editingPipeline}
         />
       )}
     </div>

@@ -43,7 +43,9 @@ import {
   updateLyricsAsync,
   deleteLyricsAsync,
   MEDIA_TYPES,
-  STARTER_TEMPLATES
+  STARTER_TEMPLATES,
+  getUserCollections,
+  saveCollections
 } from '../../services/libraryService';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { updateScheduledPost, deletePostsByContentId } from '../../services/scheduledPostsService';
@@ -351,6 +353,7 @@ const VideoStudio = ({
   // Navigation state - restore from session if available, or use URL
   const [currentView, setCurrentViewState] = useState(getInitialViewFromUrl() || savedSession?.currentView || 'home');
   const [activePipelineId, setActivePipelineId] = useState(null);
+  const [editingPipelineId, setEditingPipelineId] = useState(null);
 
   // Wrap setCurrentView to also update URL
   const setCurrentView = useCallback((view) => {
@@ -2398,6 +2401,8 @@ const VideoStudio = ({
             artistId={currentArtistId}
             latePages={latePages}
             manualAccounts={manualAccounts}
+            editingPipelineId={editingPipelineId}
+            onClearEditing={() => setEditingPipelineId(null)}
             onOpenWorkspace={(id) => {
               setActivePipelineId(id);
               setCurrentView('workspace');
@@ -2431,6 +2436,7 @@ const VideoStudio = ({
             db={db}
             artistId={currentArtistId}
             pipelineId={activePipelineId}
+            latePages={latePages}
             onBack={() => {
               setActivePipelineId(null);
               setCurrentView('home');
@@ -2445,6 +2451,32 @@ const VideoStudio = ({
             }}
             onSchedule={() => {
               setCurrentView('scheduling');
+            }}
+            onEditPipeline={(pipeline) => {
+              // Navigate back to list view with edit state
+              setActivePipelineId(null);
+              setCurrentView('home');
+              // PipelineListView will pick up editingPipelineId via prop
+              setEditingPipelineId(pipeline.id);
+            }}
+            onDeletePipeline={(pipelineId) => {
+              try {
+                const cols = getUserCollections(currentArtistId);
+                const idx = cols.findIndex(c => c.id === pipelineId);
+                if (idx !== -1) {
+                  cols.splice(idx, 1);
+                  saveCollections(currentArtistId, cols);
+                  if (db) {
+                    import('firebase/firestore').then(({ doc, deleteDoc }) => {
+                      deleteDoc(doc(db, 'artists', currentArtistId, 'collections', pipelineId)).catch(() => {});
+                    });
+                  }
+                }
+                setActivePipelineId(null);
+                setCurrentView('home');
+              } catch (err) {
+                console.error('[VideoStudio] Delete pipeline failed:', err);
+              }
             }}
           />
         )}

@@ -37,14 +37,17 @@ import { Badge } from '../../ui/components/Badge';
 import { TextField } from '../../ui/components/TextField';
 import { IconWithBackground } from '../../ui/components/IconWithBackground';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
+import { DropdownMenu } from '../../ui/components/DropdownMenu';
 import {
   FeatherUpload, FeatherCloud, FeatherPlus, FeatherX,
   FeatherType, FeatherPlay, FeatherRefreshCw, FeatherArrowRight,
   FeatherArrowLeft, FeatherImage, FeatherMusic,
   FeatherCheck, FeatherLayers, FeatherZap,
-  FeatherDatabase
+  FeatherDatabase, FeatherMoreVertical, FeatherEdit, FeatherTrash2, FeatherSettings
 } from '@subframe/core';
+import * as SubframeCore from '@subframe/core';
 import { useToast } from '../ui';
+import { ConfirmDialog } from '../ui';
 
 // Bank header colors keyed by label
 const BANK_HEADER_COLORS = {
@@ -65,8 +68,12 @@ const PipelineWorkspace = ({
   onOpenEditor,
   onViewDrafts,
   onSchedule,
+  onEditPipeline,
+  onDeletePipeline,
+  latePages = [],
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Data
   const [collections, setCollections] = useState([]);
@@ -407,6 +414,23 @@ const PipelineWorkspace = ({
               Schedule
             </Button>
           )}
+          <SubframeCore.DropdownMenu.Root>
+            <SubframeCore.DropdownMenu.Trigger asChild>
+              <IconButton variant="neutral-tertiary" size="small" icon={<FeatherMoreVertical />} />
+            </SubframeCore.DropdownMenu.Trigger>
+            <SubframeCore.DropdownMenu.Portal>
+              <SubframeCore.DropdownMenu.Content side="bottom" align="end" sideOffset={4} asChild>
+                <DropdownMenu>
+                  <DropdownMenu.DropdownItem icon={<FeatherEdit />} onClick={() => onEditPipeline?.(pipeline)}>
+                    Edit Pipeline
+                  </DropdownMenu.DropdownItem>
+                  <DropdownMenu.DropdownItem icon={<FeatherTrash2 />} onClick={() => setShowDeleteConfirm(true)}>
+                    Delete Pipeline
+                  </DropdownMenu.DropdownItem>
+                </DropdownMenu>
+              </SubframeCore.DropdownMenu.Content>
+            </SubframeCore.DropdownMenu.Portal>
+          </SubframeCore.DropdownMenu.Root>
         </div>
       </div>
 
@@ -827,6 +851,20 @@ const PipelineWorkspace = ({
           onClose={() => setShowImportModal(false)}
         />
       )}
+
+      {/* Delete Pipeline Confirmation */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title={`Delete "${pipeline?.name}"?`}
+        message={`This will permanently delete this pipeline and all its bank assignments. ${pipelineDrafts.length} draft(s) created from this pipeline will NOT be deleted.`}
+        confirmLabel="Delete Pipeline"
+        confirmVariant="destructive"
+        onConfirm={() => {
+          setShowDeleteConfirm(false);
+          onDeletePipeline?.(pipelineId);
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 };
