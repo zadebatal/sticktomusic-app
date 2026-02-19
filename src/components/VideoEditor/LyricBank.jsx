@@ -146,42 +146,14 @@ const LyricBank = ({
               style={compactStyles.editorBody}
             />
             <div style={compactStyles.editorActions}>
-              <button
-                style={compactStyles.editorCancel}
-                onClick={() => { setIsAdding(false); cancelEdit(); }}
-              >
-                Cancel
-              </button>
+              <Button variant="neutral-secondary" size="small" onClick={() => { setIsAdding(false); cancelEdit(); }}>Cancel</Button>
               {editingId ? (
                 <>
-                  <button
-                    style={compactStyles.editorReplace}
-                    onClick={handleSaveEdit}
-                    disabled={!editContent.trim()}
-                  >
-                    Replace
-                  </button>
-                  <button
-                    style={compactStyles.editorSaveNew}
-                    onClick={() => {
-                      onAddLyrics?.({ title: editTitle.trim() || 'Untitled', content: editContent.trim() });
-                      setEditingId(null);
-                      setEditTitle('');
-                      setEditContent('');
-                    }}
-                    disabled={!editContent.trim()}
-                  >
-                    Save as New
-                  </button>
+                  <Button variant="brand-primary" size="small" onClick={handleSaveEdit} disabled={!editContent.trim()}>Replace</Button>
+                  <Button variant="neutral-secondary" size="small" onClick={() => { onAddLyrics?.({ title: editTitle.trim() || 'Untitled', content: editContent.trim() }); setEditingId(null); setEditTitle(''); setEditContent(''); }} disabled={!editContent.trim()}>Save as New</Button>
                 </>
               ) : (
-                <button
-                  style={compactStyles.editorSave}
-                  onClick={handleAdd}
-                  disabled={!newContent.trim()}
-                >
-                  Add
-                </button>
+                <Button variant="brand-primary" size="small" onClick={handleAdd} disabled={!newContent.trim()}>Add</Button>
               )}
             </div>
           </div>
@@ -811,45 +783,6 @@ const getCompactStyles = (theme) => ({
     display: 'flex',
     justifyContent: 'flex-end',
     gap: '6px'
-  },
-  editorCancel: {
-    padding: '5px 10px',
-    backgroundColor: 'transparent',
-    border: `1px solid ${theme.border.subtle}`,
-    borderRadius: '5px',
-    color: theme.text.secondary,
-    fontSize: '11px',
-    cursor: 'pointer'
-  },
-  editorSave: {
-    padding: '5px 10px',
-    backgroundColor: theme.accent.primary,
-    border: 'none',
-    borderRadius: '5px',
-    color: '#fff',
-    fontSize: '11px',
-    fontWeight: 600,
-    cursor: 'pointer'
-  },
-  editorReplace: {
-    padding: '5px 10px',
-    backgroundColor: theme.accent.primary,
-    border: 'none',
-    borderRadius: '5px',
-    color: '#fff',
-    fontSize: '11px',
-    fontWeight: 600,
-    cursor: 'pointer'
-  },
-  editorSaveNew: {
-    padding: '5px 10px',
-    backgroundColor: `${theme.accent.primary}40`,
-    border: 'none',
-    borderRadius: '5px',
-    color: theme.accent.hover,
-    fontSize: '11px',
-    fontWeight: 600,
-    cursor: 'pointer'
   }
 });
 
