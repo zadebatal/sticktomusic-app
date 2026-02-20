@@ -501,7 +501,8 @@ const PipelineWorkspace = ({
           </div>
 
           {/* Upload + Import buttons */}
-          <div className="flex w-full items-center gap-2 border-b border-solid border-neutral-800 px-4 py-2">
+          <div className="flex w-full flex-col gap-2 border-b border-solid border-neutral-800 px-4 py-2">
+            <div className="flex w-full items-center gap-2">
             <Button
               className="h-auto grow shrink-0 basis-0"
               variant="neutral-secondary"
@@ -529,6 +530,28 @@ const PipelineWorkspace = ({
               style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' }}
               onChange={e => handleUpload(e.target.files)}
             />
+            </div>
+            <button
+              data-testid="test-upload-btn"
+              className="w-full rounded bg-indigo-600 px-2 py-1 text-xs text-white hover:bg-indigo-500"
+              onClick={() => {
+                toastSuccess('Upload handler reachable!');
+                // Create a tiny test PNG (1x1 pixel)
+                const canvas = document.createElement('canvas');
+                canvas.width = 1; canvas.height = 1;
+                canvas.getContext('2d').fillRect(0, 0, 1, 1);
+                canvas.toBlob((blob) => {
+                  if (blob) {
+                    const testFile = new File([blob], 'test-upload.png', { type: 'image/png' });
+                    handleUpload([testFile]);
+                  } else {
+                    toastError('Failed to create test file');
+                  }
+                }, 'image/png');
+              }}
+            >
+              Test Upload (1px image)
+            </button>
           </div>
 
           {/* Filter tabs */}
