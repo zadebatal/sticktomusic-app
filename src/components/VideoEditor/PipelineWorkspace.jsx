@@ -179,7 +179,8 @@ const PipelineWorkspace = ({
   // Upload handler (images)
   const fileInputRef = useRef(null);
   const handleUpload = async (files) => {
-    if (!files?.length || !artistId) return;
+    if (!files?.length) { toastError('No files selected'); return; }
+    if (!artistId) { toastError('No artist selected'); return; }
     setIsUploading(true);
     setUploadProgress({ current: 0, total: files.length });
 
@@ -232,12 +233,15 @@ const PipelineWorkspace = ({
     };
 
     try {
-      const { results } = await runPool(Array.from(files), processOne, {
+      const { results, errors } = await runPool(Array.from(files), processOne, {
         concurrency: 5,
         onProgress: (done, total) => setUploadProgress({ current: done, total }),
       });
       // Directly update state with uploaded items (don't rely on subscription timing)
       const uploadedItems = results.filter(Boolean);
+      if (errors.length > 0) {
+        console.error('[PipelineWorkspace] Upload errors:', errors.map(e => e.error?.message));
+      }
       if (uploadedItems.length > 0) {
         setLibrary(prev => {
           const existingIds = new Set(prev.map(i => i.id));
@@ -245,10 +249,14 @@ const PipelineWorkspace = ({
           return newItems.length > 0 ? [...prev, ...newItems] : prev;
         });
         setCollections(getCollections(artistId));
+        toastSuccess(`${uploadedItems.length} item${uploadedItems.length > 1 ? 's' : ''} uploaded to Media Pool`);
+      } else if (errors.length > 0) {
+        toastError(`Upload failed: ${errors[0].error?.message || 'unknown error'}`);
+      } else {
+        toastError('No files were processed');
       }
-      toastSuccess(`Uploaded ${files.length} file${files.length > 1 ? 's' : ''}`);
     } catch (err) {
-      toastError('Upload failed');
+      toastError(`Upload error: ${err.message}`);
     }
     setIsUploading(false);
     setUploadProgress(null);
