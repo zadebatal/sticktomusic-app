@@ -382,19 +382,19 @@ const VideoStudio = ({
   }, [navigate, location.pathname]);
 
   // Handle browser back/forward within studio
+  // Uses a ref to track the last path we handled, so we only respond to actual
+  // URL changes (browser back/forward), not re-renders from programmatic navigation.
+  const lastHandledPathRef = useRef(location.pathname);
   useEffect(() => {
     const path = location.pathname;
-    if (path.includes('/studio/scheduling') && currentView !== 'scheduling') {
-      setCurrentViewState('scheduling');
-    } else if (path.includes('/studio/drafts') && currentView !== 'drafts') {
-      setCurrentViewState('drafts');
-    } else if (path.includes('/studio/library') && currentView !== 'library') {
-      setCurrentViewState('library');
-    } else if (path.includes('/studio/slideshows') && currentView !== 'slideshows') {
-      setCurrentViewState('slideshows');
-    } else if (path === '/operator/studio' && currentView !== 'home') {
-      setCurrentViewState('home');
-    }
+    if (path === lastHandledPathRef.current) return;
+    lastHandledPathRef.current = path;
+    if (path.includes('/studio/workspace')) setCurrentViewState('workspace');
+    else if (path.includes('/studio/scheduling')) setCurrentViewState('scheduling');
+    else if (path.includes('/studio/drafts')) setCurrentViewState('drafts');
+    else if (path.includes('/studio/library')) setCurrentViewState('library');
+    else if (path.includes('/studio/slideshows')) setCurrentViewState('slideshows');
+    else if (path === '/operator/studio') setCurrentViewState('home');
   }, [location.pathname, currentView]);
   const [selectedArtist, setSelectedArtist] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
