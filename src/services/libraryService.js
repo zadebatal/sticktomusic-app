@@ -974,8 +974,12 @@ export const addToTextBank = (artistId, collectionId, bankNum, text) => {
   if (!collection) return;
   const migrated = migrateCollectionBanks(collection);
   Object.assign(collection, migrated);
-  const idx = bankNum - 1; // Convert to 0-based
+  // bankNum can be 0-based or 1-based depending on caller — normalize
+  const idx = bankNum >= 0 ? bankNum : 0;
+  if (!collection.textBanks) collection.textBanks = [];
   while (collection.textBanks.length <= idx) collection.textBanks.push([]);
+  // Ensure slot is a valid array (might be null/undefined from Firestore)
+  if (!Array.isArray(collection.textBanks[idx])) collection.textBanks[idx] = [];
   collection.textBanks[idx] = [...collection.textBanks[idx], text];
   collection.updatedAt = new Date().toISOString();
   saveCollections(artistId, collections);
@@ -994,8 +998,9 @@ export const removeFromTextBank = (artistId, collectionId, bankNum, index) => {
   if (!collection) return;
   const migrated = migrateCollectionBanks(collection);
   Object.assign(collection, migrated);
-  const idx = bankNum - 1;
-  if (collection.textBanks[idx]) {
+  const idx = bankNum >= 0 ? bankNum : 0;
+  if (!collection.textBanks) collection.textBanks = [];
+  if (Array.isArray(collection.textBanks[idx])) {
     collection.textBanks[idx] = collection.textBanks[idx].filter((_, i) => i !== index);
   }
   collection.updatedAt = new Date().toISOString();
@@ -1015,7 +1020,8 @@ export const updateTextBank = (artistId, collectionId, bankNum, texts) => {
   if (!collection) return;
   const migrated = migrateCollectionBanks(collection);
   Object.assign(collection, migrated);
-  const idx = bankNum - 1;
+  const idx = bankNum >= 0 ? bankNum : 0;
+  if (!collection.textBanks) collection.textBanks = [];
   while (collection.textBanks.length <= idx) collection.textBanks.push([]);
   collection.textBanks[idx] = texts;
   collection.updatedAt = new Date().toISOString();
