@@ -76,10 +76,10 @@ const PipelineWorkspace = ({
   const { success: toastSuccess, error: toastError } = useToast();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Data
-  const [collections, setCollections] = useState([]);
-  const [library, setLibrary] = useState([]);
-  const [createdContent, setCreatedContent] = useState({ videos: [], slideshows: [] });
+  // Data — initialize from localStorage to avoid flash of "Pipeline not found"
+  const [collections, setCollections] = useState(() => artistId ? getCollections(artistId) : []);
+  const [library, setLibrary] = useState(() => artistId ? getLibrary(artistId) : []);
+  const [createdContent, setCreatedContent] = useState(() => artistId ? getCreatedContent(artistId) : { videos: [], slideshows: [] });
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
 
