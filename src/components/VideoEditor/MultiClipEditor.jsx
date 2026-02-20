@@ -9,7 +9,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
-import { FeatherArrowLeft, FeatherX, FeatherPlay, FeatherPause, FeatherVolume2, FeatherVolumeX, FeatherPlus, FeatherTrash2, FeatherChevronUp, FeatherChevronDown, FeatherSave, FeatherDownload, FeatherRotateCcw, FeatherRotateCw, FeatherRefreshCw, FeatherMusic, FeatherUpload, FeatherDatabase, FeatherMic, FeatherScissors, FeatherSkipBack, FeatherSkipForward } from '@subframe/core';
+import { FeatherArrowLeft, FeatherX, FeatherPlay, FeatherPause, FeatherVolume2, FeatherVolumeX, FeatherPlus, FeatherTrash2, FeatherChevronUp, FeatherChevronDown, FeatherSave, FeatherDownload, FeatherRotateCcw, FeatherRotateCw, FeatherRefreshCw, FeatherMusic, FeatherUpload, FeatherDatabase, FeatherMic, FeatherScissors, FeatherSkipBack, FeatherSkipForward, FeatherStar } from '@subframe/core';
 import { TextField } from '../../ui/components/TextField';
 import { Badge } from '../../ui/components/Badge';
 import useIsMobile from '../../hooks/useIsMobile';
@@ -49,7 +49,9 @@ const MultiClipEditor = ({
   onSaveLyrics,
   onAddLyrics,
   onUpdateLyrics,
-  onDeleteLyrics
+  onDeleteLyrics,
+  presets = [],
+  onSavePreset
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
@@ -255,6 +257,11 @@ const MultiClipEditor = ({
       {openSections[key] && (<div className="px-4 pb-4">{content}</div>)}
     </div>
   );
+
+  // ── Preset state ──
+  const [selectedPreset, setSelectedPreset] = useState(null);
+  const [showPresetPrompt, setShowPresetPrompt] = useState(false);
+  const [presetPromptValue, setPresetPromptValue] = useState('');
 
   // ── Mobile detection ──
   const { isMobile } = useIsMobile();
@@ -537,6 +544,14 @@ const MultiClipEditor = ({
     setLibraryMedia(getLibrary(artistId));
     toastSuccess(`Saved clip "${clipData.name}" to library`);
   }, [selectedAudio, artistId, toastSuccess]);
+
+  // ── Preset handler ──
+  const handleApplyPreset = useCallback((preset) => {
+    setSelectedPreset(preset);
+    if (preset.settings) {
+      if (preset.settings.cropMode) setAspectRatio(preset.settings.cropMode);
+    }
+  }, []);
 
   // ── Text overlay CRUD ──
   const getDefaultTextStyle = useCallback(() => ({
@@ -2066,6 +2081,27 @@ const MultiClipEditor = ({
           )}
         </div>{/* end mainContent */}
 
+        {/* ── Preset Bar ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderTop: `1px solid ${theme.border.subtle}` }}>
+          <span style={{ fontSize: '11px', color: theme.text.muted, whiteSpace: 'nowrap' }}>Preset</span>
+          <select
+            value={selectedPreset?.id || ''}
+            onChange={(e) => {
+              const preset = presets.find(p => p.id === e.target.value);
+              if (preset) handleApplyPreset(preset);
+            }}
+            style={{ flex: '0 1 200px', padding: '4px 8px', fontSize: '11px', backgroundColor: theme.bg.surface, border: `1px solid ${theme.bg.elevated}`, borderRadius: '6px', color: theme.text.primary, outline: 'none' }}
+          >
+            <option value="">Choose a preset...</option>
+            {presets.map(preset => (
+              <option key={preset.id} value={preset.id}>{preset.name}</option>
+            ))}
+          </select>
+          {!isMobile && (
+            <Button variant="neutral-tertiary" size="small" icon={<FeatherStar />} onClick={() => { setPresetPromptValue(''); setShowPresetPrompt(true); }}>Save preset</Button>
+          )}
+        </div>
+
         {/* ── Hidden Audio Element ── */}
         <audio ref={audioRef} style={{ display: 'none' }} crossOrigin="anonymous" />
 
@@ -2109,6 +2145,47 @@ const MultiClipEditor = ({
               <div className="flex gap-2 justify-end">
                 <Button variant="neutral-secondary" size="small" onClick={() => setShowCloseConfirm(false)}>Keep Editing</Button>
                 <Button variant="destructive-primary" size="small" onClick={() => { setShowCloseConfirm(false); onClose(); }}>Close Anyway</Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Preset Save Modal ── */}
+        {showPresetPrompt && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center" style={{ background: theme.overlay.heavy }}
+            onClick={() => setShowPresetPrompt(false)}>
+            <div className="rounded-xl p-6 w-[360px] max-w-[90vw]" style={{ background: theme.bg.input }}
+              onClick={e => e.stopPropagation()}>
+              <div className="text-[16px] font-semibold mb-3" style={{ color: theme.text.primary }}>Save Preset</div>
+              <input
+                autoFocus
+                value={presetPromptValue}
+                onChange={e => setPresetPromptValue(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') setShowPresetPrompt(false);
+                  if (e.key === 'Enter' && presetPromptValue.trim()) {
+                    onSavePreset?.({ name: presetPromptValue.trim(), settings: { cropMode: aspectRatio } });
+                    toastSuccess(`Preset "${presetPromptValue.trim()}" saved!`);
+                    setShowPresetPrompt(false);
+                  }
+                }}
+                placeholder="Preset name..."
+                className="w-full rounded-lg py-2.5 px-3 text-sm outline-none"
+                style={{ background: theme.bg.page, border: `1px solid ${theme.bg.elevated}`, color: theme.text.primary }}
+              />
+              <div className="flex gap-2 justify-end mt-3">
+                <Button variant="neutral-secondary" size="small" onClick={() => setShowPresetPrompt(false)}>
+                  Cancel
+                </Button>
+                <Button variant="brand-primary" size="small" onClick={() => {
+                  if (presetPromptValue.trim()) {
+                    onSavePreset?.({ name: presetPromptValue.trim(), settings: { cropMode: aspectRatio } });
+                    toastSuccess(`Preset "${presetPromptValue.trim()}" saved!`);
+                  }
+                  setShowPresetPrompt(false);
+                }}>
+                  Save
+                </Button>
               </div>
             </div>
           </div>

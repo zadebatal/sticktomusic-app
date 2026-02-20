@@ -15,7 +15,8 @@ import { saveApiKey, loadApiKey } from '../../services/storageService';
 import { ErrorPanel, EmptyState as SharedEmptyState, useToast } from '../ui';
 import {
   incrementUseCount, getLibrary, getCollections, getLyrics,
-  subscribeToLibrary, subscribeToCollections, addToTextBank, MEDIA_TYPES
+  subscribeToLibrary, subscribeToCollections, addToTextBank, MEDIA_TYPES,
+  getTextBankText, getTextBankStyle
 } from '../../services/libraryService';
 import {
   getTrimHash,
@@ -2092,6 +2093,8 @@ const VideoEditorModal = ({
         onAddLyrics={onAddLyrics}
         onUpdateLyrics={onUpdateLyrics}
         onDeleteLyrics={onDeleteLyrics}
+        presets={presets}
+        onSavePreset={onSavePreset}
       />
     );
   }
@@ -2110,6 +2113,8 @@ const VideoEditorModal = ({
         onAddLyrics={onAddLyrics}
         onUpdateLyrics={onUpdateLyrics}
         onDeleteLyrics={onDeleteLyrics}
+        presets={presets}
+        onSavePreset={onSavePreset}
       />
     );
   }
@@ -2128,6 +2133,8 @@ const VideoEditorModal = ({
         onAddLyrics={onAddLyrics}
         onUpdateLyrics={onUpdateLyrics}
         onDeleteLyrics={onDeleteLyrics}
+        presets={presets}
+        onSavePreset={onSavePreset}
       />
     );
   }

@@ -10,7 +10,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
-import { FeatherArrowLeft, FeatherX, FeatherPlay, FeatherPause, FeatherVolume2, FeatherVolumeX, FeatherPlus, FeatherTrash2, FeatherSave, FeatherDownload, FeatherRotateCcw, FeatherRotateCw, FeatherChevronDown, FeatherRefreshCw, FeatherMusic, FeatherUpload, FeatherDatabase, FeatherMic, FeatherScissors, FeatherSkipBack, FeatherSkipForward } from '@subframe/core';
+import { FeatherArrowLeft, FeatherX, FeatherPlay, FeatherPause, FeatherVolume2, FeatherVolumeX, FeatherPlus, FeatherTrash2, FeatherSave, FeatherDownload, FeatherRotateCcw, FeatherRotateCw, FeatherChevronDown, FeatherRefreshCw, FeatherMusic, FeatherUpload, FeatherDatabase, FeatherMic, FeatherScissors, FeatherSkipBack, FeatherSkipForward, FeatherStar } from '@subframe/core';
 import { TextField } from '../../ui/components/TextField';
 import { Badge } from '../../ui/components/Badge';
 import useIsMobile from '../../hooks/useIsMobile';
@@ -1633,6 +1633,27 @@ const SoloClipEditor = ({
                 ))}
               </div>
             </div>
+          )}
+        </div>
+
+        {/* ── Preset Bar ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderTop: `1px solid ${theme.border.subtle}` }}>
+          <span style={{ fontSize: '11px', color: theme.text.muted, whiteSpace: 'nowrap' }}>Preset</span>
+          <select
+            value={selectedPreset?.id || ''}
+            onChange={(e) => {
+              const preset = presets.find(p => p.id === e.target.value);
+              if (preset) handleApplyPreset(preset);
+            }}
+            style={{ flex: '0 1 200px', padding: '4px 8px', fontSize: '11px', backgroundColor: theme.bg.surface, border: `1px solid ${theme.bg.elevated}`, borderRadius: '6px', color: theme.text.primary, outline: 'none' }}
+          >
+            <option value="">Choose a preset...</option>
+            {presets.map(preset => (
+              <option key={preset.id} value={preset.id}>{preset.name}</option>
+            ))}
+          </select>
+          {!isMobile && (
+            <Button variant="neutral-tertiary" size="small" icon={<FeatherStar />} onClick={() => { setPresetPromptValue(''); setShowPresetPrompt(true); }}>Save preset</Button>
           )}
         </div>
 
