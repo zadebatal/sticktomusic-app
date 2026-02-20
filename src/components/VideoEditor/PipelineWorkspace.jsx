@@ -22,6 +22,7 @@ import {
   subscribeToLibrary,
   subscribeToCreatedContent,
   addToCollectionAsync,
+  addToLibraryAsync,
   getTextBankText,
   getTextBankStyle,
   getBankColor,
@@ -217,9 +218,11 @@ const PipelineWorkspace = ({
         metadata: { fileSize: file.size, mimeType: file.type },
       };
 
-      // Add to library + collection
-      await addToCollectionAsync(db, artistId, pipelineId, null, item);
-      return item;
+      // Step 1: Add to library (creates Firestore doc, triggers subscription)
+      const savedItem = await addToLibraryAsync(db, artistId, item);
+      // Step 2: Link to collection by ID
+      await addToCollectionAsync(db, artistId, pipelineId, savedItem.id);
+      return savedItem;
     };
 
     try {
