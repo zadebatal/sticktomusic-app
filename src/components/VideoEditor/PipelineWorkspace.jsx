@@ -264,21 +264,29 @@ const PipelineWorkspace = ({
     setUploadProgress(null);
   };
 
-  // Keep handleUploadRef current so native event listener always calls latest version
+  // Keep handleUploadRef current so callback ref always calls latest version
   handleUploadRef.current = handleUpload;
 
-  // Native event listener for file input (backup for browser automation)
-  // React's onChange may not fire when files are set programmatically on hidden inputs
+  // Callback ref for file input — attaches native listener when element mounts
+  // (useEffect([]) runs too early — input is inside conditional render)
+  const setFileInputRef = useCallback((el) => {
+    fileInputRef.current = el;
+    if (el && !el._hasNativeListener) {
+      el._hasNativeListener = true;
+      el.addEventListener('change', () => {
+        if (el.files?.length && handleUploadRef.current) {
+          handleUploadRef.current(el.files);
+        }
+      });
+    }
+  }, []);
+
+  // Expose upload function on window for browser automation (e.g. OpenClaw)
   useEffect(() => {
-    const input = fileInputRef.current;
-    if (!input) return;
-    const nativeHandler = (e) => {
-      if (e.target.files?.length && handleUploadRef.current) {
-        handleUploadRef.current(e.target.files);
-      }
+    window.__pipelineUpload = (fileList) => {
+      if (handleUploadRef.current) handleUploadRef.current(fileList);
     };
-    input.addEventListener('change', nativeHandler);
-    return () => input.removeEventListener('change', nativeHandler);
+    return () => { delete window.__pipelineUpload; };
   }, []);
 
   // Drag & drop to assign to bank
@@ -513,7 +521,7 @@ const PipelineWorkspace = ({
               Import
             </Button>
             <input
-              ref={fileInputRef}
+              ref={setFileInputRef}
               type="file"
               multiple
               accept="image/*,audio/*"
