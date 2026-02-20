@@ -178,6 +178,8 @@ const PipelineWorkspace = ({
 
   // Upload handler (images)
   const fileInputRef = useRef(null);
+  const handleUploadRef = useRef(null);
+
   const handleUpload = async (files) => {
     if (!files?.length) { toastError('No files selected'); return; }
     if (!artistId) { toastError('No artist selected'); return; }
@@ -261,6 +263,23 @@ const PipelineWorkspace = ({
     setIsUploading(false);
     setUploadProgress(null);
   };
+
+  // Keep handleUploadRef current so native event listener always calls latest version
+  handleUploadRef.current = handleUpload;
+
+  // Native event listener for file input (backup for browser automation)
+  // React's onChange may not fire when files are set programmatically on hidden inputs
+  useEffect(() => {
+    const input = fileInputRef.current;
+    if (!input) return;
+    const nativeHandler = (e) => {
+      if (e.target.files?.length && handleUploadRef.current) {
+        handleUploadRef.current(e.target.files);
+      }
+    };
+    input.addEventListener('change', nativeHandler);
+    return () => input.removeEventListener('change', nativeHandler);
+  }, []);
 
   // Drag & drop to assign to bank
   const handleDrop = useCallback((bankIndex, e) => {
@@ -498,8 +517,8 @@ const PipelineWorkspace = ({
               type="file"
               multiple
               accept="image/*,audio/*"
-              className="hidden"
               data-testid="media-upload-input"
+              style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' }}
               onChange={e => handleUpload(e.target.files)}
             />
           </div>
