@@ -232,12 +232,20 @@ const PipelineWorkspace = ({
     };
 
     try {
-      await runPool(Array.from(files), processOne, 5, (done, total) => {
-        setUploadProgress({ current: done, total });
+      const { results } = await runPool(Array.from(files), processOne, {
+        concurrency: 5,
+        onProgress: (done, total) => setUploadProgress({ current: done, total }),
       });
-      // Force refresh state from localStorage (subscription may lag)
-      setLibrary(getLibrary(artistId));
-      setCollections(getCollections(artistId));
+      // Directly update state with uploaded items (don't rely on subscription timing)
+      const uploadedItems = results.filter(Boolean);
+      if (uploadedItems.length > 0) {
+        setLibrary(prev => {
+          const existingIds = new Set(prev.map(i => i.id));
+          const newItems = uploadedItems.filter(i => !existingIds.has(i.id));
+          return newItems.length > 0 ? [...prev, ...newItems] : prev;
+        });
+        setCollections(getCollections(artistId));
+      }
       toastSuccess(`Uploaded ${files.length} file${files.length > 1 ? 's' : ''}`);
     } catch (err) {
       toastError('Upload failed');
