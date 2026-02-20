@@ -118,9 +118,9 @@ const PipelineWorkspace = ({
     return () => unsubs.forEach(u => u && u());
   }, [db, artistId]);
 
-  // Current pipeline
+  // Current pipeline (accept both pipelines and legacy collections)
   const pipeline = useMemo(() => {
-    const p = collections.find(c => c.id === pipelineId && c.isPipeline);
+    const p = collections.find(c => c.id === pipelineId);
     return p ? migrateCollectionBanks(p) : null;
   }, [collections, pipelineId]);
 
