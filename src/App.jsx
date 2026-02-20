@@ -758,11 +758,11 @@ const StickToMusic = () => {
     setCheckingLateStatus(true);
     try {
       const status = await getArtistLateKeyStatus(artistId);
-      log('🔗 Late status for artist', artistId, ':', status);
+      log.debug('🔗 Late status for artist', artistId, ':', status);
       setArtistLateConnected(status.configured);
       return status.configured;
     } catch (error) {
-      console.error('Error checking Late status:', error);
+      log.debug('[Late] Status check unavailable (expected in dev):', error.message);
       setArtistLateConnected(false);
       return false;
     } finally {

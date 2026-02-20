@@ -196,7 +196,7 @@ const loadSessionState = () => {
     const saved = localStorage.getItem(SESSION_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      log('[Session] Loaded:', parsed);
+      log.debug('[Session] Loaded:', parsed);
       return parsed;
     }
   } catch (e) {
@@ -213,7 +213,7 @@ const saveSessionState = (state) => {
       savedAt: Date.now()
     };
     localStorage.setItem(SESSION_KEY, JSON.stringify(toSave));
-    log('[Session] Saved:', toSave);
+    log.debug('[Session] Saved:', toSave);
   } catch (e) {
     console.warn('Failed to save session state:', e);
   }
@@ -763,7 +763,7 @@ const VideoStudio = ({
       // Find the saved category
       const category = categories.find(c => c.id === saved.categoryId);
       if (category) {
-        log('[Session] Restoring:', saved.currentView, category.name, 'editor:', saved.showEditor, 'mode:', saved.studioMode);
+        log.debug('[Session] Restoring:', saved.currentView, category.name, 'editor:', saved.showEditor, 'mode:', saved.studioMode);
         setSelectedCategory(category);
         setCurrentView(saved.currentView || 'home');
         if (saved.studioMode) {
