@@ -235,6 +235,9 @@ const PipelineWorkspace = ({
       await runPool(Array.from(files), processOne, 5, (done, total) => {
         setUploadProgress({ current: done, total });
       });
+      // Force refresh state from localStorage (subscription may lag)
+      setLibrary(getLibrary(artistId));
+      setCollections(getCollections(artistId));
       toastSuccess(`Uploaded ${files.length} file${files.length > 1 ? 's' : ''}`);
     } catch (err) {
       toastError('Upload failed');
