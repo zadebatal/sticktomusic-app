@@ -195,7 +195,10 @@ export async function getArtistLateKeyStatus(artistId) {
   try {
     return await proxyRequest('keyStatus', 'GET', null, artistId);
   } catch (error) {
-    console.error('Failed to check Late key status:', error);
+    // Expected in dev (no serverless proxy) — don't spam console
+    if (!error.message?.includes('Late API proxy not available')) {
+      console.error('Failed to check Late key status:', error);
+    }
     return { configured: false, updatedAt: null };
   }
 }

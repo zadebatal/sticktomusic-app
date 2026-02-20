@@ -1182,7 +1182,7 @@ const StickToMusic = () => {
     if (user && pendingPage) {
       // Verify user has access to the pending page
       if (pendingPage === 'operator' && (user.role === 'operator' || user.role === 'conductor')) {
-        log('[App Session] Restoring operator page, tab:', pendingOperatorTab, 'editor:', pendingShowVideoEditor);
+        log.debug('[App Session] Restoring operator page, tab:', pendingOperatorTab, 'editor:', pendingShowVideoEditor);
         setCurrentPage('operator');
         if (pendingOperatorTab) {
           setOperatorTab(pendingOperatorTab);
@@ -1193,11 +1193,11 @@ const StickToMusic = () => {
           setPendingShowVideoEditor(false);
         }
       } else if ((pendingPage === 'artist-dashboard' || pendingPage === 'artist-portal') && isArtistOrCollaborator(user)) {
-        log('[App Session] Restoring artist-dashboard page');
+        log.debug('[App Session] Restoring artist-dashboard page');
         setCurrentPage('artist-dashboard');
       } else if (pendingPage === 'operator' || pendingPage === 'artist-portal' || pendingPage === 'artist-dashboard') {
         // User is authenticated but role doesn't match - go to their correct dashboard
-        log('[App Session] Role mismatch, going to correct dashboard');
+        log.debug('[App Session] Role mismatch, going to correct dashboard');
         setCurrentPage(isArtistOrCollaborator(user) ? 'artist-dashboard' : 'operator');
       }
       setPendingPage(null); // Clear pending page after restore
@@ -1208,7 +1208,7 @@ const StickToMusic = () => {
     } else if (authChecked && firestoreLoaded && !user && pendingPage) {
       // User is NOT authenticated but has a pending page (e.g., was logged out)
       // Clear pending page and proceed to home - user will need to login
-      log('[App Session] User not authenticated, clearing pending page:', pendingPage);
+      log.debug('[App Session] User not authenticated, clearing pending page:', pendingPage);
       setPendingPage(null);
       setSessionRestoreComplete(true);
     }
