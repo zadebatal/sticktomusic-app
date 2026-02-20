@@ -78,6 +78,8 @@ const PhotoMontageEditor = ({
 
   // ── Text overlay state (same pattern as SoloClipEditor) ──
   const [textOverlays, setTextOverlays] = useState(existingVideo?.textOverlays || []);
+  const textOverlaysRef = useRef(textOverlays);
+  textOverlaysRef.current = textOverlays;
   const [editingTextId, setEditingTextId] = useState(null);
   const [editingTextValue, setEditingTextValue] = useState('');
   const [draggingTextId, setDraggingTextId] = useState(null);
@@ -414,7 +416,7 @@ const PhotoMontageEditor = ({
   const handleTextMouseDown = useCallback((e, overlayId) => {
     e.preventDefault();
     e.stopPropagation();
-    const overlay = textOverlays.find(o => o.id === overlayId);
+    const overlay = textOverlaysRef.current.find(o => o.id === overlayId);
     if (!overlay) return;
     setDraggingTextId(overlayId);
     setEditingTextId(overlayId);
@@ -425,7 +427,7 @@ const PhotoMontageEditor = ({
       startPosX: overlay.position.x,
       startPosY: overlay.position.y
     };
-  }, [textOverlays]);
+  }, []);
 
   useEffect(() => {
     if (!draggingTextId) return;
@@ -436,7 +438,7 @@ const PhotoMontageEditor = ({
       const dy = e.clientY - dragStartRef.current.mouseY;
       const newX = Math.max(5, Math.min(95, dragStartRef.current.startPosX + (dx / rect.width) * 100));
       const newY = Math.max(5, Math.min(95, dragStartRef.current.startPosY + (dy / rect.height) * 100));
-      const overlay = textOverlays.find(o => o.id === draggingTextId);
+      const overlay = textOverlaysRef.current.find(o => o.id === draggingTextId);
       if (overlay) {
         updateTextOverlay(draggingTextId, { position: { ...overlay.position, x: newX, y: newY } });
       }
@@ -448,13 +450,13 @@ const PhotoMontageEditor = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [draggingTextId, textOverlays, updateTextOverlay]);
+  }, [draggingTextId, updateTextOverlay]);
 
   // ── Timeline text block drag/resize ──
   const handleTimelineDragStart = useCallback((e, overlayId, type) => {
     e.preventDefault();
     e.stopPropagation();
-    const overlay = textOverlays.find(o => o.id === overlayId);
+    const overlay = textOverlaysRef.current.find(o => o.id === overlayId);
     if (!overlay) return;
     setTimelineDrag({
       overlayId, type,
@@ -464,7 +466,7 @@ const PhotoMontageEditor = ({
     });
     setEditingTextId(overlayId);
     setEditingTextValue(overlay.text);
-  }, [textOverlays]);
+  }, []);
 
   useEffect(() => {
     if (!timelineDrag || !timelineRef.current) return;

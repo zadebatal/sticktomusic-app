@@ -84,6 +84,10 @@ async function proxyRequest(action, method = 'GET', body = null, artistId = null
     throw new Error(errorMsg);
   }
 
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new Error('Late API proxy not available (non-JSON response). Are you running on Vercel?');
+  }
   return response.json();
 }
 

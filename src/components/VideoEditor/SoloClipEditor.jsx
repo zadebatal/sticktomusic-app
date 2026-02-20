@@ -95,6 +95,8 @@ const SoloClipEditor = ({
   const activeVideo = allVideos[activeVideoIndex];
   const clip = activeVideo?.clip;
   const textOverlays = activeVideo?.textOverlays || [];
+  const textOverlaysRef = useRef(textOverlays);
+  textOverlaysRef.current = textOverlays;
   const words = activeVideo?.words || [];
 
   // Wrapper setters (route through allVideos)
@@ -709,7 +711,7 @@ const SoloClipEditor = ({
   const handleTextMouseDown = useCallback((e, overlayId) => {
     e.preventDefault();
     e.stopPropagation();
-    const overlay = textOverlays.find(o => o.id === overlayId);
+    const overlay = textOverlaysRef.current.find(o => o.id === overlayId);
     if (!overlay) return;
     setDraggingTextId(overlayId);
     setEditingTextId(overlayId);
@@ -720,7 +722,7 @@ const SoloClipEditor = ({
       startPosX: overlay.position.x,
       startPosY: overlay.position.y
     };
-  }, [textOverlays]);
+  }, []);
 
   useEffect(() => {
     if (!draggingTextId) return;
@@ -731,7 +733,8 @@ const SoloClipEditor = ({
       const dy = e.clientY - dragStartRef.current.mouseY;
       const newX = Math.max(5, Math.min(95, dragStartRef.current.startPosX + (dx / rect.width) * 100));
       const newY = Math.max(5, Math.min(95, dragStartRef.current.startPosY + (dy / rect.height) * 100));
-      updateTextOverlay(draggingTextId, { position: { ...textOverlays.find(o => o.id === draggingTextId)?.position, x: newX, y: newY } });
+      const overlay = textOverlaysRef.current.find(o => o.id === draggingTextId);
+      updateTextOverlay(draggingTextId, { position: { ...overlay?.position, x: newX, y: newY } });
     };
     const handleMouseUp = () => setDraggingTextId(null);
     window.addEventListener('mousemove', handleMouseMove);
@@ -740,7 +743,7 @@ const SoloClipEditor = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [draggingTextId, textOverlays, updateTextOverlay]);
+  }, [draggingTextId, updateTextOverlay]);
 
   // ── Switch between videos ──
   const switchToVideo = useCallback((index) => {
@@ -761,7 +764,7 @@ const SoloClipEditor = ({
   const handleTimelineDragStart = useCallback((e, overlayId, type) => {
     e.preventDefault();
     e.stopPropagation();
-    const overlay = textOverlays.find(o => o.id === overlayId);
+    const overlay = textOverlaysRef.current.find(o => o.id === overlayId);
     if (!overlay) return;
     setTimelineDrag({
       overlayId,
@@ -772,7 +775,7 @@ const SoloClipEditor = ({
     });
     setEditingTextId(overlayId);
     setEditingTextValue(overlay.text);
-  }, [textOverlays]);
+  }, []);
 
   useEffect(() => {
     if (!timelineDrag || !timelineRef.current) return;

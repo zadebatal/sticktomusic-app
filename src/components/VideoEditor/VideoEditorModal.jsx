@@ -6,6 +6,7 @@ import LyricBank from './LyricBank';
 import TemplatePicker from './TemplatePicker';
 import SoloClipEditor from './SoloClipEditor';
 import MultiClipEditor from './MultiClipEditor';
+import PhotoMontageEditor from './PhotoMontageEditor';
 import AudioClipSelector from './AudioClipSelector';
 import CloudImportButton from './CloudImportButton';
 import useEditorHistory from '../../hooks/useEditorHistory';
@@ -2097,6 +2098,24 @@ const VideoEditorModal = ({
   if (editorMode === 'multi-clip') {
     return (
       <MultiClipEditor
+        category={category}
+        existingVideo={existingVideo}
+        onSave={onSave}
+        onClose={onClose}
+        artistId={artistId}
+        db={db}
+        onSaveLyrics={onSaveLyrics}
+        onAddLyrics={onAddLyrics}
+        onUpdateLyrics={onUpdateLyrics}
+        onDeleteLyrics={onDeleteLyrics}
+      />
+    );
+  }
+
+  // ── Photo Montage mode ──
+  if (editorMode === 'photo-montage') {
+    return (
+      <PhotoMontageEditor
         category={category}
         existingVideo={existingVideo}
         onSave={onSave}

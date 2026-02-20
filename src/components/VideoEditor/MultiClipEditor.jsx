@@ -87,6 +87,8 @@ const MultiClipEditor = ({
   const activeVideo = allVideos[activeVideoIndex];
   const clips = activeVideo?.clips || [];
   const textOverlays = activeVideo?.textOverlays || [];
+  const textOverlaysRef = useRef(textOverlays);
+  textOverlaysRef.current = textOverlays;
 
   // Wrapper setters (route through allVideos)
   const setClips = useCallback((updater) => {
@@ -674,7 +676,7 @@ const MultiClipEditor = ({
   const handleTextMouseDown = useCallback((e, overlayId) => {
     e.preventDefault();
     e.stopPropagation();
-    const overlay = textOverlays.find(o => o.id === overlayId);
+    const overlay = textOverlaysRef.current.find(o => o.id === overlayId);
     if (!overlay) return;
     setDraggingTextId(overlayId);
     setEditingTextId(overlayId);
@@ -685,7 +687,7 @@ const MultiClipEditor = ({
       startPosX: overlay.position.x,
       startPosY: overlay.position.y
     };
-  }, [textOverlays]);
+  }, []);
 
   useEffect(() => {
     if (!draggingTextId) return;
@@ -696,7 +698,8 @@ const MultiClipEditor = ({
       const dy = e.clientY - dragStartRef.current.mouseY;
       const newX = Math.max(5, Math.min(95, dragStartRef.current.startPosX + (dx / rect.width) * 100));
       const newY = Math.max(5, Math.min(95, dragStartRef.current.startPosY + (dy / rect.height) * 100));
-      updateTextOverlay(draggingTextId, { position: { ...textOverlays.find(o => o.id === draggingTextId)?.position, x: newX, y: newY } });
+      const overlay = textOverlaysRef.current.find(o => o.id === draggingTextId);
+      updateTextOverlay(draggingTextId, { position: { ...overlay?.position, x: newX, y: newY } });
     };
     const handleMouseUp = () => setDraggingTextId(null);
     window.addEventListener('mousemove', handleMouseMove);
@@ -705,13 +708,13 @@ const MultiClipEditor = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [draggingTextId, textOverlays, updateTextOverlay]);
+  }, [draggingTextId, updateTextOverlay]);
 
   // ── Timeline text block drag/resize ──
   const handleTimelineDragStart = useCallback((e, overlayId, type) => {
     e.preventDefault();
     e.stopPropagation();
-    const overlay = textOverlays.find(o => o.id === overlayId);
+    const overlay = textOverlaysRef.current.find(o => o.id === overlayId);
     if (!overlay) return;
     setTimelineDrag({
       overlayId,
@@ -722,7 +725,7 @@ const MultiClipEditor = ({
     });
     setEditingTextId(overlayId);
     setEditingTextValue(overlay.text);
-  }, [textOverlays]);
+  }, []);
 
   // Compute clip cut points (boundaries between clips) for magnetic snap
   const clipCutPoints = useMemo(() => {

@@ -101,7 +101,7 @@ export async function saveSettings(db, artistId, patch) {
     }, { merge: true });
     log('[SettingsService] Saved to Firestore');
   } catch (err) {
-    log.error('[SettingsService] Save failed (localStorage still updated):', err.message);
+    log.debug('[SettingsService] Firestore save failed (localStorage fallback active):', err.message);
   }
 }
 
