@@ -488,7 +488,9 @@ const PipelineListView = ({
                 return (
                   <div
                     key={col.id}
-                    className="flex w-full items-center gap-4 rounded-lg border border-dashed border-neutral-700 bg-[#1a1a1aff] px-5 py-4"
+                    data-testid={`collection-card-${col.name.replace(/\s+/g, '-').toLowerCase()}`}
+                    className="flex w-full items-center gap-4 rounded-lg border border-dashed border-neutral-700 bg-[#1a1a1aff] px-5 py-4 cursor-pointer hover:border-neutral-500 transition-colors"
+                    onClick={() => onOpenWorkspace(col.id)}
                   >
                     {/* Name */}
                     <div className="flex grow flex-col items-start gap-0.5">

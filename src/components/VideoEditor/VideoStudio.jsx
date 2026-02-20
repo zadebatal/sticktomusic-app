@@ -349,12 +349,21 @@ const VideoStudio = ({
     return 'home';
   };
 
+  // Parse workspace ID from URL search params (?workspaceId=xxx)
+  const getWorkspaceIdFromUrl = () => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('workspaceId') || null;
+    } catch { return null; }
+  };
+
   // Load saved session for initial state
   const savedSession = useMemo(() => loadSessionState(), []);
 
+  const urlWorkspaceId = getWorkspaceIdFromUrl();
   // Navigation state - restore from session if available, or use URL
-  const [currentView, setCurrentViewState] = useState(getInitialViewFromUrl() || savedSession?.currentView || 'home');
-  const [activePipelineId, setActivePipelineId] = useState(null);
+  const [currentView, setCurrentViewState] = useState(urlWorkspaceId ? 'workspace' : (getInitialViewFromUrl() || savedSession?.currentView || 'home'));
+  const [activePipelineId, setActivePipelineId] = useState(urlWorkspaceId);
   const [editingPipelineId, setEditingPipelineId] = useState(null);
 
   // Wrap setCurrentView to also update URL
