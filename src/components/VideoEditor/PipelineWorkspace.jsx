@@ -75,6 +75,7 @@ const PipelineWorkspace = ({
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   // Data — initialize from localStorage to avoid flash of "Pipeline not found"
   const [collections, setCollections] = useState(() => artistId ? getCollections(artistId) : []);
@@ -112,9 +113,14 @@ const PipelineWorkspace = ({
 
     const unsubs = [];
     if (db) {
-      unsubs.push(subscribeToCollections(db, artistId, setCollections));
+      unsubs.push(subscribeToCollections(db, artistId, (cols) => {
+        setCollections(cols);
+        setHasLoadedOnce(true);
+      }));
       unsubs.push(subscribeToLibrary(db, artistId, setLibrary));
       unsubs.push(subscribeToCreatedContent(db, artistId, setCreatedContent));
+    } else {
+      setHasLoadedOnce(true);
     }
     return () => unsubs.forEach(u => u && u());
   }, [db, artistId]);
@@ -326,8 +332,10 @@ const PipelineWorkspace = ({
 
   if (!pipeline) {
     return (
-      <div className="flex h-full w-full items-center justify-center">
-        <span className="text-neutral-400">Pipeline not found</span>
+      <div className="flex h-full w-full items-center justify-center" data-testid="workspace-loading">
+        <span className="text-neutral-400">
+          {hasLoadedOnce ? 'Pipeline not found' : 'Loading workspace...'}
+        </span>
       </div>
     );
   }
@@ -365,7 +373,7 @@ const PipelineWorkspace = ({
   };
 
   return (
-    <div className="flex h-full w-full flex-col items-start bg-black">
+    <div className="flex h-full w-full flex-col items-start bg-black" data-testid="pipeline-workspace">
       {/* Top header bar */}
       <div className="flex w-full items-center justify-between border-b border-solid border-neutral-800 bg-black px-6 py-4">
         <div className="flex items-center gap-4">
@@ -472,6 +480,7 @@ const PipelineWorkspace = ({
               multiple
               accept="image/*,audio/*"
               className="hidden"
+              data-testid="media-upload-input"
               onChange={e => handleUpload(e.target.files)}
             />
           </div>

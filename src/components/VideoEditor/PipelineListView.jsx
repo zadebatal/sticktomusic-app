@@ -508,13 +508,13 @@ const PipelineListView = ({
                       >
                         Assign to Page
                       </Button>
-                      <Button
-                        variant="neutral-secondary"
-                        size="small"
+                      <button
+                        data-testid={`open-workspace-${col.id}`}
+                        className="rounded-md border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 transition-colors"
                         onClick={() => onOpenWorkspace(col.id)}
                       >
                         Open
-                      </Button>
+                      </button>
                       <IconButton
                         variant="neutral-tertiary"
                         size="small"
