@@ -1183,10 +1183,10 @@ export const FORMAT_TEMPLATES = [
   { id: 'hook_lyrics', name: 'Hook + Lyrics', slideCount: 2, slideLabels: ['Hook', 'Lyrics'], type: 'slideshow' },
   { id: 'carousel', name: 'Carousel', slideCount: 3, slideLabels: ['Slide 1', 'Slide 2', 'Slide 3'], type: 'slideshow' },
   { id: 'hook_vibes_lyrics', name: 'Hook + Vibes + Lyrics', slideCount: 5, slideLabels: ['Hook', 'Vibes', 'Lyrics', 'Vibes', 'CTA'], type: 'slideshow' },
-  { id: 'montage', name: 'Montage', slideCount: 0, slideLabels: [], type: 'video' },
-  { id: 'solo_clip', name: 'Solo Clip', slideCount: 0, slideLabels: [], type: 'video' },
-  { id: 'multi_clip', name: 'Multi Clip', slideCount: 0, slideLabels: [], type: 'video' },
-  { id: 'photo_montage', name: 'Photo Montage', slideCount: 0, slideLabels: [], type: 'video' },
+  { id: 'montage', name: 'Montage', slideCount: 0, slideLabels: [], type: 'video', description: 'Combine clips on a timeline, cut to beat' },
+  { id: 'solo_clip', name: 'Solo Clip', slideCount: 0, slideLabels: [], type: 'video', description: 'One clip per video, batch generate' },
+  { id: 'multi_clip', name: 'Multi Clip', slideCount: 0, slideLabels: [], type: 'video', description: 'Multiple clips on timeline' },
+  { id: 'photo_montage', name: 'Photo Montage', slideCount: 0, slideLabels: [], type: 'video', description: 'Turn photos into video with transitions' },
 ];
 
 /**
@@ -1222,14 +1222,17 @@ export const createPipeline = ({
 }) => {
   const base = createCollection({ name, description, color });
   const activeFormat = formats.find(f => f.id === activeFormatId) || formats[0];
-  const slideCount = activeFormat?.slideCount || 2;
+  const isVideoFormat = activeFormat?.type === 'video';
+  const slideCount = isVideoFormat ? 0 : (activeFormat?.slideCount || 2);
 
-  // Pre-allocate banks to match active format's slide count
+  // Pre-allocate banks to match active format's slide count (skip for video formats)
   const banks = [];
   const textBanks = [];
-  for (let i = 0; i < Math.max(slideCount, MIN_BANKS); i++) {
-    banks.push([]);
-    textBanks.push([]);
+  if (!isVideoFormat) {
+    for (let i = 0; i < Math.max(slideCount, MIN_BANKS); i++) {
+      banks.push([]);
+      textBanks.push([]);
+    }
   }
 
   return {
@@ -3091,13 +3094,18 @@ export const subscribeToCollections = (db, artistId, callback) => {
           return migrateCollectionBanks(col);
         });
 
+        // Include localStorage-only collections not yet in Firestore (in-flight writes)
+        const firestoreIds = new Set(firestoreCollections.map(c => c.id));
+        const localOnlyCollections = localCollections.filter(lc => !firestoreIds.has(lc.id));
+        const allMerged = [...mergedCollections, ...localOnlyCollections];
+
         // Save merged data to localStorage for offline access
         try {
-          localStorage.setItem(getCollectionsKey(artistId), JSON.stringify(mergedCollections));
+          localStorage.setItem(getCollectionsKey(artistId), JSON.stringify(allMerged));
         } catch (e) {}
 
         const smartCollections = createSmartCollections();
-        callback([...smartCollections, ...mergedCollections]);
+        callback([...smartCollections, ...allMerged]);
       } else {
         // Firestore empty — check localStorage and upload if data exists
         const localCollections = getCollections(artistId);

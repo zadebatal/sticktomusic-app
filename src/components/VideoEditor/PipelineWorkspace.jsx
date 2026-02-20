@@ -386,6 +386,22 @@ const PipelineWorkspace = ({
     );
   }
 
+  // Video format pipelines shouldn't use this workspace — redirect back
+  const activeFormatType = (pipeline.formats?.find(f => f.id === pipeline.activeFormatId) || pipeline.formats?.[0])?.type;
+  if (activeFormatType === 'video') {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-4">
+        <span className="text-neutral-400">Video pipelines use the video editor, not the workspace.</span>
+        <button
+          className="rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-500"
+          onClick={onBack}
+        >
+          Go Back
+        </button>
+      </div>
+    );
+  }
+
   // Get bank icon based on label
   const getBankIcon = (label) => {
     if (label.toLowerCase().includes('hook')) return <FeatherZap />;

@@ -7,7 +7,7 @@ import { TextField } from '../../ui/components/TextField';
 import {
   FeatherCheck, FeatherX, FeatherPlus,
   FeatherImage, FeatherFileText, FeatherArrowRight,
-  FeatherChevronDown
+  FeatherChevronDown, FeatherFilm, FeatherPlay, FeatherLayers, FeatherCamera
 } from '@subframe/core';
 import * as SubframeCore from '@subframe/core';
 import { DropdownMenu } from '../../ui/components/DropdownMenu';
@@ -123,23 +123,21 @@ const CreatePipelineModal = ({
                       {linkedPage ? `@${linkedPage.handle} · ${linkedPage.platform}` : 'Select a page...'}
                     </Button>
                   </SubframeCore.DropdownMenu.Trigger>
-                  <SubframeCore.DropdownMenu.Portal>
-                    <SubframeCore.DropdownMenu.Content side="bottom" align="start" sideOffset={4} asChild>
-                      <DropdownMenu>
-                        {uniquePages.map(p => (
-                          <DropdownMenu.DropdownItem
-                            key={`${p.handle}_${p.platform}`}
-                            onClick={() => setLinkedPage({ handle: p.handle, platform: p.platform, accountId: p.lateAccountId })}
-                          >
-                            @{p.handle} · {p.platform}
-                          </DropdownMenu.DropdownItem>
-                        ))}
-                        {uniquePages.length === 0 && (
-                          <DropdownMenu.DropdownItem disabled>No pages connected</DropdownMenu.DropdownItem>
-                        )}
-                      </DropdownMenu>
-                    </SubframeCore.DropdownMenu.Content>
-                  </SubframeCore.DropdownMenu.Portal>
+                  <SubframeCore.DropdownMenu.Content side="bottom" align="start" sideOffset={4} asChild>
+                    <DropdownMenu>
+                      {uniquePages.map(p => (
+                        <DropdownMenu.DropdownItem
+                          key={`${p.handle}_${p.platform}`}
+                          onClick={() => setLinkedPage({ handle: p.handle, platform: p.platform, accountId: p.lateAccountId })}
+                        >
+                          @{p.handle} · {p.platform}
+                        </DropdownMenu.DropdownItem>
+                      ))}
+                      {uniquePages.length === 0 && (
+                        <DropdownMenu.DropdownItem disabled>No pages connected</DropdownMenu.DropdownItem>
+                      )}
+                    </DropdownMenu>
+                  </SubframeCore.DropdownMenu.Content>
                 </SubframeCore.DropdownMenu.Root>
               </div>
 
@@ -156,25 +154,40 @@ const CreatePipelineModal = ({
             <div className="flex flex-col gap-4 rounded-lg border border-neutral-800 bg-[#171717] px-6 py-6">
               <div className="flex flex-col gap-1">
                 <span className="text-sm font-semibold text-white">Selected Format</span>
-                <span className="text-xs text-neutral-400">Preview of your pipeline workspace</span>
+                <span className="text-xs text-neutral-400">
+                  {selectedFormat.type === 'video' ? 'Opens video editor' : 'Preview of your pipeline workspace'}
+                </span>
               </div>
-              <div className="flex gap-2">
-                {selectedFormat.slideLabels.map((label, i) => (
-                  <div key={i} className="flex flex-1 flex-col items-center gap-2 rounded-md border border-neutral-800 bg-[#0a0a0a] px-3 py-3">
-                    <div
-                      className="flex h-16 w-full items-center justify-center rounded-md"
-                      style={{ backgroundColor: getSlideColor(label) }}
-                    >
-                      {label === 'Lyrics' || label === 'CTA' ? (
-                        <FeatherFileText className="text-black" style={{ width: 20, height: 20 }} />
-                      ) : (
-                        <FeatherImage className="text-black" style={{ width: 20, height: 20 }} />
-                      )}
+              {selectedFormat.type === 'video' ? (
+                <div className="flex flex-col items-center gap-3 py-4">
+                  {(() => {
+                    const IconComponent = selectedFormat.id === 'montage' ? FeatherFilm
+                      : selectedFormat.id === 'solo_clip' ? FeatherPlay
+                      : selectedFormat.id === 'multi_clip' ? FeatherLayers
+                      : FeatherCamera;
+                    return <IconComponent style={{ width: 32, height: 32, color: '#6366f1' }} />;
+                  })()}
+                  <span className="text-sm text-neutral-400 text-center">{selectedFormat.description}</span>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  {selectedFormat.slideLabels.map((label, i) => (
+                    <div key={i} className="flex flex-1 flex-col items-center gap-2 rounded-md border border-neutral-800 bg-[#0a0a0a] px-3 py-3">
+                      <div
+                        className="flex h-16 w-full items-center justify-center rounded-md"
+                        style={{ backgroundColor: getSlideColor(label) }}
+                      >
+                        {label === 'Lyrics' || label === 'CTA' ? (
+                          <FeatherFileText style={{ width: 20, height: 20, color: 'rgba(0,0,0,0.6)' }} />
+                        ) : (
+                          <FeatherImage style={{ width: 20, height: 20, color: 'rgba(0,0,0,0.6)' }} />
+                        )}
+                      </div>
+                      <span className="text-xs text-neutral-400">{label}</span>
                     </div>
-                    <span className="text-xs text-neutral-400">{label}</span>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -184,13 +197,15 @@ const CreatePipelineModal = ({
               <span className="text-2xl font-semibold text-white">Choose Post Format</span>
               <span className="text-sm text-neutral-400">Select a template that matches your content style</span>
             </div>
-            <div className="grid grid-cols-2 gap-6">
-              {FORMAT_TEMPLATES.map(fmt => {
+            {/* Slideshow formats */}
+            <span className="text-sm font-semibold text-neutral-400 uppercase tracking-wider">Slideshows</span>
+            <div className="grid grid-cols-2 gap-4">
+              {FORMAT_TEMPLATES.filter(fmt => fmt.type === 'slideshow').map(fmt => {
                 const isSelected = selectedFormatId === fmt.id;
                 return (
                   <div
                     key={fmt.id}
-                    className={`flex flex-col gap-4 rounded-lg px-6 py-6 cursor-pointer transition-colors relative ${
+                    className={`flex flex-col gap-3 rounded-lg px-5 py-5 cursor-pointer transition-colors relative ${
                       isSelected
                         ? 'border-2 border-[#6366f1] bg-[#171717]'
                         : 'border border-neutral-800 bg-[#171717] hover:border-neutral-400'
@@ -198,64 +213,91 @@ const CreatePipelineModal = ({
                     onClick={() => setSelectedFormatId(fmt.id)}
                   >
                     {isSelected && (
-                      <div className="absolute top-4 right-4 flex h-6 w-6 items-center justify-center rounded-full bg-[#6366f1]">
+                      <div className="absolute top-3 right-3 flex h-6 w-6 items-center justify-center rounded-full bg-[#6366f1]">
                         <FeatherCheck className="text-black" style={{ width: 14, height: 14 }} />
                       </div>
                     )}
-                    <div className="flex items-center justify-between">
-                      <span className="text-base font-semibold text-white">{fmt.name}</span>
-                      <Badge variant={isSelected ? 'brand' : 'neutral'}>{fmt.slideCount} slide{fmt.slideCount !== 1 ? 's' : ''}</Badge>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-white">{fmt.name}</span>
+                      <Badge variant={isSelected ? 'brand' : 'neutral'}>{fmt.slideCount}</Badge>
                     </div>
-                    <div className="flex items-center justify-center gap-2 px-2 py-4">
-                      {fmt.slideLabels.map((label, i) => (
-                        <React.Fragment key={i}>
-                          {i > 0 && <FeatherArrowRight className="text-neutral-400" style={{ width: 14, height: 14 }} />}
-                          <div className="flex flex-col items-center gap-1">
-                            <div
-                              className="flex items-center justify-center rounded-md"
-                              style={{
-                                backgroundColor: isSelected ? getSlideColor(label) : undefined,
-                                borderColor: isSelected ? getSlideColor(label) : '#525252',
-                                borderWidth: 2,
-                                borderStyle: 'solid',
-                                width: fmt.slideCount <= 3 ? 64 : 48,
-                                height: fmt.slideCount <= 3 ? 80 : 64,
-                                background: isSelected ? getSlideColor(label) : '#262626',
-                              }}
-                            >
-                              {label === 'Lyrics' || label === 'CTA' ? (
-                                <FeatherFileText style={{ width: 14, height: 14, color: isSelected ? getSlideColor(label) : '#9ca3af' }} />
-                              ) : (
-                                <FeatherImage style={{ width: 14, height: 14, color: isSelected ? getSlideColor(label) : '#9ca3af' }} />
-                              )}
+                    <div className="flex items-center justify-center gap-1.5 py-2">
+                      {fmt.slideLabels.map((label, i) => {
+                        const color = getSlideColor(label);
+                        return (
+                          <React.Fragment key={i}>
+                            {i > 0 && <FeatherArrowRight className="text-neutral-600" style={{ width: 10, height: 10 }} />}
+                            <div className="flex flex-col items-center gap-1">
+                              <div
+                                className="flex items-center justify-center rounded"
+                                style={{
+                                  borderColor: color,
+                                  borderWidth: 2,
+                                  borderStyle: 'solid',
+                                  width: fmt.slideCount <= 3 ? 56 : 40,
+                                  height: fmt.slideCount <= 3 ? 70 : 50,
+                                  background: isSelected ? color : `${color}15`,
+                                }}
+                              >
+                                {label === 'Lyrics' || label === 'CTA' ? (
+                                  <FeatherFileText style={{ width: 12, height: 12, color: isSelected ? '#000' : color }} />
+                                ) : (
+                                  <FeatherImage style={{ width: 12, height: 12, color: isSelected ? '#000' : color }} />
+                                )}
+                              </div>
+                              <span className="text-[10px] text-neutral-500 truncate" style={{ maxWidth: fmt.slideCount <= 3 ? 56 : 40 }}>{label}</span>
                             </div>
-                            {fmt.slideCount <= 3 && (
-                              <span className="text-xs text-neutral-400">{label}</span>
-                            )}
-                          </div>
-                        </React.Fragment>
-                      ))}
+                          </React.Fragment>
+                        );
+                      })}
                     </div>
-                    <span className="text-sm text-neutral-400">
+                    <span className="text-xs text-neutral-500">
                       {fmt.id === 'single' && 'One image with optional text overlay'}
-                      {fmt.id === 'hook_lyrics' && 'Slide 1: Hook/Cover image · Slide 2: Song lyrics text'}
+                      {fmt.id === 'hook_lyrics' && 'Hook image + Song lyrics text'}
                       {fmt.id === 'carousel' && 'Multi-image storytelling sequence'}
-                      {fmt.id === 'hook_vibes_lyrics' && 'Hook → 3 Vibe images → Lyrics'}
+                      {fmt.id === 'hook_vibes_lyrics' && 'Hook → Vibe images → Lyrics'}
                     </span>
                   </div>
                 );
               })}
+            </div>
 
-              {/* Custom format card */}
-              <div className="flex flex-col items-center justify-center gap-4 rounded-lg border-2 border-dashed border-neutral-800 bg-[#171717] px-6 py-6 opacity-40 cursor-default">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-neutral-800">
-                  <FeatherPlus className="text-neutral-400" style={{ width: 24, height: 24 }} />
-                </div>
-                <div className="flex flex-col items-center gap-1">
-                  <span className="text-base font-semibold text-white">Custom Format</span>
-                  <span className="text-sm text-neutral-400 text-center">Coming soon</span>
-                </div>
-              </div>
+            {/* Video formats */}
+            <span className="text-sm font-semibold text-neutral-400 uppercase tracking-wider mt-4">Videos</span>
+            <div className="grid grid-cols-2 gap-4">
+              {FORMAT_TEMPLATES.filter(fmt => fmt.type === 'video').map(fmt => {
+                const isSelected = selectedFormatId === fmt.id;
+                const IconComponent = fmt.id === 'montage' ? FeatherFilm
+                  : fmt.id === 'solo_clip' ? FeatherPlay
+                  : fmt.id === 'multi_clip' ? FeatherLayers
+                  : FeatherCamera;
+                return (
+                  <div
+                    key={fmt.id}
+                    className={`flex flex-col gap-3 rounded-lg px-5 py-5 cursor-pointer transition-colors relative ${
+                      isSelected
+                        ? 'border-2 border-[#6366f1] bg-[#171717]'
+                        : 'border border-neutral-800 bg-[#171717] hover:border-neutral-400'
+                    }`}
+                    onClick={() => setSelectedFormatId(fmt.id)}
+                  >
+                    {isSelected && (
+                      <div className="absolute top-3 right-3 flex h-6 w-6 items-center justify-center rounded-full bg-[#6366f1]">
+                        <FeatherCheck className="text-black" style={{ width: 14, height: 14 }} />
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3">
+                      <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${isSelected ? 'bg-[#6366f1]' : 'bg-neutral-800'}`}>
+                        <IconComponent style={{ width: 18, height: 18, color: isSelected ? '#000' : '#a1a1aa' }} />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-semibold text-white">{fmt.name}</span>
+                        <span className="text-xs text-neutral-500">{fmt.description}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

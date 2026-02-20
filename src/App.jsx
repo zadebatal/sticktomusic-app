@@ -3622,6 +3622,22 @@ const StickToMusic = () => {
           currentArtistId={currentArtistId}
           onArtistChange={(id) => setCurrentArtistId(id)}
         >
+        {/* Video Studio — rendered inline inside AppShell so sidebar stays visible */}
+        {showVideoEditor ? (
+          <VideoStudio
+            inline
+            db={db}
+            onClose={() => { setShowVideoEditor(false); }}
+            artists={getVisibleArtists()}
+            artistId={currentArtistId}
+            onArtistChange={handleArtistChange}
+            lateAccountIds={derivedLateAccountIds}
+            latePages={latePages.filter(p => p.artistId === currentArtistId)}
+            manualAccounts={manualAccountsByArtist[currentArtistId] || []}
+            onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: currentArtistId })}
+            onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, currentArtistId)}
+          />
+        ) : (
         <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-8">
           {/* ═══ Pages Tab (new) ═══ */}
           {operatorTab === 'pages' && (
@@ -5762,24 +5778,9 @@ const StickToMusic = () => {
           )}
 
         </div>
+        )}
 
         </AppShell>
-
-        {/* Video Studio Modal - Flowstage-inspired workflow */}
-        {showVideoEditor && (
-          <VideoStudio
-            db={db}
-            onClose={() => { setShowVideoEditor(false); }}
-            artists={getVisibleArtists()}
-            artistId={currentArtistId}
-            onArtistChange={handleArtistChange}
-            lateAccountIds={derivedLateAccountIds}
-            latePages={latePages.filter(p => p.artistId === currentArtistId)}
-            manualAccounts={manualAccountsByArtist[currentArtistId] || []}
-            onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: currentArtistId })}
-            onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, currentArtistId)}
-          />
-        )}
 
         {/* ADD ARTIST MODAL */}
         {showAddArtistModal && (

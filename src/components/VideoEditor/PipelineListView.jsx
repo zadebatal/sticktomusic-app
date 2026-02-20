@@ -32,7 +32,8 @@ import {
   FeatherPlus, FeatherZap, FeatherEdit, FeatherMoreVertical,
   FeatherTrash, FeatherImage, FeatherMusic,
   FeatherType, FeatherFile, FeatherUpload, FeatherArrowRight,
-  FeatherLink, FeatherLayers, FeatherChevronDown, FeatherChevronUp
+  FeatherLink, FeatherLayers, FeatherChevronDown, FeatherChevronUp,
+  FeatherFilm, FeatherPlay, FeatherCamera
 } from '@subframe/core';
 import * as SubframeCore from '@subframe/core';
 import { useToast, ConfirmDialog } from '../ui';
@@ -222,12 +223,20 @@ const PipelineListView = ({
       saveCollections(artistId, cols);
       if (db) await saveCollectionToFirestore(db, artistId, pipeline);
       setShowCreateModal(false);
-      toastSuccess(`Pipeline "${pipeline.name}" created`);
-      onOpenWorkspace(pipeline.id);
+      const isEditing = existing >= 0;
+      toastSuccess(`Pipeline "${pipeline.name}" ${isEditing ? 'updated' : 'created'}`);
+
+      // Route based on format type — video formats open video editor, slideshows open workspace
+      const activeFormat = pipeline.formats?.find(f => f.id === pipeline.activeFormatId) || pipeline.formats?.[0];
+      if (activeFormat?.type === 'video' && !isEditing) {
+        onOpenVideoEditor?.(activeFormat);
+      } else {
+        onOpenWorkspace(pipeline.id);
+      }
     } catch (err) {
       toastError('Failed to create pipeline');
     }
-  }, [artistId, db, onOpenWorkspace, toastSuccess, toastError]);
+  }, [artistId, db, onOpenWorkspace, onOpenVideoEditor, toastSuccess, toastError]);
 
   // Draft count for a workspace
   const getDraftCount = (workspaceId) =>
@@ -595,21 +604,30 @@ const PipelineListView = ({
 
             {/* Video formats */}
             <span className="text-body-bold font-body-bold text-neutral-300 mb-3 block">Videos</span>
-            <div className="grid grid-cols-3 gap-3">
-              {videoFormats.map(fmt => (
-                <div
-                  key={fmt.id}
-                  className="flex flex-col items-center gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-4 py-4 cursor-pointer hover:border-neutral-600 transition-colors"
-                  onClick={() => {
-                    setFormatPickerPage(null);
-                    onOpenVideoEditor?.(fmt);
-                  }}
-                >
-                  <FeatherImage className="text-neutral-400" style={{ width: 24, height: 24 }} />
-                  <span className="text-body-bold font-body-bold text-[#ffffffff]">{fmt.name}</span>
-                  <span className="text-caption font-caption text-neutral-400">{fmt.slideCount} clip{fmt.slideCount !== 1 ? 's' : ''}</span>
-                </div>
-              ))}
+            <div className="grid grid-cols-2 gap-3">
+              {videoFormats.map(fmt => {
+                const IconComponent = fmt.id === 'montage' ? FeatherFilm
+                  : fmt.id === 'solo_clip' ? FeatherPlay
+                  : fmt.id === 'multi_clip' ? FeatherLayers
+                  : fmt.id === 'photo_montage' ? FeatherCamera
+                  : FeatherImage;
+                return (
+                  <div
+                    key={fmt.id}
+                    className="flex flex-col items-center gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-4 py-4 cursor-pointer hover:border-neutral-600 transition-colors"
+                    onClick={() => {
+                      setFormatPickerPage(null);
+                      onOpenVideoEditor?.(fmt);
+                    }}
+                  >
+                    <IconComponent className="text-neutral-400" style={{ width: 24, height: 24 }} />
+                    <span className="text-body-bold font-body-bold text-[#ffffffff]">{fmt.name}</span>
+                    {fmt.description && (
+                      <span className="text-caption font-caption text-neutral-400 text-center">{fmt.description}</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

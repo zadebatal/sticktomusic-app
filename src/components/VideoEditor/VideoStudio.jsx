@@ -292,12 +292,13 @@ const VideoStudio = ({
   manualAccounts = [],
   onSchedulePost,
   onDeleteLatePost,
-  onArtistChange = null // Callback when artist selection changes
+  onArtistChange = null, // Callback when artist selection changes
+  inline = false // When true, renders inside AppShell instead of fixed overlay
 }) => {
   // BUG-034: Toast notifications instead of alert()
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
-  const styles = getStyles(theme);
+  const styles = getStyles(theme, inline);
 
   // Mobile responsive detection
   const { isMobile } = useIsMobile();
@@ -2001,6 +2002,13 @@ const VideoStudio = ({
 
   return (
     <div style={styles.container}>
+      {/* Breadcrumb hover styles — inline styles can't handle :hover */}
+      <style>{`
+        .studio-breadcrumbs button:hover {
+          color: ${theme.text.primary} !important;
+          background-color: rgba(255,255,255,0.08) !important;
+        }
+      `}</style>
       {/* Header */}
       <header style={{
         ...styles.header,
@@ -2008,21 +2016,25 @@ const VideoStudio = ({
       }}>
         <div style={{
           ...styles.headerLeft,
-          ...(isMobile ? { minWidth: 0 } : {})
+          ...(isMobile ? { minWidth: 0 } : {}),
+          ...(inline ? { minWidth: 0 } : {})
         }}>
-          <button
-            onClick={() => { setCurrentView('home'); setSelectedCategory(null); setStudioMode(null); }}
-            style={styles.logoButton}
-            title="Back to categories"
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polygon points="5,3 19,12 5,21" fill="currentColor"/>
-            </svg>
-            {!isMobile && <span style={styles.logoText}>Studio</span>}
-          </button>
+          {/* Hide logo/Studio button in inline mode — AppShell sidebar already shows tab */}
+          {!inline && (
+            <button
+              onClick={() => { setCurrentView('home'); setSelectedCategory(null); setStudioMode(null); }}
+              style={styles.logoButton}
+              title="Back to categories"
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polygon points="5,3 19,12 5,21" fill="currentColor"/>
+              </svg>
+              {!isMobile && <span style={styles.logoText}>Studio</span>}
+            </button>
+          )}
 
-          {/* Single artist indicator - hide on mobile (only when 1 artist) */}
-          {!isMobile && artists.length === 1 && currentArtistId && (
+          {/* Single artist indicator - hide on mobile and inline mode */}
+          {!inline && !isMobile && artists.length === 1 && currentArtistId && (
             <span style={styles.singleArtistLabel}>
               {artists[0]?.name}
             </span>
@@ -2034,7 +2046,7 @@ const VideoStudio = ({
           ...(isMobile ? { flex: '1 1 auto', order: 3, width: '100%', justifyContent: 'flex-start' } : {})
         }}>
           {/* Comprehensive Breadcrumb Navigation */}
-          <div style={{
+          <div className="studio-breadcrumbs" style={{
             ...styles.breadcrumb,
             ...(isMobile ? { fontSize: '11px', padding: '4px 8px', overflowX: 'auto', maxWidth: '100%' } : {})
           }}>
@@ -2324,35 +2336,38 @@ const VideoStudio = ({
 
         </div>
 
-        <div style={{
-          ...styles.headerRight,
-          ...(isMobile ? { order: 2, marginLeft: 'auto' } : {})
-        }}>
-          <IconButton
-            size={isMobile ? "medium" : "small"}
-            icon={<FeatherX />}
-            onClick={() => {
-              if (showEditor || showSlideshowEditor) {
-                setShowEditor(false);
-                setShowSlideshowEditor(false);
-                const targetView = studioMode === 'slideshows' ? 'slideshows' : 'library';
-                setCurrentView(targetView);
-              } else if (currentView === 'library' || currentView === 'slideshows') {
-                setCurrentView('home');
-                setStudioMode(null);
-              } else if (studioMode) {
-                setCurrentView('home');
-                setStudioMode(null);
-              } else {
-                onClose();
-              }
-            }}
-          />
-        </div>
+        {/* Hide close button in inline mode — user navigates away via AppShell sidebar */}
+        {!inline && (
+          <div style={{
+            ...styles.headerRight,
+            ...(isMobile ? { order: 2, marginLeft: 'auto' } : {})
+          }}>
+            <IconButton
+              size={isMobile ? "medium" : "small"}
+              icon={<FeatherX />}
+              onClick={() => {
+                if (showEditor || showSlideshowEditor) {
+                  setShowEditor(false);
+                  setShowSlideshowEditor(false);
+                  const targetView = studioMode === 'slideshows' ? 'slideshows' : 'library';
+                  setCurrentView(targetView);
+                } else if (currentView === 'library' || currentView === 'slideshows') {
+                  setCurrentView('home');
+                  setStudioMode(null);
+                } else if (studioMode) {
+                  setCurrentView('home');
+                  setStudioMode(null);
+                } else {
+                  onClose();
+                }
+              }}
+            />
+          </div>
+        )}
       </header>
 
-      {/* Artist Selector Bar — centered between header and content */}
-      {artists.length > 1 && (
+      {/* Artist Selector Bar — hide in inline mode (AppShell already has one) */}
+      {!inline && artists.length > 1 && (
         <div style={{
           display: 'flex',
           justifyContent: 'center',
@@ -2799,8 +2814,17 @@ const VideoStudio = ({
   );
 };
 
-const getStyles = (theme) => ({
-  container: {
+const getStyles = (theme, inline = false) => ({
+  container: inline ? {
+    width: '100%',
+    flex: '1 1 0',
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    backgroundColor: theme.bg.page,
+    color: theme.text.primary,
+    fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  } : {
     position: 'fixed',
     inset: 0,
     zIndex: 1000,
