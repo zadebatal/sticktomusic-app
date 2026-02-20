@@ -60,12 +60,14 @@ const VideoEditorModal = ({
   artistId = null,
   db = null,
   showTemplatePicker = false,
-  schedulerEditMode = false
+  schedulerEditMode = false,
+  initialEditorMode = null
 }) => {
   // Editor mode: null = show picker, 'montage' = current editor, 'solo-clip' = solo clip editor
   // Show picker only when explicitly creating a new video (showTemplatePicker=true)
+  // initialEditorMode bypasses the template picker when launching from pipeline format selection
   const [editorMode, setEditorMode] = useState(
-    existingVideo?.editorMode || (showTemplatePicker ? null : 'montage')
+    initialEditorMode || existingVideo?.editorMode || (showTemplatePicker ? null : 'montage')
   );
 
   // Theme (kept for dynamic values in waveform tracks)

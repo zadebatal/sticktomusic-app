@@ -807,18 +807,21 @@ const VideoStudio = ({
   }, []);
 
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [initialEditorMode, setInitialEditorMode] = useState(null);
 
-  const handleMakeVideo = useCallback((existingVideo = null) => {
+  const handleMakeVideo = useCallback((existingVideo = null, editorMode = null) => {
     setEditingVideo(existingVideo);
     setShowEditor(true);
     setStudioMode('videos'); // Ensure studioMode is set for breadcrumb
     // Show template picker only for new videos (not re-edits or session restores)
-    setShowTemplatePicker(!existingVideo);
+    setShowTemplatePicker(!existingVideo && !editorMode);
+    setInitialEditorMode(editorMode);
   }, []);
 
   const handleCloseEditor = useCallback(() => {
     setShowEditor(false);
     setEditingVideo(null);
+    setInitialEditorMode(null);
     // Clear library selection so stale clips don't appear next time
     setSelectedLibraryMedia({ videos: [], audio: null, images: [], lyrics: [] });
     setPullFromCollection(null);
@@ -2392,8 +2395,15 @@ const VideoStudio = ({
               setCurrentView('workspace');
             }}
             onOpenVideoEditor={(format) => {
-              // Open the montage/video editor directly
-              handleMakeVideo(null);
+              // Map format template IDs to editor mode strings
+              const FORMAT_TO_EDITOR = {
+                montage: 'montage',
+                solo_clip: 'solo-clip',
+                multi_clip: 'multi-clip',
+                photo_montage: 'photo-montage'
+              };
+              const editorMode = FORMAT_TO_EDITOR[format?.id] || null;
+              handleMakeVideo(null, editorMode);
             }}
             onViewContent={(options) => {
               const isSlideshows = options?.type === 'slideshows';
@@ -2662,6 +2672,7 @@ const VideoStudio = ({
             db={db}
             showTemplatePicker={schedulerEditPostId ? false : showTemplatePicker}
             schedulerEditMode={!!schedulerEditPostId}
+            initialEditorMode={initialEditorMode}
           />
         </EditorErrorBoundary>
       )}

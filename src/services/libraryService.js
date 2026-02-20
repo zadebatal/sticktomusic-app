@@ -1180,6 +1180,7 @@ export const FORMAT_TEMPLATES = [
   { id: 'montage', name: 'Montage', slideCount: 0, slideLabels: [], type: 'video' },
   { id: 'solo_clip', name: 'Solo Clip', slideCount: 0, slideLabels: [], type: 'video' },
   { id: 'multi_clip', name: 'Multi Clip', slideCount: 0, slideLabels: [], type: 'video' },
+  { id: 'photo_montage', name: 'Photo Montage', slideCount: 0, slideLabels: [], type: 'video' },
 ];
 
 /**
