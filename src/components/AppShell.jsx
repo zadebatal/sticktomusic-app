@@ -89,7 +89,7 @@ const AppShell = ({
                 <SubframeCore.DropdownMenu.Root>
                   <SubframeCore.DropdownMenu.Trigger asChild>
                     <div className="flex w-full items-center gap-3 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2.5 cursor-pointer hover:bg-[#262626]">
-                      <Avatar size="small" image={user?.photoURL || undefined} className="bg-brand-600 flex-none">
+                      <Avatar size="small" image={currentArtist?.photoURL || undefined} className="bg-brand-600 flex-none">
                         {(currentArtist?.name || '?')[0].toUpperCase()}
                       </Avatar>
                       <span className="text-body-bold font-body-bold text-[#ffffffff] truncate grow">
@@ -119,7 +119,7 @@ const AppShell = ({
               <div className="flex w-full flex-col items-start gap-2">
                 <span className="text-caption font-caption text-neutral-500 uppercase tracking-wider">Artist</span>
                 <div className="flex w-full items-center gap-3 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2.5">
-                  <Avatar size="small" image={user?.photoURL || undefined} className="bg-brand-600 flex-none">
+                  <Avatar size="small" image={currentArtist?.photoURL || undefined} className="bg-brand-600 flex-none">
                     {(currentArtist?.name || '?')[0].toUpperCase()}
                   </Avatar>
                   <span className="text-body-bold font-body-bold text-[#ffffffff] truncate grow">
