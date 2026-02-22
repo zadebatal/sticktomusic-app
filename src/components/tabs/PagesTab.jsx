@@ -4,6 +4,7 @@ import { useToast } from '../ui';
 import { getLateProfiles, createLateProfile, getConnectUrl } from '../../services/lateService';
 import useIsMobile from '../../hooks/useIsMobile';
 import { Button } from '../../ui/components/Button';
+import { Badge } from '../../ui/components/Badge';
 
 import { PLATFORM_META, ALL_PLATFORMS, getProfileUrl, formatFollowers } from '../../utils/platformUtils';
 
@@ -160,21 +161,13 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
       <div
-        className={`w-full overflow-auto ${isMobile ? '' : `max-w-3xl max-h-[85vh] rounded-2xl`} border ${t.cardBorder}`}
-        style={{
-          backgroundColor: theme.bg.page,
-          ...(isMobile ? { position: 'fixed', inset: 0, borderRadius: 0, maxHeight: '100vh' } : {}),
-        }}
+        className={`w-full overflow-auto ${t.bgPage} border ${t.cardBorder} ${isMobile ? 'fixed inset-0 rounded-none max-h-screen' : 'max-w-3xl max-h-[85vh] rounded-2xl'}`}
       >
         {/* Header */}
         <div
-          className={`px-6 py-4 border-b ${t.borderSubtle} flex items-center justify-between sticky top-0 z-10`}
-          style={{
-            backgroundColor: theme.bg.page,
-            ...(isMobile ? { paddingTop: 'max(16px, env(safe-area-inset-top))' } : {}),
-          }}
+          className={`px-6 py-4 border-b ${t.borderSubtle} flex items-center justify-between sticky top-0 z-10 ${t.bgPage} ${isMobile ? 'pt-[max(16px,env(safe-area-inset-top))]' : ''}`}
         >
           <div>
             <h2 className={`text-lg font-bold ${t.textPrimary}`}>Add Accounts for {artistName}</h2>
@@ -184,8 +177,7 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
           </div>
           <button
             onClick={onClose}
-            className={`text-2xl leading-none ${t.textMuted} hover:${t.textPrimary} transition`}
-            style={isMobile ? { minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}}
+            className={`text-2xl leading-none ${t.textMuted} hover:${t.textPrimary} transition ${isMobile ? 'min-w-[44px] min-h-[44px] flex items-center justify-center' : ''}`}
           >&times;</button>
         </div>
 
@@ -196,7 +188,7 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
               {rows.map((row, rowIdx) => {
                 const selected = getSelectedPlatforms(row);
                 return (
-                  <div key={rowIdx} className={`p-4 rounded-xl border ${t.cardBorder}`} style={{ backgroundColor: theme.bg.elevated }}>
+                  <div key={rowIdx} className={`p-4 rounded-xl border ${t.cardBorder} ${t.bgElevated}`}>
                     {/* Row header: handle + remove */}
                     <div className="flex items-center gap-3 mb-3">
                       <span className={`text-xs font-semibold ${t.textMuted} w-6`}>#{rowIdx + 1}</span>
@@ -205,14 +197,12 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
                         value={row.handle}
                         onChange={(e) => updateHandle(rowIdx, e.target.value)}
                         placeholder="@handle or paste URL"
-                        className={`flex-1 px-3 py-2 rounded-lg border ${t.inputBorder} outline-none text-sm transition`}
-                        style={{ backgroundColor: theme.bg.input, color: theme.text.primary, ...(isMobile ? { minHeight: 44 } : {}) }}
+                        className={`flex-1 px-3 py-2 rounded-lg border ${t.inputBorder} outline-none text-sm transition ${t.bgInput} ${t.textPrimary} ${isMobile ? 'min-h-[44px]' : ''}`}
                         {...(isMobile ? { inputMode: 'url' } : {})}
                       />
                       <button
                         onClick={() => removeRow(rowIdx)}
-                        className={`text-lg ${t.textMuted} hover:text-red-400 transition`}
-                        style={isMobile ? { minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' } : {}}
+                        className={`text-lg ${t.textMuted} hover:text-red-400 transition ${isMobile ? 'min-w-[44px] min-h-[44px] flex items-center justify-center' : ''}`}
                         title="Remove row"
                       >&times;</button>
                     </div>
@@ -267,8 +257,7 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
                                   value={row.passwords[platform]}
                                   onChange={(e) => updatePassword(rowIdx, platform, e.target.value)}
                                   placeholder="Password"
-                                  className={`w-full px-3 py-1.5 pr-9 rounded-lg border ${t.inputBorder} outline-none text-xs transition`}
-                                  style={{ backgroundColor: theme.bg.input, color: theme.text.primary }}
+                                  className={`w-full px-3 py-1.5 pr-9 rounded-lg border ${t.inputBorder} outline-none text-xs transition ${t.bgInput} ${t.textPrimary}`}
                                 />
                                 <button
                                   type="button"
@@ -291,11 +280,7 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
 
             {/* Footer: add row + done */}
             <div
-              className={`px-6 py-4 border-t ${t.borderSubtle} flex items-center justify-between sticky bottom-0`}
-              style={{
-                backgroundColor: theme.bg.page,
-                ...(isMobile ? { paddingBottom: 'max(16px, env(safe-area-inset-bottom))', flexWrap: 'wrap', gap: 12 } : {}),
-              }}
+              className={`px-6 py-4 border-t ${t.borderSubtle} flex items-center justify-between sticky bottom-0 ${t.bgPage} ${isMobile ? 'pb-[max(16px,env(safe-area-inset-bottom))] flex-wrap gap-3' : ''}`}
             >
               <Button variant="neutral-tertiary" size="small" onClick={addRow}>+ Add Another</Button>
               <div className="flex gap-3">
@@ -319,7 +304,7 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
                   const status = getAccountStatus(r.handle, r.platform);
                   const sl = statusLabels[status];
                   return (
-                    <div key={i} className={`flex items-center gap-3 px-4 py-2.5 rounded-lg border ${t.cardBorder}`} style={{ backgroundColor: theme.bg.elevated }}>
+                    <div key={i} className={`flex items-center gap-3 px-4 py-2.5 rounded-lg border ${t.cardBorder} ${t.bgElevated}`}>
                       <span className="text-sm">{meta.icon}</span>
                       <span className={`text-sm font-medium ${t.textPrimary} flex-1`}>{r.handle}</span>
                       <span className="text-xs font-medium" style={{ color: meta.color }}>{meta.label}</span>
@@ -340,11 +325,7 @@ const BulkAccountEntry = ({ artistId, artistName, latePages, isLateConfigured, o
               )}
             </div>
             <div
-              className={`px-6 py-4 border-t ${t.borderSubtle} flex justify-end sticky bottom-0`}
-              style={{
-                backgroundColor: theme.bg.page,
-                ...(isMobile ? { paddingBottom: 'max(16px, env(safe-area-inset-bottom))' } : {}),
-              }}
+              className={`px-6 py-4 border-t ${t.borderSubtle} flex justify-end sticky bottom-0 ${t.bgPage} ${isMobile ? 'pb-[max(16px,env(safe-area-inset-bottom))]' : ''}`}
             >
               <Button variant="brand-primary" onClick={onClose}>Close</Button>
             </div>
@@ -545,8 +526,8 @@ const PagesTab = ({
   const bulkEntryArtist = bulkEntryArtistId ? visibleArtists.find(a => a.id === bulkEntryArtistId) : null;
 
   return (
-    <div className={`flex-1 overflow-auto ${isMobile ? 'p-3' : 'p-6'} ${t.bgPage}`}>
-      <div className={isMobile ? '' : 'max-w-5xl mx-auto'}>
+    <div className={`flex-1 overflow-auto ${isMobile ? 'p-3' : 'px-12 py-8'} ${t.bgPage}`}>
+      <div className="w-full">
         {/* Header */}
         <div className={`flex items-center justify-between ${isMobile ? 'mb-5' : 'mb-8'}`}>
           <div>
@@ -603,12 +584,10 @@ const PagesTab = ({
                   {/* Artist Header */}
                   <div
                     onClick={() => toggleArtist(artist.id)}
-                    className={`cursor-pointer ${isMobile ? 'px-4 py-3' : 'px-6 py-4'} flex items-center justify-between ${t.cardBg}`}
-                    style={isMobile ? { minHeight: 56 } : {}}
+                    className={`cursor-pointer ${isMobile ? 'px-4 py-3 min-h-[56px]' : 'px-6 py-4'} flex items-center justify-between ${t.cardBg}`}
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shrink-0"
-                        style={{ backgroundColor: theme.accent?.primary ? theme.accent.primary + '22' : '#6366f122', color: theme.accent?.primary || '#6366f1' }}>
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shrink-0 bg-indigo-500/15 text-indigo-500">
                         {artist.name?.[0]?.toUpperCase() || '?'}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -627,19 +606,13 @@ const PagesTab = ({
                       {/* Add Accounts button */}
                       <Button variant="neutral-secondary" size="small" onClick={(e) => { e.stopPropagation(); setBulkEntryArtistId(artist.id); }}>+ Add Accounts</Button>
                       {!isMobile && isUnconfigured && !hasAnyEntries && (
-                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-orange-500/15 text-orange-400">
-                          Setup Required
-                        </span>
+                        <Badge variant="warning">Setup Required</Badge>
                       )}
                       {!isMobile && hasAnyEntries && !hasPages && (
-                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/15 text-blue-400">
-                          Manual
-                        </span>
+                        <Badge variant="neutral">Manual</Badge>
                       )}
                       {!isMobile && hasPages && (
-                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-500/15 text-green-400">
-                          Connected
-                        </span>
+                        <Badge variant="success">Connected</Badge>
                       )}
                       <span className={`text-lg transition-transform duration-200 ${expanded ? '' : '-rotate-90'} ${t.textSecondary}`}>
                         ▼
@@ -673,8 +646,7 @@ const PagesTab = ({
                           {/* Inline Late banner if unconfigured */}
                           {isUnconfigured && (
                             <div
-                              className={`${isMobile ? 'px-4' : 'px-6'} py-3 flex items-center justify-between gap-3`}
-                              style={{ backgroundColor: theme.accent?.primary ? theme.accent.primary + '11' : '#6366f111' }}
+                              className={`${isMobile ? 'px-4' : 'px-6'} py-3 flex items-center justify-between gap-3 bg-indigo-500/[0.07]`}
                             >
                               <p className={`text-sm ${t.textSecondary}`}>
                                 Connect Late to enable scheduling for {artist.name}'s accounts.
@@ -683,7 +655,7 @@ const PagesTab = ({
                             </div>
                           )}
 
-                          <div className="divide-y" style={{ borderColor: theme.bg.surface }}>
+                          <div className={`divide-y ${t.borderSubtle}`}>
                             {handleEntries.map(([normalizedHandle, group]) => {
                               const { displayHandle, pages, manualEntries } = group;
                               const handleKey = `${artist.id}:${normalizedHandle}`;
@@ -702,8 +674,7 @@ const PagesTab = ({
                                   {/* Handle Row */}
                                   <div
                                     onClick={() => toggleHandle(handleKey)}
-                                    className="cursor-pointer px-6 py-3 flex items-center justify-between gap-4 hover:opacity-80 transition"
-                                    style={{ backgroundColor: theme.bg.page }}
+                                    className={`cursor-pointer px-6 py-3 flex items-center justify-between gap-4 hover:opacity-80 transition ${t.bgPage}`}
                                   >
                                     <div className="flex items-center gap-3 min-w-0 flex-1">
                                       {profilePic ? (
@@ -811,11 +782,9 @@ const PagesTab = ({
                                             </a>
                                             <div className="flex items-center gap-4">
                                               <span className={`text-sm ${t.textSecondary}`}>{formatFollowers(page.followers)}</span>
-                                              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                                                page.status === 'active' ? 'bg-green-500/15 text-green-400' : 'bg-yellow-500/15 text-yellow-400'
-                                              }`}>
+                                              <Badge variant={page.status === 'active' ? 'success' : 'warning'}>
                                                 {page.status === 'active' ? 'Active' : 'Inactive'}
-                                              </span>
+                                              </Badge>
                                             </div>
                                           </div>
                                         );
@@ -842,7 +811,7 @@ const PagesTab = ({
                                               )}
                                             </div>
                                             <div className="flex items-center gap-3">
-                                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-500/15 text-blue-400">Manual</span>
+                                              <Badge variant="neutral">Manual</Badge>
                                               {isLateConfigured && (
                                                 <button
                                                   onClick={() => handleConnectPlatform(artist.id, entry.platform)}
@@ -904,7 +873,7 @@ const PagesTab = ({
 
                             {/* Connect a new account — only show platforms not already connected */}
                             {isLateConfigured && artistMissingPlatforms.length > 0 && (
-                              <div className={`${isMobile ? 'px-4' : 'px-6'} py-3`} style={{ backgroundColor: theme.bg.page }}>
+                              <div className={`${isMobile ? 'px-4' : 'px-6'} py-3 ${t.bgPage}`}>
                                 <p className={`text-xs ${t.textMuted} mb-2`}>Connect another platform:</p>
                                 <div className="flex gap-2 flex-wrap">
                                   {artistMissingPlatforms.map(platform => {

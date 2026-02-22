@@ -130,7 +130,7 @@ const EditorToolbar = ({
           </Button>
 
           {showAudioPicker && (
-            <div className="absolute bottom-full left-0 mb-1 w-56 bg-neutral-900 border border-neutral-700 rounded-lg shadow-lg z-50 overflow-hidden">
+            <div className="absolute bottom-full left-0 mb-1 w-56 bg-[#171717] border border-neutral-700 rounded-lg shadow-lg z-50 overflow-hidden">
               <div className="px-3 py-2 text-[11px] font-semibold text-neutral-400 uppercase border-b border-neutral-800">
                 Select Audio
               </div>

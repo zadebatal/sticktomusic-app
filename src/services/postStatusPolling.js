@@ -11,16 +11,20 @@
  */
 
 import { updateScheduledPost } from './scheduledPostsService';
+import { getAuth } from 'firebase/auth';
 import log from '../utils/logger';
 
 /**
  * Check a single post's status with Late.co API
  * @param {string} latePostId - Late.co post ID
+ * @param {string} artistId - Artist ID (required by API)
  * @returns {Object|null} { status: 'live'|'scheduled'|'failed', publishedAt, platforms }
  */
-async function checkLatePostStatus(latePostId) {
+async function checkLatePostStatus(latePostId, artistId) {
   try {
-    const response = await fetch(`/api/late?action=getPost&postId=${latePostId}`);
+    const token = await getAuth().currentUser?.getIdToken();
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+    const response = await fetch(`/api/late?action=getPost&postId=${latePostId}&artistId=${artistId}`, { headers });
     if (!response.ok) {
       console.warn('[StatusPolling] Failed to fetch post from Late.co:', latePostId);
       return null;
@@ -60,9 +64,10 @@ async function checkLatePostStatus(latePostId) {
  * @param {Object} db - Firestore instance
  * @param {string} artistId
  * @param {Array} posts - All scheduled posts
+ * @param {Function} [onStatusChange] - Callback when a post status changes: ({ type: 'posted'|'failed', contentName, thumbnail, publishedAt, errorMessage })
  * @returns {number} Number of posts updated
  */
-export async function pollOverduePosts(db, artistId, posts) {
+export async function pollOverduePosts(db, artistId, posts, onStatusChange) {
   const now = new Date();
   let updatedCount = 0;
 
@@ -93,7 +98,7 @@ export async function pollOverduePosts(db, artistId, posts) {
 
   for (const chunk of chunks) {
     const results = await Promise.all(
-      chunk.map(post => checkLatePostStatus(post.latePostId))
+      chunk.map(post => checkLatePostStatus(post.latePostId, artistId))
     );
 
     for (let i = 0; i < chunk.length; i++) {
@@ -111,6 +116,9 @@ export async function pollOverduePosts(db, artistId, posts) {
         });
         log(`[StatusPolling] ✓ Updated ${post.contentName} to POSTED`);
         updatedCount++;
+        if (onStatusChange) {
+          onStatusChange({ type: 'posted', contentName: post.contentName, thumbnail: post.thumbnail, publishedAt: result.publishedAt });
+        }
       } else if (result.status === 'failed') {
         // Update to FAILED
         await updateScheduledPost(db, artistId, post.id, {
@@ -120,6 +128,9 @@ export async function pollOverduePosts(db, artistId, posts) {
         });
         log(`[StatusPolling] ✗ Updated ${post.contentName} to FAILED`);
         updatedCount++;
+        if (onStatusChange) {
+          onStatusChange({ type: 'failed', contentName: post.contentName, errorMessage: result.error || 'Post failed on Late.co' });
+        }
       }
       // If still 'scheduled', leave as-is (Late.co hasn't posted yet)
     }
@@ -137,15 +148,16 @@ export async function pollOverduePosts(db, artistId, posts) {
  * @param {Object} db
  * @param {string} artistId
  * @param {Function} getPosts - Function that returns current posts array
+ * @param {Function} [onStatusChange] - Callback when a post transitions to posted/failed
  * @returns {Function} Cleanup function to stop polling
  */
-export function startPolling(db, artistId, getPosts) {
+export function startPolling(db, artistId, getPosts, onStatusChange) {
   let intervalId = null;
 
   const poll = async () => {
     try {
       const posts = getPosts();
-      await pollOverduePosts(db, artistId, posts);
+      await pollOverduePosts(db, artistId, posts, onStatusChange);
     } catch (error) {
       console.error('[StatusPolling] Poll error:', error);
     }

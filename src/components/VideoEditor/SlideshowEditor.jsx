@@ -74,14 +74,26 @@ const SlideshowEditor = ({
   const sanitizeAudio = (audio) => {
     if (!audio) return null;
     const clean = { ...audio };
+    // Strip blob URLs — they expire on page reload
     if (clean.localUrl && clean.localUrl.startsWith('blob:')) delete clean.localUrl;
     if (clean.url && clean.url.startsWith('blob:')) {
-      // If only URL is a blob and no cloud fallback, null out
       if (!clean.localUrl) clean.url = null;
     }
-    // If no usable URL left, keep metadata but mark as needing re-add
-    if (!clean.url && !clean.localUrl) {
-      console.warn('[SlideshowEditor] Audio has stale blob URL — cleared on load');
+    // If no usable URL, try to recover from library by name or id
+    if (!clean.url || clean.url.startsWith('blob:')) {
+      if (artistId) {
+        const lib = getLibrary(artistId);
+        const byId = clean.id && lib.find(a => a.id === clean.id && a.url && !a.url.startsWith('blob:'));
+        const byName = clean.name && lib.find(a => a.name === clean.name && a.type === 'audio' && a.url && !a.url.startsWith('blob:'));
+        const found = byId || byName;
+        if (found) {
+          clean.url = found.url;
+          clean.localUrl = found.url;
+          console.log('[SlideshowEditor] Recovered audio URL from library:', clean.name);
+        } else {
+          console.warn('[SlideshowEditor] Audio has stale blob URL — no library match for:', clean.name || clean.id);
+        }
+      }
     }
     return clean;
   };
@@ -244,6 +256,7 @@ const SlideshowEditor = ({
   const audioRef = useRef(null);
   const animationRef = useRef(null);
   const isPlayingRef = useRef(false);
+  const manualSlideOverrideRef = useRef(0); // timestamp of last manual slide switch
 
   // Text editor state
   const [editingTextId, setEditingTextId] = useState(null);
@@ -676,23 +689,35 @@ const SlideshowEditor = ({
   const previewScale = renderedCanvasWidth / baseDimensions.width;
 
   // Measure canvas area container and compute canvas pixel dimensions
+  // Debounce and threshold to prevent jitter when switching slides
+  const canvasSizeRef = useRef({ width: 480, height: 640 });
   useEffect(() => {
     if (!canvasAreaRef.current) return;
+    let raf = null;
     const observer = new ResizeObserver(entries => {
-      const { width: cw, height: ch } = entries[0].contentRect;
-      if (cw <= 0 || ch <= 0) return;
-      const ar = baseDimensions.width / baseDimensions.height;
-      let w, h;
-      if (cw / ch > ar) {
-        h = ch; w = ch * ar;
-      } else {
-        w = cw; h = cw / ar;
-      }
-      setCanvasSize({ width: Math.floor(w), height: Math.floor(h) });
-      setRenderedCanvasWidth(Math.floor(w));
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const { width: cw, height: ch } = entries[0].contentRect;
+        if (cw <= 0 || ch <= 0) return;
+        const ar = baseDimensions.width / baseDimensions.height;
+        let w, h;
+        if (cw / ch > ar) {
+          h = ch; w = ch * ar;
+        } else {
+          w = cw; h = cw / ar;
+        }
+        const nw = Math.floor(w);
+        const nh = Math.floor(h);
+        // Only update if size changed by more than 5px to prevent jitter
+        if (Math.abs(nw - canvasSizeRef.current.width) > 5 || Math.abs(nh - canvasSizeRef.current.height) > 5) {
+          canvasSizeRef.current = { width: nw, height: nh };
+          setCanvasSize({ width: nw, height: nh });
+          setRenderedCanvasWidth(nw);
+        }
+      });
     });
     observer.observe(canvasAreaRef.current);
-    return () => observer.disconnect();
+    return () => { observer.disconnect(); if (raf) cancelAnimationFrame(raf); };
   }, [baseDimensions]);
 
   // Get current slide (defined early so callbacks can reference it)
@@ -1206,8 +1231,10 @@ const SlideshowEditor = ({
           setCurrentTime(Math.max(0, elapsed));
 
           // Auto-advance slides based on cumulative duration
+          // Skip auto-advance for 3s after a manual slide switch
           const currentSlides = slidesRef.current;
-          if (currentSlides.length > 1) {
+          const timeSinceManual = Date.now() - (manualSlideOverrideRef.current || 0);
+          if (currentSlides.length > 1 && timeSinceManual > 3000) {
             let cumulative = 0;
             for (let i = 0; i < currentSlides.length; i++) {
               cumulative += currentSlides[i].duration || 3;
@@ -1293,17 +1320,24 @@ const SlideshowEditor = ({
   isPlayingRef.current = isPlaying; // Always keep playing ref current for closures
 
   const selectedAudioId = selectedAudio?.id || null;
-  // Recover blob URLs that expired on page reload — look up real URL from library
-  const selectedAudioUrl = (() => {
-    const url = selectedAudio?.url || selectedAudio?.localUrl || null;
-    if (!url) return null;
-    // If it's a blob URL, check if it's still valid by trying to find the audio in library
-    if (url.startsWith('blob:') && selectedAudioId && libraryAudio.length > 0) {
-      const libItem = libraryAudio.find(a => a.id === selectedAudioId);
-      if (libItem?.url && !libItem.url.startsWith('blob:')) return libItem.url;
+  const selectedAudioName = selectedAudio?.name || null;
+  // Recover blob URLs — use useMemo for stable reference (prevents effect re-runs)
+  const selectedAudioUrl = useMemo(() => {
+    try {
+      const url = selectedAudio?.url || selectedAudio?.localUrl || null;
+      if (!url) return null;
+      if (typeof url === 'string' && url.startsWith('blob:') && selectedAudioId && Array.isArray(libraryAudio) && libraryAudio.length > 0) {
+        const libItem = libraryAudio.find(a => a && a.id === selectedAudioId);
+        if (libItem?.url && typeof libItem.url === 'string' && !libItem.url.startsWith('blob:')) {
+          return libItem.url;
+        }
+      }
+      return url;
+    } catch (error) {
+      console.error('[SlideshowEditor] Error in selectedAudioUrl:', error);
+      return null;
     }
-    return url;
-  })();
+  }, [selectedAudio, selectedAudioId, libraryAudio]);
   const selectedAudioStart = selectedAudio?.startTime || 0;
   const selectedAudioEnd = selectedAudio?.endTime || null;
 
@@ -1313,8 +1347,40 @@ const SlideshowEditor = ({
       loadedAudioKeyRef.current = null;
       setAudioReady(false);
       if (selectedAudio && !selectedAudioUrl) {
-        setAudioError('Audio file unavailable');
+        setAudioError('Audio file unavailable — re-add from library');
       }
+      return;
+    }
+
+    // Check if it's an expired blob URL — recover from library
+    if (selectedAudioUrl.startsWith('blob:')) {
+      console.warn('[SlideshowEditor] Audio has expired blob URL, checking library...');
+      const audioName = selectedAudio?.name;
+      // Try library state first
+      if (audioName && libraryAudio.length > 0) {
+        const libItem = libraryAudio.find(a =>
+          a && a.name === audioName && a.url && !a.url.startsWith('blob:')
+        );
+        if (libItem) {
+          log('[Audio] Found audio in library with valid URL, updating...');
+          setSelectedAudio({ ...selectedAudio, url: libItem.url, localUrl: libItem.url });
+          return;
+        }
+      }
+      // Try localStorage directly
+      if (artistId) {
+        const cachedLib = getLibrary(artistId);
+        const byName = audioName && cachedLib.find(a => a.name === audioName && a.url && !a.url.startsWith('blob:'));
+        const byId = selectedAudioId && cachedLib.find(a => a.id === selectedAudioId && a.url && !a.url.startsWith('blob:'));
+        const found = byId || byName;
+        if (found) {
+          log('[Audio] Found audio in cached library, updating...');
+          setSelectedAudio({ ...selectedAudio, url: found.url, localUrl: found.url });
+          return;
+        }
+      }
+      console.warn('[SlideshowEditor] Could not find valid URL for audio, showing error');
+      setAudioError('Audio file expired — re-add from library');
       return;
     }
 
@@ -1394,29 +1460,40 @@ const SlideshowEditor = ({
     // Safety fallback: if readyState is already sufficient (e.g. cached audio),
     // events may have fired before React committed this effect. Check immediately.
     const quickCheck = setTimeout(() => {
-      if (el.readyState >= 2 && el.duration > 0) {
+      if (el.readyState >= 1) {
         log('[Audio] Fallback: already loaded, readyState:', el.readyState);
-        onLoadedMetadata();
+        if (el.duration > 0) onLoadedMetadata();
         setAudioReady(true);
         setAudioError(null);
       }
-    }, 100);
+    }, 200);
+    // Medium check at 1.5s
+    const mediumCheck = setTimeout(() => {
+      if (el.readyState >= 1) {
+        log('[Audio] Medium fallback: readyState:', el.readyState);
+        if (el.duration > 0) onLoadedMetadata();
+        setAudioReady(true);
+        setAudioError(null);
+      }
+    }, 1500);
 
-    // Timeout fallback: if audio hasn't loaded after 10s, mark as ready anyway
+    // Timeout fallback: if audio hasn't loaded after 4s, mark as ready or error
     // (prevents infinite "Loading..." state for slow/unreachable URLs)
     const loadTimeout = setTimeout(() => {
       if (!audioRef.current) return;
       if (audioRef.current.readyState >= 1) {
         log('[Audio] Timeout fallback: marking ready at readyState', audioRef.current.readyState);
         setAudioReady(true);
+        setAudioError(null);
       } else {
-        log('[Audio] Timeout: audio failed to load within 10s');
-        setAudioError('Audio took too long to load');
+        log('[Audio] Timeout: audio failed to load within 4s, src:', audioRef.current.src?.substring(0, 80));
+        setAudioError('Audio failed to load — try removing and re-adding');
       }
-    }, 10000);
+    }, 4000);
 
     return () => {
       clearTimeout(quickCheck);
+      clearTimeout(mediumCheck);
       clearTimeout(loadTimeout);
       el.removeEventListener('loadedmetadata', onLoadedMetadata);
       el.removeEventListener('canplaythrough', onCanPlayThrough);
@@ -2216,10 +2293,10 @@ const SlideshowEditor = ({
   const [previewCropRatio, setPreviewCropRatio] = useState(null);
 
   const [openSections, setOpenSections] = useState({
-    source: true,
+    source: false,
     audio: false,
     textStyle: false,
-    textBanks: true,
+    textBanks: false,
     slideBanks: true,
     lyrics: false
   });
@@ -2505,7 +2582,35 @@ const SlideshowEditor = ({
       </div>
 
       {/* Hidden audio element */}
-      <audio ref={audioRef} preload="auto" style={{ display: 'none' }} />
+      <audio
+        ref={audioRef}
+        preload="auto"
+        style={{ display: 'none' }}
+        onLoadedMetadata={() => {
+          if (!audioRef.current) return;
+          const rawDur = audioRef.current.duration;
+          const start = selectedAudioStart;
+          const end = (selectedAudioEnd && selectedAudioEnd > 0) ? selectedAudioEnd : (isFinite(rawDur) ? rawDur : 0);
+          setAudioDuration(Math.max(0, end - start));
+          audioRef.current.currentTime = start;
+        }}
+        onCanPlay={() => { setAudioReady(true); setAudioError(null); }}
+        onCanPlayThrough={() => { setAudioReady(true); setAudioError(null); }}
+        onLoadedData={() => {
+          if (audioRef.current?.readyState >= 1) {
+            setAudioReady(true);
+            setAudioError(null);
+            // Also compute duration if loadedmetadata didn't fire
+            if (audioDuration === 0 && audioRef.current.duration > 0) {
+              const rawDur = audioRef.current.duration;
+              const start = selectedAudioStart;
+              const end = (selectedAudioEnd && selectedAudioEnd > 0) ? selectedAudioEnd : (isFinite(rawDur) ? rawDur : 0);
+              setAudioDuration(Math.max(0, end - start));
+            }
+          }
+        }}
+        onError={() => { setAudioError('Audio failed to load'); setAudioReady(false); }}
+      />
     </div>
   );
 
@@ -2562,7 +2667,7 @@ const SlideshowEditor = ({
         variant="neutral-secondary"
         size="small"
         icon={<FeatherChevronLeft />}
-        onClick={() => setSelectedSlideIndex(Math.max(0, selectedSlideIndex - 1))}
+        onClick={() => { manualSlideOverrideRef.current = Date.now(); setSelectedSlideIndex(Math.max(0, selectedSlideIndex - 1)); }}
         disabled={selectedSlideIndex === 0}
       />
       <span className="text-[13px] text-neutral-500 whitespace-nowrap font-medium">
@@ -2572,7 +2677,7 @@ const SlideshowEditor = ({
         variant="neutral-secondary"
         size="small"
         icon={<FeatherChevronRight />}
-        onClick={() => setSelectedSlideIndex(Math.min(slides.length - 1, selectedSlideIndex + 1))}
+        onClick={() => { manualSlideOverrideRef.current = Date.now(); setSelectedSlideIndex(Math.min(slides.length - 1, selectedSlideIndex + 1)); }}
         disabled={selectedSlideIndex === slides.length - 1}
       />
 
@@ -2726,7 +2831,7 @@ const SlideshowEditor = ({
                     index === selectedSlideIndex ? 'border-brand-600' : 'border-neutral-200'
                   }`}
                   style={{ backgroundColor: '#171717' }}
-                  onClick={() => setSelectedSlideIndex(index)}
+                  onClick={() => { manualSlideOverrideRef.current = Date.now(); setSelectedSlideIndex(index); }}
                 >
                   {slide.backgroundImage ? (
                     <img src={slide.thumbnail || slide.backgroundImage} alt={`Slide ${index + 1}`} className="w-full h-full object-cover" />
@@ -3119,7 +3224,7 @@ const SlideshowEditor = ({
   // ─── Render: Sidebar Text Banks ───
   const renderSidebarTextBanks = () => (
     <div className="flex flex-col gap-4">
-      {getTextBanks().map((textBank, idx) => {
+      {getTextBanks().slice(0, Math.max(slides.length, 2)).map((textBank, idx) => {
         const color = getBankColor(idx);
         const inputVal = newTextInputs[idx] || '';
         return (
@@ -3228,7 +3333,7 @@ const SlideshowEditor = ({
       const migrated = migrateCollectionBanks(col);
       return Math.max(max, (migrated.banks || []).length);
     }, 0);
-    const numBanks = Math.max((categoryBankImages || []).length, collectionMaxBanks, 2);
+    const numBanks = Math.min(Math.max((categoryBankImages || []).length, collectionMaxBanks, 2), Math.max(slides.length, 2));
 
     return (
       <div className="flex flex-col gap-4">
@@ -3719,7 +3824,6 @@ const SlideshowEditor = ({
               flexShrink: 0
             }}>
               <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
-                {renderCollapsibleSection('source', 'Source', renderSidebarSource())}
                 {renderCollapsibleSection('audio', 'Audio', renderSidebarAudio())}
                 {renderCollapsibleSection('textStyle', 'Text Style', renderSidebarTextStyle())}
                 {renderCollapsibleSection('textBanks', 'Text Banks', renderSidebarTextBanks())}

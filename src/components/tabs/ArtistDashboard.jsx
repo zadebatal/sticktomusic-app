@@ -4,7 +4,7 @@ import { useToast } from '../ui';
 import { getTierForSets, computeSocialSetsUsed, shouldShowPaymentUI } from '../../services/subscriptionService';
 import { PLATFORM_META, getProfileUrl, formatFollowers } from '../../utils/platformUtils';
 import { subscribeToScheduledPosts, POST_STATUS, PLATFORM_COLORS } from '../../services/scheduledPostsService';
-import { subscribeToCreatedContent } from '../../services/libraryService';
+import { subscribeToCreatedContent, getProjects, getProjectNiches } from '../../services/libraryService';
 import { getLateProfiles, createLateProfile, getConnectUrl } from '../../services/lateService';
 import { Button } from '../../ui/components/Button';
 import { Badge } from '../../ui/components/Badge';
@@ -13,7 +13,7 @@ import { IconWithBackground } from '../../ui/components/IconWithBackground';
 import {
   FeatherEye, FeatherHeart, FeatherCalendar, FeatherTrendingUp,
   FeatherVideo, FeatherPlay, FeatherEdit2, FeatherLayers, FeatherSend,
-  FeatherMusic, FeatherCamera
+  FeatherMusic, FeatherCamera, FeatherX
 } from '@subframe/core';
 
 /** Returns a human-readable relative time string (e.g. "2 days ago") */
@@ -101,6 +101,16 @@ const ArtistDashboard = ({
     .filter(p => p.status === POST_STATUS.POSTED)
     .sort((a, b) => new Date(b.postedAt || b.scheduledTime) - new Date(a.postedAt || a.scheduledTime))
     .slice(0, 10);
+
+  // Preview modal state
+  const [previewingItem, setPreviewingItem] = useState(null);
+
+  // Projects for this artist
+  const [projects, setProjects] = useState([]);
+  useEffect(() => {
+    if (!artistId) return;
+    setProjects(getProjects(artistId));
+  }, [artistId, createdContent]); // re-derive when content changes
 
   // Connected platforms for this artist (already filtered)
   const artistPages = latePages;
@@ -293,44 +303,44 @@ const ArtistDashboard = ({
 
       {/* Stat Cards — 3 cols: Total Content, Scheduled, Posted */}
       <div className="w-full items-start gap-6 grid grid-cols-3 mobile:grid mobile:grid-cols-1">
-        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 rounded-xl border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600">
-            <FeatherLayers className="text-[#ffffffff]" />
+        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 rounded-xl border border-solid border-[#333] bg-[#1a1a1aff] px-6 py-5 cursor-pointer hover:border-[#555] transition-colors" onClick={() => onNavigate?.('studio')}>
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ backgroundColor: '#6366f1' }}>
+            <FeatherLayers className="text-white" />
           </div>
           <div className="flex w-full flex-col items-start gap-1">
-            <span className="text-caption font-caption text-neutral-400">Total Content</span>
-            <span className="text-heading-1 font-heading-1 text-[#ffffffff]">{totalContentCount}</span>
+            <span className="text-caption font-caption text-[#a3a3a3]">Total Content</span>
+            <span className="text-heading-1 font-heading-1 text-white">{totalContentCount}</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-caption font-caption text-neutral-400">
+            <span className="text-caption font-caption text-[#a3a3a3]">
               {createdContent.videos?.length || 0} videos, {createdContent.slideshows?.length || 0} slideshows
             </span>
           </div>
         </div>
-        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 rounded-xl border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600">
-            <FeatherCalendar className="text-[#ffffffff]" />
+        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 rounded-xl border border-solid border-[#333] bg-[#1a1a1aff] px-6 py-5 cursor-pointer hover:border-[#555] transition-colors" onClick={() => onNavigate?.('schedule')}>
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ backgroundColor: '#f59e0b' }}>
+            <FeatherCalendar className="text-white" />
           </div>
           <div className="flex w-full flex-col items-start gap-1">
-            <span className="text-caption font-caption text-neutral-400">Scheduled</span>
-            <span className="text-heading-1 font-heading-1 text-[#ffffffff]">{upcomingPosts.length}</span>
+            <span className="text-caption font-caption text-[#a3a3a3]">Scheduled</span>
+            <span className="text-heading-1 font-heading-1 text-white">{upcomingPosts.length}</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-caption font-caption text-neutral-400">
+            <span className="text-caption font-caption text-[#a3a3a3]">
               {upcomingPosts.length > 0 ? `Next: ${new Date(upcomingPosts[0].scheduledTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : 'No upcoming posts'}
             </span>
           </div>
         </div>
-        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 rounded-xl border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-600">
-            <FeatherSend className="text-[#ffffffff]" />
+        <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 rounded-xl border border-solid border-[#333] bg-[#1a1a1aff] px-6 py-5 cursor-pointer hover:border-[#555] transition-colors" onClick={() => onNavigate?.('schedule', { filter: 'posted' })}>
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ backgroundColor: '#22c55e' }}>
+            <FeatherSend className="text-white" />
           </div>
           <div className="flex w-full flex-col items-start gap-1">
-            <span className="text-caption font-caption text-neutral-400">Posted</span>
-            <span className="text-heading-1 font-heading-1 text-[#ffffffff]">{postedPosts.length}</span>
+            <span className="text-caption font-caption text-[#a3a3a3]">Posted</span>
+            <span className="text-heading-1 font-heading-1 text-white">{postedPosts.length}</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-caption font-caption text-neutral-400">
+            <span className="text-caption font-caption text-[#a3a3a3]">
               {postedPosts.length > 0 ? `Last: ${new Date(postedPosts[0].postedAt || postedPosts[0].scheduledTime).toLocaleString([], { month: 'short', day: 'numeric' })}` : 'No posts yet'}
             </span>
           </div>
@@ -361,37 +371,73 @@ const ArtistDashboard = ({
         </div>
       </div>
 
-      {/* Recent Content — 4-column grid */}
+      {/* Recent Content — 4-column grid with 9:16 aspect thumbnails */}
       {recentContent.length > 0 && (
         <div className="flex w-full flex-col items-start gap-4">
-          <span className="text-heading-2 font-heading-2 text-[#ffffffff]">
-            Recent Content
-          </span>
+          <div className="flex w-full items-center justify-between">
+            <span className="text-heading-2 font-heading-2 text-[#ffffffff]">
+              Recent Content
+            </span>
+            <Button size="small" variant="neutral-tertiary" onClick={() => onNavigate?.('studio')}>
+              View All
+            </Button>
+          </div>
           <div className="w-full items-start gap-4 grid grid-cols-4 mobile:grid mobile:grid-cols-2">
             {recentContent.slice(0, 4).map((item, i) => {
               const isSlideshow = item._type === 'slideshow';
+              const firstSlide = isSlideshow ? item.slides?.[0] : null;
               const thumb = isSlideshow
-                ? (item.slides?.[0]?.backgroundImage || item.slides?.[0]?.imageUrl || item.slides?.[0]?.thumbnail || null)
+                ? (firstSlide?.backgroundImage || firstSlide?.imageA?.url || firstSlide?.imageUrl || firstSlide?.thumbnail || null)
                 : (item.thumbnail || item.thumbnailUrl || item.clips?.[0]?.thumbnail || item.clips?.[0]?.thumbnailUrl || null);
+              const overlays = isSlideshow ? (firstSlide?.textOverlays || []).filter(o => o.text) : [];
               const status = (item.status || 'draft').toLowerCase();
               const badgeVariant = status === 'posted' ? 'success' : status === 'scheduled' ? 'brand' : 'neutral';
               const badgeLabel = status === 'posted' ? 'Posted' : status === 'scheduled' ? 'Scheduled' : 'Draft';
               const timeAgo = item.createdAt ? getTimeAgo(new Date(item.createdAt)) : '';
               return (
-                <div key={item.id || i} className="flex grow shrink-0 basis-0 flex-col items-start gap-3 overflow-hidden rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff]">
+                <div key={item.id || i} className="flex grow shrink-0 basis-0 flex-col items-start overflow-hidden rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] cursor-pointer hover:border-neutral-600 transition-colors" onClick={() => setPreviewingItem(item)}>
                   {thumb ? (
-                    <img className="h-32 w-full flex-none object-cover" src={thumb} alt="" loading="lazy" />
+                    <div className="w-full aspect-[9/16] relative overflow-hidden bg-[#171717]" style={{ containerType: 'inline-size' }}>
+                      <img className="w-full h-full object-cover" src={thumb} alt="" loading="lazy" />
+                      {overlays.map((overlay, oi) => (
+                        <div key={oi} className="absolute text-center pointer-events-none" style={{
+                          left: `${overlay.position?.x || 50}%`,
+                          top: `${overlay.position?.y || 50}%`,
+                          transform: 'translate(-50%, -50%)',
+                          width: `${overlay.position?.width || 80}%`,
+                          fontSize: `${(overlay.style?.fontSize || 48) / 1080 * 100}cqw`,
+                          fontWeight: overlay.style?.fontWeight || '600',
+                          fontFamily: overlay.style?.fontFamily || 'Inter, sans-serif',
+                          color: overlay.style?.color || '#fff',
+                          textTransform: overlay.style?.textTransform || 'none',
+                          WebkitTextStroke: overlay.style?.textStroke || undefined,
+                          textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+                          lineHeight: 1.2,
+                          overflow: 'hidden',
+                          wordBreak: 'break-word',
+                          whiteSpace: 'pre-wrap',
+                        }}>
+                          {overlay.text}
+                        </div>
+                      ))}
+                      {/* Badge overlay */}
+                      <div className="absolute top-2 left-2">
+                        <Badge variant={badgeVariant}>{badgeLabel}</Badge>
+                      </div>
+                    </div>
                   ) : (
-                    <div className="flex h-32 w-full flex-none items-center justify-center bg-neutral-900">
+                    <div className="flex w-full aspect-[9/16] items-center justify-center bg-[#171717] relative">
                       {isSlideshow ? (
                         <FeatherCamera className="text-neutral-600" style={{ width: 32, height: 32 }} />
                       ) : (
                         <FeatherVideo className="text-neutral-600" style={{ width: 32, height: 32 }} />
                       )}
+                      <div className="absolute top-2 left-2">
+                        <Badge variant={badgeVariant}>{badgeLabel}</Badge>
+                      </div>
                     </div>
                   )}
-                  <div className="flex w-full flex-col items-start gap-2 px-4 pb-4">
-                    <Badge variant={badgeVariant}>{badgeLabel}</Badge>
+                  <div className="flex w-full flex-col items-start gap-1 px-3 py-3">
                     <span className="text-body-bold font-body-bold text-[#ffffffff] truncate w-full">
                       {item.name || item.title || (isSlideshow ? 'Untitled Slideshow' : 'Untitled Video')}
                     </span>
@@ -401,7 +447,12 @@ const ArtistDashboard = ({
                       ) : (
                         <FeatherPlay className="text-caption font-caption text-brand-600" />
                       )}
-                      {item.audio && <FeatherMusic className="text-caption font-caption text-brand-600" />}
+                      {item.audio?.name && (
+                        <span className="flex items-center gap-1 text-caption font-caption text-brand-600 truncate max-w-[120px]" title={item.audio.name}>
+                          <FeatherMusic style={{ width: 12, height: 12, flexShrink: 0 }} />
+                          {item.audio.name.replace(' Audio Extracted', '').replace('.mp3', '')}
+                        </span>
+                      )}
                       <span className="text-caption font-caption text-neutral-400">{timeAgo}</span>
                     </div>
                   </div>
@@ -651,17 +702,54 @@ const ArtistDashboard = ({
         <div className="flex grow shrink-0 basis-0 flex-col items-start gap-4 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff]">
           <div className="flex w-full items-center justify-between px-6 pt-5">
             <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Upcoming Posts</span>
+            {upcomingPosts.length > 0 && (
+              <Button size="small" variant="neutral-tertiary" onClick={() => onNavigate?.('schedule')}>
+                View All
+              </Button>
+            )}
           </div>
           {upcomingPosts.length > 0 ? (
             <div className="flex w-full flex-col items-start">
               {upcomingPosts.slice(0, 5).map((post, i) => {
                 const date = post.scheduledTime ? new Date(post.scheduledTime) : null;
                 const platformNames = Object.keys(post.platforms || {});
-                const postThumb = post.thumbnailUrl || post.mediaUrl || null;
+                const firstSlide = post.editorState?.slides?.[0];
+                const postThumb = post.thumbnail || post.thumbnailUrl || post.mediaUrl || firstSlide?.backgroundImage || firstSlide?.imageA?.url || null;
+                const overlays = (firstSlide?.textOverlays || []).filter(o => o.text);
                 return (
-                  <div key={post.id || i} className={`flex w-full items-center gap-4 px-6 py-4 ${i < Math.min(upcomingPosts.length, 5) - 1 ? 'border-b border-solid border-neutral-800' : ''}`}>
+                  <div key={post.id || i} className={`flex w-full items-center gap-4 px-6 py-4 cursor-pointer hover:bg-neutral-800/30 transition-colors ${i < Math.min(upcomingPosts.length, 5) - 1 ? 'border-b border-solid border-neutral-800' : ''}`} onClick={() => {
+                    if (post.editorState?.slides?.length) {
+                      setPreviewingItem({ ...post, slides: post.editorState.slides, name: post.contentName, _type: 'slideshow' });
+                    } else {
+                      onNavigate?.('schedule');
+                    }
+                  }}>
                     {postThumb ? (
-                      <img className="h-16 w-16 flex-none rounded-md object-cover" src={postThumb} alt="" loading="lazy" />
+                      <div className="h-16 w-16 flex-none rounded-md overflow-hidden relative bg-neutral-800">
+                        <img className="w-full h-full object-cover" src={postThumb} alt="" loading="lazy" />
+                        {overlays.map((overlay, oi) => (
+                          <div key={oi} className="absolute text-center pointer-events-none" style={{
+                            left: `${overlay.position?.x || 50}%`,
+                            top: `${overlay.position?.y || 50}%`,
+                            transform: 'translate(-50%, -50%)',
+                            width: `${overlay.position?.width || 80}%`,
+                            fontSize: `${Math.max(4, (overlay.style?.fontSize || 36) * 0.06)}px`,
+                            fontWeight: overlay.style?.fontWeight || '600',
+                            fontFamily: overlay.style?.fontFamily || 'Inter, sans-serif',
+                            color: overlay.style?.color || '#fff',
+                            textTransform: overlay.style?.textTransform || 'none',
+                            textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+                            lineHeight: 1.15,
+                            overflow: 'hidden',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            wordBreak: 'break-word',
+                          }}>
+                            {overlay.text}
+                          </div>
+                        ))}
+                      </div>
                     ) : (
                       <div className="flex h-16 w-16 flex-none items-center justify-center rounded-md bg-neutral-800">
                         <FeatherCalendar className="text-neutral-500" />
@@ -682,6 +770,12 @@ const ArtistDashboard = ({
                           {date ? date.toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
                         </span>
                       </div>
+                      {post.editorState?.audio?.name && (
+                        <div className="flex items-center gap-1 text-caption font-caption text-brand-600 truncate max-w-[140px]" title={post.editorState.audio.name}>
+                          <FeatherMusic style={{ width: 12, height: 12, flexShrink: 0 }} />
+                          <span className="truncate">{post.editorState.audio.name.replace(' Audio Extracted', '').replace('.mp3', '')}</span>
+                        </div>
+                      )}
                     </div>
                     <IconButton size="small" icon={<FeatherEdit2 />} onClick={() => onNavigate?.('schedule')} />
                   </div>
@@ -705,19 +799,63 @@ const ArtistDashboard = ({
 
       {/* Recently Posted */}
       <div className="flex w-full flex-col items-start gap-4">
-        <span className="text-heading-2 font-heading-2 text-[#ffffffff]">
-          Recently Posted{postedPosts.length > 0 && ` (${postedPosts.length})`}
-        </span>
+        <div className="flex w-full items-center justify-between">
+          <span className="text-heading-2 font-heading-2 text-[#ffffffff]">
+            Recently Posted{postedPosts.length > 0 && ` (${postedPosts.length})`}
+          </span>
+          {postedPosts.length > 0 && (
+            <Button size="small" variant="neutral-tertiary" onClick={() => onNavigate?.('schedule')}>
+              View All
+            </Button>
+          )}
+        </div>
         <div className="flex w-full flex-col items-start rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff]">
           {postedPosts.length > 0 ? (
             postedPosts.slice(0, 5).map((post, i) => {
               const date = (post.postedAt || post.scheduledTime) ? new Date(post.postedAt || post.scheduledTime) : null;
               const results = post.postResults || {};
+              const firstSlide = post.editorState?.slides?.[0];
+              const postThumb = post.thumbnail || post.thumbnailUrl || post.mediaUrl || firstSlide?.backgroundImage || firstSlide?.imageA?.url || null;
+              const overlays = (firstSlide?.textOverlays || []).filter(o => o.text);
               return (
-                <div key={post.id || i} className={`flex w-full items-center gap-4 px-6 py-4 ${i < Math.min(postedPosts.length, 5) - 1 ? 'border-b border-solid border-neutral-800' : ''}`}>
-                  <div className="flex h-12 w-12 flex-none items-center justify-center rounded-md bg-neutral-800 text-caption font-caption text-neutral-400 font-mono">
-                    {date ? `${date.getMonth() + 1}/${date.getDate()}` : '—'}
-                  </div>
+                <div key={post.id || i} className={`flex w-full items-center gap-4 px-6 py-4 cursor-pointer hover:bg-neutral-800/30 transition-colors ${i < Math.min(postedPosts.length, 5) - 1 ? 'border-b border-solid border-neutral-800' : ''}`} onClick={() => {
+                    if (post.editorState?.slides?.length) {
+                      setPreviewingItem({ ...post, slides: post.editorState.slides, name: post.contentName, _type: 'slideshow' });
+                    } else {
+                      onNavigate?.('schedule', { filter: 'posted' });
+                    }
+                  }}>
+                  {postThumb ? (
+                    <div className="h-16 w-16 flex-none rounded-md overflow-hidden relative bg-neutral-800">
+                      <img className="w-full h-full object-cover" src={postThumb} alt="" loading="lazy" />
+                      {overlays.map((overlay, oi) => (
+                        <div key={oi} className="absolute text-center pointer-events-none" style={{
+                          left: `${overlay.position?.x || 50}%`,
+                          top: `${overlay.position?.y || 50}%`,
+                          transform: 'translate(-50%, -50%)',
+                          width: `${overlay.position?.width || 80}%`,
+                          fontSize: `${Math.max(4, (overlay.style?.fontSize || 36) * 0.06)}px`,
+                          fontWeight: overlay.style?.fontWeight || '600',
+                          fontFamily: overlay.style?.fontFamily || 'Inter, sans-serif',
+                          color: overlay.style?.color || '#fff',
+                          textTransform: overlay.style?.textTransform || 'none',
+                          textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+                          lineHeight: 1.15,
+                          overflow: 'hidden',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          wordBreak: 'break-word',
+                        }}>
+                          {overlay.text}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex h-16 w-16 flex-none items-center justify-center rounded-md bg-neutral-800">
+                      <FeatherSend className="text-neutral-500" />
+                    </div>
+                  )}
                   <div className="flex grow shrink-0 basis-0 flex-col items-start gap-1">
                     <span className="text-body-bold font-body-bold text-[#ffffffff] truncate w-full">
                       {post.contentName || post.caption || 'Untitled post'}
@@ -736,6 +874,7 @@ const ArtistDashboard = ({
                               color: PLATFORM_COLORS[platform] || '#888',
                               textDecoration: 'none'
                             }}
+                            onClick={(e) => e.stopPropagation()}
                           >
                             {platform} ↗
                           </a>
@@ -757,8 +896,19 @@ const ArtistDashboard = ({
                           {date ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                         </span>
                       )}
+                      {post.editorState?.audio?.name && (
+                        <span className="flex items-center gap-1 text-caption font-caption text-brand-600 truncate max-w-[140px]" title={post.editorState.audio.name}>
+                          <FeatherMusic style={{ width: 12, height: 12, flexShrink: 0 }} />
+                          <span className="truncate">{post.editorState.audio.name.replace(' Audio Extracted', '').replace('.mp3', '')}</span>
+                        </span>
+                      )}
                     </div>
                   </div>
+                  {date && (
+                    <span className="text-caption font-caption text-neutral-400 flex-shrink-0">
+                      {date.toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                    </span>
+                  )}
                 </div>
               );
             })
@@ -768,7 +918,7 @@ const ArtistDashboard = ({
             </div>
           )}
           {postedPosts.length > 5 && (
-            <div className="flex w-full items-center justify-center px-6 pb-4 border-t border-solid border-neutral-800">
+            <div className="flex w-full items-center justify-center px-6 pb-4 border-t border-solid border-neutral-800 cursor-pointer hover:bg-neutral-800/30" onClick={() => onNavigate?.('schedule')}>
               <span className="text-caption font-caption text-neutral-400 pt-3">
                 +{postedPosts.length - 5} more posted
               </span>
@@ -776,6 +926,57 @@ const ArtistDashboard = ({
           )}
         </div>
       </div>
+
+      {/* Projects */}
+      {projects.length > 0 && (
+        <div className="flex w-full flex-col items-start gap-4">
+          <div className="flex w-full items-center justify-between">
+            <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Projects</span>
+            <Button size="small" variant="neutral-tertiary" onClick={() => onNavigate?.('studio')}>
+              View All
+            </Button>
+          </div>
+          <div className="w-full items-start gap-4 grid grid-cols-2 mobile:grid mobile:grid-cols-1">
+            {projects.map(project => {
+              const niches = getProjectNiches(artistId, project.id);
+              return (
+                <div
+                  key={project.id}
+                  className="flex flex-col items-start gap-4 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-6 py-5 cursor-pointer hover:border-neutral-600 transition-colors"
+                  onClick={() => onNavigate?.('studio')}
+                >
+                  <div className="flex w-full items-center gap-3">
+                    <div className="flex h-10 w-10 flex-none items-center justify-center rounded-full" style={{ backgroundColor: project.projectColor || '#6366f1' }}>
+                      <span className="text-body-bold font-body-bold text-[#ffffffff]">
+                        {(project.name || 'P').split(/\s+/).filter(Boolean).slice(0, 2).map(w => (w.replace(/[^a-zA-Z0-9]/g, '')[0] || w[0])).join('').toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex grow flex-col items-start gap-0.5 min-w-0">
+                      <span className="text-heading-3 font-heading-3 text-[#ffffffff] truncate w-full">{project.name}</span>
+                      {project.linkedPage && (
+                        <span className="text-caption font-caption text-neutral-400 truncate w-full">
+                          @{project.linkedPage.handle}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {niches.length > 0 ? (
+                    <div className="flex w-full items-center gap-2 flex-wrap">
+                      {niches.map(niche => (
+                        <Badge key={niche.id} variant="neutral">
+                          {niche.name || niche.formats?.[0]?.name || 'Niche'}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <Badge variant="neutral">No niches</Badge>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Operator Contact Card */}
       {user?.ownerOperatorId && (
@@ -798,6 +999,85 @@ const ArtistDashboard = ({
           </Button>
         </div>
       )}
+
+      {/* Content Preview Modal — matches ContentLibrary preview */}
+      {previewingItem && (() => {
+        const isSlideshow = previewingItem._type === 'slideshow';
+        const slides = isSlideshow ? (previewingItem.slides || []) : [];
+        const name = previewingItem.name || previewingItem.title || (isSlideshow ? 'Untitled Slideshow' : 'Untitled Video');
+        return (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.75)' }} onClick={() => setPreviewingItem(null)}>
+            <div className="relative flex flex-col overflow-hidden" style={{ maxWidth: '90vw', maxHeight: '85vh', width: 'fit-content', minWidth: '320px', borderRadius: 16, backgroundColor: '#171717', boxShadow: '0 12px 32px -4px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="flex items-center justify-between gap-4" style={{ padding: '16px 20px', borderBottom: '1px solid #333' }}>
+                <div>
+                  <div style={{ color: '#fafafa', fontSize: 16, fontWeight: 600 }}>{name}</div>
+                  <div style={{ color: '#a3a3a3', fontSize: 12, marginTop: 2 }}>
+                    {isSlideshow ? `${slides.length} slides` : 'Video'} · {previewingItem.status || 'draft'}
+                  </div>
+                  {previewingItem.audio?.name && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                      <FeatherMusic style={{ width: 12, height: 12, color: '#6366f1' }} />
+                      <span style={{ color: '#6366f1', fontSize: 12, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={previewingItem.audio.name}>
+                        {previewingItem.audio.name.replace(' Audio Extracted', '').replace('.mp3', '')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  <Button variant="brand-secondary" size="small" icon={<FeatherEdit2 />} onClick={() => { setPreviewingItem(null); onNavigate?.('studio'); }}>Edit</Button>
+                  <IconButton size="small" icon={<FeatherX />} onClick={() => setPreviewingItem(null)} />
+                </div>
+              </div>
+              {/* Slides Gallery */}
+              <div style={{ padding: 16, overflowY: 'auto', display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', maxHeight: 'calc(85vh - 80px)' }}>
+                {isSlideshow && slides.length > 0 ? slides.map((slide, idx) => {
+                  const slideThumb = slide.backgroundImage || slide.imageA?.url || slide.thumbnail || null;
+                  const slideOverlays = (slide.textOverlays || []).filter(o => o.text);
+                  return (
+                    <div key={idx} style={{ width: 180, flexShrink: 0, aspectRatio: '9/16', borderRadius: 10, overflow: 'hidden', backgroundColor: '#0a0a0a', position: 'relative', border: '1px solid #333' }}>
+                      {slideThumb ? (
+                        <img src={slideThumb} alt={`Slide ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#737373' }}>Empty</div>
+                      )}
+                      {slideOverlays.map((overlay, oi) => (
+                        <div key={oi} style={{
+                          position: 'absolute',
+                          left: `${overlay.position?.x || 50}%`,
+                          top: `${overlay.position?.y || 50}%`,
+                          transform: 'translate(-50%,-50%)',
+                          color: overlay.style?.color || '#fff',
+                          fontSize: `${Math.max(8, (overlay.style?.fontSize || 24) * 0.2)}px`,
+                          fontWeight: overlay.style?.fontWeight || '700',
+                          textAlign: 'center',
+                          textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+                          pointerEvents: 'none',
+                          maxWidth: '90%',
+                          wordBreak: 'break-word',
+                        }}>{overlay.text}</div>
+                      ))}
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '4px 8px', background: 'rgba(0,0,0,0.6)', color: '#e5e5e5', fontSize: 11, textAlign: 'center' }}>
+                        Slide {idx + 1}
+                      </div>
+                    </div>
+                  );
+                }) : !isSlideshow ? (
+                  <div className="flex flex-col items-center gap-3 py-8">
+                    <FeatherVideo className="text-neutral-500" style={{ width: 48, height: 48 }} />
+                    <span style={{ color: '#a3a3a3', fontSize: 14 }}>Video preview</span>
+                    {(previewingItem.thumbnail || previewingItem.thumbnailUrl) && (
+                      <img style={{ maxWidth: 240, borderRadius: 10 }} src={previewingItem.thumbnail || previewingItem.thumbnailUrl} alt="" />
+                    )}
+                  </div>
+                ) : (
+                  <div className="py-8" style={{ color: '#737373', fontSize: 14 }}>No slides to preview</div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useCallback } from 'react';
 
 // ═══════════════════════════════════════════════════
 // Theme Definitions
@@ -31,31 +31,6 @@ const THEMES = {
       btnSecondary: 'border border-zinc-600 text-zinc-100 hover:bg-zinc-900',
       btnDanger: 'bg-red-600 text-white hover:bg-red-700',
     }
-  },
-  bright: {
-    id: 'bright',
-    name: 'Bright',
-    bg: { page: '#ffffff', surface: '#f4f4f5', elevated: '#e4e4e7', input: '#ffffff' },
-    text: { primary: '#18181b', secondary: '#52525b', muted: '#a1a1aa' },
-    accent: { primary: '#4f46e5', hover: '#6366f1', muted: '#e0e7ff' },
-    border: { default: '#d4d4d8', subtle: '#e4e4e7' },
-    state: { success: '#16a34a', error: '#dc2626', warning: '#d97706', info: '#2563eb' },
-    overlay: { light: 'rgba(0,0,0,0.3)', heavy: 'rgba(0,0,0,0.5)' },
-    hover: { bg: 'rgba(0,0,0,0.04)' },
-    shadow: '0 4px 20px rgba(0,0,0,0.15)',
-    tw: {
-      bgPage: 'bg-white', bgSurface: 'bg-gray-100', bgElevated: 'bg-gray-200', bgInput: 'bg-white',
-      textPrimary: 'text-gray-900', textSecondary: 'text-gray-600', textMuted: 'text-gray-400',
-      accentText: 'text-indigo-600', accentBg: 'bg-indigo-600', accentBgHover: 'hover:bg-indigo-700',
-      border: 'border-gray-300', borderSubtle: 'border-gray-200',
-      hoverBg: 'hover:bg-gray-100', hoverText: 'hover:text-gray-900',
-      tabActive: 'bg-gray-900 text-white', tabInactive: 'text-gray-500 hover:text-gray-900 hover:bg-gray-100',
-      cardBg: 'bg-gray-50', cardBorder: 'border-gray-200',
-      inputBorder: 'border-gray-300', inputFocus: 'focus:border-indigo-500',
-      btnPrimary: 'bg-gray-900 text-white hover:bg-gray-800',
-      btnSecondary: 'border border-gray-300 text-gray-700 hover:bg-gray-50',
-      btnDanger: 'bg-red-600 text-white hover:bg-red-700',
-    }
   }
 };
 
@@ -66,21 +41,11 @@ const THEMES = {
 const ThemeContext = createContext(null);
 
 export const ThemeProvider = ({ children }) => {
-  const [themeId, setThemeId] = useState(() => {
-    try { return localStorage.getItem('stm_theme') || 'dark'; }
-    catch { return 'dark'; }
-  });
+  const themeId = 'dark';
+  const theme = THEMES.dark;
 
-  const theme = THEMES[themeId] || THEMES.dark;
-
-  const setTheme = useCallback((id) => {
-    if (THEMES[id]) {
-      setThemeId(id);
-      try { localStorage.setItem('stm_theme', id); } catch {}
-      // Dispatch event so components outside ThemeProvider (e.g. App.jsx) can react
-      window.dispatchEvent(new CustomEvent('stm-theme-change', { detail: id }));
-    }
-  }, []);
+  // No-op — locked to dark theme
+  const setTheme = useCallback(() => {}, []);
 
   // Apply theme to document body for base styling
   useEffect(() => {

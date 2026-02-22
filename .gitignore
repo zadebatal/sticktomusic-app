@@ -22,3 +22,30 @@ node_modules/
 .env*.local
 build/
 *.mp4
+
+# Playwright
+e2e/auth/storage-state.json
+e2e/fixtures/test-media/
+e2e/screenshots/
+e2e/screenshots-baseline/
+e2e/screenshots-mobile/
+e2e/screenshots-themes/
+e2e/screenshots-roles/
+e2e/screenshots-flows/
+e2e/screenshots-audit/
+e2e/audit-results/
+e2e/perf-results/
+e2e/a11y-results/
+test-results/
+playwright-report/
+
+# Claude Code
+.claude/
+
+# QA docs
+QA_CLAUDE_DESKTOP_PROMPT.md
+QA_OPENCLAW_TEST.md
+
+# E2E infrastructure
+e2e/
+playwright.config.js

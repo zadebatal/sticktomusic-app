@@ -2,38 +2,43 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   subscribeToLibrary, subscribeToCollections, getCollections, getLibrary, getLyrics,
   incrementUseCount, MEDIA_TYPES, addToLibraryAsync,
-  addCreatedVideo, saveCreatedContentAsync
+  addCreatedVideo, saveCreatedContentAsync,
+  getBankColor, getBankLabel
 } from '../../services/libraryService';
 import { uploadFile } from '../../services/firebaseStorage';
 import { renderPhotoMontage } from '../../services/photoMontageExportService';
 import { useBeatDetection } from '../../hooks/useBeatDetection';
+import { normalizeBeatsToTrimRange } from '../../utils/timelineNormalization';
 import useEditorHistory from '../../hooks/useEditorHistory';
 import useWaveform from '../../hooks/useWaveform';
 import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
 import useIsMobile from '../../hooks/useIsMobile';
 import AudioClipSelector from './AudioClipSelector';
-import EditorToolbar from './EditorToolbar';
 import LyricBank from './LyricBank';
 import WordTimeline from './WordTimeline';
 import LyricAnalyzer from './LyricAnalyzer';
 import CloudImportButton from './CloudImportButton';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
-import { FeatherArrowLeft, FeatherMaximize2, FeatherGrid, FeatherStar } from '@subframe/core';
-import log from '../../utils/logger';
+import { ToggleGroup } from '../../ui/components/ToggleGroup';
+import { Badge } from '../../ui/components/Badge';
+import { FeatherMaximize2, FeatherGrid, FeatherStar, FeatherMusic, FeatherUpload, FeatherTrash2, FeatherScissors, FeatherPlus, FeatherMic, FeatherRefreshCw, FeatherPlay, FeatherPause, FeatherSkipBack, FeatherSkipForward, FeatherCheck } from '@subframe/core';
+import EditorShell from './shared/EditorShell';
+import EditorTopBar from './shared/EditorTopBar';
+import EditorFooter from './shared/EditorFooter';
+import useCollapsibleSections from './shared/useCollapsibleSections';
+import useMediaMultiSelect from './shared/useMediaMultiSelect';
+import useEditorSessionState from './shared/useEditorSessionState';
 
 /**
  * PhotoMontageEditor — Turn photos into a fast-paced video with transitions.
  *
- * Full feature parity with SoloClipEditor:
- *   EditorToolbar (undo/redo, audio picker, lyrics picker, AI transcribe),
- *   close confirmation, waveform, word overlays from transcription.
- *
- * Layout:
- *   Top bar:   Back, Name, Aspect, Export
- *   Body:      Left (w-72) Photo list | Center Preview | Right (w-64) Settings
- *   Toolbar:   EditorToolbar (shared)
+ * Unified layout (matches Montage blueprint):
+ *   Top bar:   ← Back | TextField w-80 | Undo/Redo | Save | Export
+ *   Body:      Left (w-72) Photo list | Center Preview | Right (w-96) Sidebar
+ *   Sidebar:   Audio, Photo Settings, Lyrics, Text Style (collapsible)
+ *   Footer:    Auto-saved timestamp | Cancel | Save
  */
 const PhotoMontageEditor = ({
   category,
@@ -47,39 +52,127 @@ const PhotoMontageEditor = ({
   onUpdateLyrics,
   onDeleteLyrics,
   presets = [],
-  onSavePreset
+  onSavePreset,
+  nicheTextBanks = null
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
   const { isMobile } = useIsMobile();
-  const styles = useMemo(() => getStyles(theme, isMobile), [theme, isMobile]);
 
-  // ── Photo list state ──
-  const [photos, setPhotos] = useState(() => {
-    if (existingVideo?.editorMode === 'photo-montage' && existingVideo?.montagePhotos) {
-      return existingVideo.montagePhotos;
+  // ── Multi-video state (mirrors Solo/Multi allVideos pattern) ──
+  const [allVideos, setAllVideos] = useState(() => {
+    if (existingVideo?.editorMode === 'photo-montage') {
+      return [{
+        id: 'template',
+        name: 'Template',
+        photos: existingVideo?.montagePhotos || [],
+        textOverlays: existingVideo?.textOverlays || [],
+        words: existingVideo?.words || [],
+        textStyle: existingVideo?.textStyle || {
+          fontSize: 48, fontFamily: 'Inter, sans-serif', fontWeight: '600',
+          color: '#ffffff', outline: true, outlineColor: '#000000', textAlign: 'center', textCase: 'default'
+        },
+        isTemplate: true
+      }];
     }
-    return [];
+    return [{
+      id: 'template',
+      name: 'Template',
+      photos: [],
+      textOverlays: [],
+      words: [],
+      textStyle: {
+        fontSize: 48, fontFamily: 'Inter, sans-serif', fontWeight: '600',
+        color: '#ffffff', outline: true, outlineColor: '#000000', textAlign: 'center', textCase: 'default'
+      },
+      isTemplate: true
+    }];
   });
+  const [activeVideoIndex, setActiveVideoIndex] = useState(0);
+  const [generateCount, setGenerateCount] = useState(5);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [keepTemplateText, setKeepTemplateText] = useState('none');
   const [name, setName] = useState(existingVideo?.name || 'Photo Montage');
 
-  // ── Settings state ──
+  // Derived reads from active video
+  const activeVideo = allVideos[activeVideoIndex];
+  const photos = activeVideo?.photos || [];
+  const textOverlays = activeVideo?.textOverlays || [];
+  const textOverlaysRef = useRef(textOverlays);
+  textOverlaysRef.current = textOverlays;
+  const words = activeVideo?.words || [];
+  const textStyle = activeVideo?.textStyle || {};
+
+  // Wrapper setters (route through allVideos)
+  const setPhotos = useCallback((updater) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const current = copy[activeVideoIndex];
+      if (!current) return prev;
+      copy[activeVideoIndex] = {
+        ...current,
+        photos: typeof updater === 'function' ? updater(current.photos || []) : updater
+      };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
+  const setTextOverlays = useCallback((updater) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const current = copy[activeVideoIndex];
+      if (!current) return prev;
+      copy[activeVideoIndex] = {
+        ...current,
+        textOverlays: typeof updater === 'function' ? updater(current.textOverlays || []) : updater
+      };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
+  const setWords = useCallback((updater) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const current = copy[activeVideoIndex];
+      if (!current) return prev;
+      copy[activeVideoIndex] = {
+        ...current,
+        words: typeof updater === 'function' ? updater(current.words || []) : updater
+      };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
+  const setTextStyle = useCallback((updater) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const current = copy[activeVideoIndex];
+      if (!current) return prev;
+      copy[activeVideoIndex] = {
+        ...current,
+        textStyle: typeof updater === 'function' ? updater(current.textStyle || {}) : updater
+      };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
+  // ── Footer state ──
+  const [isSavingAll, setIsSavingAll] = useState(false);
+
+  // ── Settings state (global across all variations) ──
   const [speed, setSpeed] = useState(existingVideo?.montageSpeed || 1);
   const [transition, setTransition] = useState(existingVideo?.montageTransition || 'cut');
   const [kenBurnsEnabled, setKenBurnsEnabled] = useState(existingVideo?.montageKenBurns !== false);
   const [aspectRatio, setAspectRatio] = useState(existingVideo?.cropMode || '9:16');
 
-  // ── Audio state (renamed from `audio` to match VEM/SoloClipEditor pattern) ──
+  // ── Audio state ──
   const [selectedAudio, setSelectedAudio] = useState(existingVideo?.audio || null);
   const [audioDuration, setAudioDuration] = useState(0);
   const [beatSyncEnabled, setBeatSyncEnabled] = useState(existingVideo?.montageBeatSync || false);
   const audioRef = useRef(null);
   const audioFileInputRef = useRef(null);
 
-  // ── Text overlay state (same pattern as SoloClipEditor) ──
-  const [textOverlays, setTextOverlays] = useState(existingVideo?.textOverlays || []);
-  const textOverlaysRef = useRef(textOverlays);
-  textOverlaysRef.current = textOverlays;
+  // ── Text editing state ──
   const [editingTextId, setEditingTextId] = useState(null);
   const [editingTextValue, setEditingTextValue] = useState('');
   const [draggingTextId, setDraggingTextId] = useState(null);
@@ -87,24 +180,23 @@ const PhotoMontageEditor = ({
   const previewRef = useRef(null);
   const timelineRef = useRef(null);
   const [timelineDrag, setTimelineDrag] = useState(null);
-  const [textStyle, setTextStyle] = useState({
-    fontSize: 48,
-    fontFamily: 'Inter, sans-serif',
-    fontWeight: '600',
-    color: '#ffffff',
-    outline: true,
-    outlineColor: '#000000',
-    textAlign: 'center',
-    textCase: 'default'
-  });
 
-  // ── Words state (for WordTimeline) ──
-  const [words, setWords] = useState(existingVideo?.words || []);
+  // ── Words extra state ──
   const [showWordTimeline, setShowWordTimeline] = useState(false);
   const [loadedBankLyricId, setLoadedBankLyricId] = useState(null);
 
   // ── Beat detection ──
   const { beats, bpm, isAnalyzing: beatAnalyzing, analyzeAudio } = useBeatDetection();
+
+  // Audio trim boundaries for beat normalization
+  const audioStartTime = selectedAudio?.startTime || 0;
+  const audioEndTime = selectedAudio?.endTime || selectedAudio?.duration || 0;
+
+  // Filter beats to trimmed range and normalize to local time
+  const filteredBeats = useMemo(() => {
+    if (!beats.length) return [];
+    return normalizeBeatsToTrimRange(beats, audioStartTime, audioEndTime);
+  }, [beats, audioStartTime, audioEndTime]);
 
   // ── Export state ──
   const [isExporting, setIsExporting] = useState(false);
@@ -131,6 +223,29 @@ const PhotoMontageEditor = ({
   const [showPresetPrompt, setShowPresetPrompt] = useState(false);
   const [presetPromptValue, setPresetPromptValue] = useState('');
 
+  // ── Footer state ──
+  const [lastSaved, setLastSaved] = useState(null);
+
+  // ── Right Sidebar: collapsible sections ──
+  const { openSections, renderCollapsibleSection } = useCollapsibleSections({
+    audio: true, photoSettings: true, lyrics: false, textStyle: false
+  });
+
+  // ── Session persistence ──
+  const { loadSession, saveSession, clearSession } = useEditorSessionState(
+    artistId, 'photo-montage', existingVideo?.id
+  );
+  const sessionRestoredRef = useRef(false);
+  useEffect(() => {
+    if (sessionRestoredRef.current) return;
+    sessionRestoredRef.current = true;
+    const session = loadSession();
+    if (session?.activeVideoIndex != null) setActiveVideoIndex(session.activeVideoIndex);
+  }, [loadSession]);
+  useEffect(() => {
+    saveSession({ activeVideoIndex, openSections });
+  }, [activeVideoIndex, openSections, saveSession]);
+
   // ── Audio trimmer state ──
   const [showAudioTrimmer, setShowAudioTrimmer] = useState(false);
   const [audioToTrim, setAudioToTrim] = useState(null);
@@ -142,25 +257,32 @@ const PhotoMontageEditor = ({
   const [dragIndex, setDragIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
 
-  // ── Undo/Redo history ──
-  const getHistorySnapshot = useCallback(() => ({
-    photos, textOverlays, selectedAudio, textStyle, words
-  }), [photos, textOverlays, selectedAudio, textStyle, words]);
+  // ── Undo/Redo history (route through allVideos) ──
+  const getHistorySnapshot = useCallback(() => {
+    const v = allVideos[activeVideoIndex];
+    return { ...v, selectedAudio };
+  }, [allVideos, activeVideoIndex, selectedAudio]);
 
   const restoreHistorySnapshot = useCallback((snapshot) => {
-    if (snapshot.photos !== undefined) setPhotos(snapshot.photos);
-    if (snapshot.textOverlays !== undefined) setTextOverlays(snapshot.textOverlays);
-    if (snapshot.selectedAudio !== undefined) setSelectedAudio(snapshot.selectedAudio);
-    if (snapshot.textStyle !== undefined) setTextStyle(snapshot.textStyle);
-    if (snapshot.words !== undefined) setWords(snapshot.words);
-  }, []);
+    const { selectedAudio: snapAudio, ...videoSnapshot } = snapshot;
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const cur = copy[activeVideoIndex];
+      copy[activeVideoIndex] = { ...cur, ...videoSnapshot };
+      return copy;
+    });
+    if (snapAudio !== undefined) setSelectedAudio(snapAudio);
+  }, [activeVideoIndex]);
 
-  const { canUndo, canRedo, handleUndo, handleRedo } = useEditorHistory({
+  const { canUndo, canRedo, handleUndo, handleRedo, resetHistory } = useEditorHistory({
     getSnapshot: getHistorySnapshot,
     restoreSnapshot: restoreHistorySnapshot,
     deps: [photos, textOverlays, selectedAudio, textStyle, words],
     isEditingText: !!editingTextId
   });
+
+  // Reset history when switching variations
+  useEffect(() => { resetHistory(); }, [activeVideoIndex, resetHistory]);
 
   // ── Waveform (for future timeline rendering) ──
   const { waveformData } = useWaveform({
@@ -168,6 +290,71 @@ const PhotoMontageEditor = ({
     clips: [],
     getClipUrl: () => null
   });
+
+  // ── Multi-video: switch, delete, generate ──
+  const switchToVideo = useCallback((index) => {
+    if (index === activeVideoIndex) return;
+    setActiveVideoIndex(index);
+  }, [activeVideoIndex]);
+
+  const handleDeleteVideo = useCallback((index) => {
+    if (index === 0) return; // Can't delete template
+    setAllVideos(prev => prev.filter((_, i) => i !== index));
+    setActiveVideoIndex(prev => {
+      if (prev === index) return 0;
+      if (prev > index) return prev - 1;
+      return prev;
+    });
+    toastSuccess('Variation deleted');
+  }, [toastSuccess]);
+
+  const executeGeneration = useCallback(() => {
+    const template = allVideos[0];
+    if (!template?.photos?.length) {
+      toastError('Add photos to template before generating');
+      return;
+    }
+    setIsGenerating(true);
+
+    // Fisher-Yates shuffle
+    const shuffle = (arr) => {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    };
+
+    const newVideos = [];
+    for (let g = 0; g < generateCount; g++) {
+      // Shuffle photo order
+      const genPhotos = shuffle(template.photos);
+
+      // Cycle text from words if keepTemplateText is 'none'
+      let genWords = [...(template.words || [])];
+      let genTextOverlays = [...(template.textOverlays || [])];
+      if (keepTemplateText === 'none' && genWords.length > 0) {
+        // Rotate words by variation index for variety
+        const rotateBy = (g + 1) % genWords.length;
+        genWords = [...genWords.slice(rotateBy), ...genWords.slice(0, rotateBy)];
+      }
+
+      newVideos.push({
+        id: `gen_${Date.now()}_${g}`,
+        name: `#${allVideos.length + g}`,
+        photos: genPhotos,
+        textOverlays: genTextOverlays,
+        words: genWords,
+        textStyle: { ...template.textStyle },
+        isTemplate: false
+      });
+    }
+
+    setAllVideos(prev => [...prev, ...newVideos]);
+    setIsGenerating(false);
+    toastSuccess(`Generated ${generateCount} variations`);
+  }, [allVideos, generateCount, keepTemplateText, toastSuccess, toastError]);
 
   // ── Library subscriptions ──
   useEffect(() => {
@@ -192,6 +379,18 @@ const PhotoMontageEditor = ({
     [library]
   );
 
+  // ── Multi-select for library picker ──
+  const {
+    selectedIds: selectedLibIds,
+    isDragSelecting: libDragSelecting,
+    rubberBand: libRubberBand,
+    gridRef: libGridRef,
+    gridMouseHandlers: libGridMouseHandlers,
+    toggleSelect: toggleLibSelect,
+    selectAll: selectAllLib,
+    clearSelection: clearLibSelection,
+  } = useMediaMultiSelect(libraryImages);
+
   const libraryAudio = useMemo(() =>
     library.filter(m => m.type === MEDIA_TYPES.AUDIO),
     [library]
@@ -199,14 +398,14 @@ const PhotoMontageEditor = ({
 
   // ── Computed: photo durations (beat-synced or fixed) ──
   const photoDurations = useMemo(() => {
-    if (beatSyncEnabled && beats.length > 1 && photos.length > 0) {
+    if (beatSyncEnabled && filteredBeats.length > 1 && photos.length > 0) {
       const durations = [];
-      const beatsPerPhoto = Math.max(1, Math.floor(beats.length / photos.length));
+      const beatsPerPhoto = Math.max(1, Math.floor(filteredBeats.length / photos.length));
       for (let i = 0; i < photos.length; i++) {
         const beatStart = i * beatsPerPhoto;
-        const beatEnd = Math.min((i + 1) * beatsPerPhoto, beats.length - 1);
-        if (beatStart < beats.length && beatEnd < beats.length) {
-          durations.push(beats[beatEnd] - beats[beatStart]);
+        const beatEnd = Math.min((i + 1) * beatsPerPhoto, filteredBeats.length - 1);
+        if (beatStart < filteredBeats.length && beatEnd < filteredBeats.length) {
+          durations.push(filteredBeats[beatEnd] - filteredBeats[beatStart]);
         } else {
           durations.push(speed);
         }
@@ -214,12 +413,51 @@ const PhotoMontageEditor = ({
       return durations;
     }
     return photos.map(p => p.customDuration || speed);
-  }, [photos, speed, beatSyncEnabled, beats]);
+  }, [photos, speed, beatSyncEnabled, filteredBeats]);
 
   const totalDuration = useMemo(() =>
     photoDurations.reduce((sum, d) => sum + d, 0),
     [photoDurations]
   );
+
+  // ── Save all variations ──
+  const handleSaveAllAndClose = useCallback(async () => {
+    if (isSavingAll) return;
+    setIsSavingAll(true);
+    let savedCount = 0;
+    try {
+      for (const video of allVideos) {
+        const videoData = {
+          id: video.isTemplate ? existingVideo?.id : undefined,
+          editorMode: 'photo-montage',
+          name: video.isTemplate ? name : `${name} ${video.name}`,
+          clips: [],
+          montagePhotos: (video.photos || []).map(p => ({ id: p.id, sourceImageId: p.id, url: p.url, thumbnailUrl: p.thumbnailUrl || null, name: p.name })),
+          montageSpeed: speed,
+          montageTransition: transition,
+          montageKenBurns: kenBurnsEnabled,
+          montageBeatSync: beatSyncEnabled,
+          audio: selectedAudio,
+          cropMode: aspectRatio,
+          duration: totalDuration,
+          textOverlays: video.textOverlays || [],
+          textStyle: video.textStyle || {},
+          words: video.words || [],
+          status: 'draft',
+          createdAt: existingVideo?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        onSave(videoData);
+        savedCount++;
+      }
+      toastSuccess(`Saved ${savedCount} montage${savedCount > 1 ? 's' : ''}`);
+      onClose();
+    } catch (err) {
+      toastError(`Error saving: ${err.message}`);
+    } finally {
+      setIsSavingAll(false);
+    }
+  }, [allVideos, isSavingAll, existingVideo, name, speed, transition, kenBurnsEnabled, beatSyncEnabled, selectedAudio, aspectRatio, totalDuration, onSave, onClose, toastSuccess, toastError]);
 
   // ── Beat sync: analyze audio when toggled on ──
   useEffect(() => {
@@ -510,6 +748,37 @@ const PhotoMontageEditor = ({
     }
   }, []);
 
+  // ── Save Draft ──
+  const handleSaveDraft = useCallback(() => {
+    if (photos.length === 0) {
+      toastError('No photos to save.');
+      return;
+    }
+    const videoData = {
+      id: existingVideo?.id || `montage_${Date.now()}`,
+      editorMode: 'photo-montage',
+      name,
+      clips: [],
+      montagePhotos: photos.map(p => ({ id: p.id, sourceImageId: p.id, url: p.url, thumbnailUrl: p.thumbnailUrl || null, name: p.name })),
+      montageSpeed: speed,
+      montageTransition: transition,
+      montageKenBurns: kenBurnsEnabled,
+      montageBeatSync: beatSyncEnabled,
+      audio: selectedAudio,
+      cropMode: aspectRatio,
+      duration: totalDuration,
+      textOverlays,
+      textStyle,
+      words,
+      status: 'draft',
+      createdAt: existingVideo?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    onSave(videoData);
+    setLastSaved(new Date());
+    toastSuccess(`Saved "${name}"`);
+  }, [photos, name, speed, transition, kenBurnsEnabled, beatSyncEnabled, selectedAudio, aspectRatio, totalDuration, textOverlays, textStyle, words, existingVideo, onSave, toastSuccess, toastError]);
+
   // ── Audio handling ──
   const handleAudioUpload = useCallback((e) => {
     const file = e.target.files?.[0];
@@ -674,13 +943,14 @@ const PhotoMontageEditor = ({
 
   // ── Close with confirmation (fixes back button bug) ──
   const handleCloseRequest = useCallback(() => {
-    const hasWork = photos.length > 0 || textOverlays.length > 0 || selectedAudio;
+    const hasWork = photos.length > 0 || textOverlays.length > 0 || selectedAudio || allVideos.length > 1;
     if (hasWork) {
       setShowCloseConfirm(true);
     } else {
+      clearSession();
       onClose();
     }
-  }, [photos.length, textOverlays.length, selectedAudio, onClose]);
+  }, [photos.length, textOverlays.length, selectedAudio, allVideos.length, onClose, clearSession]);
 
   // ── Keyboard shortcuts ──
   useEffect(() => {
@@ -803,54 +1073,35 @@ const PhotoMontageEditor = ({
 
   // ── Render ──
   return (
-    <div style={styles.overlay} onClick={(e) => e.target === e.currentTarget && handleCloseRequest()}>
-      <div style={styles.container}>
-        {/* Top Bar */}
-        <div style={styles.topBar}>
-          <IconButton icon={<FeatherArrowLeft />} onClick={handleCloseRequest} />
+    <EditorShell onBackdropClick={handleCloseRequest} isMobile={isMobile}>
+        <EditorTopBar
+          title={name}
+          onTitleChange={setName}
+          placeholder="Untitled Photo Montage"
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onSave={handleSaveDraft}
+          onExport={handleExport}
+          onBack={handleCloseRequest}
+          isMobile={isMobile}
+          exportDisabled={isExporting || photos.length === 0}
+          exportLoading={isExporting}
+          exportLabel={isExporting ? `Exporting ${exportProgress}%` : 'Export'}
+        />
 
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            style={styles.nameInput}
-            placeholder="Montage name"
-          />
+        {/* ═══ MAIN CONTENT ═══ */}
+        <div className={`flex grow shrink-0 basis-0 self-stretch overflow-hidden ${isMobile ? 'flex-col overflow-auto' : ''}`}>
 
-          <div style={styles.aspectGroup}>
-            {['9:16', '1:1', '4:5'].map(ratio => (
-              <button
-                key={ratio}
-                onClick={() => setAspectRatio(ratio)}
-                style={aspectRatio === ratio ? styles.aspectActive : styles.aspectButton}
-              >
-                {ratio}
-              </button>
-            ))}
-          </div>
-
-          <Button
-            variant="brand-primary"
-            size="small"
-            onClick={handleExport}
-            disabled={isExporting || photos.length === 0}
-            loading={isExporting}
-          >
-            {isExporting ? `Exporting ${exportProgress}%` : 'Export'}
-          </Button>
-        </div>
-
-        {/* Body */}
-        <div style={styles.body}>
-          {/* Left Panel — Photo List */}
-          <div style={styles.leftPanel}>
-            <div style={styles.panelHeader}>
-              <span style={styles.panelTitle}>Photos ({photos.length})</span>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <label style={styles.uploadButton}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-                  </svg>
+          {/* ── LEFT PANEL — Photo List ── */}
+          {!isMobile && (
+          <div className="flex w-72 flex-none flex-col border-r border-neutral-800 bg-[#1a1a1aff] overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2.5 border-b border-neutral-800">
+              <span className="text-[13px] font-semibold text-white">Photos ({photos.length})</span>
+              <div className="flex gap-1">
+                <label className="flex items-center justify-center w-7 h-7 rounded-md bg-neutral-800 border border-neutral-700 text-neutral-400 cursor-pointer hover:text-white">
+                  <FeatherUpload className="w-3.5 h-3.5" />
                   <input
                     type="file"
                     accept="image/*"
@@ -859,41 +1110,100 @@ const PhotoMontageEditor = ({
                     style={{ display: 'none' }}
                   />
                 </label>
+                <CloudImportButton
+                  artistId={artistId}
+                  db={db}
+                  mediaType="image"
+                  compact
+                  onImportMedia={(files) => {
+                    const realFiles = files.map(f => f.file).filter(Boolean);
+                    if (realFiles.length > 0) addPhotosFromFiles(realFiles);
+                  }}
+                />
                 {libraryImages.length > 0 && (
-                  <IconButton size="small" icon={<FeatherGrid />} onClick={() => setShowLibraryPicker(!showLibraryPicker)} />
+                  <IconButton size="small" icon={<FeatherGrid />} aria-label="Browse library" onClick={() => setShowLibraryPicker(!showLibraryPicker)} />
                 )}
               </div>
             </div>
 
             {/* Library picker dropdown */}
             {showLibraryPicker && (
-              <div style={styles.libraryPicker}>
-                <div style={{ fontSize: '11px', fontWeight: 600, color: theme.text.secondary, marginBottom: '8px' }}>
-                  Select from library ({libraryImages.length})
+              <div className="p-2 border-b border-neutral-800 bg-[#171717]">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-neutral-400">
+                      Library ({libraryImages.length})
+                    </span>
+                    {libraryImages.length > 0 && (
+                      <button className="text-[11px] text-indigo-400 hover:text-indigo-300" onClick={selectAllLib}>
+                        {selectedLibIds.size === libraryImages.length ? 'Deselect All' : 'Select All'}
+                      </button>
+                    )}
+                  </div>
+                  {selectedLibIds.size > 0 && (
+                    <span className="text-[11px] text-neutral-500">{selectedLibIds.size} selected</span>
+                  )}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px', maxHeight: '200px', overflowY: 'auto' }}>
-                  {libraryImages.map(img => (
-                    <div
-                      key={img.id}
-                      onClick={() => addPhotosFromLibrary([img])}
-                      style={styles.libraryThumb}
-                    >
-                      <img src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }} />
-                    </div>
-                  ))}
+                {selectedLibIds.size > 0 && (
+                  <Button variant="brand-secondary" size="small" className="w-full mb-1.5" onClick={() => {
+                    const selected = libraryImages.filter(img => selectedLibIds.has(img.id));
+                    addPhotosFromLibrary(selected);
+                    clearLibSelection();
+                    toastSuccess(`Added ${selected.length} photo${selected.length !== 1 ? 's' : ''} to montage`);
+                  }}>
+                    Add {selectedLibIds.size} Photo{selectedLibIds.size !== 1 ? 's' : ''}
+                  </Button>
+                )}
+                <div
+                  className="relative max-h-[200px] overflow-y-auto"
+                  ref={libGridRef}
+                  {...libGridMouseHandlers}
+                  style={{ userSelect: libDragSelecting ? 'none' : undefined }}
+                >
+                  {libRubberBand && (
+                    <div className="absolute pointer-events-none border border-indigo-400 bg-indigo-500/20 z-10 rounded-sm"
+                      style={{ left: libRubberBand.left, top: libRubberBand.top, width: libRubberBand.width, height: libRubberBand.height }} />
+                  )}
+                  <div className="grid grid-cols-3 gap-1">
+                    {libraryImages.map(img => {
+                      const isSelected = selectedLibIds.has(img.id);
+                      return (
+                        <div key={img.id}
+                          data-media-id={img.id}
+                          className={`relative aspect-square cursor-pointer rounded overflow-hidden border-2 transition-colors ${
+                            isSelected ? 'border-indigo-500' : 'border-neutral-700 hover:border-brand-500'
+                          }`}
+                          onClick={(e) => {
+                            if (libDragSelecting) return;
+                            if (e.shiftKey || selectedLibIds.size > 0) {
+                              toggleLibSelect(img.id, e);
+                            } else {
+                              addPhotosFromLibrary([img]);
+                            }
+                          }}>
+                          <img src={img.thumbnailUrl || img.url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                          {isSelected && (
+                            <div className="absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-indigo-500 flex items-center justify-center">
+                              <FeatherCheck className="text-white" style={{ width: 10, height: 10 }} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                <Button variant="neutral-secondary" size="small" onClick={() => setShowLibraryPicker(false)} className="mt-1.5 w-full">Done</Button>
+                <Button variant="neutral-secondary" size="small" onClick={() => { setShowLibraryPicker(false); clearLibSelection(); }} className="mt-1.5 w-full">Done</Button>
               </div>
             )}
 
             {/* Photo list */}
-            <div style={styles.photoList}>
+            <div className="flex-1 overflow-y-auto p-2">
               {photos.length === 0 ? (
-                <div style={styles.emptyPhotos}>
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={theme.text.muted} strokeWidth="1.5">
+                <div className="flex flex-col items-center justify-center py-10 gap-2">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.5">
                     <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
                   </svg>
-                  <span style={{ fontSize: '12px', color: theme.text.muted }}>Upload or import photos</span>
+                  <span className="text-[12px] text-neutral-500">Upload or import photos</span>
                 </div>
               ) : (
                 photos.map((photo, index) => (
@@ -904,43 +1214,47 @@ const PhotoMontageEditor = ({
                     onDragOver={(e) => handleDragOver(e, index)}
                     onDrop={() => handleDrop(index)}
                     onDragEnd={() => { setDragIndex(null); setDragOverIndex(null); }}
+                    className="flex items-center gap-2 p-1.5 rounded-md mb-1 border cursor-grab transition-colors"
                     style={{
-                      ...styles.photoItem,
                       opacity: dragIndex === index ? 0.5 : 1,
-                      borderColor: dragOverIndex === index ? theme.accent.primary : theme.border.subtle,
+                      borderColor: dragOverIndex === index ? theme.accent.primary : 'rgb(38,38,38)',
                       backgroundColor: currentPhotoIndex === index && isPlaying ? `${theme.accent.primary}15` : 'transparent'
                     }}
                   >
-                    <div style={styles.photoThumb}>
-                      <img src={photo.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }} />
+                    <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0">
+                      <img src={photo.thumbnailUrl || photo.url} alt="" className="w-full h-full object-cover" loading="lazy" />
                     </div>
-                    <div style={styles.photoInfo}>
-                      <div style={styles.photoName}>{photo.name || `Photo ${index + 1}`}</div>
-                      <div style={styles.photoDuration}>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12px] font-medium text-white truncate">{photo.name || `Photo ${index + 1}`}</div>
+                      <div className="text-[10px] text-neutral-500">
                         {beatSyncEnabled ? `${photoDurations[index]?.toFixed(2)}s (beat)` : `${photoDurations[index]?.toFixed(1)}s`}
                       </div>
                     </div>
-                    <button onClick={() => removePhoto(index)} style={styles.removeButton} title="Remove">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                      </svg>
-                    </button>
+                    <IconButton size="small" variant="destructive-tertiary" icon={<FeatherTrash2 className="w-3 h-3" />} onClick={() => removePhoto(index)} aria-label="Remove" />
                   </div>
                 ))
               )}
             </div>
           </div>
+          )}
 
-          {/* Center — Preview */}
-          <div style={styles.centerPanel}>
-            <div style={styles.previewContainer}>
+          {/* ── CENTER COLUMN ── */}
+          <div className="flex grow shrink-0 basis-0 flex-col items-center bg-black overflow-hidden">
+            <div className="flex w-full max-w-[448px] grow flex-col items-center gap-4 py-6 px-4 overflow-auto">
+
+              {/* Photo Preview */}
               {photos.length > 0 ? (
-                <div ref={previewRef} style={styles.previewFrame} onClick={() => setEditingTextId(null)}>
+                <div
+                  ref={previewRef}
+                  className="flex items-center justify-center rounded-lg bg-[#1a1a1aff] border border-neutral-800 relative overflow-hidden"
+                  style={{ aspectRatio: '9/16', height: '50vh' }}
+                  onClick={() => setEditingTextId(null)}
+                >
                   <img
                     src={photos[currentPhotoIndex]?.url}
                     alt=""
                     style={{
-                      ...styles.previewImage,
+                      width: '100%', height: '100%', objectFit: 'cover', display: 'block',
                       ...getKenBurnsStyle(currentPhotoIndex, currentPhotoProgress),
                       transition: isPlaying ? 'none' : 'transform 0.3s ease'
                     }}
@@ -995,36 +1309,33 @@ const PhotoMontageEditor = ({
                   })}
 
                   {/* Photo counter */}
-                  <div style={styles.photoCounter}>
+                  <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/60 text-white text-[11px] font-semibold">
                     {currentPhotoIndex + 1} / {photos.length}
                   </div>
                 </div>
               ) : (
-                <div style={styles.previewEmpty}>
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={theme.text.muted} strokeWidth="1">
+                <div className="flex flex-col items-center justify-center rounded-lg bg-[#111118] border-2 border-dashed border-neutral-700" style={{ width: '300px', aspectRatio: '9/16' }}>
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1">
                     <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
                   </svg>
-                  <span style={{ color: theme.text.muted, fontSize: '14px', marginTop: '12px' }}>Add photos to preview</span>
+                  <span className="text-neutral-500 text-[14px] mt-3">Add photos to preview</span>
                 </div>
               )}
-            </div>
 
-            {/* Playback controls */}
-            <div style={styles.playbackControls}>
-              <button
-                onClick={isPlaying ? stopPlayback : startPlayback}
-                disabled={photos.length === 0}
-                style={styles.playButton}
-              >
-                {isPlaying ? (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-                ) : (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21"/></svg>
-                )}
-              </button>
+              {/* Playback controls */}
+              <div className="flex items-center gap-3 w-full max-w-[500px] flex-shrink-0">
+                <button
+                  onClick={isPlaying ? stopPlayback : startPlayback}
+                  disabled={photos.length === 0}
+                  className="flex items-center justify-center w-9 h-9 rounded-full bg-brand-600 border-none text-white cursor-pointer flex-shrink-0 disabled:opacity-50"
+                >
+                  {isPlaying ? (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                  ) : (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21"/></svg>
+                  )}
+                </button>
 
-              {/* Scrubber */}
-              <div style={styles.scrubberContainer}>
                 <input
                   type="range"
                   min={0}
@@ -1035,298 +1346,377 @@ const PhotoMontageEditor = ({
                     stopPlayback();
                     setCurrentTime(parseFloat(e.target.value));
                   }}
-                  style={styles.scrubber}
+                  className="flex-1 accent-brand-600"
                 />
-              </div>
 
-              <span style={styles.timeDisplay}>
-                {currentTime.toFixed(1)}s / {totalDuration.toFixed(1)}s
-              </span>
-              {!isMobile && (
-                <IconButton size="small" icon={<FeatherMaximize2 />} onClick={() => previewRef.current?.requestFullscreen()} />
-              )}
-            </div>
-
-            {/* Photo filmstrip timeline */}
-            {photos.length > 0 && (
-              <div style={styles.filmstrip}>
-                {photos.map((photo, i) => {
-                  const widthPct = totalDuration > 0 ? (photoDurations[i] / totalDuration) * 100 : (100 / photos.length);
-                  return (
-                    <div
-                      key={photo.id}
-                      style={{
-                        ...styles.filmstripItem,
-                        width: `${widthPct}%`,
-                        borderColor: currentPhotoIndex === i ? theme.accent.primary : 'transparent'
-                      }}
-                    >
-                      <img src={photo.url} alt="" style={styles.filmstripThumb} />
-                    </div>
-                  );
-                })}
-                {/* Playhead */}
-                <div style={{
-                  ...styles.filmstripPlayhead,
-                  left: totalDuration > 0 ? `${(currentTime / totalDuration) * 100}%` : '0%'
-                }} />
-              </div>
-            )}
-
-            {/* Text overlay timeline track */}
-            {textOverlays.length > 0 && (
-              <div ref={timelineRef} style={styles.textTimelineTrack}>
-                {textOverlays.map((overlay) => {
-                  const startPct = totalDuration > 0 ? (overlay.startTime / totalDuration) * 100 : 0;
-                  const widthPct = totalDuration > 0 ? ((overlay.endTime - overlay.startTime) / totalDuration) * 100 : 10;
-                  const isSelected = editingTextId === overlay.id;
-                  return (
-                    <div
-                      key={overlay.id}
-                      style={{
-                        position: 'absolute',
-                        left: `${startPct}%`,
-                        width: `${widthPct}%`,
-                        top: '2px',
-                        height: '20px',
-                        backgroundColor: isSelected ? '#9333ea' : theme.accent.primary,
-                        borderRadius: '3px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        padding: '0 3px',
-                        cursor: timelineDrag ? 'grabbing' : 'grab',
-                        overflow: 'hidden',
-                        border: isSelected ? '1px solid #a855f7' : '1px solid rgba(124,58,237,0.5)',
-                        zIndex: isSelected ? 10 : 5,
-                        transition: timelineDrag ? 'none' : 'background-color 0.15s'
-                      }}
-                      onMouseDown={(e) => handleTimelineDragStart(e, overlay.id, 'move')}
-                    >
-                      {/* Left resize handle */}
-                      <div
-                        style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '5px', cursor: 'col-resize', zIndex: 11 }}
-                        onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'left'); }}
-                      />
-                      <span style={{ fontSize: '9px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none', padding: '0 4px' }}>
-                        {overlay.text}
-                      </span>
-                      {/* Right resize handle */}
-                      <div
-                        style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '5px', cursor: 'col-resize', zIndex: 11 }}
-                        onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'right'); }}
-                      />
-                    </div>
-                  );
-                })}
-                {/* Playhead on text track */}
-                <div style={{
-                  ...styles.filmstripPlayhead,
-                  left: totalDuration > 0 ? `${(currentTime / totalDuration) * 100}%` : '0%'
-                }} />
-              </div>
-            )}
-
-            {/* Audio waveform track */}
-            {waveformData.length > 0 && selectedAudio && (
-              <div style={styles.audioTrack}>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={externalAudioVolume}
-                  onChange={(e) => setExternalAudioVolume(parseFloat(e.target.value))}
-                  title={`Volume: ${Math.round(externalAudioVolume * 100)}%`}
-                  style={{ width: '40px', accentColor: '#9333ea', flexShrink: 0 }}
-                />
-                <div style={styles.waveformContainer}>
-                  {waveformData.map((val, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        flex: 1,
-                        height: `${Math.max(2, val * 100)}%`,
-                        backgroundColor: (i / waveformData.length) <= (totalDuration > 0 ? currentTime / totalDuration : 0)
-                          ? '#9333ea' : 'rgba(147, 51, 234, 0.3)',
-                        borderRadius: '1px',
-                        minWidth: '1px'
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Selected overlay edit bar */}
-            {editingTextId && (() => {
-              const overlay = textOverlays.find(o => o.id === editingTextId);
-              if (!overlay) return null;
-              return (
-                <div style={styles.editBar}>
-                  <input
-                    type="text"
-                    value={editingTextValue}
-                    onChange={(e) => {
-                      setEditingTextValue(e.target.value);
-                      updateTextOverlay(editingTextId, { text: e.target.value });
-                    }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') setEditingTextId(null); }}
-                    style={styles.editBarInput}
-                    autoFocus
-                  />
-                  <button
-                    onClick={() => removeTextOverlay(editingTextId)}
-                    style={styles.editBarDelete}
-                    title="Delete overlay"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                    </svg>
-                  </button>
-                  <Button variant="brand-primary" size="small" onClick={() => setEditingTextId(null)}>Done</Button>
-                </div>
-              );
-            })()}
-
-            {/* Export progress bar */}
-            {isExporting && (
-              <div style={styles.exportProgressBar}>
-                <div style={{ ...styles.exportProgressFill, width: `${exportProgress}%` }} />
-              </div>
-            )}
-          </div>
-
-          {/* Right Panel — Settings */}
-          <div style={styles.rightPanel}>
-            {/* Speed */}
-            <div style={styles.settingsSection}>
-              <div style={styles.settingsLabel}>Speed (per photo)</div>
-              <div style={styles.toggleGroup}>
-                {SPEED_PRESETS.map(preset => (
-                  <button
-                    key={preset.value}
-                    onClick={() => setSpeed(preset.value)}
-                    style={speed === preset.value ? styles.toggleActive : styles.toggleButton}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-              <input
-                type="number"
-                min={0.1}
-                max={10}
-                step={0.1}
-                value={speed}
-                onChange={(e) => setSpeed(parseFloat(e.target.value) || 1)}
-                style={styles.numberInput}
-                placeholder="Custom (s)"
-              />
-            </div>
-
-            {/* Transition */}
-            <div style={styles.settingsSection}>
-              <div style={styles.settingsLabel}>Transition</div>
-              <div style={styles.toggleGroup}>
-                {['cut', 'crossfade'].map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setTransition(t)}
-                    style={transition === t ? styles.toggleActive : styles.toggleButton}
-                  >
-                    {t === 'cut' ? 'Cut' : 'Crossfade'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Ken Burns */}
-            <div style={styles.settingsSection}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={styles.settingsLabel}>Ken Burns</div>
-                <button
-                  onClick={() => setKenBurnsEnabled(!kenBurnsEnabled)}
-                  style={kenBurnsEnabled ? styles.toggleOnButton : styles.toggleOffButton}
-                >
-                  {kenBurnsEnabled ? 'ON' : 'OFF'}
-                </button>
-              </div>
-              <div style={{ fontSize: '11px', color: theme.text.muted, marginTop: '4px' }}>
-                Pan & zoom animation on each photo
-              </div>
-            </div>
-
-            {/* Audio display (when selected via toolbar) */}
-            <div style={styles.settingsSection}>
-              <div style={styles.settingsLabel}>Audio</div>
-              {selectedAudio ? (
-                <div style={styles.audioItem}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.accent.primary} strokeWidth="2">
-                    <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
-                  </svg>
-                  <span style={{ flex: 1, fontSize: '12px', color: theme.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {selectedAudio.name || 'Audio'}
-                  </span>
-                  <button onClick={handleRemoveAudio} style={styles.removeButton}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                  </button>
-                </div>
-              ) : (
-                <div style={{ fontSize: '11px', color: theme.text.muted }}>
-                  Use the Audio button in the toolbar below to add audio
-                </div>
-              )}
-            </div>
-
-            {/* Beat Sync */}
-            {selectedAudio && (
-              <div style={styles.settingsSection}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={styles.settingsLabel}>Beat Sync</div>
-                  <button
-                    onClick={() => setBeatSyncEnabled(!beatSyncEnabled)}
-                    disabled={beatAnalyzing}
-                    style={beatSyncEnabled ? styles.toggleOnButton : styles.toggleOffButton}
-                  >
-                    {beatAnalyzing ? '...' : beatSyncEnabled ? 'ON' : 'OFF'}
-                  </button>
-                </div>
-                {bpm && (
-                  <div style={{ fontSize: '11px', color: theme.accent.primary, marginTop: '4px' }}>
-                    {bpm} BPM detected
-                  </div>
+                <span className="text-[11px] text-neutral-500 tabular-nums whitespace-nowrap min-w-[80px] text-right">
+                  {currentTime.toFixed(1)}s / {totalDuration.toFixed(1)}s
+                </span>
+                {!isMobile && (
+                  <IconButton size="small" icon={<FeatherMaximize2 />} aria-label="Fullscreen" onClick={() => previewRef.current?.requestFullscreen()} />
                 )}
-                <div style={{ fontSize: '11px', color: theme.text.muted, marginTop: '2px' }}>
-                  Time photo cuts to the beat
+              </div>
+
+              {/* Variation Tabs */}
+              <div className="flex w-full overflow-auto gap-1">
+                {allVideos.map((video, idx) => (
+                  <div
+                    key={video.id}
+                    onClick={() => switchToVideo(idx)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium cursor-pointer whitespace-nowrap flex-shrink-0 transition-all ${idx === activeVideoIndex ? 'bg-brand-600/15 border border-brand-600/30 text-[#ffffffff]' : 'bg-neutral-800/50 border border-transparent text-neutral-400'}`}
+                  >
+                    {video.isTemplate ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" /></svg>
+                    ) : (
+                      <span style={{ fontSize: '10px', opacity: 0.6 }}>#{idx}</span>
+                    )}
+                    <span>{video.isTemplate ? 'Template' : video.name || `Montage ${idx}`}</span>
+                    {!video.isTemplate && (
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteVideo(idx); }} className="bg-transparent border-none text-neutral-500 text-[14px] cursor-pointer px-0.5 ml-0.5 leading-none">&times;</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Generation Controls */}
+              <div className="flex w-full items-center gap-2">
+                <ToggleGroup value={keepTemplateText} onValueChange={(v) => v && setKeepTemplateText(v)}>
+                  <ToggleGroup.Item value="none">Random</ToggleGroup.Item>
+                  <ToggleGroup.Item value="all">Keep Text</ToggleGroup.Item>
+                </ToggleGroup>
+                <input
+                  type="number" min={1} max={20} value={generateCount}
+                  onChange={(e) => setGenerateCount(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+                  className="w-12 px-2 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[13px] text-center outline-none"
+                />
+                <Button variant="brand-primary" size="small" onClick={executeGeneration} disabled={isGenerating || photos.length === 0}>
+                  {isGenerating ? 'Remixing...' : 'Remix'}
+                </Button>
+              </div>
+
+              {/* Photo filmstrip timeline */}
+              {photos.length > 0 && (
+                <div className="flex w-full max-w-[500px] h-8 rounded overflow-hidden relative bg-neutral-800 flex-shrink-0">
+                  {photos.map((photo, i) => {
+                    const widthPct = totalDuration > 0 ? (photoDurations[i] / totalDuration) * 100 : (100 / photos.length);
+                    return (
+                      <div
+                        key={photo.id}
+                        className="h-full overflow-hidden box-border"
+                        style={{
+                          width: `${widthPct}%`,
+                          borderBottom: `2px solid ${currentPhotoIndex === i ? theme.accent.primary : 'transparent'}`
+                        }}
+                      >
+                        <img src={photo.url} alt="" className="w-full h-full object-cover block" />
+                      </div>
+                    );
+                  })}
+                  {/* Playhead */}
+                  <div className="absolute top-0 bottom-0 w-0.5 bg-white z-[2] pointer-events-none" style={{
+                    left: totalDuration > 0 ? `${(currentTime / totalDuration) * 100}%` : '0%'
+                  }} />
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Lyrics */}
-            <div style={styles.settingsSection}>
-              <div style={styles.settingsLabel}>Lyrics</div>
-              <LyricBank
-                lyrics={category?.lyrics || lyricsBank || []}
-                onAddLyrics={onAddLyrics}
-                onUpdateLyrics={onUpdateLyrics}
-                onDeleteLyrics={onDeleteLyrics}
-                onSelectText={(selectedText) => addLyricsAsTimedOverlays(selectedText)}
-                compact={true}
-                showAddForm={true}
-              />
-            </div>
+              {/* Text overlay timeline track */}
+              {textOverlays.length > 0 && (
+                <div ref={timelineRef} className="relative w-full max-w-[500px] h-6 rounded bg-neutral-800 flex-shrink-0 overflow-visible">
+                  {textOverlays.map((overlay) => {
+                    const startPct = totalDuration > 0 ? (overlay.startTime / totalDuration) * 100 : 0;
+                    const widthPct = totalDuration > 0 ? ((overlay.endTime - overlay.startTime) / totalDuration) * 100 : 10;
+                    const isSelected = editingTextId === overlay.id;
+                    return (
+                      <div
+                        key={overlay.id}
+                        style={{
+                          position: 'absolute',
+                          left: `${startPct}%`,
+                          width: `${widthPct}%`,
+                          top: '2px',
+                          height: '20px',
+                          backgroundColor: isSelected ? '#9333ea' : theme.accent.primary,
+                          borderRadius: '3px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          padding: '0 3px',
+                          cursor: timelineDrag ? 'grabbing' : 'grab',
+                          overflow: 'hidden',
+                          border: isSelected ? '1px solid #a855f7' : '1px solid rgba(124,58,237,0.5)',
+                          zIndex: isSelected ? 10 : 5,
+                          transition: timelineDrag ? 'none' : 'background-color 0.15s'
+                        }}
+                        onMouseDown={(e) => handleTimelineDragStart(e, overlay.id, 'move')}
+                      >
+                        <div
+                          style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '5px', cursor: 'col-resize', zIndex: 11 }}
+                          onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'left'); }}
+                        />
+                        <span style={{ fontSize: '9px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none', padding: '0 4px' }}>
+                          {overlay.text}
+                        </span>
+                        <div
+                          style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '5px', cursor: 'col-resize', zIndex: 11 }}
+                          onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'right'); }}
+                        />
+                      </div>
+                    );
+                  })}
+                  {/* Playhead on text track */}
+                  <div className="absolute top-0 bottom-0 w-0.5 bg-white z-[2] pointer-events-none" style={{
+                    left: totalDuration > 0 ? `${(currentTime / totalDuration) * 100}%` : '0%'
+                  }} />
+                </div>
+              )}
 
-            {/* Summary */}
-            <div style={{ ...styles.settingsSection, borderTop: `1px solid ${theme.border.subtle}`, paddingTop: '12px', marginTop: '8px' }}>
-              <div style={{ fontSize: '11px', color: theme.text.muted }}>
-                {photos.length} photo{photos.length !== 1 ? 's' : ''} &middot; {totalDuration.toFixed(1)}s total
-                {bpm ? ` \u00b7 ${bpm} BPM` : ''}
-                {textOverlays.length > 0 ? ` \u00b7 ${textOverlays.length} texts` : ''}
-              </div>
+              {/* Audio waveform track */}
+              {waveformData.length > 0 && selectedAudio && (
+                <div className="flex items-center gap-2 w-full max-w-[500px] h-7 flex-shrink-0">
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={externalAudioVolume}
+                    onChange={(e) => setExternalAudioVolume(parseFloat(e.target.value))}
+                    title={`Volume: ${Math.round(externalAudioVolume * 100)}%`}
+                    className="w-10 accent-purple-500 flex-shrink-0"
+                  />
+                  <div className="flex-1 h-full flex items-end gap-px bg-neutral-800 rounded p-0.5 overflow-hidden">
+                    {waveformData.map((val, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          flex: 1,
+                          height: `${Math.max(2, val * 100)}%`,
+                          backgroundColor: (i / waveformData.length) <= (totalDuration > 0 ? currentTime / totalDuration : 0)
+                            ? '#9333ea' : 'rgba(147, 51, 234, 0.3)',
+                          borderRadius: '1px',
+                          minWidth: '1px'
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Selected overlay edit bar */}
+              {editingTextId && (() => {
+                const overlay = textOverlays.find(o => o.id === editingTextId);
+                if (!overlay) return null;
+                return (
+                  <div className="flex items-center gap-1.5 w-full max-w-[500px] p-1 rounded-md bg-[#171717] border border-neutral-800 flex-shrink-0">
+                    <input
+                      type="text"
+                      value={editingTextValue}
+                      onChange={(e) => {
+                        setEditingTextValue(e.target.value);
+                        updateTextOverlay(editingTextId, { text: e.target.value });
+                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') setEditingTextId(null); }}
+                      className="flex-1 py-1 px-2 text-[12px] bg-neutral-800 border border-neutral-700 rounded text-white outline-none"
+                      autoFocus
+                    />
+                    <IconButton size="small" variant="destructive-tertiary" icon={<FeatherTrash2 className="w-3 h-3" />} onClick={() => removeTextOverlay(editingTextId)} aria-label="Delete overlay" />
+                    <Button variant="brand-primary" size="small" onClick={() => setEditingTextId(null)}>Done</Button>
+                  </div>
+                );
+              })()}
+
+              {/* Export progress bar */}
+              {isExporting && (
+                <div className="w-full max-w-[500px] h-1 bg-neutral-800 rounded overflow-hidden flex-shrink-0">
+                  <div className="h-full bg-brand-600 rounded transition-[width] duration-200" style={{ width: `${exportProgress}%` }} />
+                </div>
+              )}
+
             </div>
           </div>
+
+          {/* ── RIGHT SIDEBAR ── */}
+          {!isMobile && (
+            <div className="flex w-96 flex-none flex-col border-l border-neutral-800 bg-[#1a1a1aff] overflow-auto">
+
+              {renderCollapsibleSection('audio', 'Audio', (
+                <div className="flex flex-col gap-3">
+                  {selectedAudio ? (
+                    <>
+                      <div className="flex items-center gap-2 p-2 rounded-lg bg-black/50">
+                        <FeatherMusic className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                        <span className="text-body font-body text-[#ffffffff] flex-1 truncate">{selectedAudio.name || 'Audio'}</span>
+                        {selectedAudio.isTrimmed && <Badge>Trimmed</Badge>}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="neutral-secondary" size="small" icon={<FeatherScissors />} onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}>Trim</Button>
+                        <Button variant="destructive-tertiary" size="small" icon={<FeatherTrash2 />} onClick={handleRemoveAudio}>Remove</Button>
+                      </div>
+                      {/* Volume control */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-caption font-caption text-neutral-400 w-16">Volume</span>
+                        <input type="range" min="0" max="1" step="0.05" value={externalAudioVolume}
+                          onChange={e => setExternalAudioVolume(parseFloat(e.target.value))}
+                          className="flex-1 h-1 accent-purple-500 cursor-pointer" />
+                        <span className="text-caption font-caption text-neutral-400 w-8">{Math.round(externalAudioVolume * 100)}%</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center text-neutral-500 text-caption font-caption py-4">No audio selected</div>
+                  )}
+                  <Button variant="neutral-secondary" size="small" icon={<FeatherUpload />} onClick={() => audioFileInputRef.current?.click()}>Upload Audio</Button>
+                  {libraryAudio.length > 0 && (
+                    <div className="flex flex-col gap-1 mt-1">
+                      <span className="text-caption font-caption text-neutral-500">Library Audio</span>
+                      {libraryAudio.map(audio => (
+                        <div key={audio.id} className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-neutral-800 transition-colors"
+                          onClick={() => { setAudioToTrim(audio); setShowAudioTrimmer(true); }}>
+                          <FeatherMusic className="w-3 h-3 text-neutral-500" />
+                          <span className="text-body font-body text-neutral-300 text-[12px] truncate flex-1">{audio.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {renderCollapsibleSection('photoSettings', 'Photo Settings', (
+                <div className="flex flex-col gap-4">
+                  {/* Speed */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-semibold text-white">Speed (per photo)</span>
+                    <ToggleGroup value={String(speed)} onValueChange={(val) => { if (val) setSpeed(parseFloat(val)); }}>
+                      {SPEED_PRESETS.map(preset => (
+                        <ToggleGroup.Item key={preset.value} value={String(preset.value)} icon={null}>{preset.label}</ToggleGroup.Item>
+                      ))}
+                    </ToggleGroup>
+                    <input
+                      type="number"
+                      min={0.1}
+                      max={10}
+                      step={0.1}
+                      value={speed}
+                      onChange={(e) => setSpeed(parseFloat(e.target.value) || 1)}
+                      placeholder="Custom (s)"
+                      className="w-full mt-1 py-1.5 px-2 text-[12px] bg-neutral-800 border border-neutral-700 rounded text-white outline-none"
+                    />
+                  </div>
+
+                  {/* Transition */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-semibold text-white">Transition</span>
+                    <ToggleGroup value={transition} onValueChange={(val) => { if (val) setTransition(val); }}>
+                      <ToggleGroup.Item value="cut" icon={null}>Cut</ToggleGroup.Item>
+                      <ToggleGroup.Item value="crossfade" icon={null}>Crossfade</ToggleGroup.Item>
+                    </ToggleGroup>
+                  </div>
+
+                  {/* Ken Burns */}
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[12px] font-semibold text-white">Ken Burns</span>
+                      <Button variant={kenBurnsEnabled ? 'brand-secondary' : 'neutral-secondary'} size="small" onClick={() => setKenBurnsEnabled(!kenBurnsEnabled)}>
+                        {kenBurnsEnabled ? 'ON' : 'OFF'}
+                      </Button>
+                    </div>
+                    <span className="text-[11px] text-neutral-500">Pan & zoom animation on each photo</span>
+                  </div>
+
+                  {/* Beat Sync */}
+                  {selectedAudio && (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[12px] font-semibold text-white">Beat Sync</span>
+                        <Button variant={beatSyncEnabled ? 'brand-secondary' : 'neutral-secondary'} size="small" onClick={() => setBeatSyncEnabled(!beatSyncEnabled)} disabled={beatAnalyzing}>
+                          {beatAnalyzing ? '...' : beatSyncEnabled ? 'ON' : 'OFF'}
+                        </Button>
+                      </div>
+                      {bpm && <Badge variant="neutral">{bpm} BPM</Badge>}
+                      <span className="text-[11px] text-neutral-500">Time photo cuts to the beat</span>
+                    </div>
+                  )}
+
+                  {/* Aspect Ratio */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-semibold text-white">Aspect Ratio</span>
+                    <ToggleGroup value={aspectRatio} onValueChange={(val) => { if (val) setAspectRatio(val); }}>
+                      <ToggleGroup.Item value="9:16" icon={null}>9:16</ToggleGroup.Item>
+                      <ToggleGroup.Item value="1:1" icon={null}>1:1</ToggleGroup.Item>
+                      <ToggleGroup.Item value="4:5" icon={null}>4:5</ToggleGroup.Item>
+                    </ToggleGroup>
+                  </div>
+                </div>
+              ))}
+
+              {renderCollapsibleSection('lyrics', 'Lyrics', (
+                <div className="flex flex-col gap-3">
+                  <LyricBank
+                    lyrics={category?.lyrics || lyricsBank || []}
+                    onAddLyrics={onAddLyrics}
+                    onUpdateLyrics={onUpdateLyrics}
+                    onDeleteLyrics={onDeleteLyrics}
+                    onSelectText={(selectedText) => addLyricsAsTimedOverlays(selectedText)}
+                    compact={true}
+                    showAddForm={true}
+                  />
+                  {selectedAudio && (
+                    <Button variant="neutral-secondary" size="small" icon={<FeatherMic />} onClick={() => setShowTranscriber(true)}>AI Transcribe</Button>
+                  )}
+                  {(words.length > 0 || selectedAudio) && (
+                    <Button variant="neutral-secondary" size="small" onClick={() => setShowWordTimeline(true)}>Word Timeline</Button>
+                  )}
+                </div>
+              ))}
+
+              {renderCollapsibleSection('textStyle', 'Text Style', (
+                <div className="flex flex-col gap-3">
+                  <Button variant="neutral-secondary" size="small" icon={<FeatherPlus />} onClick={() => addTextOverlay()}>Add Text</Button>
+                  {/* Niche Text Banks */}
+                  {nicheTextBanks && nicheTextBanks.some(b => b?.length > 0) && (
+                    <div className="flex flex-col gap-2 pt-2 border-t border-neutral-800">
+                      <span className="text-[12px] font-semibold text-neutral-300">Niche Banks</span>
+                      {nicheTextBanks.map((bank, bankIdx) => {
+                        if (!bank?.length) return null;
+                        const color = getBankColor(bankIdx);
+                        return (
+                          <div key={bankIdx}>
+                            <div className="text-[11px] font-semibold mb-1" style={{ color: color.primary }}>{getBankLabel(bankIdx)}</div>
+                            {bank.map((entry, entryIdx) => {
+                              const text = typeof entry === 'string' ? entry : entry?.text || '';
+                              if (!text) return null;
+                              return (
+                                <div key={entryIdx} className="flex items-center px-2 py-1 rounded-md mb-0.5 cursor-pointer hover:bg-neutral-800/50"
+                                  style={{ borderLeft: `2px solid ${color.primary}` }}
+                                  onClick={() => addTextOverlay(text)}>
+                                  <span className="text-[12px] text-neutral-300 truncate">{text}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {textOverlays.length > 0 && (
+                    <div className="flex flex-col gap-1.5">
+                      {textOverlays.map(overlay => (
+                        <div key={overlay.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${editingTextId === overlay.id ? 'bg-brand-600/20 border border-brand-600' : 'border border-neutral-800 hover:bg-neutral-800'}`}
+                          onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}>
+                          <span className="text-body font-body text-[#ffffffff] text-[12px] truncate flex-1">{overlay.text}</span>
+                          <IconButton size="small" variant="destructive-tertiary" icon={<FeatherTrash2 className="w-3 h-3" />} onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} aria-label="Remove" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Summary */}
+                  <div className="text-[11px] text-neutral-500 pt-2 border-t border-neutral-800">
+                    {photos.length} photo{photos.length !== 1 ? 's' : ''} · {totalDuration.toFixed(1)}s total
+                    {bpm ? ` · ${bpm} BPM` : ''}
+                    {textOverlays.length > 0 ? ` · ${textOverlays.length} texts` : ''}
+                  </div>
+                </div>
+              ))}
+
+            </div>
+          )}
         </div>
 
         {/* ── Preset Bar ── */}
@@ -1338,7 +1728,7 @@ const PhotoMontageEditor = ({
               const preset = presets.find(p => p.id === e.target.value);
               if (preset) handleApplyPreset(preset);
             }}
-            style={{ ...styles.presetSelect, padding: '4px 8px', fontSize: '11px', flex: '0 1 200px' }}
+            style={{ flex: '0 1 200px', padding: '4px 8px', fontSize: '11px', backgroundColor: theme.bg.surface, border: `1px solid ${theme.bg.elevated}`, borderRadius: '6px', color: theme.text.primary, outline: 'none' }}
           >
             <option value="">Choose a preset...</option>
             {presets.map(preset => (
@@ -1350,25 +1740,7 @@ const PhotoMontageEditor = ({
           )}
         </div>
 
-        {/* EditorToolbar */}
-        <EditorToolbar
-          canUndo={canUndo}
-          canRedo={canRedo}
-          onUndo={handleUndo}
-          onRedo={handleRedo}
-          onAddText={() => addTextOverlay()}
-          audioTracks={libraryAudio}
-          onSelectAudio={(audio) => {
-            setAudioToTrim(audio);
-            setShowAudioTrimmer(true);
-          }}
-          onUploadAudio={() => audioFileInputRef.current?.click()}
-          lyrics={lyricsBank}
-          onSelectLyric={(lyric) => addLyricsAsTimedOverlays(lyric.content || lyric.title || '')}
-          onAddNewLyrics={onAddLyrics ? () => onAddLyrics({ title: 'New Lyrics', content: '' }) : null}
-          onAITranscribe={selectedAudio ? () => setShowTranscriber(true) : null}
-          onWordTimeline={(words.length > 0 || selectedAudio) ? () => setShowWordTimeline(true) : null}
-        />
+        <EditorFooter lastSaved={lastSaved} onCancel={onClose} onSaveAll={allVideos.length > 1 ? handleSaveAllAndClose : handleSaveDraft} isSavingAll={isSavingAll} saveAllCount={allVideos.length} saveLabel="Save" />
 
         {/* Hidden audio file input */}
         <input
@@ -1439,8 +1811,8 @@ const PhotoMontageEditor = ({
 
         {/* ── Close Confirmation ── */}
         {showCloseConfirm && (
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-[100]">
-            <div className="rounded-xl p-5 max-w-[340px] w-full" style={{ backgroundColor: theme.bg.surface, border: `1px solid ${theme.border.subtle}` }}>
+          <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-[100]">
+            <div className="bg-[#171717] rounded-xl p-6 max-w-[360px] w-full border border-neutral-800">
               <h3 className="text-[16px] font-semibold mb-2" style={{ color: theme.text.primary }}>Close editor?</h3>
               <p className="text-[13px] mb-4" style={{ color: theme.text.secondary }}>
                 You have unsaved work. Are you sure you want to close?
@@ -1493,314 +1865,8 @@ const PhotoMontageEditor = ({
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </EditorShell>
   );
 };
-
-// ── Styles ──
-const getStyles = (theme, isMobile) => ({
-  overlay: {
-    position: 'fixed', inset: 0,
-    backgroundColor: theme.overlay.heavy,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    zIndex: 10000, padding: isMobile ? '0' : '20px'
-  },
-  container: {
-    backgroundColor: theme.bg.page,
-    borderRadius: isMobile ? 0 : '16px',
-    border: isMobile ? 'none' : `1px solid ${theme.border.subtle}`,
-    display: 'flex', flexDirection: 'column',
-    width: '100%', maxWidth: '1400px',
-    height: isMobile ? '100%' : '90vh',
-    overflow: 'hidden'
-  },
-  // Top bar
-  topBar: {
-    display: 'flex', alignItems: 'center', gap: '12px',
-    padding: '12px 16px', borderBottom: `1px solid ${theme.border.subtle}`,
-    flexShrink: 0
-  },
-  nameInput: {
-    flex: 1, background: 'none', border: `1px solid ${theme.border.subtle}`,
-    borderRadius: '6px', padding: '6px 10px', color: theme.text.primary,
-    fontSize: '14px', fontWeight: 500, outline: 'none'
-  },
-  aspectGroup: {
-    display: 'flex', gap: '2px', backgroundColor: theme.bg.input,
-    borderRadius: '6px', padding: '2px'
-  },
-  aspectButton: {
-    padding: '4px 10px', fontSize: '11px', fontWeight: 500,
-    background: 'none', border: 'none', color: theme.text.secondary,
-    cursor: 'pointer', borderRadius: '4px'
-  },
-  aspectActive: {
-    padding: '4px 10px', fontSize: '11px', fontWeight: 600,
-    backgroundColor: theme.accent.primary, border: 'none', color: '#fff',
-    cursor: 'pointer', borderRadius: '4px'
-  },
-  // Body
-  body: {
-    display: 'flex', flex: 1, minHeight: 0,
-    flexDirection: isMobile ? 'column' : 'row'
-  },
-  // Left panel
-  leftPanel: {
-    width: isMobile ? '100%' : '288px', flexShrink: 0,
-    borderRight: isMobile ? 'none' : `1px solid ${theme.border.subtle}`,
-    display: 'flex', flexDirection: 'column', overflow: 'hidden'
-  },
-  panelHeader: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '10px 12px', borderBottom: `1px solid ${theme.border.subtle}`
-  },
-  panelTitle: {
-    fontSize: '13px', fontWeight: 600, color: theme.text.primary
-  },
-  uploadButton: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    width: '28px', height: '28px', borderRadius: '6px',
-    backgroundColor: theme.bg.input, border: `1px solid ${theme.border.subtle}`,
-    color: theme.text.secondary, cursor: 'pointer'
-  },
-  photoList: {
-    flex: 1, overflowY: 'auto', padding: '8px'
-  },
-  emptyPhotos: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    justifyContent: 'center', padding: '40px 16px', gap: '8px'
-  },
-  photoItem: {
-    display: 'flex', alignItems: 'center', gap: '8px',
-    padding: '6px', borderRadius: '6px', marginBottom: '4px',
-    border: `1px solid ${theme.border.subtle}`, cursor: 'grab',
-    transition: 'border-color 0.15s'
-  },
-  photoThumb: {
-    width: '40px', height: '40px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0
-  },
-  photoInfo: {
-    flex: 1, minWidth: 0
-  },
-  photoName: {
-    fontSize: '12px', fontWeight: 500, color: theme.text.primary,
-    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-  },
-  photoDuration: {
-    fontSize: '10px', color: theme.text.muted
-  },
-  removeButton: {
-    background: 'none', border: 'none', color: theme.text.muted,
-    cursor: 'pointer', padding: '4px', borderRadius: '4px',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    minWidth: '24px', minHeight: '24px'
-  },
-  // Library picker
-  libraryPicker: {
-    padding: '8px', borderBottom: `1px solid ${theme.border.subtle}`,
-    backgroundColor: theme.bg.elevated
-  },
-  libraryThumb: {
-    aspectRatio: '1', cursor: 'pointer', borderRadius: '4px', overflow: 'hidden',
-    border: `1px solid ${theme.border.subtle}`
-  },
-  // Center panel
-  centerPanel: {
-    flex: 1, display: 'flex', flexDirection: 'column',
-    alignItems: 'center', justifyContent: 'center',
-    padding: '16px', minWidth: 0
-  },
-  previewContainer: {
-    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-    width: '100%', minHeight: 0
-  },
-  previewFrame: {
-    position: 'relative', overflow: 'hidden',
-    borderRadius: '8px', backgroundColor: '#000',
-    maxHeight: '100%', maxWidth: '100%',
-    aspectRatio: '9/16'
-  },
-  previewImage: {
-    width: '100%', height: '100%', objectFit: 'cover',
-    display: 'block'
-  },
-  photoCounter: {
-    position: 'absolute', bottom: '8px', right: '8px',
-    padding: '3px 8px', borderRadius: '4px',
-    backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff',
-    fontSize: '11px', fontWeight: 600
-  },
-  previewEmpty: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    justifyContent: 'center', width: '300px', aspectRatio: '9/16',
-    backgroundColor: theme.bg.input, borderRadius: '8px',
-    border: `2px dashed ${theme.border.subtle}`
-  },
-  // Playback controls
-  playbackControls: {
-    display: 'flex', alignItems: 'center', gap: '12px',
-    width: '100%', maxWidth: '500px', marginTop: '12px', flexShrink: 0
-  },
-  playButton: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    width: '36px', height: '36px', borderRadius: '50%',
-    backgroundColor: theme.accent.primary, border: 'none',
-    color: '#fff', cursor: 'pointer', flexShrink: 0
-  },
-  scrubberContainer: {
-    flex: 1
-  },
-  scrubber: {
-    width: '100%', accentColor: theme.accent.primary
-  },
-  timeDisplay: {
-    fontSize: '11px', color: theme.text.muted, fontVariantNumeric: 'tabular-nums',
-    whiteSpace: 'nowrap', minWidth: '80px', textAlign: 'right'
-  },
-  presetSelect: {
-    flex: 1,
-    padding: '8px 12px',
-    backgroundColor: theme.bg.surface,
-    border: `1px solid ${theme.bg.elevated}`,
-    borderRadius: '6px',
-    color: theme.text.primary,
-    fontSize: '13px',
-    outline: 'none'
-  },
-  audioTrack: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    width: '100%',
-    maxWidth: '500px',
-    height: '28px',
-    marginTop: '6px',
-    flexShrink: 0
-  },
-  waveformContainer: {
-    flex: 1,
-    height: '100%',
-    display: 'flex',
-    alignItems: 'flex-end',
-    gap: '1px',
-    backgroundColor: theme.bg.input,
-    borderRadius: '4px',
-    padding: '2px',
-    overflow: 'hidden'
-  },
-  // Filmstrip timeline
-  filmstrip: {
-    display: 'flex', width: '100%', maxWidth: '500px',
-    height: '32px', marginTop: '8px', borderRadius: '4px',
-    overflow: 'hidden', position: 'relative',
-    backgroundColor: theme.bg.input, flexShrink: 0
-  },
-  filmstripItem: {
-    height: '100%', overflow: 'hidden',
-    borderBottom: '2px solid transparent',
-    boxSizing: 'border-box'
-  },
-  filmstripThumb: {
-    width: '100%', height: '100%', objectFit: 'cover',
-    display: 'block'
-  },
-  filmstripPlayhead: {
-    position: 'absolute', top: 0, bottom: 0,
-    width: '2px', backgroundColor: '#fff',
-    zIndex: 2, pointerEvents: 'none'
-  },
-  // Text timeline track
-  textTimelineTrack: {
-    position: 'relative', width: '100%', maxWidth: '500px',
-    height: '24px', marginTop: '6px', borderRadius: '4px',
-    backgroundColor: theme.bg.input, flexShrink: 0,
-    overflow: 'visible'
-  },
-  // Edit bar
-  editBar: {
-    display: 'flex', alignItems: 'center', gap: '6px',
-    width: '100%', maxWidth: '500px', marginTop: '6px',
-    padding: '4px 6px', borderRadius: '6px',
-    backgroundColor: theme.bg.surface,
-    border: `1px solid ${theme.border.subtle}`, flexShrink: 0
-  },
-  editBarInput: {
-    flex: 1, padding: '4px 8px', fontSize: '12px',
-    backgroundColor: theme.bg.input, border: `1px solid ${theme.border.subtle}`,
-    borderRadius: '4px', color: theme.text.primary, outline: 'none'
-  },
-  editBarDelete: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    width: '28px', height: '28px', borderRadius: '4px',
-    backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
-    color: '#ef4444', cursor: 'pointer'
-  },
-  // Export progress
-  exportProgressBar: {
-    width: '100%', maxWidth: '500px', height: '4px',
-    backgroundColor: theme.bg.input, borderRadius: '2px',
-    marginTop: '8px', overflow: 'hidden', flexShrink: 0
-  },
-  exportProgressFill: {
-    height: '100%', backgroundColor: theme.accent.primary,
-    borderRadius: '2px', transition: 'width 0.2s'
-  },
-  // Right panel
-  rightPanel: {
-    width: isMobile ? '100%' : '256px', flexShrink: 0,
-    borderLeft: isMobile ? 'none' : `1px solid ${theme.border.subtle}`,
-    overflowY: 'auto', padding: '12px'
-  },
-  settingsSection: {
-    marginBottom: '16px'
-  },
-  settingsLabel: {
-    fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '6px'
-  },
-  toggleGroup: {
-    display: 'flex', gap: '2px', backgroundColor: theme.bg.input,
-    borderRadius: '6px', padding: '2px'
-  },
-  toggleButton: {
-    flex: 1, padding: '5px 8px', fontSize: '11px', fontWeight: 500,
-    background: 'none', border: 'none', color: theme.text.secondary,
-    cursor: 'pointer', borderRadius: '4px', textAlign: 'center'
-  },
-  toggleActive: {
-    flex: 1, padding: '5px 8px', fontSize: '11px', fontWeight: 600,
-    backgroundColor: theme.accent.primary, border: 'none', color: '#fff',
-    cursor: 'pointer', borderRadius: '4px', textAlign: 'center'
-  },
-  numberInput: {
-    width: '100%', marginTop: '6px', padding: '5px 8px',
-    fontSize: '12px', backgroundColor: theme.bg.input,
-    border: `1px solid ${theme.border.subtle}`, borderRadius: '4px',
-    color: theme.text.primary, outline: 'none'
-  },
-  toggleOnButton: {
-    padding: '3px 10px', fontSize: '11px', fontWeight: 600,
-    backgroundColor: `${theme.accent.primary}30`, border: `1px solid ${theme.accent.primary}`,
-    borderRadius: '4px', color: theme.accent.primary, cursor: 'pointer'
-  },
-  toggleOffButton: {
-    padding: '3px 10px', fontSize: '11px', fontWeight: 500,
-    backgroundColor: theme.bg.input, border: `1px solid ${theme.border.subtle}`,
-    borderRadius: '4px', color: theme.text.muted, cursor: 'pointer'
-  },
-  // Audio
-  audioItem: {
-    display: 'flex', alignItems: 'center', gap: '6px',
-    padding: '6px 8px', borderRadius: '6px',
-    backgroundColor: `${theme.accent.primary}10`,
-    border: `1px solid ${theme.accent.primary}30`
-  },
-  addAudioButton: {
-    display: 'flex', alignItems: 'center', gap: '6px',
-    padding: '8px 12px', borderRadius: '6px', width: '100%',
-    backgroundColor: theme.bg.input, border: `1px solid ${theme.border.subtle}`,
-    color: theme.text.secondary, cursor: 'pointer', fontSize: '12px', fontWeight: 500
-  },
-});
 
 export default PhotoMontageEditor;

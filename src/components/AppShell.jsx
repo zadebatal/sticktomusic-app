@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTheme } from '../contexts/ThemeContext';
-import ThemeSwitcher from './ThemeSwitcher';
+
 import useIsMobile from '../hooks/useIsMobile';
 import { Avatar } from '../ui/components/Avatar';
 import { Badge } from '../ui/components/Badge';
@@ -77,19 +77,19 @@ const AppShell = ({
     <div className="flex h-screen w-full items-start bg-black">
       {/* LEFT SIDEBAR — desktop only */}
       {!isMobile && (
-        <div className="flex w-64 flex-none flex-col items-start self-stretch border-r border-solid border-neutral-900 bg-black">
+        <div className="flex w-64 flex-none flex-col items-start self-stretch border-r border-solid border-[#333] bg-black">
           {/* Logo + Artist Selector */}
           <div className="flex w-full flex-col items-start gap-6 px-6 py-6">
             <span className="text-heading-2 font-heading-2 text-[#ffffffff]">StickToMusic</span>
 
-            {/* Artist selector dropdown */}
-            {visibleArtists.length > 0 && (
+            {/* Artist selector — dropdown for multiple, static for single */}
+            {visibleArtists.length > 1 ? (
               <div className="flex w-full flex-col items-start gap-2">
                 <span className="text-caption font-caption text-neutral-500 uppercase tracking-wider">Artist</span>
                 <SubframeCore.DropdownMenu.Root>
                   <SubframeCore.DropdownMenu.Trigger asChild>
-                    <div className="flex w-full items-center gap-3 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2.5 cursor-pointer hover:bg-neutral-900">
-                      <Avatar size="small" className="bg-brand-600 flex-none">
+                    <div className="flex w-full items-center gap-3 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2.5 cursor-pointer hover:bg-[#262626]">
+                      <Avatar size="small" image={user?.photoURL || undefined} className="bg-brand-600 flex-none">
                         {(currentArtist?.name || '?')[0].toUpperCase()}
                       </Avatar>
                       <span className="text-body-bold font-body-bold text-[#ffffffff] truncate grow">
@@ -115,7 +115,19 @@ const AppShell = ({
                   </SubframeCore.DropdownMenu.Portal>
                 </SubframeCore.DropdownMenu.Root>
               </div>
-            )}
+            ) : visibleArtists.length === 1 ? (
+              <div className="flex w-full flex-col items-start gap-2">
+                <span className="text-caption font-caption text-neutral-500 uppercase tracking-wider">Artist</span>
+                <div className="flex w-full items-center gap-3 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2.5">
+                  <Avatar size="small" image={user?.photoURL || undefined} className="bg-brand-600 flex-none">
+                    {(currentArtist?.name || '?')[0].toUpperCase()}
+                  </Avatar>
+                  <span className="text-body-bold font-body-bold text-[#ffffffff] truncate grow">
+                    {currentArtist?.name || 'Artist'}
+                  </span>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {/* Nav Items */}
@@ -141,7 +153,7 @@ const AppShell = ({
           </div>
 
           {/* User Footer */}
-          <div className="flex w-full flex-col items-start border-t border-solid border-neutral-900 px-6 py-4">
+          <div className="flex w-full flex-col items-start border-t border-solid border-[#333] px-6 py-4">
             <SubframeCore.DropdownMenu.Root>
               <SubframeCore.DropdownMenu.Trigger asChild>
                 <div className="flex w-full items-center gap-3 cursor-pointer">
@@ -237,8 +249,6 @@ const AppShell = ({
         </nav>
       )}
 
-      {/* THEME SWITCHER */}
-      <ThemeSwitcher />
     </div>
   );
 };

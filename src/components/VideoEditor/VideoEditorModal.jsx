@@ -31,9 +31,12 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
-import { TextField } from '../../ui/components/TextField';
 import { Badge } from '../../ui/components/Badge';
-import { FeatherArrowLeft, FeatherX, FeatherPlay, FeatherPause, FeatherVolume2, FeatherVolumeX, FeatherMaximize2, FeatherPlus, FeatherTrash2, FeatherScissors, FeatherRefreshCw, FeatherChevronDown, FeatherChevronUp, FeatherZoomIn, FeatherZoomOut, FeatherStar, FeatherSave, FeatherDownload, FeatherRotateCcw, FeatherRotateCw, FeatherMusic, FeatherUpload, FeatherDatabase, FeatherMic } from '@subframe/core';
+import { FeatherX, FeatherPlay, FeatherPause, FeatherVolume2, FeatherVolumeX, FeatherMaximize2, FeatherPlus, FeatherTrash2, FeatherScissors, FeatherRefreshCw, FeatherChevronUp, FeatherZoomIn, FeatherZoomOut, FeatherStar, FeatherMusic, FeatherUpload, FeatherDatabase, FeatherMic } from '@subframe/core';
+import EditorShell from './shared/EditorShell';
+import EditorTopBar from './shared/EditorTopBar';
+import EditorFooter from './shared/EditorFooter';
+import useCollapsibleSections from './shared/useCollapsibleSections';
 
 // Default text style used for template initialization and recovery fallback
 const DEFAULT_TEXT_STYLE = {
@@ -379,28 +382,9 @@ const VideoEditorModal = ({
 
   // ── Right Sidebar: collapsible sections ──
   const [videoName, setVideoName] = useState(existingVideo?.name || 'Untitled Video');
-  const [openSections, setOpenSections] = useState({
+  const { renderCollapsibleSection } = useCollapsibleSections({
     audio: true, clips: true, lyrics: false, textStyle: false
   });
-  const toggleSection = useCallback((key) => {
-    setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
-  }, []);
-  const renderCollapsibleSection = (key, title, content) => (
-    <div className="w-full border-t border-neutral-800">
-      <button
-        onClick={() => toggleSection(key)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-transparent border-none text-white text-heading-3 font-heading-3 cursor-pointer"
-      >
-        <span>{title}</span>
-        <FeatherChevronDown className={`w-4 h-4 text-neutral-500 flex-shrink-0 transition-transform duration-150 ${openSections[key] ? 'rotate-180' : ''}`} />
-      </button>
-      {openSections[key] && (
-        <div className="px-4 pb-4">
-          {content}
-        </div>
-      )}
-    </div>
-  );
 
   // Beat detection
   const { beats, bpm, isAnalyzing, analyzeAudio } = useBeatDetection();
@@ -2095,6 +2079,7 @@ const VideoEditorModal = ({
         onDeleteLyrics={onDeleteLyrics}
         presets={presets}
         onSavePreset={onSavePreset}
+        nicheTextBanks={category?.nicheTextBanks || null}
       />
     );
   }
@@ -2115,6 +2100,7 @@ const VideoEditorModal = ({
         onDeleteLyrics={onDeleteLyrics}
         presets={presets}
         onSavePreset={onSavePreset}
+        nicheTextBanks={category?.nicheTextBanks || null}
       />
     );
   }
@@ -2135,74 +2121,27 @@ const VideoEditorModal = ({
         onDeleteLyrics={onDeleteLyrics}
         presets={presets}
         onSavePreset={onSavePreset}
+        nicheTextBanks={category?.nicheTextBanks || null}
       />
     );
   }
 
   // ── Montage mode (existing editor) ──
   return (
-    <div
-      className={`fixed inset-0 bg-black/80 flex items-center justify-center z-[1000] ${isMobile ? 'p-0' : 'p-5'}`}
-      onClick={(e) => e.target === e.currentTarget && handleCloseRequest()}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="video-editor-title"
-    >
-      <div className="w-full h-screen bg-black flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        {/* ═══ TOP BAR ═══ */}
-        <div className="flex w-full items-center justify-between border-b border-neutral-800 bg-black px-6 py-4">
-          <div className="flex items-center gap-4">
-            <IconButton
-              variant="neutral-tertiary"
-              size="medium"
-              icon={<FeatherArrowLeft />}
-              onClick={handleCloseRequest}
-            />
-            {!isMobile && (
-              <TextField className="w-80" variant="filled" label="" helpText="">
-                <TextField.Input
-                  placeholder="Untitled Video"
-                  value={videoName}
-                  onChange={(e) => setVideoName(e.target.value)}
-                />
-              </TextField>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            <IconButton
-              variant="neutral-tertiary"
-              size="medium"
-              icon={<FeatherRotateCcw />}
-              disabled={!canUndo}
-              onClick={handleUndo}
-              title="Undo (⌘Z)"
-            />
-            <IconButton
-              variant="neutral-tertiary"
-              size="medium"
-              icon={<FeatherRotateCw />}
-              disabled={!canRedo}
-              onClick={handleRedo}
-              title="Redo (⌘⇧Z)"
-            />
-            <Button
-              variant="neutral-secondary"
-              size="medium"
-              icon={<FeatherSave />}
-              onClick={handleSave}
-            >
-              Save
-            </Button>
-            <Button
-              variant="brand-primary"
-              size="medium"
-              icon={<FeatherDownload />}
-              onClick={handleSave}
-            >
-              Export
-            </Button>
-          </div>
-        </div>
+    <EditorShell onBackdropClick={handleCloseRequest} isMobile={isMobile}>
+        <EditorTopBar
+          title={videoName}
+          onTitleChange={setVideoName}
+          placeholder="Untitled Video"
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onSave={handleSave}
+          onExport={handleSave}
+          onBack={handleCloseRequest}
+          isMobile={isMobile}
+        />
 
         {/* ═══ MAIN CONTENT ═══ */}
         <div className="flex grow shrink-0 basis-0 self-stretch overflow-hidden">
@@ -2965,7 +2904,7 @@ const VideoEditorModal = ({
                     </div>
                     {/* Lyric Bank Dropdown */}
                     {showLyricBankPicker && (category?.lyrics?.length || 0) > 0 && (
-                      <div className="bg-neutral-900 border border-neutral-700 rounded-lg max-h-[200px] overflow-y-auto shadow-lg">
+                      <div className="bg-[#171717] border border-neutral-700 rounded-lg max-h-[200px] overflow-y-auto shadow-lg">
                         {category.lyrics.map(lyric => (
                           <div key={lyric.id} className="w-full px-3 py-2.5 border-b border-neutral-800 text-[#ffffffff] text-left cursor-pointer text-[13px] hover:bg-neutral-800"
                             onClick={() => {
@@ -3123,20 +3062,7 @@ const VideoEditorModal = ({
           onChange={handleAudioUpload}
         />
 
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-3 border-t border-neutral-800">
-          <div className="flex items-center gap-3">
-            {lastSaved && (
-              <span className="text-[11px] text-green-400 flex items-center gap-1">
-                ✓ Auto-saved {lastSaved.toLocaleTimeString()}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            <Button variant="neutral-secondary" size="medium" onClick={onClose}>Cancel</Button>
-            <Button variant="brand-primary" size="medium" onClick={handleSaveAllAndClose} disabled={isSavingAll}>{isSavingAll ? 'Saving...' : `Save All (${allVideos.length})`}</Button>
-          </div>
-        </div>
+        <EditorFooter lastSaved={lastSaved} onCancel={onClose} onSaveAll={handleSaveAllAndClose} isSavingAll={isSavingAll} saveAllCount={allVideos.length} />
 
         {/* Lyrics Editor Modal */}
         {showLyricsEditor && (
@@ -3397,8 +3323,7 @@ const VideoEditorModal = ({
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </EditorShell>
   );
 };
 

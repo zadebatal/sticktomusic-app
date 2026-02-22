@@ -2,23 +2,32 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   subscribeToLibrary, subscribeToCollections, getCollections, getLibrary, getLyrics,
   addToVideoTextBank, removeFromVideoTextBank, updateVideoTextBank,
-  addToLibraryAsync, incrementUseCount, MEDIA_TYPES
+  addToLibraryAsync, incrementUseCount, MEDIA_TYPES,
+  getBankColor, getBankLabel
 } from '../../services/libraryService';
 import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
-import { FeatherArrowLeft, FeatherX, FeatherPlay, FeatherPause, FeatherVolume2, FeatherVolumeX, FeatherPlus, FeatherTrash2, FeatherChevronUp, FeatherChevronDown, FeatherSave, FeatherDownload, FeatherRotateCcw, FeatherRotateCw, FeatherRefreshCw, FeatherMusic, FeatherUpload, FeatherDatabase, FeatherMic, FeatherScissors, FeatherSkipBack, FeatherSkipForward, FeatherStar } from '@subframe/core';
-import { TextField } from '../../ui/components/TextField';
+import { FeatherX, FeatherPlay, FeatherPause, FeatherVolume2, FeatherVolumeX, FeatherPlus, FeatherTrash2, FeatherChevronUp, FeatherChevronDown, FeatherRefreshCw, FeatherMusic, FeatherUpload, FeatherDatabase, FeatherMic, FeatherScissors, FeatherSkipBack, FeatherSkipForward, FeatherStar, FeatherCheck } from '@subframe/core';
 import { Badge } from '../../ui/components/Badge';
+import { useBeatDetection } from '../../hooks/useBeatDetection';
+import { normalizeBeatsToTrimRange } from '../../utils/timelineNormalization';
+import EditorShell from './shared/EditorShell';
+import EditorTopBar from './shared/EditorTopBar';
+import EditorFooter from './shared/EditorFooter';
+import useCollapsibleSections from './shared/useCollapsibleSections';
 import useIsMobile from '../../hooks/useIsMobile';
 import AudioClipSelector from './AudioClipSelector';
+import BeatSelector from './BeatSelector';
 import CloudImportButton from './CloudImportButton';
 import LyricBank from './LyricBank';
 import LyricAnalyzer from './LyricAnalyzer';
 import useEditorHistory from '../../hooks/useEditorHistory';
 import useWaveform from '../../hooks/useWaveform';
+import useMediaMultiSelect from './shared/useMediaMultiSelect';
+import useEditorSessionState from './shared/useEditorSessionState';
 
 /**
  * MultiClipEditor v1 — "Multi-Clip" video editor mode
@@ -51,7 +60,8 @@ const MultiClipEditor = ({
   onUpdateLyrics,
   onDeleteLyrics,
   presets = [],
-  onSavePreset
+  onSavePreset,
+  nicheTextBanks = null
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
@@ -65,6 +75,7 @@ const MultiClipEditor = ({
         name: 'Template',
         clips: existingVideo.clips || [],
         textOverlays: existingVideo.textOverlays || [],
+        words: existingVideo.words || [],
         isTemplate: true
       }];
     }
@@ -75,6 +86,7 @@ const MultiClipEditor = ({
       name: 'Template',
       clips: firstClip ? [firstClip] : [],
       textOverlays: [],
+      words: [],
       isTemplate: true
     }];
   });
@@ -91,6 +103,11 @@ const MultiClipEditor = ({
   const textOverlays = activeVideo?.textOverlays || [];
   const textOverlaysRef = useRef(textOverlays);
   textOverlaysRef.current = textOverlays;
+  const words = activeVideo?.words || [];
+
+  // ── Footer state ──
+  const [isSavingAll, setIsSavingAll] = useState(false);
+  const [lastSaved, setLastSaved] = useState(null);
 
   // Wrapper setters (route through allVideos)
   const setClips = useCallback((updater) => {
@@ -121,10 +138,23 @@ const MultiClipEditor = ({
     });
   }, [activeVideoIndex]);
 
+  const setWords = useCallback((updater) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const current = copy[activeVideoIndex];
+      if (!current) return prev;
+      copy[activeVideoIndex] = {
+        ...current,
+        words: typeof updater === 'function' ? updater(current.words || []) : updater
+      };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
   // ── Undo/Redo history ──
   const getHistorySnapshot = useCallback(() => {
     const v = allVideos[activeVideoIndex];
-    return v ? { clips: v.clips, textOverlays: v.textOverlays } : null;
+    return v ? { clips: v.clips, textOverlays: v.textOverlays, words: v.words } : null;
   }, [allVideos, activeVideoIndex]);
 
   const restoreHistorySnapshot = useCallback((snapshot) => {
@@ -152,6 +182,20 @@ const MultiClipEditor = ({
   const audioRef = useRef(null);
   const audioFileInputRef = useRef(null);
   // Waveform via shared hook (below)
+
+  // ── Beat detection ──
+  const { beats, bpm, isAnalyzing, analyzeAudio } = useBeatDetection();
+  const [showBeatSelector, setShowBeatSelector] = useState(false);
+
+  // Audio trim boundaries for beat normalization
+  const audioStartTime = selectedAudio?.startTime || 0;
+  const audioEndTime = selectedAudio?.endTime || selectedAudio?.duration || 0;
+
+  // Filter beats to trimmed range and normalize to local time
+  const filteredBeats = useMemo(() => {
+    if (!beats.length) return [];
+    return normalizeBeatsToTrimRange(beats, audioStartTime, audioEndTime);
+  }, [beats, audioStartTime, audioEndTime]);
 
   // ── Audio leveling state ──
   const [sourceVideoMuted, setSourceVideoMuted] = useState(existingVideo?.sourceVideoMuted ?? false);
@@ -222,6 +266,18 @@ const MultiClipEditor = ({
     return libraryVideos.filter(v => col.mediaIds.includes(v.id));
   }, [selectedCollection, libraryVideos, collections, category?.videos]);
 
+  // ── Multi-select for clip grid ──
+  const {
+    selectedIds: selectedClipIds,
+    isDragSelecting: clipDragSelecting,
+    rubberBand: clipRubberBand,
+    gridRef: clipGridRef,
+    gridMouseHandlers: clipGridMouseHandlers,
+    toggleSelect: toggleClipSelect,
+    selectAll: selectAllClips,
+    clearSelection: clearClipSelection,
+  } = useMediaMultiSelect(visibleVideos);
+
   // ── Text bank input state ──
   const [newTextA, setNewTextA] = useState('');
   const [newTextB, setNewTextB] = useState('');
@@ -241,22 +297,24 @@ const MultiClipEditor = ({
 
   // ── BeatSync layout state ──
   const [videoName, setVideoName] = useState(existingVideo?.name || 'Untitled Multi-Clip');
-  const [openSections, setOpenSections] = useState({
+  const { openSections, renderCollapsibleSection } = useCollapsibleSections({
     audio: true, clips: true, lyrics: false, textStyle: false
   });
-  const toggleSection = useCallback((key) => {
-    setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
-  }, []);
-  const renderCollapsibleSection = (key, title, content) => (
-    <div className="w-full border-t border-neutral-800">
-      <button onClick={() => toggleSection(key)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-transparent border-none text-white text-heading-3 font-heading-3 cursor-pointer">
-        <span>{title}</span>
-        <FeatherChevronDown className={`w-4 h-4 text-neutral-500 flex-shrink-0 transition-transform duration-150 ${openSections[key] ? 'rotate-180' : ''}`} />
-      </button>
-      {openSections[key] && (<div className="px-4 pb-4">{content}</div>)}
-    </div>
+
+  // ── Session persistence ──
+  const { loadSession, saveSession, clearSession } = useEditorSessionState(
+    artistId, 'multi-clip', existingVideo?.id
   );
+  const sessionRestoredRef = useRef(false);
+  useEffect(() => {
+    if (sessionRestoredRef.current) return;
+    sessionRestoredRef.current = true;
+    const session = loadSession();
+    if (session?.activeVideoIndex != null) setActiveVideoIndex(session.activeVideoIndex);
+  }, [loadSession]);
+  useEffect(() => {
+    saveSession({ activeVideoIndex, openSections });
+  }, [activeVideoIndex, openSections, saveSession]);
 
   // ── Preset state ──
   const [selectedPreset, setSelectedPreset] = useState(null);
@@ -498,6 +556,29 @@ const MultiClipEditor = ({
     return () => clearTimeout(fallback);
   }, [selectedAudio]);
 
+  // ── Beat analysis — trigger when audio changes ──
+  useEffect(() => {
+    if (selectedAudio?.url || selectedAudio?.localUrl) {
+      let audioSource = null;
+      const localUrl = selectedAudio.localUrl;
+      const isBlobUrl = localUrl && localUrl.startsWith('blob:');
+
+      if (selectedAudio.file instanceof File || selectedAudio.file instanceof Blob) {
+        audioSource = selectedAudio.file;
+      } else if (localUrl && !isBlobUrl) {
+        audioSource = localUrl;
+      } else if (selectedAudio.url) {
+        audioSource = selectedAudio.url;
+      }
+
+      if (audioSource) {
+        analyzeAudio(audioSource).catch(err => {
+          console.error('Beat analysis failed:', err);
+        });
+      }
+    }
+  }, [selectedAudio, analyzeAudio]);
+
   // ── Audio trim save handler ──
   const handleAudioTrimSave = useCallback(({ startTime, endTime, duration: trimDuration, trimmedFile, trimmedName }) => {
     if (!audioToTrim) return;
@@ -591,6 +672,80 @@ const MultiClipEditor = ({
     setShowTranscriber(false);
   }, [totalDuration, getDefaultTextStyle, setTextOverlays, toastSuccess, toastError]);
 
+  // ── Cut by word — creates one clip per word from random source clips ──
+  const handleCutByWord = useCallback(() => {
+    if (!words.length) {
+      toastError('No words to cut by. Add lyrics first.');
+      return;
+    }
+    if (!category?.videos?.length) {
+      toastError('No clips in bank. Upload videos first.');
+      return;
+    }
+
+    const availableClips = category.videos;
+    const newClips = words.map((word, i) => {
+      const randomClip = availableClips[Math.floor(Math.random() * availableClips.length)];
+      return {
+        id: `clip_${Date.now()}_${i}`,
+        sourceId: randomClip.id,
+        url: randomClip.url,
+        localUrl: randomClip.localUrl,
+        thumbnail: randomClip.thumbnail,
+        startTime: word.startTime,
+        duration: word.duration || 0.5,
+        locked: false
+      };
+    });
+
+    setClips(newClips);
+    toastSuccess(`Created ${newClips.length} clips from words`);
+  }, [words, category?.videos, setClips, toastSuccess, toastError]);
+
+  // ── Cut by beat — opens BeatSelector modal ──
+  const handleCutByBeat = useCallback(() => {
+    if (!filteredBeats.length) {
+      toastError('No beats detected. Try a different audio track or check the trim range.');
+      return;
+    }
+    setShowBeatSelector(true);
+  }, [filteredBeats, toastError]);
+
+  // ── Apply selected beats — creates clips at beat boundaries ──
+  const handleBeatSelectionApply = useCallback((selectedBeatTimes) => {
+    if (!selectedBeatTimes.length || !category?.videos?.length) {
+      setShowBeatSelector(false);
+      return;
+    }
+
+    const effectiveDuration = (selectedAudio?.endTime || selectedAudio?.duration || audioDuration) - (selectedAudio?.startTime || 0);
+    const availableClips = category.videos;
+    const newClips = [];
+
+    for (let i = 0; i < selectedBeatTimes.length; i++) {
+      const startTime = selectedBeatTimes[i];
+      const endTime = selectedBeatTimes[i + 1] || effectiveDuration;
+      const clipDuration = endTime - startTime;
+
+      const randomClip = availableClips[Math.floor(Math.random() * availableClips.length)];
+
+      newClips.push({
+        id: `clip_${Date.now()}_${i}`,
+        sourceId: randomClip.id,
+        url: randomClip.url,
+        localUrl: randomClip.localUrl,
+        thumbnail: randomClip.thumbnail,
+        startTime: startTime,
+        duration: clipDuration,
+        locked: false
+      });
+    }
+
+    setClips(newClips);
+    setShowBeatSelector(false);
+    toastSuccess(`Created ${newClips.length} clips from beats`);
+  }, [category?.videos, audioDuration, selectedAudio, setClips, toastSuccess]);
+
   useEffect(() => {
     const hasLibraryAudio = selectedAudio && !selectedAudio.isSourceVideo;
     if (videoRef.current) {
@@ -603,6 +758,14 @@ const MultiClipEditor = ({
       audioRef.current.volume = externalAudioVolume;
     }
   }, [isMuted, selectedAudio, sourceVideoMuted, sourceVideoVolume, externalAudioVolume]);
+
+  // Get clip URL safely (must be before useWaveform which references it)
+  const getClipUrl = (clipObj) => {
+    if (!clipObj) return null;
+    const localUrl = clipObj.localUrl;
+    const isBlobUrl = localUrl && localUrl.startsWith('blob:');
+    return isBlobUrl ? clipObj.url : (localUrl || clipObj.url || clipObj.src);
+  };
 
   // Waveform data via shared hook
   const { waveformData, clipWaveforms, waveformSource } = useWaveform({
@@ -990,11 +1153,14 @@ const MultiClipEditor = ({
       externalAudioVolume
     };
     onSave(videoData);
+    setLastSaved(new Date());
     toastSuccess(`Saved "${video.name || 'Multi-Clip'}"`);
   }, [allVideos, activeVideoIndex, totalDuration, aspectRatio, selectedAudio, existingVideo, sourceVideoMuted, sourceVideoVolume, externalAudioVolume, onSave, toastSuccess, toastError]);
 
   // ── Save All & Close ──
   const handleSaveAllAndClose = useCallback(async () => {
+    if (isSavingAll) return;
+    setIsSavingAll(true);
     let savedCount = 0;
     const timestamp = Date.now();
     for (const video of allVideos) {
@@ -1032,13 +1198,15 @@ const MultiClipEditor = ({
       } catch (err) {
         console.error(`[MultiClipEditor] Failed to save video ${savedCount}:`, err);
         toastError(`Failed to save "${video.name || 'Multi-Clip'}". Please try again.`);
+        setIsSavingAll(false);
         return; // Stop on failure so user doesn't lose context
       }
       savedCount++;
     }
+    setIsSavingAll(false);
     toastSuccess(`Saved ${savedCount} video${savedCount !== 1 ? 's' : ''}!`);
     onClose();
-  }, [allVideos, totalDuration, aspectRatio, selectedAudio, existingVideo, onSave, onClose, toastSuccess, toastError]);
+  }, [allVideos, totalDuration, aspectRatio, selectedAudio, existingVideo, onSave, onClose, toastSuccess, toastError, isSavingAll]);
 
   // Export removed — was identical to Save Draft but set status='rendered' without actually rendering.
   // Real video export (FFmpeg render + download) will be added as a future feature.
@@ -1049,9 +1217,10 @@ const MultiClipEditor = ({
     if (hasWork) {
       setShowCloseConfirm(true);
     } else {
+      clearSession();
       onClose();
     }
-  }, [textOverlays, allVideos, clips, onClose]);
+  }, [textOverlays, allVideos, clips, onClose, clearSession]);
 
   // ── Keyboard shortcuts ──
   useEffect(() => {
@@ -1068,14 +1237,6 @@ const MultiClipEditor = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleCloseRequest, handlePlayPause, editingTextId]);
-
-  // Get clip URL safely
-  const getClipUrl = (clipObj) => {
-    if (!clipObj) return null;
-    const localUrl = clipObj.localUrl;
-    const isBlobUrl = localUrl && localUrl.startsWith('blob:');
-    return isBlobUrl ? clipObj.url : (localUrl || clipObj.url || clipObj.src);
-  };
 
   // Currently editing overlay
   const editingOverlay = textOverlays.find(o => o.id === editingTextId);
@@ -1145,29 +1306,23 @@ const MultiClipEditor = ({
 
   // ── RENDER ──
   return (
-    <div className={`fixed inset-0 bg-black/80 flex items-center justify-center z-[10000] ${isMobile ? 'p-0' : 'p-2.5'}`} onClick={(e) => e.target === e.currentTarget && handleCloseRequest()}>
-      <div className={`bg-[#1a1a1aff] w-full max-w-[1400px] h-screen flex flex-col overflow-hidden ${isMobile ? 'rounded-none border-none max-w-full w-screen' : 'rounded-xl border border-neutral-800'}`}>
-
-        {/* ── Top Bar (BeatSync style) ── */}
-        <div className="flex w-full items-center justify-between border-b border-neutral-800 bg-black px-6 py-4">
-          <div className="flex items-center gap-4">
-            <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherArrowLeft />} onClick={handleCloseRequest} />
-            {!isMobile && (
-              <TextField className="w-80" variant="filled" label="" helpText="">
-                <TextField.Input placeholder="Untitled Multi-Clip" value={videoName} onChange={(e) => setVideoName(e.target.value)} />
-              </TextField>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherRotateCcw />} disabled={!canUndo} onClick={handleUndo} title="Undo" />
-            <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherRotateCw />} disabled={!canRedo} onClick={handleRedo} title="Redo" />
-            <Button variant="neutral-secondary" size="medium" icon={<FeatherSave />} onClick={handleSaveDraft}>Save</Button>
-            <Button variant="brand-primary" size="medium" icon={<FeatherDownload />} onClick={handleSaveDraft}>Export</Button>
-          </div>
-        </div>
+    <EditorShell onBackdropClick={handleCloseRequest} isMobile={isMobile}>
+        <EditorTopBar
+          title={videoName}
+          onTitleChange={setVideoName}
+          placeholder="Untitled Multi-Clip"
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onSave={handleSaveDraft}
+          onExport={handleSaveDraft}
+          onBack={handleCloseRequest}
+          isMobile={isMobile}
+        />
 
         {/* ── Main Content — Center + Right Sidebar (BeatSync layout) ── */}
-        <div className={`flex flex-1 overflow-hidden ${isMobile ? 'flex-col overflow-auto' : ''}`}>
+        <div className={`flex grow shrink-0 basis-0 self-stretch overflow-hidden ${isMobile ? 'flex-col overflow-auto' : ''}`}>
 
           {/* ── CENTER COLUMN ── */}
           <div className="flex flex-1 flex-col overflow-hidden min-w-0">
@@ -1314,10 +1469,10 @@ const MultiClipEditor = ({
 
               {/* Playback Controls */}
               <div className="flex w-full items-center justify-center gap-3">
-                <IconButton variant="neutral-tertiary" size="small" icon={<FeatherSkipBack />} onClick={() => handleSeek(0)} />
-                <IconButton variant="neutral-secondary" size="medium" icon={isPlaying ? <FeatherPause /> : <FeatherPlay />} onClick={handlePlayPause} />
-                <IconButton variant="neutral-tertiary" size="small" icon={<FeatherSkipForward />} onClick={() => handleSeek(timelineDuration)} />
-                <IconButton variant="neutral-tertiary" size="small" icon={isMuted ? <FeatherVolumeX /> : <FeatherVolume2 />} onClick={() => setIsMuted(!isMuted)} />
+                <IconButton variant="neutral-tertiary" size="small" icon={<FeatherSkipBack />} aria-label="Skip to start" onClick={() => handleSeek(0)} />
+                <IconButton variant="neutral-secondary" size="medium" icon={isPlaying ? <FeatherPause /> : <FeatherPlay />} aria-label={isPlaying ? "Pause" : "Play"} onClick={handlePlayPause} />
+                <IconButton variant="neutral-tertiary" size="small" icon={<FeatherSkipForward />} aria-label="Skip to end" onClick={() => handleSeek(timelineDuration)} />
+                <IconButton variant="neutral-tertiary" size="small" icon={isMuted ? <FeatherVolumeX /> : <FeatherVolume2 />} aria-label={isMuted ? "Unmute" : "Mute"} onClick={() => setIsMuted(!isMuted)} />
               </div>
 
 
@@ -1427,8 +1582,17 @@ const MultiClipEditor = ({
 
                       {/* Timeline */}
                       <div style={{ borderTop: `1px solid ${theme.border.subtle}`, paddingTop: '10px', marginBottom: '12px' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary, marginBottom: '8px' }}>
-                          Timeline ({clips.length} clip{clips.length !== 1 ? 's' : ''})
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span style={{ fontSize: '12px', fontWeight: 600, color: theme.text.primary }}>
+                              Timeline ({clips.length} clip{clips.length !== 1 ? 's' : ''})
+                            </span>
+                            <Button variant="neutral-secondary" size="small" onClick={handleCutByWord}>Cut by word</Button>
+                            <Button variant="neutral-secondary" size="small" onClick={handleCutByBeat}>Cut by beat</Button>
+                          </div>
+                          <Badge variant="neutral">
+                            {isAnalyzing ? 'Analyzing beats...' : bpm ? `${Math.round(bpm)} BPM (${filteredBeats.length} beats)` : 'No beats detected'}
+                          </Badge>
                         </div>
                         {clips.length === 0 ? (
                           <div style={{ fontSize: '11px', color: theme.text.muted, padding: '12px', textAlign: 'center', backgroundColor: theme.hover.bg, borderRadius: '6px' }}>
@@ -1482,7 +1646,7 @@ const MultiClipEditor = ({
                               <div style={{ fontSize: '12px', fontWeight: 600, color: '#14b8a6', marginBottom: '6px' }}>Text Bank A</div>
                               <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
                                 <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} placeholder="Add text..." className="flex-1 px-2 py-1.5 rounded-md border border-neutral-800 bg-[#0a0a0aff] text-[#ffffffff] text-[12px] outline-none min-h-[44px]" />
-                                <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} />
+                                <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} aria-label="Add to Text Bank A" onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} />
                               </div>
                               {bankA.map((text, idx) => (
                                 <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-400 min-h-[36px]">
@@ -1499,7 +1663,7 @@ const MultiClipEditor = ({
                               <div style={{ fontSize: '12px', fontWeight: 600, color: '#f59e0b', marginBottom: '6px' }}>Text Bank B</div>
                               <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
                                 <input value={newTextB} onChange={(e) => setNewTextB(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} placeholder="Add text..." className="flex-1 px-2 py-1.5 rounded-md border border-neutral-800 bg-[#0a0a0aff] text-[#ffffffff] text-[12px] outline-none min-h-[44px]" />
-                                <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} />
+                                <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} aria-label="Add to Text Bank B" onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} />
                               </div>
                               {bankB.map((text, idx) => (
                                 <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-400 min-h-[36px]">
@@ -1790,16 +1954,6 @@ const MultiClipEditor = ({
           </div>
         )}
 
-          {/* ── Footer ── */}
-          <div className="flex items-center justify-end gap-3 border-t border-neutral-800 px-4 py-2 flex-shrink-0">
-            <span className="text-caption font-caption text-neutral-500 flex-1">Auto-saved</span>
-            <Button variant="neutral-secondary" size="small" onClick={handleCloseRequest}>Cancel</Button>
-            {allVideos.length > 1 && (
-              <Button variant="neutral-secondary" size="small" onClick={handleSaveAllAndClose}>Save All ({allVideos.length})</Button>
-            )}
-            <Button variant="brand-primary" size="small" onClick={handleSaveDraft}>Save</Button>
-          </div>
-
           </div>{/* end center column */}
 
           {/* ── RIGHT SIDEBAR ── */}
@@ -1875,7 +2029,17 @@ const MultiClipEditor = ({
                   </select>
                   {/* Video grid */}
                   <div className="flex justify-between items-center">
-                    <span className="text-caption font-caption text-neutral-500">{visibleVideos.length} clips</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-caption font-caption text-neutral-500">{visibleVideos.length} clips</span>
+                      {visibleVideos.length > 0 && (
+                        <button className="text-caption font-caption text-indigo-400 hover:text-indigo-300" onClick={selectAllClips}>
+                          {selectedClipIds.size === visibleVideos.length ? 'Deselect All' : 'Select All'}
+                        </button>
+                      )}
+                      {selectedClipIds.size > 0 && (
+                        <span className="text-caption font-caption text-neutral-500">{selectedClipIds.size} sel</span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <CloudImportButton artistId={artistId} db={db} mediaType="video" compact
                         onImportMedia={(files) => { const newVids = files.map((f, i) => ({ id: `import_${Date.now()}_${i}`, name: f.name, url: f.url, localUrl: f.localUrl, type: 'video' })); setLibraryMedia(prev => [...prev, ...newVids]); }} />
@@ -1883,24 +2047,72 @@ const MultiClipEditor = ({
                         onClick={() => { visibleVideos.forEach(v => addClipToTimeline(v)); }}>Add All</button>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {visibleVideos.map((video, i) => {
-                      const isInTimeline = clips.some(clip => (clip.id === video.id) || (clip.sourceId === video.id));
-                      return (
-                        <div key={video.id || i} className="relative rounded-md overflow-hidden cursor-pointer border border-transparent hover:border-teal-500/50"
-                          style={isInTimeline ? { borderColor: 'rgba(34,197,94,0.4)' } : undefined}
-                          onClick={() => { addClipToTimeline(video); if (video.id && artistId) incrementUseCount(artistId, video.id); }}>
-                          {isInTimeline && <div className="absolute top-1 right-1 z-10 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center text-[9px] text-white font-bold">&#10003;</div>}
-                          <div className="w-full aspect-video bg-black">
-                            {(video.thumbnailUrl || video.thumbnail) ? <img src={video.thumbnailUrl || video.thumbnail} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-neutral-600 text-lg">&#127916;</div>}
+                  {selectedClipIds.size > 0 && (
+                    <Button variant="brand-secondary" size="small" className="w-full" onClick={() => {
+                      const selected = visibleVideos.filter(v => selectedClipIds.has(v.id));
+                      selected.forEach(v => addClipToTimeline(v));
+                      clearClipSelection();
+                      toastSuccess(`Added ${selected.length} clip${selected.length !== 1 ? 's' : ''} to timeline`);
+                    }}>
+                      Add {selectedClipIds.size} to Timeline
+                    </Button>
+                  )}
+                  <div
+                    className="relative max-h-[300px] overflow-y-auto"
+                    ref={clipGridRef}
+                    {...clipGridMouseHandlers}
+                    style={{ userSelect: clipDragSelecting ? 'none' : undefined }}
+                  >
+                    {clipRubberBand && (
+                      <div className="absolute pointer-events-none border border-indigo-400 bg-indigo-500/20 z-10 rounded-sm"
+                        style={{ left: clipRubberBand.left, top: clipRubberBand.top, width: clipRubberBand.width, height: clipRubberBand.height }} />
+                    )}
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {visibleVideos.map((video, i) => {
+                        const isInTimeline = clips.some(clip => (clip.id === video.id) || (clip.sourceId === video.id));
+                        const isSelected = selectedClipIds.has(video.id);
+                        return (
+                          <div key={video.id || i}
+                            data-media-id={video.id}
+                            className={`relative rounded-md overflow-hidden cursor-pointer border-2 transition-colors ${
+                              isSelected ? 'border-indigo-500' : 'border-transparent hover:border-teal-500/50'
+                            }`}
+                            style={!isSelected && isInTimeline ? { borderColor: 'rgba(34,197,94,0.4)' } : undefined}
+                            onClick={(e) => {
+                              if (clipDragSelecting) return;
+                              if (e.shiftKey || selectedClipIds.size > 0) {
+                                toggleClipSelect(video.id, e);
+                              } else {
+                                addClipToTimeline(video);
+                                if (video.id && artistId) incrementUseCount(artistId, video.id);
+                              }
+                            }}>
+                            {isSelected && (
+                              <div className="absolute top-1 left-1 z-10 h-4 w-4 rounded-full bg-indigo-500 flex items-center justify-center">
+                                <FeatherCheck className="text-white" style={{ width: 10, height: 10 }} />
+                              </div>
+                            )}
+                            {isInTimeline && !isSelected && <div className="absolute top-1 right-1 z-10 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center text-[9px] text-white font-bold">&#10003;</div>}
+                            <div className="w-full aspect-video bg-black">
+                              {(video.thumbnailUrl || video.thumbnail) ? <img src={video.thumbnailUrl || video.thumbnail} alt="" className="w-full h-full object-cover" loading="lazy" /> : <div className="w-full h-full flex items-center justify-center text-neutral-600 text-lg">&#127916;</div>}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                   {/* Clip ordering */}
                   <div className="border-t border-neutral-800 pt-3">
-                    <span className="text-caption font-caption text-neutral-400 mb-2 block">Timeline ({clips.length} clip{clips.length !== 1 ? 's' : ''})</span>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-caption font-caption text-neutral-400">Timeline ({clips.length} clip{clips.length !== 1 ? 's' : ''})</span>
+                      <div className="flex items-center gap-1">
+                        <Button variant="neutral-secondary" size="small" onClick={handleCutByWord}>Cut by word</Button>
+                        <Button variant="neutral-secondary" size="small" onClick={handleCutByBeat}>Cut by beat</Button>
+                      </div>
+                    </div>
+                    <Badge variant="neutral" className="mb-2">
+                      {isAnalyzing ? 'Analyzing beats...' : bpm ? `${Math.round(bpm)} BPM (${filteredBeats.length} beats)` : 'No beats detected'}
+                    </Badge>
                     {clips.length === 0 ? (
                       <div className="text-[11px] text-neutral-600 text-center py-3 bg-neutral-800/30 rounded-md">No clips added yet</div>
                     ) : (
@@ -1915,9 +2127,9 @@ const MultiClipEditor = ({
                               <div className="text-[9px] text-neutral-500">{formatTime(getClipDuration(clip.id || clip.sourceId))}</div>
                             </div>
                             <div className="flex gap-0.5 flex-shrink-0">
-                              <IconButton variant="neutral-tertiary" size="small" icon={<FeatherChevronUp />} disabled={idx === 0} onClick={(e) => { e.stopPropagation(); moveClipUp(idx); }} />
-                              <IconButton variant="neutral-tertiary" size="small" icon={<FeatherChevronDown />} disabled={idx >= clips.length - 1} onClick={(e) => { e.stopPropagation(); moveClipDown(idx); }} />
-                              <IconButton variant="neutral-tertiary" size="small" icon={<FeatherTrash2 />} onClick={(e) => { e.stopPropagation(); removeClipFromTimeline(idx); }} />
+                              <IconButton variant="neutral-tertiary" size="small" icon={<FeatherChevronUp />} aria-label="Move clip up" disabled={idx === 0} onClick={(e) => { e.stopPropagation(); moveClipUp(idx); }} />
+                              <IconButton variant="neutral-tertiary" size="small" icon={<FeatherChevronDown />} aria-label="Move clip down" disabled={idx >= clips.length - 1} onClick={(e) => { e.stopPropagation(); moveClipDown(idx); }} />
+                              <IconButton variant="neutral-tertiary" size="small" icon={<FeatherTrash2 />} aria-label="Remove clip" onClick={(e) => { e.stopPropagation(); removeClipFromTimeline(idx); }} />
                             </div>
                           </div>
                         ))}
@@ -1935,7 +2147,7 @@ const MultiClipEditor = ({
                             <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)}
                               onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
                               placeholder="Add text..." className="flex-1 px-2 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[12px] outline-none" />
-                            <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} />
+                            <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} aria-label="Add to Text Bank A" onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} />
                           </div>
                           {bankA.map((text, idx) => (
                             <div key={idx} className="flex items-center px-2 py-1 rounded-md bg-neutral-800/50 mb-1">
@@ -1951,7 +2163,7 @@ const MultiClipEditor = ({
                             <input value={newTextB} onChange={(e) => setNewTextB(e.target.value)}
                               onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
                               placeholder="Add text..." className="flex-1 px-2 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[12px] outline-none" />
-                            <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} />
+                            <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} aria-label="Add to Text Bank B" onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} />
                           </div>
                           {bankB.map((text, idx) => (
                             <div key={idx} className="flex items-center px-2 py-1 rounded-md bg-neutral-800/50 mb-1">
@@ -1964,6 +2176,32 @@ const MultiClipEditor = ({
                       </div>
                     );
                   })()}
+                  {/* Niche Text Banks */}
+                  {nicheTextBanks && nicheTextBanks.some(b => b?.length > 0) && (
+                    <div className="flex flex-col gap-3 pt-3 border-t border-neutral-800">
+                      <div className="text-body-bold font-body-bold text-neutral-300">Niche Banks</div>
+                      {nicheTextBanks.map((bank, bankIdx) => {
+                        if (!bank?.length) return null;
+                        const color = getBankColor(bankIdx);
+                        return (
+                          <div key={bankIdx}>
+                            <div className="text-[12px] font-semibold mb-1.5" style={{ color: color.primary }}>{getBankLabel(bankIdx)}</div>
+                            {bank.map((entry, entryIdx) => {
+                              const text = typeof entry === 'string' ? entry : entry?.text || '';
+                              if (!text) return null;
+                              return (
+                                <div key={entryIdx} className="flex items-center px-2 py-1 rounded-md mb-0.5 cursor-pointer hover:bg-neutral-800/50"
+                                  style={{ borderLeft: `2px solid ${color.primary}` }}
+                                  onClick={() => addTextOverlay(text)}>
+                                  <span className="text-[12px] text-neutral-300 truncate">{text}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ))}
 
@@ -2001,7 +2239,7 @@ const MultiClipEditor = ({
                             Overlay {idx + 1}
                             {overlay.startTime !== undefined && <span className="ml-1.5 text-[9px] text-neutral-600">{overlay.startTime.toFixed(1)}s &#8211; {overlay.endTime.toFixed(1)}s</span>}
                           </span>
-                          <IconButton size="small" icon={<FeatherX />} onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} />
+                          <IconButton size="small" icon={<FeatherX />} aria-label="Remove overlay" onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} />
                         </div>
                         {isSelected ? (
                           <input value={editingTextValue} onChange={(e) => setEditingTextValue(e.target.value)}
@@ -2102,6 +2340,8 @@ const MultiClipEditor = ({
           )}
         </div>
 
+        <EditorFooter lastSaved={lastSaved} onCancel={handleCloseRequest} onSaveAll={handleSaveAllAndClose} isSavingAll={isSavingAll} saveAllCount={allVideos.length} />
+
         {/* ── Hidden Audio Element ── */}
         <audio ref={audioRef} style={{ display: 'none' }} crossOrigin="anonymous" />
 
@@ -2125,6 +2365,17 @@ const MultiClipEditor = ({
           );
         })()}
 
+        {/* ── Beat Selector Modal ── */}
+        {showBeatSelector && (
+          <BeatSelector
+            beats={filteredBeats}
+            bpm={bpm}
+            duration={(audioEndTime || audioDuration) - audioStartTime}
+            onApply={handleBeatSelectionApply}
+            onCancel={() => setShowBeatSelector(false)}
+          />
+        )}
+
         {/* ── Lyric Analyzer Modal ── */}
         {showTranscriber && selectedAudio && (
           <LyricAnalyzer
@@ -2137,7 +2388,7 @@ const MultiClipEditor = ({
         {/* ── Close Confirmation ── */}
         {showCloseConfirm && (
           <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-[100]">
-            <div className="bg-neutral-900 rounded-xl p-6 max-w-[360px] w-full border border-neutral-800">
+            <div className="bg-[#171717] rounded-xl p-6 max-w-[360px] w-full border border-neutral-800">
               <h3 className="text-[16px] font-semibold mb-2" style={{ color: theme.text.primary }}>Close editor?</h3>
               <p className="text-[13px] mb-4" style={{ color: theme.text.secondary }}>
                 You have unsaved work. Are you sure you want to close?
@@ -2190,8 +2441,7 @@ const MultiClipEditor = ({
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </EditorShell>
   );
 };
 

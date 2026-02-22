@@ -7,7 +7,8 @@ import { DropdownMenu } from '../../ui/components/DropdownMenu';
 import {
   FeatherPlus, FeatherEdit, FeatherMoreVertical,
   FeatherTrash, FeatherSettings, FeatherSearch,
-  FeatherFilter, FeatherCheck, FeatherX, FeatherUsers
+  FeatherFilter, FeatherCheck, FeatherX, FeatherUsers,
+  FeatherLoader,
 } from '@subframe/core';
 import { Avatar } from '../../ui/components/Avatar';
 import * as SubframeCore from '@subframe/core';
@@ -28,6 +29,7 @@ const ArtistsManagement = ({
   onDeleteArtist,
   isConductor = false,
   latePages = [],
+  loadingLatePages = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [tierFilter, setTierFilter] = useState('all');
@@ -74,7 +76,7 @@ const ArtistsManagement = ({
   };
 
   return (
-    <div className="flex-1 overflow-auto bg-black px-12 py-12">
+    <div className="flex-1 overflow-auto bg-black px-12 py-8">
       <div className="flex w-full flex-col items-start gap-8">
 
         {/* ═══ HEADER ═══ */}
@@ -251,7 +253,12 @@ const ArtistsManagement = ({
                     <div className="flex flex-col items-start gap-1">
                       <span className="text-caption font-caption text-neutral-400">Late.co Status</span>
                       <div className="flex items-center gap-1">
-                        {isConnected ? (
+                        {loadingLatePages ? (
+                          <>
+                            <FeatherLoader className="text-body font-body text-neutral-400 animate-spin" style={{ width: 14, height: 14 }} />
+                            <span className="text-body-bold font-body-bold text-neutral-400">Checking...</span>
+                          </>
+                        ) : isConnected ? (
                           <>
                             <FeatherCheck className="text-body font-body text-[#22c55eff]" />
                             <span className="text-body-bold font-body-bold text-[#ffffffff]">Connected</span>

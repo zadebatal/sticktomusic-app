@@ -187,11 +187,11 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
         onClick={() => setShowMenu(!showMenu)}
         style={{
           background: 'none',
-          border: `1px solid ${theme.border.subtle}`,
+          border: '1px solid rgba(99, 102, 241, 0.5)',
           borderRadius: '6px',
           padding: compact ? '2px 6px' : '4px 10px',
           cursor: 'pointer',
-          color: theme.text.muted,
+          color: '#a5b4fc',
           fontSize: compact ? '11px' : '12px',
           display: 'flex',
           alignItems: 'center',

@@ -30,7 +30,6 @@ import AppShell from './components/AppShell';
 import PagesTab from './components/tabs/PagesTab';
 import SettingsTab from './components/tabs/SettingsTab';
 import ArtistDashboard from './components/tabs/ArtistDashboard';
-import ArtistSettingsTab from './components/tabs/ArtistSettingsTab';
 import ArtistsManagement from './components/tabs/ArtistsManagement';
 import OnboardingWizard from './components/OnboardingWizard';
 
@@ -490,6 +489,7 @@ const StickToMusic = () => {
   const [operatorTab, setOperatorTab] = useState(initialState.tab); // Moved up for restore effect
   const [showVideoEditor, setShowVideoEditor] = useState(initialState.showStudio); // Moved up for restore effect
   const [artistTab, setArtistTab] = useState('dashboard'); // Tab for artist-dashboard view
+  const [artistScheduleFilter, setArtistScheduleFilter] = useState(null); // Filter for artist schedule tab
   const [openFaq, setOpenFaq] = useState(null);
 
   // ═══ Theme bridge: since ThemeProvider wraps return JSX, we listen for changes via custom event ═══
@@ -570,7 +570,7 @@ const StickToMusic = () => {
 
   // Multi-artist state - artists loaded from Firestore
   const [firestoreArtists, setFirestoreArtists] = useState([]);
-  const [currentArtistId, setCurrentArtistId] = useState(null); // Set by artist subscription after login validates permissions
+  const [currentArtistId, setCurrentArtistId] = useState(() => getLastArtistId() || null); // Restore last selected artist, validated by subscription
   const [artistsLoaded, setArtistsLoaded] = useState(false);
 
   // Master auth listener - tracks Firebase auth state
@@ -3222,7 +3222,12 @@ const StickToMusic = () => {
   // ═══ ARTIST DASHBOARD (artists + collaborators) ═══
   if (currentPage === 'artist-dashboard') {
     const effectiveArtistId = getEffectiveArtistId(user) || currentArtistId;
-    const artistTabChangeHandler = (tab) => {
+    const artistTabChangeHandler = (tab, opts) => {
+      if (tab === 'schedule' && opts?.filter) {
+        setArtistScheduleFilter(opts.filter);
+      } else if (tab !== 'schedule') {
+        setArtistScheduleFilter(null);
+      }
       setArtistTab(tab);
     };
 
@@ -3239,21 +3244,41 @@ const StickToMusic = () => {
           currentArtistId={effectiveArtistId}
           onArtistChange={() => {}}
         >
-          {/* Studio (full-screen overlay) */}
-          {artistTab === 'studio' && (
+          {/* Studio — rendered inline inside AppShell so sidebar stays visible */}
+          {artistTab === 'studio' ? (
             <VideoStudio
+              inline
               db={db}
               onClose={() => { setArtistTab('dashboard'); }}
               artists={[firestoreArtists.find(a => a.id === effectiveArtistId)].filter(Boolean)}
               artistId={effectiveArtistId}
               onArtistChange={() => {}}
               lateAccountIds={derivedLateAccountIds}
+              latePages={latePages.filter(p => p.artistId === effectiveArtistId)}
+              manualAccounts={manualAccountsByArtist[effectiveArtistId] || []}
               onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: effectiveArtistId })}
               onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, effectiveArtistId)}
             />
-          )}
-
-          <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-8">
+          ) : artistTab === 'schedule' ? (
+            <SchedulingPage
+              db={db}
+              artistId={effectiveArtistId}
+              accounts={latePages.filter(p => p.artistId === effectiveArtistId)}
+              lateAccountIds={derivedLateAccountIds}
+              initialStatusFilter={artistScheduleFilter}
+              onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: effectiveArtistId })}
+              onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, effectiveArtistId)}
+              onEditDraft={(post) => {
+                if (post.editorState) {
+                  setArtistTab('studio');
+                }
+              }}
+              onBack={() => setArtistTab('dashboard')}
+              visibleArtists={[firestoreArtists.find(a => a.id === effectiveArtistId)].filter(Boolean)}
+              onArtistChange={() => {}}
+            />
+          ) : (
+          <div className="w-full overflow-y-auto" style={{ maxHeight: '100%' }}>
             {/* Dashboard Tab */}
             {artistTab === 'dashboard' && (
               <ArtistDashboard
@@ -3268,21 +3293,6 @@ const StickToMusic = () => {
                 onRemoveManualAccount={handleRemoveManualAccount}
                 onLoadLatePages={loadLatePages}
                 onNavigate={artistTabChangeHandler}
-              />
-            )}
-
-            {/* Schedule Tab (read-only) */}
-            {artistTab === 'schedule' && (
-              <SchedulingPage
-                db={db}
-                artistId={effectiveArtistId}
-                accounts={latePages}
-                lateAccountIds={derivedLateAccountIds}
-                onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: effectiveArtistId })}
-                onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, effectiveArtistId)}
-                onEditDraft={() => {}}
-                onBack={() => setArtistTab('dashboard')}
-                readOnly={isArtistOrCollaborator(user)}
               />
             )}
 
@@ -3304,16 +3314,16 @@ const StickToMusic = () => {
 
             {/* Settings Tab */}
             {artistTab === 'settings' && (
-              <ArtistSettingsTab
+              <SettingsTab
                 user={user}
                 onLogout={handleLogout}
                 db={db}
                 artistId={effectiveArtistId}
-                latePages={latePages}
-                socialSetsAllowed={user?.socialSetsAllowed || 0}
+                onPhotoUpdated={(url) => setUser(prev => ({ ...prev, photoURL: url }))}
               />
             )}
           </div>
+          )}
 
           {/* Onboarding Wizard (first-run) */}
           {user && !user.onboardingComplete && (
@@ -3620,7 +3630,7 @@ const StickToMusic = () => {
           userRole={user?.role || 'operator'}
           visibleArtists={getVisibleArtists()}
           currentArtistId={currentArtistId}
-          onArtistChange={(id) => setCurrentArtistId(id)}
+          onArtistChange={handleArtistChange}
         >
         {/* Video Studio — rendered inline inside AppShell so sidebar stays visible */}
         {showVideoEditor ? (
@@ -3637,8 +3647,8 @@ const StickToMusic = () => {
             onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: currentArtistId })}
             onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, currentArtistId)}
           />
-        ) : (
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-8">
+        ) : operatorTab === 'schedule' ? null : (
+        <div className="w-full overflow-y-auto" style={{ maxHeight: '100%' }}>
           {/* ═══ Pages Tab (new) ═══ */}
           {operatorTab === 'pages' && (
             <PagesTab
@@ -3663,28 +3673,13 @@ const StickToMusic = () => {
               onLogout={handleLogout}
               db={db}
               artistId={currentArtistId}
+              onPhotoUpdated={(url) => setUser(prev => ({ ...prev, photoURL: url }))}
+              allUsers={allowedUsers}
+              firestoreArtists={firestoreArtists}
             />
           )}
 
-          {/* ═══ Schedule Tab (standalone) ═══ */}
-          {operatorTab === 'schedule' && (
-            <SchedulingPage
-              db={db}
-              artistId={currentArtistId}
-              accounts={latePages}
-              lateAccountIds={derivedLateAccountIds}
-              onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: currentArtistId })}
-              onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, currentArtistId)}
-              onEditDraft={(post) => {
-                if (post.editorState) {
-                  setShowVideoEditor(true);
-                }
-              }}
-              onBack={() => setOperatorTab('pages')}
-              visibleArtists={getVisibleArtists()}
-              onArtistChange={(id) => setCurrentArtistId(id)}
-            />
-          )}
+          {/* ═══ Schedule Tab (standalone — rendered outside max-w wrapper below) ═══ */}
 
           {/* Artists Tab */}
           {operatorTab === 'artists' && (
@@ -3709,6 +3704,7 @@ const StickToMusic = () => {
               onDeleteArtist={(artist) => setDeleteArtistConfirm({ show: true, artist, isDeleting: false })}
               isConductor={isConductor(user)}
               latePages={latePages}
+              loadingLatePages={loadingLatePages}
             />
           )}
 
@@ -5778,6 +5774,26 @@ const StickToMusic = () => {
           )}
 
         </div>
+        )}
+
+        {/* ═══ Schedule Tab — outside max-w wrapper to prevent centering shift ═══ */}
+        {!showVideoEditor && operatorTab === 'schedule' && (
+          <SchedulingPage
+            db={db}
+            artistId={currentArtistId}
+            accounts={latePages}
+            lateAccountIds={derivedLateAccountIds}
+            onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: currentArtistId })}
+            onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, currentArtistId)}
+            onEditDraft={(post) => {
+              if (post.editorState) {
+                setShowVideoEditor(true);
+              }
+            }}
+            onBack={() => setOperatorTab('pages')}
+            visibleArtists={getVisibleArtists()}
+            onArtistChange={handleArtistChange}
+          />
         )}
 
         </AppShell>

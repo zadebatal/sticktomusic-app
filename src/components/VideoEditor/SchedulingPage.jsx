@@ -6,9 +6,9 @@ import {
   addManyScheduledPosts
 } from '../../services/scheduledPostsService';
 import { getTemplates, generateFromTemplate } from '../../services/contentTemplateService';
-import CaptionHashtagBank from './CaptionHashtagBank';
+
 import { useToast, ConfirmDialog } from '../ui';
-import { getCreatedContent, getCollections } from '../../services/libraryService';
+import { getCreatedContent, getCollections, getCollectionHashtagBank, getCollectionCaptionBank } from '../../services/libraryService';
 import { renderVideo } from '../../services/videoExportService';
 import { exportSlideshowAsImages, generateSlideThumbnail } from '../../services/slideshowExportService';
 import { uploadFile } from '../../services/firebaseStorage';
@@ -25,10 +25,10 @@ import { Loader } from '../../ui/components/Loader';
 import { DropdownMenu } from '../../ui/components/DropdownMenu';
 import {
   FeatherPlus, FeatherShuffle, FeatherPause, FeatherPlay,
-  FeatherHash, FeatherList, FeatherCalendar, FeatherChevronDown,
+  FeatherList, FeatherCalendar, FeatherChevronDown,
   FeatherTrash2, FeatherX, FeatherUser,
-  FeatherGripVertical, FeatherEdit, FeatherSend, FeatherRotateCcw,
-  FeatherLock, FeatherUnlock, FeatherChevronUp, FeatherChevronLeft, FeatherChevronRight
+  FeatherGripVertical, FeatherEdit, FeatherEdit2, FeatherSend, FeatherRotateCcw,
+  FeatherLock, FeatherUnlock, FeatherChevronUp, FeatherChevronLeft, FeatherChevronRight, FeatherImage, FeatherMusic
 } from '@subframe/core';
 import * as SubframeCore from '@subframe/core';
 
@@ -50,7 +50,8 @@ const SchedulingPage = ({
   onBack,
   readOnly = false,
   visibleArtists = [],
-  onArtistChange
+  onArtistChange,
+  initialStatusFilter = null,
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
@@ -74,9 +75,16 @@ const SchedulingPage = ({
   const [showAddModal, setShowAddModal] = useState(false);
   const [viewMode, setViewMode] = useState('list');
   const [queuePaused, setQueuePaused] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter || 'all');
+  // Sync initialStatusFilter when navigating from dashboard
+  const prevFilterRef = useRef(initialStatusFilter);
+  if (initialStatusFilter && initialStatusFilter !== prevFilterRef.current) {
+    prevFilterRef.current = initialStatusFilter;
+    setStatusFilter(initialStatusFilter);
+  }
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
-  const [showCaptionBank, setShowCaptionBank] = useState(false);
+  const [previewingPost, setPreviewingPost] = useState(null);
+
 
   // ── BATCH SELECT STATE (new — batch-first) ──
   const [selectedPostIds, setSelectedPostIds] = useState(new Set());
@@ -232,7 +240,10 @@ const SchedulingPage = ({
 
     // Start polling for overdue SCHEDULED posts (checks if they're actually live on Late.co)
     // Use ref to avoid re-creating subscription when posts change
-    const stopPolling = startPolling(db, artistId, () => postsRef.current);
+    const stopPolling = startPolling(db, artistId, () => postsRef.current, (event) => {
+      if (event.type === 'posted') toastSuccess(`"${event.contentName}" just went live!`);
+      if (event.type === 'failed') toastError(`"${event.contentName}" failed to post`);
+    });
 
     return () => {
       unsubscribe();
@@ -291,6 +302,7 @@ const SchedulingPage = ({
 
         // Match by scheduledTime (within 2 min tolerance) + content similarity
         let matched = 0;
+        let posted = 0;
         for (const localPost of missing) {
           const localTime = localPost.scheduledTime ? new Date(localPost.scheduledTime).getTime() : 0;
           const localCaption = (localPost.caption || '').toLowerCase().trim();
@@ -316,9 +328,23 @@ const SchedulingPage = ({
 
           if (match) {
             const latePostId = match._id || match.id;
-            log('[Schedule] Backfill matched:', localPost.id, '→', latePostId);
-            await updateScheduledPost(db, artistId, localPost.id, { latePostId });
+            const lateStatus = (match.status || '').toLowerCase();
+            const updates = { latePostId };
+            // If Late.co shows the post as published/live, update our status too
+            if (lateStatus === 'published' || lateStatus === 'live') {
+              updates.status = 'posted';
+              updates.postedAt = match.published_at || match.publishedAt || new Date().toISOString();
+              log('[Schedule] Backfill matched + POSTED:', localPost.id, '→', latePostId);
+            } else if (lateStatus === 'failed') {
+              updates.status = 'failed';
+              updates.errorMessage = match.error || 'Post failed on Late.co';
+              log('[Schedule] Backfill matched + FAILED:', localPost.id, '→', latePostId);
+            } else {
+              log('[Schedule] Backfill matched:', localPost.id, '→', latePostId, '(status:', lateStatus, ')');
+            }
+            await updateScheduledPost(db, artistId, localPost.id, updates);
             matched++;
+            if (updates.status === 'posted') posted++;
             // Remove from pool so it's not matched again
             const idx = allLatePosts.indexOf(match);
             if (idx >= 0) allLatePosts.splice(idx, 1);
@@ -326,8 +352,12 @@ const SchedulingPage = ({
         }
 
         if (matched > 0) {
-          log('[Schedule] Backfill complete:', matched, 'posts linked to Late.co');
-          toastSuccess(`Linked ${matched} post${matched !== 1 ? 's' : ''} to Late.co`);
+          log('[Schedule] Backfill complete:', matched, 'linked,', posted, 'marked posted');
+          if (posted > 0) {
+            toastSuccess(`${posted} post${posted !== 1 ? 's' : ''} already went live on Late.co`);
+          } else {
+            toastSuccess(`Linked ${matched} post${matched !== 1 ? 's' : ''} to Late.co`);
+          }
         } else {
           log('[Schedule] Backfill: no matches found');
         }
@@ -337,12 +367,149 @@ const SchedulingPage = ({
     })();
   }, [posts, loading, artistId, db, toastSuccess]);
 
+  // ── Manual sync with Late.co — fetch all Late posts, match + update status ──
+  const [syncing, setSyncing] = useState(false);
+  const handleSyncWithLate = useCallback(async () => {
+    if (!db || !artistId || syncing) return;
+    setSyncing(true);
+    try {
+      const token = await getAuth().currentUser?.getIdToken();
+      if (!token) { toastError('Not authenticated'); setSyncing(false); return; }
+
+      // Fetch all Late posts (paginated)
+      let allLatePosts = [];
+      let page = 1;
+      let hasMore = true;
+      while (hasMore) {
+        const resp = await fetch(`/api/late?action=posts&page=${page}&artistId=${artistId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!resp.ok) {
+          console.warn('[Sync] Late API returned', resp.status);
+          break;
+        }
+        const data = await resp.json();
+        const latePosts = data.posts || data.data || [];
+        if (Array.isArray(latePosts) && latePosts.length > 0) {
+          allLatePosts = [...allLatePosts, ...latePosts];
+          page++;
+          if (latePosts.length < 50) hasMore = false;
+        } else {
+          hasMore = false;
+        }
+        if (page > 10) hasMore = false;
+      }
+
+      log('[Sync] Fetched', allLatePosts.length, 'Late posts');
+      if (allLatePosts.length > 0) {
+        log('[Sync] Sample Late post:', JSON.stringify(allLatePosts[0]).substring(0, 500));
+      }
+
+      if (allLatePosts.length === 0) {
+        toastError('No posts found on Late.co');
+        setSyncing(false);
+        return;
+      }
+
+      // Match local scheduled posts to Late posts
+      const scheduled = postsRef.current.filter(p => p.status === 'scheduled');
+      let linked = 0;
+      let posted = 0;
+      let failed = 0;
+
+      for (const localPost of scheduled) {
+        const localTime = localPost.scheduledTime ? new Date(localPost.scheduledTime).getTime() : 0;
+        const localCaption = (localPost.caption || '').toLowerCase().trim();
+
+        const match = allLatePosts.find(lp => {
+          const lateId = lp._id || lp.id;
+          if (!lateId) return false;
+          // Match by time (within 5 min tolerance)
+          const lateTime = lp.scheduledFor ? new Date(lp.scheduledFor).getTime() : 0;
+          if (Math.abs(localTime - lateTime) > 5 * 60 * 1000) return false;
+          // Match by caption if available
+          const lateContent = (lp.content || '').toLowerCase().trim();
+          if (localCaption && lateContent) {
+            return lateContent.includes(localCaption.substring(0, 20));
+          }
+          return true;
+        });
+
+        if (match) {
+          const latePostId = match._id || match.id;
+          const lateStatus = (match.status || '').toLowerCase();
+          const updates = { latePostId };
+
+          if (lateStatus === 'published' || lateStatus === 'live') {
+            updates.status = 'posted';
+            updates.postedAt = match.published_at || match.publishedAt || new Date().toISOString();
+            posted++;
+          } else if (lateStatus === 'failed') {
+            updates.status = 'failed';
+            updates.errorMessage = match.error || 'Post failed on Late.co';
+            failed++;
+          }
+          await updateScheduledPost(db, artistId, localPost.id, updates);
+          linked++;
+          // Remove from pool
+          const idx = allLatePosts.indexOf(match);
+          if (idx >= 0) allLatePosts.splice(idx, 1);
+        }
+      }
+
+      const parts = [];
+      if (posted > 0) parts.push(`${posted} posted`);
+      if (failed > 0) parts.push(`${failed} failed`);
+      if (linked > posted + failed) parts.push(`${linked - posted - failed} linked`);
+      if (parts.length > 0) {
+        toastSuccess(`Synced with Late: ${parts.join(', ')}`);
+      } else {
+        toastError(`No matches found (${scheduled.length} scheduled, ${allLatePosts.length + linked} on Late)`);
+      }
+      log('[Sync] Done:', linked, 'linked,', posted, 'posted,', failed, 'failed');
+    } catch (err) {
+      console.error('[Sync] Error:', err);
+      toastError('Sync failed: ' + (err.message || 'Unknown error'));
+    }
+    setSyncing(false);
+  }, [db, artistId, syncing, toastSuccess, toastError]);
+
   useEffect(() => {
     const now = new Date();
     setBatchStartDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
   }, []);
 
-  // Load always-on hashtags/captions from content templates (reusable)
+  // Per-niche hashtag/caption bank map: collectionName → { hashtags: string[], caption: string }
+  const nicheBankMap = useMemo(() => {
+    const map = {};
+    const cols = getCollections(artistId);
+    cols.forEach(c => {
+      if (!c.name) return;
+      const hb = getCollectionHashtagBank(c);
+      const cb = getCollectionCaptionBank(c);
+      const hashtags = [...(hb.always || []), ...(hb.pool || [])];
+      // Also handle flat array format (Session 65 migration)
+      const flatHashtags = Array.isArray(c.hashtagBank) ? c.hashtagBank : [];
+      const flatCaptions = Array.isArray(c.captionBank) ? c.captionBank : [];
+      const allHashtags = hashtags.length > 0 ? hashtags : flatHashtags;
+      const captions = [...(cb.always || []), ...(cb.pool || []), ...flatCaptions];
+      if (allHashtags.length > 0 || captions.length > 0) {
+        map[c.name] = { hashtags: allHashtags, caption: captions[0] || '' };
+      }
+    });
+    return map;
+  }, [artistId]);
+
+  // Helper: get hashtags/caption for a post based on its collection
+  const getPostBank = useCallback((post) => {
+    if (post?.collectionName && nicheBankMap[post.collectionName]) {
+      return nicheBankMap[post.collectionName];
+    }
+    // No niche match — return empty (don't merge all templates together)
+    return { hashtags: [], caption: '' };
+  }, [nicheBankMap]);
+
+  // Load always-on hashtags/captions from content templates (global fallback)
   const loadAlwaysOnFromTemplates = useCallback(async () => {
     if (!db || !artistId) return;
     try {
@@ -1360,10 +1527,10 @@ const SchedulingPage = ({
   }
 
   return (
-    <div className="flex h-full w-full items-stretch bg-black">
+    <div className="flex h-full w-full items-stretch bg-black overflow-hidden">
       <div style={{ ...s.page, flex: '1 1 0%', minWidth: 0 }}>
       {/* ═══ HEADER ═══ */}
-      <div className="flex w-full flex-col items-start border-b border-solid border-neutral-800 bg-black px-12 py-6" style={isMobile ? { padding: '12px 16px' } : undefined}>
+      <div className="flex w-full flex-col items-start border-b border-solid border-neutral-800 bg-black px-12 py-8" style={isMobile ? { padding: '12px 16px' } : undefined}>
         <div className="flex w-full items-center justify-between" style={isMobile ? { flexDirection: 'column', alignItems: 'flex-start', gap: '8px' } : undefined}>
           <div className="flex items-center gap-6">
             <div className="flex flex-col items-start gap-1">
@@ -1376,7 +1543,7 @@ const SchedulingPage = ({
             {visibleArtists.length > 1 && onArtistChange && (
               <SubframeCore.DropdownMenu.Root>
                 <SubframeCore.DropdownMenu.Trigger asChild>
-                  <div className="flex items-center gap-3 rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2 cursor-pointer hover:bg-neutral-900">
+                  <div className="flex items-center gap-3 rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2 cursor-pointer hover:bg-[#262626]">
                     <div className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-brand-600 text-white text-xs font-semibold">
                       {(visibleArtists.find(a => a.id === artistId)?.name || '?')[0].toUpperCase()}
                     </div>
@@ -1403,21 +1570,18 @@ const SchedulingPage = ({
           <div className="flex items-center gap-3" style={isMobile ? { flexWrap: 'wrap', width: '100%' } : undefined}>
             {!readOnly && (
               <>
-                <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherPlus />} onClick={() => setShowAddModal(true)} />
-                <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherShuffle />} onClick={handleRandomizeOrder} />
-                <IconButton variant="neutral-tertiary" size="medium" icon={queuePaused ? <FeatherPlay /> : <FeatherPause />} onClick={() => setQueuePaused(!queuePaused)} />
-                <IconButton
-                  variant={showCaptionBank ? 'brand-tertiary' : 'neutral-tertiary'}
-                  size="medium"
-                  icon={<FeatherHash />}
-                  onClick={() => setShowCaptionBank(!showCaptionBank)}
-                />
+                <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherPlus />} aria-label="Add to queue" onClick={() => setShowAddModal(true)} />
+                <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherRotateCcw />} aria-label="Sync with Late" loading={syncing} onClick={handleSyncWithLate} />
+                <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherShuffle />} aria-label="Randomize order" onClick={handleRandomizeOrder} />
+                <IconButton variant="neutral-tertiary" size="medium" icon={queuePaused ? <FeatherPlay /> : <FeatherPause />} aria-label={queuePaused ? "Resume queue" : "Pause queue"} onClick={() => setQueuePaused(!queuePaused)} />
               </>
             )}
             <div className="flex h-8 w-px flex-none flex-col items-start bg-neutral-800" />
+            {/* Note: Radix ToggleGroup may emit aria-checked on non-checkbox roles (axe "aria-allowed-attr").
+                This is a known Radix UI library issue — cannot fix without patching Radix internals. */}
             <ToggleGroup value={viewMode} onValueChange={(v) => v && setViewMode(v)}>
-              <ToggleGroup.Item className="h-8 w-auto flex-none" icon={<FeatherList />} value="list" />
-              <ToggleGroup.Item className="h-8 w-auto flex-none" icon={<FeatherCalendar />} value="calendar" />
+              <ToggleGroup.Item className="h-8 w-auto flex-none" icon={<FeatherList />} value="list" aria-label="List view" />
+              <ToggleGroup.Item className="h-8 w-auto flex-none" icon={<FeatherCalendar />} value="calendar" aria-label="Calendar view" />
             </ToggleGroup>
           </div>
         </div>
@@ -1530,28 +1694,16 @@ const SchedulingPage = ({
             <div style={{ width: '1px', height: '32px', backgroundColor: theme.border.default, display: isMobile ? 'none' : 'block' }} />
 
             <div style={{ ...s.bulkSection, ...(isMobile ? { width: '100%' } : {}) }}>
-              <label style={s.miniLabel}>Start</label>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <div style={{ position: 'relative', display: 'inline-block' }}>
-                  <input type="date" value={batchStartDate} onChange={(e) => setBatchStartDate(e.target.value)} style={{ ...s.miniInput, paddingRight: '24px' }} />
-                  <span style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '12px', opacity: 0.5 }}>📅</span>
-                </div>
-                <div style={{ position: 'relative', display: 'inline-block' }}>
-                  <input
-                    type="time"
-                    value={batchStartTime}
-                    onChange={(e) => setBatchStartTime(e.target.value)}
-                    style={{ ...s.miniInput, paddingRight: '24px', cursor: 'pointer' }}
-                  />
-                  <span
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const input = e.currentTarget.previousElementSibling;
-                      if (input) { input.focus(); input.click(); }
-                    }}
-                    style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'auto', fontSize: '12px', opacity: 0.5, cursor: 'pointer' }}
-                  >🕐</span>
-                </div>
+              <label style={s.miniLabel}>Batch Start Date & Time</label>
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                <input type="date" value={batchStartDate} onChange={(e) => setBatchStartDate(e.target.value)} style={s.miniInput} aria-label="Batch start date" />
+                <input
+                  type="time"
+                  value={batchStartTime}
+                  onChange={(e) => setBatchStartTime(e.target.value)}
+                  style={{ ...s.miniInput, cursor: 'pointer' }}
+                  aria-label="Batch start time"
+                />
               </div>
             </div>
 
@@ -1561,9 +1713,9 @@ const SchedulingPage = ({
                 <div style={{ ...s.bulkSection, ...(isMobile ? { width: '100%' } : {}) }}>
                   <label style={s.miniLabel}>Random Range (min)</label>
                   <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                    <input type="number" value={batchRandomMin} onChange={(e) => setBatchRandomMin(Number(e.target.value))} style={{ ...s.miniInput, width: '60px' }} />
+                    <input type="number" value={batchRandomMin} onChange={(e) => setBatchRandomMin(Number(e.target.value))} style={{ ...s.miniInput, width: '60px' }} aria-label="Random spacing minimum minutes" />
                     <span style={{ color: '#52525b', fontSize: '11px' }}>to</span>
-                    <input type="number" value={batchRandomMax} onChange={(e) => setBatchRandomMax(Number(e.target.value))} style={{ ...s.miniInput, width: '60px' }} />
+                    <input type="number" value={batchRandomMax} onChange={(e) => setBatchRandomMax(Number(e.target.value))} style={{ ...s.miniInput, width: '60px' }} aria-label="Random spacing maximum minutes" />
                   </div>
                 </div>
               </>
@@ -1594,7 +1746,6 @@ const SchedulingPage = ({
         <div className="flex w-full flex-wrap items-center gap-1">
           {[
             { key: 'all', label: 'All' },
-            { key: POST_STATUS.DRAFT, label: 'Drafts' },
             { key: POST_STATUS.SCHEDULED, label: 'Scheduled' },
             { key: POST_STATUS.POSTING, label: 'Posting' },
             { key: POST_STATUS.POSTED, label: 'Posted' },
@@ -1631,6 +1782,7 @@ const SchedulingPage = ({
                   else selectAllVisible();
                 }}
                 className="w-4 h-4 cursor-pointer"
+                aria-label="Select all posts"
               />
               <span className="text-body font-body text-neutral-400">Select All</span>
             </div>
@@ -1671,6 +1823,7 @@ const SchedulingPage = ({
                   }}
                   style={{ cursor: 'pointer', width: '14px', height: '14px' }}
                   title="Select all"
+                  aria-label="Select all posts"
                 />
               </div>
               <div style={{ width: '28px' }} />
@@ -1703,8 +1856,8 @@ const SchedulingPage = ({
                     isPaused={queuePaused}
                     accounts={accounts}
                     lateAccountIds={lateAccountIds}
-                    alwaysOnHashtags={alwaysOnHashtags}
-                    alwaysOnCaption={alwaysOnCaption}
+                    alwaysOnHashtags={getPostBank(post).hashtags}
+                    alwaysOnCaption={getPostBank(post).caption}
                     onToggleSelect={() => togglePostSelection(post.id)}
                     onToggleExpand={() => setExpandedPostId(expandedPostId === post.id ? null : post.id)}
                     onUpdate={(updates) => handleUpdatePost(post.id, updates)}
@@ -1732,6 +1885,7 @@ const SchedulingPage = ({
             posts={filteredPosts}
             expandedPostId={expandedPostId}
             onSelectPost={(id) => setExpandedPostId(expandedPostId === id ? null : id)}
+            onEditPost={(post) => setPreviewingPost(post)}
             isMobile={isMobile}
             calendarDate={calendarDate}
             onChangeMonth={setCalendarDate}
@@ -1760,6 +1914,86 @@ const SchedulingPage = ({
       )}
 
       {/* Confirm Dialog */}
+      {/* Post Preview Modal */}
+      {previewingPost && (() => {
+        const es = previewingPost.editorState;
+        const isSlideshow = previewingPost.contentType === 'slideshow' && es?.slides?.length > 0;
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.85)' }}
+            onClick={() => setPreviewingPost(null)}>
+            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', maxWidth: '90vw', maxHeight: '85vh', minWidth: 320, borderRadius: 16, backgroundColor: theme.bg.input, overflow: 'hidden' }}
+              onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: `1px solid ${theme.border.subtle}` }}>
+                <div>
+                  <div style={{ color: theme.text.primary, fontSize: 16, fontWeight: 600 }}>
+                    {previewingPost.contentName || 'Untitled'}
+                  </div>
+                  <div style={{ color: theme.text.muted, fontSize: 12, marginTop: 2 }}>
+                    {isSlideshow ? `${es.slides.length} slides` : previewingPost.contentType || 'draft'}
+                    {previewingPost.scheduledTime && ` · ${new Date(previewingPost.scheduledTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`}
+                  </div>
+                  {(es?.audio?.name || previewingPost.audioName) && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                      <FeatherMusic style={{ width: 12, height: 12, color: '#6366f1' }} />
+                      <span style={{ color: '#6366f1', fontSize: 12, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={es?.audio?.name || previewingPost.audioName}>
+                        {(es?.audio?.name || previewingPost.audioName).replace(' Audio Extracted', '').replace('.mp3', '')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                  {!readOnly && es && onEditDraft && (
+                    <Button variant="brand-secondary" size="small" icon={<FeatherEdit2 />} onClick={() => { setPreviewingPost(null); onEditDraft(previewingPost); }}>
+                      Edit
+                    </Button>
+                  )}
+                  <IconButton size="small" icon={<FeatherX />} aria-label="Close preview" onClick={() => setPreviewingPost(null)} />
+                </div>
+              </div>
+              {/* Content */}
+              <div style={{ padding: 16, overflowY: 'auto', display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', maxHeight: 'calc(85vh - 72px)' }}>
+                {isSlideshow ? (
+                  es.slides.map((slide, i) => (
+                    <div key={slide.id || i} style={{
+                      width: 180, aspectRatio: '9/16', borderRadius: 10, overflow: 'hidden',
+                      backgroundColor: theme.bg.page, position: 'relative', border: `1px solid ${theme.border.subtle}`
+                    }}>
+                      {(slide.backgroundImage || slide.thumbnail || slide.imageA?.url) ? (
+                        <img src={slide.backgroundImage || slide.thumbnail || slide.imageA?.url} alt={`Slide ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.text.muted }}>Empty</div>
+                      )}
+                      {(slide.textOverlays || []).map((overlay, oi) => (
+                        <div key={oi} style={{
+                          position: 'absolute', left: `${overlay.position?.x || 50}%`, top: `${overlay.position?.y || 50}%`,
+                          transform: 'translate(-50%, -50%)', color: overlay.style?.color || '#fff',
+                          fontSize: `${Math.max(8, (overlay.style?.fontSize || 24) * 0.2)}px`,
+                          fontWeight: overlay.style?.fontWeight || '700', textAlign: 'center',
+                          textShadow: '0 1px 3px rgba(0,0,0,0.8)', pointerEvents: 'none', maxWidth: '90%', wordBreak: 'break-word'
+                        }}>{overlay.text}</div>
+                      ))}
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '4px 8px', background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 11, textAlign: 'center' }}>
+                        Slide {i + 1}
+                      </div>
+                    </div>
+                  ))
+                ) : (() => {
+                  const thumb = getPostThumb(previewingPost);
+                  return thumb ? (
+                    <div style={{ width: 240, aspectRatio: '9/16', borderRadius: 10, overflow: 'hidden', backgroundColor: theme.bg.page, border: `1px solid ${theme.border.subtle}` }}>
+                      <img src={thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                  ) : (
+                    <div style={{ padding: 40, color: theme.text.muted, textAlign: 'center' }}>No preview available</div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}
         title={confirmDialog.title}
@@ -1769,28 +2003,6 @@ const SchedulingPage = ({
         onCancel={() => setConfirmDialog({ isOpen: false })}
       />
       </div>{/* end main column */}
-
-      {/* ═══ CAPTION BANK SIDEBAR ═══ */}
-      {showCaptionBank && !isMobile && (
-        <div className="flex w-96 flex-none flex-col items-start self-stretch border-l border-solid border-neutral-800 bg-[#1a1a1aff] overflow-auto">
-          <div className="flex w-full items-center justify-between border-b border-solid border-neutral-800 px-6 py-4">
-            <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Caption Bank</span>
-            <IconButton variant="neutral-tertiary" size="small" icon={<FeatherX />} onClick={() => setShowCaptionBank(false)} />
-          </div>
-          <div className="flex w-full grow shrink-0 basis-0 flex-col items-start overflow-auto">
-            <CaptionHashtagBank
-              db={db}
-              artistId={artistId}
-              compact={false}
-              onBankChange={() => { loadAlwaysOnFromTemplates(); }}
-              draftCount={selectedPostIds.size > 0
-                ? posts.filter(p => p.status === POST_STATUS.DRAFT && selectedPostIds.has(p.id)).length
-                : posts.filter(p => p.status === POST_STATUS.DRAFT).length}
-              onApplyToDrafts={handleApplyCategory}
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -1915,6 +2127,7 @@ const PostRow = ({
             onChange={onToggleSelect}
             style={{ cursor: 'pointer', width: isMobile ? '20px' : '14px', height: isMobile ? '20px' : '14px', accentColor: '#6366f1' }}
             onClick={(e) => e.stopPropagation()}
+            aria-label={`Select post ${post.name || post.contentName || ''}`}
           />
         </div>
 
@@ -1960,28 +2173,16 @@ const PostRow = ({
         {isMobile ? (
           <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '6px', paddingLeft: '32px' }}>
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <div style={{ position: 'relative', flex: 1, minWidth: '120px' }}>
-                <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} onMouseDown={(e) => e.stopPropagation()} style={{ ...s.inlineDate, width: '100%', paddingRight: '24px' }} />
-                <span style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '11px', opacity: 0.5 }}>📅</span>
-              </div>
-              <div style={{ position: 'relative', flex: 1, minWidth: '90px' }}>
-                <input
-                  type="time"
-                  value={schedTime}
-                  onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }}
-                  onClick={(e) => e.stopPropagation()}
-                  onFocus={(e) => e.stopPropagation()}
-                  style={{ ...s.inlineTime, width: '100%', paddingRight: '24px', cursor: 'pointer' }}
-                />
-                <span
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const input = e.currentTarget.previousElementSibling;
-                    if (input) { input.focus(); input.click(); }
-                  }}
-                  style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'auto', fontSize: '11px', opacity: 0.5, cursor: 'pointer' }}
-                >🕐</span>
-              </div>
+              <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} onMouseDown={(e) => e.stopPropagation()} style={{ ...s.inlineDate, flex: 1, minWidth: '120px' }} aria-label="Schedule date" />
+              <input
+                type="time"
+                value={schedTime}
+                onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }}
+                onClick={(e) => e.stopPropagation()}
+                onFocus={(e) => e.stopPropagation()}
+                style={{ ...s.inlineTime, flex: 1, minWidth: '90px', cursor: 'pointer' }}
+                aria-label="Schedule time"
+              />
             </div>
             {previewTime && !post.scheduledTime && (() => {
               const pt = new Date(previewTime);
@@ -1998,29 +2199,16 @@ const PostRow = ({
             {/* Schedule Date/Time */}
             <div style={{ width: '190px', display: 'flex', flexDirection: 'column', gap: '2px', flexShrink: 0 }}>
               <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                <div style={{ position: 'relative', display: 'inline-block' }}>
-                  <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} onMouseDown={(e) => e.stopPropagation()} style={{ ...s.inlineDate, paddingRight: '24px' }} />
-                  <span style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', fontSize: '10px', opacity: 0.5 }}>📅</span>
-                </div>
-                <div style={{ position: 'relative', display: 'inline-block' }}>
-                  <input
-                    ref={(el) => { if (el) el.dataset.timeInput = 'true'; }}
-                    type="time"
-                    value={schedTime}
-                    onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }}
-                    onClick={(e) => e.stopPropagation()}
-                    onFocus={(e) => e.stopPropagation()}
-                    style={{ ...s.inlineTime, paddingRight: '24px', cursor: 'pointer' }}
-                  />
-                  <span
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const input = e.currentTarget.previousElementSibling;
-                      if (input) { input.focus(); input.click(); }
-                    }}
-                    style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'auto', fontSize: '10px', opacity: 0.5, cursor: 'pointer' }}
-                  >🕐</span>
-                </div>
+                <input type="date" value={schedDate} onChange={(e) => { setSchedDate(e.target.value); handleScheduleChange(e.target.value, null); }} onMouseDown={(e) => e.stopPropagation()} style={s.inlineDate} aria-label="Schedule date" />
+                <input
+                  type="time"
+                  value={schedTime}
+                  onChange={(e) => { setSchedTime(e.target.value); handleScheduleChange(null, e.target.value); }}
+                  onClick={(e) => e.stopPropagation()}
+                  onFocus={(e) => e.stopPropagation()}
+                  style={{ ...s.inlineTime, cursor: 'pointer' }}
+                  aria-label="Schedule time"
+                />
               </div>
               {previewTime && !post.scheduledTime && (() => {
                 const pt = new Date(previewTime);
@@ -2058,12 +2246,14 @@ const PostRow = ({
             variant="neutral-tertiary"
             size="small"
             icon={post.locked ? <FeatherLock className="text-warning-500" /> : <FeatherUnlock />}
+            aria-label={post.locked ? "Unlock post" : "Lock post"}
             onClick={(e) => { e.stopPropagation(); onUpdate({ locked: !post.locked }); }}
           />
           <IconButton
             variant="neutral-tertiary"
             size="small"
             icon={isExpanded ? <FeatherChevronUp /> : <FeatherChevronDown />}
+            aria-label={isExpanded ? "Collapse" : "Expand"}
             onClick={onToggleExpand}
           />
           {!readOnly && (
@@ -2071,6 +2261,7 @@ const PostRow = ({
               variant="destructive-tertiary"
               size="small"
               icon={<FeatherTrash2 />}
+              aria-label="Delete post"
               onClick={(e) => { e.stopPropagation(); onDelete(); }}
             />
           )}
@@ -2109,13 +2300,15 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
   const { theme } = useTheme();
   const s = getS(theme);
   const [hashtags, setHashtags] = useState(toHashtagArray(post.hashtags).join(' '));
+  const [caption, setCaption] = useState(post.caption || '');
   const [hashtagBank, setHashtagBank] = useState([]);
   const [showSaveSet, setShowSaveSet] = useState(false);
   const [newSetName, setNewSetName] = useState('');
 
   useEffect(() => {
     setHashtags(toHashtagArray(post.hashtags).join(' '));
-  }, [post.id, post.hashtags]);
+    setCaption(post.caption || '');
+  }, [post.id, post.hashtags, post.caption]);
 
   useEffect(() => {
     const key = `stm_hashtag_bank_${post.id?.split('/')[0] || 'default'}`;
@@ -2126,6 +2319,10 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
   const handleHashtagsBlur = () => {
     const tags = hashtags.split(/[\s,]+/).filter(Boolean).map(h => h.startsWith('#') ? h : `#${h}`);
     if (tags.join(' ') !== toHashtagArray(post.hashtags).join(' ')) onUpdate({ hashtags: tags });
+  };
+
+  const handleCaptionBlur = () => {
+    if (caption !== (post.caption || '')) onUpdate({ caption });
   };
 
   const handleApplySet = (set) => { setHashtags(set.tags.join(' ')); onUpdate({ hashtags: set.tags }); };
@@ -2209,8 +2406,29 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
           </div>
         </div>
 
-        {/* Center: Tiered Hashtags */}
+        {/* Center: Caption + Tiered Hashtags */}
         <div style={s.drawerCenter}>
+          <label style={s.drawerLabel}>Caption</label>
+          <textarea
+            value={caption}
+            onChange={(e) => setCaption(e.target.value)}
+            onBlur={handleCaptionBlur}
+            placeholder="Write your caption..."
+            rows={4}
+            readOnly={readOnly}
+            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.input, color: theme.text.primary, fontSize: '12px', fontFamily: 'inherit', resize: 'vertical', lineHeight: '1.5' }}
+            aria-label="Post caption"
+          />
+          {alwaysOnCaption && (
+            <div style={{ marginTop: '6px' }}>
+              <span style={{ fontSize: '9px', color: '#52525b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Always-on (from bank)</span>
+              <div style={{ padding: '6px 8px', borderRadius: '6px', backgroundColor: theme.bg.surface, border: `1px solid ${theme.border.default}`, fontSize: '11px', color: theme.text.secondary, fontStyle: 'italic', marginTop: '3px' }}>
+                {alwaysOnCaption}
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginTop: '12px' }} />
           <label style={s.drawerLabel}>Hashtags</label>
 
           {/* Always-on tier (gray, locked) */}
@@ -2234,6 +2452,7 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
             onBlur={handleHashtagsBlur}
             placeholder="#tag1 #tag2 #tag3"
             style={{ ...s.drawerInput, marginTop: '3px' }}
+            aria-label="Per-post hashtags"
           />
           {perPostTags.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
@@ -2264,22 +2483,13 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
               <button style={s.linkBtn} onClick={() => setShowSaveSet(true)}>Save Current as Set</button>
             ) : (
               <div style={{ display: 'flex', gap: '6px' }}>
-                <input type="text" value={newSetName} onChange={(e) => setNewSetName(e.target.value)} placeholder="Set name..." style={{ ...s.drawerInput, flex: 1 }} />
+                <input type="text" value={newSetName} onChange={(e) => setNewSetName(e.target.value)} placeholder="Set name..." style={{ ...s.drawerInput, flex: 1 }} aria-label="Hashtag set name" />
                 <button style={{ ...s.drawerBtn, padding: '4px 12px' }} onClick={handleSaveSet}>Save</button>
                 <button style={{ ...s.drawerBtn, padding: '4px 8px' }} onClick={() => setShowSaveSet(false)}>×</button>
               </div>
             )}
           </div>
 
-          {/* Always-on caption from templates */}
-          {alwaysOnCaption && (
-            <div style={{ marginTop: '10px' }}>
-              <label style={s.drawerLabel}>Always-on Caption</label>
-              <div style={{ padding: '6px 8px', borderRadius: '6px', backgroundColor: theme.bg.input, border: `1px solid ${theme.border.default}`, fontSize: '11px', color: theme.text.secondary, fontStyle: 'italic' }}>
-                {alwaysOnCaption}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Right: Account Selection + Results */}
@@ -2388,13 +2598,13 @@ const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) =>
       <div style={s.modalContent} onClick={(e) => e.stopPropagation()}>
         <div style={s.modalHeader}>
           <h2 style={s.modalTitle}>Add from Drafts</h2>
-          <IconButton size="small" icon={<FeatherX />} onClick={onClose} />
+          <IconButton size="small" icon={<FeatherX />} aria-label="Close" onClick={onClose} />
         </div>
         <div style={{ padding: '8px 16px', borderBottom: `1px solid ${theme.bg.elevated}` }}>
           <ToggleGroup value={selectedTab} onValueChange={(val) => { if (val) { setSelectedTab(val); setSelectedItems(new Set()); } }}>
-            <ToggleGroup.Item value="all">All</ToggleGroup.Item>
-            <ToggleGroup.Item value="videos">Videos</ToggleGroup.Item>
-            <ToggleGroup.Item value="slideshows">Slideshows</ToggleGroup.Item>
+            <ToggleGroup.Item value="all" aria-label="Show all drafts">All</ToggleGroup.Item>
+            <ToggleGroup.Item value="videos" aria-label="Show video drafts">Videos</ToggleGroup.Item>
+            <ToggleGroup.Item value="slideshows" aria-label="Show slideshow drafts">Slideshows</ToggleGroup.Item>
           </ToggleGroup>
         </div>
         {loadingContent ? (
@@ -2417,7 +2627,7 @@ const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) =>
                       {item.thumbnail ? <img src={item.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> :
                         <span style={{ fontSize: '24px' }}>{item.type === 'slideshow' ? '🖼️' : '🎥'}</span>}
                       {isDuplicate && <div style={s.dupBadge}>Already queued</div>}
-                      <input type="checkbox" checked={isSelected} onChange={() => handleSelectItem(item.id)} style={{ position: 'absolute', top: '6px', right: '6px', width: '16px', height: '16px' }} onClick={(e) => e.stopPropagation()} />
+                      <input type="checkbox" checked={isSelected} onChange={() => handleSelectItem(item.id)} style={{ position: 'absolute', top: '6px', right: '6px', width: '16px', height: '16px' }} onClick={(e) => e.stopPropagation()} aria-label={`Select ${item.name || 'draft'}`} />
                     </div>
                     <div style={{ padding: '6px 8px' }}>
                       <p style={{ margin: 0, fontSize: '11px', fontWeight: '500', color: '#e4e4e7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
@@ -2456,7 +2666,36 @@ const AddFromDraftsModal = ({ artistId, existingContentIds, onAdd, onClose }) =>
 // CalendarView
 // ═══════════════════════════════════════════════════
 
-const CalendarView = ({ posts, expandedPostId, onSelectPost, calendarDate, onChangeMonth, onDragPost, isMobile = false }) => {
+const STATUS_COLORS = {
+  [POST_STATUS.DRAFT]: '#71717a',
+  [POST_STATUS.SCHEDULED]: '#6366f1',
+  [POST_STATUS.POSTING]: '#f59e0b',
+  [POST_STATUS.POSTED]: '#10b981',
+  [POST_STATUS.FAILED]: '#ef4444',
+};
+
+const getPostThumb = (post) => {
+  if (post.thumbnail && !post.thumbnail.startsWith('blob:')) return post.thumbnail;
+  const es = post.editorState;
+  if (!es) return null;
+  // Slideshow: try first slide's background image
+  const slide = es.slides?.[0];
+  if (slide) {
+    const url = slide.backgroundImage || slide.imageA?.url || slide.thumbnail;
+    if (url && !url.startsWith('blob:')) return url;
+  }
+  // Video: try thumbnail or first clip
+  if (es.thumbnailUrl) return es.thumbnailUrl;
+  if (es.thumbnail && !es.thumbnail.startsWith('blob:')) return es.thumbnail;
+  const clip = es.clips?.[0];
+  if (clip) {
+    const url = clip.thumbnailUrl || clip.thumbnail;
+    if (url && !url.startsWith('blob:')) return url;
+  }
+  return null;
+};
+
+const CalendarView = ({ posts, expandedPostId, onSelectPost, onEditPost, calendarDate, onChangeMonth, onDragPost, isMobile = false }) => {
   const { theme } = useTheme();
   const s = getS(theme);
   const [draggedPostId, setDraggedPostId] = useState(null);
@@ -2487,9 +2726,9 @@ const CalendarView = ({ posts, expandedPostId, onSelectPost, calendarDate, onCha
   return (
     <div style={s.calView}>
       <div style={s.calHeader}>
-        <IconButton size={isMobile ? "medium" : "small"} onClick={() => onChangeMonth(new Date(year, month - 1))} icon={<FeatherChevronLeft />} />
+        <IconButton size={isMobile ? "medium" : "small"} onClick={() => onChangeMonth(new Date(year, month - 1))} icon={<FeatherChevronLeft />} aria-label="Previous month" />
         <span style={s.calTitle}>{firstDay.toLocaleString('en-US', { month: 'long', year: 'numeric' })}</span>
-        <IconButton size={isMobile ? "medium" : "small"} onClick={() => onChangeMonth(new Date(year, month + 1))} icon={<FeatherChevronRight />} />
+        <IconButton size={isMobile ? "medium" : "small"} onClick={() => onChangeMonth(new Date(year, month + 1))} icon={<FeatherChevronRight />} aria-label="Next month" />
         <Button variant="neutral-tertiary" size="small" className="ml-2" onClick={() => onChangeMonth(new Date())}>Today</Button>
       </div>
       <div style={{ ...s.calGrid, ...(isMobile ? { padding: '4px' } : {}) }}>
@@ -2509,26 +2748,74 @@ const CalendarView = ({ posts, expandedPostId, onSelectPost, calendarDate, onCha
             >
               {date && (
                 <>
-                  <div style={s.calCellDate}>{date.getDate()}</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
-                    {dayPosts.map(post => (
-                      <div
-                        key={post.id}
-                        draggable
-                        onDragStart={(e) => { e.stopPropagation(); setDraggedPostId(post.id); setDragFromDate(date); e.dataTransfer.effectAllowed = 'move'; }}
-                        onClick={() => onSelectPost(post.id)}
-                        style={{
-                          padding: isMobile ? '1px 3px' : '2px 6px', borderRadius: isMobile ? '3px' : '4px', fontSize: isMobile ? '8px' : '10px', fontWeight: '500', color: '#fff', cursor: 'pointer',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          backgroundColor: { [POST_STATUS.DRAFT]: '#71717a', [POST_STATUS.SCHEDULED]: '#6366f1', [POST_STATUS.POSTING]: '#f59e0b', [POST_STATUS.POSTED]: '#10b981', [POST_STATUS.FAILED]: '#ef4444' }[post.status] || '#71717a',
-                          ...(expandedPostId === post.id ? { boxShadow: '0 0 0 2px #6366f1' } : {}),
-                          opacity: draggedPostId === post.id ? 0.5 : 1
-                        }}
-                        title={`${post.contentName} — ${new Date(post.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}
-                      >
-                        {post.contentName.substring(0, isMobile ? 6 : 12)}
-                      </div>
-                    ))}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <div style={s.calCellDate}>{date.getDate()}</div>
+                    {dayPosts.length > 0 && (
+                      <span style={{ fontSize: '9px', fontWeight: '700', color: '#fff', backgroundColor: '#6366f1', borderRadius: '8px', padding: '1px 5px', lineHeight: '14px' }}>
+                        {dayPosts.length}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, maxHeight: isMobile ? '80px' : '150px', overflowY: dayPosts.length > 4 ? 'auto' : 'hidden' }}>
+                    {dayPosts.map(post => {
+                      const statusColor = STATUS_COLORS[post.status] || '#71717a';
+                      const timeStr = new Date(post.scheduledTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                      if (isMobile) {
+                        return (
+                          <div
+                            key={post.id}
+                            draggable
+                            onDragStart={(e) => { e.stopPropagation(); setDraggedPostId(post.id); setDragFromDate(date); e.dataTransfer.effectAllowed = 'move'; }}
+                            onClick={() => onSelectPost(post.id)}
+                            style={{
+                              padding: '1px 3px', borderRadius: '3px', fontSize: '8px', fontWeight: '500', color: '#fff', cursor: 'pointer',
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', backgroundColor: statusColor,
+                              ...(expandedPostId === post.id ? { boxShadow: '0 0 0 2px #6366f1' } : {}),
+                              opacity: draggedPostId === post.id ? 0.5 : 1
+                            }}
+                            title={`${post.contentName} — ${timeStr}`}
+                          >
+                            {post.contentName.substring(0, 6)}
+                          </div>
+                        );
+                      }
+                      return (
+                        <div
+                          key={post.id}
+                          draggable
+                          onDragStart={(e) => { e.stopPropagation(); setDraggedPostId(post.id); setDragFromDate(date); e.dataTransfer.effectAllowed = 'move'; }}
+                          onClick={() => onEditPost ? onEditPost(post) : onSelectPost(post.id)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '5px',
+                            padding: '3px 5px', borderRadius: '5px', cursor: 'pointer',
+                            backgroundColor: theme.bg.input, border: `1px solid ${theme.border.default}`,
+                            ...(expandedPostId === post.id ? { boxShadow: '0 0 0 2px #6366f1' } : {}),
+                            opacity: draggedPostId === post.id ? 0.5 : 1
+                          }}
+                          title={`${post.contentName} — ${timeStr}`}
+                        >
+                          {(() => {
+                            const thumb = getPostThumb(post);
+                            return thumb ? (
+                              <img src={thumb} alt="" style={{ width: '36px', height: '26px', borderRadius: '3px', objectFit: 'cover', flexShrink: 0 }} />
+                            ) : (
+                              <div style={{ width: '36px', height: '26px', borderRadius: '3px', backgroundColor: statusColor, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <span style={{ fontSize: '8px', color: '#fff', fontWeight: '600' }}>{(post.contentName || '?')[0]}</span>
+                              </div>
+                            );
+                          })()}
+                          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: '500', color: theme.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {post.contentName}
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontSize: '9px', color: theme.text.muted }}>{timeStr}</span>
+                              <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: statusColor, flexShrink: 0 }} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </>
               )}
@@ -2545,7 +2832,7 @@ const CalendarView = ({ posts, expandedPostId, onSelectPost, calendarDate, onCha
 // ═══════════════════════════════════════════════════
 
 const getS = (theme) => ({
-  page: { display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: theme.bg.page, color: theme.text.primary, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
+  page: { display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', backgroundColor: theme.bg.page, color: theme.text.primary, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
   loadingState: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' },
   spinner: { width: '32px', height: '32px', border: `3px solid ${theme.border.default}`, borderTop: `3px solid ${theme.accent.primary}`, borderRadius: '50%', animation: 'spin 1s linear infinite' },
 
@@ -2588,12 +2875,12 @@ const getS = (theme) => ({
   viewToggleBtnActive: { backgroundColor: theme.bg.elevated, color: theme.text.primary },
 
   // Content area
-  content: { flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' },
+  content: { flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 },
 
   // List
   listContainer: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
   listHeader: { display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 20px', borderBottom: `1px solid ${theme.border.subtle}`, backgroundColor: theme.bg.surface, fontSize: '10px', fontWeight: '600', color: theme.text.secondary, textTransform: 'uppercase', letterSpacing: '0.5px', flexShrink: 0 },
-  listScroll: { flex: 1, overflowY: 'auto' },
+  listScroll: { flex: 1, overflowY: 'auto', scrollbarGutter: 'stable' },
   emptyState: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 20px' },
 
   // Row
@@ -2655,8 +2942,8 @@ const getS = (theme) => ({
   calTitle: { fontSize: '15px', fontWeight: '600', color: theme.text.primary, minWidth: '150px', textAlign: 'center' },
   calGrid: { flex: 1, display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1px', padding: '8px', backgroundColor: theme.border.default, overflow: 'auto' },
   calDayHeader: { padding: '8px 6px', backgroundColor: theme.bg.surface, color: theme.text.muted, fontSize: '11px', fontWeight: '600', textAlign: 'center', textTransform: 'uppercase' },
-  calCell: { backgroundColor: theme.bg.surface, padding: '6px', minHeight: '90px', display: 'flex', flexDirection: 'column', border: `1px solid ${theme.border.default}` },
-  calCellDate: { fontSize: '11px', fontWeight: '600', color: theme.text.secondary, marginBottom: '3px' }
+  calCell: { backgroundColor: theme.bg.surface, padding: '6px', minHeight: '180px', display: 'flex', flexDirection: 'column', border: `1px solid ${theme.border.default}`, overflow: 'hidden' },
+  calCellDate: { fontSize: '11px', fontWeight: '600', color: theme.text.secondary }
 });
 
 export default SchedulingPage;

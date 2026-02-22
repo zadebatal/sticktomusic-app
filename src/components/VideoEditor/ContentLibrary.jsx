@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import ExportAndPostModal from './ExportAndPostModal';
 import ScheduleQueue from './ScheduleQueue';
 import { StatusPill, ConfirmDialog, EmptyState as SharedEmptyState, useToast } from '../ui';
@@ -7,18 +7,23 @@ import { renderVideo } from '../../services/videoExportService';
 import { uploadFile } from '../../services/firebaseStorage';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
 import { createScheduledPost, deleteScheduledPost, getScheduledPosts, POST_STATUS } from '../../services/scheduledPostsService';
-import { getLibraryAsync, saveCreatedContentAsync, markContentScheduledAsync, unmarkContentScheduledAsync } from '../../services/libraryService';
+import { getLibrary, getLibraryAsync, getProjects, getProjectNiches, saveCreatedContentAsync, markContentScheduledAsync, unmarkContentScheduledAsync } from '../../services/libraryService';
 import log from '../../utils/logger';
 import {
   initGoogleDrive, authenticate as driveAuth, isAuthenticated as isDriveAuth,
   uploadFile as driveUploadFile, ensureAppFolder
 } from '../../services/googleDriveService';
+import {
+  initDropbox, authenticate as dbxAuth, isAuthenticated as isDbxAuth,
+  uploadFile as dbxUploadFile, ensureAppFolder as dbxEnsureAppFolder
+} from '../../services/dropboxService';
 import useIsMobile from '../../hooks/useIsMobile';
 import { useTheme } from '../../contexts/ThemeContext';
 import CloudImportButton from './CloudImportButton';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
+import { Badge } from '../../ui/components/Badge';
 import { FeatherArrowLeft, FeatherPlus, FeatherTrash2, FeatherDownload, FeatherEdit2, FeatherMusic, FeatherCalendar, FeatherX, FeatherSend, FeatherUploadCloud, FeatherChevronRight } from '@subframe/core';
 
 /**
@@ -54,7 +59,10 @@ const ContentLibrary = ({
   // Trash / soft-delete props
   onRestoreContent,
   onPermanentDelete,
-  onGetDeletedContent
+  onGetDeletedContent,
+  // Drafts tab toggle (Video/Slideshow)
+  draftsTab,
+  onDraftsTabChange
 }) => {
   // BUG-034: Toast notifications instead of alert()
   const { success: toastSuccess, error: toastError } = useToast();
@@ -64,6 +72,8 @@ const ContentLibrary = ({
   const isSlideshow = contentType === 'slideshows';
   const [filter, setFilter] = useState('all');
   const [dateRange, setDateRange] = useState('all');
+  const [projectFilter, setProjectFilter] = useState('all');
+  const [nicheFilter, setNicheFilter] = useState('all');
   const [selectedVideoIds, setSelectedVideoIds] = useState(new Set());
   const [lastSelectedIndex, setLastSelectedIndex] = useState(null);
   const [exportingVideo, setExportingVideo] = useState(null);
@@ -76,6 +86,47 @@ const ContentLibrary = ({
   const [loadingTrash, setLoadingTrash] = useState(false);
   const [restoringId, setRestoringId] = useState(null);
 
+  // Projects & niches for filtering
+  const projects = useMemo(() => artistId ? getProjects(artistId) : [], [artistId]);
+  const niches = useMemo(() => {
+    if (!artistId || projectFilter === 'all') {
+      // Get all niches across all projects
+      return projects.flatMap(p => getProjectNiches(artistId, p.id));
+    }
+    return getProjectNiches(artistId, projectFilter);
+  }, [artistId, projects, projectFilter]);
+
+  // Map niche (collection) IDs to their project IDs for filtering
+  const nicheProjectMap = useMemo(() => {
+    const map = new Map();
+    for (const p of projects) {
+      for (const n of getProjectNiches(artistId, p.id)) {
+        map.set(n.id, p.id);
+      }
+    }
+    return map;
+  }, [artistId, projects]);
+
+  // Reset niche filter when project changes
+  useEffect(() => {
+    setNicheFilter('all');
+  }, [projectFilter]);
+
+  // Build URL/ID→thumbnailUrl map from library for low-res card thumbnails
+  const thumbMap = useMemo(() => {
+    if (!artistId) return new Map();
+    const lib = getLibrary(artistId);
+    const map = new Map();
+    for (const item of lib) {
+      if (item.thumbnailUrl) {
+        if (item.url) map.set(item.url, item.thumbnailUrl);
+        if (item.id) map.set(item.id, item.thumbnailUrl);
+        if (item.localUrl) map.set(item.localUrl, item.thumbnailUrl);
+      }
+    }
+    return map;
+  }, [artistId]);
+
   // Rendering state
   const [renderingVideoId, setRenderingVideoId] = useState(null);
   const [renderProgress, setRenderProgress] = useState(0);
@@ -85,6 +136,11 @@ const ContentLibrary = ({
   const DRIVE_API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;
   const driveConfigured = !!(DRIVE_CLIENT_ID && DRIVE_API_KEY);
   const [driveExporting, setDriveExporting] = useState(null); // item id being exported
+
+  // Dropbox export
+  const DROPBOX_APP_KEY = process.env.REACT_APP_DROPBOX_APP_KEY;
+  const dropboxConfigured = !!DROPBOX_APP_KEY;
+  const [dropboxExporting, setDropboxExporting] = useState(null);
 
   // Export a video or slideshow to Google Drive
   const handleExportToDrive = useCallback(async (item) => {
@@ -138,6 +194,56 @@ const ContentLibrary = ({
       setDriveExporting(null);
     }
   }, [driveConfigured, DRIVE_CLIENT_ID, DRIVE_API_KEY, isSlideshow, category?.name, toastSuccess, toastError]);
+
+  // Export a video or slideshow to Dropbox
+  const handleExportToDropbox = useCallback(async (item) => {
+    if (!dropboxConfigured) {
+      toastError('Dropbox not configured');
+      return;
+    }
+    setDropboxExporting(item.id);
+    try {
+      initDropbox(DROPBOX_APP_KEY);
+      if (!isDbxAuth()) await dbxAuth();
+
+      const artistName = category?.name || 'StickToMusic';
+      const appFolder = await dbxEnsureAppFolder(artistName);
+
+      if (isSlideshow) {
+        const slides = item.slides || [];
+        let uploaded = 0;
+        for (let i = 0; i < slides.length; i++) {
+          const slide = slides[i];
+          const imageUrl = slide.backgroundImage || slide.imageA?.url || slide.imageA?.localUrl || slide.thumbnail;
+          if (!imageUrl) continue;
+          const resp = await fetch(imageUrl);
+          const blob = await resp.blob();
+          const ext = blob.type.includes('png') ? 'png' : 'jpg';
+          const fileName = `${item.name || 'slideshow'}_slide${i + 1}.${ext}`;
+          await dbxUploadFile(new File([blob], fileName, { type: blob.type }), `${appFolder.artistPath}/${fileName}`);
+          uploaded++;
+        }
+        toastSuccess(`Exported ${uploaded} slide${uploaded !== 1 ? 's' : ''} to Dropbox`);
+      } else {
+        const url = item.cloudUrl;
+        if (!url) {
+          toastError('Video needs to be rendered first');
+          setDropboxExporting(null);
+          return;
+        }
+        const resp = await fetch(url);
+        const blob = await resp.blob();
+        const fileName = `${item.name || item.textOverlay || 'video'}_${item.id}.mp4`;
+        await dbxUploadFile(new File([blob], fileName, { type: 'video/mp4' }), `${appFolder.artistPath}/${fileName}`);
+        toastSuccess('Video exported to Dropbox');
+      }
+    } catch (err) {
+      console.error('[ContentLibrary] Dropbox export failed:', err);
+      toastError('Dropbox export failed: ' + (err.message || 'Unknown error'));
+    } finally {
+      setDropboxExporting(null);
+    }
+  }, [dropboxConfigured, DROPBOX_APP_KEY, isSlideshow, category?.name, toastSuccess, toastError]);
 
   // Scheduled posts for draft status tracking
   const [scheduledPosts, setScheduledPosts] = useState([]);
@@ -329,8 +435,7 @@ const ContentLibrary = ({
   }, [scheduledPosts]);
 
   // Split items into posted, scheduled, and unposted
-  const [showPosted, setShowPosted] = useState(false);
-  const [showScheduledItems, setShowScheduledItems] = useState(false);
+  const [draftTab, setDraftTab] = useState('drafts'); // 'drafts' | 'scheduled' | 'posted'
 
   const { unpostedItems, scheduledItems, postedItems } = useMemo(() => {
     const posted = [];
@@ -348,6 +453,18 @@ const ContentLibrary = ({
     return { unpostedItems: unposted, scheduledItems: scheduled, postedItems: posted };
   }, [items, postedContentIds, scheduledContentIds]);
 
+  // Shared project/niche filter function
+  const applyProjectNicheFilter = useCallback((item) => {
+    if (projectFilter !== 'all') {
+      const itemProject = item.collectionId ? nicheProjectMap.get(item.collectionId) : null;
+      if (itemProject !== projectFilter) return false;
+    }
+    if (nicheFilter !== 'all') {
+      if (item.collectionId !== nicheFilter) return false;
+    }
+    return true;
+  }, [projectFilter, nicheFilter, nicheProjectMap]);
+
   const filteredItems = unpostedItems.filter(item => {
     if (filter !== 'all' && item.status !== filter) return false;
     if (dateRange !== 'all') {
@@ -358,8 +475,11 @@ const ContentLibrary = ({
       if (dateRange === 'week' && diffDays > 7) return false;
       if (dateRange === 'month' && diffDays > 30) return false;
     }
-    return true;
+    return applyProjectNicheFilter(item);
   });
+
+  const filteredScheduledItems = useMemo(() => scheduledItems.filter(applyProjectNicheFilter), [scheduledItems, applyProjectNicheFilter]);
+  const filteredPostedItems = useMemo(() => postedItems.filter(applyProjectNicheFilter), [postedItems, applyProjectNicheFilter]);
 
   // Card-level click-to-select with shift-click range support
   const handleCardSelect = useCallback((itemId, index, event) => {
@@ -383,57 +503,55 @@ const ContentLibrary = ({
   // Backwards compat alias
   const filteredVideos = isSlideshow ? [] : filteredItems;
 
-  const styles = getStyles(theme);
-
   return (
-    <div style={styles.container}>
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Header */}
-      <div style={{
-        ...styles.header,
-        ...(isMobile ? { flexDirection: 'column', alignItems: 'stretch', gap: '12px', padding: '16px' } : {})
-      }}>
-        <div style={styles.headerLeft}>
-          <IconButton size="small" icon={<FeatherArrowLeft />} onClick={() => { setPreviewingVideo(null); setPreviewingSlideshow(null); onBack?.(); }} />
-          <div style={styles.titleSection}>
-            <div style={styles.categoryIcon}>{category?.name?.charAt(0).toUpperCase()}</div>
+      <div className={`flex items-center justify-between px-6 py-5 border-b border-neutral-800 ${isDraftsView && !isMobile ? '!grid !grid-cols-[1fr_auto_1fr] !items-center' : ''} ${isMobile ? '!flex-col !items-stretch !gap-3 !p-4' : ''}`}>
+        <div className="flex items-center gap-4">
+          <IconButton size="small" icon={<FeatherArrowLeft />} aria-label="Back" onClick={() => { setPreviewingVideo(null); setPreviewingSlideshow(null); onBack?.(); }} />
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-neutral-800 rounded-lg flex items-center justify-center text-base font-semibold text-neutral-400">{category?.name?.charAt(0).toUpperCase()}</div>
             <div>
-              <h1 style={styles.title}>{category?.name}</h1>
-              <p style={styles.subtitle}>
+              <h1 className="text-lg font-semibold text-white m-0">{category?.name}</h1>
+              <p className="text-[13px] text-neutral-500 m-0">
                 {isSlideshow ? 'Draft and approve slideshows' : 'Draft and approve videos'}
               </p>
             </div>
           </div>
         </div>
-        <div style={{
-          ...styles.headerActions,
-          ...(isMobile ? { flexDirection: 'column', width: '100%', gap: '8px' } : {})
-        }}>
-          <CloudImportButton
-            artistId={artistId}
-            db={db}
-            mediaType="all"
-            onImportMedia={(files) => {
-              toastSuccess(`Imported ${files.length} file(s) from cloud`);
-            }}
-          />
+        {/* Video / Slideshow toggle — centered */}
+        {isDraftsView && onDraftsTabChange && (
+          <div className="flex items-center">
+            {['videos', 'slideshows'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => onDraftsTabChange(tab)}
+                className={`border-none cursor-pointer transition-all duration-150 px-4 py-2 text-[13px] font-semibold rounded-md ${draftsTab === tab ? 'bg-indigo-500/15 text-indigo-400' : 'bg-transparent text-neutral-500'}`}
+              >
+                {tab === 'videos' ? 'Videos' : 'Slideshows'}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className={`flex items-center gap-2 ${isDraftsView ? 'justify-end' : ''} ${isMobile ? '!flex-col !w-full !gap-2' : ''}`}>
           {isDraftsView ? (
-            /* Drafts view: show prominent create CTAs + delete */
-            <>
-              <Button variant="brand-primary" size="small" className={isMobile ? 'w-full justify-center' : ''} onClick={() => onMakeVideo?.()}>
-                New Video Draft
+            /* Drafts view: only show delete when items selected */
+            selectedVideoIds.size > 0 && (
+              <Button variant="destructive-secondary" size="small" className={isMobile ? 'w-full justify-center' : ''} icon={<FeatherTrash2 />} onClick={() => setDeleteConfirm({ isOpen: true, videoId: null, isBulk: true })}>
+                Delete Selected ({selectedVideoIds.size})
               </Button>
-              <Button variant="brand-secondary" size="small" className={isMobile ? 'w-full justify-center' : ''} onClick={() => onMakeSlideshow?.()}>
-                New Slideshow Draft
-              </Button>
-              {selectedVideoIds.size > 0 && (
-                <Button variant="destructive-secondary" size="small" className={isMobile ? 'w-full justify-center' : ''} icon={<FeatherTrash2 />} onClick={() => setDeleteConfirm({ isOpen: true, videoId: null, isBulk: true })}>
-                  Delete Selected ({selectedVideoIds.size})
-                </Button>
-              )}
-            </>
+            )
           ) : (
             /* Normal category view: show Make buttons */
             <>
+              <CloudImportButton
+                artistId={artistId}
+                db={db}
+                mediaType="all"
+                onImportMedia={(files) => {
+                  toastSuccess(`Imported ${files.length} file(s) from cloud`);
+                }}
+              />
               <Button variant="brand-primary" size="small" className={isMobile ? 'w-full justify-center' : ''} icon={<FeatherPlus />} onClick={() => isSlideshow ? onMakeSlideshow?.() : onMakeVideo?.()}>
                 {isSlideshow ? 'Make a slideshow' : 'Make a video'}
               </Button>
@@ -447,35 +565,66 @@ const ContentLibrary = ({
         </div>
       </div>
 
-      {/* Filters */}
-      <div style={{
-        ...styles.filters,
-        ...(isMobile ? { flexDirection: 'column', alignItems: 'stretch', gap: '8px', padding: '12px 16px' } : {})
-      }}>
-        <ToggleGroup value={dateRange} onValueChange={(val) => val && setDateRange(val)}>
-          <ToggleGroup.Item value="all">All time</ToggleGroup.Item>
-          <ToggleGroup.Item value="today">Today</ToggleGroup.Item>
-          <ToggleGroup.Item value="week">This week</ToggleGroup.Item>
-          <ToggleGroup.Item value="month">This month</ToggleGroup.Item>
-        </ToggleGroup>
-        <div style={styles.filterRight}>
-          {filteredItems.length > 0 && (
-            <label style={styles.selectAllLabel}>
+      {/* Drafts / Scheduled / Posted tabs */}
+      {isDraftsView && (
+        <div className="flex items-center border-b border-neutral-800">
+          {[
+            { key: 'drafts', label: 'Drafts', count: filteredItems.length },
+            { key: 'scheduled', label: 'Scheduled', count: filteredScheduledItems.length },
+            { key: 'posted', label: 'Posted', count: filteredPostedItems.length },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setDraftTab(tab.key)}
+              className={`border-none cursor-pointer transition-all duration-150 px-5 py-2.5 text-[13px] font-semibold ${draftTab === tab.key ? 'bg-indigo-500/15 text-indigo-400 border-b-2 border-b-brand-600' : 'bg-transparent text-neutral-500 border-b-2 border-b-transparent'}`}
+            >
+              {tab.label} ({tab.count})
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Filters — show on all tabs */}
+      {isDraftsView && (
+        <div className={`flex items-center justify-between px-6 py-3 border-b border-neutral-800 ${isMobile ? '!flex-col !items-stretch !gap-2 !px-4' : ''}`}>
+          {draftTab === 'drafts' ? (
+            <ToggleGroup value={dateRange} onValueChange={(val) => val && setDateRange(val)}>
+              <ToggleGroup.Item value="all">All time</ToggleGroup.Item>
+              <ToggleGroup.Item value="today">Today</ToggleGroup.Item>
+              <ToggleGroup.Item value="week">This week</ToggleGroup.Item>
+              <ToggleGroup.Item value="month">This month</ToggleGroup.Item>
+            </ToggleGroup>
+          ) : (
+            <div />
+          )}
+        <div className="flex items-center gap-4">
+          {draftTab === 'drafts' && filteredItems.length > 0 && (
+            <label className="flex items-center gap-2 text-neutral-400 text-[13px] cursor-pointer">
               <input
                 type="checkbox"
                 checked={filteredItems.length > 0 && filteredItems.every(v => selectedVideoIds.has(v.id))}
                 onChange={toggleSelectAll}
-                style={styles.checkbox}
+                className="w-5 h-5 accent-brand-600 cursor-pointer"
               />
               Select All ({filteredItems.length})
             </label>
           )}
-          <select value={filter} onChange={(e) => setFilter(e.target.value)} style={styles.statusFilter}>
-            <option value="all">All statuses</option>
-            <option value="draft">Drafts</option>
-            <option value="completed">Completed</option>
-            <option value="approved">Approved</option>
-          </select>
+          {isDraftsView && projects.length > 0 && (
+            <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} className="px-3 py-2 bg-black border border-neutral-200 rounded-md text-neutral-800 text-[13px] cursor-pointer" style={{ colorScheme: 'dark' }}>
+              <option value="all">All projects</option>
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          )}
+          {isDraftsView && niches.length > 0 && (
+            <select value={nicheFilter} onChange={(e) => setNicheFilter(e.target.value)} className="px-3 py-2 bg-black border border-neutral-200 rounded-md text-neutral-800 text-[13px] cursor-pointer" style={{ colorScheme: 'dark' }}>
+              <option value="all">All niches</option>
+              {niches.map(n => (
+                <option key={n.id} value={n.id}>{n.name}</option>
+              ))}
+            </select>
+          )}
           {onGetDeletedContent && (
             <Button
               variant="neutral-tertiary"
@@ -504,9 +653,12 @@ const ContentLibrary = ({
               {showTrash ? 'Hide Trash' : 'Trash'}
             </Button>
           )}
+          </div>
         </div>
-      </div>
+      )}
 
+      {/* ═══ Drafts Tab Content ═══ */}
+      {draftTab === 'drafts' && <>
       {/* Trash Panel */}
       {showTrash && (
         <div style={{ padding: '16px 24px', borderBottom: `1px solid ${theme.border.subtle}`, backgroundColor: `${theme.bg.elevated}` }}>
@@ -514,7 +666,7 @@ const ContentLibrary = ({
             <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: theme.text.primary }}>
               Trash ({trashItems.length} {isSlideshow ? 'slideshow' : 'video'}{trashItems.length !== 1 ? 's' : ''})
             </h3>
-            <IconButton size="small" icon={<FeatherX />} onClick={() => setShowTrash(false)} />
+            <IconButton size="small" icon={<FeatherX />} aria-label="Close trash" onClick={() => setShowTrash(false)} />
           </div>
           {trashItems.length === 0 ? (
             <p style={{ color: theme.text.muted, fontSize: '12px', margin: 0 }}>Trash is empty</p>
@@ -611,12 +763,9 @@ const ContentLibrary = ({
       )}
 
       {/* Content Grid */}
-      <div style={{
-        ...styles.contentArea,
-        ...(isMobile ? { padding: '12px' } : {})
-      }}>
+      <div className={`flex-1 overflow-auto ${isMobile ? 'p-3' : 'p-6'}`}>
         {filteredItems.length === 0 ? (
-          <div style={styles.emptyState}>
+          <div className="flex flex-col items-center justify-center h-full text-center">
             {isSlideshow ? (
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
                 <rect x="2" y="6" width="6" height="12" rx="1"/>
@@ -628,10 +777,10 @@ const ContentLibrary = ({
                 <rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3V9z"/>
               </svg>
             )}
-            <h3 style={styles.emptyTitle}>
+            <h3 className="text-lg font-semibold text-white mt-4 mb-2">
               {isSlideshow ? 'No slideshows yet' : 'No videos yet'}
             </h3>
-            <p style={styles.emptyText}>
+            <p className="text-sm text-neutral-500 m-0 mb-6">
               {isDraftsView
                 ? 'No drafts to show'
                 : (isSlideshow ? 'Create your first slideshow to get started' : 'Create your first video to get started')}
@@ -643,14 +792,10 @@ const ContentLibrary = ({
             )}
           </div>
         ) : (
-          <div style={{
-            ...styles.grid,
-            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(200px, 1fr))',
-            ...(isMobile ? { gap: '10px', padding: '0' } : {})
-          }}>
+          <div className={`grid gap-4 ${isMobile ? 'grid-cols-2 !gap-2.5' : 'grid-cols-[repeat(auto-fill,minmax(200px,1fr))]'}`}>
             {filteredItems.map((item, index) => (
               isSlideshow ? (
-                <div key={item.id} onClick={(e) => handleCardSelect(item.id, index, e)} style={{ cursor: 'pointer' }}>
+                <div key={item.id} onClick={(e) => handleCardSelect(item.id, index, e)} style={{ cursor: 'pointer', contentVisibility: 'auto', containIntrinsicSize: '0 200px' }}>
                   <SlideshowCard
                     slideshow={item}
                     isSelected={selectedVideoIds.has(item.id)}
@@ -660,8 +805,11 @@ const ContentLibrary = ({
                     onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
                     onExportToDrive={driveConfigured ? () => handleExportToDrive(item) : null}
                     isDriveExporting={driveExporting === item.id}
+                    onExportToDropbox={dropboxConfigured ? () => handleExportToDropbox(item) : null}
+                    isDropboxExporting={dropboxExporting === item.id}
                     isMobile={isMobile}
                     draftNumber={index + 1}
+                    thumbMap={thumbMap}
                     onPost={async () => {
                       if (onViewScheduling && db && artistId) {
                         // Create a scheduled post and navigate to scheduling page
@@ -696,7 +844,7 @@ const ContentLibrary = ({
                   />
                 </div>
               ) : (
-                <div key={item.id} onClick={(e) => handleCardSelect(item.id, index, e)} style={{ cursor: 'pointer' }}>
+                <div key={item.id} onClick={(e) => handleCardSelect(item.id, index, e)} style={{ cursor: 'pointer', contentVisibility: 'auto', containIntrinsicSize: '0 200px' }}>
                   <VideoCard
                     video={item}
                     isSelected={selectedVideoIds.has(item.id)}
@@ -707,6 +855,9 @@ const ContentLibrary = ({
                     onApprove={() => onApproveVideo(item.id)}
                     onExportToDrive={driveConfigured ? () => handleExportToDrive(item) : null}
                     isDriveExporting={driveExporting === item.id}
+                    onExportToDropbox={dropboxConfigured ? () => handleExportToDropbox(item) : null}
+                    isDropboxExporting={dropboxExporting === item.id}
+                    thumbMap={thumbMap}
                     onPost={async () => {
                       if (onViewScheduling && db && artistId) {
                         // Create a scheduled post and navigate to scheduling page
@@ -746,36 +897,29 @@ const ContentLibrary = ({
         )}
       </div>
 
-      {/* Scheduled Drafts Section */}
-      {isDraftsView && scheduledItems.length > 0 && (
-        <div style={{ borderTop: `1px solid ${theme.border.subtle}` }}>
-          <Button
-            variant="neutral-tertiary"
-            onClick={() => setShowScheduledItems(!showScheduledItems)}
-            icon={<FeatherChevronRight style={{ transform: showScheduledItems ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />}
-            className="w-full justify-start px-6 py-3"
-          >
-            Scheduled ({scheduledItems.length})
-          </Button>
-          {showScheduledItems && (
+      </>}
+
+      {/* ═══ Scheduled Tab Content ═══ */}
+      {draftTab === 'scheduled' && (
+        <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? '12px' : '16px 24px' }}>
+          {filteredScheduledItems.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-neutral-500">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <p className="mt-3 text-body font-body">No scheduled content</p>
+            </div>
+          ) : (
             <div style={{
-              padding: '0 24px 16px',
               display: 'grid',
               gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(200px, 1fr))',
               gap: isMobile ? '10px' : '16px'
             }}>
-              {scheduledItems.map((item) => {
+              {filteredScheduledItems.map((item) => {
                 const postInfo = scheduledPosts.find(p => p.contentId === item.id && (p.status === 'scheduled' || p.status === 'draft'));
                 return (
                   <div key={item.id} style={{ position: 'relative' }}>
-                    {/* Schedule badge */}
-                    <div style={{
-                      position: 'absolute', top: '8px', right: '8px', zIndex: 2,
-                      display: 'flex', alignItems: 'center', gap: '4px',
-                      padding: '3px 8px', borderRadius: '6px',
-                      backgroundColor: `${theme.accent.primary}cc`, color: '#fff',
-                      fontSize: '10px', fontWeight: '600'
-                    }}>
+                    <div className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold text-white" style={{ backgroundColor: `${theme.accent.primary}cc` }}>
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                         <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
                       </svg>
@@ -789,6 +933,7 @@ const ContentLibrary = ({
                         onPreview={() => setPreviewingSlideshow(item)}
                         onEdit={() => onEditSlideshow?.(item)}
                         isMobile={isMobile}
+                        thumbMap={thumbMap}
                       />
                     ) : (
                       <VideoCard
@@ -798,9 +943,9 @@ const ContentLibrary = ({
                         onEdit={() => onEditVideo?.(item)}
                         onPreview={() => setPreviewingVideo(item)}
                         isMobile={isMobile}
+                        thumbMap={thumbMap}
                       />
                     )}
-                    {/* Unschedule action */}
                     <Button
                       variant="neutral-secondary"
                       size="small"
@@ -828,25 +973,23 @@ const ContentLibrary = ({
         </div>
       )}
 
-      {/* Already Posted Section */}
-      {isDraftsView && postedItems.length > 0 && (
-        <div style={{ borderTop: `1px solid ${theme.border.subtle}` }}>
-          <Button
-            variant="neutral-tertiary"
-            onClick={() => setShowPosted(!showPosted)}
-            icon={<FeatherChevronRight style={{ transform: showPosted ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />}
-            className="w-full justify-start px-6 py-3"
-          >
-            Already Posted ({postedItems.length})
-          </Button>
-          {showPosted && (
+      {/* ═══ Posted Tab Content ═══ */}
+      {draftTab === 'posted' && (
+        <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? '12px' : '16px 24px' }}>
+          {filteredPostedItems.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-neutral-500">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
+                <path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/>
+              </svg>
+              <p className="mt-3 text-body font-body">No posted content yet</p>
+            </div>
+          ) : (
             <div style={{
-              padding: '0 24px 16px',
               display: 'grid',
               gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(200px, 1fr))',
               gap: isMobile ? '10px' : '16px'
             }}>
-              {postedItems.map((item, index) => {
+              {filteredPostedItems.map((item) => {
                 const postInfo = scheduledPosts.find(p => p.contentId === item.id && p.status === 'posted');
                 return (
                   <div key={item.id} style={{ position: 'relative' }}>
@@ -857,7 +1000,6 @@ const ContentLibrary = ({
                         onToggleSelect={() => {}}
                         onPreview={() => setPreviewingSlideshow(item)}
                         onEdit={() => {
-                          // Duplicate as new draft — new ID, new timestamps
                           const duplicate = {
                             ...item,
                             id: `slideshow_${Date.now()}`,
@@ -870,6 +1012,7 @@ const ContentLibrary = ({
                         onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
                         isMobile={isMobile}
                         draftNumber={null}
+                        thumbMap={thumbMap}
                       />
                     ) : (
                       <VideoCard
@@ -889,16 +1032,10 @@ const ContentLibrary = ({
                         onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
                         isMobile={isMobile}
                         onPreview={() => setPreviewingVideo(item)}
+                        thumbMap={thumbMap}
                       />
                     )}
-                    {/* Posted badge overlay */}
-                    <div style={{
-                      position: 'absolute', top: '6px', left: '6px',
-                      backgroundColor: 'rgba(34,197,94,0.9)',
-                      color: '#fff', fontSize: '9px', fontWeight: '700',
-                      padding: '2px 6px', borderRadius: '4px',
-                      letterSpacing: '0.5px', textTransform: 'uppercase'
-                    }}>
+                    <div className="absolute top-1.5 left-1.5 bg-green-600/90 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide">
                       Posted{postInfo?.postedAt ? ` ${new Date(postInfo.postedAt).toLocaleDateString()}` : ''}
                     </div>
                   </div>
@@ -911,24 +1048,12 @@ const ContentLibrary = ({
 
       {/* Batch Action Bar */}
       {selectedItems.length > 0 && (
-        <div style={{
-          ...styles.batchBar,
-          ...(isMobile ? {
-            flexDirection: 'column',
-            gap: '12px',
-            margin: '0 12px 12px',
-            padding: '12px 16px',
-            paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))'
-          } : {})
-        }}>
-          <div style={styles.batchLeft}>
-            <input type="checkbox" checked={filteredItems.every(v => selectedVideoIds.has(v.id))} onChange={toggleSelectAll} style={styles.checkbox} />
-            <span style={styles.batchText}>{selectedItems.length} selected</span>
+        <div className={`flex items-center justify-between px-6 py-4 bg-brand-600 mx-6 mb-4 rounded-xl shadow-[0_4px_20px_rgba(99,102,241,0.5)] ${isMobile ? '!flex-col !gap-3 !mx-3 !mb-3 !px-4 !py-3 !pb-[calc(12px+env(safe-area-inset-bottom,0px))]' : ''}`}>
+          <div className="flex items-center gap-3">
+            <input type="checkbox" checked={filteredItems.every(v => selectedVideoIds.has(v.id))} onChange={toggleSelectAll} className="w-5 h-5 accent-brand-600 cursor-pointer" />
+            <span className="text-white text-sm font-medium">{selectedItems.length} selected</span>
           </div>
-          <div style={{
-            ...styles.batchRight,
-            ...(isMobile ? { flexWrap: 'wrap', justifyContent: 'center', width: '100%' } : {})
-          }}>
+          <div className={`flex items-center gap-2 ${isMobile ? '!flex-wrap !justify-center !w-full' : ''}`}>
             <Button variant="neutral-tertiary" size="small" onClick={clearSelection}>Clear</Button>
             <Button variant="destructive-secondary" size="small" icon={<FeatherTrash2 />} onClick={() => setDeleteConfirm({ isOpen: true, videoId: null, isBulk: true })}>
               Delete {selectedItems.length}
@@ -1022,7 +1147,7 @@ const ContentLibrary = ({
                   Select a song from your library
                 </div>
               </div>
-              <IconButton size="small" icon={<FeatherX />} onClick={() => setShowAudioAssign(false)} />
+              <IconButton size="small" icon={<FeatherX />} aria-label="Close audio selection" onClick={() => setShowAudioAssign(false)} />
             </div>
 
             {/* Audio List */}
@@ -1223,10 +1348,18 @@ const ContentLibrary = ({
                 <div style={{ color: theme.text.muted, fontSize: 12, marginTop: 2 }}>
                   {previewingSlideshow.slides?.length || 0} slides · {previewingSlideshow.status || 'draft'}
                 </div>
+                {previewingSlideshow.audio?.name && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                    <FeatherMusic style={{ width: 12, height: 12, color: '#6366f1' }} />
+                    <span style={{ color: '#6366f1', fontSize: 12, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={previewingSlideshow.audio.name}>
+                      {previewingSlideshow.audio.name.replace(' Audio Extracted', '').replace('.mp3', '')}
+                    </span>
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                 <Button variant="brand-secondary" size="small" icon={<FeatherEdit2 />} onClick={() => { setPreviewingSlideshow(null); onEditSlideshow?.(previewingSlideshow); }}>Edit</Button>
-                <IconButton size={isMobile ? "medium" : "small"} icon={<FeatherX />} onClick={() => setPreviewingSlideshow(null)} />
+                <IconButton size={isMobile ? "medium" : "small"} icon={<FeatherX />} aria-label="Close preview" onClick={() => setPreviewingSlideshow(null)} />
               </div>
             </div>
             {/* Slides */}
@@ -1291,7 +1424,7 @@ const ContentLibrary = ({
             boxShadow: theme.shadow
           }} onClick={e => e.stopPropagation()}>
             <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 10 }}>
-              <IconButton size={isMobile ? "medium" : "small"} icon={<FeatherX />} onClick={() => setPreviewingVideo(null)} />
+              <IconButton size={isMobile ? "medium" : "small"} icon={<FeatherX />} aria-label="Close preview" onClick={() => setPreviewingVideo(null)} />
             </div>
             {previewingVideo.cloudUrl ? (
               <video
@@ -1337,6 +1470,14 @@ const ContentLibrary = ({
                 {previewingVideo.status} · {previewingVideo.clips?.length || 0} clips
                 {previewingVideo.cloudUrl && ' · Rendered'}
               </div>
+              {previewingVideo.audio?.name && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                  <FeatherMusic style={{ width: 12, height: 12, color: '#6366f1' }} />
+                  <span style={{ color: '#6366f1', fontSize: 12, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={previewingVideo.audio.name}>
+                    {previewingVideo.audio.name.replace(' Audio Extracted', '').replace('.mp3', '')}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1345,7 +1486,7 @@ const ContentLibrary = ({
   );
 };
 
-const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onApprove, onPost, onRender, isRendering, renderProgress, onPreview, onExportToDrive, isDriveExporting, isMobile = false }) => {
+const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onApprove, onPost, onRender, isRendering, renderProgress, onPreview, onExportToDrive, isDriveExporting, onExportToDropbox, isDropboxExporting, isMobile = false, thumbMap }) => {
   const { theme } = useTheme();
   const [showActions, setShowActions] = useState(false);
   const actionsVisible = isMobile || showActions;
@@ -1358,88 +1499,53 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
 
   const needsRendering = video.isRendered === false;
 
-  const styles = getStyles(theme);
-
   return (
     <div
-      style={{...styles.videoCard, ...(isSelected ? styles.videoCardSelected : {})}}
+      className={`relative bg-[#171717] rounded-xl overflow-hidden ${isSelected ? 'border-2 border-brand-600 shadow-[0_0_0_2px_rgba(99,102,241,0.3)]' : 'border-2 border-transparent'}`}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
-      <div style={styles.videoCheckbox} onClick={(e) => e.stopPropagation()}>
-        <input type="checkbox" checked={isSelected} onChange={onToggleSelect} style={styles.checkbox} />
+      <div className="absolute top-2 left-2 z-10 min-w-[44px] min-h-[44px] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+        <input type="checkbox" checked={isSelected} onChange={onToggleSelect} className="w-5 h-5 accent-brand-600 cursor-pointer" />
       </div>
 
-      <div style={styles.videoThumb} onClick={() => !isRendering && onPreview?.(video)}>
+      <div className="relative aspect-[9/16] bg-black select-none" onClick={() => !isRendering && onPreview?.(video)}>
         {(video.thumbnail || video.thumbnailUrl) ? (
-          <img src={video.thumbnail || video.thumbnailUrl} alt="" style={styles.videoThumbImg} loading="lazy" />
+          <ThumbImg src={thumbMap?.get(video.id) || video.thumbnail || video.thumbnailUrl} alt="" className="w-full h-full object-cover" />
         ) : video.clips?.[0]?.thumbnail || video.clips?.[0]?.thumbnailUrl ? (
-          <img src={video.clips[0].thumbnail || video.clips[0].thumbnailUrl} alt="" style={styles.videoThumbImg} loading="lazy" />
+          <ThumbImg src={video.clips[0].thumbnail || video.clips[0].thumbnailUrl} alt="" className="w-full h-full object-cover" />
         ) : video.clips?.[0]?.url ? (
-          <video src={video.clips[0].url} style={styles.videoThumbImg} muted preload="metadata" />
+          <video src={video.clips[0].url} className="w-full h-full object-cover" muted preload="metadata" />
         ) : (
-          <div style={styles.videoThumbPlaceholder}>
+          <div className="w-full h-full flex items-center justify-center">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
               <rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3V9z"/>
             </svg>
           </div>
         )}
 
-        {video.textOverlay && <div style={styles.textOverlay}>{video.textOverlay}</div>}
+        {video.textOverlay && <div className="absolute bottom-[40%] left-1/2 -translate-x-1/2 px-4 py-2 bg-black/30 rounded text-white text-xs font-medium">{video.textOverlay}</div>}
 
         {/* "Needs Rendering" badge */}
         {needsRendering && !isRendering && (
-          <div style={{
-            position: 'absolute',
-            top: '8px',
-            right: '8px',
-            background: 'rgba(251, 191, 36, 0.9)',
-            color: '#78350f',
-            padding: '2px 6px',
-            borderRadius: '4px',
-            fontSize: '10px',
-            fontWeight: '600'
-          }}>
+          <div className="absolute top-2 right-2 bg-amber-400/90 text-amber-900 px-1.5 py-0.5 rounded text-[10px] font-semibold">
             ⚡ Recipe
           </div>
         )}
 
         {/* Rendering progress */}
         {isRendering && (
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            background: theme.overlay.heavy,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: theme.text.primary
-          }}>
-            <div style={{ fontSize: '12px', marginBottom: '8px' }}>Rendering...</div>
-            <div style={{
-              width: '80%',
-              height: '4px',
-              background: theme.border.subtle,
-              borderRadius: '2px'
-            }}>
-              <div style={{
-                width: `${renderProgress}%`,
-                height: '100%',
-                background: '#8b5cf6',
-                borderRadius: '2px',
-                transition: 'width 0.3s'
-              }} />
+          <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center text-white">
+            <div className="text-xs mb-2">Rendering...</div>
+            <div className="w-4/5 h-1 bg-neutral-700 rounded-sm">
+              <div className="h-full bg-violet-500 rounded-sm transition-all duration-300" style={{ width: `${renderProgress}%` }} />
             </div>
-            <div style={{ fontSize: '11px', marginTop: '4px' }}>{renderProgress}%</div>
+            <div className="text-[11px] mt-1">{renderProgress}%</div>
           </div>
         )}
 
         {actionsVisible && !isRendering && (
-          <div style={{
-            ...styles.videoActions,
-            ...(isMobile ? { position: 'absolute', bottom: '8px', left: '8px', right: '8px', top: 'auto', justifyContent: 'center', flexWrap: 'wrap', background: theme.overlay.light, borderRadius: '6px', padding: '4px' } : {})
-          }}>
+          <div className={`absolute top-2 right-2 flex gap-1.5 ${isMobile ? '!bottom-2 !left-2 !right-2 !top-auto !justify-center !flex-wrap bg-black/30 rounded-md p-1' : ''}`}>
             <Button variant="neutral-secondary" size="small" icon={<FeatherEdit2 />} onClick={(e) => handleActionClick(e, onEdit)}>Edit</Button>
             {needsRendering ? (
               <Button variant="brand-primary" size="small" onClick={(e) => handleActionClick(e, onRender)}>🎬 Export</Button>
@@ -1476,24 +1582,71 @@ const VideoCard = ({ video, isSelected, onToggleSelect, onEdit, onDelete, onAppr
                     {isDriveExporting ? 'Saving...' : 'Drive'}
                   </Button>
                 )}
+                {onExportToDropbox && video.cloudUrl && (
+                  <Button
+                    variant="neutral-secondary"
+                    size="small"
+                    icon={<FeatherUploadCloud />}
+                    disabled={isDropboxExporting}
+                    loading={isDropboxExporting}
+                    onClick={(e) => { e.stopPropagation(); onExportToDropbox(); }}
+                  >
+                    {isDropboxExporting ? 'Saving...' : 'Dropbox'}
+                  </Button>
+                )}
                 <Button variant="brand-primary" size="small" icon={<FeatherSend />} onClick={(e) => handleActionClick(e, onPost)}>Post</Button>
               </>
             )}
-            <IconButton size="small" icon={<FeatherTrash2 />} onClick={(e) => handleActionClick(e, onDelete)} />
+            <IconButton size="small" icon={<FeatherTrash2 />} aria-label="Delete" onClick={(e) => handleActionClick(e, onDelete)} />
           </div>
         )}
       </div>
 
       {/* UI-31: Use StatusPill instead of custom badge */}
-      <div style={styles.statusBadgeContainer}>
+      <div className="px-3 py-2.5 bg-[#171717] flex items-center justify-center">
         <StatusPill status={video.status || VIDEO_STATUS.DRAFT} />
       </div>
     </div>
   );
 };
 
-const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdit, onDelete, onPost, onExportToDrive, isDriveExporting, isMobile = false, draftNumber }) => {
-  const { theme } = useTheme();
+// Tiny thumbnail component — loads full image once, downscales to small canvas, caches data URL
+const thumbCache = new Map();
+const ThumbImg = ({ src, alt = '', className = '' }) => {
+  const [dataUrl, setDataUrl] = useState(() => thumbCache.get(src) || null);
+  const attempted = useRef(false);
+
+  useEffect(() => {
+    if (!src || dataUrl || attempted.current) return;
+    attempted.current = true;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const MAX = 96;
+        const scale = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.naturalWidth * scale);
+        canvas.height = Math.round(img.naturalHeight * scale);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const url = canvas.toDataURL('image/jpeg', 0.6);
+        thumbCache.set(src, url);
+        setDataUrl(url);
+      } catch {
+        // CORS or canvas tainted — fall back to original
+        setDataUrl(src);
+      }
+    };
+    img.onerror = () => setDataUrl(src);
+    img.src = src;
+  }, [src, dataUrl]);
+
+  if (!src) return null;
+  return <img src={dataUrl || src} alt={alt} loading="lazy" decoding="async" className={className} />;
+};
+
+const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdit, onDelete, onPost, onExportToDrive, isDriveExporting, onExportToDropbox, isDropboxExporting, isMobile = false, draftNumber, thumbMap }) => {
   const [showActions, setShowActions] = useState(false);
   const actionsVisible = isMobile || showActions;
 
@@ -1504,118 +1657,84 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
 
   const slides = slideshow.slides || [];
   const slideCount = slides.length;
-
-  // Check if slideshow has been exported (has carousel images)
   const isExported = slideshow.exportedImages?.length > 0 || slideshow.status === 'rendered';
 
-  // Get thumbnail for a slide
-  const getSlideThumb = (slide) =>
-    slide?.imageA?.url || slide?.imageA?.localUrl || slide?.thumbnail || slide?.backgroundImage;
-
-  // Get primary text overlay for a slide (first overlay with non-empty text)
-  const getSlideText = (slide) => {
-    if (!slide?.textOverlays?.length) return null;
-    const overlay = slide.textOverlays.find(o => o.text);
-    return overlay || null;
+  const getSlideThumb = (slide) => {
+    if (!slide) return null;
+    // Try sourceImageId first (most reliable match)
+    if (slide.sourceImageId && thumbMap?.has(slide.sourceImageId)) return thumbMap.get(slide.sourceImageId);
+    // Try all URL fields
+    const urls = [slide.backgroundImage, slide.imageA?.url, slide.imageA?.localUrl, slide.thumbnail];
+    for (const url of urls) {
+      if (url && thumbMap?.has(url)) return thumbMap.get(url);
+    }
+    return urls.find(u => u) || null;
   };
-
-  // Render a mini slide thumbnail with text overlay
-  const renderMiniSlide = (slide, idx) => {
-    const thumb = getSlideThumb(slide);
-    const visibleOverlays = (slide?.textOverlays || []).filter(o => o.text);
-    return (
-      <div key={idx} style={{
-        position: 'relative',
-        width: '100%',
-        aspectRatio: '9/16',
-        backgroundColor: theme.bg.page,
-        borderRadius: idx === 0 ? '10px 0 0 0' : idx === slideCount - 1 ? '0 10px 0 0' : '0',
-        overflow: 'hidden',
-        flexShrink: 0,
-      }}>
-        {thumb ? (
-          <img src={thumb} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        ) : (
-          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${theme.bg.input}, ${theme.bg.surface})` }}>
-            <span style={{ color: theme.text.muted, fontSize: '10px' }}>{idx + 1}</span>
-          </div>
-        )}
-        {/* Text overlays rendered exactly as in editor */}
-        {visibleOverlays.map((overlay, oi) => (
-          <div key={oi} style={{
-            position: 'absolute',
-            left: `${overlay.position?.x || 50}%`,
-            top: `${overlay.position?.y || 50}%`,
-            transform: 'translate(-50%, -50%)',
-            color: overlay.style?.color || '#fff',
-            fontSize: `${Math.max(8, (overlay.style?.fontSize || 36) * 0.22)}px`,
-            fontWeight: overlay.style?.fontWeight || '600',
-            fontFamily: overlay.style?.fontFamily || 'Inter, sans-serif',
-            textAlign: overlay.style?.textAlign || 'center',
-            textShadow: overlay.style?.outline
-              ? `0 0 3px ${overlay.style?.outlineColor || 'rgba(0,0,0,0.5)'}`
-              : '0 1px 3px rgba(0,0,0,0.9)',
-            pointerEvents: 'none',
-            maxWidth: '90%',
-            overflow: 'hidden',
-            display: '-webkit-box',
-            WebkitLineClamp: 3,
-            WebkitBoxOrient: 'vertical',
-            wordBreak: 'break-word',
-            lineHeight: '1.2',
-            padding: '1px 2px',
-          }}>
-            {overlay.text}
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  const styles = getStyles(theme);
 
   return (
     <div
-      style={{...styles.videoCard, ...(isSelected ? styles.videoCardSelected : {})}}
+      className={`relative rounded-lg overflow-hidden border border-solid transition-colors ${
+        isSelected ? 'border-brand-600 shadow-[0_0_0_2px_rgba(99,102,241,0.3)]' : 'border-neutral-800 hover:border-neutral-600'
+      } bg-[#1a1a1a]`}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
-      <div style={styles.videoCheckbox} onClick={(e) => e.stopPropagation()}>
-        <input type="checkbox" checked={isSelected} onChange={onToggleSelect} style={styles.checkbox} />
+      {/* Checkbox */}
+      <div className="absolute top-2 left-2 z-10" onClick={(e) => e.stopPropagation()}>
+        <input type="checkbox" checked={isSelected} onChange={onToggleSelect}
+          className="w-5 h-5 cursor-pointer accent-indigo-500" />
       </div>
 
-      <div style={styles.videoThumb} onClick={() => onPreview?.()}>
+      {/* Thumbnail area — horizontal filmstrip */}
+      <div className="relative bg-[#171717] select-none cursor-pointer" onClick={() => onPreview?.()}>
         {slideCount > 0 ? (
-          <div style={{
-            display: 'flex',
-            width: '100%',
-            height: '100%',
-            gap: '1px',
-            backgroundColor: theme.bg.page,
-          }}>
-            {/* Show up to 4 slides as filmstrip, with overflow indicator */}
-            {slides.slice(0, 4).map((slide, idx) => (
-              <div key={idx} style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                {renderMiniSlide(slide, idx)}
-              </div>
-            ))}
-            {slideCount > 4 && (
-              <div style={{
-                flex: 1,
-                minWidth: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: `linear-gradient(135deg, ${theme.bg.input}, ${theme.bg.surface})`,
-                borderRadius: '0 10px 0 0',
-              }}>
-                <span style={{ color: theme.text.secondary, fontSize: '11px', fontWeight: '600' }}>+{slideCount - 4}</span>
+          <div className="flex w-full gap-px bg-[#171717]" style={{ height: '120px' }}>
+            {slides.slice(0, 5).map((slide, idx) => {
+              const thumb = getSlideThumb(slide);
+              const visibleOverlays = (slide?.textOverlays || []).filter(o => o.text);
+              return (
+                <div key={idx} className="flex-1 min-w-0 overflow-hidden relative bg-neutral-800">
+                  {thumb ? (
+                    <ThumbImg src={thumb} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <span className="text-neutral-500 text-[10px]">{idx + 1}</span>
+                    </div>
+                  )}
+                  {visibleOverlays.map((overlay, oi) => (
+                    <div key={oi} className="absolute pointer-events-none" style={{
+                      left: `${overlay.position?.x || 50}%`,
+                      top: `${overlay.position?.y || 50}%`,
+                      transform: 'translate(-50%, -50%)',
+                      color: overlay.style?.color || '#fff',
+                      fontSize: `${Math.max(6, (overlay.style?.fontSize || 36) * 0.16)}px`,
+                      fontWeight: overlay.style?.fontWeight || '600',
+                      fontFamily: overlay.style?.fontFamily || 'Inter, sans-serif',
+                      textAlign: overlay.style?.textAlign || 'center',
+                      textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+                      maxWidth: '92%',
+                      overflow: 'hidden',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      wordBreak: 'break-word',
+                      lineHeight: '1.15',
+                    }}>
+                      {overlay.text}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+            {slideCount > 5 && (
+              <div className="flex-1 min-w-0 flex items-center justify-center bg-neutral-800">
+                <span className="text-neutral-400 text-[11px] font-semibold">+{slideCount - 5}</span>
               </div>
             )}
           </div>
         ) : (
-          <div style={styles.videoThumbPlaceholder}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
+          <div className="w-full flex items-center justify-center" style={{ height: '100px' }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
               <rect x="2" y="6" width="6" height="12" rx="1"/>
               <rect x="9" y="6" width="6" height="12" rx="1"/>
               <rect x="16" y="6" width="6" height="12" rx="1"/>
@@ -1623,155 +1742,62 @@ const SlideshowCard = ({ slideshow, isSelected, onToggleSelect, onPreview, onEdi
           </div>
         )}
 
-        {/* Draft number badge - top left */}
+        {/* Draft number badge */}
         {draftNumber != null && (
-          <div style={{
-            position: 'absolute',
-            top: '8px',
-            left: '8px',
-            background: 'rgba(0, 0, 0, 0.75)',
-            color: '#fff',
-            padding: '2px 6px',
-            borderRadius: '4px',
-            fontSize: '10px',
-            fontWeight: '700',
-            backdropFilter: 'blur(4px)',
-            minWidth: '20px',
-            textAlign: 'center',
-          }}>
+          <div className="absolute top-2 left-9 bg-black/75 text-white px-1.5 py-0.5 rounded text-[10px] font-bold backdrop-blur-sm min-w-[20px] text-center">
             #{draftNumber}
           </div>
         )}
 
-        {/* Carousel badge - bottom left */}
-        <div style={{
-          position: 'absolute',
-          bottom: '8px',
-          left: '8px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px',
-          background: 'rgba(124, 58, 237, 0.85)',
-          color: '#fff',
-          padding: '3px 8px',
-          borderRadius: '4px',
-          fontSize: '10px',
-          fontWeight: '600',
-          backdropFilter: 'blur(4px)',
-        }}>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <rect x="2" y="6" width="6" height="12" rx="1"/>
-            <rect x="9" y="6" width="6" height="12" rx="1"/>
-            <rect x="16" y="6" width="6" height="12" rx="1"/>
-          </svg>
-          {slideCount} slides
-        </div>
-
-        {/* Status badge - exported or draft */}
+        {/* Status badge */}
         {isExported ? (
-          <div style={{
-            position: 'absolute',
-            top: '8px',
-            right: '8px',
-            background: 'rgba(34, 197, 94, 0.9)',
-            color: '#fff',
-            padding: '2px 6px',
-            borderRadius: '4px',
-            fontSize: '10px',
-            fontWeight: '600'
-          }}>
-            ✓ Ready
-          </div>
+          <Badge className="absolute top-2 right-2" variant="success">Ready</Badge>
         ) : (
-          <div style={{
-            position: 'absolute',
-            top: '8px',
-            right: '8px',
-            background: 'rgba(251, 191, 36, 0.9)',
-            color: '#78350f',
-            padding: '2px 6px',
-            borderRadius: '4px',
-            fontSize: '10px',
-            fontWeight: '600'
-          }}>
-            Draft
-          </div>
+          <Badge className="absolute top-2 right-2" variant="warning">Draft</Badge>
         )}
 
+        {/* Hover actions — icon-only to fit card width */}
         {actionsVisible && (
-          <div style={{
-            ...styles.videoActions,
-            ...(isMobile ? { position: 'absolute', bottom: '8px', left: '8px', right: '8px', top: 'auto', justifyContent: 'center', flexWrap: 'wrap', background: theme.overlay.light, borderRadius: '6px', padding: '4px' } : {})
-          }}>
-            <Button variant="neutral-secondary" size="small" icon={<FeatherEdit2 />} onClick={(e) => handleActionClick(e, onEdit)}>Edit</Button>
+          <div className={`absolute flex gap-1 ${
+            isMobile
+              ? 'bottom-2 left-2 right-2 top-auto justify-center flex-wrap bg-black/60 rounded-md p-1'
+              : 'bottom-2 right-2'
+          }`}>
+            <IconButton variant="neutral-secondary" size="small" icon={<FeatherEdit2 />} aria-label="Edit" onClick={(e) => handleActionClick(e, onEdit)} />
             {onExportToDrive && (
-              <Button
-                variant="neutral-secondary"
-                size="small"
-                icon={<FeatherUploadCloud />}
-                disabled={isDriveExporting}
-                loading={isDriveExporting}
-                onClick={(e) => { e.stopPropagation(); onExportToDrive(); }}
-              >
-                {isDriveExporting ? 'Saving...' : 'Drive'}
-              </Button>
+              <IconButton variant="neutral-secondary" size="small" icon={<FeatherUploadCloud />} aria-label="Export to Drive"
+                disabled={isDriveExporting} loading={isDriveExporting}
+                onClick={(e) => { e.stopPropagation(); onExportToDrive(); }} />
             )}
-            <Button variant="brand-primary" size="small" icon={<FeatherSend />} onClick={(e) => handleActionClick(e, onPost)}>Post</Button>
-            <IconButton size="small" icon={<FeatherTrash2 />} onClick={(e) => handleActionClick(e, onDelete)} />
+            {onExportToDropbox && (
+              <IconButton variant="neutral-secondary" size="small" icon={<FeatherUploadCloud />} aria-label="Export to Dropbox"
+                disabled={isDropboxExporting} loading={isDropboxExporting}
+                onClick={(e) => { e.stopPropagation(); onExportToDropbox(); }} />
+            )}
+            <IconButton variant="brand-primary" size="small" icon={<FeatherSend />} aria-label="Post" onClick={(e) => handleActionClick(e, onPost)} />
+            <IconButton size="small" icon={<FeatherTrash2 />} aria-label="Delete" onClick={(e) => handleActionClick(e, onDelete)} />
           </div>
         )}
       </div>
 
-      {/* Name + Audio + Status */}
-      <div style={styles.statusBadgeContainer}>
-        {slideshow.name && (
-          <div style={{
-            padding: '4px 12px 0',
-            fontSize: '11px',
-            fontWeight: '500',
-            color: theme.text.secondary,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}>
-            {slideshow.name}
+      {/* Metadata footer */}
+      <div className="flex items-center gap-2 px-3 py-2">
+        <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+          <span className="text-caption font-caption text-neutral-200 truncate">{slideshow.name || 'Untitled'}</span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Badge variant="brand">{slideCount} slide{slideCount !== 1 ? 's' : ''}</Badge>
+            {slideshow.audio?.name && (
+              <span className="flex items-center gap-1 text-[10px] text-indigo-400 truncate max-w-[120px]" title={slideshow.audio.name}>
+                <FeatherMusic style={{ width: 10, height: 10, flexShrink: 0 }} />
+                {slideshow.audio.name.replace(' Audio Extracted', '').replace('.mp3', '')}
+              </span>
+            )}
+            {slideshow.collectionName && (
+              <Badge variant="neutral" className="text-[9px]">{slideshow.collectionName}</Badge>
+            )}
           </div>
-        )}
-        {slideshow.audio?.name && (
-          <div style={{
-            padding: '2px 12px 0',
-            fontSize: '10px',
-            fontWeight: '500',
-            color: theme.accent.hover,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '3px',
-          }}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M9 18V5l12-2v13"/>
-              <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
-            </svg>
-            {slideshow.audio.name.replace(' Audio Extracted', '').replace('.mp3', '')}
-          </div>
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {slideshow.collectionName && (
-            <span style={{
-              fontSize: 9,
-              padding: '1px 5px',
-              borderRadius: 4,
-              backgroundColor: 'rgba(99,102,241,0.15)',
-              color: '#818cf8',
-              whiteSpace: 'nowrap',
-            }}>
-              {slideshow.collectionName}
-            </span>
-          )}
-          <StatusPill status={slideshow.status || VIDEO_STATUS.DRAFT} />
         </div>
+        <StatusPill status={slideshow.status || VIDEO_STATUS.DRAFT} />
       </div>
     </div>
   );
@@ -1947,7 +1973,7 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
             </svg>
             Schedule Carousel{slideshows.length > 1 ? 's' : ''}
           </h3>
-          <IconButton size="small" icon={<FeatherX />} onClick={onClose} />
+          <IconButton size="small" icon={<FeatherX />} aria-label="Close" onClick={onClose} />
         </div>
 
         {/* Preview */}
@@ -2079,197 +2105,5 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
     </div>
   );
 };
-
-const getSlideshowPostingStyles = (theme) => ({
-  overlay: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: theme.overlay.heavy,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000
-  },
-  modal: {
-    backgroundColor: theme.bg.input,
-    borderRadius: '16px',
-    padding: '24px',
-    maxWidth: '480px',
-    width: '90%',
-    maxHeight: '90vh',
-    overflow: 'auto',
-    boxShadow: theme.shadow
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: '20px'
-  },
-  title: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    margin: 0,
-    fontSize: '18px',
-    fontWeight: '600',
-    color: theme.text.primary
-  },
-  preview: {
-    backgroundColor: theme.hover.bg,
-    borderRadius: '12px',
-    padding: '16px',
-    marginBottom: '20px'
-  },
-  previewImages: {
-    display: 'flex',
-    gap: '8px',
-    marginBottom: '8px'
-  },
-  previewImg: {
-    width: '60px',
-    height: '80px',
-    objectFit: 'cover',
-    borderRadius: '8px'
-  },
-  previewMore: {
-    width: '60px',
-    height: '80px',
-    backgroundColor: theme.border.subtle,
-    borderRadius: '8px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '14px',
-    color: theme.text.secondary
-  },
-  previewText: {
-    fontSize: '13px',
-    color: theme.text.secondary
-  },
-  field: {
-    marginBottom: '16px'
-  },
-  row: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '12px'
-  },
-  label: {
-    display: 'block',
-    fontSize: '12px',
-    fontWeight: '500',
-    color: theme.text.secondary,
-    textTransform: 'uppercase',
-    marginBottom: '6px'
-  },
-  select: {
-    width: '100%',
-    padding: '10px 12px',
-    backgroundColor: theme.hover.bg,
-    border: `1px solid ${theme.border.subtle}`,
-    borderRadius: '8px',
-    color: theme.text.primary,
-    fontSize: '14px',
-    cursor: 'pointer'
-  },
-  input: {
-    width: '100%',
-    padding: '10px 12px',
-    backgroundColor: theme.hover.bg,
-    border: `1px solid ${theme.border.subtle}`,
-    borderRadius: '8px',
-    color: theme.text.primary,
-    fontSize: '14px',
-    boxSizing: 'border-box'
-  },
-  checkboxRow: {
-    display: 'flex',
-    gap: '16px'
-  },
-  checkboxLabel: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    fontSize: '14px',
-    color: theme.text.primary,
-    cursor: 'pointer'
-  },
-  textarea: {
-    width: '100%',
-    padding: '10px 12px',
-    backgroundColor: theme.hover.bg,
-    border: `1px solid ${theme.border.subtle}`,
-    borderRadius: '8px',
-    color: theme.text.primary,
-    fontSize: '14px',
-    resize: 'none',
-    boxSizing: 'border-box'
-  },
-  hashtagInput: {
-    width: '100%',
-    padding: '10px 12px',
-    backgroundColor: theme.hover.bg,
-    border: `1px solid ${theme.border.subtle}`,
-    borderRadius: '8px',
-    color: theme.accent.hover,
-    fontSize: '14px',
-    boxSizing: 'border-box'
-  },
-});
-
-const getStyles = (theme) => ({
-  container: { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' },
-  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: `1px solid ${theme.bg.surface}` },
-  headerLeft: { display: 'flex', alignItems: 'center', gap: '16px' },
-  backButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '36px', backgroundColor: theme.bg.surface, border: 'none', borderRadius: '8px', color: theme.text.secondary, cursor: 'pointer' },
-  titleSection: { display: 'flex', alignItems: 'center', gap: '12px' },
-  categoryIcon: { width: '40px', height: '40px', backgroundColor: theme.bg.elevated, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: '600', color: theme.text.secondary },
-  title: { fontSize: '18px', fontWeight: '600', color: theme.text.primary, margin: 0 },
-  subtitle: { fontSize: '13px', color: theme.text.muted, margin: 0 },
-  headerActions: { display: 'flex', alignItems: 'center', gap: '8px' },
-  primaryButton: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', backgroundColor: theme.accent.primary, border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
-  secondaryButton: { padding: '10px 16px', backgroundColor: theme.bg.surface, border: `1px solid ${theme.bg.elevated}`, borderRadius: '8px', color: theme.text.primary, cursor: 'pointer', fontSize: '13px' },
-  filters: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 24px', borderBottom: `1px solid ${theme.bg.surface}` },
-  filterGroup: { display: 'flex', alignItems: 'center', gap: '4px' },
-  filterRight: { display: 'flex', alignItems: 'center', gap: '16px' },
-  dateFilter: { padding: '6px 12px', backgroundColor: 'transparent', border: 'none', borderRadius: '6px', color: theme.text.secondary, cursor: 'pointer', fontSize: '13px' },
-  dateFilterActive: { padding: '6px 12px', backgroundColor: theme.bg.surface, border: 'none', borderRadius: '6px', color: theme.text.primary, cursor: 'pointer', fontSize: '13px' },
-  selectAllLabel: { display: 'flex', alignItems: 'center', gap: '8px', color: theme.text.secondary, fontSize: '13px', cursor: 'pointer' },
-  statusFilter: { padding: '8px 12px', backgroundColor: theme.bg.surface, border: `1px solid ${theme.bg.elevated}`, borderRadius: '6px', color: theme.text.primary, fontSize: '13px', cursor: 'pointer' },
-  contentArea: { flex: 1, overflow: 'auto', padding: '24px' },
-  emptyState: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' },
-  emptyTitle: { fontSize: '18px', fontWeight: '600', color: theme.text.primary, margin: '16px 0 8px 0' },
-  emptyText: { fontSize: '14px', color: theme.text.muted, margin: '0 0 24px 0' },
-  emptyButton: { padding: '12px 24px', backgroundColor: theme.accent.primary, border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '500' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' },
-  videoCard: { position: 'relative', backgroundColor: theme.bg.input, borderRadius: '12px', overflow: 'hidden', border: '2px solid transparent' },
-  videoCardSelected: { border: `2px solid ${theme.accent.primary}`, boxShadow: `0 0 0 2px ${theme.accent.primary}4d` },
-  videoCheckbox: { position: 'absolute', top: '8px', left: '8px', zIndex: 10, minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  checkbox: { width: '20px', height: '20px', accentColor: theme.accent.primary, cursor: 'pointer' },
-  videoThumb: { position: 'relative', aspectRatio: '9/16', backgroundColor: theme.bg.page, userSelect: 'none' },
-  videoThumbImg: { width: '100%', height: '100%', objectFit: 'cover' },
-  videoThumbPlaceholder: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  textOverlay: { position: 'absolute', bottom: '40%', left: '50%', transform: 'translateX(-50%)', padding: '8px 16px', backgroundColor: theme.overlay.light, borderRadius: '4px', color: theme.text.primary, fontSize: '12px', fontWeight: '500' },
-  videoActions: { position: 'absolute', top: '8px', right: '8px', display: 'flex', gap: '6px' },
-  statusBadge: { padding: '10px 12px', fontSize: '12px', fontWeight: '500', textAlign: 'center' },
-  statusDraft: { backgroundColor: theme.bg.surface, color: theme.text.secondary },
-  statusApproved: { backgroundColor: '#065f46', color: '#34d399' },
-  batchBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', backgroundColor: theme.accent.primary, margin: '0 24px 16px', borderRadius: '12px', boxShadow: `0 4px 20px ${theme.accent.primary}80` },
-  batchLeft: { display: 'flex', alignItems: 'center', gap: '12px' },
-  batchText: { color: '#fff', fontSize: '14px', fontWeight: '500' },
-  batchRight: { display: 'flex', alignItems: 'center', gap: '8px' },
-  batchBtnClear: { padding: '8px 16px', backgroundColor: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px' },
-  batchBtnDelete: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', backgroundColor: '#dc2626', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
-  batchBtnExport: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', backgroundColor: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500' },
-  batchBtnPost: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: '#fff', border: 'none', borderRadius: '6px', color: theme.accent.primary, cursor: 'pointer', fontSize: '14px', fontWeight: '600' },
-  footer: { display: 'flex', justifyContent: 'center', gap: '16px', padding: '16px 24px', borderTop: `1px solid ${theme.bg.surface}` },
-  footerButton: { padding: '10px 16px', backgroundColor: 'transparent', border: `1px solid ${theme.bg.elevated}`, borderRadius: '8px', color: theme.text.secondary, cursor: 'pointer', fontSize: '13px' },
-  // UI-31: Container for StatusPill at bottom of video card
-  statusBadgeContainer: { padding: '10px 12px', backgroundColor: theme.bg.surface, display: 'flex', alignItems: 'center', justifyContent: 'center' }
-});
 
 export default ContentLibrary;

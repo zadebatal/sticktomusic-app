@@ -1179,10 +1179,11 @@ export const updateCollectionHashtagBank = (artistId, collectionId, hashtagBank)
  * Pre-defined content format templates
  */
 export const FORMAT_TEMPLATES = [
-  { id: 'single', name: 'Single Image', slideCount: 1, slideLabels: ['Image'], type: 'slideshow' },
-  { id: 'hook_lyrics', name: 'Hook + Lyrics', slideCount: 2, slideLabels: ['Hook', 'Lyrics'], type: 'slideshow' },
-  { id: 'carousel', name: 'Carousel', slideCount: 3, slideLabels: ['Slide 1', 'Slide 2', 'Slide 3'], type: 'slideshow' },
-  { id: 'hook_vibes_lyrics', name: 'Hook + Vibes + Lyrics', slideCount: 5, slideLabels: ['Hook', 'Vibes', 'Lyrics', 'Vibes', 'CTA'], type: 'slideshow' },
+  { id: 'single', name: '1 Slide', slideCount: 1, slideLabels: ['Image'], type: 'slideshow' },
+  { id: 'hook_lyrics', name: '2 Slide', slideCount: 2, slideLabels: ['Hook', 'Lyrics'], type: 'slideshow' },
+  { id: 'carousel', name: '3 Slide', slideCount: 3, slideLabels: ['Slide 1', 'Slide 2', 'Slide 3'], type: 'slideshow' },
+  { id: 'four_slide', name: '4 Slide', slideCount: 4, slideLabels: ['Slide 1', 'Slide 2', 'Slide 3', 'Slide 4'], type: 'slideshow' },
+  { id: 'hook_vibes_lyrics', name: '5 Slide', slideCount: 5, slideLabels: ['Hook', 'Text', 'Text', 'Text', 'Lyrics'], type: 'slideshow' },
   { id: 'montage', name: 'Montage', slideCount: 0, slideLabels: [], type: 'video', description: 'Combine clips on a timeline, cut to beat' },
   { id: 'solo_clip', name: 'Solo Clip', slideCount: 0, slideLabels: [], type: 'video', description: 'One clip per video, batch generate' },
   { id: 'multi_clip', name: 'Multi Clip', slideCount: 0, slideLabels: [], type: 'video', description: 'Multiple clips on timeline' },
@@ -1215,7 +1216,7 @@ export const PIPELINE_COLORS = [
 export const createPipeline = ({
   name,
   linkedPage = null,
-  formats = [FORMAT_TEMPLATES[1]], // Default: Hook + Lyrics
+  formats = [FORMAT_TEMPLATES[1]], // Default: 2 Slide
   activeFormatId = null,
   description = '',
   color = null
@@ -1558,6 +1559,561 @@ export const removeFromCollection = (artistId, collectionId, mediaIds) => {
     }
   });
   saveLibrary(artistId, library);
+};
+
+// ============================================================================
+// PROJECT SYSTEM — "One Screen to Rule Them All"
+// Projects group niches (pipelines) under a shared media pool.
+// A Project Root is a collection with isProjectRoot: true.
+// A Niche is a pipeline with projectId pointing to a project root.
+// ============================================================================
+
+/**
+ * Create a project root collection
+ * @param {string} artistId
+ * @param {Object} params
+ * @param {string} params.name
+ * @param {Object|null} params.linkedPage - { handle, platform, accountId }
+ * @param {string} params.color - Accent color from PIPELINE_COLORS
+ * @returns {Object} Project root collection
+ */
+export const createProject = (artistId, { name, linkedPage = null, color = null }) => {
+  const base = createCollection({ name, description: '' });
+  const project = {
+    ...base,
+    isProjectRoot: true,
+    linkedPage,
+    projectColor: color || PIPELINE_COLORS[Math.floor(Math.random() * PIPELINE_COLORS.length)],
+  };
+  const collections = getUserCollections(artistId);
+  collections.push(project);
+  saveCollections(artistId, collections);
+  return project;
+};
+
+/**
+ * Get all project roots for an artist
+ */
+export const getProjects = (artistId) => {
+  const collections = getUserCollections(artistId);
+  return collections.filter(c => c.isProjectRoot === true);
+};
+
+/**
+ * Get a specific project by ID
+ */
+export const getProjectById = (artistId, projectId) => {
+  const collections = getUserCollections(artistId);
+  return collections.find(c => c.id === projectId && c.isProjectRoot === true) || null;
+};
+
+/**
+ * Get all niches (pipelines) in a project
+ */
+export const getProjectNiches = (artistId, projectId) => {
+  const collections = getUserCollections(artistId);
+  return collections.filter(c => c.projectId === projectId && c.isPipeline === true);
+};
+
+/**
+ * Create a niche (pipeline) linked to a project
+ * @param {string} artistId
+ * @param {Object} params
+ * @param {string} params.projectId - ID of the parent project root
+ * @param {Object} params.format - FORMAT_TEMPLATE entry
+ * @param {string} [params.name] - Override name (defaults to format name)
+ * @returns {Object} The new niche (pipeline collection)
+ */
+export const createNiche = (artistId, { projectId, format, name = null }) => {
+  const pipeline = createPipeline({
+    name: name || format.name,
+    formats: [format],
+    activeFormatId: format.id,
+  });
+  pipeline.projectId = projectId;
+  const collections = getUserCollections(artistId);
+  collections.push(pipeline);
+  saveCollections(artistId, collections);
+  return pipeline;
+};
+
+/**
+ * Add media IDs to a project root's shared pool
+ */
+export const addToProjectPool = (artistId, projectId, mediaIds) => {
+  const ids = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
+  const collections = getUserCollections(artistId);
+  const project = collections.find(c => c.id === projectId && c.isProjectRoot);
+  if (!project) return;
+  const existing = new Set(project.mediaIds || []);
+  const newIds = ids.filter(id => !existing.has(id));
+  if (newIds.length === 0) return;
+  project.mediaIds = [...(project.mediaIds || []), ...newIds];
+  project.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
+};
+
+/**
+ * Get stats for a project: niche count, draft count, media count
+ */
+export const getProjectStats = (artistId, projectId) => {
+  const collections = getUserCollections(artistId);
+  const niches = collections.filter(c => c.projectId === projectId && c.isPipeline);
+  const project = collections.find(c => c.id === projectId && c.isProjectRoot);
+  const content = getCreatedContent(artistId);
+  const nicheIds = new Set(niches.map(n => n.id));
+  const draftCount = [
+    ...(content.slideshows || []).filter(s => !s.isTemplate && nicheIds.has(s.collectionId)),
+    ...(content.videos || []).filter(v => nicheIds.has(v.collectionId)),
+  ].length;
+  // Build niche format descriptions (e.g. "Hook + Lyrics", "Photo Montage")
+  const nicheFormats = niches.map(n => {
+    const fmt = n.formats?.[0];
+    if (fmt?.name) return fmt.name;
+    return n.name || 'Niche';
+  });
+  return {
+    nicheCount: niches.length,
+    nicheFormats,
+    draftCount,
+    mediaCount: (project?.mediaIds || []).length,
+  };
+};
+
+/**
+ * Update caption bank for a niche
+ */
+export const updateNicheCaptionBank = (artistId, nicheId, captions) => {
+  const cols = getUserCollections(artistId);
+  const idx = cols.findIndex(c => c.id === nicheId);
+  if (idx === -1) return;
+  cols[idx].captionBank = captions;
+  cols[idx].updatedAt = new Date().toISOString();
+  saveCollections(artistId, cols);
+};
+
+/**
+ * Update hashtag bank for a niche
+ */
+export const updateNicheHashtagBank = (artistId, nicheId, hashtags) => {
+  const cols = getUserCollections(artistId);
+  const idx = cols.findIndex(c => c.id === nicheId);
+  if (idx === -1) return;
+  cols[idx].hashtagBank = hashtags;
+  cols[idx].updatedAt = new Date().toISOString();
+  saveCollections(artistId, cols);
+};
+
+/**
+ * Move a caption or hashtag entry from one niche to another
+ */
+export const moveNicheBankEntry = (artistId, fromNicheId, toNicheId, entry, bankType) => {
+  const cols = getUserCollections(artistId);
+  const fromIdx = cols.findIndex(c => c.id === fromNicheId);
+  const toIdx = cols.findIndex(c => c.id === toNicheId);
+  if (fromIdx === -1 || toIdx === -1) return;
+  const field = bankType === 'caption' ? 'captionBank' : 'hashtagBank';
+  const fromBank = [...(cols[fromIdx][field] || [])];
+  const toBank = [...(cols[toIdx][field] || [])];
+  const entryIdx = fromBank.indexOf(entry);
+  if (entryIdx === -1) return;
+  fromBank.splice(entryIdx, 1);
+  toBank.push(entry);
+  cols[fromIdx][field] = fromBank;
+  cols[toIdx][field] = toBank;
+  cols[fromIdx].updatedAt = new Date().toISOString();
+  cols[toIdx].updatedAt = new Date().toISOString();
+  saveCollections(artistId, cols);
+};
+
+/**
+ * Idempotent migration: convert existing pipelines into the project system.
+ * Phase 1 (always runs): Dedup project roots, fix @@names, re-assign orphans, delete Firestore dupes.
+ * Phase 2 (once per artist): Create new project roots from unmigrated pipelines.
+ * Saves to both localStorage AND Firestore to survive subscription merges.
+ */
+export const migrateToProjects = async (artistId, db = null) => {
+  const flagKey = `stm_projects_migrated_v2_${artistId}`;
+  const collections = getUserCollections(artistId);
+  let needsSave = false;
+  const firestoreDeleteIds = []; // Track IDs to delete from Firestore
+
+  // ── Phase 1: ALWAYS run cleanup (dedup, @@fix, orphan re-assign) ──
+
+  // Fix double-@ in project names
+  collections.filter(c => c.isProjectRoot).forEach(p => {
+    if (p.name && p.name.startsWith('@@')) {
+      p.name = p.name.slice(1);
+      needsSave = true;
+    }
+  });
+
+  // Dedup project roots by linkedPage.handle (or name for unlinked)
+  const projectRoots = collections.filter(c => c.isProjectRoot);
+  if (projectRoots.length > 0) {
+    const seenKeys = new Set();
+    const dupeIds = new Set();
+    projectRoots.forEach(p => {
+      // Normalize key: strip leading @ for comparison
+      const rawKey = p.linkedPage?.handle || p.name || p.id;
+      const key = rawKey.replace(/^@+/, '');
+      if (seenKeys.has(key)) {
+        dupeIds.add(p.id);
+      } else {
+        seenKeys.add(key);
+      }
+    });
+    if (dupeIds.size > 0) {
+      const survivors = projectRoots.filter(p => !dupeIds.has(p.id));
+      dupeIds.forEach(dupeId => {
+        const dupe = collections.find(c => c.id === dupeId);
+        if (!dupe) return;
+        const rawKey = dupe.linkedPage?.handle || dupe.name || dupe.id;
+        const key = rawKey.replace(/^@+/, '');
+        const survivor = survivors.find(s => {
+          const sk = (s.linkedPage?.handle || s.name || s.id).replace(/^@+/, '');
+          return sk === key;
+        });
+        if (survivor) {
+          collections.filter(c => c.projectId === dupeId).forEach(n => { n.projectId = survivor.id; });
+          const merged = new Set([...(survivor.mediaIds || []), ...(dupe.mediaIds || [])]);
+          survivor.mediaIds = Array.from(merged);
+        }
+        firestoreDeleteIds.push(dupeId);
+      });
+      for (let i = collections.length - 1; i >= 0; i--) {
+        if (dupeIds.has(collections[i].id)) collections.splice(i, 1);
+      }
+      needsSave = true;
+      log('[libraryService] Cleaned up', dupeIds.size, 'duplicate project roots');
+    }
+  }
+
+  // Re-assign orphaned niches (lost projectId from subscription clobber)
+  const existingRoots = collections.filter(c => c.isProjectRoot);
+  const orphanNiches = collections.filter(c => c.isPipeline && !c.projectId && !c.isProjectRoot);
+  if (existingRoots.length > 0 && orphanNiches.length > 0) {
+    orphanNiches.forEach(niche => {
+      const nicheHandle = niche.linkedPage?.handle;
+      const matchingRoot = nicheHandle
+        ? existingRoots.find(r => r.linkedPage?.handle === nicheHandle)
+        : null;
+      if (matchingRoot) {
+        niche.projectId = matchingRoot.id;
+        const poolIds = new Set(matchingRoot.mediaIds || []);
+        (niche.mediaIds || []).forEach(id => poolIds.add(id));
+        matchingRoot.mediaIds = Array.from(poolIds);
+        needsSave = true;
+      }
+    });
+  }
+
+  // Save Phase 1 cleanup + delete Firestore dupes
+  if (needsSave) {
+    saveCollections(artistId, collections);
+    if (db) {
+      // Delete duplicate docs from Firestore
+      if (firestoreDeleteIds.length > 0) {
+        firestoreDeleteIds.forEach(id => {
+          const docRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', id);
+          deleteDoc(docRef).catch(() => {});
+        });
+        log('[libraryService] Deleting', firestoreDeleteIds.length, 'duplicate docs from Firestore');
+      }
+      // Save surviving roots + reassigned niches to Firestore
+      const modified = collections.filter(c => c.isProjectRoot || c.projectId);
+      Promise.all(modified.map(col => saveCollectionToFirestore(db, artistId, col))).catch(console.error);
+    }
+  }
+
+  // ── Phase 2: Create new projects (guarded — once per artist) ──
+  if (localStorage.getItem(flagKey)) return;
+
+  const unmigrated = collections.filter(c => c.isPipeline && !c.projectId && !c.isProjectRoot);
+  if (unmigrated.length === 0) {
+    localStorage.setItem(flagKey, Date.now().toString());
+    return;
+  }
+
+  const groups = {};
+  unmigrated.forEach(pipeline => {
+    const key = pipeline.linkedPage?.handle || `standalone_${pipeline.id}`;
+    if (!groups[key]) groups[key] = { linkedPage: pipeline.linkedPage || null, niches: [] };
+    groups[key].niches.push(pipeline);
+  });
+
+  const newProjects = [];
+  Object.entries(groups).forEach(([key, group]) => {
+    const handle = group.linkedPage?.handle || '';
+    const projectName = group.linkedPage
+      ? (handle.startsWith('@') ? handle : `@${handle}`)
+      : (group.niches.length === 1 ? group.niches[0].name : key);
+    const base = createCollection({ name: projectName, description: '' });
+    const project = {
+      ...base,
+      isProjectRoot: true,
+      linkedPage: group.linkedPage,
+      projectColor: group.niches[0]?.pipelineColor || PIPELINE_COLORS[Math.floor(Math.random() * PIPELINE_COLORS.length)],
+    };
+
+    const allMediaIds = new Set();
+    group.niches.forEach(niche => {
+      (niche.mediaIds || []).forEach(id => allMediaIds.add(id));
+    });
+    project.mediaIds = Array.from(allMediaIds);
+
+    // Migrate caption/hashtag banks from old collection format to flat arrays
+    group.niches.forEach(niche => {
+      niche.projectId = project.id;
+      if (niche.captionBank && typeof niche.captionBank === 'object' && !Array.isArray(niche.captionBank)) {
+        const { always = [], pool = [] } = niche.captionBank;
+        niche.captionBank = [...always, ...pool];
+      }
+      if (niche.hashtagBank && typeof niche.hashtagBank === 'object' && !Array.isArray(niche.hashtagBank)) {
+        const { always = [], pool = [] } = niche.hashtagBank;
+        niche.hashtagBank = [...always, ...pool];
+      }
+    });
+    collections.push(project);
+    newProjects.push(project);
+  });
+
+  saveCollections(artistId, collections);
+  localStorage.setItem(flagKey, Date.now().toString());
+  log('[libraryService] Migrated', unmigrated.length, 'pipelines into', newProjects.length, 'projects');
+
+  if (db) {
+    try {
+      const toSave = [...newProjects, ...unmigrated];
+      await Promise.all(toSave.map(col => saveCollectionToFirestore(db, artistId, col)));
+      log('[libraryService] Saved', toSave.length, 'migrated collections to Firestore');
+    } catch (err) {
+      console.error('[libraryService] Firestore migration save failed:', err);
+    }
+  }
+};
+
+/**
+ * Migrate unassigned drafts into niches based on slide count.
+ * Creates project + niches if they don't exist. Only sets collectionId — no content modified.
+ * Safe + idempotent (guarded by localStorage flag, skips already-assigned drafts).
+ */
+export const migrateDraftsToNiches = async (artistId, db = null) => {
+  // Always ensure project media pools are populated (even if draft migration already ran)
+  const existingProject = getProjects(artistId)[0];
+  if (existingProject) {
+    const library = getLibrary(artistId);
+    if (library.length > 0 && (!existingProject.mediaIds || existingProject.mediaIds.length === 0)) {
+      existingProject.mediaIds = library.map(item => item.id);
+      const cols = getUserCollections(artistId);
+      const idx = cols.findIndex(c => c.id === existingProject.id);
+      if (idx !== -1) cols[idx] = existingProject;
+      saveCollections(artistId, cols);
+      if (db) await saveCollectionToFirestore(db, artistId, existingProject);
+      log('[libraryService] Populated project media pool with', library.length, 'items');
+    }
+
+    // Always populate niche mediaIds + banks from assigned draft slide images
+    const niches = getProjectNiches(artistId, existingProject.id);
+    const content = getCreatedContent(artistId);
+    const lib = getLibrary(artistId);
+    let nichesDirty = false;
+    niches.forEach(niche => {
+      const nicheDrafts = (content.slideshows || []).filter(s => s.collectionId === niche.id && !s.isTemplate);
+      if (nicheDrafts.length === 0) return;
+      const imageIds = new Set(niche.mediaIds || []);
+      const beforeSize = imageIds.size;
+      // Ensure banks array exists
+      if (!niche.banks) niche.banks = [];
+      const bankSets = niche.banks.map(b => new Set(b || []));
+      let banksDirty = false;
+      // Also build text bank sets from draft text overlays
+      if (!niche.textBanks) niche.textBanks = [];
+      const textBankSets = niche.textBanks.map(tb => new Set((tb || []).map(e => typeof e === 'string' ? e : e?.text).filter(Boolean)));
+      let textDirty = false;
+      nicheDrafts.forEach(draft => {
+        (draft.slides || []).forEach((slide, slideIdx) => {
+          // Resolve image ID from sourceImageId, or match by backgroundImage URL
+          let imgId = slide.sourceImageId || slide.imageId;
+          if (!imgId && slide.backgroundImage) {
+            const match = lib.find(m => m.url === slide.backgroundImage);
+            if (match) imgId = match.id;
+          }
+          if (imgId) {
+            imageIds.add(imgId);
+            while (bankSets.length <= slideIdx) bankSets.push(new Set());
+            if (!bankSets[slideIdx].has(imgId)) {
+              bankSets[slideIdx].add(imgId);
+              banksDirty = true;
+            }
+          }
+          // Extract text overlays into text banks for this slide position
+          (slide.textOverlays || []).forEach(overlay => {
+            if (!overlay.text?.trim()) return;
+            while (textBankSets.length <= slideIdx) textBankSets.push(new Set());
+            if (!textBankSets[slideIdx].has(overlay.text.trim())) {
+              textBankSets[slideIdx].add(overlay.text.trim());
+              textDirty = true;
+            }
+          });
+        });
+      });
+      if (imageIds.size > beforeSize || banksDirty || textDirty) {
+        niche.mediaIds = Array.from(imageIds);
+        niche.banks = bankSets.map(s => Array.from(s));
+        if (textDirty) {
+          niche.textBanks = textBankSets.map(s => Array.from(s));
+        }
+        const cols2 = getUserCollections(artistId);
+        const nIdx = cols2.findIndex(c => c.id === niche.id);
+        if (nIdx !== -1) { cols2[nIdx] = niche; nichesDirty = true; }
+        saveCollections(artistId, cols2);
+      }
+    });
+    if (nichesDirty && db) {
+      Promise.all(niches.filter(n => n.mediaIds?.length > 0).map(n => saveCollectionToFirestore(db, artistId, n))).catch(console.error);
+      log('[libraryService] Populated niche media pools + banks from draft images');
+    }
+
+    // Always patch stale niche format labels & names to match current FORMAT_TEMPLATES
+    const allNiches = getProjectNiches(artistId, existingProject.id);
+    let labelsDirty = false;
+    allNiches.forEach(niche => {
+      if (!niche.formats?.length) return;
+      niche.formats.forEach(fmt => {
+        const template = FORMAT_TEMPLATES.find(t => t.id === fmt.id);
+        if (!template) return;
+        const needsLabelFix = JSON.stringify(fmt.slideLabels) !== JSON.stringify(template.slideLabels);
+        const needsNameFix = fmt.name !== template.name;
+        if (needsLabelFix || needsNameFix) {
+          fmt.slideLabels = [...template.slideLabels];
+          fmt.name = template.name;
+          labelsDirty = true;
+        }
+      });
+      // Also update niche name if it matches old format name
+      const OLD_NAME_MAP = {
+        'Hook + Vibes + Lyrics': '5 Slide',
+        'Hook + Text + Lyrics': '5 Slide',
+        'Single Image': '1 Slide',
+        'Hook + Lyrics': '2 Slide',
+        'Carousel': '3 Slide',
+      };
+      if (OLD_NAME_MAP[niche.name]) {
+        niche.name = OLD_NAME_MAP[niche.name];
+        labelsDirty = true;
+      }
+    });
+    if (labelsDirty) {
+      const cols3 = getUserCollections(artistId);
+      allNiches.forEach(n => {
+        const nIdx = cols3.findIndex(c => c.id === n.id);
+        if (nIdx !== -1) cols3[nIdx] = n;
+      });
+      saveCollections(artistId, cols3);
+      if (db) Promise.all(allNiches.map(n => saveCollectionToFirestore(db, artistId, n))).catch(console.error);
+      log('[libraryService] Patched niche format labels to match current templates');
+    }
+  }
+
+  const flagKey = `stm_drafts_migrated_${artistId}`;
+  if (localStorage.getItem(flagKey)) return;
+
+  const content = getCreatedContent(artistId);
+  const unassigned = (content.slideshows || []).filter(s => !s.isTemplate && !s.collectionId);
+  if (unassigned.length === 0) {
+    localStorage.setItem(flagKey, Date.now().toString());
+    return;
+  }
+
+  // Map slide counts to format template IDs
+  const SLIDE_FORMAT_MAP = { 1: 'single', 2: 'hook_lyrics', 3: 'carousel', 5: 'hook_vibes_lyrics' };
+  const groups = {};
+  unassigned.forEach(s => {
+    const count = (s.slides || []).length;
+    const formatId = SLIDE_FORMAT_MAP[count];
+    if (formatId) {
+      if (!groups[formatId]) groups[formatId] = [];
+      groups[formatId].push(s);
+    }
+  });
+
+  if (Object.keys(groups).length === 0) {
+    localStorage.setItem(flagKey, Date.now().toString());
+    return;
+  }
+
+  // Ensure a project exists, with all library media in its pool
+  let project = existingProject;
+  const library = getLibrary(artistId);
+  if (!project) {
+    project = createProject(artistId, { name: 'Content', color: PIPELINE_COLORS[0] });
+    if (library.length > 0) {
+      project.mediaIds = library.map(item => item.id);
+      const cols = getUserCollections(artistId);
+      const idx = cols.findIndex(c => c.id === project.id);
+      if (idx !== -1) cols[idx] = project;
+      saveCollections(artistId, cols);
+    }
+    if (db) await saveCollectionToFirestore(db, artistId, project);
+  }
+
+  // For each format group, ensure a niche exists and assign drafts
+  for (const [formatId, drafts] of Object.entries(groups)) {
+    const format = FORMAT_TEMPLATES.find(f => f.id === formatId);
+    if (!format) continue;
+
+    // Check if niche already exists for this format under this project
+    const collections = getUserCollections(artistId);
+    let niche = collections.find(c =>
+      c.projectId === project.id && c.isPipeline && c.formats?.[0]?.id === formatId
+    );
+
+    if (!niche) {
+      niche = createNiche(artistId, { projectId: project.id, format });
+      if (db) await saveCollectionToFirestore(db, artistId, niche);
+    }
+
+    // Assign drafts + extract image IDs into niche mediaIds + banks
+    const nicheImageIds = new Set(niche.mediaIds || []);
+    if (!niche.banks) niche.banks = [];
+    const bankSets = niche.banks.map(b => new Set(b || []));
+    drafts.forEach(draft => {
+      draft.collectionId = niche.id;
+      draft.updatedAt = new Date().toISOString();
+      (draft.slides || []).forEach((slide, slideIdx) => {
+        const imgId = slide.sourceImageId || slide.imageId;
+        if (!imgId) return;
+        nicheImageIds.add(imgId);
+        while (bankSets.length <= slideIdx) bankSets.push(new Set());
+        bankSets[slideIdx].add(imgId);
+      });
+    });
+    niche.banks = bankSets.map(s => Array.from(s));
+    if (nicheImageIds.size > (niche.mediaIds || []).length) {
+      niche.mediaIds = Array.from(nicheImageIds);
+      const cols2 = getUserCollections(artistId);
+      const nIdx = cols2.findIndex(c => c.id === niche.id);
+      if (nIdx !== -1) cols2[nIdx] = niche;
+      saveCollections(artistId, cols2);
+      if (db) await saveCollectionToFirestore(db, artistId, niche);
+    }
+
+    log('[libraryService] Assigned', drafts.length, formatId, 'drafts to niche', niche.id);
+  }
+
+  // Save content to localStorage + Firestore
+  saveCreatedContent(artistId, content);
+  localStorage.setItem(flagKey, Date.now().toString());
+  log('[libraryService] Migrated', unassigned.length, 'drafts to niches for artist', artistId);
+
+  if (db) {
+    try {
+      await saveCreatedContentAsync(db, artistId, content);
+    } catch (err) {
+      console.error('[libraryService] Firestore draft migration save failed:', err);
+    }
+  }
 };
 
 /**
@@ -3041,12 +3597,19 @@ export const subscribeToCollections = (db, artistId, callback) => {
         return { id: doc.id, ...data };
       });
 
-      // Deduplicate by name (migration may have created duplicate entries)
-      const seenNames = new Set();
+      // Deduplicate project roots by normalized name (migration may have created duplicates)
+      const seenProjectNames = new Set();
+      const seenOtherNames = new Set();
       const firestoreCollections = rawFirestoreCollections.filter(col => {
-        const key = col.name || col.id;
-        if (seenNames.has(key)) return false;
-        seenNames.add(key);
+        if (col.isProjectRoot) {
+          const key = (col.name || col.id).replace(/^@+/, '');
+          if (seenProjectNames.has(key)) return false;
+          seenProjectNames.add(key);
+        } else {
+          const key = col.name || col.id;
+          if (seenOtherNames.has(key)) return false;
+          seenOtherNames.add(key);
+        }
         return true;
       });
 
@@ -3083,6 +3646,9 @@ export const subscribeToCollections = (db, artistId, callback) => {
             }
             return {
               ...col,
+              // Preserve project fields from localStorage if Firestore hasn't caught up yet
+              ...(localCol.projectId && !col.projectId ? { projectId: localCol.projectId } : {}),
+              ...(localCol.isProjectRoot && !col.isProjectRoot ? { isProjectRoot: localCol.isProjectRoot, projectColor: localCol.projectColor, linkedPage: localCol.linkedPage } : {}),
               banks: mergedBanks,
               textBanks: mergedTextBanks,
               videoTextBank1: (col.videoTextBank1?.length > 0 ? col.videoTextBank1 : localCol.videoTextBank1) || [],
@@ -3095,8 +3661,19 @@ export const subscribeToCollections = (db, artistId, callback) => {
         });
 
         // Include localStorage-only collections not yet in Firestore (in-flight writes)
+        // Also dedup by name for project roots to prevent migration dupes from re-appearing
         const firestoreIds = new Set(firestoreCollections.map(c => c.id));
-        const localOnlyCollections = localCollections.filter(lc => !firestoreIds.has(lc.id));
+        const mergedNames = new Set(mergedCollections.filter(c => c.isProjectRoot).map(c => (c.name || '').replace(/^@+/, '')));
+        const localOnlyCollections = localCollections.filter(lc => {
+          if (firestoreIds.has(lc.id)) return false;
+          // Dedup project roots by normalized name
+          if (lc.isProjectRoot) {
+            const normName = (lc.name || '').replace(/^@+/, '');
+            if (mergedNames.has(normName)) return false;
+            mergedNames.add(normName);
+          }
+          return true;
+        });
         const allMerged = [...mergedCollections, ...localOnlyCollections];
 
         // Save merged data to localStorage for offline access
@@ -3529,14 +4106,18 @@ const loadImageForCanvas = (url) => {
  * @param {Function} onProgress - callback(done, total, generated)
  * @returns {Promise<{generated: number, failed: number}>}
  */
+export const THUMB_VERSION = 2; // v1 = 50px/20%, v2 = 200px/40%
+export const THUMB_MAX_SIZE = 200;
+export const THUMB_QUALITY = 0.4;
+
 export const migrateThumbnails = async (db, artistId, libraryItems, uploadFileFn, onProgress) => {
   const images = (libraryItems || []).filter(item =>
-    item.type === MEDIA_TYPES.IMAGE && item.url
+    item.type === MEDIA_TYPES.IMAGE && item.url && (!item.thumbnailUrl || item.thumbVersion !== THUMB_VERSION)
   );
 
   if (images.length === 0) return { generated: 0, failed: 0 };
 
-  log(`[ThumbnailMigration] Starting — ${images.length} images need thumbnails`);
+  log(`[ThumbnailMigration] Starting — ${images.length} images need thumbnails (v${THUMB_VERSION})`);
 
   let generated = 0;
   let failed = 0;
@@ -3544,12 +4125,9 @@ export const migrateThumbnails = async (db, artistId, libraryItems, uploadFileFn
   for (let i = 0; i < images.length; i++) {
     const item = images[i];
     try {
-      // Load image (handles CORS with fallback)
       const { img, cleanup } = await loadImageForCanvas(item.url);
 
-      // Canvas resize to 50px max dimension (tiny grid cells)
-      const maxSize = 50;
-      const scale = Math.min(1, maxSize / Math.max(img.naturalWidth, img.naturalHeight));
+      const scale = Math.min(1, THUMB_MAX_SIZE / Math.max(img.naturalWidth, img.naturalHeight));
       const canvas = document.createElement('canvas');
       canvas.width = Math.round(img.naturalWidth * scale);
       canvas.height = Math.round(img.naturalHeight * scale);
@@ -3557,22 +4135,19 @@ export const migrateThumbnails = async (db, artistId, libraryItems, uploadFileFn
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       cleanup();
 
-      // Convert to JPEG blob (minimal quality — only used for grid previews)
-      const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.2));
+      const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', THUMB_QUALITY));
       if (!thumbBlob) throw new Error('Canvas toBlob returned null');
 
-      // Upload thumbnail to Firebase Storage
       const thumbFile = new File([thumbBlob], `thumb_${item.name}`, { type: 'image/jpeg' });
       const { url: thumbnailUrl } = await uploadFileFn(thumbFile, 'thumbnails');
 
-      // Update record in localStorage + Firestore (Firestore update skipped if db is null)
-      await updateLibraryItemAsync(db, artistId, item.id, { thumbnailUrl });
+      await updateLibraryItemAsync(db, artistId, item.id, { thumbnailUrl, thumbVersion: THUMB_VERSION });
 
       generated++;
-      log(`[ThumbnailMigration] ✓ ${i + 1}/${images.length} — ${item.name}`);
+      if (generated % 20 === 0) log(`[ThumbnailMigration] ${generated}/${images.length} done`);
     } catch (err) {
       failed++;
-      console.warn(`[ThumbnailMigration] ✗ ${i + 1}/${images.length} — ${item.name}:`, err.message);
+      console.warn(`[ThumbnailMigration] ✗ ${item.name}:`, err.message);
     }
 
     if (onProgress) onProgress(i + 1, images.length, generated);

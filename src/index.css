@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Prevent layout shift from scrollbar appearing/disappearing */
+html {
+  overflow-y: scroll;
+}
+
 /* Custom utilities for mobile responsiveness */
 .scrollbar-hide {
   -ms-overflow-style: none;
