@@ -101,6 +101,7 @@ export async function createScheduledPost(db, artistId, data) {
 
     // Source context
     collectionName: data.collectionName || null, // Originating collection name
+    nicheId: data.nicheId || null, // Originating niche ID (for finished media uploads)
     mediaType: data.mediaType || null, // 'video' | 'image' for uploaded media
 
     // Editor state for re-editing

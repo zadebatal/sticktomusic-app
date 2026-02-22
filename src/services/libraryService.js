@@ -1195,6 +1195,7 @@ export const FORMAT_TEMPLATES = [
   { id: 'solo_clip', name: 'Solo Clip', slideCount: 0, slideLabels: [], type: 'video', description: 'One clip per video, batch generate' },
   { id: 'multi_clip', name: 'Multi Clip', slideCount: 0, slideLabels: [], type: 'video', description: 'Multiple clips on timeline' },
   { id: 'photo_montage', name: 'Photo Montage', slideCount: 0, slideLabels: [], type: 'video', description: 'Turn photos into video with transitions' },
+  { id: 'finished_media', name: 'Finished Media', slideCount: 0, slideLabels: [], type: 'video', description: 'Upload ready-to-post videos & images' },
 ];
 
 /**

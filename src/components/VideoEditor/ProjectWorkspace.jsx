@@ -43,7 +43,7 @@ import { IconButton } from '../../ui/components/IconButton';
 import { Badge } from '../../ui/components/Badge';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
 import {
-  FeatherUpload, FeatherDownloadCloud, FeatherPlus, FeatherX,
+  FeatherUpload, FeatherUploadCloud, FeatherDownloadCloud, FeatherPlus, FeatherX,
   FeatherArrowLeft, FeatherImage, FeatherMusic, FeatherPlay,
   FeatherCheck, FeatherFilm, FeatherLayers, FeatherCamera,
   FeatherFileText, FeatherSearch, FeatherChevronDown,
@@ -53,6 +53,7 @@ import * as SubframeCore from '@subframe/core';
 import { useToast, ConfirmDialog } from '../ui';
 import SlideshowNicheContent from './SlideshowNicheContent';
 import VideoNicheContent from './VideoNicheContent';
+import FinishedMediaNicheContent from './FinishedMediaNicheContent';
 import useMediaMultiSelect from './shared/useMediaMultiSelect';
 
 const FORMAT_TO_EDITOR = {
@@ -67,6 +68,7 @@ const FORMAT_ICONS = {
   solo_clip: FeatherPlay,
   multi_clip: FeatherLayers,
   photo_montage: FeatherCamera,
+  finished_media: FeatherUploadCloud,
 };
 
 const VIDEO_FORMAT_COLORS = {
@@ -74,6 +76,7 @@ const VIDEO_FORMAT_COLORS = {
   solo_clip: '#22c55e',     // green
   multi_clip: '#f59e0b',    // amber
   photo_montage: '#a855f7', // purple
+  finished_media: '#06b6d4', // cyan
 };
 
 const ProjectWorkspace = ({
@@ -763,7 +766,7 @@ const ProjectWorkspace = ({
           />
         )}
 
-        {!showCaptionPage && activeNiche && activeFormat?.type === 'video' && (
+        {!showCaptionPage && activeNiche && activeFormat?.type === 'video' && activeFormat?.id !== 'finished_media' && (
           <VideoNicheContent
             db={db}
             artistId={artistId}
@@ -772,6 +775,15 @@ const ProjectWorkspace = ({
             onMakeVideo={(format, nicheId, existingDraft) => {
               onOpenVideoEditor?.(format, nicheId, existingDraft);
             }}
+            allNiches={niches}
+          />
+        )}
+
+        {!showCaptionPage && activeNiche && activeFormat?.id === 'finished_media' && (
+          <FinishedMediaNicheContent
+            db={db}
+            artistId={artistId}
+            niche={activeNiche}
             allNiches={niches}
           />
         )}
