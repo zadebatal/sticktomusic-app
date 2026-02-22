@@ -182,6 +182,8 @@ const ProjectLanding = ({
   const handleCreateProject = useCallback(async () => {
     if (!newProjectName.trim()) return;
     try {
+      // Clear deletion flag so migration doesn't block future auto-creation
+      localStorage.removeItem(`stm_projects_deleted_${artistId}`);
       const project = createProject(artistId, {
         name: newProjectName.trim(),
         linkedPage: newProjectPage,
@@ -230,6 +232,11 @@ const ProjectLanding = ({
     // Remove project root
     const filtered = cols.filter(c => c.id !== projectId);
     saveCollections(artistId, filtered);
+    // Mark that user has explicitly deleted projects (prevents migration re-creation)
+    const remaining = filtered.filter(c => c.isProjectRoot);
+    if (remaining.length === 0) {
+      localStorage.setItem(`stm_projects_deleted_${artistId}`, Date.now().toString());
+    }
     // Update local React state immediately
     setCollections(filtered);
     if (db) {

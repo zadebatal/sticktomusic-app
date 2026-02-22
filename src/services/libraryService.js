@@ -2044,9 +2044,11 @@ export const migrateDraftsToNiches = async (artistId, db = null) => {
   }
 
   // Ensure a project exists, with all library media in its pool
+  // Skip auto-creation if user has explicitly deleted all projects
+  const deletedKey = `stm_projects_deleted_${artistId}`;
   let project = existingProject;
   const library = getLibrary(artistId);
-  if (!project) {
+  if (!project && !localStorage.getItem(deletedKey)) {
     project = createProject(artistId, { name: 'Content', color: PIPELINE_COLORS[0] });
     if (library.length > 0) {
       project.mediaIds = library.map(item => item.id);
