@@ -796,7 +796,7 @@ const ProjectWorkspace = ({
               <span className="text-heading-2 font-heading-2 text-[#ffffffff]">What do you want to make?</span>
               <span className="text-body font-body text-neutral-400">Choose a content format to create your first niche</span>
             </div>
-            <div className="grid grid-cols-2 gap-4 max-w-lg">
+            <div className="grid grid-cols-3 gap-4 max-w-2xl">
               {[...slideshowFormats, ...videoFormats].map(fmt => {
                 const IconComp = FORMAT_ICONS[fmt.id] || FeatherImage;
                 return (
@@ -846,14 +846,14 @@ const ProjectWorkspace = ({
       {/* New Niche format picker modal */}
       {showNichePicker && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowNichePicker(false)}>
-          <div className="w-full max-w-lg rounded-xl border border-neutral-800 bg-[#111111] p-6" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-2xl rounded-xl border border-neutral-800 bg-[#111111] p-6 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Add Niche</span>
               <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherX />} aria-label="Close" onClick={() => setShowNichePicker(false)} />
             </div>
 
             <span className="text-body-bold font-body-bold text-neutral-300 mb-3 block">Slideshows</span>
-            <div className="grid grid-cols-2 gap-3 mb-6">
+            <div className="grid grid-cols-3 gap-3 mb-6">
               {slideshowFormats.map(fmt => (
                 <div
                   key={fmt.id}
@@ -876,7 +876,7 @@ const ProjectWorkspace = ({
             </div>
 
             <span className="text-body-bold font-body-bold text-neutral-300 mb-3 block">Videos</span>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               {videoFormats.map(fmt => {
                 const IconComp = FORMAT_ICONS[fmt.id] || FeatherImage;
                 const color = VIDEO_FORMAT_COLORS[fmt.id] || '#6366f1';
