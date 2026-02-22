@@ -240,8 +240,8 @@ const ProjectLanding = ({
     // Update local React state immediately
     setCollections(filtered);
     if (db) {
-      // Delete project doc from Firestore
-      try { await deleteDoc(doc(db, 'artists', artistId, 'collections', projectId)); } catch (e) { /* ok */ }
+      // Delete project doc from Firestore (must match subscribeToCollections path)
+      try { await deleteDoc(doc(db, 'artists', artistId, 'library', 'data', 'collections', projectId)); } catch (e) { /* ok */ }
       // Sync unlinked niches to Firestore
       for (const n of niches) {
         try { await saveCollectionToFirestore(db, artistId, n); } catch (e) { /* ok */ }
