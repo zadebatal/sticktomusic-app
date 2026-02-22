@@ -28,8 +28,10 @@ import {
   FeatherList, FeatherCalendar, FeatherChevronDown,
   FeatherTrash2, FeatherX, FeatherUser,
   FeatherGripVertical, FeatherEdit, FeatherEdit2, FeatherSend, FeatherRotateCcw,
-  FeatherLock, FeatherUnlock, FeatherChevronUp, FeatherChevronLeft, FeatherChevronRight, FeatherImage, FeatherMusic
+  FeatherLock, FeatherUnlock, FeatherChevronUp, FeatherChevronLeft, FeatherChevronRight, FeatherImage, FeatherMusic,
+  FeatherUploadCloud,
 } from '@subframe/core';
+import UploadFinishedMediaModal from './UploadFinishedMediaModal';
 import * as SubframeCore from '@subframe/core';
 
 /**
@@ -84,6 +86,7 @@ const SchedulingPage = ({
   }
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
   const [previewingPost, setPreviewingPost] = useState(null);
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
 
   // ── BATCH SELECT STATE (new — batch-first) ──
@@ -1571,6 +1574,7 @@ const SchedulingPage = ({
             {!readOnly && (
               <>
                 <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherPlus />} aria-label="Add to queue" onClick={() => setShowAddModal(true)} />
+                <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherUploadCloud />} aria-label="Upload finished media" onClick={() => setShowUploadModal(true)} />
                 <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherRotateCcw />} aria-label="Sync with Late" loading={syncing} onClick={handleSyncWithLate} />
                 <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherShuffle />} aria-label="Randomize order" onClick={handleRandomizeOrder} />
                 <IconButton variant="neutral-tertiary" size="medium" icon={queuePaused ? <FeatherPlay /> : <FeatherPause />} aria-label={queuePaused ? "Resume queue" : "Pause queue"} onClick={() => setQueuePaused(!queuePaused)} />
@@ -1913,6 +1917,15 @@ const SchedulingPage = ({
         />
       )}
 
+      {showUploadModal && (
+        <UploadFinishedMediaModal
+          db={db}
+          artistId={artistId}
+          onClose={() => setShowUploadModal(false)}
+          onComplete={(count) => toastSuccess(`Uploaded ${count} file${count !== 1 ? 's' : ''} to queue`)}
+        />
+      )}
+
       {/* Confirm Dialog */}
       {/* Post Preview Modal */}
       {previewingPost && (() => {
@@ -2142,7 +2155,7 @@ const PostRow = ({
           {previewImage ? (
             <img src={previewImage} alt="" style={s.thumbImg} />
           ) : (
-            <span style={{ fontSize: '16px' }}>{post.contentType === 'slideshow' ? '🖼️' : '🎥'}</span>
+            <span style={{ fontSize: '16px' }}>{post.contentType === 'upload' ? (post.mediaType === 'image' ? '📷' : '📤') : post.contentType === 'slideshow' ? '🖼️' : '🎥'}</span>
           )}
         </div>
 
@@ -2150,7 +2163,12 @@ const PostRow = ({
         <div style={{ flex: 1.2, minWidth: 0, cursor: 'pointer' }} onClick={onToggleExpand}>
           <div style={s.contentName}>{post.contentName}</div>
           <div style={{ fontSize: '10px', color: '#52525b', marginTop: '1px', display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <span>{post.contentType === 'slideshow' ? 'Slideshow' : 'Video'}</span>
+            <span>{post.contentType === 'upload' ? (post.mediaType === 'image' ? 'Image' : 'Video') : post.contentType === 'slideshow' ? 'Slideshow' : 'Video'}</span>
+            {post.contentType === 'upload' && (
+              <span style={{ color: '#8b5cf6', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.2)' }}>
+                Uploaded
+              </span>
+            )}
             {post.collectionName && (
               <span style={{ color: '#14b8a6', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', backgroundColor: 'rgba(20,184,166,0.12)', border: '1px solid rgba(20,184,166,0.2)' }} title={`From: ${post.collectionName}`}>
                 {post.collectionName}
@@ -2368,7 +2386,7 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
               <img src={previewImage} alt="" style={s.drawerImg} />
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                <span style={{ fontSize: '32px' }}>{post.contentType === 'slideshow' ? '🖼️' : '🎥'}</span>
+                <span style={{ fontSize: '32px' }}>{post.contentType === 'upload' ? (post.mediaType === 'image' ? '📷' : '📤') : post.contentType === 'slideshow' ? '🖼️' : '🎥'}</span>
               </div>
             )}
           </div>

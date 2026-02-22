@@ -13,12 +13,14 @@ import {
   getUserCollections,
   saveCollections,
   saveCollectionToFirestore,
+  deleteCollectionAsync,
+  markCollectionPendingDeletion,
+  clearPendingDeletion,
   subscribeToCollections,
   subscribeToLibrary,
   subscribeToCreatedContent,
   PIPELINE_COLORS,
 } from '../../services/libraryService';
-import { deleteDoc, doc } from 'firebase/firestore';
 import { subscribeToScheduledPosts, createScheduledPost, PLATFORM_LABELS, PLATFORM_COLORS } from '../../services/scheduledPostsService';
 import { pollOverduePosts } from '../../services/postStatusPolling';
 import { Button } from '../../ui/components/Button';
@@ -29,7 +31,9 @@ import {
   FeatherPlus, FeatherArrowRight, FeatherImage, FeatherLayers,
   FeatherX, FeatherChevronDown, FeatherZap, FeatherMoreVertical,
   FeatherEdit2, FeatherTrash2, FeatherSend, FeatherClock, FeatherMusic,
+  FeatherUploadCloud,
 } from '@subframe/core';
+import UploadFinishedMediaModal from './UploadFinishedMediaModal';
 import * as SubframeCore from '@subframe/core';
 import { DropdownMenu } from '../../ui/components/DropdownMenu';
 import { useToast } from '../ui';
@@ -76,6 +80,7 @@ const ProjectLanding = ({
   const [showQuickSchedule, setShowQuickSchedule] = useState(false);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('14:00');
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   // Subscribe to data
   useEffect(() => {
@@ -226,27 +231,33 @@ const ProjectLanding = ({
     const cols = getUserCollections(artistId);
     const project = cols.find(c => c.id === projectId);
     if (!project) return;
+
+    // Mark as pending deletion FIRST to prevent subscription race condition
+    markCollectionPendingDeletion(projectId);
+
     // Unlink niches from this project
     const niches = cols.filter(c => c.projectId === projectId);
     niches.forEach(n => { delete n.projectId; n.updatedAt = new Date().toISOString(); });
-    // Remove project root
-    const filtered = cols.filter(c => c.id !== projectId);
-    saveCollections(artistId, filtered);
+
     // Mark that user has explicitly deleted projects (prevents migration re-creation)
-    const remaining = filtered.filter(c => c.isProjectRoot);
+    const remaining = cols.filter(c => c.id !== projectId && c.isProjectRoot);
     if (remaining.length === 0) {
       localStorage.setItem(`stm_projects_deleted_${artistId}`, Date.now().toString());
     }
-    // Update local React state immediately
-    setCollections(filtered);
+
+    // Delete via libraryService (handles both localStorage + Firestore)
+    await deleteCollectionAsync(db, artistId, projectId);
+
+    // Sync unlinked niches to Firestore
     if (db) {
-      // Delete project doc from Firestore (must match subscribeToCollections path)
-      try { await deleteDoc(doc(db, 'artists', artistId, 'library', 'data', 'collections', projectId)); } catch (e) { /* ok */ }
-      // Sync unlinked niches to Firestore
       for (const n of niches) {
         try { await saveCollectionToFirestore(db, artistId, n); } catch (e) { /* ok */ }
       }
     }
+
+    // Clear pending deletion now that Firestore doc is gone
+    clearPendingDeletion(projectId);
+
     toastSuccess(`Project "${project.name}" deleted`);
   }, [artistId, db, toastSuccess]);
 
@@ -290,6 +301,9 @@ const ProjectLanding = ({
               View Drafts
             </Button>
           )}
+          <Button variant="neutral-secondary" size="medium" icon={<FeatherUploadCloud />} onClick={() => setShowUploadModal(true)}>
+            Upload Media
+          </Button>
           <Button variant="brand-primary" size="medium" icon={<FeatherPlus />} onClick={() => setShowCreateForm(true)}>
             New Project
           </Button>
@@ -698,6 +712,15 @@ const ProjectLanding = ({
       )}
 
       {/* Create Project Inline Modal */}
+      {showUploadModal && (
+        <UploadFinishedMediaModal
+          db={db}
+          artistId={artistId}
+          onClose={() => setShowUploadModal(false)}
+          onComplete={(count) => toastSuccess(`Uploaded ${count} file${count !== 1 ? 's' : ''} to queue`)}
+        />
+      )}
+
       {showCreateForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowCreateForm(false)}>
           <div className="w-full max-w-md rounded-xl border border-neutral-800 bg-[#111111] p-6" onClick={e => e.stopPropagation()}>

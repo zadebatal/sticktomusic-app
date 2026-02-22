@@ -28,6 +28,13 @@ import {
 import log from '../utils/logger';
 
 // ============================================================================
+// PENDING DELETION TRACKING (prevents subscription race conditions)
+// ============================================================================
+const pendingDeletionIds = new Set();
+export const markCollectionPendingDeletion = (id) => pendingDeletionIds.add(id);
+export const clearPendingDeletion = (id) => pendingDeletionIds.delete(id);
+
+// ============================================================================
 // CONSTANTS
 // ============================================================================
 
@@ -3676,7 +3683,8 @@ export const subscribeToCollections = (db, artistId, callback) => {
           }
           return true;
         });
-        const allMerged = [...mergedCollections, ...localOnlyCollections];
+        const allMerged = [...mergedCollections, ...localOnlyCollections]
+          .filter(c => !pendingDeletionIds.has(c.id));
 
         // Save merged data to localStorage for offline access
         try {
