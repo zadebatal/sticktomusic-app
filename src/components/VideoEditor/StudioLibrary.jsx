@@ -8,7 +8,6 @@ import {
   getLibrary,
   getCollections,
   getCreatedContent,
-  getPipelineAssetCounts,
   subscribeToCollections,
   subscribeToLibrary,
   subscribeToCreatedContent,

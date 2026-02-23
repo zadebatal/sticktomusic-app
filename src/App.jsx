@@ -7578,7 +7578,7 @@ const StickToMusic = () => {
           left: 0,
           right: 0,
           height: '28px',
-          backgroundColor: window.location.port === '3001' ? '#7c3aed' : '#0ea5e9',
+          backgroundColor: '#0ea5e9',
           color: '#fff',
           display: 'flex',
           alignItems: 'center',
@@ -7590,9 +7590,7 @@ const StickToMusic = () => {
           fontFamily: 'monospace',
           pointerEvents: 'none',
         }}>
-          {window.location.port === '3001'
-            ? '◆ REDESIGN — localhost:3001 — redesign-test branch ◆'
-            : `◆ MAIN — localhost:${window.location.port || '3000'} — main branch ◆`}
+          {`◆ DEV — localhost:${window.location.port || '3000'} ◆`}
         </div>
       )}
     </div>
