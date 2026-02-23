@@ -389,8 +389,8 @@ export const clearSpotifyMockData = (artistId = 'demo_artist') => {
   localStorage.removeItem(`stm_spotify_${artistId}`);
   localStorage.removeItem(`stm_spotify_snapshots_${artistId}`);
   localStorage.removeItem(`stm_spotify_attribution_${artistId}`);
-  localStorage.removeItem('stm_analytics');
-  localStorage.removeItem('stm_analytics_last_sync');
+  localStorage.removeItem(`stm_analytics_${artistId}`);
+  localStorage.removeItem(`stm_analytics_last_sync_${artistId}`);
   log('🗑️ Mock data cleared');
 };
 

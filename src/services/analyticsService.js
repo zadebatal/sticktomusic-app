@@ -8,47 +8,74 @@
  * - Time-series data for charts
  */
 
-const STORAGE_KEY = 'stm_analytics';
-const LAST_SYNC_KEY = 'stm_analytics_last_sync';
+const STORAGE_KEY_PREFIX = 'stm_analytics_';
+const LAST_SYNC_KEY_PREFIX = 'stm_analytics_last_sync_';
+const LEGACY_STORAGE_KEY = 'stm_analytics';
+const LEGACY_LAST_SYNC_KEY = 'stm_analytics_last_sync';
 const SYNC_INTERVAL = 60 * 60 * 1000; // 1 hour in milliseconds
 
+const getStorageKey = (artistId) => `${STORAGE_KEY_PREFIX}${artistId}`;
+const getLastSyncKey = (artistId) => `${LAST_SYNC_KEY_PREFIX}${artistId}`;
+
+const EMPTY_ANALYTICS = { videos: {}, snapshots: [], lastUpdated: null };
+
 /**
- * Get stored analytics data from localStorage
+ * Migrate global analytics to per-artist key (one-time, idempotent)
  */
-export const getStoredAnalytics = () => {
-  try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : {
-      videos: {},        // videoId -> analytics data
-      snapshots: [],     // time-series snapshots
-      lastUpdated: null
-    };
-  } catch (error) {
-    console.error('Error reading analytics from localStorage:', error);
-    return { videos: {}, snapshots: [], lastUpdated: null };
+const migrateIfNeeded = (artistId) => {
+  const perArtistKey = getStorageKey(artistId);
+  if (localStorage.getItem(perArtistKey)) return; // already migrated
+
+  const legacyData = localStorage.getItem(LEGACY_STORAGE_KEY);
+  if (legacyData) {
+    localStorage.setItem(perArtistKey, legacyData);
+    const legacySync = localStorage.getItem(LEGACY_LAST_SYNC_KEY);
+    if (legacySync) localStorage.setItem(getLastSyncKey(artistId), legacySync);
+    // Don't remove legacy keys yet — other artists may still need migration
+    console.log('[Analytics] Migrated global data to artist:', artistId);
   }
 };
 
 /**
- * Save analytics data to localStorage
+ * Get stored analytics data from localStorage (per-artist)
+ * @param {string} artistId
  */
-export const saveAnalytics = (data) => {
+export const getStoredAnalytics = (artistId) => {
+  if (!artistId) return EMPTY_ANALYTICS;
+  migrateIfNeeded(artistId);
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    const data = localStorage.getItem(getStorageKey(artistId));
+    return data ? JSON.parse(data) : EMPTY_ANALYTICS;
+  } catch (error) {
+    console.error('Error reading analytics from localStorage:', error);
+    return EMPTY_ANALYTICS;
+  }
+};
+
+/**
+ * Save analytics data to localStorage (per-artist)
+ * @param {string} artistId
+ */
+export const saveAnalytics = (artistId, data) => {
+  if (!artistId) return;
+  try {
+    localStorage.setItem(getStorageKey(artistId), JSON.stringify({
       ...data,
       lastUpdated: new Date().toISOString()
     }));
-    localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
+    localStorage.setItem(getLastSyncKey(artistId), new Date().toISOString());
   } catch (error) {
     console.error('Error saving analytics to localStorage:', error);
   }
 };
 
 /**
- * Check if sync is needed (hourly)
+ * Check if sync is needed (hourly, per-artist)
+ * @param {string} artistId
  */
-export const needsSync = () => {
-  const lastSync = localStorage.getItem(LAST_SYNC_KEY);
+export const needsSync = (artistId) => {
+  if (!artistId) return false;
+  const lastSync = localStorage.getItem(getLastSyncKey(artistId));
   if (!lastSync) return true;
 
   const lastSyncTime = new Date(lastSync).getTime();
@@ -107,11 +134,12 @@ export const fetchLatePosts = async (accessToken) => {
 
 /**
  * Sync analytics from Late API
+ * @param {string} artistId - Artist ID for scoped storage
  * @param {Array} videos - Array of video objects from the app (with latePostId, audioId, categoryId)
  * @param {string} accessToken - Late API access token
  */
-export const syncAnalytics = async (videos, accessToken) => {
-  const stored = getStoredAnalytics();
+export const syncAnalytics = async (artistId, videos, accessToken) => {
+  const stored = getStoredAnalytics(artistId);
   const now = new Date().toISOString();
   const today = now.split('T')[0];
 
@@ -170,7 +198,7 @@ export const syncAnalytics = async (videos, accessToken) => {
     }
   }
 
-  saveAnalytics(stored);
+  saveAnalytics(artistId, stored);
   return stored;
 };
 
@@ -192,11 +220,12 @@ export const calculateTotalStats = (videos) => {
 
 /**
  * Get top performing videos
+ * @param {string} artistId
  * @param {number} limit - Number of videos to return
  * @param {string} sortBy - Sort metric ('views', 'likes', 'engagement')
  */
-export const getTopVideos = (limit = 10, sortBy = 'views') => {
-  const stored = getStoredAnalytics();
+export const getTopVideos = (artistId, limit = 10, sortBy = 'views') => {
+  const stored = getStoredAnalytics(artistId);
   const videos = Object.values(stored.videos);
 
   return videos
@@ -207,9 +236,10 @@ export const getTopVideos = (limit = 10, sortBy = 'views') => {
 /**
  * Get song performance aggregation
  * Groups all videos by audioId and aggregates their stats
+ * @param {string} artistId
  */
-export const getSongPerformance = () => {
-  const stored = getStoredAnalytics();
+export const getSongPerformance = (artistId) => {
+  const stored = getStoredAnalytics(artistId);
   const videos = Object.values(stored.videos);
 
   // Group by audioId
@@ -258,9 +288,10 @@ export const getSongPerformance = () => {
 
 /**
  * Get category performance aggregation
+ * @param {string} artistId
  */
-export const getCategoryPerformance = () => {
-  const stored = getStoredAnalytics();
+export const getCategoryPerformance = (artistId) => {
+  const stored = getStoredAnalytics(artistId);
   const videos = Object.values(stored.videos);
 
   // Group by categoryId
@@ -301,9 +332,10 @@ export const getCategoryPerformance = () => {
 
 /**
  * Get account/handle performance aggregation
+ * @param {string} artistId
  */
-export const getAccountPerformance = () => {
-  const stored = getStoredAnalytics();
+export const getAccountPerformance = (artistId) => {
+  const stored = getStoredAnalytics(artistId);
   const videos = Object.values(stored.videos);
 
   // Group by handle
@@ -346,11 +378,12 @@ export const getAccountPerformance = () => {
 
 /**
  * Get time series data for charts
+ * @param {string} artistId
  * @param {string} period - 'daily', 'weekly', 'monthly'
  * @param {number} days - Number of days to include
  */
-export const getTimeSeriesData = (period = 'daily', days = 30) => {
-  const stored = getStoredAnalytics();
+export const getTimeSeriesData = (artistId, period = 'daily', days = 30) => {
+  const stored = getStoredAnalytics(artistId);
   const snapshots = stored.snapshots || [];
 
   // Get snapshots from the last N days
@@ -387,10 +420,11 @@ export const getTimeSeriesData = (period = 'daily', days = 30) => {
 
 /**
  * Get analytics for a specific song
+ * @param {string} artistId
  * @param {string} audioId - Audio/song ID
  */
-export const getSongAnalytics = (audioId) => {
-  const stored = getStoredAnalytics();
+export const getSongAnalytics = (artistId, audioId) => {
+  const stored = getStoredAnalytics(artistId);
   const videos = Object.values(stored.videos).filter(v => v.audioId === audioId);
 
   if (videos.length === 0) return null;
@@ -444,17 +478,20 @@ const getCategoryBreakdownForSong = (videos) => {
 };
 
 /**
- * Clear all analytics data
+ * Clear all analytics data for an artist
+ * @param {string} artistId
  */
-export const clearAnalytics = () => {
-  localStorage.removeItem(STORAGE_KEY);
-  localStorage.removeItem(LAST_SYNC_KEY);
+export const clearAnalytics = (artistId) => {
+  if (!artistId) return;
+  localStorage.removeItem(getStorageKey(artistId));
+  localStorage.removeItem(getLastSyncKey(artistId));
 };
 
 /**
  * Add mock data for testing (remove in production)
+ * @param {string} artistId
  */
-export const addMockData = () => {
+export const addMockData = (artistId) => {
   const mockVideos = {
     'video_1': {
       videoId: 'video_1',
@@ -563,7 +600,7 @@ export const addMockData = () => {
     });
   }
 
-  saveAnalytics({ videos: mockVideos, snapshots });
+  saveAnalytics(artistId, { videos: mockVideos, snapshots });
   return { videos: mockVideos, snapshots };
 };
 

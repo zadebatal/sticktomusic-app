@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { getStoredAnalytics } from '../../services/analyticsService';
 import { Button } from '../../ui/components/Button';
 import {
   getSpotifyOverview,
@@ -316,8 +317,8 @@ export const TimelineOverlayChart = ({ artistId, days = 30 }) => {
         const timeline = getSpotifyTimeline(artistId, days);
         setTimelineData(timeline);
 
-        // Get content posts from localStorage
-        const analytics = JSON.parse(localStorage.getItem('stm_analytics') || '{}');
+        // Get content posts from per-artist analytics
+        const analytics = getStoredAnalytics(artistId);
         const videos = Object.values(analytics.videos || {});
         setContentPosts(videos.filter(v => v.postedAt));
       } catch (error) {

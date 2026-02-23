@@ -101,26 +101,27 @@ const AnalyticsDashboard = ({
   // Load analytics data
   const loadAnalytics = useCallback(() => {
     const capturedArtistId = currentArtistId;
-    const stored = getStoredAnalytics();
+    if (!capturedArtistId) return;
+    const stored = getStoredAnalytics(capturedArtistId);
 
     // If no data, add mock data for demo
     if (Object.keys(stored.videos).length === 0) {
-      const mockData = addMockData();
+      const mockData = addMockData(capturedArtistId);
       setAnalytics(mockData);
       setTotalStats(calculateTotalStats(mockData.videos));
-      setTopVideos(getTopVideos(10));
-      setSongPerformance(getSongPerformance());
-      setCategoryPerformance(getCategoryPerformance());
-      setAccountPerformance(getAccountPerformance());
-      setTimeSeriesData(getTimeSeriesData(chartPeriod, 30));
+      setTopVideos(getTopVideos(capturedArtistId, 10));
+      setSongPerformance(getSongPerformance(capturedArtistId));
+      setCategoryPerformance(getCategoryPerformance(capturedArtistId));
+      setAccountPerformance(getAccountPerformance(capturedArtistId));
+      setTimeSeriesData(getTimeSeriesData(capturedArtistId, chartPeriod, 30));
     } else {
       setAnalytics(stored);
       setTotalStats(calculateTotalStats(stored.videos));
-      setTopVideos(getTopVideos(10));
-      setSongPerformance(getSongPerformance());
-      setCategoryPerformance(getCategoryPerformance());
-      setAccountPerformance(getAccountPerformance());
-      setTimeSeriesData(getTimeSeriesData(chartPeriod, 30));
+      setTopVideos(getTopVideos(capturedArtistId, 10));
+      setSongPerformance(getSongPerformance(capturedArtistId));
+      setCategoryPerformance(getCategoryPerformance(capturedArtistId));
+      setAccountPerformance(getAccountPerformance(capturedArtistId));
+      setTimeSeriesData(getTimeSeriesData(capturedArtistId, chartPeriod, 30));
     }
 
     // Load Spotify attribution data — verify artistId hasn't changed
@@ -145,8 +146,8 @@ const AnalyticsDashboard = ({
 
   // Update time series when period changes
   useEffect(() => {
-    setTimeSeriesData(getTimeSeriesData(chartPeriod, 30));
-  }, [chartPeriod]);
+    if (currentArtistId) setTimeSeriesData(getTimeSeriesData(currentArtistId, chartPeriod, 30));
+  }, [chartPeriod, currentArtistId]);
 
   // Sync with Late API
   const handleSync = async () => {
@@ -193,7 +194,7 @@ const AnalyticsDashboard = ({
 
   // Song detail view
   if (selectedSong) {
-    const songData = getSongAnalytics(selectedSong);
+    const songData = getSongAnalytics(currentArtistId, selectedSong);
     return (
       <div className={`px-12 py-8 bg-black min-h-screen text-white ${isMobile ? '!px-4' : ''}`}>
         <div className="flex items-center gap-4 mb-6">
