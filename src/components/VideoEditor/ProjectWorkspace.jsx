@@ -54,6 +54,7 @@ import { useToast, ConfirmDialog } from '../ui';
 import SlideshowNicheContent from './SlideshowNicheContent';
 import VideoNicheContent from './VideoNicheContent';
 import FinishedMediaNicheContent from './FinishedMediaNicheContent';
+import ClipperNicheContent from './ClipperNicheContent';
 import useMediaMultiSelect from './shared/useMediaMultiSelect';
 
 const FORMAT_TO_EDITOR = {
@@ -769,7 +770,20 @@ const ProjectWorkspace = ({
           />
         )}
 
-        {!showCaptionPage && activeNiche && activeFormat?.type === 'video' && activeFormat?.id !== 'finished_media' && (
+        {!showCaptionPage && activeNiche && activeFormat?.id === 'clipper' && (
+          <ClipperNicheContent
+            db={db}
+            artistId={artistId}
+            niche={activeNiche}
+            createdContent={createdContent}
+            onMakeVideo={(format, nicheId, existingDraft) => {
+              onOpenVideoEditor?.(format, nicheId, existingDraft);
+            }}
+            allNiches={niches}
+          />
+        )}
+
+        {!showCaptionPage && activeNiche && activeFormat?.type === 'video' && activeFormat?.id !== 'finished_media' && activeFormat?.id !== 'clipper' && (
           <VideoNicheContent
             db={db}
             artistId={artistId}
