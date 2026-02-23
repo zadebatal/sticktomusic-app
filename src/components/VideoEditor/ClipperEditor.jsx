@@ -354,8 +354,12 @@ const ClipperEditor = ({
         title={videoName}
         onTitleChange={setVideoName}
         placeholder="Untitled Clip"
-        onClose={onClose}
+        onBack={onClose}
         isMobile={isMobile}
+        onExport={handleExport}
+        exportDisabled={clips.length === 0 || exporting}
+        exportLoading={exporting}
+        exportLabel={exporting ? `Exporting ${exportedCount}/${clips.length}...` : `Export ${clips.length || 0}`}
       />
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -414,95 +418,13 @@ const ClipperEditor = ({
               </div>
 
               {/* Timeline */}
-              <div className="flex flex-col gap-2 px-4 pb-3">
-                {/* Time display */}
-                <div className="flex items-center justify-between">
-                  <span className="text-caption font-caption text-neutral-400">
-                    {formatTimePrecise(currentTime)}
-                  </span>
-                  <span className="text-caption font-caption text-neutral-500">
-                    {formatTime(duration)}
-                  </span>
-                </div>
-
-                {/* Timeline bar */}
-                <div
-                  ref={timelineRef}
-                  className="relative h-10 rounded-lg bg-neutral-800 cursor-pointer overflow-hidden"
-                  onClick={handleTimelineClick}
-                >
-                  {/* Clip regions */}
-                  {clips.map((clip, i) => (
-                    <div
-                      key={clip.id}
-                      className={`absolute top-0 h-full rounded transition-colors ${
-                        activeClipIdx === i ? 'bg-indigo-500/40 border border-indigo-400' : 'bg-indigo-500/20 border border-indigo-500/30'
-                      }`}
-                      style={{
-                        left: `${(clip.start / duration) * 100}%`,
-                        width: `${((clip.end - clip.start) / duration) * 100}%`,
-                      }}
-                      onClick={(e) => { e.stopPropagation(); setActiveClipIdx(i); jumpToClip(clip); }}
-                    />
-                  ))}
-
-                  {/* Mark-in indicator */}
-                  {markIn !== null && (
-                    <div
-                      className="absolute top-0 h-full border-l-2 border-dashed border-green-400"
-                      style={{ left: `${(markIn / duration) * 100}%` }}
-                    >
-                      <div className="absolute -top-0.5 -left-1 w-2 h-2 rounded-full bg-green-400" />
-                    </div>
-                  )}
-
-                  {/* Pending region (mark-in to current) */}
-                  {markIn !== null && (
-                    <div
-                      className="absolute top-0 h-full bg-green-500/15"
-                      style={{
-                        left: `${(Math.min(markIn, currentTime) / duration) * 100}%`,
-                        width: `${(Math.abs(currentTime - markIn) / duration) * 100}%`,
-                      }}
-                    />
-                  )}
-
-                  {/* Playhead */}
-                  <div
-                    className="absolute top-0 h-full w-0.5 bg-white z-10"
-                    style={{ left: `${(currentTime / duration) * 100}%` }}
-                  />
-                </div>
-
-                {/* Controls */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1">
-                    <IconButton
-                      variant="neutral-tertiary" size="small"
-                      icon={<FeatherSkipBack />}
-                      aria-label="Back 5s"
-                      onClick={() => seekTo(currentTime - 5)}
-                    />
-                    <IconButton
-                      variant="neutral-tertiary" size="medium"
-                      icon={isPlaying ? <FeatherPause /> : <FeatherPlay />}
-                      aria-label={isPlaying ? 'Pause' : 'Play'}
-                      onClick={togglePlay}
-                    />
-                    <IconButton
-                      variant="neutral-tertiary" size="small"
-                      icon={<FeatherSkipForward />}
-                      aria-label="Forward 5s"
-                      onClick={() => seekTo(currentTime + 5)}
-                    />
-                    <IconButton
-                      variant="neutral-tertiary" size="small"
-                      icon={isMuted ? <FeatherVolumeX /> : <FeatherVolume2 />}
-                      aria-label={isMuted ? 'Unmute' : 'Mute'}
-                      onClick={toggleMute}
-                    />
+              <div className="flex flex-col gap-2 px-4 pb-3 border-t border-neutral-800 pt-3">
+                {/* Header */}
+                <div className="flex w-full items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-heading-3 font-heading-3 text-[#ffffffff]">Timeline</span>
+                    <Badge variant="neutral">{formatTimePrecise(currentTime)} / {formatTime(duration)}</Badge>
                   </div>
-
                   <div className="flex items-center gap-2">
                     {markIn !== null && (
                       <Badge variant="success">IN: {formatTimePrecise(markIn)}</Badge>
@@ -518,8 +440,124 @@ const ClipperEditor = ({
                   </div>
                 </div>
 
+                {/* Multi-track timeline */}
+                <div
+                  ref={timelineRef}
+                  className="flex w-full flex-col gap-2 relative"
+                  style={{ minHeight: '80px', cursor: 'pointer', userSelect: 'none' }}
+                  onClick={(e) => {
+                    if (!duration) return;
+                    if (e.target === e.currentTarget || e.target.dataset.timelineClickable) {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const clickX = e.clientX - rect.left;
+                      const time = (clickX / rect.width) * duration;
+                      seekTo(Math.max(0, Math.min(duration, time)));
+                    }
+                  }}
+                >
+                  {/* Clips Track */}
+                  <div className="flex w-full items-center gap-3">
+                    <span className="w-20 text-caption font-caption text-neutral-400 text-right shrink-0">Clips</span>
+                    <div className="flex-1 h-10 rounded-md border border-neutral-800 bg-black relative overflow-hidden" data-timeline-clickable="true">
+                      {clips.map((clip, i) => {
+                        const startPct = duration > 0 ? (clip.start / duration) * 100 : 0;
+                        const widthPct = duration > 0 ? ((clip.end - clip.start) / duration) * 100 : 0;
+                        const isActive = activeClipIdx === i;
+                        return (
+                          <div
+                            key={clip.id}
+                            style={{
+                              position: 'absolute', left: `${startPct}%`, width: `${widthPct}%`,
+                              top: '2px', height: '36px', borderRadius: '4px', cursor: 'pointer',
+                              backgroundColor: isActive ? 'rgba(99, 102, 241, 0.4)' : 'rgba(99, 102, 241, 0.2)',
+                              border: isActive ? '1px solid #818cf8' : '1px solid rgba(99, 102, 241, 0.3)',
+                              display: 'flex', alignItems: 'center', padding: '0 6px', overflow: 'hidden',
+                              zIndex: isActive ? 10 : 5,
+                            }}
+                            onClick={(e) => { e.stopPropagation(); setActiveClipIdx(i); jumpToClip(clip); }}
+                          >
+                            <span style={{ fontSize: '10px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
+                              {clip.name}
+                            </span>
+                          </div>
+                        );
+                      })}
+
+                      {/* Mark-in indicator on clips track */}
+                      {markIn !== null && duration > 0 && (
+                        <>
+                          <div
+                            style={{
+                              position: 'absolute', left: `${(markIn / duration) * 100}%`, top: 0, bottom: 0,
+                              width: '2px', backgroundColor: '#22c55e', zIndex: 15,
+                            }}
+                          />
+                          <div
+                            style={{
+                              position: 'absolute',
+                              left: `${(Math.min(markIn, currentTime) / duration) * 100}%`,
+                              width: `${(Math.abs(currentTime - markIn) / duration) * 100}%`,
+                              top: 0, bottom: 0, backgroundColor: 'rgba(34, 197, 94, 0.12)', zIndex: 2,
+                            }}
+                          />
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Source Track */}
+                  <div className="flex w-full items-center gap-3">
+                    <span className="w-20 text-caption font-caption text-neutral-400 text-right shrink-0">Source</span>
+                    <div className="flex-1 h-7 rounded-md border border-neutral-800 bg-black relative overflow-hidden" data-timeline-clickable="true">
+                      <div style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, background: 'linear-gradient(90deg, rgba(99,102,241,0.08) 0%, rgba(99,102,241,0.04) 100%)' }} />
+                      <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '10px', color: 'rgba(255,255,255,0.4)' }}>
+                        {sourceName || 'No source'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Playhead */}
+                  {duration > 0 && (
+                    <div style={{
+                      position: 'absolute', left: `${(currentTime / duration) * 100}%`, top: 0, bottom: 0,
+                      width: '2px', backgroundColor: '#ef4444', zIndex: 20, pointerEvents: 'auto', cursor: 'ew-resize',
+                      transition: isPlaying ? 'none' : 'left 0.1s ease-out',
+                    }} onMouseDown={(e) => {
+                      e.preventDefault(); e.stopPropagation();
+                      document.body.style.userSelect = 'none';
+                      const wasPlaying = isPlaying;
+                      if (isPlaying) { videoRef.current?.pause(); setIsPlaying(false); }
+                      const handleDragMove = (moveE) => {
+                        const rect = timelineRef.current?.getBoundingClientRect();
+                        if (!rect) return;
+                        const pct = Math.max(0, Math.min(1, (moveE.clientX - rect.left) / rect.width));
+                        seekTo(pct * duration);
+                      };
+                      const handleDragEnd = () => {
+                        document.body.style.userSelect = '';
+                        window.removeEventListener('mousemove', handleDragMove);
+                        window.removeEventListener('mouseup', handleDragEnd);
+                        if (wasPlaying) { videoRef.current?.play(); setIsPlaying(true); }
+                      };
+                      window.addEventListener('mousemove', handleDragMove);
+                      window.addEventListener('mouseup', handleDragEnd);
+                    }}>
+                      <div style={{ position: 'absolute', left: '-6px', right: '-6px', top: 0, bottom: 0, cursor: 'ew-resize' }} />
+                      <div style={{ position: 'absolute', top: '-2px', left: '50%', transform: 'translateX(-50%)', width: '10px', height: '10px', backgroundColor: '#ef4444', borderRadius: '2px', clipPath: 'polygon(0 0, 100% 0, 50% 100%)' }} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Playback Controls */}
+                <div className="flex w-full items-center justify-center gap-3">
+                  <IconButton variant="neutral-tertiary" size="small" icon={<FeatherSkipBack />} aria-label="Skip to start" onClick={() => seekTo(0)} />
+                  <IconButton variant="neutral-secondary" size="medium" icon={isPlaying ? <FeatherPause /> : <FeatherPlay />} aria-label={isPlaying ? 'Pause' : 'Play'} onClick={togglePlay} />
+                  <IconButton variant="neutral-tertiary" size="small" icon={<FeatherSkipForward />} aria-label="Skip to end" onClick={() => seekTo(duration)} />
+                  <IconButton variant="neutral-tertiary" size="small" icon={isMuted ? <FeatherVolumeX /> : <FeatherVolume2 />} aria-label={isMuted ? 'Unmute' : 'Mute'} onClick={toggleMute} />
+                </div>
+
                 {/* Keyboard hint */}
-                <div className="flex items-center gap-3 text-[10px] text-neutral-600">
+                <div className="flex items-center justify-center gap-3 text-[10px] text-neutral-600">
                   <span>Space: Play/Pause</span>
                   <span>I: Mark In</span>
                   <span>O: Mark Out</span>
