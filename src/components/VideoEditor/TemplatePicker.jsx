@@ -37,6 +37,13 @@ const TEMPLATES = [
     description: 'Turn photos into a fast-paced video with transitions',
     features: ['Upload or pull from banks', 'Ken Burns pan/zoom effects', 'Beat-synced photo timing'],
     icon: 'photo-montage'
+  },
+  {
+    id: 'clipper',
+    name: 'Clipper',
+    description: 'Split a video into multiple clips — instant, no quality loss',
+    features: ['Mark in/out points', 'Stream-copy extraction (instant)', 'Export clips separately'],
+    icon: 'clipper'
   }
 ];
 
@@ -104,11 +111,26 @@ const PhotoMontageIcon = () => (
   </svg>
 );
 
+const ClipperIcon = () => (
+  <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    {/* Scissors */}
+    <circle cx="14" cy="14" r="4" />
+    <circle cx="14" cy="34" r="4" />
+    <line x1="34" y1="8" x2="17" y2="31" />
+    <line x1="34" y1="40" x2="17" y2="17" />
+    {/* Cut segments */}
+    <rect x="32" y="10" width="10" height="8" rx="2" fill="currentColor" opacity="0.2" stroke="none" />
+    <rect x="32" y="22" width="10" height="8" rx="2" fill="currentColor" opacity="0.15" stroke="none" />
+    <rect x="32" y="34" width="10" height="8" rx="2" fill="currentColor" opacity="0.1" stroke="none" />
+  </svg>
+);
+
 const ICON_MAP = {
   'montage': MontageIcon,
   'solo-clip': SoloClipIcon,
   'multi-clip': MultiClipIcon,
-  'photo-montage': PhotoMontageIcon
+  'photo-montage': PhotoMontageIcon,
+  'clipper': ClipperIcon
 };
 
 const TemplatePicker = ({ onSelect, onClose, clipCount = 0 }) => {

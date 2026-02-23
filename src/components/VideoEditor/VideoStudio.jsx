@@ -955,7 +955,8 @@ const VideoStudio = ({
     montage: 'montage',
     solo_clip: 'solo-clip',
     multi_clip: 'multi-clip',
-    photo_montage: 'photo-montage'
+    photo_montage: 'photo-montage',
+    clipper: 'clipper',
   };
 
   // Project system — open a project workspace

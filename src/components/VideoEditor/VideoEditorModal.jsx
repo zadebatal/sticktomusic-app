@@ -7,6 +7,7 @@ import TemplatePicker from './TemplatePicker';
 import SoloClipEditor from './SoloClipEditor';
 import MultiClipEditor from './MultiClipEditor';
 import PhotoMontageEditor from './PhotoMontageEditor';
+import ClipperEditor from './ClipperEditor';
 import AudioClipSelector from './AudioClipSelector';
 import CloudImportButton from './CloudImportButton';
 import useEditorHistory from '../../hooks/useEditorHistory';
@@ -2122,6 +2123,20 @@ const VideoEditorModal = ({
         presets={presets}
         onSavePreset={onSavePreset}
         nicheTextBanks={category?.nicheTextBanks || null}
+      />
+    );
+  }
+
+  // ── Clipper mode ──
+  if (editorMode === 'clipper') {
+    return (
+      <ClipperEditor
+        category={category}
+        existingVideo={existingVideo}
+        onSave={onSave}
+        onClose={onClose}
+        artistId={artistId}
+        db={db}
       />
     );
   }

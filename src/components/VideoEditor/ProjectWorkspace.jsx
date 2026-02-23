@@ -47,7 +47,7 @@ import {
   FeatherArrowLeft, FeatherImage, FeatherMusic, FeatherPlay,
   FeatherCheck, FeatherFilm, FeatherLayers, FeatherCamera,
   FeatherFileText, FeatherSearch, FeatherChevronDown,
-  FeatherHash, FeatherMessageSquare, FeatherTrash2,
+  FeatherHash, FeatherMessageSquare, FeatherTrash2, FeatherScissors,
 } from '@subframe/core';
 import * as SubframeCore from '@subframe/core';
 import { useToast, ConfirmDialog } from '../ui';
@@ -61,6 +61,7 @@ const FORMAT_TO_EDITOR = {
   solo_clip: 'solo-clip',
   multi_clip: 'multi-clip',
   photo_montage: 'photo-montage',
+  clipper: 'clipper',
 };
 
 const FORMAT_ICONS = {
@@ -69,6 +70,7 @@ const FORMAT_ICONS = {
   multi_clip: FeatherLayers,
   photo_montage: FeatherCamera,
   finished_media: FeatherUploadCloud,
+  clipper: FeatherScissors,
 };
 
 const VIDEO_FORMAT_COLORS = {
@@ -77,6 +79,7 @@ const VIDEO_FORMAT_COLORS = {
   multi_clip: '#f59e0b',    // amber
   photo_montage: '#a855f7', // purple
   finished_media: '#06b6d4', // cyan
+  clipper: '#f43f5e',         // rose
 };
 
 const ProjectWorkspace = ({
