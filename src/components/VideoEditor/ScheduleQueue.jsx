@@ -459,7 +459,7 @@ const ScheduleQueue = ({
               {contentType === 'mixed' && ' (videos & slideshows)'}
             </p>
           </div>
-          <IconButton size="medium" icon={<FeatherX />} onClick={onClose} />
+          <IconButton size="medium" icon={<FeatherX />} onClick={onClose} aria-label="Close" />
         </div>
 
         {/* Rendering Progress */}
@@ -617,7 +617,7 @@ const ScheduleQueue = ({
             {error && (
               <div style={styles.errorBar}>
                 <span>⚠️ {error}</span>
-                <IconButton size="small" icon={<FeatherX />} onClick={() => setError(null)} />
+                <IconButton size="small" icon={<FeatherX />} onClick={() => setError(null)} aria-label="Dismiss error" />
               </div>
             )}
 
@@ -662,7 +662,7 @@ const ScheduleQueue = ({
             <div style={styles.sidebar}>
               <div style={styles.sidebarHeader}>
                 <h3 style={styles.sidebarTitle}>Collection Banks</h3>
-                <IconButton size="small" icon={<FeatherX />} onClick={() => setShowBankEditor(false)} />
+                <IconButton size="small" icon={<FeatherX />} onClick={() => setShowBankEditor(false)} aria-label="Close bank editor" />
               </div>
 
               <div style={styles.sidebarContent}>
@@ -938,6 +938,7 @@ const ScheduleQueueCard = ({
           style={styles.actionBtn}
           onClick={() => onToggleEdit(post.id)}
           title={post.isEditing ? 'Done editing (Enter)' : 'Edit'}
+          aria-label={post.isEditing ? 'Done editing' : 'Edit'}
         >
           {post.isEditing ? '✓' : '✏️'}
         </button>
@@ -949,6 +950,7 @@ const ScheduleQueueCard = ({
           onClick={() => onRandomize(post.id)}
           disabled={post.isManuallyEdited}
           title={post.isManuallyEdited ? 'Cannot randomize edited posts' : 'Randomize'}
+          aria-label={post.isManuallyEdited ? 'Cannot randomize edited posts' : 'Randomize'}
         >
           🎲
         </button>
@@ -960,6 +962,7 @@ const ScheduleQueueCard = ({
           }}
           onClick={handleRemove}
           title={showRemoveConfirm ? 'Click again to confirm' : 'Remove'}
+          aria-label={showRemoveConfirm ? 'Click again to confirm' : 'Remove'}
         >
           {showRemoveConfirm ? '?' : '✕'}
         </button>

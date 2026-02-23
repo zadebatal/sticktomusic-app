@@ -466,7 +466,7 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       <div style={styles.modal}>
         <div style={styles.header}>
           <h2 style={styles.title}>🎤 Lyric Analyzer</h2>
-          <IconButton icon={<FeatherX />} onClick={onClose} />
+          <IconButton icon={<FeatherX />} onClick={onClose} aria-label="Close" />
         </div>
 
         <div style={styles.content}>

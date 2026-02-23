@@ -265,6 +265,7 @@ const CaptionHashtagBank = ({
           size="small"
           icon={<FeatherPlus />}
           onClick={() => setShowAddCategory(true)}
+          aria-label="Add category"
         />
         {onApplyToDrafts && selectedCategory && draftCount > 0 && (
           <Button variant="brand-primary" size="small" onClick={() => onApplyToDrafts(selectedCategory)} style={{ marginLeft: 'auto' }}>
@@ -318,6 +319,7 @@ const CaptionHashtagBank = ({
                   size="small"
                   icon={<FeatherTrash2 />}
                   onClick={handleDeleteCategory}
+                  aria-label="Delete category"
                 />
               )}
             </div>
@@ -393,7 +395,7 @@ const CaptionHashtagBank = ({
                   alwaysCaptions.map((cap, i) => (
                     <div key={i} className="flex items-center justify-between bg-[#1a1a1aff] border border-solid border-neutral-800 rounded-lg px-3 py-2">
                       <span className="text-caption font-caption text-brand-400" style={{ wordBreak: 'break-word' }}>{cap}</span>
-                      <IconButton variant="destructive-tertiary" size="small" icon={<FeatherX />} onClick={() => removeCaptionAlways(i)} />
+                      <IconButton variant="destructive-tertiary" size="small" icon={<FeatherX />} onClick={() => removeCaptionAlways(i)} aria-label="Remove caption" />
                     </div>
                   ))
                 ) : (
@@ -421,7 +423,7 @@ const CaptionHashtagBank = ({
                   poolCaptions.map((cap, i) => (
                     <div key={i} className="flex items-center justify-between bg-[#1a1a1aff] border border-solid border-neutral-800 rounded-lg px-3 py-2">
                       <span className="text-caption font-caption text-neutral-400" style={{ wordBreak: 'break-word' }}>{cap}</span>
-                      <IconButton variant="destructive-tertiary" size="small" icon={<FeatherX />} onClick={() => removeCaptionPool(i)} />
+                      <IconButton variant="destructive-tertiary" size="small" icon={<FeatherX />} onClick={() => removeCaptionPool(i)} aria-label="Remove caption" />
                     </div>
                   ))
                 ) : (

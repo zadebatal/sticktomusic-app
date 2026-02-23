@@ -208,6 +208,7 @@ const ArtistsManagement = ({
                           size="small"
                           icon={<FeatherMoreVertical />}
                           onClick={(e) => e.stopPropagation()}
+                          aria-label="More options"
                         />
                       </SubframeCore.DropdownMenu.Trigger>
                       <SubframeCore.DropdownMenu.Portal>

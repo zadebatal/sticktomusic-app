@@ -34,7 +34,7 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
           <span style={{ fontSize: '11px', color: theme.text.muted }}>{texts.length}</span>
         </div>
         {onDelete && (
-          <IconButton size="small" icon={<FeatherX />} onClick={onDelete} title={`Delete ${label}`} />
+          <IconButton size="small" icon={<FeatherX />} onClick={onDelete} title={`Delete ${label}`} aria-label={`Delete ${label}`} />
         )}
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
@@ -94,6 +94,7 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
                 cursor: 'pointer', fontSize: '16px', padding: '4px 8px', flexShrink: 0, minWidth: '32px', minHeight: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}
               title="Remove"
+              aria-label="Remove"
             >×</button>
           </div>
           );
@@ -120,7 +121,7 @@ const TextBankPanel = ({ bankNum, label, color, texts, onAdd, onRemove, onUpdate
             color: theme.text.primary, fontSize: '12px'
           }}
         />
-        <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newText.trim()) { onAdd(newText.trim()); setNewText(''); } }} disabled={!newText.trim()} />
+        <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newText.trim()) { onAdd(newText.trim()); setNewText(''); } }} disabled={!newText.trim()} aria-label="Add text" />
       </div>
     </div>
   );

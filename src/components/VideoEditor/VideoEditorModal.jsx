@@ -2366,8 +2366,8 @@ const VideoEditorModal = ({
                   <Badge variant="neutral">
                     {isAnalyzing ? 'Analyzing beats...' : bpm ? `${Math.round(bpm)} BPM (${filteredBeats.length} beats)` : 'No beats detected'}
                   </Badge>
-                  <IconButton variant="neutral-tertiary" size="small" icon={<FeatherZoomOut />} onClick={() => setTimelineScale(s => Math.max(0.5, s - 0.1))} />
-                  <IconButton variant="neutral-tertiary" size="small" icon={<FeatherZoomIn />} onClick={() => setTimelineScale(s => Math.min(2, s + 0.1))} />
+                  <IconButton variant="neutral-tertiary" size="small" icon={<FeatherZoomOut />} onClick={() => setTimelineScale(s => Math.max(0.5, s - 0.1))} aria-label="Zoom out" />
+                  <IconButton variant="neutral-tertiary" size="small" icon={<FeatherZoomIn />} onClick={() => setTimelineScale(s => Math.min(2, s + 0.1))} aria-label="Zoom in" />
                 </div>
               </div>
 
@@ -2865,7 +2865,7 @@ const VideoEditorModal = ({
                               <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)}
                                 onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToTextBank(1, newTextA); setNewTextA(''); } }}
                                 placeholder="Add text..." className="flex-1 px-2.5 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[12px] outline-none" />
-                              <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newTextA.trim()) { handleAddToTextBank(1, newTextA); setNewTextA(''); } }} />
+                              <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newTextA.trim()) { handleAddToTextBank(1, newTextA); setNewTextA(''); } }} aria-label="Add to Text Bank A" />
                             </div>
                             {textBank1.map((text, idx) => (
                               <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-300">
@@ -2880,7 +2880,7 @@ const VideoEditorModal = ({
                               <input value={newTextB} onChange={(e) => setNewTextB(e.target.value)}
                                 onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToTextBank(2, newTextB); setNewTextB(''); } }}
                                 placeholder="Add text..." className="flex-1 px-2.5 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[12px] outline-none" />
-                              <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newTextB.trim()) { handleAddToTextBank(2, newTextB); setNewTextB(''); } }} />
+                              <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newTextB.trim()) { handleAddToTextBank(2, newTextB); setNewTextB(''); } }} aria-label="Add to Text Bank B" />
                             </div>
                             {textBank2.map((text, idx) => (
                               <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-300">

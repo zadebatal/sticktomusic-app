@@ -1129,7 +1129,7 @@ const WordTimeline = ({
             ...styles.title,
             ...(isMobile ? { fontSize: '16px' } : {})
           }}>Word timeline</h2>
-          <IconButton size={isMobile ? "medium" : "small"} icon={<FeatherX />} onClick={onClose} />
+          <IconButton size={isMobile ? "medium" : "small"} icon={<FeatherX />} onClick={onClose} aria-label="Close" />
         </div>
 
         <div style={{

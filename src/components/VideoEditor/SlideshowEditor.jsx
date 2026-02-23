@@ -2399,6 +2399,7 @@ const SlideshowEditor = ({
           size={isMobile ? 'large' : 'medium'}
           icon={<FeatherX />}
           onClick={onClose}
+          aria-label="Close"
         />
       </div>
     </header>
@@ -2636,6 +2637,7 @@ const SlideshowEditor = ({
           onClick={handlePlayPause}
           disabled={!audioReady || !!audioError}
           className={audioError ? '!bg-error-600' : ''}
+          aria-label={isPlaying ? "Pause" : "Play"}
         />
         <div className="flex flex-col flex-1 min-w-0">
           <span className="text-xs text-white truncate">
@@ -2673,6 +2675,7 @@ const SlideshowEditor = ({
         icon={<FeatherChevronLeft />}
         onClick={() => { manualSlideOverrideRef.current = Date.now(); setSelectedSlideIndex(Math.max(0, selectedSlideIndex - 1)); }}
         disabled={selectedSlideIndex === 0}
+        aria-label="Previous slide"
       />
       <span className="text-[13px] text-neutral-500 whitespace-nowrap font-medium">
         Slide {selectedSlideIndex + 1} of {slides.length}
@@ -2683,6 +2686,7 @@ const SlideshowEditor = ({
         icon={<FeatherChevronRight />}
         onClick={() => { manualSlideOverrideRef.current = Date.now(); setSelectedSlideIndex(Math.min(slides.length - 1, selectedSlideIndex + 1)); }}
         disabled={selectedSlideIndex === slides.length - 1}
+        aria-label="Next slide"
       />
 
       <div className="w-px h-5 bg-neutral-200" />
@@ -2762,6 +2766,7 @@ const SlideshowEditor = ({
           icon={<FeatherTrash2 />}
           onClick={() => { removeTextOverlay(selOverlay.id); setEditingTextId(null); }}
           title="Delete text block"
+          aria-label="Delete text block"
         />
         <IconButton
           variant="neutral-tertiary"
@@ -2769,6 +2774,7 @@ const SlideshowEditor = ({
           icon={<FeatherCheck />}
           onClick={() => setEditingTextId(null)}
           title="Done editing"
+          aria-label="Done editing"
         />
         {/* Add to Bank */}
         <div className="relative">
@@ -2807,11 +2813,11 @@ const SlideshowEditor = ({
       <div className="flex gap-1 flex-shrink-0">
         <IconButton variant="neutral-tertiary" size="small"
           icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h10a5 5 0 015 5v0a5 5 0 01-5 5H3"/><path d="M7 6l-4 4 4 4"/></svg>}
-          onClick={handleUndo} disabled={!canUndo}
+          onClick={handleUndo} disabled={!canUndo} aria-label="Undo"
         />
         <IconButton variant="neutral-tertiary" size="small"
           icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H11a5 5 0 00-5 5v0a5 5 0 005 5h10"/><path d="M17 6l4 4-4 4"/></svg>}
-          onClick={handleRedo} disabled={!canRedo}
+          onClick={handleRedo} disabled={!canRedo} aria-label="Redo"
         />
       </div>
 
@@ -3195,15 +3201,16 @@ const SlideshowEditor = ({
           <div className="text-[13px] text-neutral-500 mb-1.5">Formatting</div>
           <div className="flex gap-1">
             {[
-              { key: 'bold', label: 'B', active: activeStyle.fontWeight === '700', toggle: () => handleStyleChange({ fontWeight: activeStyle.fontWeight === '700' ? '400' : '700' }), bold: true },
-              { key: 'caps', label: 'AA', active: activeStyle.textTransform === 'uppercase', toggle: () => handleStyleChange({ textTransform: activeStyle.textTransform === 'uppercase' ? 'none' : 'uppercase' }) },
-              { key: 'outline', label: 'Sh', active: !!activeStyle.outline, toggle: () => handleStyleChange({ outline: !activeStyle.outline }) },
-              { key: 'stroke', label: 'St', active: !!activeStyle.textStroke, toggle: () => handleStyleChange({ textStroke: activeStyle.textStroke ? null : buildStroke(0.5, '#000000') }) }
+              { key: 'bold', label: 'B', ariaLabel: 'Bold', active: activeStyle.fontWeight === '700', toggle: () => handleStyleChange({ fontWeight: activeStyle.fontWeight === '700' ? '400' : '700' }), bold: true },
+              { key: 'caps', label: 'AA', ariaLabel: 'All caps', active: activeStyle.textTransform === 'uppercase', toggle: () => handleStyleChange({ textTransform: activeStyle.textTransform === 'uppercase' ? 'none' : 'uppercase' }) },
+              { key: 'outline', label: 'Sh', ariaLabel: 'Shadow', active: !!activeStyle.outline, toggle: () => handleStyleChange({ outline: !activeStyle.outline }) },
+              { key: 'stroke', label: 'St', ariaLabel: 'Stroke', active: !!activeStyle.textStroke, toggle: () => handleStyleChange({ textStroke: activeStyle.textStroke ? null : buildStroke(0.5, '#000000') }) }
             ].map(btn => (
               <IconButton key={btn.key} onClick={btn.toggle}
                 variant={btn.active ? 'brand-secondary' : 'neutral-secondary'}
                 size="small"
                 icon={<span className={`text-xs ${btn.bold ? 'font-bold' : 'font-semibold'}`}>{btn.label}</span>}
+                aria-label={btn.ariaLabel}
               />
             ))}
           </div>
@@ -3241,6 +3248,7 @@ const SlideshowEditor = ({
               <span className="text-sm font-semibold" style={{ color: color.light }}>{bankLabel(idx)} Text</span>
               {idx >= MIN_BANKS && (
                 <IconButton variant="neutral-tertiary" size="small" icon={<FeatherTrash2 />}
+                  aria-label={`Delete ${bankLabel(idx)} bank`}
                   onClick={(e) => {
                     e.stopPropagation();
                     if (!window.confirm(`Delete ${bankLabel(idx)} text and image bank?`)) return;
@@ -3283,6 +3291,7 @@ const SlideshowEditor = ({
                       </div>
                       <IconButton variant="neutral-tertiary" size="small" icon={<FeatherX />}
                         onClick={(e) => { e.stopPropagation(); handleRemoveFromTextBank(idx + 1, i); }}
+                        aria-label="Remove text"
                       />
                     </div>
                   );
@@ -3302,6 +3311,7 @@ const SlideshowEditor = ({
                 icon={<FeatherPlus />}
                 disabled={!inputVal.trim()}
                 onClick={() => { if (inputVal.trim()) { handleAddToTextBank(idx + 1, inputVal); setNewTextInputs(prev => ({ ...prev, [idx]: '' })); } }}
+                aria-label="Add text"
               />
             </div>
           </div>
@@ -3381,6 +3391,7 @@ const SlideshowEditor = ({
                 <Badge variant="neutral">{bankImages.length} images</Badge>
                 {idx >= MIN_BANKS && (
                   <IconButton variant="neutral-tertiary" size="small" icon={<FeatherTrash2 />}
+                    aria-label={`Delete ${bankLabel(idx)} bank`}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (!window.confirm(`Delete ${bankLabel(idx)}? Images will remain in your library.`)) return;
@@ -3597,7 +3608,7 @@ const SlideshowEditor = ({
               </svg>
               Schedule Carousel
             </h3>
-            <IconButton variant="neutral-tertiary" size="small" icon={<FeatherX />} onClick={() => setShowSchedulePanel(false)} />
+            <IconButton variant="neutral-tertiary" size="small" icon={<FeatherX />} onClick={() => setShowSchedulePanel(false)} aria-label="Close schedule panel" />
           </div>
           <div className="grid grid-cols-2 gap-3 mb-3">
             <div className="flex flex-col gap-1 mb-2">
@@ -3963,14 +3974,14 @@ const TextEditorPanel = ({
           </svg>
           Text Editor
         </h3>
-        <IconButton icon={<FeatherX />} onClick={onClose} />
+        <IconButton icon={<FeatherX />} onClick={onClose} aria-label="Close text editor" />
       </div>
 
       {/* Text Blocks List */}
       <div style={textPanelStyles.textList}>
         <div style={textPanelStyles.sectionHeader}>
           <span>Text Blocks ({textOverlays.length})</span>
-          <IconButton size="small" icon={<FeatherPlus />} onClick={onAddTextOverlay} />
+          <IconButton size="small" icon={<FeatherPlus />} onClick={onAddTextOverlay} aria-label="Add text block" />
         </div>
 
         {textOverlays.length === 0 ? (
@@ -3996,9 +4007,9 @@ const TextEditorPanel = ({
               </div>
               <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0 }}>
                 {canReroll && (
-                  <IconButton size="small" icon={<FeatherRefreshCw />} onClick={(e) => { e.stopPropagation(); onRerollText(overlay.id); }} title={`Reroll from Text Bank ${idx === 0 ? '1' : idx === 1 ? '2' : ''} (${bank.length} items)`} />
+                  <IconButton size="small" icon={<FeatherRefreshCw />} onClick={(e) => { e.stopPropagation(); onRerollText(overlay.id); }} title={`Reroll from Text Bank ${idx === 0 ? '1' : idx === 1 ? '2' : ''} (${bank.length} items)`} aria-label={`Reroll from Text Bank ${idx === 0 ? '1' : idx === 1 ? '2' : ''}`} />
                 )}
-                <IconButton size="small" icon={<FeatherTrash2 />} onClick={(e) => { e.stopPropagation(); onRemoveOverlay(overlay.id); }} />
+                <IconButton size="small" icon={<FeatherTrash2 />} onClick={(e) => { e.stopPropagation(); onRemoveOverlay(overlay.id); }} aria-label="Delete text overlay" />
               </div>
             </div>
             );

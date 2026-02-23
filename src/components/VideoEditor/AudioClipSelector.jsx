@@ -634,7 +634,7 @@ const AudioClipSelector = ({
               {!isMobile && <p style={styles.subtitle}>Drag the green (IN) and orange (OUT) markers, or press I/O keys</p>}
             </div>
           </div>
-          <IconButton size={isMobile ? "medium" : "small"} icon={<FeatherX />} onClick={onCancel} />
+          <IconButton size={isMobile ? "medium" : "small"} icon={<FeatherX />} onClick={onCancel} aria-label="Close" />
         </div>
 
         {/* Quick Presets */}

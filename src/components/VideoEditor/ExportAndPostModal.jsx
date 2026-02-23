@@ -151,7 +151,7 @@ const ExportAndPostModal = ({
             {stage === EXPORT_STAGE.POSTING && 'Scheduling Post...'}
             {stage === EXPORT_STAGE.DONE && 'Done!'}
           </h2>
-          <IconButton size="small" icon={<FeatherX />} onClick={onClose} />
+          <IconButton size="small" icon={<FeatherX />} onClick={onClose} aria-label="Close" />
         </div>
 
         <div style={styles.body}>

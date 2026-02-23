@@ -149,7 +149,7 @@ const TemplatePicker = ({ onSelect, onClose, clipCount = 0 }) => {
               {clipCount > 0 ? `${clipCount} clip${clipCount !== 1 ? 's' : ''} selected` : 'Select how to edit your clips'}
             </p>
           </div>
-          <IconButton icon={<FeatherX />} onClick={onClose} />
+          <IconButton icon={<FeatherX />} onClick={onClose} aria-label="Close" />
         </div>
 
         {/* Template Cards */}

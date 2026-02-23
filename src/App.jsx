@@ -6800,40 +6800,15 @@ const StickToMusic = () => {
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans">
       {/* Private mode warning modal */}
       {showPrivateModeWarning && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.9)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10000
-        }}>
-          <div style={{
-            backgroundColor: '#1a1a1a',
-            padding: '32px',
-            borderRadius: '12px',
-            maxWidth: '500px',
-            textAlign: 'center'
-          }}>
-            <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>Private Browsing Not Supported</h2>
-            <p style={{ color: '#999', marginBottom: '24px' }}>
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[10000]">
+          <div className="bg-[#1a1a1a] p-8 rounded-xl max-w-[500px] text-center">
+            <h2 className="text-2xl font-bold mb-4">Private Browsing Not Supported</h2>
+            <p className="text-[#999] mb-6">
               StickToMusic requires localStorage to function properly. Please use normal browsing mode.
             </p>
             <button
               onClick={() => window.location.reload()}
-              style={{
-                backgroundColor: '#7c3aed',
-                color: 'white',
-                padding: '12px 24px',
-                borderRadius: '8px',
-                border: 'none',
-                cursor: 'pointer',
-                fontWeight: '600'
-              }}
+              className="bg-violet-600 text-white px-6 py-3 rounded-lg border-none cursor-pointer font-semibold"
             >
               Reload Page
             </button>

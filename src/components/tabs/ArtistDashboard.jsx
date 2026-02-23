@@ -778,7 +778,7 @@ const ArtistDashboard = ({
                         </div>
                       )}
                     </div>
-                    <IconButton size="small" icon={<FeatherEdit2 />} onClick={() => onNavigate?.('schedule')} />
+                    <IconButton size="small" icon={<FeatherEdit2 />} onClick={() => onNavigate?.('schedule')} aria-label="Edit schedule" />
                   </div>
                 );
               })}
@@ -1027,7 +1027,7 @@ const ArtistDashboard = ({
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
                   <Button variant="brand-secondary" size="small" icon={<FeatherEdit2 />} onClick={() => { setPreviewingItem(null); onNavigate?.('studio'); }}>Edit</Button>
-                  <IconButton size="small" icon={<FeatherX />} onClick={() => setPreviewingItem(null)} />
+                  <IconButton size="small" icon={<FeatherX />} onClick={() => setPreviewingItem(null)} aria-label="Close preview" />
                 </div>
               </div>
               {/* Slides Gallery */}
