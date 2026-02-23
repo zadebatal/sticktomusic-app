@@ -80,13 +80,15 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
   };
 
   const handleForgotPassword = async () => {
-    const resetEmail = email || window.prompt('Enter your email address:');
-    if (!resetEmail) return;
+    if (!email) {
+      setResetMessage({ type: 'error', text: 'Enter your email address above first.' });
+      return;
+    }
     setResetLoading(true);
     setResetMessage(null);
     try {
       const auth = getAuth();
-      await sendPasswordResetEmail(auth, resetEmail);
+      await sendPasswordResetEmail(auth, email);
       setResetMessage({ type: 'success', text: 'Password reset email sent! Check your inbox.' });
     } catch (err) {
       const msg = err.code === 'auth/user-not-found'

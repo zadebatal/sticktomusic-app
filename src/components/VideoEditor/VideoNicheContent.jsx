@@ -131,7 +131,7 @@ const VideoNicheContent = ({
             <span className="text-body-bold font-body-bold text-[#ffffffff]">Drafts</span>
             <Badge variant="neutral">{nicheDrafts.length}</Badge>
           </div>
-          <div className="grid w-full grid-cols-4 gap-3">
+          <div className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {nicheDrafts
               .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
               .map(draft => (

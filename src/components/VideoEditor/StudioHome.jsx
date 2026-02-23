@@ -275,7 +275,7 @@ const StudioHome = ({
             localStorage.setItem(migrationKey, 'true');
             log('[StudioHome] Migration complete:', result.migrated);
           }
-        });
+        }).catch(err => log.error('[StudioHome] Firestore migration failed:', err));
       }
 
       // Build thumbnail cache from localStorage for merge

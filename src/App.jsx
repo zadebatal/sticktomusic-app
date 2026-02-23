@@ -2363,7 +2363,7 @@ const StickToMusic = () => {
 
   // Stripe Payment Link - You can create this in Stripe Dashboard
   // Go to: Stripe Dashboard > Products > + Add Product > Create a Payment Link
-  const STRIPE_PAYMENT_LINK_BASE = 'https://buy.stripe.com/'; // Add your payment link here
+  const STRIPE_PAYMENT_LINK_BASE = 'https://buy.stripe.com/';
 
   // Handle application approval - shows payment modal
   const handleApproveApplication = async (app) => {

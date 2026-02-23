@@ -750,7 +750,7 @@ const VideoStudio = ({
           // Sync to localStorage
           saveArtistCategories(initialArtistId, firestoreCats);
         }
-      });
+      }).catch(err => log.error('[VideoStudio] Failed to load categories from Firestore:', err));
     }
   // eslint-disable-next-line
   }, []); // Only run once on mount
@@ -768,7 +768,7 @@ const VideoStudio = ({
       // Migrate existing pipelines to projects, then assign unassigned drafts to niches
       migrateToProjects(currentArtistId, db).then(() => {
         migrateDraftsToNiches(currentArtistId, db);
-      });
+      }).catch(err => log.error('[VideoStudio] Project migration failed:', err));
     }
   }, [currentArtistId]);
 

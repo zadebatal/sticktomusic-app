@@ -212,7 +212,7 @@ const BatchPipeline = ({
       log('[BatchPipeline] Auto-selecting single audio option');
       setSelectedAudio(availableAudio[0]);
     }
-  }, [availableAudio]); // eslint-disable-line
+  }, [availableAudio, selectedAudio]);
 
   // Analyze beats when audio is selected
   useEffect(() => {

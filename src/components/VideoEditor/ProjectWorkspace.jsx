@@ -649,7 +649,7 @@ const ProjectWorkspace = ({
                 style={{ left: rubberBand.left, top: rubberBand.top, width: rubberBand.width, height: rubberBand.height }}
               />
             )}
-            <div className="w-full gap-1 grid grid-cols-4">
+            <div className="w-full gap-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
               {filteredImages.map(item => {
                 const bankIdx = getImageBankIndex(item.id);
                 const bankColor = bankIdx >= 0 ? getBankColor(bankIdx) : null;
@@ -1063,7 +1063,7 @@ const ImportFromLibraryModal = ({ items, onImport, onClose }) => {
               {images.length > 0 && (
                 <>
                   <span className="text-body-bold font-body-bold text-neutral-300 mb-3 block">Images ({images.length})</span>
-                  <div className="grid grid-cols-5 gap-2 mb-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-6">
                     {images.map(item => (
                       <div key={item.id}
                         data-media-id={item.id}

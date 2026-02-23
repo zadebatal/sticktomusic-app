@@ -349,7 +349,7 @@ const ArtistDashboard = ({
       </div>
 
       {/* Quick Action Cards */}
-      <div className="w-full items-start gap-6 grid grid-cols-2">
+      <div className="w-full items-start gap-6 grid grid-cols-1 sm:grid-cols-2">
         <div className="flex grow shrink-0 basis-0 flex-col items-center gap-6 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-8 py-8">
           <IconWithBackground variant="neutral" size="x-large" icon={<FeatherVideo />} />
           <div className="flex w-full flex-col items-center gap-2">

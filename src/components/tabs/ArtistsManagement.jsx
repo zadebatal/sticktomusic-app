@@ -158,7 +158,7 @@ const ArtistsManagement = ({
             )}
           </div>
         ) : (
-          <div className="grid w-full grid-cols-2 gap-6">
+          <div className="grid w-full grid-cols-1 sm:grid-cols-2 gap-6">
             {filteredArtists.map(artist => {
               const tier = getTierBadge(artist);
               const isActive = artist.status === 'active' || !artist.status;

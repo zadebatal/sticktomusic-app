@@ -11,6 +11,7 @@ import {
   MEDIA_TYPES
 } from '../../services/libraryService';
 import { useTheme } from '../../contexts/ThemeContext';
+import log from '../../utils/logger';
 
 const CollectionPicker = ({
   artistId,
@@ -40,7 +41,7 @@ const CollectionPicker = ({
     if (artistId) {
       getCollectionsAsync(db, artistId).then(allCollections => {
         setLocalCollections(allCollections);
-      });
+      }).catch(err => log.error('[CollectionPicker] Failed to load collections:', err));
     }
   }, [artistId, db, liveCollections]);
 
