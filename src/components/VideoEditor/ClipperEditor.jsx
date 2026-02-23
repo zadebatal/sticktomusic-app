@@ -24,6 +24,7 @@ import EditorShell from './shared/EditorShell';
 import EditorTopBar from './shared/EditorTopBar';
 import EditorFooter from './shared/EditorFooter';
 import useIsMobile from '../../hooks/useIsMobile';
+import useUnsavedChanges from './shared/useUnsavedChanges';
 import { uploadFile } from '../../services/firebaseStorage';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
@@ -520,14 +521,23 @@ const ClipperEditor = ({
     return map;
   }, [clips, buckets]);
 
+  // ── Unsaved changes guard (beforeunload + back button) ──
+  const hasUnsavedWork = clips.length > 0 || !!sourceUrl;
+  const { confirmLeave } = useUnsavedChanges(hasUnsavedWork);
+
+  const handleCloseRequest = useCallback(() => {
+    if (!confirmLeave()) return;
+    onClose();
+  }, [confirmLeave, onClose]);
+
   // ── Render ──
   return (
-    <EditorShell onBackdropClick={onClose} isMobile={isMobile}>
+    <EditorShell onBackdropClick={handleCloseRequest} isMobile={isMobile}>
       <EditorTopBar
         title={videoName}
         onTitleChange={setVideoName}
         placeholder="Untitled Clip"
-        onBack={onClose}
+        onBack={handleCloseRequest}
         isMobile={isMobile}
         onSave={handleSave}
         onExport={handleExport}

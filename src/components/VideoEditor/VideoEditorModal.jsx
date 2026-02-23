@@ -38,6 +38,7 @@ import EditorShell from './shared/EditorShell';
 import EditorTopBar from './shared/EditorTopBar';
 import EditorFooter from './shared/EditorFooter';
 import useCollapsibleSections from './shared/useCollapsibleSections';
+import useUnsavedChanges from './shared/useUnsavedChanges';
 
 // Default text style used for template initialization and recovery fallback
 const DEFAULT_TEXT_STYLE = {
@@ -851,17 +852,18 @@ const VideoEditorModal = ({
     setIsPlaying(prev => !prev);
   }, []);
 
+  // Track whether the editor has unsaved work (for beforeunload guard)
+  const hasUnsavedWork = clips.length > 0 || words.length > 0 || !!selectedAudio;
+  useUnsavedChanges(hasUnsavedWork);
+
   // Handle close with confirmation if there's unsaved work
   const handleCloseRequest = useCallback(() => {
-    // Check if there's any work that would be lost
-    const hasWork = clips.length > 0 || words.length > 0 || selectedAudio;
-
-    if (hasWork) {
+    if (hasUnsavedWork) {
       setShowCloseConfirm(true);
     } else {
       onClose();
     }
-  }, [clips.length, words.length, selectedAudio, onClose]);
+  }, [hasUnsavedWork, onClose]);
 
   const handleConfirmClose = useCallback(() => {
     setShowCloseConfirm(false);

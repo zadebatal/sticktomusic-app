@@ -31,6 +31,7 @@ import useEditorHistory from '../../hooks/useEditorHistory';
 import useWaveform from '../../hooks/useWaveform';
 import useMediaMultiSelect from './shared/useMediaMultiSelect';
 import useEditorSessionState from './shared/useEditorSessionState';
+import useUnsavedChanges from './shared/useUnsavedChanges';
 
 /**
  * SoloClipEditor v2 — "Solo Clip" video editor mode
@@ -1110,16 +1111,19 @@ const SoloClipEditor = ({
   // Export removed — was identical to Save Draft but set status='rendered' without actually rendering.
   // Real video export (FFmpeg render + download) will be added as a future feature.
 
+  // ── Unsaved changes guard (beforeunload) ──
+  const hasUnsavedWork = textOverlays.length > 0 || allVideos.length > 1;
+  useUnsavedChanges(hasUnsavedWork);
+
   // ── Close with confirmation ──
   const handleCloseRequest = useCallback(() => {
-    const hasWork = textOverlays.length > 0 || allVideos.length > 1;
-    if (hasWork) {
+    if (hasUnsavedWork) {
       setShowCloseConfirm(true);
     } else {
       clearSession();
       onClose();
     }
-  }, [textOverlays, allVideos, onClose, clearSession]);
+  }, [hasUnsavedWork, onClose, clearSession]);
 
   // ── Keyboard shortcuts ──
   useEffect(() => {

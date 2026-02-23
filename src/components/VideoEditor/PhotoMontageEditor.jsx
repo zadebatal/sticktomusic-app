@@ -31,6 +31,7 @@ import EditorFooter from './shared/EditorFooter';
 import useCollapsibleSections from './shared/useCollapsibleSections';
 import useMediaMultiSelect from './shared/useMediaMultiSelect';
 import useEditorSessionState from './shared/useEditorSessionState';
+import useUnsavedChanges from './shared/useUnsavedChanges';
 
 /**
  * PhotoMontageEditor — Turn photos into a fast-paced video with transitions.
@@ -942,16 +943,19 @@ const PhotoMontageEditor = ({
     toastSuccess(`Created ${newOverlays.length} timed word overlays`);
   }, [totalDuration, getDefaultTextStyle, toastSuccess]);
 
+  // ── Unsaved changes guard (beforeunload) ──
+  const hasUnsavedWork = photos.length > 0 || textOverlays.length > 0 || !!selectedAudio || allVideos.length > 1;
+  useUnsavedChanges(hasUnsavedWork);
+
   // ── Close with confirmation (fixes back button bug) ──
   const handleCloseRequest = useCallback(() => {
-    const hasWork = photos.length > 0 || textOverlays.length > 0 || selectedAudio || allVideos.length > 1;
-    if (hasWork) {
+    if (hasUnsavedWork) {
       setShowCloseConfirm(true);
     } else {
       clearSession();
       onClose();
     }
-  }, [photos.length, textOverlays.length, selectedAudio, allVideos.length, onClose, clearSession]);
+  }, [hasUnsavedWork, onClose, clearSession]);
 
   // ── Keyboard shortcuts ──
   useEffect(() => {

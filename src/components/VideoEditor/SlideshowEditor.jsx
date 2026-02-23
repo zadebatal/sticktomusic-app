@@ -15,6 +15,7 @@ import { ToggleGroup } from '../../ui/components/ToggleGroup';
 import { TextField } from '../../ui/components/TextField';
 import { Badge } from '../../ui/components/Badge';
 import { FeatherArrowLeft, FeatherX, FeatherDownload, FeatherChevronLeft, FeatherChevronRight, FeatherChevronDown, FeatherPlus, FeatherTrash2, FeatherRefreshCw, FeatherPlay, FeatherPause, FeatherScissors, FeatherUpload, FeatherCloud, FeatherMusic, FeatherMic, FeatherDatabase, FeatherAlignLeft, FeatherAlignCenter, FeatherAlignRight, FeatherLayout, FeatherCheck, FeatherCopy, FeatherSave } from '@subframe/core';
+import useUnsavedChanges from './shared/useUnsavedChanges';
 
 /**
  * SlideshowEditor - Flowstage-style carousel/slideshow creator
@@ -434,15 +435,18 @@ const SlideshowEditor = ({
     setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
   }, [setSlides]);
 
+  // ── Unsaved changes guard (beforeunload) ──
+  const hasUnsavedWork = slides.length > 0 || selectedAudio !== null || allSlideshows.length > 1;
+  useUnsavedChanges(hasUnsavedWork);
+
   // Close confirmation handler — check for unsaved work before closing
   const handleCloseRequest = useCallback(() => {
-    const hasWork = slides.length > 0 || selectedAudio !== null || allSlideshows.length > 1;
-    if (hasWork) {
+    if (hasUnsavedWork) {
       setShowCloseConfirm(true);
     } else {
       onClose?.();
     }
-  }, [slides, selectedAudio, allSlideshows, onClose]);
+  }, [hasUnsavedWork, onClose]);
 
   // Keyboard shortcut: Cmd+Z / Ctrl+Z for undo, Cmd+Shift+Z / Ctrl+Shift+Z for redo
   // Escape key to trigger close confirmation

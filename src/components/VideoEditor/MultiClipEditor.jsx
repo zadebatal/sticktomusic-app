@@ -29,6 +29,7 @@ import useEditorHistory from '../../hooks/useEditorHistory';
 import useWaveform from '../../hooks/useWaveform';
 import useMediaMultiSelect from './shared/useMediaMultiSelect';
 import useEditorSessionState from './shared/useEditorSessionState';
+import useUnsavedChanges from './shared/useUnsavedChanges';
 
 /**
  * MultiClipEditor v1 — "Multi-Clip" video editor mode
@@ -1212,16 +1213,19 @@ const MultiClipEditor = ({
   // Export removed — was identical to Save Draft but set status='rendered' without actually rendering.
   // Real video export (FFmpeg render + download) will be added as a future feature.
 
+  // ── Unsaved changes guard (beforeunload) ──
+  const hasUnsavedWork = textOverlays.length > 0 || allVideos.length > 1 || clips.length > 0;
+  useUnsavedChanges(hasUnsavedWork);
+
   // ── Close with confirmation ──
   const handleCloseRequest = useCallback(() => {
-    const hasWork = textOverlays.length > 0 || allVideos.length > 1 || (clips.length > 0);
-    if (hasWork) {
+    if (hasUnsavedWork) {
       setShowCloseConfirm(true);
     } else {
       clearSession();
       onClose();
     }
-  }, [textOverlays, allVideos, clips, onClose, clearSession]);
+  }, [hasUnsavedWork, onClose, clearSession]);
 
   // ── Keyboard shortcuts ──
   useEffect(() => {
