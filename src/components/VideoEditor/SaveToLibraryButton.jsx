@@ -9,6 +9,7 @@ import { uploadFile } from '../../services/firebaseStorage';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../ui/components/Button';
 import { FeatherSave } from '@subframe/core';
+import log from '../../utils/logger';
 
 const SaveToLibraryButton = ({
   artistId,
@@ -66,7 +67,7 @@ const SaveToLibraryButton = ({
       setSelectedCollectionId(null);
 
     } catch (error) {
-      console.error('Failed to save clip to library:', error);
+      log.error('Failed to save clip to library:', error);
     } finally {
       setIsSaving(false);
     }

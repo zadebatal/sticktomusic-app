@@ -56,7 +56,7 @@ const loadFFmpeg = async (onProgress = () => {}) => {
       ffmpegInstance = ffmpeg;
       return ffmpeg;
     } catch (error) {
-      console.error('[VideoExport] Failed to load FFmpeg:', error);
+      log.error('[VideoExport] Failed to load FFmpeg:', error);
       ffmpegLoadPromise = null; // Clear so next call retries instead of returning stale failure
       throw error;
     }
@@ -156,7 +156,7 @@ const processVideo = async (videoBlob, onProgress = () => {}, audioInfo = null, 
     log('[VideoExport] Processing complete:', (outputBlob.size / 1024 / 1024).toFixed(2), 'MB');
     return outputBlob;
   } catch (error) {
-    console.error('[VideoExport] Processing failed:', error);
+    log.error('[VideoExport] Processing failed:', error);
     // Return original blob as fallback
     return videoBlob;
   }
@@ -293,7 +293,7 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
       const video = await loadVideo(url);
       return { ...clip, video, index: i };
     } catch (err) {
-      console.warn(`Failed to load clip ${i}:`, err);
+      log.warn(`Failed to load clip ${i}:`, err);
       return { ...clip, video: null, index: i };
     }
   });
@@ -524,7 +524,7 @@ export const renderVideo = async (videoData, onProgress = () => {}, options = {}
         audioBufferPromise = fetch(audioUrl)
           .then(res => res.arrayBuffer())
           .catch(err => {
-            console.warn('[VideoExport] Audio pre-fetch failed:', err);
+            log.warn('[VideoExport] Audio pre-fetch failed:', err);
             return null;
           });
 
@@ -532,7 +532,7 @@ export const renderVideo = async (videoData, onProgress = () => {}, options = {}
           startTime: audio.startTime || 0
         };
       } else if (isBlobUrl) {
-        console.warn('[VideoExport] Audio has stale blob URL — skipping audio. Re-add from library to include audio.');
+        log.warn('[VideoExport] Audio has stale blob URL — skipping audio. Re-add from library to include audio.');
       }
     }
 
@@ -557,7 +557,7 @@ export const renderVideo = async (videoData, onProgress = () => {}, options = {}
     onProgress(safeProgress(100));
     return finalBlob;
   } catch (canvasError) {
-    console.error('[VideoExport] Canvas render failed:', canvasError);
+    log.error('[VideoExport] Canvas render failed:', canvasError);
     throw new Error(`Video rendering failed: ${canvasError.message}`);
   }
 };

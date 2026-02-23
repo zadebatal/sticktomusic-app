@@ -123,7 +123,7 @@ const AudioClipSelector = ({
 
       audioContext.close();
     } catch (err) {
-      console.error('Waveform generation failed:', err);
+      log.error('Waveform generation failed:', err);
       try { audioContext.close(); } catch (e) { /* H-06: ensure cleanup even on error */ }
       setWaveformData(Array(300).fill(0).map(() => Math.random() * 0.5 + 0.2));
     }
@@ -433,7 +433,7 @@ const AudioClipSelector = ({
         };
         animationRef.current = requestAnimationFrame(updateLoop);
       }).catch(err => {
-        console.error('Playback failed:', err);
+        log.error('Playback failed:', err);
         setIsPlaying(false);
       });
     }
@@ -526,7 +526,7 @@ const AudioClipSelector = ({
         trimmedName: name || trimmedFile.name
       });
     } catch (error) {
-      console.error('[AudioClipSelector] Trim failed:', error);
+      log.error('[AudioClipSelector] Trim failed:', error);
       setTrimProgress('');
       // Fall back to metadata-only approach
       onSave({ startTime: inPoint, endTime: outPoint, duration: selectedDuration });
@@ -592,7 +592,7 @@ const AudioClipSelector = ({
 
       // Don't close the modal - user can still use the clip for current slideshow
     } catch (error) {
-      console.error('[AudioClipSelector] Save to library failed:', error);
+      log.error('[AudioClipSelector] Save to library failed:', error);
       onError?.(`Failed to save: ${error.message}`);
     } finally {
       setIsTrimming(false);

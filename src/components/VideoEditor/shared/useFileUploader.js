@@ -5,6 +5,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { uploadFile, generateThumbnail } from '../../../services/firebaseStorage';
 import { createScheduledPost } from '../../../services/scheduledPostsService';
+import log from '../../../utils/logger';
 
 const MAX_CONCURRENT = 3;
 
@@ -117,7 +118,7 @@ export default function useFileUploader({ db, artistId, nicheId = null, nicheNam
           }
           completed++;
         } catch (err) {
-          console.error('Upload failed:', entry.file.name, err);
+          log.error('Upload failed:', entry.file.name, err);
           if (mountedRef.current) {
             setFiles(prev => prev.map((f, i) => i === currentIdx ? { ...f, status: 'error', error: err.message } : f));
           }

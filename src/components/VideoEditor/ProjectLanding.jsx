@@ -335,12 +335,12 @@ const ProjectLanding = ({
 
       <div className="grid w-full grid-cols-2 gap-4 mt-4">
         {projects.length === 0 && !showCreateForm && (
-          <div className="col-span-2 flex flex-col items-center gap-4 rounded-lg border border-dashed border-neutral-700 bg-[#1a1a1aff] px-8 py-12">
-            <FeatherZap className="text-neutral-500" style={{ width: 32, height: 32 }} />
-            <span className="text-body-bold font-body-bold text-neutral-300">Create your first project</span>
-            <span className="text-caption font-caption text-neutral-500 text-center max-w-sm">
-              A project groups all your content niches (like "Hook+Lyrics", "Montage") under one roof with a shared media pool.
-            </span>
+          <div className="col-span-2 flex flex-col items-center justify-center gap-3 py-16 text-center">
+            <FeatherLayers className="w-12 h-12 text-zinc-600" />
+            <h3 className="text-lg font-semibold text-white">No projects yet</h3>
+            <p className="text-sm text-zinc-400 max-w-xs">
+              Create a project to organize your content and start producing
+            </p>
             <Button variant="brand-secondary" size="medium" icon={<FeatherPlus />} onClick={() => setShowCreateForm(true)}>
               New Project
             </Button>

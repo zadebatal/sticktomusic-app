@@ -7,6 +7,7 @@ import { FeatherX } from '@subframe/core';
 import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
 import { getStoredApiKey } from '../../services/whisperService';
 import { loadLyricTemplate, saveLyricTemplate } from '../../services/storageService';
+import log from '../../utils/logger';
 
 /**
  * LyricAnalyzer - AI-powered lyric transcription with caching
@@ -87,7 +88,7 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
             }
           }
         } catch (err) {
-          console.warn('Could not check shared OpenAI key status:', err.message);
+          log.warn('Could not check shared OpenAI key status:', err.message);
         }
         setShowApiKeyInput(true);
       })();

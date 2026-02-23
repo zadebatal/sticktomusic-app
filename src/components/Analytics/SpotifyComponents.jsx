@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import log from '../../utils/logger';
 import { getStoredAnalytics } from '../../services/analyticsService';
 import { Button } from '../../ui/components/Button';
 import {
@@ -80,7 +81,7 @@ export const SpotifyMomentumCard = ({ artistId }) => {
         const overview = getSpotifyOverview(artistId);
         setData(overview);
       } catch (error) {
-        console.error('Error loading Spotify momentum:', error);
+        log.error('Error loading Spotify momentum:', error);
       }
       setIsLoading(false);
     };
@@ -216,7 +217,7 @@ export const GrowthDriversCard = ({ artistId }) => {
         const topDrivers = getTopGrowthDrivers(artistId, 5);
         setDrivers(topDrivers);
       } catch (error) {
-        console.error('Error loading growth drivers:', error);
+        log.error('Error loading growth drivers:', error);
       }
       setIsLoading(false);
     };
@@ -322,7 +323,7 @@ export const TimelineOverlayChart = ({ artistId, days = 30 }) => {
         const videos = Object.values(analytics.videos || {});
         setContentPosts(videos.filter(v => v.postedAt));
       } catch (error) {
-        console.error('Error loading timeline:', error);
+        log.error('Error loading timeline:', error);
       }
     };
     loadData();
@@ -517,7 +518,7 @@ export const SpotifySetupCard = ({ artistId, onConfigured }) => {
         onConfigured(config);
       }
     } catch (error) {
-      console.error('Error saving Spotify config:', error);
+      log.error('Error saving Spotify config:', error);
     }
     setIsSaving(false);
   };
@@ -648,7 +649,7 @@ export const SpotifyTab = ({ artistId }) => {
       setVideoAttributions(videoAttrs);
       setSongAttributions(songAttrs);
     } catch (error) {
-      console.error('Error loading Spotify data:', error);
+      log.error('Error loading Spotify data:', error);
     }
   };
 
@@ -660,7 +661,7 @@ export const SpotifyTab = ({ artistId }) => {
       await syncSpotifyData(artistId, config);
       loadData();
     } catch (error) {
-      console.error('Error syncing Spotify data:', error);
+      log.error('Error syncing Spotify data:', error);
     }
     setIsSyncing(false);
   };

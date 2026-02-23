@@ -8,6 +8,8 @@
  * @see docs/DOMAIN_INVARIANTS.md
  */
 
+import log from './logger';
+
 /**
  * Content Banks - Define hashtags and captions for each category/niche
  * This is the SINGLE SOURCE OF TRUTH for bank data
@@ -107,7 +109,7 @@ function shuffleArray(array) {
 export function generateHashtags(bankName, options = {}) {
   const bank = getBank(bankName);
   if (!bank) {
-    console.warn(`[CaptionGenerator] Bank "${bankName}" not found`);
+    log.warn(`[CaptionGenerator] Bank "${bankName}" not found`);
     return [];
   }
 
@@ -138,7 +140,7 @@ export function generateHashtags(bankName, options = {}) {
 export function generateCaption(bankName) {
   const bank = getBank(bankName);
   if (!bank) {
-    console.warn(`[CaptionGenerator] Bank "${bankName}" not found`);
+    log.warn(`[CaptionGenerator] Bank "${bankName}" not found`);
     return '';
   }
 
@@ -257,7 +259,7 @@ export function isValidBankName(bankName) {
 export function assertValidBank(bankName, context = '') {
   if (!isValidBankName(bankName)) {
     const msg = `Invalid bank name "${bankName}"${context ? ` in ${context}` : ''}. Valid: ${getBankNames().join(', ')}`;
-    console.error('[BANK VIOLATION]', msg);
+    log.error('[BANK VIOLATION]', msg);
     if (process.env.NODE_ENV === 'development') {
       throw new Error(msg);
     }

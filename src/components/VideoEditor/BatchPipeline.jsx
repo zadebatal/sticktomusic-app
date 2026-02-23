@@ -234,10 +234,10 @@ const BatchPipeline = ({
 
       if (audioSource) {
         analyzeAudio(audioSource).catch(err => {
-          console.warn('Beat analysis failed:', err);
+          log.warn('Beat analysis failed:', err);
         });
       } else {
-        console.warn('[BatchPipeline] No valid audio source for beat detection:', selectedAudio);
+        log.warn('[BatchPipeline] No valid audio source for beat detection:', selectedAudio);
       }
     }
   }, [selectedAudio, analyzeAudio]);
@@ -449,7 +449,7 @@ const BatchPipeline = ({
       setStage(STAGES.PREVIEW);
 
     } catch (err) {
-      console.error('[BatchPipeline] Preview generation failed:', err);
+      log.error('[BatchPipeline] Preview generation failed:', err);
       setError(`Preview failed: ${err.message}`);
     } finally {
       setIsGeneratingPreview(false);

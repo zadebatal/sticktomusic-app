@@ -22,6 +22,7 @@ import {
   onSnapshot,
   serverTimestamp
 } from 'firebase/firestore';
+import log from '../utils/logger';
 
 // Collection name
 const TEMPLATES_COLLECTION = 'contentTemplates';
@@ -132,7 +133,7 @@ export const subscribeToTemplates = (db, artistId, callback) => {
       callback(DEFAULT_TEMPLATES);
     }
   }, (error) => {
-    console.error('Error subscribing to templates:', error);
+    log.error('Error subscribing to templates:', error);
     callback(DEFAULT_TEMPLATES);
   });
 };
@@ -154,7 +155,7 @@ export const getTemplates = async (db, artistId) => {
     }
     return DEFAULT_TEMPLATES;
   } catch (error) {
-    console.error('Error getting templates:', error);
+    log.error('Error getting templates:', error);
     return DEFAULT_TEMPLATES;
   }
 };

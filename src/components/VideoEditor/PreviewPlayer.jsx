@@ -138,7 +138,7 @@ const PreviewPlayer = ({
       const audioStart = audio?.startTime || 0;
       audioRef.current.currentTime = audioStart;
       audioRef.current.play().catch(err => {
-        console.warn('[PreviewPlayer] Audio play failed:', err);
+        log.warn('[PreviewPlayer] Audio play failed:', err);
       });
     }
 

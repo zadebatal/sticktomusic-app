@@ -13,6 +13,7 @@ import useEditorHistory from '../../hooks/useEditorHistory';
 import useWaveform from '../../hooks/useWaveform';
 import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
+import log from '../../utils/logger';
 import useIsMobile from '../../hooks/useIsMobile';
 import AudioClipSelector from './AudioClipSelector';
 import LyricBank from './LyricBank';
@@ -1042,7 +1043,7 @@ const PhotoMontageEditor = ({
       onSave?.(saved);
       onClose?.();
     } catch (err) {
-      console.error('[PhotoMontage] Export failed:', err);
+      log.error('[PhotoMontage] Export failed:', err);
       toastError(`Export failed: ${err.message}`);
     } finally {
       setIsExporting(false);

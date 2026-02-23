@@ -89,9 +89,9 @@ const SlideshowEditor = ({
         if (found) {
           clean.url = found.url;
           clean.localUrl = found.url;
-          console.log('[SlideshowEditor] Recovered audio URL from library:', clean.name);
+          log('[SlideshowEditor] Recovered audio URL from library:', clean.name);
         } else {
-          console.warn('[SlideshowEditor] Audio has stale blob URL — no library match for:', clean.name || clean.id);
+          log.warn('[SlideshowEditor] Audio has stale blob URL — no library match for:', clean.name || clean.id);
         }
       }
     }
@@ -139,7 +139,7 @@ const SlideshowEditor = ({
       const safeSlides = (newSlides || []).map((slide, i) => {
         const orig = current.slides[i];
         if (orig && orig.backgroundImage && !slide.backgroundImage) {
-          console.warn('[SlideshowEditor] Prevented image loss on slide', i, slide.id);
+          log.warn('[SlideshowEditor] Prevented image loss on slide', i, slide.id);
           return { ...slide, backgroundImage: orig.backgroundImage, thumbnail: orig.thumbnail };
         }
         return slide;
@@ -1086,7 +1086,7 @@ const SlideshowEditor = ({
         return { ...slide, textOverlays: updatedOverlays };
       }));
     } catch (err) {
-      console.error('[SlideshowEditor] Text reroll error:', err);
+      log.error('[SlideshowEditor] Text reroll error:', err);
     }
   }, [selectedSlideIndex, getTextBanks]);
 
@@ -1146,7 +1146,7 @@ const SlideshowEditor = ({
               : ss
           ));
         } catch (err) {
-          console.error('[SlideshowEditor] Failed to persist trimmed audio:', err);
+          log.error('[SlideshowEditor] Failed to persist trimmed audio:', err);
         }
       }
     } else {
@@ -1261,7 +1261,7 @@ const SlideshowEditor = ({
         };
         animationRef.current = requestAnimationFrame(updateTime);
       }).catch(err => {
-        console.error('Audio playback failed:', err);
+        log.error('Audio playback failed:', err);
         setIsPlaying(false);
       });
     }
@@ -1334,7 +1334,7 @@ const SlideshowEditor = ({
       }
       return url;
     } catch (error) {
-      console.error('[SlideshowEditor] Error in selectedAudioUrl:', error);
+      log.error('[SlideshowEditor] Error in selectedAudioUrl:', error);
       return null;
     }
   }, [selectedAudio, selectedAudioId, libraryAudio]);
@@ -1354,7 +1354,7 @@ const SlideshowEditor = ({
 
     // Check if it's an expired blob URL — recover from library
     if (selectedAudioUrl.startsWith('blob:')) {
-      console.warn('[SlideshowEditor] Audio has expired blob URL, checking library...');
+      log.warn('[SlideshowEditor] Audio has expired blob URL, checking library...');
       const audioName = selectedAudio?.name;
       // Try library state first
       if (audioName && libraryAudio.length > 0) {
@@ -1379,7 +1379,7 @@ const SlideshowEditor = ({
           return;
         }
       }
-      console.warn('[SlideshowEditor] Could not find valid URL for audio, showing error');
+      log.warn('[SlideshowEditor] Could not find valid URL for audio, showing error');
       setAudioError('Audio file expired — re-add from library');
       return;
     }
@@ -1429,7 +1429,7 @@ const SlideshowEditor = ({
 
     const onError = () => {
       const errMsg = el.error?.message || 'Failed to load audio';
-      console.error('[Audio] load error:', el.error, errMsg);
+      log.error('[Audio] load error:', el.error, errMsg);
       setAudioError(errMsg);
       setAudioReady(false);
     };
@@ -1587,7 +1587,7 @@ const SlideshowEditor = ({
           clipData.id
         );
       } catch (err) {
-        console.warn('Invalid drop data:', err);
+        log.warn('Invalid drop data:', err);
       }
     }
   }, [setSlideBackground]);
@@ -1650,7 +1650,7 @@ const SlideshowEditor = ({
         });
         setSelectedSlideIndex(insertAt);
       } catch (err) {
-        console.warn('Invalid filmstrip drop data:', err);
+        log.warn('Invalid filmstrip drop data:', err);
       }
     }
     setFilmstripDropIndex(null);
@@ -1950,7 +1950,7 @@ const SlideshowEditor = ({
       try {
         await onSave?.(slideshowData);
       } catch (err) {
-        console.error(`[SlideshowEditor] Failed to save "${ss.name}":`, err);
+        log.error(`[SlideshowEditor] Failed to save "${ss.name}":`, err);
         return; // Stop on failure
       }
     }
@@ -2217,7 +2217,7 @@ const SlideshowEditor = ({
         toastSuccess(`Successfully exported ${images.length} carousel images!`);
       }
     } catch (err) {
-      console.error('[Export] Failed:', err);
+      log.error('[Export] Failed:', err);
       toastError(`Export failed: ${err.message}`);
     } finally {
       setIsExporting(false);
@@ -2278,7 +2278,7 @@ const SlideshowEditor = ({
       setShowSchedulePanel(false);
       onClose?.();
     } catch (err) {
-      console.error('[Schedule] Failed:', err);
+      log.error('[Schedule] Failed:', err);
       toastError(`Scheduling failed: ${err.message}`);
     } finally {
       setIsScheduling(false);

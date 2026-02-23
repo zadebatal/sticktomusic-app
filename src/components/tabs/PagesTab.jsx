@@ -7,6 +7,7 @@ import { Button } from '../../ui/components/Button';
 import { Badge } from '../../ui/components/Badge';
 
 import { PLATFORM_META, ALL_PLATFORMS, getProfileUrl, formatFollowers } from '../../utils/platformUtils';
+import log from '../../utils/logger';
 
 /**
  * PagesTab — Artist-centric social media account management.
@@ -477,7 +478,7 @@ const PagesTab = ({
         throw new Error('No auth URL returned from Late');
       }
     } catch (error) {
-      console.error('Failed to start connect flow:', error);
+      log.error('Failed to start connect flow:', error);
       toastError(`Failed to connect ${platform}: ${error.message}`);
     } finally {
       setConnectingPlatform(null);

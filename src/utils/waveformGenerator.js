@@ -4,6 +4,8 @@
  * Includes URL-keyed in-memory cache to avoid re-fetching the same source.
  */
 
+import log from './logger';
+
 const cache = new Map();
 const bufferCache = new Map(); // Cache decoded AudioBuffers by URL
 
@@ -63,7 +65,7 @@ function sampleWaveform(rawData, samples) {
 export async function generateWaveformData(source, samples = 200) {
   if (!source) return [];
   if (typeof source === 'string' && source.startsWith('blob:')) {
-    console.warn('[Waveform] Rejected stale blob URL:', source.slice(0, 40));
+    log.warn('[Waveform] Rejected stale blob URL:', source.slice(0, 40));
     return [];
   }
   try {
@@ -71,7 +73,7 @@ export async function generateWaveformData(source, samples = 200) {
     const rawData = buffer.getChannelData(0);
     return sampleWaveform(rawData, samples);
   } catch (err) {
-    console.warn('Waveform generation failed:', err.message);
+    log.warn('Waveform generation failed:', err.message);
     return [];
   }
 }
@@ -85,7 +87,7 @@ export async function generateWaveformData(source, samples = 200) {
 export async function generateWaveformFromUrl(url, samples = 200) {
   if (!url) return [];
   if (url.startsWith('blob:')) {
-    console.warn('[Waveform] Rejected stale blob URL:', url.slice(0, 40));
+    log.warn('[Waveform] Rejected stale blob URL:', url.slice(0, 40));
     return [];
   }
   const key = `${url}::${samples}`;
@@ -120,7 +122,7 @@ export async function generateWaveformForClip(url, clipDuration, samples = 200) 
     if (data.length > 0) cache.set(key, data);
     return data;
   } catch (err) {
-    console.warn('Clip waveform generation failed:', err.message);
+    log.warn('Clip waveform generation failed:', err.message);
     return [];
   }
 }

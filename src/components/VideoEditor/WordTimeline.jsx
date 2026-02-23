@@ -105,7 +105,7 @@ const WordTimeline = ({
         setAudioBufferReady(true);
         log('[Scrub] Audio buffer ready for scrubbing and waveform');
       } catch (err) {
-        console.warn('[Scrub] Could not init scrub audio:', err.message);
+        log.warn('[Scrub] Could not init scrub audio:', err.message);
         setAudioBufferReady(false);
       }
     };

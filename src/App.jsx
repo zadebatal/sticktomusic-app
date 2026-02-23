@@ -240,7 +240,7 @@ const lateApi = {
       const accounts = data.accounts || data.data || (Array.isArray(data) ? data : []);
       return { success: true, accounts };
     } catch (error) {
-      console.warn('[Late] fetchAccounts:', error.message);
+      log.warn('[Late] fetchAccounts:', error.message);
       return { success: false, error: error.message };
     }
   },
@@ -323,7 +323,7 @@ const lateApi = {
       }
       return { success: true, post: await response.json() };
     } catch (error) {
-      console.warn('[Late] schedulePost:', error.message);
+      log.warn('[Late] schedulePost:', error.message);
       return { success: false, error: error.message };
     }
   },
@@ -366,7 +366,7 @@ const lateApi = {
 
       return { success: true, posts: allPosts };
     } catch (error) {
-      console.warn('[Late] fetchScheduledPosts:', error.message);
+      log.warn('[Late] fetchScheduledPosts:', error.message);
       return { success: false, error: error.message };
     }
   },
@@ -387,7 +387,7 @@ const lateApi = {
       }
       return { success: true };
     } catch (error) {
-      console.warn('[Late] deletePost:', error.message);
+      log.warn('[Late] deletePost:', error.message);
       return { success: false, error: error.message };
     }
   }
@@ -405,7 +405,7 @@ const loadAppSession = () => {
       return parsed;
     }
   } catch (e) {
-    console.warn('Failed to load app session:', e);
+    log.warn('Failed to load app session:', e);
   }
   return null;
 };
@@ -418,7 +418,7 @@ const saveAppSession = (state) => {
       log.debug('[App Session] Saved:', state);
     }
   } catch (e) {
-    console.warn('Failed to save app session:', e);
+    log.warn('Failed to save app session:', e);
   }
 };
 
@@ -434,7 +434,7 @@ const StickToMusic = () => {
       localStorage.setItem('_stm_test', '1');
       localStorage.removeItem('_stm_test');
     } catch (e) {
-      console.error('[App] Private mode detected or localStorage disabled');
+      log.error('[App] Private mode detected or localStorage disabled');
       setShowPrivateModeWarning(true);
     }
   }, []);
@@ -453,8 +453,8 @@ const StickToMusic = () => {
 
   // Offline detection
   useEffect(() => {
-    const handleOnline = () => console.log('[App] Back online');
-    const handleOffline = () => console.warn('[App] Offline mode');
+    const handleOnline = () => log('[App] Back online');
+    const handleOffline = () => log.warn('[App] Offline mode');
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     return () => {
@@ -637,7 +637,7 @@ const StickToMusic = () => {
         log('✅ Loaded allowed users:', users.length, '(deduped from', rawUsers.length, ')');
       },
       (error) => {
-        console.error('❌ Error loading allowed users:', error);
+        log.error('❌ Error loading allowed users:', error);
         // Authenticated but still failed — real permissions issue, proceed anyway
         setFirestoreLoaded(true);
       }
@@ -680,7 +680,7 @@ const StickToMusic = () => {
           setLastArtistId(boonArtist.id);
         }
       }).catch((err) => {
-        console.warn('Could not ensure Boon exists:', err.message);
+        log.warn('Could not ensure Boon exists:', err.message);
       });
     }
 
@@ -809,7 +809,7 @@ const StickToMusic = () => {
           setArtistLateConnected(false);
         }
       } catch (error) {
-        console.warn('Error fetching Late posts for new artist:', error.message);
+        log.warn('Error fetching Late posts for new artist:', error.message);
       }
     }
   };
@@ -856,7 +856,7 @@ const StickToMusic = () => {
             result.accounts.forEach((account) => {
               const realId = account._id || account.id || account.account_id;
               if (!realId) {
-                console.warn(`[Late] Skipping account without ID for ${artist.name}:`, JSON.stringify(account));
+                log.warn(`[Late] Skipping account without ID for ${artist.name}:`, JSON.stringify(account));
                 return;
               }
               const platform = (account.platform || account.type || '').toLowerCase();
@@ -881,7 +881,7 @@ const StickToMusic = () => {
           }
         } catch (artistError) {
           // If we get a 403 or other error for this artist, treat as unconfigured
-          console.warn(`Late API error for ${artist.name}:`, artistError.message);
+          log.warn(`Late API error for ${artist.name}:`, artistError.message);
           unconfigured.push({ id: artist.id, name: artist.name });
         }
       }
@@ -890,7 +890,7 @@ const StickToMusic = () => {
       setUnconfiguredLateArtists(unconfigured);
       log('📱 Loaded', allPages.length, 'Late pages from', artistsToLoad.length, 'artists,', unconfigured.length, 'unconfigured');
     } catch (error) {
-      console.error('Error loading Late pages:', error);
+      log.error('Error loading Late pages:', error);
     } finally {
       setLoadingLatePages(false);
     }
@@ -929,7 +929,7 @@ const StickToMusic = () => {
       showToast(`Added ${newAccounts.length} account${newAccounts.length !== 1 ? 's' : ''}`, 'success');
       return newAccounts.map(a => ({ ...a, status: 'saved' }));
     } catch (err) {
-      console.error('Failed to save manual accounts:', err);
+      log.error('Failed to save manual accounts:', err);
       showToast('Failed to save accounts', 'error');
       return accounts.map(a => ({ ...a, status: 'error' }));
     }
@@ -946,7 +946,7 @@ const StickToMusic = () => {
         await updateArtist(db, artistId, { manualAccounts: existing });
         showToast('Account removed', 'success');
       } catch (err) {
-        console.error('Failed to remove manual account:', err);
+        log.error('Failed to remove manual account:', err);
         showToast('Failed to remove account', 'error');
       }
     }
@@ -1012,7 +1012,7 @@ const StickToMusic = () => {
           });
           log('✅ Created allowedUsers record for artist:', artistEmail);
         } catch (err) {
-          console.warn('Could not create allowedUsers record:', err);
+          log.warn('Could not create allowedUsers record:', err);
         }
       }
 
@@ -1024,7 +1024,7 @@ const StickToMusic = () => {
       setShowAddArtistModal(false);
       setAddArtistForm({ name: '', assignedOperatorId: '', artistEmail: '', socialSetsForArtist: 5, error: null, isLoading: false });
     } catch (error) {
-      console.error('Failed to create artist:', error);
+      log.error('Failed to create artist:', error);
       setAddArtistForm(prev => ({ ...prev, error: error.message || 'Failed to create artist', isLoading: false }));
     }
   };
@@ -1058,7 +1058,7 @@ const StickToMusic = () => {
       }
       log('Deleted artist:', artist.id, artist.name);
     } catch (error) {
-      console.error('Failed to delete artist:', error);
+      log.error('Failed to delete artist:', error);
       showToast('Failed to delete artist: ' + error.message, 'error');
     }
     setDeleteArtistConfirm({ show: false, artist: null, isDeleting: false });
@@ -1095,7 +1095,7 @@ const StickToMusic = () => {
       }
       log('Reassigned artist:', artistId, '→ owner:', newOwnerId);
     } catch (error) {
-      console.error('Failed to reassign artist:', error);
+      log.error('Failed to reassign artist:', error);
       showToast('Failed to reassign: ' + error.message, 'error');
     }
     setReassignArtist({ show: false, artist: null });
@@ -1111,7 +1111,7 @@ const StickToMusic = () => {
       });
       log('Updated artist details:', editArtistModal.artist.id);
     } catch (error) {
-      console.error('Failed to update artist:', error);
+      log.error('Failed to update artist:', error);
       showToast('Failed to save: ' + error.message, 'error');
     }
     setEditArtistModal({ show: false, artist: null, activeSince: '', isSaving: false });
@@ -1257,7 +1257,7 @@ const StickToMusic = () => {
           log('Loaded applications from Firestore:', apps.length);
         },
         (error) => {
-          console.error('Error loading applications:', error);
+          log.error('Error loading applications:', error);
         }
       );
       return () => unsubscribe();
@@ -1892,7 +1892,7 @@ const StickToMusic = () => {
       setCurrentPage((googleRole === 'artist' || googleRole === 'collaborator') ? 'artist-dashboard' : 'operator');
       showToast(`Welcome, ${result.user.displayName || 'there'}!`, 'success');
     } catch (error) {
-      console.error('Google sign-in error:', error);
+      log.error('Google sign-in error:', error);
       let errorMessage = 'Google sign-in failed';
       if (error.code === 'auth/popup-closed-by-user') {
         errorMessage = 'Sign-in cancelled';
@@ -1960,7 +1960,7 @@ const StickToMusic = () => {
       setCurrentPage('home');
       showToast('Logged out successfully', 'success');
     } catch (error) {
-      console.error('Logout error:', error);
+      log.error('Logout error:', error);
       showToast('Logout failed', 'error');
     }
   };
@@ -2386,7 +2386,7 @@ const StickToMusic = () => {
         showToast(data.error || 'Failed to approve', 'error');
       }
     } catch (err) {
-      console.error('Approve error:', err);
+      log.error('Approve error:', err);
       showToast('Failed to approve application', 'error');
     }
   };
@@ -2407,7 +2407,7 @@ const StickToMusic = () => {
         showToast(data.error || 'Failed to deny', 'error');
       }
     } catch (err) {
-      console.error('Deny error:', err);
+      log.error('Deny error:', err);
       showToast('Failed to deny application', 'error');
     }
   };
@@ -2433,7 +2433,7 @@ const StickToMusic = () => {
       setShowPaymentModal(false);
       setSelectedApplication(null);
     } catch (error) {
-      console.error('Error:', error);
+      log.error('Error:', error);
       showToast('Failed to process. Try again.', 'error');
     }
     setPaymentLinkLoading(false);
@@ -2483,7 +2483,7 @@ const StickToMusic = () => {
       showToast(`${name} added to allowed users!`, 'success');
       return true;
     } catch (error) {
-      console.error('Error adding user:', error);
+      log.error('Error adding user:', error);
       showToast('Failed to add user', 'error');
       return false;
     }
@@ -2501,7 +2501,7 @@ const StickToMusic = () => {
           approvedAt: new Date().toISOString()
         });
       } catch (error) {
-        console.error('Error updating application status:', error);
+        log.error('Error updating application status:', error);
       }
       // Local state will update via onSnapshot listener
     }
@@ -2696,7 +2696,7 @@ const StickToMusic = () => {
       setSubmitted(true);
       showToast('Application submitted successfully!', 'success');
     } catch (error) {
-      console.error('Error saving application:', error);
+      log.error('Error saving application:', error);
       // Still add locally even if Firestore fails
       setApplications(prev => [{ id: Date.now().toString(), ...newApplication }, ...prev]);
       setSubmitted(true);
@@ -3336,7 +3336,7 @@ const StickToMusic = () => {
                   const userRef = doc(db, 'allowedUsers', user.email.toLowerCase());
                   await updateDoc(userRef, { onboardingComplete: true });
                 } catch (err) {
-                  console.warn('Could not update onboarding status:', err);
+                  log.warn('Could not update onboarding status:', err);
                 }
                 setUser(prev => prev ? { ...prev, onboardingComplete: true } : prev);
               }}
@@ -3867,7 +3867,7 @@ const StickToMusic = () => {
                   // Fallback to derived account mapping
                   const legacyAccountIds = derivedLateAccountIds[post.handle];
                   if (!legacyAccountIds) {
-                    console.error(`No Late account mapping for ${post.handle}`);
+                    log.error(`No Late account mapping for ${post.handle}`);
                     failCount++;
                     errors.push(`${post.handle}: No account mapping found`);
                     continue;
@@ -3955,7 +3955,7 @@ const StickToMusic = () => {
 
               if (failCount > 0) {
                 setSyncStatus(`⚠️ ${successCount} scheduled, ${failCount} failed`);
-                console.error('Scheduling errors:', errors);
+                log.error('Scheduling errors:', errors);
               } else {
                 setSyncStatus(`✓ ${successCount} ${postWord(successCount)} scheduled! (${artistCount} artist / ${adjacentCount} adjacent)`);
               }
@@ -6272,7 +6272,7 @@ const StickToMusic = () => {
                             showToast(`Template "${categoryName}" saved!`, 'success');
                             setEditingCategory(null);
                           } catch (error) {
-                            console.error('Error saving template:', error);
+                            log.error('Error saving template:', error);
                             showToast('Failed to save template', 'error');
                           } finally {
                             setSavingTemplate(false);
@@ -6511,7 +6511,7 @@ const StickToMusic = () => {
                           setLastSynced(new Date());
                         }
                       } catch (error) {
-                        console.error('Error connecting Late:', error);
+                        log.error('Error connecting Late:', error);
                         showToast(`Failed to connect: ${error.message}`, 'error');
                       } finally {
                         setConnectingLate(false);

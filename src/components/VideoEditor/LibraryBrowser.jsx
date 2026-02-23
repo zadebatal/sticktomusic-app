@@ -250,7 +250,7 @@ const LibraryBrowser = ({
         localStorage.setItem(versionKey, Date.now().toString());
         if (result.generated > 0) setLibrary(getLibrary(artistId));
       } catch (err) {
-        console.warn('[LibraryBrowser] Thumbnail migration error:', err);
+        log.warn('[LibraryBrowser] Thumbnail migration error:', err);
       }
     }, 3000);
     return () => clearTimeout(timer);
@@ -275,7 +275,7 @@ const LibraryBrowser = ({
     const cols = getCollections(artistId);
     const col = cols.find(c => c.id === collectionId && c.type !== 'smart' && !c.id?.startsWith('smart_'));
     if (col) {
-      saveCollectionToFirestore(db, artistId, col).catch(console.error);
+      saveCollectionToFirestore(db, artistId, col).catch(log.error);
     }
   };
 
@@ -559,7 +559,7 @@ const LibraryBrowser = ({
     log('[LibraryBrowser] Starting upload for', files.length, 'files, artistId:', artistId);
 
     if (!artistId) {
-      console.error('[LibraryBrowser] No artistId provided - cannot save to library');
+      log.error('[LibraryBrowser] No artistId provided - cannot save to library');
       toastError('No artist selected. Please select an artist first.');
       return;
     }
@@ -642,7 +642,7 @@ const LibraryBrowser = ({
               thumbnailUrl = thumbResult.url;
             }
           } catch (thumbErr) {
-            console.warn('[LibraryBrowser] Thumbnail generation failed:', thumbErr);
+            log.warn('[LibraryBrowser] Thumbnail generation failed:', thumbErr);
           }
           URL.revokeObjectURL(img.src);
         }
@@ -675,7 +675,7 @@ const LibraryBrowser = ({
       });
 
       if (errors.length > 0) {
-        console.error('[LibraryBrowser] Some uploads failed:', errors);
+        log.error('[LibraryBrowser] Some uploads failed:', errors);
         toastError(`${errors.length} file(s) failed to upload`);
       }
 
@@ -687,7 +687,7 @@ const LibraryBrowser = ({
             await assignToBankAsync(db, artistId, activeView, uploadedIds, targetBankIndex);
             toastSuccess(`Uploaded & added ${uploadedIds.length} image${uploadedIds.length > 1 ? 's' : ''} to ${getBankLabel(targetBankIndex)}`);
           } catch (err) {
-            console.error('[LibraryBrowser] Bank assignment failed:', err);
+            log.error('[LibraryBrowser] Bank assignment failed:', err);
             toastError(`Upload succeeded but bank assignment failed`);
           }
         }
@@ -696,7 +696,7 @@ const LibraryBrowser = ({
       log('[LibraryBrowser] Upload complete');
       if (!db) loadData();
     } catch (error) {
-      console.error('[LibraryBrowser] Upload failed:', error);
+      log.error('[LibraryBrowser] Upload failed:', error);
       toastError('Upload failed: ' + error.message);
     } finally {
       setUploadProgress(100);
@@ -1567,7 +1567,7 @@ const LibraryBrowser = ({
           imported++;
           setDriveProgress({ current: imported, total: mediaFiles.length });
         } catch (err) {
-          console.warn('[Drive] Failed to import:', file.name, err.message);
+          log.warn('[Drive] Failed to import:', file.name, err.message);
         }
       }
 
@@ -1610,7 +1610,7 @@ const LibraryBrowser = ({
         exported++;
         setDriveProgress({ current: exported, total: collectionMedia.length });
       } catch (err) {
-        console.warn('[Drive] Failed to export:', item.name, err.message);
+        log.warn('[Drive] Failed to export:', item.name, err.message);
       }
     }
 
@@ -2201,7 +2201,7 @@ const LibraryBrowser = ({
                                 }
                                 toastSuccess(`Imported ${files.length} file(s) from Dropbox`);
                               } catch (err) {
-                                console.error('Dropbox import:', err);
+                                log.error('Dropbox import:', err);
                                 toastError('Dropbox import failed');
                               }
                             }}

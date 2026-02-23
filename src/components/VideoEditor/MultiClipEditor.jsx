@@ -7,6 +7,7 @@ import {
 } from '../../services/libraryService';
 import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
+import log from '../../utils/logger';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
@@ -573,7 +574,7 @@ const MultiClipEditor = ({
 
       if (audioSource) {
         analyzeAudio(audioSource).catch(err => {
-          console.error('Beat analysis failed:', err);
+          log.error('Beat analysis failed:', err);
         });
       }
     }
@@ -1196,7 +1197,7 @@ const MultiClipEditor = ({
       try {
         await onSave(videoData);
       } catch (err) {
-        console.error(`[MultiClipEditor] Failed to save video ${savedCount}:`, err);
+        log.error(`[MultiClipEditor] Failed to save video ${savedCount}:`, err);
         toastError(`Failed to save "${video.name || 'Multi-Clip'}". Please try again.`);
         setIsSavingAll(false);
         return; // Stop on failure so user doesn't lose context

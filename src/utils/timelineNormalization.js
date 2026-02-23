@@ -13,10 +13,13 @@
  * - GLOBAL TIME: Offset from start of full audio file (0 = file start)
  * - LOCAL TIME: Offset from trim start point (0 = trim start, normalized)
  *
+ * @module timelineNormalization
  * Usage:
  *   import { normalizeWordsToTrimRange } from '../utils/timelineNormalization';
  *   const localWords = normalizeWordsToTrimRange(globalWords, trimStart, trimEnd);
  */
+
+import log from './logger';
 
 /**
  * Normalize an array of words to the trim range
@@ -172,7 +175,7 @@ export function validateLocalTimeData(data, trimmedDuration) {
   }
 
   if (errors.length > 0 && process.env.NODE_ENV === 'development') {
-    console.warn('[TimelineNormalization] Validation errors:', errors);
+    log.warn('[TimelineNormalization] Validation errors:', errors);
   }
 
   return {
@@ -282,7 +285,7 @@ export function assertActiveRange(activeRange, context = '') {
   if (errors.length > 0) {
     const msg = `Invalid activeRange${context ? ` in ${context}` : ''}: ${errors.join(', ')}`;
     // Log in all environments for observability
-    console.error('[TIME WINDOW VIOLATION]', msg, activeRange);
+    log.error('[TIME WINDOW VIOLATION]', msg, activeRange);
 
     // In development, also throw to catch bugs early
     if (process.env.NODE_ENV === 'development') {

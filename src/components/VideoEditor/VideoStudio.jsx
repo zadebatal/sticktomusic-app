@@ -97,7 +97,7 @@ async function saveCategoriesToFirestore(db, artistId, categories) {
     const docRef = doc(db, 'artists', artistId, 'studio', FIRESTORE_CATEGORY_DOC);
     await setDoc(docRef, { categories: cleanCategories, updatedAt: new Date().toISOString() }, { merge: true });
   } catch (error) {
-    console.warn('[VideoStudio] Failed to save categories to Firestore:', error.message);
+    log.warn('[VideoStudio] Failed to save categories to Firestore:', error.message);
   }
 }
 
@@ -111,7 +111,7 @@ async function loadCategoriesFromFirestore(db, artistId) {
     }
     return null;
   } catch (error) {
-    console.warn('[VideoStudio] Failed to load categories from Firestore:', error.message);
+    log.warn('[VideoStudio] Failed to load categories from Firestore:', error.message);
     return null;
   }
 }
@@ -133,7 +133,7 @@ class EditorErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error('VideoEditorModal Error:', error, errorInfo);
+    log.error('VideoEditorModal Error:', error, errorInfo);
   }
 
   render() {
@@ -206,7 +206,7 @@ const loadSessionState = () => {
       return parsed;
     }
   } catch (e) {
-    console.warn('Failed to load session state:', e);
+    log.warn('Failed to load session state:', e);
   }
   return null;
 };
@@ -221,7 +221,7 @@ const saveSessionState = (state) => {
     localStorage.setItem(SESSION_KEY, JSON.stringify(toSave));
     log.debug('[Session] Saved:', toSave);
   } catch (e) {
-    console.warn('Failed to save session state:', e);
+    log.warn('Failed to save session state:', e);
   }
 };
 
@@ -544,7 +544,7 @@ const VideoStudio = ({
       setCreatedContentVersion(v => v + 1);
       setFirestoreContentLoaded(true);
     }).catch(err => {
-      console.warn('[VideoStudio] Failed to load created content from Firestore:', err);
+      log.warn('[VideoStudio] Failed to load created content from Firestore:', err);
       setFirestoreContentLoaded(true);
     });
   // eslint-disable-next-line
@@ -787,7 +787,7 @@ const VideoStudio = ({
     const success = saveFn(categories);
     if (!success) {
       // Storage quota exceeded - try cleanup and retry
-      console.warn('Storage save failed, attempting cleanup...');
+      log.warn('Storage save failed, attempting cleanup...');
       cleanupStorage();
       // Retry save after cleanup
       saveFn(categories);
@@ -1005,11 +1005,11 @@ const VideoStudio = ({
             data = { ...data, audio: { ...data.audio, url: libAudio.url } };
             log('[VideoStudio] Replaced blob URL with library URL for video audio:', libAudio.name);
           } else {
-            console.warn('[VideoStudio] Video audio has blob URL but not found in library:', data.audio.id);
+            log.warn('[VideoStudio] Video audio has blob URL but not found in library:', data.audio.id);
           }
         }
       } catch (err) {
-        console.error('[VideoStudio] Failed to upload video audio:', err);
+        log.error('[VideoStudio] Failed to upload video audio:', err);
       }
     }
     // Clean audio object for Firestore (remove non-serializable fields)
@@ -1028,7 +1028,7 @@ const VideoStudio = ({
         });
         log('[VideoStudio] Updated scheduledPost from editor:', schedulerEditPostId);
       } catch (err) {
-        console.error('[VideoStudio] Failed to update scheduledPost:', err);
+        log.error('[VideoStudio] Failed to update scheduledPost:', err);
       }
       setShowEditor(false);
       setEditingVideo(null);
@@ -1055,7 +1055,7 @@ const VideoStudio = ({
         if (db && currentArtistId) {
           const content = getCreatedContent(currentArtistId);
           saveCreatedContentAsync(db, currentArtistId, content).catch(err =>
-            console.error('[VideoStudio] Failed to sync video to Firestore:', err)
+            log.error('[VideoStudio] Failed to sync video to Firestore:', err)
           );
         }
 
@@ -1140,13 +1140,13 @@ const VideoStudio = ({
         try {
           duration = await getMediaDuration(localBlobUrl, 'video');
         } catch (e) {
-          console.warn('Could not get video duration:', file.name, e.message);
+          log.warn('Could not get video duration:', file.name, e.message);
         }
 
         try {
           thumbnail = await generateThumbnail(localBlobUrl);
         } catch (e) {
-          console.warn('Could not generate thumbnail:', file.name, e.message);
+          log.warn('Could not generate thumbnail:', file.name, e.message);
         }
 
         // Keep blob URL for current session playback (avoids CORS issues)
@@ -1171,7 +1171,7 @@ const VideoStudio = ({
           await new Promise(resolve => setTimeout(resolve, 200));
         }
       } catch (error) {
-        console.error('✗ Failed to upload video:', file.name, error.message || error);
+        log.error('✗ Failed to upload video:', file.name, error.message || error);
         failedUploads.push({ name: file.name, error: error.message || 'Unknown error' });
         // Continue with other files
       }
@@ -1180,7 +1180,7 @@ const VideoStudio = ({
     // Log summary
     log(`Upload summary: ${uploadedVideos.length} succeeded, ${failedUploads.length} failed`);
     if (failedUploads.length > 0) {
-      console.warn('Failed uploads:', failedUploads);
+      log.warn('Failed uploads:', failedUploads);
     }
 
     log('Upload complete. Videos to add:', uploadedVideos.length);
@@ -1203,7 +1203,7 @@ const VideoStudio = ({
         return updated;
       });
     } else {
-      console.warn('No videos were successfully uploaded');
+      log.warn('No videos were successfully uploaded');
     }
 
     setUploadProgress(null);
@@ -1234,7 +1234,7 @@ const VideoStudio = ({
         try {
           fullDuration = await getMediaDuration(localBlobUrl, 'audio');
         } catch (e) {
-          console.warn('Could not get audio duration:', displayName, e.message);
+          log.warn('Could not get audio duration:', displayName, e.message);
           // Try from Firebase URL as fallback
           fullDuration = await getMediaDuration(url, 'audio').catch(() => 0);
         }
@@ -1262,7 +1262,7 @@ const VideoStudio = ({
 
         uploadedAudio.push(audioData);
       } catch (error) {
-        console.error('Failed to upload audio:', file.name, error);
+        log.error('Failed to upload audio:', file.name, error);
         // Continue with other files
       }
     }
@@ -1321,7 +1321,7 @@ const VideoStudio = ({
 
       setSelectedCategory(prev => prev ? { ...prev, audio: [...prev.audio, savedClip] } : prev);
     } catch (error) {
-      console.error('Failed to save audio clip:', error);
+      log.error('Failed to save audio clip:', error);
     }
 
     setUploadProgress(null);
@@ -1369,7 +1369,7 @@ const VideoStudio = ({
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
         if (db) {
           softDeleteCreatedVideoAsync(db, currentArtistId, videoId).catch(err =>
-            console.warn('[VideoStudio] Firestore video soft-delete failed:', err)
+            log.warn('[VideoStudio] Firestore video soft-delete failed:', err)
           );
         } else {
           deleteCreatedVideo(currentArtistId, videoId);
@@ -1378,7 +1378,7 @@ const VideoStudio = ({
         // Cascade: remove any scheduled posts referencing this draft
         if (db && currentArtistId) {
           deletePostsByContentId(db, currentArtistId, videoId).catch(err =>
-            console.warn('[VideoStudio] Cascade delete for video failed:', err)
+            log.warn('[VideoStudio] Cascade delete for video failed:', err)
           );
         }
       }
@@ -1411,7 +1411,7 @@ const VideoStudio = ({
     // Cascade: remove any scheduled posts referencing this draft
     if (db && currentArtistId) {
       deletePostsByContentId(db, currentArtistId, videoId).catch(err =>
-        console.warn('[VideoStudio] Cascade delete for video failed:', err)
+        log.warn('[VideoStudio] Cascade delete for video failed:', err)
       );
     }
   }, [selectedCategory, currentArtistId, db]);
@@ -1782,7 +1782,7 @@ const VideoStudio = ({
           try {
             thumbnail = await generateSlideThumbnail(firstSlide, slideshowData.aspectRatio || '9:16');
           } catch (e) {
-            console.warn('[VideoStudio] Thumbnail generation failed, using raw image:', e);
+            log.warn('[VideoStudio] Thumbnail generation failed, using raw image:', e);
           }
         }
         await updateScheduledPost(db, currentArtistId, schedulerEditPostId, {
@@ -1792,7 +1792,7 @@ const VideoStudio = ({
         });
         log('[VideoStudio] Updated scheduledPost (slideshow) from editor:', schedulerEditPostId);
       } catch (err) {
-        console.error('[VideoStudio] Failed to update scheduledPost:', err);
+        log.error('[VideoStudio] Failed to update scheduledPost:', err);
       }
       setShowSlideshowEditor(false);
       setEditingSlideshow(null);
@@ -1815,7 +1815,7 @@ const VideoStudio = ({
 
         // Upload audio to Firebase Storage if it has a blob URL (same as scheduler mode)
         if (data.audio && (data.audio.file || data.audio.url?.startsWith('blob:'))) {
-          console.log('[VideoStudio] Safari Debug - Audio before upload:', {
+          log('[VideoStudio] Safari Debug - Audio before upload:', {
             hasFile: !!data.audio.file,
             url: data.audio.url?.substring(0, 50),
             id: data.audio.id,
@@ -1825,7 +1825,7 @@ const VideoStudio = ({
           try {
             const audioFile = data.audio.file;
             if (audioFile) {
-              console.log('[VideoStudio] Safari Debug - Uploading audio file to Firebase...');
+              log('[VideoStudio] Safari Debug - Uploading audio file to Firebase...');
               const { url: firebaseUrl } = await uploadFile(audioFile, 'audio');
               data = {
                 ...data,
@@ -1836,11 +1836,11 @@ const VideoStudio = ({
               };
               log('[VideoStudio] Uploaded audio to Firebase:', firebaseUrl);
             } else if (data.audio.url?.startsWith('blob:')) {
-              console.log('[VideoStudio] Safari Debug - No file, trying to find in library. Library has', libraryMedia.audio.length, 'audio items');
+              log('[VideoStudio] Safari Debug - No file, trying to find in library. Library has', libraryMedia.audio.length, 'audio items');
               // Blob URL without file - try to find in library by ID
               const libAudio = libraryMedia.audio.find(a => a.id === data.audio.id);
               if (libAudio && libAudio.url && !libAudio.url.startsWith('blob:')) {
-                console.log('[VideoStudio] Safari Debug - Found in library:', libAudio.name, 'URL:', libAudio.url?.substring(0, 50));
+                log('[VideoStudio] Safari Debug - Found in library:', libAudio.name, 'URL:', libAudio.url?.substring(0, 50));
                 data = {
                   ...data,
                   audio: {
@@ -1850,14 +1850,14 @@ const VideoStudio = ({
                 };
                 log('[VideoStudio] Replaced blob URL with library URL for audio:', libAudio.name);
               } else {
-                console.warn('[VideoStudio] Safari Debug - Audio has blob URL but not found in library. Searched for ID:', data.audio.id);
+                log.warn('[VideoStudio] Safari Debug - Audio has blob URL but not found in library. Searched for ID:', data.audio.id);
               }
             }
           } catch (err) {
-            console.error('[VideoStudio] Failed to upload audio:', err);
+            log.error('[VideoStudio] Failed to upload audio:', err);
           }
         } else if (data.audio) {
-          console.log('[VideoStudio] Safari Debug - Audio already has valid URL:', data.audio.url?.substring(0, 50));
+          log('[VideoStudio] Safari Debug - Audio already has valid URL:', data.audio.url?.substring(0, 50));
         }
 
         // Clean audio object for Firestore (remove non-serializable fields)
@@ -1870,7 +1870,7 @@ const VideoStudio = ({
         // Sync to Firestore for persistence across refreshes/devices
         if (db) {
           addCreatedSlideshowAsync(db, currentArtistId, data).catch((err) => {
-            console.error('[VideoStudio] Failed to sync slideshow to Firestore:', err);
+            log.error('[VideoStudio] Failed to sync slideshow to Firestore:', err);
           });
         }
         log('[VideoStudio] Saved slideshow via library system:', savedSlideshow.id);
@@ -1953,7 +1953,7 @@ const VideoStudio = ({
           createdAt: new Date().toISOString()
         });
       } catch (error) {
-        console.error('Failed to upload image:', file.name, error);
+        log.error('Failed to upload image:', file.name, error);
       }
     }
 
@@ -2003,7 +2003,7 @@ const VideoStudio = ({
     if (!selectedCategory) {
       if (USE_LIBRARY_SYSTEM && currentArtistId) {
         if (db) {
-          deleteCreatedSlideshowAsync(db, currentArtistId, slideshowId).catch(console.error);
+          deleteCreatedSlideshowAsync(db, currentArtistId, slideshowId).catch(log.error);
         } else {
           deleteCreatedSlideshow(currentArtistId, slideshowId);
         }
@@ -2011,7 +2011,7 @@ const VideoStudio = ({
         // Cascade: remove any scheduled posts referencing this draft
         if (db && currentArtistId) {
           deletePostsByContentId(db, currentArtistId, slideshowId).catch(err =>
-            console.warn('[VideoStudio] Cascade delete for slideshow failed:', err)
+            log.warn('[VideoStudio] Cascade delete for slideshow failed:', err)
           );
         }
       }
@@ -2033,7 +2033,7 @@ const VideoStudio = ({
     // Cascade: remove any scheduled posts referencing this draft
     if (db && currentArtistId) {
       deletePostsByContentId(db, currentArtistId, slideshowId).catch(err =>
-        console.warn('[VideoStudio] Cascade delete for slideshow failed:', err)
+        log.warn('[VideoStudio] Cascade delete for slideshow failed:', err)
       );
     }
   }, [selectedCategory, currentArtistId, db]);

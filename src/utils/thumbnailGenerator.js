@@ -3,6 +3,8 @@
  * Utility for generating video thumbnails using canvas
  */
 
+import log from './logger';
+
 /**
  * Generate a thumbnail from a video URL
  * @param {string} videoUrl - The URL of the video
@@ -133,7 +135,7 @@ export const generateThumbnailsForVideos = async (videos) => {
         const thumbnail = await generateThumbnailFromUrl(video.url);
         return { ...video, thumbnail };
       } catch (error) {
-        console.warn('Failed to generate thumbnail for', video.name || video.url, error);
+        log.warn('Failed to generate thumbnail for', video.name || video.url, error);
         return { ...video, thumbnail: null };
       }
     })

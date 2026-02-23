@@ -365,7 +365,7 @@ const SchedulingPage = ({
           log('[Schedule] Backfill: no matches found');
         }
       } catch (err) {
-        console.warn('[Schedule] Backfill error:', err);
+        log.warn('[Schedule] Backfill error:', err);
       }
     })();
   }, [posts, loading, artistId, db, toastSuccess]);
@@ -388,7 +388,7 @@ const SchedulingPage = ({
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!resp.ok) {
-          console.warn('[Sync] Late API returned', resp.status);
+          log.warn('[Sync] Late API returned', resp.status);
           break;
         }
         const data = await resp.json();
@@ -471,7 +471,7 @@ const SchedulingPage = ({
       }
       log('[Sync] Done:', linked, 'linked,', posted, 'posted,', failed, 'failed');
     } catch (err) {
-      console.error('[Sync] Error:', err);
+      log.error('[Sync] Error:', err);
       toastError('Sync failed: ' + (err.message || 'Unknown error'));
     }
     setSyncing(false);
@@ -700,15 +700,15 @@ const SchedulingPage = ({
               body: JSON.stringify({ action: 'updatePost', postId: post.latePostId, artistId, scheduledFor: update.scheduledTime })
             });
             if (resp.ok) synced++;
-            else console.warn('[Schedule] Late sync failed:', resp.status);
+            else log.warn('[Schedule] Late sync failed:', resp.status);
           } catch (syncErr) {
-            console.warn('[Schedule] Late sync error:', syncErr.message);
+            log.warn('[Schedule] Late sync error:', syncErr.message);
           }
         }
         if (synced > 0) toastSuccess(`Shuffled + synced ${synced} post${synced !== 1 ? 's' : ''} to Late.co`);
         else toastSuccess('Queue shuffled (Late sync failed)');
       } catch (outerErr) {
-        console.error('[Schedule] Late sync error:', outerErr);
+        log.error('[Schedule] Late sync error:', outerErr);
         toastSuccess('Queue shuffled');
       }
     } else {
@@ -755,10 +755,10 @@ const SchedulingPage = ({
           const what = updates.scheduledTime ? 'Time' : 'Caption';
           toastSuccess(`${what} updated on Late.co`);
         } else {
-          console.warn('[Schedule] Failed to sync to Late.co:', await response.text());
+          log.warn('[Schedule] Failed to sync to Late.co:', await response.text());
         }
       } catch (error) {
-        console.error('[Schedule] Error syncing to Late.co:', error);
+        log.error('[Schedule] Error syncing to Late.co:', error);
       }
     }
   }, [db, artistId, posts, toastSuccess]);
@@ -1842,9 +1842,11 @@ const SchedulingPage = ({
             {/* Post Rows */}
             <div style={s.listScroll}>
               {filteredPosts.length === 0 ? (
-                <div style={s.emptyState}>
-                  <p style={{ color: '#71717a', fontSize: '14px' }}>
-                    {posts.length === 0 ? 'No posts yet. Add content from drafts to start scheduling.' : 'No posts match this filter.'}
+                <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+                  <FeatherCalendar className="w-12 h-12 text-zinc-600" />
+                  <h3 className="text-lg font-semibold text-white">No scheduled posts</h3>
+                  <p className="text-sm text-zinc-400 max-w-xs">
+                    {posts.length === 0 ? 'Create content in the Studio, then schedule it here' : 'No posts match this filter'}
                   </p>
                 </div>
               ) : (

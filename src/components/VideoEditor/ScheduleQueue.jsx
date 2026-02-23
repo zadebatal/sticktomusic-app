@@ -102,7 +102,7 @@ const ScheduleQueue = ({
         const result = await getCollectionsAsync(db, artistId);
         setCollections(result || []);
       } catch (err) {
-        console.error('[ScheduleQueue] Failed to load collections:', err);
+        log.error('[ScheduleQueue] Failed to load collections:', err);
       }
     };
 
@@ -340,7 +340,7 @@ const ScheduleQueue = ({
               : p
           );
         } catch (err) {
-          console.error('Render error:', err);
+          log.error('Render error:', err);
           setError(`Failed to render "${post.title}": ${err.message}`);
           setIsRendering(false);
           return;
@@ -428,7 +428,7 @@ const ScheduleQueue = ({
         scheduled++;
         setSuccessCount(scheduled);
       } catch (err) {
-        console.error('Schedule error:', err);
+        log.error('Schedule error:', err);
         errors.push(`${post.title}: ${err.message}`);
         failed++;
       }

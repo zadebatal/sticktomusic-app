@@ -8,6 +8,7 @@ import {
 } from '../../services/libraryService';
 import { useToast } from '../ui';
 import { useTheme } from '../../contexts/ThemeContext';
+import log from '../../utils/logger';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
@@ -522,7 +523,7 @@ const SoloClipEditor = ({
 
       if (audioSource) {
         analyzeAudio(audioSource).catch(err => {
-          console.error('Beat analysis failed:', err);
+          log.error('Beat analysis failed:', err);
         });
       }
     }
@@ -1094,7 +1095,7 @@ const SoloClipEditor = ({
       try {
         await onSave(videoData);
       } catch (err) {
-        console.error(`[SoloClipEditor] Failed to save video ${savedCount}:`, err);
+        log.error(`[SoloClipEditor] Failed to save video ${savedCount}:`, err);
         toastError(`Failed to save "${video.name || 'Solo Clip'}". Please try again.`);
         setIsSavingAll(false);
         return; // Stop on failure so user doesn't lose context

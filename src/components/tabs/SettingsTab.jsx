@@ -12,6 +12,7 @@ import {
   FeatherCheck, FeatherCamera, FeatherEdit2, FeatherTrash2,
 } from '@subframe/core';
 import ProfilePictureUpload from '../ProfilePictureUpload';
+import log from '../../utils/logger';
 import {
   initGoogleDrive,
   authenticate as driveAuth,
@@ -175,7 +176,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
       setInviteMessage(`Invited ${email} as ${role}.`);
       setTimeout(() => { setInviteStatus(null); setInviteMessage(''); }, 4000);
     } catch (err) {
-      console.error('[Settings] Invite failed:', err);
+      log.error('[Settings] Invite failed:', err);
       setInviteStatus('error');
       setInviteMessage('Failed to send invite. Please try again.');
     }

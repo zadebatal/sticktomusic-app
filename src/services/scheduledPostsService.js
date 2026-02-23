@@ -124,7 +124,7 @@ export async function createScheduledPost(db, artistId, data) {
     // Also update local
     saveLocalPost(artistId, post);
   } catch (error) {
-    console.error('[ScheduledPosts] Firestore create failed:', error);
+    log.error('[ScheduledPosts] Firestore create failed:', error);
     // Save to localStorage as fallback (mark unsynced)
     saveLocalPost(artistId, { ...post, syncedToCloud: false });
   }
@@ -155,7 +155,7 @@ export async function updateScheduledPost(db, artistId, postId, updates) {
       removeLocalPost(artistId, postId);
       return patch;
     }
-    console.error('[ScheduledPosts] Firestore update failed:', error);
+    log.error('[ScheduledPosts] Firestore update failed:', error);
     // Update localStorage as fallback (mark unsynced)
     updateLocalPost(artistId, postId, { ...patch, syncedToCloud: false });
   }
@@ -173,7 +173,7 @@ export async function deleteScheduledPost(db, artistId, postId) {
     removeLocalPost(artistId, postId);
     return true;
   } catch (error) {
-    console.error('[ScheduledPosts] Delete failed:', error);
+    log.error('[ScheduledPosts] Delete failed:', error);
     removeLocalPost(artistId, postId);
     return false;
   }
@@ -196,7 +196,7 @@ export async function deletePostsByContentId(db, artistId, contentId) {
     log('[ScheduledPosts] Cascade-deleted', matching.length, 'posts for contentId:', contentId);
     return matching.length;
   } catch (error) {
-    console.error('[ScheduledPosts] Cascade delete failed:', error);
+    log.error('[ScheduledPosts] Cascade delete failed:', error);
     return 0;
   }
 }
@@ -215,7 +215,7 @@ export async function getScheduledPosts(db, artistId) {
     log('[ScheduledPosts] Loaded', posts.length, 'posts');
     return posts;
   } catch (error) {
-    console.error('[ScheduledPosts] Load failed, using local:', error);
+    log.error('[ScheduledPosts] Load failed, using local:', error);
     return getLocalPosts(artistId);
   }
 }
@@ -233,7 +233,7 @@ export function subscribeToScheduledPosts(db, artistId, callback) {
     const posts = snapshot.docs.map(d => d.data());
     callback(posts);
   }, (error) => {
-    console.error('[ScheduledPosts] Subscription error:', error);
+    log.error('[ScheduledPosts] Subscription error:', error);
     callback(getLocalPosts(artistId));
   });
 }
@@ -262,7 +262,7 @@ export async function reorderPosts(db, artistId, newOrder) {
     });
     return true;
   } catch (error) {
-    console.error('[ScheduledPosts] Firestore reorder failed:', error);
+    log.error('[ScheduledPosts] Firestore reorder failed:', error);
     // Update localStorage as fallback
     newOrder.forEach(({ id, queuePosition }) => {
       updateLocalPost(artistId, id, { queuePosition, syncedToCloud: false });
@@ -320,7 +320,7 @@ export async function addManyScheduledPosts(db, artistId, posts) {
     // Also update local
     results.forEach(p => saveLocalPost(artistId, p));
   } catch (error) {
-    console.error('[ScheduledPosts] Firestore batch create failed:', error);
+    log.error('[ScheduledPosts] Firestore batch create failed:', error);
     // Save to localStorage as fallback (mark unsynced)
     results.forEach(p => saveLocalPost(artistId, { ...p, syncedToCloud: false }));
   }
@@ -399,7 +399,7 @@ function saveLocalPost(artistId, post) {
     localStorage.setItem(STORAGE_KEY(artistId), JSON.stringify(posts));
   } catch (error) {
     if (error?.name === 'QuotaExceededError' || error?.code === 22) {
-      console.warn('[ScheduledPosts] Quota exceeded, cleaning up...');
+      log.warn('[ScheduledPosts] Quota exceeded, cleaning up...');
       const keysToClean = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
@@ -412,10 +412,10 @@ function saveLocalPost(artistId, post) {
       try {
         localStorage.setItem(STORAGE_KEY(artistId), JSON.stringify(posts));
       } catch (retryError) {
-        console.error('[ScheduledPosts] Save failed even after cleanup:', retryError);
+        log.error('[ScheduledPosts] Save failed even after cleanup:', retryError);
       }
     } else {
-      console.error('[ScheduledPosts] Local save failed:', error);
+      log.error('[ScheduledPosts] Local save failed:', error);
     }
   }
 }
@@ -429,7 +429,7 @@ function updateLocalPost(artistId, postId, updates) {
       localStorage.setItem(STORAGE_KEY(artistId), JSON.stringify(posts));
     }
   } catch (error) {
-    console.error('[ScheduledPosts] Local update failed:', error);
+    log.error('[ScheduledPosts] Local update failed:', error);
   }
 }
 
@@ -438,7 +438,7 @@ function removeLocalPost(artistId, postId) {
     const posts = getLocalPosts(artistId).filter(p => p.id !== postId);
     localStorage.setItem(STORAGE_KEY(artistId), JSON.stringify(posts));
   } catch (error) {
-    console.error('[ScheduledPosts] Local delete failed:', error);
+    log.error('[ScheduledPosts] Local delete failed:', error);
   }
 }
 

@@ -7,6 +7,8 @@
  * @see docs/DOMAIN_INVARIANTS.md Section B
  */
 
+import log from './logger';
+
 /**
  * Check if a URL is a blob URL
  * @param {string} url
@@ -93,7 +95,7 @@ export function assertNoBlobUrls(obj, context = '') {
   if (violations.length > 0) {
     const msg = `Blob URLs found${context ? ` in ${context}` : ''}: ${violations.join(', ')}`;
     // Log in all environments for observability
-    console.error('[ASSET VIOLATION]', msg, { violations });
+    log.error('[ASSET VIOLATION]', msg, { violations });
 
     // Always throw - blob URLs in persistence is a P0 data integrity violation
     throw new Error(msg);
@@ -198,7 +200,7 @@ export function isReadyForPersistence(asset) {
 export function warnIfBlobUrl(asset, operation = 'operation') {
   if (process.env.NODE_ENV === 'development') {
     if (asset?.url && isBlobUrl(asset.url)) {
-      console.warn(`[ASSET WARNING] blob URL detected during ${operation}. This URL will not persist across sessions.`, {
+      log.warn(`[ASSET WARNING] blob URL detected during ${operation}. This URL will not persist across sessions.`, {
         url: asset.url,
         id: asset.id,
       });

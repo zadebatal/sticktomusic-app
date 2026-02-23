@@ -3,6 +3,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useToast } from '../ui';
 import googleDriveService, { initGoogleDrive } from '../../services/googleDriveService';
 import dropboxService, { initDropbox } from '../../services/dropboxService';
+import log from '../../utils/logger';
 
 const DRIVE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID;
 const DRIVE_API_KEY = process.env.REACT_APP_GOOGLE_API_KEY;
@@ -93,7 +94,7 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
             source: 'google_drive'
           });
         } catch (err) {
-          console.warn(`Failed to download ${filtered[i].name}:`, err.message);
+          log.warn(`Failed to download ${filtered[i].name}:`, err.message);
         }
       }
       if (imported.length > 0) {
@@ -101,7 +102,7 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
         toast.success(`Imported ${imported.length} file${imported.length > 1 ? 's' : ''} from Drive`);
       }
     } catch (err) {
-      console.error('Drive import error:', err);
+      log.error('Drive import error:', err);
       toast.error('Failed to import from Google Drive');
     }
     setImporting(false);
@@ -151,7 +152,7 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
             source: 'dropbox'
           });
         } catch (err) {
-          console.warn(`Failed to download ${files[i].name}:`, err.message);
+          log.warn(`Failed to download ${files[i].name}:`, err.message);
         }
       }
       if (imported.length > 0) {
@@ -159,7 +160,7 @@ const CloudImportButton = ({ artistId, onImportMedia, mediaType = 'all', compact
         toast.success(`Imported ${imported.length} file${imported.length > 1 ? 's' : ''} from Dropbox`);
       }
     } catch (err) {
-      console.error('Dropbox import error:', err);
+      log.error('Dropbox import error:', err);
       toast.error('Failed to import from Dropbox');
     }
     setImporting(false);

@@ -46,7 +46,7 @@ export const useBeatDetection = () => {
       } else if (typeof audioSource === 'string') {
         // Reject stale blob URLs early
         if (audioSource.startsWith('blob:')) {
-          console.warn('[BeatDetection] Rejected stale blob URL');
+          log.warn('[BeatDetection] Rejected stale blob URL');
           setIsAnalyzing(false);
           return;
         }
@@ -61,7 +61,7 @@ export const useBeatDetection = () => {
           arrayBuffer = await response.arrayBuffer();
         } catch (fetchError) {
           // CORS error or network issue - try loading via audio element
-          console.warn('Direct fetch failed, trying audio element method:', fetchError.message);
+          log.warn('Direct fetch failed, trying audio element method:', fetchError.message);
 
           // Create an audio element to load the audio
           const audio = new Audio();
@@ -77,7 +77,7 @@ export const useBeatDetection = () => {
 
           // Use MediaElementSourceNode to get the audio data
           // This approach doesn't give us raw ArrayBuffer, so fall back to basic detection
-          console.warn('Could not get raw audio data due to CORS. Using fallback BPM estimation.');
+          log.warn('Could not get raw audio data due to CORS. Using fallback BPM estimation.');
 
           // Estimate based on common music tempos (this is a fallback)
           const fallbackBpm = 120;
@@ -123,7 +123,7 @@ export const useBeatDetection = () => {
         return { bpm: detectedBpm, beats: beatTimestamps, offset };
 
       } catch (detectError) {
-        console.warn('Professional beat detection failed, using fallback:', detectError.message);
+        log.warn('Professional beat detection failed, using fallback:', detectError.message);
 
         // Fallback to basic onset detection
         const fallbackResult = detectBeatsBasic(audioBuffer);
@@ -137,7 +137,7 @@ export const useBeatDetection = () => {
       }
 
     } catch (err) {
-      console.error('Beat detection error:', err);
+      log.error('Beat detection error:', err);
       setError(err.message);
 
       // Set default values so UI doesn't break

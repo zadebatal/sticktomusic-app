@@ -9,6 +9,7 @@
  * - FFmpeg stream-copy extraction (no re-encoding)
  */
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import log from '../../utils/logger';
 import { useToast } from '../ui';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
@@ -45,7 +46,7 @@ const loadFFmpeg = async () => {
       ffmpegInstance = ffmpeg;
       return ffmpeg;
     } catch (error) {
-      console.error('[Clipper] Failed to load FFmpeg:', error);
+      log.error('[Clipper] Failed to load FFmpeg:', error);
       ffmpegLoadPromise = null;
       throw error;
     }
@@ -460,7 +461,7 @@ const ClipperEditor = ({
       toastSuccess(`Exported ${results.length} clip${results.length !== 1 ? 's' : ''}`);
       setExporting(false);
     } catch (err) {
-      console.error('[Clipper] Export failed:', err);
+      log.error('[Clipper] Export failed:', err);
       toastError(`Export failed: ${err.message}`);
       setExporting(false);
     }

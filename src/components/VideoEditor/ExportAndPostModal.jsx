@@ -7,6 +7,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { FeatherX, FeatherUploadCloud, FeatherDownload, FeatherCopy, FeatherSend, FeatherArrowLeft, FeatherRefreshCw } from '@subframe/core';
+import log from '../../utils/logger';
 
 /**
  * ExportAndPostModal - Modal for exporting and posting videos
@@ -68,7 +69,7 @@ const ExportAndPostModal = ({
 
       setStage(EXPORT_STAGE.DONE);
     } catch (err) {
-      console.error('Export error:', err);
+      log.error('Export error:', err);
       setError(err.message || 'Failed to export video');
       setStage(EXPORT_STAGE.OPTIONS);
     }
@@ -107,7 +108,7 @@ const ExportAndPostModal = ({
         setStage(EXPORT_STAGE.READY);
       }
     } catch (err) {
-      console.error('Export/upload error:', err);
+      log.error('Export/upload error:', err);
       setError(err.message || 'Failed to export or upload video');
       setStage(EXPORT_STAGE.OPTIONS);
     }
@@ -124,7 +125,7 @@ const ExportAndPostModal = ({
       await onSchedulePost(videoUrl, caption);
       setStage(EXPORT_STAGE.DONE);
     } catch (err) {
-      console.error('Posting error:', err);
+      log.error('Posting error:', err);
       setError(err.message || 'Failed to schedule post');
       setStage(EXPORT_STAGE.READY);
     }

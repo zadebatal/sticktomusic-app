@@ -8,6 +8,8 @@
  * When processing transcribed words, ensure they are already normalized to LOCAL time.
  */
 
+import log from '../utils/logger';
+
 /**
  * Parse a CapCut draft_info.json file and extract template data
  * @param {Object} draftData - Parsed JSON from draft_info.json
@@ -122,7 +124,7 @@ export function parseCapCutProject(draftData) {
 
     return template;
   } catch (error) {
-    console.error('Error parsing CapCut project:', error);
+    log.error('Error parsing CapCut project:', error);
     throw new Error(`Failed to parse CapCut project: ${error.message}`);
   }
 }

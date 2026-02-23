@@ -26,7 +26,7 @@ async function checkLatePostStatus(latePostId, artistId) {
     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
     const response = await fetch(`/api/late?action=getPost&postId=${latePostId}&artistId=${artistId}`, { headers });
     if (!response.ok) {
-      console.warn('[StatusPolling] Failed to fetch post from Late.co:', latePostId);
+      log.warn('[StatusPolling] Failed to fetch post from Late.co:', latePostId);
       return null;
     }
 
@@ -54,7 +54,7 @@ async function checkLatePostStatus(latePostId, artistId) {
 
     return { status: 'scheduled' };
   } catch (error) {
-    console.error('[StatusPolling] Error checking Late post:', latePostId, error);
+    log.error('[StatusPolling] Error checking Late post:', latePostId, error);
     return null;
   }
 }
@@ -159,7 +159,7 @@ export function startPolling(db, artistId, getPosts, onStatusChange) {
       const posts = getPosts();
       await pollOverduePosts(db, artistId, posts, onStatusChange);
     } catch (error) {
-      console.error('[StatusPolling] Poll error:', error);
+      log.error('[StatusPolling] Poll error:', error);
     }
   };
 

@@ -24,8 +24,8 @@ if (process.env.NODE_ENV === 'development') {
   const required = ['apiKey', 'authDomain', 'projectId'];
   const missing = required.filter(key => !firebaseConfig[key]);
   if (missing.length > 0) {
-    console.error('❌ Missing Firebase config:', missing.join(', '));
-    console.error('Set REACT_APP_FIREBASE_* environment variables in .env.local');
+    log.error('❌ Missing Firebase config:', missing.join(', '));
+    log.error('Set REACT_APP_FIREBASE_* environment variables in .env.local');
   }
 }
 
@@ -116,7 +116,7 @@ export async function uploadFile(file, folder = 'uploads', onProgress = null, op
         if (onProgress) onProgress(progress);
       },
       (error) => {
-        console.error('Upload error:', error);
+        log.error('Upload error:', error);
         reject(error);
       },
       async () => {
@@ -141,7 +141,7 @@ export async function deleteFile(path) {
     await deleteObject(storageRef);
     return { success: true };
   } catch (error) {
-    console.error('Delete error:', error);
+    log.error('Delete error:', error);
     return { success: false, error: error.message };
   }
 }
@@ -163,7 +163,7 @@ export function getMediaDuration(url, type = 'video') {
     };
 
     element.onerror = () => {
-      console.warn('Could not load media metadata:', url);
+      log.warn('Could not load media metadata:', url);
       resolve(0);
       element.remove();
     };
@@ -206,14 +206,14 @@ export function generateThumbnail(videoUrl, time = 1) {
         const thumbnail = canvas.toDataURL('image/jpeg', 0.7);
         resolve(thumbnail);
       } catch (error) {
-        console.warn('Thumbnail generation failed:', error);
+        log.warn('Thumbnail generation failed:', error);
         resolve(null);
       }
       video.remove();
     };
 
     video.onerror = () => {
-      console.warn('Could not load video for thumbnail');
+      log.warn('Could not load video for thumbnail');
       resolve(null);
       video.remove();
     };

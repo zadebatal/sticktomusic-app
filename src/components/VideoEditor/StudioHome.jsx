@@ -318,7 +318,7 @@ const StudioHome = ({
     log('[StudioHome] db available:', !!db);
 
     if (!artistId) {
-      console.warn('[StudioHome] WARNING: No artistId provided - uploads will fail!');
+      log.warn('[StudioHome] WARNING: No artistId provided - uploads will fail!');
     }
   }, [artistId, db]);
 
@@ -363,7 +363,7 @@ const StudioHome = ({
           setLibraryRefreshTrigger(prev => prev + 1);
         }
       } catch (err) {
-        console.warn('[StudioHome] Thumbnail migration error:', err);
+        log.warn('[StudioHome] Thumbnail migration error:', err);
       }
     }, 2000);
     return () => clearTimeout(timer);
@@ -403,7 +403,7 @@ const StudioHome = ({
           setLibraryRefreshTrigger(prev => prev + 1);
         }
       } catch (err) {
-        console.warn('[StudioHome] Video thumbnail migration error:', err);
+        log.warn('[StudioHome] Video thumbnail migration error:', err);
       }
     }, 4000); // Start after image migration has a head start
     return () => clearTimeout(timer);
@@ -420,7 +420,7 @@ const StudioHome = ({
     log('[StudioHome] Starting upload for', files.length, 'files, artistId:', artistId, 'type:', type);
 
     if (!artistId) {
-      console.error('[StudioHome] No artistId - cannot save to library');
+      log.error('[StudioHome] No artistId - cannot save to library');
       toastError('No artist selected. Please select an artist first.');
       return;
     }
@@ -458,7 +458,7 @@ const StudioHome = ({
         try {
           duration = await getMediaDuration(localUrl, type === MEDIA_TYPES.VIDEO ? 'video' : 'audio');
         } catch (e) {
-          console.warn('Could not get duration:', e);
+          log.warn('Could not get duration:', e);
         }
       }
 
@@ -502,7 +502,7 @@ const StudioHome = ({
             thumbnailUrl = thumbResult.url;
           }
         } catch (thumbErr) {
-          console.warn('[StudioHome] Video thumbnail generation failed:', thumbErr);
+          log.warn('[StudioHome] Video thumbnail generation failed:', thumbErr);
         }
       }
 
@@ -528,7 +528,7 @@ const StudioHome = ({
             thumbnailUrl = thumbResult.url;
           }
         } catch (thumbErr) {
-          console.warn('[StudioHome] Thumbnail generation failed:', thumbErr);
+          log.warn('[StudioHome] Thumbnail generation failed:', thumbErr);
         }
       }
 
@@ -586,7 +586,7 @@ const StudioHome = ({
         // Trigger LibraryBrowser refresh
         setLibraryRefreshTrigger(prev => prev + 1);
       } catch (saveError) {
-        console.error('[StudioHome] Failed to save to library:', saveError);
+        log.error('[StudioHome] Failed to save to library:', saveError);
         toastError('Files uploaded but failed to save to library: ' + saveError.message);
       }
     }
@@ -596,7 +596,7 @@ const StudioHome = ({
       const failedNames = failedFiles.map(f => f.name).join(', ');
       toastError(`Upload failed for: ${failedNames} — ${failedFiles[0].error}`);
     } else if (uploadedItems.length === 0) {
-      console.error('[StudioHome] No items were successfully uploaded');
+      log.error('[StudioHome] No items were successfully uploaded');
       toastError('No files were uploaded. Check if Firebase is configured correctly.');
     } else {
       log('[StudioHome] Upload complete!', uploadedItems.length, 'files added to library');
@@ -676,7 +676,7 @@ const StudioHome = ({
           await addToCollectionAsync(artistId, selectedCollection, [audioItem.id], db);
         }
       } catch (err) {
-        console.error(`[StudioHome] Failed to upload audio file ${files[i].name}:`, err);
+        log.error(`[StudioHome] Failed to upload audio file ${files[i].name}:`, err);
       }
     }
     setUploadProgress({ current: 0, total: 0, percent: 0 });
@@ -747,12 +747,12 @@ const StudioHome = ({
     log('[StudioHome] handleClipSave called with clipData:', clipData);
 
     if (!pendingAudio) {
-      console.error('[StudioHome] No pendingAudio - cannot save');
+      log.error('[StudioHome] No pendingAudio - cannot save');
       return;
     }
 
     if (!artistId) {
-      console.error('[StudioHome] No artistId - cannot save audio clip');
+      log.error('[StudioHome] No artistId - cannot save audio clip');
       toastError('No artist selected. Please select an artist first.');
       return;
     }
@@ -767,7 +767,7 @@ const StudioHome = ({
     });
 
     if (!calculatedDuration || calculatedDuration < 1) {
-      console.error('[StudioHome] Invalid or too short duration:', calculatedDuration, 'clipData:', JSON.stringify(clipData));
+      log.error('[StudioHome] Invalid or too short duration:', calculatedDuration, 'clipData:', JSON.stringify(clipData));
       toastError('Audio duration is invalid or too short (must be at least 1 second).');
       return;
     }
@@ -828,7 +828,7 @@ const StudioHome = ({
       setLibraryRefreshTrigger(prev => prev + 1);
 
     } catch (error) {
-      console.error('[StudioHome] Audio upload failed:', error);
+      log.error('[StudioHome] Audio upload failed:', error);
       toastError('Audio upload failed: ' + error.message);
     }
 
@@ -890,7 +890,7 @@ const StudioHome = ({
       await addToLibraryAsync(db, artistId, audioItem);
       setLibraryRefreshTrigger(prev => prev + 1);
     } catch (error) {
-      console.error('[StudioHome] Retrim upload failed:', error);
+      log.error('[StudioHome] Retrim upload failed:', error);
       toastError('Audio trim failed: ' + error.message);
     }
 
@@ -909,7 +909,7 @@ const StudioHome = ({
       try {
         cancelFn();
       } catch (error) {
-        console.error('[StudioHome] Error cancelling upload:', error);
+        log.error('[StudioHome] Error cancelling upload:', error);
       }
     });
     cancelFunctionsRef.current = [];
@@ -1134,7 +1134,7 @@ const StudioHome = ({
     // Warn if only one bank is populated
     const populatedCount = bankImages.filter(bank => bank.length > 0).length;
     if (populatedCount === 1) {
-      console.warn(`[Batch] Only one bank is populated — will use images from that bank.`);
+      log.warn(`[Batch] Only one bank is populated — will use images from that bank.`);
     }
 
     setBatchGenerating(true);
@@ -1245,7 +1245,7 @@ const StudioHome = ({
     // Sync to Firestore for persistence
     const content = getCreatedContent(artistId);
     if (db) {
-      saveCreatedContentAsync(db, artistId, content).catch(console.error);
+      saveCreatedContentAsync(db, artistId, content).catch(log.error);
     }
 
     // Refresh created content
@@ -1897,7 +1897,7 @@ const StudioHome = ({
                             addToCollectionAsync(db, artistId, selectedCollection, addedIds);
                           }
                           setLibraryRefreshTrigger(prev => prev + 1);
-                        }).catch(err => console.warn('[StudioHome] Cloud import save failed:', err));
+                        }).catch(err => log.warn('[StudioHome] Cloud import save failed:', err));
                       }}
                     />
                   }
@@ -2007,7 +2007,7 @@ const StudioHome = ({
                             addToCollectionAsync(db, artistId, selectedCollection, addedIds);
                           }
                           setLibraryRefreshTrigger(prev => prev + 1);
-                        }).catch(err => console.warn('[StudioHome] Cloud import save failed:', err));
+                        }).catch(err => log.warn('[StudioHome] Cloud import save failed:', err));
                       }}
                     />
                   }
@@ -2363,7 +2363,7 @@ const StudioHome = ({
                                   setLibraryRefreshTrigger(t => t + 1);
                                   setEditingAudio(null);
                                 } catch (err) {
-                                  console.error('Failed to update audio:', err);
+                                  log.error('Failed to update audio:', err);
                                 }
                               }}
                             >
@@ -2379,7 +2379,7 @@ const StudioHome = ({
                                   setLibraryRefreshTrigger(t => t + 1);
                                   setEditingAudio(null);
                                 } catch (err) {
-                                  console.error('Failed to save as new:', err);
+                                  log.error('Failed to save as new:', err);
                                 }
                               }}
                             >
@@ -2615,7 +2615,7 @@ const StudioHome = ({
                 if (db) {
                   const cols = getCollections(artistId);
                   const fresh = cols.find(c => c.id === selectedCollection);
-                  if (fresh) saveCollectionToFirestore(db, artistId, fresh).catch(console.error);
+                  if (fresh) saveCollectionToFirestore(db, artistId, fresh).catch(log.error);
                 }
               };
               return (

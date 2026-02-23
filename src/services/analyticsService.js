@@ -8,6 +8,8 @@
  * - Time-series data for charts
  */
 
+import log from '../utils/logger';
+
 const STORAGE_KEY_PREFIX = 'stm_analytics_';
 const LAST_SYNC_KEY_PREFIX = 'stm_analytics_last_sync_';
 const LEGACY_STORAGE_KEY = 'stm_analytics';
@@ -32,7 +34,7 @@ const migrateIfNeeded = (artistId) => {
     const legacySync = localStorage.getItem(LEGACY_LAST_SYNC_KEY);
     if (legacySync) localStorage.setItem(getLastSyncKey(artistId), legacySync);
     // Don't remove legacy keys yet — other artists may still need migration
-    console.log('[Analytics] Migrated global data to artist:', artistId);
+    log('[Analytics] Migrated global data to artist:', artistId);
   }
 };
 
@@ -47,7 +49,7 @@ export const getStoredAnalytics = (artistId) => {
     const data = localStorage.getItem(getStorageKey(artistId));
     return data ? JSON.parse(data) : EMPTY_ANALYTICS;
   } catch (error) {
-    console.error('Error reading analytics from localStorage:', error);
+    log.error('Error reading analytics from localStorage:', error);
     return EMPTY_ANALYTICS;
   }
 };
@@ -65,7 +67,7 @@ export const saveAnalytics = (artistId, data) => {
     }));
     localStorage.setItem(getLastSyncKey(artistId), new Date().toISOString());
   } catch (error) {
-    console.error('Error saving analytics to localStorage:', error);
+    log.error('Error saving analytics to localStorage:', error);
   }
 };
 
@@ -103,7 +105,7 @@ export const fetchLateAnalytics = async (latePostId, accessToken) => {
 
     return await response.json();
   } catch (error) {
-    console.error('Error fetching Late analytics:', error);
+    log.error('Error fetching Late analytics:', error);
     return null;
   }
 };
@@ -127,7 +129,7 @@ export const fetchLatePosts = async (accessToken) => {
 
     return await response.json();
   } catch (error) {
-    console.error('Error fetching Late posts:', error);
+    log.error('Error fetching Late posts:', error);
     return [];
   }
 };
@@ -174,7 +176,7 @@ export const syncAnalytics = async (artistId, videos, accessToken) => {
         };
       }
     } catch (error) {
-      console.error(`Error syncing analytics for video ${video.id}:`, error);
+      log.error(`Error syncing analytics for video ${video.id}:`, error);
     }
   }
 

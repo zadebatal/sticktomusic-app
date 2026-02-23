@@ -88,7 +88,7 @@ export function assertOperator(user, operation = 'this operation') {
   if (!isUserOperator(user)) {
     const msg = `Permission denied: ${operation} requires operator access`;
     // Log in all environments - security violations must be tracked
-    console.error('[ROLE VIOLATION]', msg, { email: user?.email });
+    log.error('[ROLE VIOLATION]', msg, { email: user?.email });
 
     // Always throw - permission bypass is a P0 security violation
     throw new Error(msg);

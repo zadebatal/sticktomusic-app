@@ -64,7 +64,7 @@ export async function initGoogleDrive(clientId, apiKey) {
       discoveryDocs: [DISCOVERY_DOC]
     });
   } catch (err) {
-    console.error('[GoogleDrive] gapi.client.init failed:', err);
+    log.error('[GoogleDrive] gapi.client.init failed:', err);
     const msg = err?.result?.error?.message || err?.error?.message || err?.message || err?.error || JSON.stringify(err);
     throw new Error('Drive API init failed: ' + msg);
   }
@@ -110,7 +110,7 @@ export function authenticate() {
 
     tokenClient.callback = async (response) => {
       if (response.error) {
-        console.error('[GoogleDrive] Auth error:', response);
+        log.error('[GoogleDrive] Auth error:', response);
         reject(new Error(response.error_description || response.error));
         return;
       }

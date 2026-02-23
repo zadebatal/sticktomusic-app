@@ -1,0 +1,16 @@
+{
+  "short_name": "StickToMusic",
+  "name": "StickToMusic — Content Engine for Music Artists",
+  "description": "Create stunning music videos in seconds. Schedule posts across TikTok, Instagram, YouTube & Facebook.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#6366f1",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

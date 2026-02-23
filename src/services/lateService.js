@@ -13,6 +13,7 @@
 
 import { isUserOperator } from '../utils/roles';
 import { getAuth } from 'firebase/auth';
+import log from '../utils/logger';
 
 // Use our authenticated proxy instead of direct Late API
 const LATE_PROXY = '/api/late';
@@ -100,7 +101,7 @@ async function proxyRequest(action, method = 'GET', body = null, artistId = null
 function assertLateAccess(user, operation = 'Late.co operation') {
   if (user && !isUserOperator(user)) {
     const msg = `Permission denied: ${operation} requires operator access`;
-    console.error('[LATE SERVICE]', msg);
+    log.error('[LATE SERVICE]', msg);
     throw new Error(msg);
   }
 }
@@ -110,7 +111,7 @@ export function storeLateConnection(connected = true) {
     localStorage.setItem(STORAGE_KEY, connected ? 'true' : 'false');
     return true;
   } catch (error) {
-    console.error('Failed to store Late connection status:', error);
+    log.error('Failed to store Late connection status:', error);
     return false;
   }
 }
@@ -197,7 +198,7 @@ export async function getArtistLateKeyStatus(artistId) {
   } catch (error) {
     // Expected in dev (no serverless proxy) — don't spam console
     if (!error.message?.includes('Late API proxy not available')) {
-      console.error('Failed to check Late key status:', error);
+      log.error('Failed to check Late key status:', error);
     }
     return { configured: false, updatedAt: null };
   }
@@ -225,7 +226,7 @@ export async function fetchLateAccounts(artistId = null) {
 
     return accounts.filter(a => a.isActive);
   } catch (error) {
-    console.error('Failed to fetch Late accounts:', error);
+    log.error('Failed to fetch Late accounts:', error);
     throw error;
   }
 }

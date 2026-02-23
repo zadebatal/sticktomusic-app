@@ -208,7 +208,7 @@ const renderSlideToCanvas = async (slide, dimensions) => {
       ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
       ctx.restore();
     } catch (err) {
-      console.warn('Failed to draw background image:', err);
+      log.warn('Failed to draw background image:', err);
     }
   }
 
@@ -326,7 +326,7 @@ export const generateSlideThumbnail = async (slide, aspectRatio = '9:16') => {
 
       ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
     } catch (err) {
-      console.warn('Failed to draw thumbnail background:', err);
+      log.warn('Failed to draw thumbnail background:', err);
     }
   }
 

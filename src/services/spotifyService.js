@@ -9,6 +9,7 @@
  */
 
 import { getAuth } from 'firebase/auth';
+import log from '../utils/logger';
 
 // Storage keys (artist-namespaced)
 const getStorageKey = (artistId) => `stm_spotify_${artistId}`;
@@ -92,7 +93,7 @@ export const getStoredSpotifyData = (artistId) => {
       lastUpdated: null
     };
   } catch (error) {
-    console.error('Error reading Spotify data:', error);
+    log.error('Error reading Spotify data:', error);
     return { artist: null, tracks: {}, lastUpdated: null };
   }
 };
@@ -107,7 +108,7 @@ export const saveSpotifyData = (artistId, data) => {
       lastUpdated: new Date().toISOString()
     }));
   } catch (error) {
-    console.error('Error saving Spotify data:', error);
+    log.error('Error saving Spotify data:', error);
   }
 };
 
@@ -123,7 +124,7 @@ export const getStoredSnapshots = (artistId) => {
       lastUpdated: null
     };
   } catch (error) {
-    console.error('Error reading snapshots:', error);
+    log.error('Error reading snapshots:', error);
     return { artistSnapshots: [], trackSnapshots: {}, lastUpdated: null };
   }
 };
@@ -138,7 +139,7 @@ export const saveSnapshots = (artistId, data) => {
       lastUpdated: new Date().toISOString()
     }));
   } catch (error) {
-    console.error('Error saving snapshots:', error);
+    log.error('Error saving snapshots:', error);
   }
 };
 
@@ -154,7 +155,7 @@ export const getStoredAttribution = (artistId) => {
       lastComputed: null
     };
   } catch (error) {
-    console.error('Error reading attribution:', error);
+    log.error('Error reading attribution:', error);
     return { growthEvents: [], postAttributions: [], lastComputed: null };
   }
 };
@@ -169,7 +170,7 @@ export const saveAttribution = (artistId, data) => {
       lastComputed: new Date().toISOString()
     }));
   } catch (error) {
-    console.error('Error saving attribution:', error);
+    log.error('Error saving attribution:', error);
   }
 };
 
@@ -266,7 +267,7 @@ export const syncSpotifyData = async (artistId, spotifyConfig) => {
           lastUpdated: now
         };
       } catch (error) {
-        console.error(`Error syncing track ${track.spotifyTrackId}:`, error);
+        log.error(`Error syncing track ${track.spotifyTrackId}:`, error);
       }
     }
   }

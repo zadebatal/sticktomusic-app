@@ -6,6 +6,7 @@ import getCroppedImg from '../utils/cropImage';
 import { uploadFile } from '../services/firebaseStorage';
 import { Button } from '../ui/components/Button';
 import { FeatherX } from '@subframe/core';
+import log from '../utils/logger';
 
 /**
  * ProfilePictureUpload — modal with file picker, circular crop, zoom, and save.
@@ -52,7 +53,7 @@ const ProfilePictureUpload = ({ db, onSave, onClose }) => {
       onSave?.(url);
       onClose?.();
     } catch (err) {
-      console.error('[ProfilePicture] Upload failed:', err);
+      log.error('[ProfilePicture] Upload failed:', err);
     }
     setSaving(false);
   };

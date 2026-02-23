@@ -304,7 +304,7 @@ export const renderPhotoMontage = async ({ photos, aspectRatio = '9:16', transit
     log('[PhotoMontage] Final MP4:', (finalBlob.size / 1024 / 1024).toFixed(2), 'MB');
     return finalBlob;
   } catch (error) {
-    console.error('[PhotoMontage] FFmpeg failed, returning raw blob:', error);
+    log.error('[PhotoMontage] FFmpeg failed, returning raw blob:', error);
     onProgress(100);
     return rawBlob;
   }

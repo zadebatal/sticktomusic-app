@@ -7,6 +7,8 @@
  * @see docs/DOMAIN_INVARIANTS.md Section D
  */
 
+import log from './logger';
+
 /**
  * Video/Project Status Enum
  * Represents the lifecycle of a created video
@@ -114,7 +116,7 @@ export function assertValidVideoStatus(status, context = '') {
   if (!isValidVideoStatus(status)) {
     const msg = `Invalid video status "${status}"${context ? ` in ${context}` : ''}. Valid: ${Object.values(VIDEO_STATUS).join(', ')}`;
     // Log in all environments for observability
-    console.error('[STATUS VIOLATION]', msg);
+    log.error('[STATUS VIOLATION]', msg);
 
     // In development, throw to catch bugs early
     if (process.env.NODE_ENV === 'development') {

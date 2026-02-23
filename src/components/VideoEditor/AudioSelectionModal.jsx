@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { FeatherX, FeatherUpload } from '@subframe/core';
+import log from '../../utils/logger';
 
 const AudioSelectionModal = ({
   libraryAudio = [],
@@ -39,7 +40,7 @@ const AudioSelectionModal = ({
 
       return filtered;
     } catch (error) {
-      console.error('[AudioSelectionModal] Filter error:', error);
+      log.error('[AudioSelectionModal] Filter error:', error);
       return [];
     }
   }, [libraryAudio, searchQuery, filterCollection, collections]);

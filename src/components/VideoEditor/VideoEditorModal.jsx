@@ -463,7 +463,7 @@ const VideoEditorModal = ({
       // Note: We don't clear clips automatically because user may have manually curated them
       // But we should warn them if clips exist
       if (clips.length > 0) {
-        console.warn('[TrimChange] Clips may be out of sync with new trim range');
+        log.warn('[TrimChange] Clips may be out of sync with new trim range');
       }
 
       previousTrimHashRef.current = currentHash;
@@ -520,7 +520,7 @@ const VideoEditorModal = ({
 
       if (audioSource) {
         analyzeAudio(audioSource).catch(err => {
-          console.error('Beat analysis failed:', err);
+          log.error('Beat analysis failed:', err);
         });
       }
 
@@ -873,7 +873,7 @@ const VideoEditorModal = ({
     try {
       localStorage.removeItem(autoSaveKey);
     } catch (e) {
-      console.error('Failed to clear auto-save:', e);
+      log.error('Failed to clear auto-save:', e);
     }
   }, [autoSaveKey]);
 
@@ -996,7 +996,7 @@ const VideoEditorModal = ({
         }
       }
     } catch (e) {
-      console.error('Failed to check for auto-saved draft:', e);
+      log.error('Failed to check for auto-saved draft:', e);
     }
   }, [autoSaveKey, existingVideo]);
 
@@ -1019,7 +1019,7 @@ const VideoEditorModal = ({
         setLastSaved(new Date());
         failedOnce = false;
       } catch (e) {
-        console.error('Auto-save failed:', e);
+        log.error('Auto-save failed:', e);
         if (!failedOnce) {
           toast.error('Auto-save failed. Save your work manually.');
           failedOnce = true;
@@ -1219,7 +1219,7 @@ const VideoEditorModal = ({
         try {
           await onSave(videoData);
         } catch (err) {
-          console.error(`[VideoEditorModal] Failed to save video ${savedCount}:`, err);
+          log.error(`[VideoEditorModal] Failed to save video ${savedCount}:`, err);
           toast.error(`Failed to save video. Please try again.`);
           setIsSavingAll(false);
           return;
@@ -1762,7 +1762,7 @@ const VideoEditorModal = ({
       const data = await response.json();
       return data.configured;
     } catch (error) {
-      console.warn('Could not check Whisper status:', error.message);
+      log.warn('Could not check Whisper status:', error.message);
       return false;
     }
   }, []);
@@ -1952,7 +1952,7 @@ const VideoEditorModal = ({
       }
 
     } catch (error) {
-      console.error('Transcription error:', error);
+      log.error('Transcription error:', error);
       toast.error(`Transcription failed: ${error.message}`);
       setTranscriptionError(error.message);
     } finally {
@@ -2192,7 +2192,7 @@ const VideoEditorModal = ({
                       onLoadStart={() => { if (activeVideoRef.current === 'A') { setVideoLoading(true); setVideoError(null); } }}
                       onCanPlay={() => { if (activeVideoRef.current === 'A') setVideoLoading(false); }}
                       onError={(e) => {
-                        console.error('Video A load error:', e);
+                        log.error('Video A load error:', e);
                         if (activeVideoRef.current === 'A') {
                           setVideoError('Unable to load video. This may be due to CORS restrictions.');
                           setVideoLoading(false);
@@ -2218,7 +2218,7 @@ const VideoEditorModal = ({
                       onLoadStart={() => { if (activeVideoRef.current === 'B') { setVideoLoading(true); setVideoError(null); } }}
                       onCanPlay={() => { if (activeVideoRef.current === 'B') setVideoLoading(false); }}
                       onError={(e) => {
-                        console.error('Video B load error:', e);
+                        log.error('Video B load error:', e);
                         if (activeVideoRef.current === 'B') {
                           setVideoError('Unable to load video. This may be due to CORS restrictions.');
                           setVideoLoading(false);

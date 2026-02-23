@@ -24,7 +24,7 @@ import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
 import { Badge } from '../../ui/components/Badge';
-import { FeatherArrowLeft, FeatherPlus, FeatherTrash2, FeatherDownload, FeatherEdit2, FeatherMusic, FeatherCalendar, FeatherX, FeatherSend, FeatherUploadCloud, FeatherChevronRight } from '@subframe/core';
+import { FeatherArrowLeft, FeatherPlus, FeatherTrash2, FeatherDownload, FeatherEdit2, FeatherMusic, FeatherCalendar, FeatherX, FeatherSend, FeatherUploadCloud, FeatherChevronRight, FeatherFilm } from '@subframe/core';
 
 /**
  * ContentLibrary - Shows all videos or slideshows created within a category
@@ -188,7 +188,7 @@ const ContentLibrary = ({
         toastSuccess('Video exported to Google Drive');
       }
     } catch (err) {
-      console.error('[ContentLibrary] Drive export failed:', err);
+      log.error('[ContentLibrary] Drive export failed:', err);
       toastError('Drive export failed: ' + (err.message || 'Unknown error'));
     } finally {
       setDriveExporting(null);
@@ -238,7 +238,7 @@ const ContentLibrary = ({
         toastSuccess('Video exported to Dropbox');
       }
     } catch (err) {
-      console.error('[ContentLibrary] Dropbox export failed:', err);
+      log.error('[ContentLibrary] Dropbox export failed:', err);
       toastError('Dropbox export failed: ' + (err.message || 'Unknown error'));
     } finally {
       setDropboxExporting(null);
@@ -298,7 +298,7 @@ const ContentLibrary = ({
       setRenderProgress(100);
       return cloudUrl; // Return URL for PostingModule
     } catch (err) {
-      console.error('[ContentLibrary] Render failed:', err);
+      log.error('[ContentLibrary] Render failed:', err);
       throw err; // Re-throw for PostingModule to handle
     } finally {
       setRenderingVideoId(null);
@@ -357,7 +357,7 @@ const ContentLibrary = ({
           m.type === 'audio' || m.name?.match(/\.(mp3|wav|m4a|aac|ogg)$/i) || m.mimeType?.includes('audio')
         ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         setAudioLibrary(audioItems);
-      }).catch(err => console.error('[ContentLibrary] Failed to load audio library:', err));
+      }).catch(err => log.error('[ContentLibrary] Failed to load audio library:', err));
     }
   }, [showAudioAssign, db, artistId, audioLibrary.length]);
 
@@ -389,7 +389,7 @@ const ContentLibrary = ({
       toastSuccess(`Assigned "${audioItem.name}" to ${selectedVideoIds.size} drafts`);
       setShowAudioAssign(false);
     } catch (err) {
-      console.error('[ContentLibrary] Bulk audio assign failed:', err);
+      log.error('[ContentLibrary] Bulk audio assign failed:', err);
       toastError(`Failed to assign audio: ${err.message}`);
     } finally { setAssigningAudio(false); }
   }, [db, artistId, selectedVideoIds, items, category, toastSuccess, toastError]);
@@ -765,31 +765,12 @@ const ContentLibrary = ({
       {/* Content Grid */}
       <div className={`flex-1 overflow-auto ${isMobile ? 'p-3' : 'p-6'}`}>
         {filteredItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            {isSlideshow ? (
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
-                <rect x="2" y="6" width="6" height="12" rx="1"/>
-                <rect x="9" y="6" width="6" height="12" rx="1"/>
-                <rect x="16" y="6" width="6" height="12" rx="1"/>
-              </svg>
-            ) : (
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5">
-                <rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3V9z"/>
-              </svg>
-            )}
-            <h3 className="text-lg font-semibold text-white mt-4 mb-2">
-              {isSlideshow ? 'No slideshows yet' : 'No videos yet'}
-            </h3>
-            <p className="text-sm text-neutral-500 m-0 mb-6">
-              {isDraftsView
-                ? 'No drafts to show'
-                : (isSlideshow ? 'Create your first slideshow to get started' : 'Create your first video to get started')}
+          <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+            <FeatherFilm className="w-12 h-12 text-zinc-600" />
+            <h3 className="text-lg font-semibold text-white">No content yet</h3>
+            <p className="text-sm text-zinc-400 max-w-xs">
+              Create your first video or slideshow to get started
             </p>
-            {!isDraftsView && (
-              <Button variant="brand-primary" size="medium" icon={<FeatherPlus />} onClick={() => isSlideshow ? onMakeSlideshow?.() : onMakeVideo?.()}>
-                {isSlideshow ? 'Make a slideshow' : 'Make a video'}
-              </Button>
-            )}
           </div>
         ) : (
           <div className={`grid gap-4 ${isMobile ? 'grid-cols-2 !gap-2.5' : 'grid-cols-[repeat(auto-fill,minmax(200px,1fr))]'}`}>
@@ -831,7 +812,7 @@ const ContentLibrary = ({
                           }
                           toastSuccess('Added to schedule queue');
                         } catch (err) {
-                          console.error('[ContentLibrary] Failed to create scheduled post:', err);
+                          log.error('[ContentLibrary] Failed to create scheduled post:', err);
                         }
                         onViewScheduling();
                       } else if (onViewScheduling) {
@@ -878,7 +859,7 @@ const ContentLibrary = ({
                           }
                           toastSuccess('Added to schedule queue');
                         } catch (err) {
-                          console.error('[ContentLibrary] Failed to create scheduled post:', err);
+                          log.error('[ContentLibrary] Failed to create scheduled post:', err);
                         }
                         onViewScheduling();
                       } else {
@@ -1090,7 +1071,7 @@ const ContentLibrary = ({
                   toastSuccess(`Added ${postsToCreate.length} item(s) to schedule queue`);
                   clearSelection();
                 } catch (err) {
-                  console.error('[ContentLibrary] Batch schedule failed:', err);
+                  log.error('[ContentLibrary] Batch schedule failed:', err);
                   toastError('Failed to add items to queue');
                 }
                 onViewScheduling();
@@ -1859,7 +1840,7 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
         log(`[Schedule] Processing slideshow ${si + 1}/${slideshows.length}:`, slideshow.id);
 
         if (!onSchedulePost) {
-          console.error('[Schedule] onSchedulePost is not defined!');
+          log.error('[Schedule] onSchedulePost is not defined!');
           toastError('Scheduling not available. Please try again.');
           break;
         }
@@ -1875,7 +1856,7 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
         }
 
         if (!platformJobs.length) {
-          console.warn('[Schedule] No account IDs for selected platforms on', selectedHandle);
+          log.warn('[Schedule] No account IDs for selected platforms on', selectedHandle);
           continue;
         }
 
@@ -1902,7 +1883,7 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
         const schedulePromises = platformJobs.map(async (job) => {
           const images = imagesByRatio[job.ratio];
           if (!images?.length) {
-            console.warn(`[Schedule] No images for ${job.label}, skipping`);
+            log.warn(`[Schedule] No images for ${job.label}, skipping`);
             return null;
           }
           log(`[Schedule] Sending to Late for ${job.label}:`, images.length, 'images');
@@ -1928,7 +1909,7 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
             }
             return result;
           } catch (err) {
-            console.error(`[Schedule] ${job.label} error:`, err);
+            log.error(`[Schedule] ${job.label} error:`, err);
             toastError(`Error scheduling for ${job.label}: ${err.message}`);
             return null;
           }
@@ -1947,7 +1928,7 @@ const SlideshowPostingModal = ({ slideshows, lateAccountIds, onSchedulePost, onC
         toastError('No carousels were scheduled. Check that your account has the correct platform IDs configured.');
       }
     } catch (err) {
-      console.error('[SlideshowPostingModal] Schedule failed:', err);
+      log.error('[SlideshowPostingModal] Schedule failed:', err);
       toastError(`Failed to schedule: ${err.message}`);
     } finally {
       setIsScheduling(false);

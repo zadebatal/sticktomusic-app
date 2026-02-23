@@ -32,7 +32,7 @@ import { ToggleGroup } from '../../ui/components/ToggleGroup';
 import { DropdownMenu } from '../../ui/components/DropdownMenu';
 import {
   FeatherRefreshCw, FeatherArrowLeft, FeatherTrendingUp,
-  FeatherBarChart, FeatherMusic, FeatherFilm, FeatherHeadphones,
+  FeatherBarChart, FeatherBarChart2, FeatherMusic, FeatherFilm, FeatherHeadphones,
   FeatherUser, FeatherChevronDown, FeatherEye, FeatherHeart,
   FeatherMessageCircle
 } from '@subframe/core';
@@ -85,6 +85,7 @@ const AnalyticsDashboard = ({
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'songs' | 'videos' | 'spotify'
   const [videoAttributions, setVideoAttributions] = useState([]);
   const [songAttributions, setSongAttributions] = useState([]);
+  const [hasRealData, setHasRealData] = useState(true);
 
   // Handle artist change
   const handleArtistChange = (newArtistId) => {
@@ -104,17 +105,18 @@ const AnalyticsDashboard = ({
     if (!capturedArtistId) return;
     const stored = getStoredAnalytics(capturedArtistId);
 
-    // If no data, add mock data for demo
+    // If no data, show empty state instead of mock data
     if (Object.keys(stored.videos).length === 0) {
-      const mockData = addMockData(capturedArtistId);
-      setAnalytics(mockData);
-      setTotalStats(calculateTotalStats(mockData.videos));
-      setTopVideos(getTopVideos(capturedArtistId, 10));
-      setSongPerformance(getSongPerformance(capturedArtistId));
-      setCategoryPerformance(getCategoryPerformance(capturedArtistId));
-      setAccountPerformance(getAccountPerformance(capturedArtistId));
-      setTimeSeriesData(getTimeSeriesData(capturedArtistId, chartPeriod, 30));
+      setHasRealData(false);
+      setAnalytics(stored);
+      setTotalStats(null);
+      setTopVideos([]);
+      setSongPerformance([]);
+      setCategoryPerformance([]);
+      setAccountPerformance([]);
+      setTimeSeriesData([]);
     } else {
+      setHasRealData(true);
       setAnalytics(stored);
       setTotalStats(calculateTotalStats(stored.videos));
       setTopVideos(getTopVideos(capturedArtistId, 10));
@@ -132,7 +134,7 @@ const AnalyticsDashboard = ({
         setSongAttributions(getSongAttributionSummary(capturedArtistId));
       }
     } catch (error) {
-      console.error('Error loading attribution data:', error);
+      log.error('Error loading attribution data:', error);
     }
 
     setLastUpdated(stored.lastUpdated);
@@ -163,7 +165,7 @@ const AnalyticsDashboard = ({
       // Refresh analytics data after sync
       loadAnalytics();
     } catch (error) {
-      console.error('Error syncing with Late:', error);
+      log.error('Error syncing with Late:', error);
     }
     setIsSyncing(false);
   };
@@ -381,8 +383,19 @@ const AnalyticsDashboard = ({
         </ToggleGroup>
       </div>
 
+      {/* Empty state — no analytics data */}
+      {!hasRealData && (
+        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+          <FeatherBarChart2 className="w-12 h-12 text-zinc-600" />
+          <h3 className="text-lg font-semibold text-white">No analytics data yet</h3>
+          <p className="text-sm text-zinc-400 max-w-xs">
+            Schedule and post content to start tracking performance
+          </p>
+        </div>
+      )}
+
       {/* Overview Tab */}
-      {activeTab === 'overview' && (
+      {hasRealData && activeTab === 'overview' && (
         <>
           {/* Spotify Growth Section - New Row */}
           <div className={`grid gap-6 mb-6 ${isMobile ? 'grid-cols-1 !gap-4' : 'grid-cols-2'}`}>
@@ -599,7 +612,7 @@ const AnalyticsDashboard = ({
       )}
 
       {/* Songs Tab - Enhanced with Spotify Attribution */}
-      {activeTab === 'songs' && (
+      {hasRealData && activeTab === 'songs' && (
         <div className="py-4">
           <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
             {songPerformance.map((song, i) => {
@@ -654,7 +667,7 @@ const AnalyticsDashboard = ({
       )}
 
       {/* Videos Tab - Enhanced with Spotify Attribution */}
-      {activeTab === 'videos' && (
+      {hasRealData && activeTab === 'videos' && (
         <div className="py-4">
           <div className="flex flex-col">
             <div className="flex p-3 border-b border-neutral-800 text-[12px] font-semibold uppercase text-neutral-400">
@@ -720,7 +733,7 @@ const AnalyticsDashboard = ({
       )}
 
       {/* Spotify Tab */}
-      {activeTab === 'spotify' && (
+      {hasRealData && activeTab === 'spotify' && (
         <SpotifyTab artistId={currentArtistId} />
       )}
     </div>

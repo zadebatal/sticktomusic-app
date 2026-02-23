@@ -37,17 +37,17 @@ function saveToStorage(key, data) {
     return true;
   } catch (error) {
     if (error.name === 'QuotaExceededError') {
-      console.warn('Storage quota exceeded — running cleanup and retrying...');
+      log.warn('Storage quota exceeded — running cleanup and retrying...');
       cleanupStorage();
       try {
         localStorage.setItem(key, JSON.stringify(data));
         return true;
       } catch (retryError) {
-        console.error(`Storage quota still exceeded after cleanup for ${key}:`, retryError);
+        log.error(`Storage quota still exceeded after cleanup for ${key}:`, retryError);
         return false;
       }
     }
-    console.error(`Failed to save ${key}:`, error);
+    log.error(`Failed to save ${key}:`, error);
     return false;
   }
 }
@@ -61,7 +61,7 @@ function loadFromStorage(key, defaultValue = null) {
     if (!data) return defaultValue;
     return JSON.parse(data);
   } catch (error) {
-    console.error(`Failed to load ${key}:`, error);
+    log.error(`Failed to load ${key}:`, error);
     return defaultValue;
   }
 }
@@ -102,7 +102,7 @@ export function saveCategories(categories) {
   if (process.env.NODE_ENV === 'development') {
     const blobViolations = findBlobUrls(cleanedCategories);
     if (blobViolations.length > 0) {
-      console.error('[STORAGE VIOLATION] Blob URLs found after cleaning:', blobViolations);
+      log.error('[STORAGE VIOLATION] Blob URLs found after cleaning:', blobViolations);
     }
   }
 
@@ -125,7 +125,7 @@ export function loadCategories() {
  */
 export function saveArtistCategories(artistId, categories) {
   if (!artistId) {
-    console.warn('saveArtistCategories called without artistId, falling back to global storage');
+    log.warn('saveArtistCategories called without artistId, falling back to global storage');
     return saveCategories(categories);
   }
 
@@ -156,7 +156,7 @@ export function saveArtistCategories(artistId, categories) {
   if (process.env.NODE_ENV === 'development') {
     const blobViolations = findBlobUrls(cleanedCategories);
     if (blobViolations.length > 0) {
-      console.error('[STORAGE VIOLATION] Blob URLs found after cleaning:', blobViolations);
+      log.error('[STORAGE VIOLATION] Blob URLs found after cleaning:', blobViolations);
     }
   }
 
@@ -169,7 +169,7 @@ export function saveArtistCategories(artistId, categories) {
  */
 export function loadArtistCategories(artistId) {
   if (!artistId) {
-    console.warn('loadArtistCategories called without artistId, falling back to global storage');
+    log.warn('loadArtistCategories called without artistId, falling back to global storage');
     return loadCategories();
   }
   return loadFromStorage(`${ARTIST_CATEGORIES_PREFIX}${artistId}`, []);
@@ -229,7 +229,7 @@ export function hasLegacyData() {
  */
 export function migrateToArtistStorage(artistId) {
   if (!artistId) {
-    console.error('Cannot migrate without artistId');
+    log.error('Cannot migrate without artistId');
     return false;
   }
 
@@ -399,7 +399,7 @@ export function cleanupStorage() {
       return true;
     }
   } catch (error) {
-    console.error('Storage cleanup failed:', error);
+    log.error('Storage cleanup failed:', error);
   }
   return false;
 }

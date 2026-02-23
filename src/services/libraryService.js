@@ -385,7 +385,7 @@ export const createCreatedSlideshow = ({
     throw new Error('Slideshow must have at least one slide');
   }
   if (slides.some(s => !s.backgroundImage)) {
-    console.warn('[Library] Some slides missing background images');
+    log.warn('[Library] Some slides missing background images');
   }
 
   const now = new Date().toISOString();
@@ -472,7 +472,7 @@ export const getLibrary = (artistId) => {
     const data = localStorage.getItem(getLibraryKey(artistId));
     return data ? JSON.parse(data) : [];
   } catch (error) {
-    console.error('Error loading library:', error);
+    log.error('Error loading library:', error);
     return [];
   }
 };
@@ -494,7 +494,7 @@ export const saveLibrary = (artistId, library) => {
     localStorage.setItem(getLibraryKey(artistId), JSON.stringify(cleanedLibrary));
   } catch (error) {
     if (error?.name === 'QuotaExceededError' || error?.code === 22) {
-      console.warn('[Library] localStorage quota exceeded, attempting cleanup...');
+      log.warn('[Library] localStorage quota exceeded, attempting cleanup...');
       try {
         // Remove old session/temp data to free space
         const keysToClean = [];
@@ -513,10 +513,10 @@ export const saveLibrary = (artistId, library) => {
         })).filter(item => item.url);
         localStorage.setItem(getLibraryKey(artistId), JSON.stringify(cleanedLibrary));
       } catch (retryError) {
-        console.error('[Library] Save failed even after cleanup. Storage is full:', retryError.message);
+        log.error('[Library] Save failed even after cleanup. Storage is full:', retryError.message);
       }
     } else {
-      console.error('Error saving library:', error);
+      log.error('Error saving library:', error);
     }
   }
 };
@@ -530,7 +530,7 @@ export const saveLibrary = (artistId, library) => {
 export const addToLibrary = (artistId, mediaItem) => {
   // BUG-027: Validate audio duration > 0
   if (mediaItem.type === 'audio' && mediaItem.duration !== undefined && mediaItem.duration <= 0) {
-    console.warn('[Library] Rejected audio item with invalid duration:', mediaItem.duration);
+    log.warn('[Library] Rejected audio item with invalid duration:', mediaItem.duration);
     return null;
   }
   const library = getLibrary(artistId);
@@ -670,7 +670,7 @@ export const getCollections = (artistId) => {
 
     return [...smartCollections, ...dedupedCollections];
   } catch (error) {
-    console.error('Error loading collections:', error);
+    log.error('Error loading collections:', error);
     return createSmartCollections();
   }
 };
@@ -685,7 +685,7 @@ export const getUserCollections = (artistId) => {
     const data = localStorage.getItem(getCollectionsKey(artistId));
     return data ? JSON.parse(data) : [];
   } catch (error) {
-    console.error('Error loading user collections:', error);
+    log.error('Error loading user collections:', error);
     return [];
   }
 };
@@ -701,7 +701,7 @@ export const saveCollections = (artistId, collections) => {
     const userCollections = collections.filter(c => c.type !== COLLECTION_TYPES.SMART);
     localStorage.setItem(getCollectionsKey(artistId), JSON.stringify(userCollections));
   } catch (error) {
-    console.error('Error saving collections:', error);
+    log.error('Error saving collections:', error);
   }
 };
 
@@ -1725,7 +1725,7 @@ export const migrateToProjects = async (artistId, db = null) => {
       }
       // Save surviving roots + reassigned niches to Firestore
       const modified = collections.filter(c => c.isProjectRoot || c.projectId);
-      Promise.all(modified.map(col => saveCollectionToFirestore(db, artistId, col))).catch(console.error);
+      Promise.all(modified.map(col => saveCollectionToFirestore(db, artistId, col))).catch(log.error);
     }
   }
 
@@ -1791,7 +1791,7 @@ export const migrateToProjects = async (artistId, db = null) => {
       await Promise.all(toSave.map(col => saveCollectionToFirestore(db, artistId, col)));
       log('[libraryService] Saved', toSave.length, 'migrated collections to Firestore');
     } catch (err) {
-      console.error('[libraryService] Firestore migration save failed:', err);
+      log.error('[libraryService] Firestore migration save failed:', err);
     }
   }
 };
@@ -1874,7 +1874,7 @@ export const migrateDraftsToNiches = async (artistId, db = null) => {
       }
     });
     if (nichesDirty && db) {
-      Promise.all(niches.filter(n => n.mediaIds?.length > 0).map(n => saveCollectionToFirestore(db, artistId, n))).catch(console.error);
+      Promise.all(niches.filter(n => n.mediaIds?.length > 0).map(n => saveCollectionToFirestore(db, artistId, n))).catch(log.error);
       log('[libraryService] Populated niche media pools + banks from draft images');
     }
 
@@ -1914,7 +1914,7 @@ export const migrateDraftsToNiches = async (artistId, db = null) => {
         if (nIdx !== -1) cols3[nIdx] = n;
       });
       saveCollections(artistId, cols3);
-      if (db) Promise.all(allNiches.map(n => saveCollectionToFirestore(db, artistId, n))).catch(console.error);
+      if (db) Promise.all(allNiches.map(n => saveCollectionToFirestore(db, artistId, n))).catch(log.error);
       log('[libraryService] Patched niche format labels to match current templates');
     }
   }
@@ -2016,7 +2016,7 @@ export const migrateDraftsToNiches = async (artistId, db = null) => {
     try {
       await saveCreatedContentAsync(db, artistId, content);
     } catch (err) {
-      console.error('[libraryService] Firestore draft migration save failed:', err);
+      log.error('[libraryService] Firestore draft migration save failed:', err);
     }
   }
 };
@@ -2117,7 +2117,7 @@ export const getCreatedContent = (artistId) => {
     }
     return content;
   } catch (error) {
-    console.error('Error loading created content:', error);
+    log.error('Error loading created content:', error);
     return { videos: [], slideshows: [] };
   }
 };
@@ -2162,7 +2162,7 @@ export const saveCreatedContent = (artistId, content) => {
     localStorage.setItem(getCreatedContentKey(artistId), JSON.stringify(cleanedContent));
   } catch (error) {
     if (error?.name === 'QuotaExceededError' || error?.code === 22) {
-      console.warn('[CreatedContent] localStorage quota exceeded, attempting cleanup...');
+      log.warn('[CreatedContent] localStorage quota exceeded, attempting cleanup...');
       try {
         // Remove old session/temp data to free space
         const keysToClean = [];
@@ -2217,7 +2217,7 @@ export const saveCreatedContent = (artistId, content) => {
         localStorage.setItem(getCreatedContentKey(artistId), JSON.stringify(minimalContent));
         log('[CreatedContent] Saved with minimal data after cleanup');
       } catch (retryError) {
-        console.error('[CreatedContent] Save failed even after cleanup. Storage is full:', retryError.message);
+        log.error('[CreatedContent] Save failed even after cleanup. Storage is full:', retryError.message);
         // Last resort: try to keep only most recent 20 items
         try {
           const recentContent = {
@@ -2225,13 +2225,13 @@ export const saveCreatedContent = (artistId, content) => {
             slideshows: (content.slideshows || []).slice(-10).map(s => ({ id: s.id, name: s.name, status: s.status }))
           };
           localStorage.setItem(getCreatedContentKey(artistId), JSON.stringify(recentContent));
-          console.warn('[CreatedContent] Saved only most recent 20 items due to quota');
+          log.warn('[CreatedContent] Saved only most recent 20 items due to quota');
         } catch (finalError) {
-          console.error('[CreatedContent] CRITICAL: Cannot save to localStorage at all:', finalError.message);
+          log.error('[CreatedContent] CRITICAL: Cannot save to localStorage at all:', finalError.message);
         }
       }
     } else {
-      console.error('Error saving created content:', error);
+      log.error('Error saving created content:', error);
     }
   }
 };
@@ -2451,7 +2451,7 @@ export const saveCreatedContentAsync = async (db, artistId, content) => {
     log('[Library] Created content saved to Firestore:',
       `${content.videos?.length || 0} videos, ${content.slideshows?.length || 0} slideshows`);
   } catch (error) {
-    console.error('[Library] Firestore save created content failed:', error.message);
+    log.error('[Library] Firestore save created content failed:', error.message);
   }
 };
 
@@ -2483,7 +2483,7 @@ export const loadCreatedContentAsync = async (db, artistId) => {
         await deleteDoc(oldDocRef);
         log('[Library] Migration complete, old document deleted');
       } catch (err) {
-        console.warn('[Library] Could not delete old document:', err.message);
+        log.warn('[Library] Could not delete old document:', err.message);
       }
 
       saveCreatedContent(artistId, content);
@@ -2525,7 +2525,7 @@ export const loadCreatedContentAsync = async (db, artistId) => {
     saveCreatedContent(artistId, content);
     return content;
   } catch (error) {
-    console.error('[Library] Firestore load created content failed:', error.message);
+    log.error('[Library] Firestore load created content failed:', error.message);
   }
   // Fallback to localStorage
   return getCreatedContent(artistId);
@@ -2606,7 +2606,7 @@ export const subscribeToCreatedContent = (db, artistId, callback) => {
 
       callback(content);
     }, (error) => {
-      console.error('[Library] Created content subscription error:', error);
+      log.error('[Library] Created content subscription error:', error);
     });
   });
 
@@ -2622,7 +2622,7 @@ export const addCreatedSlideshowAsync = async (db, artistId, slideshowData) => {
   try {
     await saveCreatedContentAsync(db, artistId, content);
   } catch (error) {
-    console.error('[Library] Failed to sync slideshow to Firestore:', error);
+    log.error('[Library] Failed to sync slideshow to Firestore:', error);
     // Data still saved to localStorage, mark as unsynced
   }
   return result;
@@ -2637,7 +2637,7 @@ export const updateCreatedSlideshowAsync = async (db, artistId, slideshowId, upd
   try {
     await saveCreatedContentAsync(db, artistId, content);
   } catch (error) {
-    console.error('[Library] Failed to sync slideshow update to Firestore:', error);
+    log.error('[Library] Failed to sync slideshow update to Firestore:', error);
     // Data still saved to localStorage, mark as unsynced
   }
   return result;
@@ -2654,7 +2654,7 @@ export const deleteCreatedSlideshowAsync = async (db, artistId, slideshowId) => 
     await updateDoc(docRef, { deletedAt: serverTimestamp() });
     log('[Library] Soft-deleted slideshow:', slideshowId);
   } catch (error) {
-    console.error('[Library] Failed to soft-delete slideshow from Firestore:', error);
+    log.error('[Library] Failed to soft-delete slideshow from Firestore:', error);
   }
   return result;
 };
@@ -2670,7 +2670,7 @@ export const softDeleteCreatedVideoAsync = async (db, artistId, videoId) => {
     await updateDoc(docRef, { deletedAt: serverTimestamp() });
     log('[Library] Soft-deleted video:', videoId);
   } catch (error) {
-    console.error('[Library] Failed to soft-delete video from Firestore:', error);
+    log.error('[Library] Failed to soft-delete video from Firestore:', error);
   }
   return result;
 };
@@ -2708,7 +2708,7 @@ export const restoreCreatedContentAsync = async (db, artistId, itemId) => {
     log('[Library] Restored content:', itemId);
     return true;
   } catch (error) {
-    console.error('[Library] Failed to restore content from Firestore:', error);
+    log.error('[Library] Failed to restore content from Firestore:', error);
     return false;
   }
 };
@@ -2738,7 +2738,7 @@ export const getDeletedContentAsync = async (db, artistId) => {
 
     return { videos, slideshows };
   } catch (error) {
-    console.error('[Library] Failed to load deleted content:', error);
+    log.error('[Library] Failed to load deleted content:', error);
     return { videos: [], slideshows: [] };
   }
 };
@@ -2754,7 +2754,7 @@ export const permanentlyDeleteContentAsync = async (db, artistId, itemId) => {
     log('[Library] Permanently deleted content:', itemId);
     return true;
   } catch (error) {
-    console.error('[Library] Failed to permanently delete content:', error);
+    log.error('[Library] Failed to permanently delete content:', error);
     return false;
   }
 };
@@ -2772,7 +2772,7 @@ export const addCreatedSlideshowsBatchAsync = async (db, artistId, slideshowsDat
   try {
     await saveCreatedContentAsync(db, artistId, content);
   } catch (error) {
-    console.error('[Library] Failed to sync batch slideshows to Firestore:', error);
+    log.error('[Library] Failed to sync batch slideshows to Firestore:', error);
     // Data still saved to localStorage, mark as unsynced
   }
 
@@ -2818,7 +2818,7 @@ export const markContentScheduledAsync = async (db, artistId, contentId, schedul
       const docRef = doc(db, 'artists', artistId, 'library', 'data', 'createdContent', contentId);
       await updateDoc(docRef, { scheduledPostId, updatedAt: serverTimestamp() });
     } catch (error) {
-      console.warn('[Library] Failed to sync scheduledPostId to Firestore:', error.message);
+      log.warn('[Library] Failed to sync scheduledPostId to Firestore:', error.message);
     }
   }
   return result;
@@ -2854,7 +2854,7 @@ export const getLyrics = (artistId) => {
     const data = localStorage.getItem(getLyricsKey(artistId));
     return data ? JSON.parse(data) : [];
   } catch (error) {
-    console.error('Error loading lyrics:', error);
+    log.error('Error loading lyrics:', error);
     return [];
   }
 };
@@ -2868,7 +2868,7 @@ export const saveLyrics = (artistId, lyrics) => {
   try {
     localStorage.setItem(getLyricsKey(artistId), JSON.stringify(lyrics));
   } catch (error) {
-    console.error('Error saving lyrics:', error);
+    log.error('Error saving lyrics:', error);
   }
 };
 
@@ -2969,7 +2969,7 @@ export const subscribeToLyrics = (db, artistId, callback) => {
       callback(items);
     },
     (error) => {
-      console.error('[Lyrics] Subscription error:', error);
+      log.error('[Lyrics] Subscription error:', error);
       callback(getLyrics(artistId));
     }
   );
@@ -2998,7 +2998,7 @@ export const addLyricsAsync = async (db, artistId, lyricsData) => {
       });
       log('[Lyrics] Saved to Firestore:', newEntry.id);
     } catch (error) {
-      console.error('[Lyrics] Firestore write failed:', error.message);
+      log.error('[Lyrics] Firestore write failed:', error.message);
     }
   }
 
@@ -3027,7 +3027,7 @@ export const updateLyricsAsync = async (db, artistId, lyricsId, updates) => {
       });
       log('[Lyrics] Updated in Firestore:', lyricsId);
     } catch (error) {
-      console.error('[Lyrics] Firestore update failed:', error.message);
+      log.error('[Lyrics] Firestore update failed:', error.message);
       // If doc doesn't exist yet, create it
       if (error.code === 'not-found' && updated) {
         try {
@@ -3035,7 +3035,7 @@ export const updateLyricsAsync = async (db, artistId, lyricsId, updates) => {
           await setDoc(docRef, { ...updated, updatedAt: serverTimestamp() });
           log('[Lyrics] Created missing doc in Firestore:', lyricsId);
         } catch (e2) {
-          console.error('[Lyrics] Firestore fallback create failed:', e2.message);
+          log.error('[Lyrics] Firestore fallback create failed:', e2.message);
         }
       }
     }
@@ -3062,7 +3062,7 @@ export const deleteLyricsAsync = async (db, artistId, lyricsId) => {
       await deleteDoc(docRef);
       log('[Lyrics] Deleted from Firestore:', lyricsId);
     } catch (error) {
-      console.error('[Lyrics] Firestore delete failed:', error.message);
+      log.error('[Lyrics] Firestore delete failed:', error.message);
     }
   }
 
@@ -3088,7 +3088,7 @@ const migrateLyricsToFirestore = async (db, artistId, lyrics) => {
     await batch.commit();
     log('[Lyrics] Migrated', lyrics.length, 'entries from localStorage to Firestore');
   } catch (error) {
-    console.error('[Lyrics] Migration failed:', error.message);
+    log.error('[Lyrics] Migration failed:', error.message);
   }
 };
 
@@ -3106,7 +3106,7 @@ export const getOnboardingStatus = (artistId) => {
     const data = localStorage.getItem(getOnboardingKey(artistId));
     return data ? JSON.parse(data) : { completed: false, templateId: null };
   } catch (error) {
-    console.error('Error loading onboarding status:', error);
+    log.error('Error loading onboarding status:', error);
     return { completed: false, templateId: null };
   }
 };
@@ -3243,7 +3243,7 @@ export const getLibraryAsync = async (db, artistId) => {
         return items;
       }
     } catch (error) {
-      console.warn('[Library] Firestore read failed, using localStorage:', error.message);
+      log.warn('[Library] Firestore read failed, using localStorage:', error.message);
     }
   }
   // Fallback to localStorage
@@ -3259,7 +3259,7 @@ export const getLibraryAsync = async (db, artistId) => {
  */
 export const subscribeToLibrary = (db, artistId, callback) => {
   if (!db || !artistId) {
-    console.warn('[Library] Cannot subscribe: missing db or artistId');
+    log.warn('[Library] Cannot subscribe: missing db or artistId');
     // Return localStorage data immediately and a no-op unsubscribe
     callback(getLibrary(artistId));
     return () => {};
@@ -3287,7 +3287,7 @@ export const subscribeToLibrary = (db, artistId, callback) => {
       callback(items);
     },
     (error) => {
-      console.error('[Library] Subscription error:', error);
+      log.error('[Library] Subscription error:', error);
       // Fallback to localStorage on error
       callback(getLibrary(artistId));
     }
@@ -3306,7 +3306,7 @@ export const addToLibraryAsync = async (db, artistId, mediaItem) => {
 
   // BUG-027: Validate duration for audio — reject items with missing/zero duration
   if (newItem.type === MEDIA_TYPES.AUDIO && (!newItem.duration || newItem.duration <= 0)) {
-    console.error('[Library] Audio item rejected — invalid duration:', newItem.duration);
+    log.error('[Library] Audio item rejected — invalid duration:', newItem.duration);
     throw new Error('Audio must have a valid duration before saving to library');
   }
 
@@ -3324,7 +3324,7 @@ export const addToLibraryAsync = async (db, artistId, mediaItem) => {
       log('[Library] Saved to Firestore:', newItem.id);
       localResult.syncedToCloud = true;
     } catch (error) {
-      console.error('[Library] Firestore write failed:', error.message);
+      log.error('[Library] Firestore write failed:', error.message);
       localResult.syncedToCloud = false;
     }
   }
@@ -3366,7 +3366,7 @@ export const addManyToLibraryAsync = async (db, artistId, mediaItems) => {
       log('[Library] All items saved to Firestore:', newItems.length, 'total items');
       localResult.syncedToCloud = true;
     } catch (error) {
-      console.error('[Library] Firestore batch write failed:', error.message);
+      log.error('[Library] Firestore batch write failed:', error.message);
       localResult.syncedToCloud = false;
     }
   }
@@ -3396,7 +3396,7 @@ export const updateLibraryItemAsync = async (db, artistId, mediaId, updates) => 
       });
       log('[Library] Updated in Firestore:', mediaId);
     } catch (error) {
-      console.error('[Library] Firestore update failed:', error.message);
+      log.error('[Library] Firestore update failed:', error.message);
     }
   }
 
@@ -3421,7 +3421,7 @@ export const removeFromLibraryAsync = async (db, artistId, mediaId) => {
       await deleteDoc(docRef);
       log('[Library] Removed from Firestore:', mediaId);
     } catch (error) {
-      console.error('[Library] Firestore delete failed:', error.message);
+      log.error('[Library] Firestore delete failed:', error.message);
     }
   }
 
@@ -3470,7 +3470,7 @@ export const getCollectionsAsync = async (db, artistId) => {
         return [...smartCollections, ...mergedCollections];
       }
     } catch (error) {
-      console.warn('[Library] Firestore collections read failed:', error.message);
+      log.warn('[Library] Firestore collections read failed:', error.message);
     }
   }
   return getCollections(artistId);
@@ -3598,7 +3598,7 @@ export const subscribeToCollections = (db, artistId, callback) => {
           // Upload local collections to Firestore (including banks)
           userCollections.forEach(col => {
             const docRef = doc(db, 'artists', artistId, 'library', 'data', 'collections', col.id);
-            setDoc(docRef, { ...col, updatedAt: serverTimestamp() }).catch(console.error);
+            setDoc(docRef, { ...col, updatedAt: serverTimestamp() }).catch(log.error);
           });
         }
 
@@ -3606,7 +3606,7 @@ export const subscribeToCollections = (db, artistId, callback) => {
       }
     },
     (error) => {
-      console.error('[Collections] Firestore subscription error:', error);
+      log.error('[Collections] Firestore subscription error:', error);
       callback(getCollections(artistId));
     }
   );
@@ -3630,7 +3630,7 @@ export const saveCollectionToFirestore = async (db, artistId, collectionData) =>
     await setDoc(docRef, data);
     return true;
   } catch (error) {
-    console.error('[Collections] Failed to save to Firestore:', error);
+    log.error('[Collections] Failed to save to Firestore:', error);
     return false;
   }
 };
@@ -3763,7 +3763,7 @@ export const deleteCollectionFromFirestore = async (db, artistId, collectionId) 
     await deleteDoc(docRef);
     return true;
   } catch (error) {
-    console.error('[Collections] Failed to delete from Firestore:', error);
+    log.error('[Collections] Failed to delete from Firestore:', error);
     return false;
   }
 };
@@ -3789,7 +3789,7 @@ export const createNewCollectionAsync = async (db, artistId, collectionData) => 
       });
       log('[Library] Collection saved to Firestore:', localResult.id);
     } catch (error) {
-      console.error('[Library] Firestore collection write failed:', error.message);
+      log.error('[Library] Firestore collection write failed:', error.message);
     }
   }
 
@@ -3812,7 +3812,7 @@ export const getOnboardingStatusAsync = async (db, artistId) => {
         return snapshot.data();
       }
     } catch (error) {
-      console.warn('[Library] Firestore onboarding read failed:', error.message);
+      log.warn('[Library] Firestore onboarding read failed:', error.message);
     }
   }
   return getOnboardingStatus(artistId);
@@ -3859,7 +3859,7 @@ export const completeOnboardingAsync = async (db, artistId, templateId) => {
         log('[Library] Template collections saved to Firestore');
       }
     } catch (error) {
-      console.error('[Library] Firestore onboarding write failed:', error.message);
+      log.error('[Library] Firestore onboarding write failed:', error.message);
     }
   }
 };
@@ -3956,7 +3956,7 @@ export const migrateToFirestore = async (db, artistId) => {
     log('[Migration] Complete for artist:', artistId, result.migrated);
 
   } catch (error) {
-    console.error('[Migration] Failed:', error);
+    log.error('[Migration] Failed:', error);
     result.success = false;
     result.errors.push(error.message);
   }
@@ -4053,7 +4053,7 @@ export const migrateThumbnails = async (db, artistId, libraryItems, uploadFileFn
       if (generated % 20 === 0) log(`[ThumbnailMigration] ${generated}/${images.length} done`);
     } catch (err) {
       failed++;
-      console.warn(`[ThumbnailMigration] ✗ ${item.name}:`, err.message);
+      log.warn(`[ThumbnailMigration] ✗ ${item.name}:`, err.message);
     }
 
     if (onProgress) onProgress(i + 1, images.length, generated);
@@ -4148,7 +4148,7 @@ export const migrateVideoThumbnails = async (db, artistId, libraryItems, uploadF
       log(`[VideoThumbMigration] ✓ ${i + 1}/${videos.length} — ${item.name}`);
     } catch (err) {
       failed++;
-      console.warn(`[VideoThumbMigration] ✗ ${i + 1}/${videos.length} — ${item.name}:`, err.message);
+      log.warn(`[VideoThumbMigration] ✗ ${i + 1}/${videos.length} — ${item.name}:`, err.message);
     }
 
     if (onProgress) onProgress(i + 1, videos.length, generated);

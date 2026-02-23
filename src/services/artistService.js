@@ -64,7 +64,7 @@ export const subscribeToArtists = (db, callback) => {
     }));
     callback(artists);
   }, (error) => {
-    console.error('Error subscribing to artists:', error);
+    log.error('Error subscribing to artists:', error);
     callback([]);
   });
 };
@@ -81,7 +81,7 @@ export const subscribeToArtistById = (db, artistId, callback) => {
       callback([]);
     }
   }, (error) => {
-    console.error('Error subscribing to artist:', artistId, error);
+    log.error('Error subscribing to artist:', artistId, error);
     callback([]);
   });
 };
@@ -101,7 +101,7 @@ export const getArtists = async (db) => {
       ...doc.data()
     }));
   } catch (error) {
-    console.error('Error getting artists:', error);
+    log.error('Error getting artists:', error);
     return [];
   }
 };
@@ -121,7 +121,7 @@ export const getArtist = async (db, artistId) => {
     }
     return null;
   } catch (error) {
-    console.error('Error getting artist:', error);
+    log.error('Error getting artist:', error);
     return null;
   }
 };
@@ -161,7 +161,7 @@ export const createArtist = async (db, artistData) => {
 
     return { id: docRef.id, ...newArtist };
   } catch (error) {
-    console.error('Error creating artist:', error);
+    log.error('Error creating artist:', error);
     throw error;
   }
 };
@@ -181,7 +181,7 @@ export const updateArtist = async (db, artistId, updates) => {
     });
     return true;
   } catch (error) {
-    console.error('Error updating artist:', error);
+    log.error('Error updating artist:', error);
     throw error;
   }
 };
@@ -201,7 +201,7 @@ export const deleteArtist = async (db, artistId) => {
 
     return true;
   } catch (error) {
-    console.error('Error deleting artist:', error);
+    log.error('Error deleting artist:', error);
     throw error;
   }
 };
@@ -240,7 +240,7 @@ export const getArtistCategories = (artistId) => {
     const data = localStorage.getItem(`${CATEGORIES_PREFIX}${artistId}`);
     return data ? JSON.parse(data) : [];
   } catch (error) {
-    console.error('Error getting artist categories:', error);
+    log.error('Error getting artist categories:', error);
     return [];
   }
 };
@@ -252,7 +252,7 @@ export const saveArtistCategories = (artistId, categories) => {
   try {
     localStorage.setItem(`${CATEGORIES_PREFIX}${artistId}`, JSON.stringify(categories));
   } catch (error) {
-    console.error('Error saving artist categories:', error);
+    log.error('Error saving artist categories:', error);
   }
 };
 
@@ -264,7 +264,7 @@ export const getArtistAnalytics = (artistId) => {
     const data = localStorage.getItem(`${ANALYTICS_PREFIX}${artistId}`);
     return data ? JSON.parse(data) : { videos: {}, snapshots: [], lastUpdated: null };
   } catch (error) {
-    console.error('Error getting artist analytics:', error);
+    log.error('Error getting artist analytics:', error);
     return { videos: {}, snapshots: [], lastUpdated: null };
   }
 };
@@ -279,7 +279,7 @@ export const saveArtistAnalytics = (artistId, analytics) => {
       lastUpdated: new Date().toISOString()
     }));
   } catch (error) {
-    console.error('Error saving artist analytics:', error);
+    log.error('Error saving artist analytics:', error);
   }
 };
 
@@ -399,7 +399,7 @@ export const ensureBoonArtistExists = async (db) => {
       return { id: boonId, ...boonDoc.data() };
     }
   } catch (error) {
-    console.error('[Migration] Error ensuring Boon artist exists:', error);
+    log.error('[Migration] Error ensuring Boon artist exists:', error);
     return null;
   }
 };
@@ -422,7 +422,7 @@ export const getLinkedAccountGroups = (artistId) => {
     const saved = localStorage.getItem(`${LINKED_ACCOUNTS_PREFIX}${artistId}`);
     return saved ? JSON.parse(saved) : [];
   } catch (e) {
-    console.error('Error loading linked accounts:', e);
+    log.error('Error loading linked accounts:', e);
     return [];
   }
 };
@@ -438,7 +438,7 @@ export const saveLinkedAccountGroups = (artistId, groups) => {
     localStorage.setItem(`${LINKED_ACCOUNTS_PREFIX}${artistId}`, JSON.stringify(groups));
     return true;
   } catch (e) {
-    console.error('Error saving linked accounts:', e);
+    log.error('Error saving linked accounts:', e);
     return false;
   }
 };

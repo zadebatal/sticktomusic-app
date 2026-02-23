@@ -56,6 +56,7 @@ import VideoNicheContent from './VideoNicheContent';
 import FinishedMediaNicheContent from './FinishedMediaNicheContent';
 import ClipperNicheContent from './ClipperNicheContent';
 import useMediaMultiSelect from './shared/useMediaMultiSelect';
+import log from '../../utils/logger';
 
 const FORMAT_TO_EDITOR = {
   montage: 'montage',
@@ -160,7 +161,7 @@ const ProjectWorkspace = ({
     );
     if (!needsUpgrade) return;
     thumbMigrationRef.current = true;
-    migrateThumbnails(db, artistId, library, uploadFile).catch(console.error);
+    migrateThumbnails(db, artistId, library, uploadFile).catch(log.error);
   }, [db, artistId, library]);
 
   // Project root
@@ -696,10 +697,12 @@ const ProjectWorkspace = ({
             )}
 
             {scopedMedia.length === 0 && (
-              <div className="flex flex-col items-center gap-2 py-6 w-full">
-                <FeatherUpload className="text-neutral-500" style={{ width: 20, height: 20 }} />
-                <span className="text-caption-bold font-caption-bold text-neutral-400">No media yet</span>
-                <span className="text-caption font-caption text-neutral-500 text-center px-2">Upload or import media</span>
+              <div className="flex flex-col items-center justify-center gap-3 py-16 text-center w-full">
+                <FeatherImage className="w-12 h-12 text-zinc-600" />
+                <h3 className="text-lg font-semibold text-white">No media in pool</h3>
+                <p className="text-sm text-zinc-400 max-w-xs">
+                  Upload images and audio to start creating
+                </p>
               </div>
             )}
           </div>

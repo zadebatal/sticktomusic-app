@@ -1,4 +1,5 @@
 import React, { useEffect, useCallback, useState, useRef, createContext, useContext } from 'react';
+import log from '../../utils/logger';
 import useIsMobile from '../../hooks/useIsMobile';
 
 /**
@@ -77,10 +78,10 @@ export const useToast = () => {
   if (!context) {
     // Fallback for components outside provider
     return {
-      toast: () => console.warn('Toast provider not found'),
-      success: () => console.warn('Toast provider not found'),
-      error: () => console.warn('Toast provider not found'),
-      info: () => console.warn('Toast provider not found'),
+      toast: () => log.warn('Toast provider not found'),
+      success: () => log.warn('Toast provider not found'),
+      error: () => log.warn('Toast provider not found'),
+      info: () => log.warn('Toast provider not found'),
     };
   }
   return context;
