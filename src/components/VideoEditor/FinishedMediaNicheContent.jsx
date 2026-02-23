@@ -2,8 +2,7 @@
  * FinishedMediaNicheContent — Upload finished videos/images, view uploads, caption/hashtag banks
  */
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { uploadFile, generateThumbnail } from '../../services/firebaseStorage';
-import { createScheduledPost, subscribeToScheduledPosts } from '../../services/scheduledPostsService';
+import { subscribeToScheduledPosts } from '../../services/scheduledPostsService';
 import {
   updateNicheCaptionBank,
   updateNicheHashtagBank,
@@ -16,20 +15,22 @@ import { IconButton } from '../../ui/components/IconButton';
 import { Badge } from '../../ui/components/Badge';
 import {
   FeatherUploadCloud, FeatherTrash2, FeatherImage, FeatherFilm,
-  FeatherHash, FeatherMessageSquare, FeatherPlus, FeatherX, FeatherCheck,
+  FeatherHash, FeatherMessageSquare, FeatherPlus, FeatherX,
 } from '@subframe/core';
 import { useToast } from '../ui';
-
-const MAX_CONCURRENT = 3;
+import useFileUploader from './shared/useFileUploader';
 
 const FinishedMediaNicheContent = ({ db, artistId, niche, allNiches = [] }) => {
-  const { success: toastSuccess, error: toastError } = useToast();
-  const [files, setFiles] = useState([]);
+  const { success: toastSuccess } = useToast();
   const [caption, setCaption] = useState('');
   const [hashtags, setHashtags] = useState('');
-  const [uploading, setUploading] = useState(false);
   const [scheduledPosts, setScheduledPosts] = useState([]);
+  const [previewPost, setPreviewPost] = useState(null);
   const fileInputRef = useRef(null);
+
+  const {
+    files, uploading, addFiles, removeFile, updateFileName, handleDrop, uploadAll, clearFiles, formatSize,
+  } = useFileUploader({ db, artistId, nicheId: niche?.id, nicheName: niche?.name });
 
   // Caption/hashtag state
   const [newCaption, setNewCaption] = useState('');
@@ -110,124 +111,23 @@ const FinishedMediaNicheContent = ({ db, artistId, niche, allNiches = [] }) => {
     navigator.clipboard.writeText(hashtagBank.join(' '));
   }, [hashtagBank]);
 
-  // File handling
-  const addFiles = useCallback((newFiles) => {
-    const entries = Array.from(newFiles)
-      .filter(f => f.type.startsWith('video/') || f.type.startsWith('image/'))
-      .map(f => ({
-        file: f,
-        name: f.name.replace(/\.[^/.]+$/, ''),
-        type: f.type.startsWith('video/') ? 'video' : 'image',
-        localPreview: URL.createObjectURL(f),
-        progress: 0,
-        status: 'pending',
-        error: null,
-      }));
-    setFiles(prev => [...prev, ...entries]);
-  }, []);
-
-  const removeFile = useCallback((idx) => {
-    setFiles(prev => {
-      const removed = prev[idx];
-      if (removed?.localPreview) URL.revokeObjectURL(removed.localPreview);
-      return prev.filter((_, i) => i !== idx);
-    });
-  }, []);
-
-  const updateFileName = useCallback((idx, newName) => {
-    setFiles(prev => prev.map((f, i) => i === idx ? { ...f, name: newName } : f));
-  }, []);
-
-  const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    if (uploading) return;
-    addFiles(e.dataTransfer.files);
-  }, [addFiles, uploading]);
-
   const handleUploadAll = useCallback(async () => {
-    if (files.length === 0 || !db || !artistId || !niche) return;
-    setUploading(true);
-
-    const hashtagsArray = hashtags
-      .split(/[,\s]+/)
-      .map(h => h.replace(/^#/, '').trim())
-      .filter(Boolean);
-
-    let idx = 0;
-    const total = files.length;
-    let completed = 0;
-
-    const processNext = async () => {
-      while (idx < total) {
-        const currentIdx = idx++;
-        const entry = files[currentIdx];
-        if (!entry) continue;
-
-        setFiles(prev => prev.map((f, i) => i === currentIdx ? { ...f, status: 'uploading' } : f));
-
-        try {
-          const { url: cloudUrl } = await uploadFile(entry.file, 'finished-media', (pct) => {
-            setFiles(prev => prev.map((f, i) => i === currentIdx ? { ...f, progress: Math.round(pct) } : f));
-          });
-
-          let thumbnail = cloudUrl;
-          if (entry.type === 'video') {
-            const thumb = await generateThumbnail(cloudUrl, 1);
-            if (thumb) thumbnail = thumb;
-          }
-
-          await createScheduledPost(db, artistId, {
-            contentId: null,
-            contentType: 'upload',
-            contentName: entry.name,
-            thumbnail,
-            cloudUrl,
-            audioUrl: null,
-            platforms: {},
-            scheduledTime: null,
-            caption: caption || '',
-            hashtags: hashtagsArray,
-            status: 'draft',
-            editorState: null,
-            collectionName: niche.name,
-            nicheId: niche.id,
-            mediaType: entry.type,
-          });
-
-          setFiles(prev => prev.map((f, i) => i === currentIdx ? { ...f, status: 'done', progress: 100 } : f));
-          completed++;
-        } catch (err) {
-          console.error('Upload failed:', entry.file.name, err);
-          setFiles(prev => prev.map((f, i) => i === currentIdx ? { ...f, status: 'error', error: err.message } : f));
-          completed++;
-        }
-      }
-    };
-
-    const workers = [];
-    for (let w = 0; w < Math.min(MAX_CONCURRENT, total); w++) {
-      workers.push(processNext());
+    if (files.length === 0 || !niche) return;
+    const completed = await uploadAll({ caption, hashtags });
+    if (completed > 0) {
+      toastSuccess(`Uploaded ${completed} file${completed !== 1 ? 's' : ''} to queue`);
+      clearFiles();
+      setCaption('');
+      setHashtags('');
     }
-    await Promise.all(workers);
-
-    setUploading(false);
-    toastSuccess(`Uploaded ${completed} file${completed !== 1 ? 's' : ''} to queue`);
-    setFiles([]);
-    setCaption('');
-    setHashtags('');
-  }, [files, db, artistId, niche, caption, hashtags, toastSuccess]);
-
-  const formatSize = (bytes) => {
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
+  }, [files, niche, caption, hashtags, uploadAll, clearFiles, toastSuccess]);
 
   if (!niche) return null;
 
   return (
     <div className="flex flex-1 flex-col items-center self-stretch overflow-y-auto">
       {/* Upload area */}
-      <div className="flex w-full flex-col items-center gap-4 px-12 py-8">
+      <div className="flex w-full flex-col items-center gap-4 px-4 sm:px-12 py-6 sm:py-8">
         <div className="flex flex-col items-center gap-2">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-500/10 border border-cyan-500/30">
             <FeatherUploadCloud className="text-cyan-400" style={{ width: 28, height: 28 }} />
@@ -335,16 +235,17 @@ const FinishedMediaNicheContent = ({ db, artistId, niche, allNiches = [] }) => {
 
       {/* Uploaded posts grid */}
       {nicheUploads.length > 0 && (
-        <div className="flex w-full flex-col gap-4 px-12 pb-6">
+        <div className="flex w-full flex-col gap-4 px-4 sm:px-12 pb-6">
           <div className="flex items-center gap-2">
             <span className="text-body-bold font-body-bold text-[#ffffffff]">Uploads</span>
             <Badge variant="neutral">{nicheUploads.length}</Badge>
           </div>
-          <div className="grid w-full grid-cols-4 gap-3">
+          <div className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {nicheUploads.map(post => (
               <div
                 key={post.id}
-                className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] overflow-hidden"
+                className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
+                onClick={() => setPreviewPost(post)}
               >
                 {post.thumbnail ? (
                   <div className="w-full aspect-video bg-[#171717]">
@@ -371,8 +272,32 @@ const FinishedMediaNicheContent = ({ db, artistId, niche, allNiches = [] }) => {
         </div>
       )}
 
+      {/* Preview lightbox */}
+      {previewPost && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85" onClick={() => setPreviewPost(null)}>
+          <div className="relative max-w-3xl max-h-[85vh] w-full mx-4" onClick={e => e.stopPropagation()}>
+            <IconButton
+              className="absolute -top-10 right-0"
+              variant="neutral-tertiary" size="medium" icon={<FeatherX />} aria-label="Close preview"
+              onClick={() => setPreviewPost(null)}
+            />
+            {previewPost.mediaType === 'video' ? (
+              <video src={previewPost.cloudUrl} className="w-full max-h-[80vh] rounded-lg" controls autoPlay />
+            ) : (
+              <img src={previewPost.cloudUrl || previewPost.thumbnail} alt={previewPost.contentName} className="w-full max-h-[80vh] rounded-lg object-contain" />
+            )}
+            <div className="flex items-center gap-2 mt-3">
+              <span className="text-body font-body text-white">{previewPost.contentName || 'Untitled'}</span>
+              <Badge variant={previewPost.status === 'scheduled' ? 'brand' : previewPost.status === 'posted' ? 'success' : 'neutral'}>
+                {previewPost.status}
+              </Badge>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Captions & Hashtags */}
-      <div className="flex w-full flex-col items-start gap-3 border-t border-solid border-neutral-800 px-12 py-4">
+      <div className="flex w-full flex-col items-start gap-3 border-t border-solid border-neutral-800 px-4 sm:px-12 py-4">
         {/* Captions */}
         <div className="flex w-full flex-col gap-2">
           <div className="flex items-center gap-2">
