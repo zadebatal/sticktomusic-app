@@ -26,6 +26,8 @@ import { ThemeProvider, THEMES } from './contexts/ThemeContext';
 
 // New UI components (redesign)
 import LandingPage from './components/LandingPage';
+import TermsPage from './components/TermsPage';
+import PrivacyPage from './components/PrivacyPage';
 import AppShell from './components/AppShell';
 import PagesTab from './components/tabs/PagesTab';
 import SettingsTab from './components/tabs/SettingsTab';
@@ -3024,6 +3026,14 @@ const StickToMusic = () => {
         </div>
       </div>
     );
+  }
+
+  // ═══ Legal pages — accessible without auth ═══
+  if (location.pathname === '/terms') {
+    return <ThemeProvider><TermsPage /></ThemeProvider>;
+  }
+  if (location.pathname === '/privacy') {
+    return <ThemeProvider><PrivacyPage /></ThemeProvider>;
   }
 
   // ═══ NEW ROUTING: Non-authenticated users → Landing Page ═══

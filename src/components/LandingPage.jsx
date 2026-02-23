@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import { calculateOperatorPrice } from '../services/subscriptionService';
@@ -30,6 +31,8 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState(null);
   const [applicationSubmitted, setApplicationSubmitted] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const navigate = useNavigate();
 
   // Password reset state
   const [resetMessage, setResetMessage] = useState(null);
@@ -365,8 +368,13 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
       </div>
 
       {/* FOOTER */}
-      <div className="flex w-full items-center justify-center border-t border-solid border-neutral-800 bg-black px-4 sm:px-12 py-8">
+      <div className="flex w-full flex-col sm:flex-row items-center justify-between border-t border-solid border-neutral-800 bg-black px-4 sm:px-12 py-8 gap-4">
         <span className="text-caption font-caption text-neutral-400">&copy; 2026 StickToMusic</span>
+        <div className="flex items-center gap-6">
+          <button onClick={() => navigate('/terms')} className="text-caption font-caption text-neutral-400 hover:text-white transition-colors bg-transparent border-none cursor-pointer p-0">Terms of Service</button>
+          <button onClick={() => navigate('/privacy')} className="text-caption font-caption text-neutral-400 hover:text-white transition-colors bg-transparent border-none cursor-pointer p-0">Privacy Policy</button>
+          <a href="mailto:support@sticktomusic.com" className="text-caption font-caption text-neutral-400 hover:text-white transition-colors no-underline">Contact</a>
+        </div>
       </div>
 
       {/* AUTH MODAL */}
@@ -472,7 +480,24 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
                     </div>
                   )}
                 </div>
-                <Button className="w-full min-h-[44px]" variant="brand-primary" size="large" disabled={authLoading || checkoutLoading} onClick={handleSubmit}>
+                {authMode === 'signup' && (
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={agreedToTerms}
+                      onChange={(e) => setAgreedToTerms(e.target.checked)}
+                      className="mt-1 w-4 h-4 rounded border-neutral-600 accent-brand-600 flex-shrink-0"
+                      aria-label="Agree to terms"
+                    />
+                    <span className="text-xs text-neutral-400">
+                      I agree to the{' '}
+                      <button type="button" onClick={() => navigate('/terms')} className="text-brand-700 hover:text-white underline bg-transparent border-none p-0 cursor-pointer text-xs">Terms of Service</button>
+                      {' '}and{' '}
+                      <button type="button" onClick={() => navigate('/privacy')} className="text-brand-700 hover:text-white underline bg-transparent border-none p-0 cursor-pointer text-xs">Privacy Policy</button>
+                    </span>
+                  </label>
+                )}
+                <Button className="w-full min-h-[44px]" variant="brand-primary" size="large" disabled={authLoading || checkoutLoading || (authMode === 'signup' && !agreedToTerms)} onClick={handleSubmit}>
                   {authLoading ? (
                     <span className="flex items-center gap-2">
                       <FeatherLoader className="w-4 h-4 animate-spin" />
