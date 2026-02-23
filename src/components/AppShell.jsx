@@ -58,6 +58,7 @@ const AppShell = ({
   visibleArtists = [],
   currentArtistId,
   onArtistChange,
+  isLoading = false,
 }) => {
   const { theme } = useTheme();
   const { isMobile } = useIsMobile();
@@ -104,7 +105,12 @@ const AppShell = ({
                         {visibleArtists.map(artist => (
                           <DropdownMenu.DropdownItem
                             key={artist.id}
-                            icon={<FeatherUser />}
+                            icon={artist.photoURL
+                              ? <img src={artist.photoURL} alt="" className="w-5 h-5 rounded-full object-cover" />
+                              : <span className="flex w-5 h-5 items-center justify-center rounded-full bg-brand-600 text-[10px] font-bold text-white">
+                                  {(artist.name || '?')[0].toUpperCase()}
+                                </span>
+                            }
                             onClick={() => onArtistChange && onArtistChange(artist.id)}
                           >
                             {artist.name}
@@ -182,7 +188,7 @@ const AppShell = ({
                       Settings
                     </DropdownMenu.DropdownItem>
                     <DropdownMenu.DropdownDivider />
-                    <DropdownMenu.DropdownItem icon={<FeatherLogOut />} onClick={onLogout}>
+                    <DropdownMenu.DropdownItem icon={<FeatherLogOut />} onClick={() => { if (window.confirm('Log out of your account?')) onLogout(); }}>
                       Log out
                     </DropdownMenu.DropdownItem>
                   </DropdownMenu>
@@ -195,6 +201,9 @@ const AppShell = ({
 
       {/* MAIN CONTENT */}
       <div className="flex grow shrink-0 basis-0 flex-col items-start self-stretch bg-black overflow-auto" style={isMobile ? { paddingBottom: 64 } : undefined}>
+        {isLoading && (
+          <div className="h-0.5 w-full flex-none bg-indigo-500 animate-pulse" />
+        )}
         {children}
       </div>
 

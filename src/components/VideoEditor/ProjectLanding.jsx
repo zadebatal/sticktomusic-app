@@ -37,6 +37,7 @@ import UploadFinishedMediaModal from './UploadFinishedMediaModal';
 import * as SubframeCore from '@subframe/core';
 import { DropdownMenu } from '../../ui/components/DropdownMenu';
 import { useToast } from '../ui';
+import useIsMobile from '../../hooks/useIsMobile';
 
 /** Format a scheduledTime ISO string as relative/short time */
 function formatRelativeTime(isoString) {
@@ -68,6 +69,7 @@ const ProjectLanding = ({
   onEditSlideshow,
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
+  const { isMobile } = useIsMobile();
 
   const [collections, setCollections] = useState(() => artistId ? getCollections(artistId) : []);
   const [library, setLibrary] = useState(() => artistId ? getLibrary(artistId) : []);
@@ -286,16 +288,16 @@ const ProjectLanding = ({
   }, [previewingDraft, scheduleDate, scheduleTime, db, artistId, toastSuccess, toastError]);
 
   return (
-    <div className="flex w-full flex-col items-start bg-black px-12 py-8 overflow-y-auto" style={{ maxHeight: '100%' }}>
+    <div className="flex w-full flex-col items-start bg-black px-4 md:px-12 py-8 overflow-y-auto" style={{ maxHeight: '100%' }}>
       {/* Header */}
-      <div className="flex w-full items-center justify-between">
+      <div className="flex w-full items-start sm:items-center justify-between gap-4 flex-col sm:flex-row">
         <div className="flex flex-col items-start gap-2">
           <span className="text-heading-1 font-heading-1 text-[#ffffffff]">Studio</span>
           <span className="text-body font-body text-neutral-400">
             {projects.length} project{projects.length !== 1 ? 's' : ''}
           </span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           {onViewContent && (
             <Button variant="neutral-secondary" size="medium" icon={<FeatherLayers />} onClick={() => onViewContent({ type: 'slideshows' })}>
               View Drafts
@@ -333,9 +335,9 @@ const ProjectLanding = ({
         <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Your Projects</span>
       </div>
 
-      <div className="grid w-full grid-cols-2 gap-4 mt-4">
+      <div className="grid w-full grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
         {projects.length === 0 && !showCreateForm && (
-          <div className="col-span-2 flex flex-col items-center justify-center gap-3 py-16 text-center">
+          <div className="col-span-1 sm:col-span-2 flex flex-col items-center justify-center gap-3 py-16 text-center">
             <FeatherLayers className="w-12 h-12 text-zinc-600" />
             <h3 className="text-lg font-semibold text-white">No projects yet</h3>
             <p className="text-sm text-zinc-400 max-w-xs">
@@ -441,7 +443,7 @@ const ProjectLanding = ({
               <Badge variant="brand">{upcomingPosts.length}</Badge>
             </div>
           </div>
-          <div className="grid w-full grid-cols-4 gap-3">
+          <div className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {upcomingPosts.map(post => {
               const platformEntries = post.platforms || {};
               const platforms = Object.keys(platformEntries);
@@ -550,7 +552,7 @@ const ProjectLanding = ({
               </Button>
             )}
           </div>
-          <div className="grid w-full grid-cols-4 gap-3">
+          <div className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {(createdContent.slideshows || [])
               .filter(s => !s.isTemplate)
               .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
@@ -732,11 +734,11 @@ const ProjectLanding = ({
             <div className="flex flex-col gap-4">
               <TextField className="h-auto w-full" variant="filled" label="Project Name">
                 <TextField.Input
-                  placeholder="e.g., My Music Page"
+                  placeholder="e.g., Summer Campaign 2026"
                   value={newProjectName}
                   onChange={e => setNewProjectName(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleCreateProject(); }}
-                  autoFocus
+                  autoFocus={!isMobile}
                 />
               </TextField>
 

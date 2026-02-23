@@ -224,7 +224,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
   const initials = (user?.name || user?.email || '?').split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 
   return (
-    <div className="flex-1 overflow-auto bg-black px-12 py-8">
+    <div className="flex-1 overflow-auto bg-black px-4 md:px-12 py-8">
       <span className="text-heading-1 font-heading-1 text-[#ffffffff]">Settings</span>
 
       {/* ═══ PROFILE HERO ═══ */}
@@ -253,7 +253,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
       </div>
 
       {/* ═══ TWO-COLUMN GRID ═══ */}
-      <div className="mt-6 grid grid-cols-2 gap-6">
+      <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
 
         {/* ── TEAM ── */}
         {isConductor ? (
@@ -536,7 +536,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
             variant="destructive-secondary"
             size="medium"
             icon={<FeatherLogOut />}
-            onClick={onLogout}
+            onClick={() => { if (window.confirm('Log out of your account?')) onLogout(); }}
           >
             Log Out
           </Button>

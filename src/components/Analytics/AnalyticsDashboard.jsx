@@ -224,7 +224,7 @@ const AnalyticsDashboard = ({
             </div>
 
             {/* Song Stats Cards */}
-            <div className="grid grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <div className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-5 py-4">
                 <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{formatNumber(songData.totalViews)}</span>
                 <span className="text-caption font-caption text-neutral-400">Total Views</span>
@@ -260,7 +260,7 @@ const AnalyticsDashboard = ({
             {/* Videos Using This Song */}
             <div className="mt-8">
               <h3 className="text-heading-2 font-heading-2 text-[#ffffffff] mb-4">Videos Using This Song</h3>
-              <div className="flex flex-col">
+              <div className="flex flex-col overflow-x-auto">
                 <div className="flex p-3 border-b border-neutral-800 text-[12px] font-semibold uppercase text-neutral-400">
                   <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">Video</span>
                   <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">Category</span>
@@ -569,8 +569,8 @@ const AnalyticsDashboard = ({
           {/* Top Videos Table */}
           <div className="rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] p-5">
             <h3 className="text-heading-2 font-heading-2 text-[#ffffffff] mb-4">🔥 Top Performing Videos</h3>
-            <div className="flex flex-col">
-              <div className="flex p-3 border-b border-neutral-800 text-[12px] font-semibold uppercase text-neutral-400">
+            <div className="flex flex-col overflow-x-auto">
+              <div className="flex p-3 border-b border-neutral-800 text-[12px] font-semibold uppercase text-neutral-400 min-w-[600px]">
                 <span className="flex-[2] min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">Video</span>
                 <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">Song</span>
                 <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">Category</span>
@@ -579,7 +579,7 @@ const AnalyticsDashboard = ({
                 <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">Engagement</span>
               </div>
               {topVideos.slice(0, 8).map((video, i) => (
-                <div key={video.videoId} className="flex items-center p-3 border-b border-neutral-800 text-[13px] text-white hover:bg-[#1a1a1aff] transition-colors">
+                <div key={video.videoId} className="flex items-center p-3 border-b border-neutral-800 text-[13px] text-white hover:bg-[#1a1a1aff] transition-colors min-w-[600px]">
                   <span className="flex-[2] min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
                     <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-neutral-800 text-[11px] mr-2 text-neutral-500">{i + 1}</span>
                     {video.videoName}
@@ -669,8 +669,8 @@ const AnalyticsDashboard = ({
       {/* Videos Tab - Enhanced with Spotify Attribution */}
       {hasRealData && activeTab === 'videos' && (
         <div className="py-4">
-          <div className="flex flex-col">
-            <div className="flex p-3 border-b border-neutral-800 text-[12px] font-semibold uppercase text-neutral-400">
+          <div className="flex flex-col overflow-x-auto">
+            <div className="flex p-3 border-b border-neutral-800 text-[12px] font-semibold uppercase text-neutral-400 min-w-[900px]">
               <span className="w-[40px] min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">#</span>
               <span className="flex-[2] min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">Video</span>
               <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">Song</span>
@@ -686,7 +686,7 @@ const AnalyticsDashboard = ({
               // Find attribution data for this video
               const attr = videoAttributions.find(v => v.videoId === video.videoId) || video;
               return (
-                <div key={video.videoId} className="flex items-center p-3 border-b border-neutral-800 text-[13px] text-white hover:bg-[#1a1a1aff] transition-colors">
+                <div key={video.videoId} className="flex items-center p-3 border-b border-neutral-800 text-[13px] text-white hover:bg-[#1a1a1aff] transition-colors min-w-[900px]">
                   <span className="w-[40px] min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{i + 1}</span>
                   <span className="flex-[2] min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-medium">
                     {video.videoName}

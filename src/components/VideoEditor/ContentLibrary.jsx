@@ -1253,7 +1253,11 @@ const ContentLibrary = ({
         isOpen={deleteConfirm.isOpen}
         title={deleteConfirm.isBulk
           ? `Delete ${selectedItems.length} ${isSlideshow ? 'slideshows' : 'videos'}?`
-          : `Delete ${isSlideshow ? 'slideshow' : 'video'}?`
+          : (() => {
+              const item = items.find(i => i.id === deleteConfirm.videoId);
+              const name = item?.name || item?.textOverlay || item?.collectionName || 'Untitled';
+              return `Delete "${name}"?`;
+            })()
         }
         message={deleteConfirm.isBulk
           ? `This will move ${selectedItems.length} ${isSlideshow ? 'slideshow' : 'video'}${selectedItems.length > 1 ? 's' : ''} to the trash. You can restore ${selectedItems.length > 1 ? 'them' : 'it'} later from the Trash button.`

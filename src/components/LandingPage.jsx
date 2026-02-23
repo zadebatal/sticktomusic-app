@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
+import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
 import { calculateOperatorPrice } from '../services/subscriptionService';
 import { Button } from '../ui/components/Button';
 import { Badge } from '../ui/components/Badge';
 import { TextField } from '../ui/components/TextField';
 import { IconWithBackground } from '../ui/components/IconWithBackground';
+import { Accordion } from '../ui/components/Accordion';
 import {
   FeatherArrowRight, FeatherPlay, FeatherVideo, FeatherCalendar,
-  FeatherBarChart, FeatherCheck, FeatherX
+  FeatherBarChart, FeatherCheck, FeatherX, FeatherLoader, FeatherChevronDown,
+  FeatherHelpCircle
 } from '@subframe/core';
 
 /**
@@ -28,10 +31,24 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
   const [checkoutError, setCheckoutError] = useState(null);
   const [applicationSubmitted, setApplicationSubmitted] = useState(false);
 
+  // Password reset state
+  const [resetMessage, setResetMessage] = useState(null);
+  const [resetLoading, setResetLoading] = useState(false);
+
   // Operator calculator state
   const [opArtists, setOpArtists] = useState('5');
   const [opSetsPerArtist, setOpSetsPerArtist] = useState('10');
   const operatorPrice = calculateOperatorPrice(parseInt(opArtists) || 0, parseInt(opSetsPerArtist) || 0);
+
+  // FAQ data
+  const faqItems = [
+    { q: 'What is a Social Set?', a: 'A Social Set covers one artist across all platforms — Facebook, TikTok, Twitter, and Instagram. Each set lets you manage content and scheduling for one artist on all four platforms.' },
+    { q: 'What platforms does StickToMusic support?', a: 'TikTok, Instagram, YouTube, and Facebook. Schedule posts to all platforms from one dashboard.' },
+    { q: 'How does the Studio work?', a: 'Upload your clips, photos, and tracks. Our Studio remixes your media into ready-to-post videos and slideshows — professionally cut, synced to your music, at the click of a button.' },
+    { q: 'Can I try it before I buy?', a: 'Contact us for a demo. We\'ll walk you through the platform and set up your first project.' },
+    { q: 'How many team members can I add?', a: 'Each operator account can manage multiple artists with unlimited collaborators.' },
+    { q: 'What happens if I need more Social Sets later?', a: 'You can upgrade your plan at any time. Your content, scheduled posts, and analytics carry over seamlessly.' },
+  ];
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -62,6 +79,26 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
     setCheckoutLoading(false);
   };
 
+  const handleForgotPassword = async () => {
+    const resetEmail = email || window.prompt('Enter your email address:');
+    if (!resetEmail) return;
+    setResetLoading(true);
+    setResetMessage(null);
+    try {
+      const auth = getAuth();
+      await sendPasswordResetEmail(auth, resetEmail);
+      setResetMessage({ type: 'success', text: 'Password reset email sent! Check your inbox.' });
+    } catch (err) {
+      const msg = err.code === 'auth/user-not-found'
+        ? 'No account found with that email.'
+        : err.code === 'auth/invalid-email'
+        ? 'Please enter a valid email address.'
+        : 'Could not send reset email. Please try again.';
+      setResetMessage({ type: 'error', text: msg });
+    }
+    setResetLoading(false);
+  };
+
   const tierCards = [
     { name: 'Starter', price: '$500', sets: 5, features: ['5 Social Sets', 'Unlimited posts', 'Full analytics', 'Priority support'] },
     { name: 'Growth', price: '$1,000', sets: 10, features: ['10 Social Sets', 'Unlimited posts', 'Full analytics', 'Priority support'], popular: true },
@@ -72,7 +109,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
   return (
     <div className="flex h-full w-full flex-col items-center bg-black">
       {/* NAV */}
-      <div className="flex w-full items-center justify-between border-b border-solid border-neutral-800 bg-black px-12 py-4">
+      <div className="flex w-full items-center justify-between border-b border-solid border-neutral-800 bg-black px-4 sm:px-12 py-4">
         <span className="text-heading-2 font-heading-2 text-[#ffffffff]">StickToMusic</span>
         <div className="flex items-center gap-3">
           <Button variant="brand-tertiary" size="medium" onClick={() => { setAuthMode('login'); setShowAuth(true); }}>
@@ -85,13 +122,13 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
       </div>
 
       {/* MAIN CONTENT — single centered container */}
-      <div className="flex w-full max-w-[1280px] flex-col items-center gap-32 bg-black px-12 py-24">
+      <div className="flex w-full max-w-[1280px] flex-col items-center gap-16 sm:gap-32 bg-black px-4 sm:px-12 py-12 sm:py-24">
 
         {/* ═══ HERO ═══ */}
         <div className="flex w-full flex-col items-center gap-12">
           <div className="flex w-full max-w-[768px] flex-col items-center gap-8">
             <div className="flex w-full flex-col items-center gap-6">
-              <span className="w-full font-['Outfit'] text-[72px] font-[700] leading-[80px] text-[#ffffffff] text-center -tracking-[0.02em]">
+              <span className="w-full font-['Outfit'] text-[40px] sm:text-[56px] lg:text-[72px] font-[700] leading-[48px] sm:leading-[64px] lg:leading-[80px] text-[#ffffffff] text-center -tracking-[0.02em]">
                 Your music, everywhere.
               </span>
               <span className="w-full text-heading-2 font-heading-2 text-brand-700 text-center">
@@ -99,11 +136,11 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
                 and grow your audience systematically — all in one place.
               </span>
             </div>
-            <div className="flex items-center gap-4">
-              <Button variant="brand-tertiary" size="large" iconRight={<FeatherArrowRight />} onClick={() => { setAuthMode('signup'); setShowAuth(true); }}>
+            <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+              <Button className="min-h-[48px] w-full sm:w-auto px-8" variant="brand-tertiary" size="large" iconRight={<FeatherArrowRight />} onClick={() => { setAuthMode('signup'); setShowAuth(true); }}>
                 Start Creating
               </Button>
-              <Button variant="neutral-secondary" size="large" onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}>
+              <Button className="min-h-[48px] w-full sm:w-auto px-8" variant="neutral-secondary" size="large" onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}>
                 See How
               </Button>
             </div>
@@ -120,7 +157,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
               One tool to create, schedule, and grow across every platform.
             </span>
           </div>
-          <div className="w-full items-start gap-8 grid grid-cols-3">
+          <div className="w-full items-start gap-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {[
               { icon: <FeatherVideo />, title: 'Studio', desc: 'Drop in your clips, photos, and tracks. Our studio remixes your own media into hundreds of ready-to-post videos and slideshows — professionally cut, perfectly synced, at the click of a button.' },
               { icon: <FeatherCalendar />, title: 'Scheduler', desc: 'Schedule posts across TikTok, Instagram, YouTube, and Facebook from one dashboard. Stay consistent without the daily grind.' },
@@ -144,7 +181,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
               How it works
             </span>
           </div>
-          <div className="w-full items-start gap-8 grid grid-cols-3">
+          <div className="w-full items-start gap-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {[
               { num: '1', title: 'Connect your pages', desc: 'Link your TikTok, Instagram, YouTube, and Facebook accounts in seconds.' },
               { num: '2', title: 'Create content', desc: 'Drop in your clips, photos, and tracks — our studio remixes them into hundreds of ready-to-post videos and slideshows at the click of a button.' },
@@ -201,7 +238,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
           <div className="flex w-full flex-col items-start gap-6 rounded-lg border border-solid border-neutral-800 bg-[#000000ff] px-8 py-8">
             {/* Tier cards */}
             {pricingTab === 'artist' && (
-              <div className="w-full items-start gap-6 grid grid-cols-4">
+              <div className="w-full items-start gap-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
                 {tierCards.map((tier, i) => (
                   <div
                     key={i}
@@ -281,15 +318,44 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
           </div>
         </div>
 
+        {/* ═══ FAQ ═══ */}
+        <div className="flex w-full flex-col items-center gap-12">
+          <div className="flex w-full max-w-[768px] flex-col items-center gap-4">
+            <span className="text-heading-1 font-heading-1 text-[#ffffffff] text-center">
+              Frequently asked questions
+            </span>
+            <span className="text-body font-body text-brand-900 text-center">
+              Everything you need to know about StickToMusic.
+            </span>
+          </div>
+          <div className="flex w-full max-w-[768px] flex-col items-start gap-0">
+            {faqItems.map((item, i) => (
+              <Accordion
+                key={i}
+                trigger={
+                  <div className="flex w-full items-center justify-between py-5 border-b border-solid border-neutral-800">
+                    <span className="text-body-bold font-body-bold text-[#ffffffff]">{item.q}</span>
+                    <Accordion.Chevron />
+                  </div>
+                }
+              >
+                <div className="pb-5 border-b border-solid border-neutral-800">
+                  <span className="text-body font-body text-brand-900">{item.a}</span>
+                </div>
+              </Accordion>
+            ))}
+          </div>
+        </div>
+
         {/* ═══ CTA ═══ */}
-        <div className="flex w-full flex-col items-center gap-6 rounded-lg bg-[#000000ff] px-12 py-16">
+        <div className="flex w-full flex-col items-center gap-6 rounded-lg bg-[#000000ff] px-6 sm:px-12 py-16">
           <div className="flex w-full max-w-[768px] flex-col items-center gap-4">
             <span className="text-heading-1 font-heading-1 text-[#ffffffff] text-center">Ready to create?</span>
             <span className="text-body font-body text-brand-900 text-center">
               Join hundreds of artists growing their audience with StickToMusic.
             </span>
           </div>
-          <Button variant="brand-tertiary" size="large" iconRight={<FeatherArrowRight />} onClick={() => { setAuthMode('signup'); setShowAuth(true); }}>
+          <Button className="min-h-[48px] px-10" variant="brand-tertiary" size="large" iconRight={<FeatherArrowRight />} onClick={() => { setAuthMode('signup'); setShowAuth(true); }}>
             Get Started
           </Button>
         </div>
@@ -297,7 +363,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
       </div>
 
       {/* FOOTER */}
-      <div className="flex w-full items-center justify-center border-t border-solid border-neutral-800 bg-black px-12 py-8">
+      <div className="flex w-full items-center justify-center border-t border-solid border-neutral-800 bg-black px-4 sm:px-12 py-8">
         <span className="text-caption font-caption text-neutral-400">&copy; 2026 StickToMusic</span>
       </div>
 
@@ -321,7 +387,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
                 )}
               </div>
               <button
-                onClick={() => { setShowAuth(false); setSelectedTier(null); setCheckoutError(null); }}
+                onClick={() => { setShowAuth(false); setSelectedTier(null); setCheckoutError(null); setResetMessage(null); }}
                 className="flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
               >
                 <FeatherX className="w-5 h-5" />
@@ -332,7 +398,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
             <div className="flex items-center rounded-lg border border-solid border-neutral-800 bg-black px-1 py-1 mb-6">
               <div
                 className={`flex flex-1 h-9 items-center justify-center rounded-md cursor-pointer transition-colors ${authMode === 'login' ? 'bg-neutral-100' : ''}`}
-                onClick={() => { setAuthMode('login'); setCheckoutError(null); }}
+                onClick={() => { setAuthMode('login'); setCheckoutError(null); setResetMessage(null); }}
               >
                 <span className={`text-sm ${authMode === 'login' ? 'text-default-font font-semibold' : 'text-neutral-400'}`}>
                   Login
@@ -340,7 +406,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
               </div>
               <div
                 className={`flex flex-1 h-9 items-center justify-center rounded-md cursor-pointer transition-colors ${authMode === 'signup' ? 'bg-neutral-100' : ''}`}
-                onClick={() => { setAuthMode('signup'); setCheckoutError(null); }}
+                onClick={() => { setAuthMode('signup'); setCheckoutError(null); setResetMessage(null); }}
               >
                 <span className={`text-sm ${authMode === 'signup' ? 'text-default-font font-semibold' : 'text-neutral-400'}`}>
                   Sign Up
@@ -379,16 +445,38 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
                     onChange={(e) => setEmail(e.target.value)}
                   />
                 </TextField>
-                <TextField label="Password">
-                  <TextField.Input
-                    placeholder="Password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    type="password"
-                  />
-                </TextField>
-                <Button className="w-full" variant="brand-primary" size="large" disabled={authLoading || checkoutLoading} onClick={handleSubmit}>
-                  {authLoading ? 'Loading...' : authMode === 'login' ? 'Log In' : 'Sign Up'}
+                <div className="flex flex-col gap-1">
+                  <TextField label="Password">
+                    <TextField.Input
+                      placeholder="Password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      type="password"
+                    />
+                  </TextField>
+                  {authMode === 'login' && (
+                    <button
+                      type="button"
+                      onClick={handleForgotPassword}
+                      disabled={resetLoading}
+                      className="self-end text-xs text-brand-700 hover:text-white transition-colors cursor-pointer bg-transparent border-none p-0 mt-1 disabled:opacity-50"
+                    >
+                      {resetLoading ? 'Sending...' : 'Forgot password?'}
+                    </button>
+                  )}
+                  {resetMessage && (
+                    <div className={`mt-1 text-xs ${resetMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                      {resetMessage.text}
+                    </div>
+                  )}
+                </div>
+                <Button className="w-full min-h-[44px]" variant="brand-primary" size="large" disabled={authLoading || checkoutLoading} onClick={handleSubmit}>
+                  {authLoading ? (
+                    <span className="flex items-center gap-2">
+                      <FeatherLoader className="w-4 h-4 animate-spin" />
+                      {authMode === 'login' ? 'Logging in...' : 'Signing up...'}
+                    </span>
+                  ) : authMode === 'login' ? 'Log In' : 'Sign Up'}
                 </Button>
               </form>
             )}
@@ -400,8 +488,13 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
                   <span className="text-caption font-caption text-neutral-400">or</span>
                   <div className="flex-1 h-px bg-neutral-800" />
                 </div>
-                <Button className="w-full" variant="neutral-secondary" size="large" onClick={onGoogleAuth}>
-                  Continue with Google
+                <Button className="w-full min-h-[44px]" variant="neutral-secondary" size="large" disabled={authLoading} onClick={onGoogleAuth}>
+                  {authLoading ? (
+                    <span className="flex items-center gap-2">
+                      <FeatherLoader className="w-4 h-4 animate-spin" />
+                      Signing in...
+                    </span>
+                  ) : 'Continue with Google'}
                 </Button>
               </>
             )}

@@ -2267,6 +2267,7 @@ const PostRow = ({
             size="small"
             icon={post.locked ? <FeatherLock className="text-warning-500" /> : <FeatherUnlock />}
             aria-label={post.locked ? "Unlock post" : "Lock post"}
+            title={post.locked ? "Unlock post (allow editing)" : "Lock post (prevent changes)"}
             onClick={(e) => { e.stopPropagation(); onUpdate({ locked: !post.locked }); }}
           />
           <IconButton
