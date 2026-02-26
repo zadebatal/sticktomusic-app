@@ -99,6 +99,7 @@ const SlideshowNicheContent = ({
   // Audio preview playback
   const [playingAudioId, setPlayingAudioId] = useState(null);
   const audioPreviewRef = useRef(null);
+  const { success: toastSuccess, error: toastError } = useToast();
 
   const handlePlayAudio = useCallback((e, audio) => {
     e.stopPropagation();
@@ -109,22 +110,21 @@ const SlideshowNicheContent = ({
       el.currentTime = 0;
       setPlayingAudioId(null);
     } else {
-      // Skip stale blob URLs — they don't survive page reloads
-      const src = (audio.localUrl && !audio.localUrl.startsWith('blob:')) ? audio.localUrl : audio.url;
-      if (!src) return;
+      // Pick the best available URL — skip blob: URLs (stale after reload)
+      const validUrl = (u) => u && !u.startsWith('blob:');
+      const src = validUrl(audio.url) ? audio.url : validUrl(audio.localUrl) ? audio.localUrl : null;
+      if (!src) {
+        toastError('This track has no valid URL — please re-upload it');
+        return;
+      }
       el.src = src;
       el.play().catch(() => {
-        // If localUrl failed, retry with permanent url
-        if (audio.url && el.src !== audio.url) {
-          el.src = audio.url;
-          el.play().catch(() => setPlayingAudioId(null));
-        } else {
-          setPlayingAudioId(null);
-        }
+        toastError('Could not play this track — the file may need to be re-uploaded');
+        setPlayingAudioId(null);
       });
       setPlayingAudioId(audio.id);
     }
-  }, [playingAudioId]);
+  }, [playingAudioId, toastError]);
 
   // Audio tools / transcription
   const [showAudioTrimmer, setShowAudioTrimmer] = useState(false);
@@ -133,7 +133,6 @@ const SlideshowNicheContent = ({
   const [showBankPicker, setShowBankPicker] = useState(false);
   const [pendingTranscription, setPendingTranscription] = useState(null);
   const { analyze: analyzeAudio, isAnalyzing, progress: analyzeProgress } = useLyricAnalyzer();
-  const { success: toastSuccess, error: toastError } = useToast();
 
   const pipeline = useMemo(() => niche ? migrateCollectionBanks(niche) : null, [niche]);
 
