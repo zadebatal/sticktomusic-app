@@ -73,8 +73,19 @@ const VideoNicheContent = ({
       el.currentTime = 0;
       setPlayingAudioId(null);
     } else {
-      el.src = audio.localUrl || audio.url;
-      el.play().catch(() => {});
+      // Skip stale blob URLs — they don't survive page reloads
+      const src = (audio.localUrl && !audio.localUrl.startsWith('blob:')) ? audio.localUrl : audio.url;
+      if (!src) return;
+      el.src = src;
+      el.play().catch(() => {
+        // If localUrl failed, retry with permanent url
+        if (audio.url && el.src !== audio.url) {
+          el.src = audio.url;
+          el.play().catch(() => setPlayingAudioId(null));
+        } else {
+          setPlayingAudioId(null);
+        }
+      });
       setPlayingAudioId(audio.id);
     }
   }, [playingAudioId]);
