@@ -63,6 +63,7 @@ const ProjectLanding = ({
   latePages = [],
   manualAccounts = [],
   onOpenProject,
+  onStartWizard,
   onViewContent,
   onOpenVideoEditor,
   onViewAllMedia,
@@ -195,11 +196,7 @@ const ProjectLanding = ({
         name: newProjectName.trim(),
         linkedPage: newProjectPage,
         color: PIPELINE_COLORS[Math.floor(Math.random() * PIPELINE_COLORS.length)],
-      });
-      if (db) {
-        const { saveCollectionToFirestore } = await import('../../services/libraryService');
-        await saveCollectionToFirestore(db, artistId, project);
-      }
+      }, db);
       setShowCreateForm(false);
       setNewProjectName('');
       setNewProjectPage(null);
@@ -306,7 +303,7 @@ const ProjectLanding = ({
           <Button variant="neutral-secondary" size="medium" icon={<FeatherUploadCloud />} onClick={() => setShowUploadModal(true)}>
             Upload Media
           </Button>
-          <Button variant="brand-primary" size="medium" icon={<FeatherPlus />} onClick={() => setShowCreateForm(true)}>
+          <Button variant="brand-primary" size="medium" icon={<FeatherPlus />} onClick={() => onStartWizard ? onStartWizard() : setShowCreateForm(true)}>
             New Project
           </Button>
         </div>
@@ -452,7 +449,8 @@ const ProjectLanding = ({
               const accountHandle = firstPlatformData?.handle || null;
               const slides = post.editorState?.slides || [];
               const firstSlide = slides[0];
-              const firstSlideUrl = firstSlide?.backgroundImage || firstSlide?.imageA?.url || firstSlide?.url || post.thumbnail;
+              const rawPostUrl = firstSlide?.backgroundImage || firstSlide?.imageA?.url || firstSlide?.url || post.thumbnail;
+              const firstSlideUrl = rawPostUrl && !rawPostUrl.startsWith('blob:') ? rawPostUrl : null;
               return (
                 <div
                   key={post.id}
@@ -466,7 +464,7 @@ const ProjectLanding = ({
                 >
                   {firstSlideUrl ? (
                     <div className="w-full aspect-[9/16] bg-[#171717] relative overflow-hidden" style={{ containerType: 'inline-size' }}>
-                      <img src={firstSlideUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      <img src={firstSlideUrl} alt="" className="w-full h-full object-cover" loading="lazy" onError={e => { e.target.style.display = 'none'; }} />
                       {(firstSlide?.textOverlays || []).map((overlay, oi) => (
                         <div
                           key={oi}
@@ -558,7 +556,8 @@ const ProjectLanding = ({
               .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
               .slice(0, 4)
               .map(draft => {
-                const firstSlideUrl = draft.slides?.[0]?.backgroundImage || draft.slides?.[0]?.imageA?.url || draft.slides?.[0]?.url || draft.thumbnail;
+                const rawUrl = draft.slides?.[0]?.backgroundImage || draft.slides?.[0]?.imageA?.url || draft.slides?.[0]?.url || draft.thumbnail;
+                const firstSlideUrl = rawUrl && !rawUrl.startsWith('blob:') ? rawUrl : null;
                 return (
                   <div
                     key={draft.id}
@@ -567,7 +566,7 @@ const ProjectLanding = ({
                   >
                     {firstSlideUrl ? (
                       <div className="w-full aspect-[9/16] bg-[#171717] relative overflow-hidden" style={{ containerType: 'inline-size' }}>
-                        <img src={firstSlideUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                        <img src={firstSlideUrl} alt="" className="w-full h-full object-cover" loading="lazy" onError={e => { e.target.style.display = 'none'; }} />
                         {(draft.slides?.[0]?.textOverlays || []).map((overlay, oi) => (
                           <div
                             key={oi}

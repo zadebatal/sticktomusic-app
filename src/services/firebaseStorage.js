@@ -154,28 +154,23 @@ export async function deleteFile(path) {
  */
 export function getMediaDuration(url, type = 'video') {
   return new Promise((resolve) => {
+    let resolved = false;
+    const done = (value) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeoutId);
+      resolve(value);
+      element.onloadedmetadata = null;
+      element.onerror = null;
+      element.remove();
+    };
+
     const element = document.createElement(type);
     element.preload = 'metadata';
-
-    element.onloadedmetadata = () => {
-      resolve(element.duration || 0);
-      element.remove();
-    };
-
-    element.onerror = () => {
-      log.warn('Could not load media metadata:', url);
-      resolve(0);
-      element.remove();
-    };
-
-    // Timeout fallback
-    setTimeout(() => {
-      if (!element.duration) {
-        resolve(0);
-        element.remove();
-      }
-    }, 5000);
-
+    element.crossOrigin = 'anonymous';
+    element.onloadedmetadata = () => done(element.duration || 0);
+    element.onerror = () => { log.warn('Could not load media metadata:', url); done(0); };
+    const timeoutId = setTimeout(() => done(0), 5000);
     element.src = url;
   });
 }
@@ -188,6 +183,18 @@ export function getMediaDuration(url, type = 'video') {
  */
 export function generateThumbnail(videoUrl, time = 1) {
   return new Promise((resolve) => {
+    let resolved = false;
+    const done = (value) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeoutId);
+      video.onloadedmetadata = null;
+      video.onseeked = null;
+      video.onerror = null;
+      resolve(value);
+      video.remove();
+    };
+
     const video = document.createElement('video');
     video.crossOrigin = 'anonymous';
     video.preload = 'metadata';
@@ -203,27 +210,15 @@ export function generateThumbnail(videoUrl, time = 1) {
         canvas.height = video.videoHeight || 180;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const thumbnail = canvas.toDataURL('image/jpeg', 0.7);
-        resolve(thumbnail);
+        done(canvas.toDataURL('image/jpeg', 0.7));
       } catch (error) {
         log.warn('Thumbnail generation failed:', error);
-        resolve(null);
+        done(null);
       }
-      video.remove();
     };
 
-    video.onerror = () => {
-      log.warn('Could not load video for thumbnail');
-      resolve(null);
-      video.remove();
-    };
-
-    // Timeout fallback
-    setTimeout(() => {
-      resolve(null);
-      video.remove();
-    }, 10000);
-
+    video.onerror = () => { log.warn('Could not load video for thumbnail'); done(null); };
+    const timeoutId = setTimeout(() => done(null), 10000);
     video.src = videoUrl;
   });
 }

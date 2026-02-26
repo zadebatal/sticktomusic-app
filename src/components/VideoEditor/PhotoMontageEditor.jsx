@@ -45,6 +45,7 @@ import useUnsavedChanges from './shared/useUnsavedChanges';
 const PhotoMontageEditor = ({
   category,
   existingVideo = null,
+  templateSettings = null,
   onSave,
   onClose,
   artistId = null,
@@ -62,6 +63,11 @@ const PhotoMontageEditor = ({
   const { isMobile } = useIsMobile();
 
   // ── Multi-video state (mirrors Solo/Multi allVideos pattern) ──
+  const defaultTextStyle = {
+    fontSize: 48, fontFamily: 'Inter, sans-serif', fontWeight: '600',
+    color: '#ffffff', outline: true, outlineColor: '#000000', textAlign: 'center', textCase: 'default',
+    ...(templateSettings?.textStyle || {}),
+  };
   const [allVideos, setAllVideos] = useState(() => {
     if (existingVideo?.editorMode === 'photo-montage') {
       return [{
@@ -70,10 +76,7 @@ const PhotoMontageEditor = ({
         photos: existingVideo?.montagePhotos || [],
         textOverlays: existingVideo?.textOverlays || [],
         words: existingVideo?.words || [],
-        textStyle: existingVideo?.textStyle || {
-          fontSize: 48, fontFamily: 'Inter, sans-serif', fontWeight: '600',
-          color: '#ffffff', outline: true, outlineColor: '#000000', textAlign: 'center', textCase: 'default'
-        },
+        textStyle: existingVideo?.textStyle || defaultTextStyle,
         isTemplate: true
       }];
     }
@@ -83,10 +86,7 @@ const PhotoMontageEditor = ({
       photos: [],
       textOverlays: [],
       words: [],
-      textStyle: {
-        fontSize: 48, fontFamily: 'Inter, sans-serif', fontWeight: '600',
-        color: '#ffffff', outline: true, outlineColor: '#000000', textAlign: 'center', textCase: 'default'
-      },
+      textStyle: defaultTextStyle,
       isTemplate: true
     }];
   });
@@ -162,15 +162,15 @@ const PhotoMontageEditor = ({
   const [isSavingAll, setIsSavingAll] = useState(false);
 
   // ── Settings state (global across all variations) ──
-  const [speed, setSpeed] = useState(existingVideo?.montageSpeed || 1);
-  const [transition, setTransition] = useState(existingVideo?.montageTransition || 'cut');
-  const [kenBurnsEnabled, setKenBurnsEnabled] = useState(existingVideo?.montageKenBurns !== false);
-  const [aspectRatio, setAspectRatio] = useState(existingVideo?.cropMode || '9:16');
+  const [speed, setSpeed] = useState(existingVideo?.montageSpeed || templateSettings?.speed || 1);
+  const [transition, setTransition] = useState(existingVideo?.montageTransition || templateSettings?.transition || 'cut');
+  const [kenBurnsEnabled, setKenBurnsEnabled] = useState(existingVideo?.montageKenBurns !== undefined ? existingVideo.montageKenBurns !== false : (templateSettings?.kenBurns !== undefined ? templateSettings.kenBurns : true));
+  const [aspectRatio, setAspectRatio] = useState(existingVideo?.cropMode || templateSettings?.aspectRatio || '9:16');
 
   // ── Audio state ──
   const [selectedAudio, setSelectedAudio] = useState(existingVideo?.audio || null);
   const [audioDuration, setAudioDuration] = useState(0);
-  const [beatSyncEnabled, setBeatSyncEnabled] = useState(existingVideo?.montageBeatSync || false);
+  const [beatSyncEnabled, setBeatSyncEnabled] = useState(existingVideo?.montageBeatSync || templateSettings?.beatSync || false);
   const audioRef = useRef(null);
   const audioFileInputRef = useRef(null);
 
@@ -376,10 +376,14 @@ const PhotoMontageEditor = ({
     return () => unsubs.forEach(u => u());
   }, [db, artistId]);
 
-  const libraryImages = useMemo(() =>
-    library.filter(m => m.type === MEDIA_TYPES.IMAGE && m.url && !m.url.startsWith('blob:')),
-    [library]
-  );
+  const libraryImages = useMemo(() => {
+    // Prefer niche images from category if available (passed from ProjectWorkspace via pipelineCategory)
+    if (category?.images?.length > 0) {
+      return category.images.filter(m => m.url && !m.url.startsWith('blob:'));
+    }
+    // Fallback to full library for non-niche usage
+    return library.filter(m => m.type === MEDIA_TYPES.IMAGE && m.url && !m.url.startsWith('blob:'));
+  }, [library, category]);
 
   // ── Multi-select for library picker ──
   const {

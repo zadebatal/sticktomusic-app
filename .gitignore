@@ -41,6 +41,7 @@ playwright-report/
 
 # Claude Code
 .claude/
+.mcp.json
 
 # QA docs
 QA_CLAUDE_DESKTOP_PROMPT.md

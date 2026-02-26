@@ -23,7 +23,7 @@ const ALLOWED_ORIGINS = [
 
 const isVercelPreview = (origin) => {
   if (!origin) return false;
-  return /^https:\/\/[a-z0-9-]*sticktomusic[a-z0-9-]*\.vercel\.app$/i.test(origin);
+  return /^https:\/\/sticktomusic-app(-[a-z0-9]+)*\.vercel\.app$/i.test(origin);
 };
 
 const isLocalhostOrigin = (origin) => {

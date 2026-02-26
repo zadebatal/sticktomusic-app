@@ -1,0 +1,264 @@
+/**
+ * MontagePreview — Beat-synced clip cycling preview for montage niches.
+ * Cuts between clips on detected beats (or every 0.5s without audio).
+ */
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import usePreviewPlayback from '../usePreviewPlayback';
+import { useBeatDetection } from '../../../../hooks/useBeatDetection';
+import PreviewTransport from './PreviewTransport';
+import DraggableTextOverlay from './DraggableTextOverlay';
+
+const ASPECT_CSS = { '9:16': '9/16', '16:9': '16/9', '1:1': '1/1', '4:5': '4/5' };
+const MAX_PRELOADED = 10;
+
+const MontagePreview = ({
+  media = [],
+  audioUrl,
+  textBankA = [],
+  textBankB = [],
+  textStyle = {},
+  textPosition = 'center',
+  aspectRatio = '9:16',
+}) => {
+  const [playlist, setPlaylist] = useState(() => [...media]);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [previewTextA, setPreviewTextA] = useState(() => textBankA[0] || '');
+  const [previewTextB, setPreviewTextB] = useState(() => textBankB[0] || '');
+  const lastBeatIdxRef = useRef(-1);
+  const videoRefsMap = useRef({});
+
+  const { beats, bpm, analyzeAudio } = useBeatDetection();
+  const { audioRef, currentTime, isPlaying, progress, toggle, seek } = usePreviewPlayback({
+    audioUrl,
+    duration: 30,
+  });
+  const containerRef = useRef(null);
+
+  // Independent position state per text overlay
+  const textPosY = textPosition === 'top' ? 15 : textPosition === 'bottom' ? 85 : 50;
+  const [textPosA, setTextPosA] = useState({ x: 50, y: Math.max(textPosY - 10, 10), width: 80 });
+  const [textPosB, setTextPosB] = useState({ x: 50, y: Math.min(textPosY + 10, 90), width: 80 });
+
+  // Text timing — start/end in seconds
+  const [textTimingA, setTextTimingA] = useState({ start: 0, end: 30 });
+  const [textTimingB, setTextTimingB] = useState({ start: 0, end: 30 });
+
+  // Analyze audio for beats when audioUrl changes
+  const analyzedUrlRef = useRef(null);
+  useEffect(() => {
+    if (audioUrl && audioUrl !== analyzedUrlRef.current) {
+      analyzedUrlRef.current = audioUrl;
+      analyzeAudio(audioUrl).catch(() => {});
+    }
+  }, [audioUrl, analyzeAudio]);
+
+  // Play/pause ALL video elements when isPlaying changes
+  useEffect(() => {
+    const refs = videoRefsMap.current;
+    Object.values(refs).forEach(vid => {
+      if (!vid) return;
+      if (isPlaying) {
+        vid.play().catch(() => {});
+      } else {
+        vid.pause();
+      }
+    });
+  }, [isPlaying]);
+
+  // Pick random text on each cut
+  const pickText = useCallback((bank) => {
+    if (!bank.length) return '';
+    return bank[Math.floor(Math.random() * bank.length)];
+  }, []);
+
+  // Beat-sync: advance on beat crossings
+  useEffect(() => {
+    if (!isPlaying || !playlist.length) return;
+
+    if (beats.length > 0) {
+      let beatIdx = -1;
+      for (let i = beats.length - 1; i >= 0; i--) {
+        if (currentTime >= beats[i]) { beatIdx = i; break; }
+      }
+      if (beatIdx !== lastBeatIdxRef.current && beatIdx >= 0) {
+        lastBeatIdxRef.current = beatIdx;
+        setActiveIdx(prev => (prev + 1) % playlist.length);
+        setPreviewTextA(pickText(textBankA));
+        setPreviewTextB(pickText(textBankB));
+      }
+    } else {
+      const intervalIdx = Math.floor(currentTime / 0.5);
+      if (intervalIdx !== lastBeatIdxRef.current) {
+        lastBeatIdxRef.current = intervalIdx;
+        setActiveIdx(prev => (prev + 1) % playlist.length);
+        setPreviewTextA(pickText(textBankA));
+        setPreviewTextB(pickText(textBankB));
+      }
+    }
+  }, [currentTime, isPlaying, beats, playlist.length, textBankA, textBankB, pickText]);
+
+  // Sync playlist when media changes
+  useEffect(() => {
+    setPlaylist([...media]);
+    setActiveIdx(0);
+    lastBeatIdxRef.current = -1;
+  }, [media]);
+
+  // Show text immediately when banks change (don't wait for play)
+  useEffect(() => {
+    if (textBankA.length > 0 && !previewTextA) setPreviewTextA(textBankA[0]);
+  }, [textBankA, previewTextA]);
+  useEffect(() => {
+    if (textBankB.length > 0 && !previewTextB) setPreviewTextB(textBankB[0]);
+  }, [textBankB, previewTextB]);
+
+  // Reroll — swap the clip under the playhead
+  const handleReroll = useCallback(() => {
+    if (media.length < 2) return;
+    setPlaylist(prev => {
+      const playheadIdx = prev.length > 0 ? Math.min(Math.floor(progress * prev.length), prev.length - 1) : 0;
+      if (playheadIdx < 0) return prev;
+      const next = prev.slice(0, media.length);
+      const current = next[playheadIdx];
+      const candidates = media.filter(m => m.id !== current?.id);
+      if (candidates.length === 0) return prev;
+      next[playheadIdx] = candidates[Math.floor(Math.random() * candidates.length)];
+      return next;
+    });
+    setPreviewTextA(pickText(textBankA));
+    setPreviewTextB(pickText(textBankB));
+  }, [media, progress, pickText, textBankA, textBankB]);
+
+  const handleCellClick = useCallback((idx) => {
+    setActiveIdx(idx);
+    setPreviewTextA(pickText(textBankA));
+    setPreviewTextB(pickText(textBankB));
+  }, [pickText, textBankA, textBankB]);
+
+  // Text track timing change
+  const handleTextTrackChange = useCallback((trackId, changes) => {
+    if (trackId === 'textA') setTextTimingA(prev => ({ ...prev, ...changes }));
+    if (trackId === 'textB') setTextTimingB(prev => ({ ...prev, ...changes }));
+  }, []);
+
+  // Build text tracks for transport
+  const textTracks = useMemo(() => {
+    const tracks = [];
+    if (previewTextA) {
+      const label = previewTextA.length > 20 ? previewTextA.slice(0, 20) + '...' : previewTextA;
+      tracks.push({ id: 'textA', label, color: '#6366f1', start: textTimingA.start, end: textTimingA.end });
+    }
+    if (previewTextB) {
+      const label = previewTextB.length > 20 ? previewTextB.slice(0, 20) + '...' : previewTextB;
+      tracks.push({ id: 'textB', label, color: '#f59e0b', start: textTimingB.start, end: textTimingB.end });
+    }
+    return tracks;
+  }, [previewTextA, previewTextB, textTimingA, textTimingB]);
+
+  // Is text visible at current time?
+  const showA = previewTextA && currentTime >= textTimingA.start && currentTime <= textTimingA.end;
+  const showB = previewTextB && currentTime >= textTimingB.start && currentTime <= textTimingB.end;
+
+  const preloaded = useMemo(() => playlist.slice(0, MAX_PRELOADED), [playlist]);
+
+  if (!playlist.length) return null;
+
+  return (
+    <div className="flex w-full flex-col gap-0">
+      {/* Visual area */}
+      <div
+        ref={containerRef}
+        className="relative w-full overflow-hidden rounded-xl border border-solid border-neutral-700 bg-[#0a0a0f]"
+        style={{ aspectRatio: ASPECT_CSS[aspectRatio] || '9/16' }}
+      >
+        {/* Media layers */}
+        {preloaded.map((item, i) => {
+          const isActive = i === activeIdx % preloaded.length;
+          return (
+            <div
+              key={item.id}
+              className="absolute inset-0"
+              style={{ opacity: isActive ? 1 : 0, transition: 'opacity 0.05s' }}
+            >
+              {item.type === 'video' ? (
+                <video
+                  ref={el => { videoRefsMap.current[item.id] = el; }}
+                  className="w-full h-full object-cover"
+                  src={item.url}
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                />
+              ) : (
+                <img src={item.thumbnailUrl || item.url} alt="" className="w-full h-full object-cover" loading="lazy" />
+              )}
+            </div>
+          );
+        })}
+
+        {/* Poster overlay when paused */}
+        {!isPlaying && preloaded[activeIdx % preloaded.length] && (() => {
+          const cur = preloaded[activeIdx % preloaded.length];
+          const src = cur.thumbnailUrl || (cur.type !== 'video' ? cur.url : null);
+          return src ? (
+            <div className="absolute inset-0 z-[1]">
+              <img src={src} alt="" className="w-full h-full object-cover" />
+            </div>
+          ) : null;
+        })()}
+
+        {/* Independent text overlays — Bank A (indigo) */}
+        {showA && (
+          <DraggableTextOverlay
+            text={previewTextA}
+            textStyle={textStyle}
+            color="#6366f1"
+            position={textPosA}
+            onPositionChange={setTextPosA}
+            containerRef={containerRef}
+          />
+        )}
+
+        {/* Independent text overlays — Bank B (amber) */}
+        {showB && (
+          <DraggableTextOverlay
+            text={previewTextB}
+            textStyle={textStyle}
+            color="#f59e0b"
+            position={textPosB}
+            onPositionChange={setTextPosB}
+            containerRef={containerRef}
+          />
+        )}
+
+        {/* BPM badge */}
+        {bpm && (
+          <div className="absolute top-2 left-2 z-10 rounded-full bg-black/60 border border-white/20 px-2 py-0.5">
+            <span className="text-[10px] font-mono text-white/80">{Math.round(bpm)} BPM</span>
+          </div>
+        )}
+
+        <audio ref={audioRef} preload="auto" style={{ display: 'none' }} />
+      </div>
+
+      {/* Transport below preview */}
+      <PreviewTransport
+        isPlaying={isPlaying}
+        onToggle={toggle}
+        onReroll={handleReroll}
+        progress={progress}
+        items={playlist}
+        activeIdx={playlist.length > 0 ? Math.min(Math.floor(progress * playlist.length), playlist.length - 1) : 0}
+        onCellClick={handleCellClick}
+        onScrub={seek}
+        showPlayhead={true}
+        totalDuration={30}
+        textTracks={textTracks}
+        onTextTrackChange={handleTextTrackChange}
+      />
+    </div>
+  );
+};
+
+export default MontagePreview;

@@ -57,7 +57,8 @@ const SlideshowEditor = ({
   onAddLyrics,
   onImportToBank,
   lateAccountIds = {},
-  schedulerEditMode = false
+  schedulerEditMode = false,
+  templateSettings = null
 }) => {
   // Mobile responsive detection
   const { isMobile } = useIsMobile();
@@ -117,10 +118,19 @@ const SlideshowEditor = ({
     }];
   });
   const [activeSlideshowIndex, setActiveSlideshowIndex] = useState(0);
-  const [generateCount, setGenerateCount] = useState(10);
+  const nicheGenCount = existingSlideshow?._nicheGenerateCount || null;
+  // When coming from niche, generateCount = N-1 (template is already timeline 1)
+  const [generateCount, setGenerateCount] = useState(nicheGenCount ? Math.max(nicheGenCount - 1, 1) : 10);
   const [isGenerating, setIsGenerating] = useState(false);
   // Keep-template-text: 'none' = pull from banks, 'all' = keep all, Set<number> = keep specific slide indices
-  const [keepTemplateText, setKeepTemplateText] = useState('none');
+  const nicheLockedSlides = existingSlideshow?._lockedSlides;
+  const [keepTemplateText, setKeepTemplateText] = useState(() => {
+    if (nicheLockedSlides) {
+      const lockedIndices = Object.entries(nicheLockedSlides).filter(([, v]) => v).map(([k]) => parseInt(k));
+      if (lockedIndices.length > 0) return new Set(lockedIndices);
+    }
+    return 'none';
+  });
 
   // Derived reads from active slideshow (existing code reads these unchanged)
   // Use stable empty array to prevent creating new [] reference every render
@@ -175,7 +185,7 @@ const SlideshowEditor = ({
   }, [activeSlideshowIndex]);
 
   // Other slideshow state
-  const [aspectRatio, setAspectRatio] = useState(existingSlideshow?.aspectRatio || '9:16');
+  const [aspectRatio, setAspectRatio] = useState(existingSlideshow?.aspectRatio || templateSettings?.aspectRatio || '9:16');
   const [selectedSlideIndex, setSelectedSlideIndex] = useState(0);
   const [activeBank, setActiveBank] = useState('image0'); // 'image0' | 'image1' | ... | 'audio' | 'lyrics'
   const [libraryImages, setLibraryImages] = useState([]);
@@ -211,7 +221,7 @@ const SlideshowEditor = ({
     const colFromCategory = category?.id ? collections.find(c => c.id === category.id) : null;
     const targetCol = colFromSource || colFromCategory || collections[0];
     if (!targetCol) return;
-    addToTextBank(artistId, targetCol.id, bankNum, entry);
+    addToTextBank(artistId, targetCol.id, bankNum, entry, db);
     // Update local state so UI refreshes immediately (write to textBanks array)
     setCollections(prev => prev.map(col => {
       if (col.id !== targetCol.id) return col;
@@ -232,7 +242,7 @@ const SlideshowEditor = ({
     const colFromCategory = category?.id ? collections.find(c => c.id === category.id) : null;
     const targetCol = colFromSource || colFromCategory || collections[0];
     if (!targetCol) return;
-    removeFromTextBank(artistId, targetCol.id, bankNum, index);
+    removeFromTextBank(artistId, targetCol.id, bankNum, index, db);
     setCollections(prev => prev.map(col => {
       if (col.id !== targetCol.id) return col;
       const migrated = migrateCollectionBanks(col);
@@ -349,14 +359,10 @@ const SlideshowEditor = ({
 
     if (mediaIds.length > 0 && artistId && collections.length > 0) {
       const targetCol = collections[0];
-      assignToBank(artistId, targetCol.id, mediaIds, bank);
+      assignToBank(artistId, targetCol.id, mediaIds, bank, db);
       // Refresh collections state
       const freshCols = getCollections(artistId);
       setCollections(freshCols);
-      if (db) {
-        const col = freshCols.find(c => c.id === targetCol.id);
-        if (col) saveCollectionToFirestore(db, artistId, col).catch(() => {});
-      }
       toastSuccess(`Added ${mediaIds.length} image${mediaIds.length > 1 ? 's' : ''} to ${bankLabel(bank)} Bank`);
       return;
     }
@@ -1267,6 +1273,7 @@ const SlideshowEditor = ({
       }).catch(err => {
         log.error('Audio playback failed:', err);
         setIsPlaying(false);
+        toastError('Audio playback failed — try a different file');
       });
     }
   }, [isPlaying, audioReady]);
@@ -2176,6 +2183,18 @@ const SlideshowEditor = ({
     executeGeneration();
   }, [allSlideshows, executeGeneration]);
 
+  // Auto-generate on mount when coming from niche preview (Create N flow)
+  const autoGenTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (autoGenTriggeredRef.current || !nicheGenCount) return;
+    // Wait for collections/library to load before generating
+    if (collections.length === 0 || libraryImages.length === 0) return;
+    const templateSS = allSlideshows[0];
+    if (!templateSS || templateSS.slides.length === 0) return;
+    autoGenTriggeredRef.current = true;
+    executeGeneration();
+  }, [nicheGenCount, collections.length, libraryImages.length, allSlideshows, executeGeneration]);
+
   // Export slideshow as carousel images
   const handleExport = useCallback(async () => {
     // Check if there are slides with backgrounds
@@ -2586,36 +2605,6 @@ const SlideshowEditor = ({
         })}
       </div>
 
-      {/* Hidden audio element */}
-      <audio
-        ref={audioRef}
-        preload="auto"
-        style={{ display: 'none' }}
-        onLoadedMetadata={() => {
-          if (!audioRef.current) return;
-          const rawDur = audioRef.current.duration;
-          const start = selectedAudioStart;
-          const end = (selectedAudioEnd && selectedAudioEnd > 0) ? selectedAudioEnd : (isFinite(rawDur) ? rawDur : 0);
-          setAudioDuration(Math.max(0, end - start));
-          audioRef.current.currentTime = start;
-        }}
-        onCanPlay={() => { setAudioReady(true); setAudioError(null); }}
-        onCanPlayThrough={() => { setAudioReady(true); setAudioError(null); }}
-        onLoadedData={() => {
-          if (audioRef.current?.readyState >= 1) {
-            setAudioReady(true);
-            setAudioError(null);
-            // Also compute duration if loadedmetadata didn't fire
-            if (audioDuration === 0 && audioRef.current.duration > 0) {
-              const rawDur = audioRef.current.duration;
-              const start = selectedAudioStart;
-              const end = (selectedAudioEnd && selectedAudioEnd > 0) ? selectedAudioEnd : (isFinite(rawDur) ? rawDur : 0);
-              setAudioDuration(Math.max(0, end - start));
-            }
-          }
-        }}
-        onError={() => { setAudioError('Audio failed to load'); setAudioReady(false); }}
-      />
     </div>
   );
 
@@ -3259,7 +3248,7 @@ const SlideshowEditor = ({
                         if (db) {
                           const freshCols = getCollections(artistId);
                           const updated = freshCols.find(c => c.id === col.id);
-                          if (updated) saveCollectionToFirestore(db, artistId, updated).catch(() => {});
+                          if (updated) saveCollectionToFirestore(db, artistId, updated).catch(err => log.error('[SlideshowEditor] Firestore sync failed:', err));
                         }
                       }
                     });
@@ -3277,7 +3266,7 @@ const SlideshowEditor = ({
                   return (
                     <div key={i} className="flex items-center gap-2">
                       <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: entryStyle?.color || '#737373' }} />
-                      <div onClick={() => {
+                      <div role="button" tabIndex="0" onClick={() => {
                         if (slides.length === 0) return;
                         // Navigate to matching slide position (wraps if bank index exceeds slide count)
                         const targetIdx = idx % slides.length;
@@ -3285,7 +3274,7 @@ const SlideshowEditor = ({
                         const newOverlay = { id: `text_${Date.now()}_${i}`, text: entryText, style: entryStyle ? { ...entryStyle } : getDefaultTextStyle(), position: { x: 50, y: 50, width: 80, height: 20 } };
                         setSlides(prev => prev.map((slide, si) => si === targetIdx ? { ...slide, textOverlays: [...(slide.textOverlays || []), newOverlay] } : slide));
                         setEditingTextId(newOverlay.id);
-                      }} className="flex-1 px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-sm text-white text-[13px] cursor-pointer leading-snug break-words"
+                      }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); } }} className="flex-1 px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-sm text-white text-[13px] cursor-pointer leading-snug break-words"
                         title={entryStyle ? `Click to add to ${bankLabel(idx % slides.length)} (styled)` : `Click to add to ${bankLabel(idx % slides.length)}`}>
                         {entryText}
                       </div>
@@ -3328,7 +3317,7 @@ const SlideshowEditor = ({
             if (db) {
               const freshCols = getCollections(artistId);
               const updated = freshCols.find(c => c.id === targetCol.id);
-              if (updated) saveCollectionToFirestore(db, artistId, updated).catch(() => {});
+              if (updated) saveCollectionToFirestore(db, artistId, updated).catch(err => log.error('[SlideshowEditor] Firestore sync failed:', err));
             }
             setCollections(getCollections(artistId));
             toastSuccess(`${bankLabel(getTextBanks().length)} added`);
@@ -3402,7 +3391,7 @@ const SlideshowEditor = ({
                           if (db) {
                             const freshCols = getCollections(artistId);
                             const updated = freshCols.find(c => c.id === col.id);
-                            if (updated) saveCollectionToFirestore(db, artistId, updated).catch(() => {});
+                            if (updated) saveCollectionToFirestore(db, artistId, updated).catch(err => log.error('[SlideshowEditor] Firestore sync failed:', err));
                           }
                         }
                       });
@@ -3772,6 +3761,13 @@ const SlideshowEditor = ({
     </>
   );
 
+  // Lock body scroll while editor is open
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   // ═══════════════════════════════════════════
   // ─── MAIN RETURN ───
   // ═══════════════════════════════════════════
@@ -3912,6 +3908,36 @@ const SlideshowEditor = ({
         </div>
 
         {renderModals()}
+
+        {/* Hidden audio element — placed outside renderCanvasPreview to prevent ref loss on re-renders */}
+        <audio
+          ref={audioRef}
+          preload="auto"
+          style={{ display: 'none' }}
+          onLoadedMetadata={() => {
+            if (!audioRef.current) return;
+            const rawDur = audioRef.current.duration;
+            const start = selectedAudioStart;
+            const end = (selectedAudioEnd && selectedAudioEnd > 0) ? selectedAudioEnd : (isFinite(rawDur) ? rawDur : 0);
+            setAudioDuration(Math.max(0, end - start));
+            audioRef.current.currentTime = start;
+          }}
+          onCanPlay={() => { setAudioReady(true); setAudioError(null); }}
+          onCanPlayThrough={() => { setAudioReady(true); setAudioError(null); }}
+          onLoadedData={() => {
+            if (audioRef.current?.readyState >= 1) {
+              setAudioReady(true);
+              setAudioError(null);
+              if (audioDuration === 0 && audioRef.current.duration > 0) {
+                const rawDur = audioRef.current.duration;
+                const start = selectedAudioStart;
+                const end = (selectedAudioEnd && selectedAudioEnd > 0) ? selectedAudioEnd : (isFinite(rawDur) ? rawDur : 0);
+                setAudioDuration(Math.max(0, end - start));
+              }
+            }
+          }}
+          onError={() => { setAudioError('Audio failed to load'); setAudioReady(false); }}
+        />
       </div>
     </div>
   );

@@ -70,9 +70,11 @@ const ArtistsManagement = ({
     return result;
   }, [artists, searchQuery, tierFilter]);
 
-  // Social sets count per artist
+  // Social sets count per artist — count actual connected pages, not the quota
   const getSocialSetsCount = (artist) => {
-    return artist.socialSetsAllowed || artist.socialSets || 0;
+    const artistPages = latePages.filter(p => p.artistId === artist.id);
+    const handles = new Set(artistPages.map(p => p.handle).filter(Boolean));
+    return handles.size;
   };
 
   return (

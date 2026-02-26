@@ -2,7 +2,7 @@
  * SlideshowNicheContent — Banks, text entries, preview & generate panel for a slideshow niche.
  * Extracted from PipelineWorkspace center+right panels.
  */
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
   getPipelineBankLabel,
   migrateCollectionBanks,
@@ -10,25 +10,25 @@ import {
   removeFromBank,
   addToTextBank,
   removeFromTextBank,
-  getUserCollections,
-  saveCollections,
-  saveCollectionToFirestore,
   getTextBankText,
   getTextBankStyle,
   getBankColor,
-  updateNicheCaptionBank,
-  updateNicheHashtagBank,
-  moveNicheBankEntry,
+  updateNicheAudioId,
 } from '../../services/libraryService';
+import TemplateConfigurator from './shared/TemplateConfigurator';
+import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
+import LyricDistributor from './shared/LyricDistributor';
+import AudioClipSelector from './AudioClipSelector';
+import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
+import { useToast } from '../ui';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { Badge } from '../../ui/components/Badge';
 import { IconWithBackground } from '../../ui/components/IconWithBackground';
 import {
-  FeatherPlus, FeatherX, FeatherType, FeatherPlay, FeatherRefreshCw,
-  FeatherArrowRight, FeatherImage, FeatherMusic, FeatherZap,
-  FeatherDatabase, FeatherLayers, FeatherHash, FeatherMessageSquare,
-  FeatherTrash2,
+  FeatherPlus, FeatherX, FeatherType, FeatherPlay, FeatherSquare,
+  FeatherImage, FeatherMusic, FeatherZap, FeatherTrash2,
+  FeatherRefreshCw, FeatherLock, FeatherUnlock,
 } from '@subframe/core';
 
 // Bank header colors keyed by label
@@ -75,26 +75,66 @@ const SlideshowNicheContent = ({
   niche,
   library,
   createdContent,
-  selectedAudio,
+  projectAudio = [],
   draggingMediaIds,
   onOpenEditor,
   onViewDrafts,
-  allNiches = [],
   onUploadToBank,
   onImportToBank,
+  onUploadAudio,
+  onImportAudio,
 }) => {
   const [textInputs, setTextInputs] = useState({});
   const [dragOverBank, setDragOverBank] = useState(null);
   const [previewSlideIdx, setPreviewSlideIdx] = useState(0);
+  const [previewPicks, setPreviewPicks] = useState({}); // { [bankIdx]: imageId }
   const [generateCount, setGenerateCount] = useState(10);
-  const [previewKey, setPreviewKey] = useState(0);
-  const [lyricsText, setLyricsText] = useState('');
-  const [newCaption, setNewCaption] = useState('');
-  const [newHashtag, setNewHashtag] = useState('');
+  const previewContainerRef = useRef(null);
+  const [textPositions, setTextPositions] = useState({});
+  const [textOverrides, setTextOverrides] = useState({}); // { [bankIdx]: editedText } — preview-only, doesn't modify bank
+  const [lockedSlides, setLockedSlides] = useState({}); // { [bankIdx]: true } — locked text persists across generated timelines
+  const [liveSettings, setLiveSettings] = useState(null);
+  const [lightboxItem, setLightboxItem] = useState(null);
+
+  // Audio preview playback
+  const [playingAudioId, setPlayingAudioId] = useState(null);
+  const audioPreviewRef = useRef(null);
+
+  const handlePlayAudio = useCallback((e, audio) => {
+    e.stopPropagation();
+    const el = audioPreviewRef.current;
+    if (!el) return;
+    if (playingAudioId === audio.id) {
+      el.pause();
+      el.currentTime = 0;
+      setPlayingAudioId(null);
+    } else {
+      el.src = audio.localUrl || audio.url;
+      el.play().catch(() => {});
+      setPlayingAudioId(audio.id);
+    }
+  }, [playingAudioId]);
+
+  // Audio tools / transcription
+  const [showAudioTrimmer, setShowAudioTrimmer] = useState(false);
+  const [showLyricDistributor, setShowLyricDistributor] = useState(false);
+  const [transcribedText, setTranscribedText] = useState('');
+  const [showBankPicker, setShowBankPicker] = useState(false);
+  const [pendingTranscription, setPendingTranscription] = useState(null);
+  const { analyze: analyzeAudio, isAnalyzing, progress: analyzeProgress } = useLyricAnalyzer();
+  const { success: toastSuccess, error: toastError } = useToast();
 
   const pipeline = useMemo(() => niche ? migrateCollectionBanks(niche) : null, [niche]);
 
   const activeFormat = pipeline?.formats?.find(f => f.id === pipeline.activeFormatId) || pipeline?.formats?.[0];
+
+  // Per-niche audio selection
+  const selectedAudio = useMemo(
+    () => projectAudio.find(a => a.id === niche?.audioId) || projectAudio[0] || null,
+    [projectAudio, niche?.audioId]
+  );
+  const audioUrl = useMemo(() => selectedAudio?.localUrl || selectedAudio?.url || null, [selectedAudio]);
+
   const slideCount = activeFormat?.slideCount || pipeline?.banks?.length || 2;
 
   // Drafts for this niche
@@ -108,147 +148,136 @@ const SlideshowNicheContent = ({
     e.preventDefault();
     setDragOverBank(null);
     if (draggingMediaIds?.length > 0 && niche) {
-      draggingMediaIds.forEach(id => assignToBank(artistId, niche.id, id, bankIndex));
-      if (db && pipeline) saveCollectionToFirestore(db, artistId, { ...pipeline, updatedAt: new Date().toISOString() });
+      draggingMediaIds.forEach(id => assignToBank(artistId, niche.id, id, bankIndex, db));
     }
-  }, [draggingMediaIds, artistId, niche, db, pipeline]);
+  }, [draggingMediaIds, artistId, niche, db]);
 
   // Add text to bank
   const handleAddText = useCallback((bankIdx) => {
     const text = (textInputs[bankIdx] || '').trim();
     if (!text || !niche) return;
-    addToTextBank(artistId, niche.id, bankIdx, text);
-    if (db) {
-      const updated = getUserCollections(artistId).find(c => c.id === niche.id);
-      if (updated) saveCollectionToFirestore(db, artistId, updated);
-    }
+    addToTextBank(artistId, niche.id, bankIdx, text, db);
     setTextInputs(prev => ({ ...prev, [bankIdx]: '' }));
   }, [textInputs, artistId, niche, db]);
 
   // Remove text from bank
   const handleRemoveText = useCallback((bankIdx, entryIdx) => {
     if (!niche) return;
-    removeFromTextBank(artistId, niche.id, bankIdx, entryIdx);
-    if (db) {
-      const updated = getUserCollections(artistId).find(c => c.id === niche.id);
-      if (updated) saveCollectionToFirestore(db, artistId, updated);
-    }
+    removeFromTextBank(artistId, niche.id, bankIdx, entryIdx, db);
   }, [artistId, niche, db]);
 
-  // Random preview image
-  const getPreviewImage = useCallback((slideIdx) => {
-    if (!pipeline?.banks?.[slideIdx]?.length) return null;
-    const ids = pipeline.banks[slideIdx];
-    const randId = ids[Math.floor(Math.random() * ids.length)];
-    const item = library.find(m => m.id === randId);
+  // Pick one random image ID from a bank (stable until reroll)
+  const pickOneFromBank = useCallback((bankIdx) => {
+    const ids = pipeline?.banks?.[bankIdx] || [];
+    if (ids.length === 0) return null;
+    return ids[Math.floor(Math.random() * ids.length)];
+  }, [pipeline]);
+
+  // Ensure picks exist for a given bank (lazy init)
+  const ensurePicks = useCallback((bankIdx) => {
+    setPreviewPicks(prev => {
+      if (prev[bankIdx] !== undefined) return prev;
+      return { ...prev, [bankIdx]: pickOneFromBank(bankIdx) };
+    });
+  }, [pickOneFromBank]);
+
+  // Generate picks when slide changes
+  useEffect(() => {
+    ensurePicks(previewSlideIdx);
+  }, [previewSlideIdx, ensurePicks]);
+
+  // Reroll the currently visible image
+  const handleRerollPreview = useCallback(() => {
+    const ids = pipeline?.banks?.[previewSlideIdx] || [];
+    if (ids.length < 2) return;
+    setPreviewPicks(prev => {
+      const currentPick = prev[previewSlideIdx];
+      const candidates = ids.filter(id => id !== currentPick);
+      const newPick = candidates[Math.floor(Math.random() * candidates.length)];
+      return { ...prev, [previewSlideIdx]: newPick };
+    });
+  }, [pipeline, previewSlideIdx]);
+
+  // Get the current preview image URL
+  const currentPreviewUrl = useMemo(() => {
+    const pickedId = previewPicks[previewSlideIdx];
+    if (!pickedId) return null;
+    const item = library.find(m => m.id === pickedId);
     return item?.url || item?.thumbnailUrl || null;
-  }, [pipeline, library]);
+  }, [previewPicks, previewSlideIdx, library]);
 
-  // Random preview text
-  const getPreviewText = useCallback((slideIdx) => {
-    const texts = pipeline?.textBanks?.[slideIdx] || [];
-    if (!texts.length) return null;
-    const entry = texts[Math.floor(Math.random() * texts.length)];
-    return getTextBankText(entry);
-  }, [pipeline]);
+  // Check if current bank has images
+  const currentBankHasImages = useMemo(() => {
+    return (pipeline?.banks?.[previewSlideIdx] || []).length > 0;
+  }, [pipeline, previewSlideIdx]);
 
-  // Load lyrics from banks
-  const handleLoadFromBanks = useCallback(() => {
-    if (!pipeline?.textBanks) return;
-    const allTexts = pipeline.textBanks
-      .flatMap(bank => (bank || []).map(entry => getTextBankText(entry)))
-      .filter(Boolean);
-    if (allTexts.length === 0) return;
-    setLyricsText(allTexts.join('\n'));
-  }, [pipeline]);
-
-  // Caption bank helpers
-  const captions = niche?.captionBank || [];
-  const hashtags = niche?.hashtagBank || [];
-  const otherNiches = allNiches.filter(n => n.id !== niche?.id);
-
-  const handleAddCaption = useCallback(() => {
-    const text = newCaption.trim();
-    if (!text || !niche) return;
-    const updated = [...captions, text];
-    updateNicheCaptionBank(artistId, niche.id, updated);
-    if (db) {
-      const col = getUserCollections(artistId).find(c => c.id === niche.id);
-      if (col) saveCollectionToFirestore(db, artistId, col);
-    }
-    setNewCaption('');
-  }, [newCaption, captions, artistId, niche, db]);
-
-  const handleRemoveCaption = useCallback((idx) => {
+  // Audio selection
+  const handleSelectAudio = useCallback((audioId) => {
     if (!niche) return;
-    const updated = captions.filter((_, i) => i !== idx);
-    updateNicheCaptionBank(artistId, niche.id, updated);
-    if (db) {
-      const col = getUserCollections(artistId).find(c => c.id === niche.id);
-      if (col) saveCollectionToFirestore(db, artistId, col);
-    }
-  }, [captions, artistId, niche, db]);
-
-  const handleMoveCaption = useCallback((entry, toNicheId) => {
-    if (!niche) return;
-    moveNicheBankEntry(artistId, niche.id, toNicheId, entry, 'caption');
-    if (db) {
-      const cols = getUserCollections(artistId);
-      const from = cols.find(c => c.id === niche.id);
-      const to = cols.find(c => c.id === toNicheId);
-      if (from) saveCollectionToFirestore(db, artistId, from);
-      if (to) saveCollectionToFirestore(db, artistId, to);
-    }
+    updateNicheAudioId(artistId, niche.id, audioId, db);
   }, [artistId, niche, db]);
 
-  const handleAddHashtag = useCallback(() => {
-    let text = newHashtag.trim();
-    if (!text || !niche) return;
-    // Auto-normalize: add # if missing
-    if (!text.startsWith('#')) text = '#' + text;
-    if (hashtags.includes(text)) return;
-    const updated = [...hashtags, text];
-    updateNicheHashtagBank(artistId, niche.id, updated);
-    if (db) {
-      const col = getUserCollections(artistId).find(c => c.id === niche.id);
-      if (col) saveCollectionToFirestore(db, artistId, col);
+  // Auto-transcribe
+  const handleAutoTranscribe = useCallback(async () => {
+    if (!selectedAudio) return;
+    const audioSrc = selectedAudio.localUrl || selectedAudio.url;
+    if (!audioSrc || audioSrc.startsWith('blob:')) {
+      toastError('Audio URL not available for transcription');
+      return;
     }
-    setNewHashtag('');
-  }, [newHashtag, hashtags, artistId, niche, db]);
+    try {
+      const result = await analyzeAudio(audioSrc);
+      if (!result?.words?.length) { toastError('No words transcribed'); return; }
+      const fullText = result.words.map(w => w.text).join(' ');
+      const lined = fullText.replace(/([.!?])\s+/g, '$1\n').trim();
+      setTranscribedText(lined);
+      setShowLyricDistributor(true);
+      toastSuccess(`Transcribed ${result.words.length} word${result.words.length !== 1 ? 's' : ''}`);
+    } catch (err) {
+      if (err.message === 'API_KEY_REQUIRED') {
+        toastError('OpenAI API key required — set it in Settings');
+      } else {
+        toastError(`Transcription failed: ${err.message}`);
+      }
+    }
+  }, [selectedAudio, analyzeAudio, toastSuccess, toastError]);
 
-  const handleRemoveHashtag = useCallback((idx) => {
+  // Assign transcribed lines to a specific slide bank
+  const handleAssignToBank = useCallback((bankIdx) => {
+    if (!pendingTranscription || !niche) return;
+    pendingTranscription.forEach(text => addToTextBank(artistId, niche.id, bankIdx, text, db));
+    setPendingTranscription(null);
+    setShowBankPicker(false);
+  }, [pendingTranscription, artistId, niche, db]);
+
+  // Auto-distribute transcribed lines across slide banks
+  const handleAutoDistribute = useCallback(() => {
+    if (!pendingTranscription || !niche) return;
+    pendingTranscription.forEach((text, i) => {
+      const bankIdx = i % slideCount;
+      addToTextBank(artistId, niche.id, bankIdx, text, db);
+    });
+    setPendingTranscription(null);
+    setShowBankPicker(false);
+  }, [pendingTranscription, artistId, niche, slideCount, db]);
+
+  // LyricDistributor confirm — add transcribed lines to slide text banks
+  const handleLyricDistributorConfirm = useCallback((assignmentMap) => {
     if (!niche) return;
-    const updated = hashtags.filter((_, i) => i !== idx);
-    updateNicheHashtagBank(artistId, niche.id, updated);
-    if (db) {
-      const col = getUserCollections(artistId).find(c => c.id === niche.id);
-      if (col) saveCollectionToFirestore(db, artistId, col);
-    }
-  }, [hashtags, artistId, niche, db]);
-
-  const handleMoveHashtag = useCallback((entry, toNicheId) => {
-    if (!niche) return;
-    moveNicheBankEntry(artistId, niche.id, toNicheId, entry, 'hashtag');
-    if (db) {
-      const cols = getUserCollections(artistId);
-      const from = cols.find(c => c.id === niche.id);
-      const to = cols.find(c => c.id === toNicheId);
-      if (from) saveCollectionToFirestore(db, artistId, from);
-      if (to) saveCollectionToFirestore(db, artistId, to);
-    }
-  }, [artistId, niche, db]);
-
-  const handleCopyAllHashtags = useCallback(() => {
-    if (!hashtags.length) return;
-    navigator.clipboard.writeText(hashtags.join(' '));
-  }, [hashtags]);
+    Object.entries(assignmentMap).forEach(([bankIdx, lines]) => {
+      lines.forEach(text => addToTextBank(artistId, niche.id, parseInt(bankIdx), text, db));
+    });
+    setShowLyricDistributor(false);
+    toastSuccess('Lyrics distributed');
+  }, [artistId, niche, db, toastSuccess]);
 
   if (!pipeline) return null;
 
   return (
     <div className="flex items-stretch overflow-hidden flex-1 self-stretch">
-      {/* Center — Slide Banks */}
-      <div className="flex grow shrink-0 basis-0 items-stretch self-stretch overflow-x-auto gap-3 px-4 py-4">
+      {/* Center — Slide Banks + Audio */}
+      <div className="flex grow shrink-0 basis-0 flex-col self-stretch overflow-hidden">
+        <div className="flex items-stretch flex-1 min-h-0 overflow-x-auto overflow-y-hidden gap-3 px-4 py-4 pr-1">
         {Array.from({ length: slideCount }).map((_, bankIdx) => {
           const label = getPipelineBankLabel(pipeline, bankIdx);
           const headerColor = getBankHeaderColor(label, bankIdx);
@@ -259,7 +288,7 @@ const SlideshowNicheContent = ({
           const isDragOver = dragOverBank === bankIdx;
 
           return (
-            <div key={bankIdx} className="flex flex-col gap-2 flex-1 min-w-[150px]">
+            <div key={bankIdx} className="flex flex-col gap-2 flex-1 min-w-[150px] overflow-hidden">
               {/* Column header */}
               <div
                 className="flex w-full flex-none items-center justify-between rounded-t-lg px-3 py-2"
@@ -301,11 +330,12 @@ const SlideshowNicheContent = ({
                     {bankImages.map(item => (
                       <img
                         key={item.id}
-                        className="flex-none rounded-sm border-b-2 border-solid aspect-square object-cover w-full"
+                        className="flex-none rounded-sm border-b-2 border-solid aspect-square object-cover w-full cursor-pointer hover:opacity-80 transition-opacity"
                         style={{ borderBottomColor: headerColor }}
                         src={item.thumbnailUrl || item.url}
                         alt={item.name}
                         loading="lazy"
+                        onClick={() => setLightboxItem(item)}
                       />
                     ))}
                     <div
@@ -354,189 +384,357 @@ const SlideshowNicheContent = ({
             </div>
           );
         })}
+        {/* Audio Bank — same column pattern as slide banks */}
+        <div className="flex flex-col gap-2 flex-1 min-w-[150px] overflow-hidden">
+          {/* Column header */}
+          <div className="flex w-full flex-none items-center justify-between rounded-t-lg px-3 py-2" style={{ backgroundColor: '#292524' }}>
+            <div className="flex items-center gap-2">
+              <IconWithBackground variant="brand" size="small" icon={<FeatherMusic />} square />
+              <span className="text-caption-bold font-caption-bold text-[#ffffffff]">Audio</span>
+            </div>
+            <Badge variant="neutral">{projectAudio.length}</Badge>
+          </div>
+
+          {/* Audio items — vertical scroll, fills remaining height */}
+          <div className="flex w-full flex-col items-start gap-2 rounded-b-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-3 flex-1 min-h-0 overflow-hidden">
+            <div className="flex w-full flex-none items-center justify-between">
+              <span className="text-caption font-caption text-neutral-400">Tracks</span>
+              <div className="flex items-center gap-1">
+                <span className="text-caption font-caption text-neutral-400 mr-1">{projectAudio.length}</span>
+                <button
+                  className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
+                  onClick={() => onImportAudio?.()}
+                >Import</button>
+                <button
+                  className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
+                  onClick={() => onUploadAudio?.()}
+                >Upload</button>
+              </div>
+            </div>
+            <div className="w-full flex-1 min-h-0 overflow-y-auto">
+              <div className="flex flex-col gap-1.5">
+                {projectAudio.map(audio => {
+                  const isActive = niche?.audioId === audio.id;
+                  const isPlaying = playingAudioId === audio.id;
+                  const dur = audio.duration ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}` : '';
+                  return (
+                    <div
+                      key={audio.id}
+                      className={`group flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 cursor-pointer transition-colors flex-none ${
+                        isActive ? 'bg-indigo-500/15 border border-indigo-500 ring-1 ring-indigo-500' : 'bg-black border border-transparent hover:border-neutral-700'
+                      }`}
+                      onClick={() => handleSelectAudio(audio.id)}
+                    >
+                      <button
+                        className="flex-none flex items-center justify-center w-5 h-5 rounded-full bg-neutral-800 hover:bg-neutral-700 border-none cursor-pointer transition-colors"
+                        onClick={(e) => handlePlayAudio(e, audio)}
+                        title={isPlaying ? 'Stop' : 'Preview'}
+                      >
+                        {isPlaying
+                          ? <FeatherSquare className="text-indigo-400" style={{ width: 8, height: 8 }} />
+                          : <FeatherPlay className={isActive ? 'text-indigo-400' : 'text-neutral-400'} style={{ width: 8, height: 8 }} />
+                        }
+                      </button>
+                      <span className="text-caption font-caption text-white truncate flex-1">{audio.name}</span>
+                      <span className="text-[10px] text-neutral-500 flex-none">{dur}</span>
+                      <button
+                        className="flex-none opacity-0 group-hover:opacity-100 flex items-center justify-center w-4 h-4 bg-transparent border-none cursor-pointer transition-opacity"
+                        onClick={(e) => { e.stopPropagation(); removeFromBank(artistId, niche.id, audio.id, -1, db); }}
+                        title="Remove from project"
+                      >
+                        <FeatherX className="text-neutral-500 hover:text-red-400" style={{ width: 10, height: 10 }} />
+                      </button>
+                    </div>
+                  );
+                })}
+                <div
+                  className="flex flex-col items-center justify-center rounded-md border-2 border-dashed border-neutral-700 py-3 cursor-pointer hover:border-indigo-500 hover:bg-indigo-500/5 transition-colors"
+                  onClick={() => onUploadAudio?.()}
+                  title="Upload audio"
+                >
+                  <FeatherPlus className="text-neutral-500" style={{ width: 12, height: 12 }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        </div>
+        {/* Hidden audio element for preview playback */}
+        <audio ref={audioPreviewRef} preload="none" style={{ display: 'none' }} onEnded={() => setPlayingAudioId(null)} />
+
       </div>
 
-      {/* Right — Preview + Generate */}
-      <div className="flex w-72 flex-none flex-col items-start self-stretch border-l border-solid border-neutral-800 bg-black overflow-y-auto">
-        {/* Preview header */}
-        <div className="flex w-full items-center justify-between border-b border-solid border-neutral-800 px-4 py-3">
-          <span className="text-body-bold font-body-bold text-[#ffffffff]">Preview</span>
-          <IconButton variant="neutral-tertiary" size="small" icon={<FeatherRefreshCw />} aria-label="Refresh preview"
-            onClick={() => { setPreviewKey(k => k + 1); setPreviewSlideIdx(0); }} />
-        </div>
-
-        {/* Preview card */}
-        <div className="flex w-full flex-col items-center gap-3 px-4 py-4">
-          <div className="flex w-full flex-col items-center justify-center overflow-hidden rounded-xl border border-solid border-neutral-700 bg-black relative aspect-[9/16]">
-            {getPreviewImage(previewSlideIdx) ? (
-              <img key={previewKey} className="w-full grow shrink-0 basis-0 object-cover absolute" src={getPreviewImage(previewSlideIdx)} alt="Preview" />
+      {/* Right — Template Configurator + Banks */}
+      <div className="flex w-96 flex-none flex-col items-start self-stretch border-l border-solid border-neutral-800 bg-black overflow-y-auto">
+        {/* Template Configurator (inline — we render its pieces directly so captions/hashtags/lyrics stay below) */}
+        <TemplateConfigurator
+          niche={niche}
+          activeFormat={activeFormat}
+          artistId={artistId}
+          db={db}
+          onSettingsChange={setLiveSettings}
+          previewContent={
+            currentPreviewUrl ? (
+              <>
+              <div ref={previewContainerRef} className="relative w-full overflow-hidden rounded-xl border border-solid border-neutral-700 bg-[#0a0a0f]" style={{ aspectRatio: '9/16' }}>
+                <img className="absolute inset-0 w-full h-full object-cover" src={currentPreviewUrl} alt="Preview" />
+                {/* Draggable text overlay — only for current slide, editable via double-click */}
+                {(() => {
+                  const texts = pipeline?.textBanks?.[previewSlideIdx] || [];
+                  if (!texts.length) return null;
+                  const entry = texts[0];
+                  const bankText = getTextBankText(entry);
+                  if (!bankText) return null;
+                  const displayText = textOverrides[previewSlideIdx] ?? bankText;
+                  const bankLabel = getPipelineBankLabel(pipeline, previewSlideIdx);
+                  const color = getBankHeaderColor(bankLabel, previewSlideIdx);
+                  const pos = textPositions[previewSlideIdx] || { x: 50, y: 50, width: 80 };
+                  return (
+                    <>
+                      <DraggableTextOverlay
+                        key={previewSlideIdx}
+                        text={displayText}
+                        textStyle={{ ...(liveSettings?.textStyle || {}), ...(getTextBankStyle(entry) || {}) }}
+                        color={color}
+                        position={pos}
+                        onPositionChange={(newPos) => setTextPositions(prev => ({ ...prev, [previewSlideIdx]: newPos }))}
+                        onTextChange={(newText) => setTextOverrides(prev => ({ ...prev, [previewSlideIdx]: newText }))}
+                        containerRef={previewContainerRef}
+                      />
+                    </>
+                  );
+                })()}
+                {/* Slide dots */}
+                <div className="absolute bottom-2 left-0 right-0 flex items-center justify-center gap-2 z-10">
+                  {Array.from({ length: slideCount }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="flex h-2 w-2 flex-none rounded-full cursor-pointer"
+                      style={{
+                        backgroundColor: getBankHeaderColor(getPipelineBankLabel(pipeline, i), i),
+                        opacity: previewSlideIdx === i ? 1 : 0.3,
+                      }}
+                      onClick={(e) => { e.stopPropagation(); setPreviewSlideIdx(i); }}
+                    />
+                  ))}
+                </div>
+              </div>
+              {/* Controls below preview */}
+              <div className="flex items-center justify-center gap-3 mt-2">
+                {(pipeline?.banks?.[previewSlideIdx] || []).length >= 2 && (
+                  <button
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
+                    onClick={handleRerollPreview}
+                  >
+                    <FeatherRefreshCw className="text-neutral-300" style={{ width: 12, height: 12 }} />
+                    <span className="text-caption font-caption text-neutral-300">Reroll</span>
+                  </button>
+                )}
+                {(pipeline?.textBanks?.[previewSlideIdx] || []).length > 0 && (
+                  <button
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border cursor-pointer transition-colors ${
+                      lockedSlides[previewSlideIdx]
+                        ? 'bg-indigo-500/15 border-indigo-500 text-indigo-400'
+                        : 'bg-neutral-800 hover:bg-neutral-700 border-neutral-700 text-neutral-400'
+                    }`}
+                    onClick={() => setLockedSlides(prev => ({ ...prev, [previewSlideIdx]: !prev[previewSlideIdx] }))}
+                  >
+                    {lockedSlides[previewSlideIdx]
+                      ? <FeatherLock className="text-indigo-400" style={{ width: 12, height: 12 }} />
+                      : <FeatherUnlock className="text-neutral-400" style={{ width: 12, height: 12 }} />
+                    }
+                    <span className="text-caption font-caption">{lockedSlides[previewSlideIdx] ? 'Text locked' : 'Lock text'}</span>
+                  </button>
+                )}
+              </div>
+            </> ) : currentBankHasImages ? (
+              <div className="flex flex-col items-center gap-2">
+                <FeatherImage className="text-neutral-600" style={{ width: 24, height: 24 }} />
+                <span className="text-caption font-caption text-neutral-500">Loading preview...</span>
+              </div>
             ) : (
               <div className="flex flex-col items-center gap-2">
                 <FeatherImage className="text-neutral-600" style={{ width: 24, height: 24 }} />
                 <span className="text-caption font-caption text-neutral-500">No images yet</span>
               </div>
-            )}
-            {getPreviewText(previewSlideIdx) && (
-              <div className="flex flex-col items-center justify-center px-6 relative z-10">
-                <span className="text-heading-2 font-heading-2 text-[#ffffffff] text-center drop-shadow-lg">
-                  {getPreviewText(previewSlideIdx)}
-                </span>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {Array.from({ length: slideCount }).map((_, i) => (
-              <div
-                key={i}
-                className="flex h-2 w-2 flex-none items-start rounded-full cursor-pointer"
-                style={{
-                  backgroundColor: getBankHeaderColor(getPipelineBankLabel(pipeline, i), i),
-                  opacity: previewSlideIdx === i ? 1 : 0.3,
-                }}
-                onClick={() => setPreviewSlideIdx(i)}
-              />
-            ))}
-          </div>
-          <span className="text-caption font-caption text-neutral-400">Slide {previewSlideIdx + 1} of {slideCount}</span>
-        </div>
+            )
+          }
+          createCount={generateCount}
+          onCreateCountChange={setGenerateCount}
+          onCreateClick={(templateSettings) => {
+            if (!onOpenEditor) return;
+            // Package the niche preview state into an existingDraft for the editor
+            const timestamp = Date.now();
+            const slides = Array.from({ length: slideCount }).map((_, bankIdx) => {
+              const pickedId = previewPicks[bankIdx];
+              const item = pickedId ? library.find(m => m.id === pickedId) : null;
+              const imgUrl = item?.url || item?.thumbnailUrl || null;
+              // Build text overlays from first text bank entry + any overrides
+              const texts = pipeline?.textBanks?.[bankIdx] || [];
+              const textOverlayList = [];
+              if (texts.length > 0) {
+                const entry = texts[0];
+                const bankText = getTextBankText(entry);
+                const displayText = textOverrides[bankIdx] ?? bankText;
+                if (displayText) {
+                  const pos = textPositions[bankIdx] || { x: 50, y: 50, width: 80 };
+                  // Merge template text style as base, then overlay bank entry style
+                  const baseStyle = templateSettings?.textStyle || liveSettings?.textStyle || {};
+                  const entryStyle = getTextBankStyle(entry) || {};
+                  textOverlayList.push({
+                    id: `text_${timestamp}_${bankIdx}_0`,
+                    text: displayText,
+                    style: {
+                      fontFamily: "'Inter', sans-serif",
+                      fontSize: 48,
+                      fontWeight: '600',
+                      color: '#ffffff',
+                      textAlign: 'center',
+                      outline: true,
+                      outlineColor: '#000000',
+                      ...baseStyle,
+                      ...entryStyle,
+                    },
+                    position: pos,
+                  });
+                }
+              }
+              return {
+                id: `slide_${timestamp}_${bankIdx}`,
+                index: bankIdx,
+                backgroundImage: imgUrl,
+                thumbnail: imgUrl,
+                sourceBank: `image${bankIdx}`,
+                sourceImageId: pickedId || null,
+                textOverlays: textOverlayList,
+                keepText: !!lockedSlides[bankIdx],
+                duration: 3,
+                imageTransform: { scale: 1, offsetX: 0, offsetY: 0 },
+              };
+            });
+            const existingDraft = {
+              id: `slideshow_niche_${timestamp}`,
+              name: pipeline?.name ? `${pipeline.name} #1` : 'Slideshow #1',
+              slides,
+              audio: selectedAudio ? { ...selectedAudio } : null,
+              aspectRatio: templateSettings?.aspectRatio || '9:16',
+              isTemplate: true,
+              _nicheGenerateCount: generateCount,
+              _lockedSlides: { ...lockedSlides },
+            };
+            onOpenEditor(pipeline, generateCount, existingDraft, templateSettings);
+          }}
+          createLabel={`Create ${generateCount}`}
+          selectedAudio={selectedAudio}
+          projectAudio={projectAudio}
+          onSelectAudio={handleSelectAudio}
+          onUploadAudio={onUploadAudio}
+          onTrimAudio={() => setShowAudioTrimmer(true)}
+          onAutoTranscribe={handleAutoTranscribe}
+          isTranscribing={isAnalyzing}
+          draftCount={nicheDrafts.length}
+          onViewDrafts={() => onViewDrafts && onViewDrafts(pipeline)}
+        />
 
-        {/* Generate section */}
-        <div className="flex w-full flex-col items-start gap-3 border-t border-solid border-neutral-800 px-4 py-4">
-          <span className="text-body-bold font-body-bold text-[#ffffffff]">Create</span>
-          <div className="flex w-full items-center justify-between">
-            <span className="text-caption font-caption text-neutral-400">Count</span>
-            <input
-              type="number" min={1} max={50} value={generateCount}
-              onChange={e => setGenerateCount(Math.max(1, parseInt(e.target.value) || 1))}
-              className="w-14 rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-2 py-1 text-center text-body font-body text-white outline-none"
-            />
-          </div>
-          <div className="flex w-full items-center justify-between">
-            <span className="text-caption font-caption text-neutral-400">Audio</span>
-            <div className="flex items-center gap-1.5">
-              <FeatherMusic className="text-caption font-caption text-neutral-400" />
-              <span className="text-caption font-caption text-[#ffffffff]">{selectedAudio?.name || 'None selected'}</span>
-            </div>
-          </div>
-          <Button className="h-auto w-full flex-none" variant="brand-primary" size="medium" icon={<FeatherPlay />}
-            onClick={() => onOpenEditor && onOpenEditor(pipeline, generateCount)}>
-            Create {generateCount}
-          </Button>
-        </div>
-
-        {/* View Drafts row */}
-        <div className="flex w-full items-center justify-between border-t border-solid border-neutral-800 px-4 py-3">
-          <span className="text-caption font-caption text-neutral-400">{nicheDrafts.length} draft{nicheDrafts.length !== 1 ? 's' : ''} created</span>
-          <Button className="h-auto w-auto flex-none" variant="neutral-tertiary" size="small" iconRight={<FeatherArrowRight />}
-            onClick={() => onViewDrafts && onViewDrafts(pipeline)}>
-            View Drafts
-          </Button>
-        </div>
-
-        {/* Captions & Hashtags */}
-        <div className="flex w-full flex-col items-start gap-3 border-t border-solid border-neutral-800 px-4 py-3">
-          {/* Captions */}
-          <div className="flex w-full flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <FeatherMessageSquare className="text-neutral-400" style={{ width: 12, height: 12 }} />
-              <span className="text-caption-bold font-caption-bold text-neutral-300">Captions</span>
-              <Badge variant="neutral">{captions.length}</Badge>
-            </div>
-            {captions.length > 0 && (
-              <div className="flex flex-col gap-1.5 max-h-[120px] overflow-y-auto">
-                {captions.map((cap, idx) => (
-                  <div key={idx} className="flex items-start gap-2 rounded-md bg-black px-2.5 py-1.5 group">
-                    <span
-                      className="grow text-caption font-caption text-neutral-300 cursor-pointer hover:text-white line-clamp-2"
-                      title="Click to copy"
-                      onClick={() => navigator.clipboard.writeText(cap)}
-                    >{cap}</span>
-                    <div className="flex items-center gap-1 flex-none opacity-0 group-hover:opacity-100 transition-opacity">
-                      {otherNiches.length > 0 && (
-                        <select
-                          className="bg-neutral-800 text-caption text-neutral-300 border-none rounded px-1 py-0.5 cursor-pointer outline-none"
-                          value=""
-                          onChange={e => { if (e.target.value) handleMoveCaption(cap, e.target.value); }}
-                        >
-                          <option value="" disabled>Move to...</option>
-                          {otherNiches.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
-                        </select>
-                      )}
-                      <button className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0" onClick={() => handleRemoveCaption(idx)}>
-                        <FeatherTrash2 style={{ width: 12, height: 12 }} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="flex w-full gap-2">
-              <textarea
-                className="flex-1 min-h-[32px] max-h-[64px] rounded-md border border-solid border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500 resize-none"
-                placeholder="Add caption..."
-                value={newCaption}
-                onChange={e => setNewCaption(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddCaption(); } }}
-                rows={1}
-              />
-              <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add caption" onClick={handleAddCaption} />
-            </div>
-          </div>
-
-          {/* Hashtags */}
-          <div className="flex w-full flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <FeatherHash className="text-neutral-400" style={{ width: 12, height: 12 }} />
-              <span className="text-caption-bold font-caption-bold text-neutral-300">Hashtags</span>
-              <Badge variant="neutral">{hashtags.length}</Badge>
-              {hashtags.length > 0 && (
-                <button className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer ml-auto" onClick={handleCopyAllHashtags}>
-                  Copy All
-                </button>
-              )}
-            </div>
-            {hashtags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 max-h-[80px] overflow-y-auto">
-                {hashtags.map((tag, idx) => (
-                  <div key={idx} className="flex items-center gap-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 px-2.5 py-0.5 group">
-                    <span className="text-caption font-caption text-indigo-300">{tag}</span>
-                    <button className="text-indigo-400 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleRemoveHashtag(idx)}>
-                      <FeatherX style={{ width: 10, height: 10 }} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="flex w-full gap-2">
-              <input
-                className="flex-1 rounded-md border border-solid border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500"
-                placeholder="#hashtag"
-                value={newHashtag}
-                onChange={e => setNewHashtag(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleAddHashtag(); }}
-              />
-              <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add hashtag" onClick={handleAddHashtag} />
-            </div>
-          </div>
-        </div>
-
-        {/* Lyrics section */}
-        <div className="flex w-full flex-col items-start gap-3 border-t border-solid border-neutral-800 px-4 py-3">
-          <div className="flex w-full items-center justify-between">
-            <span className="text-body-bold font-body-bold text-[#ffffffff]">Lyrics</span>
-            <Badge variant="neutral">
-              {(pipeline.textBanks || []).reduce((sum, bank) => sum + (bank?.length || 0), 0)} saved
-            </Badge>
-          </div>
-          <textarea
-            className="flex h-20 w-full flex-none items-start rounded-md border border-solid border-neutral-800 bg-black px-3 py-2 text-body font-body text-white outline-none placeholder-neutral-500 resize-none"
-            placeholder="Paste lyrics..." value={lyricsText} onChange={e => setLyricsText(e.target.value)}
-          />
-          <Button className="h-auto w-full flex-none" variant="neutral-secondary" size="small" icon={<FeatherDatabase />} onClick={handleLoadFromBanks}>
-            Load from Bank
-          </Button>
-        </div>
       </div>
+
+      {/* Audio Trimmer Modal */}
+      {showAudioTrimmer && selectedAudio && (
+        <AudioClipSelector
+          audioUrl={selectedAudio.localUrl || selectedAudio.url}
+          audioName={selectedAudio.name || 'Audio'}
+          onSave={() => setShowAudioTrimmer(false)}
+          onCancel={() => setShowAudioTrimmer(false)}
+          db={db}
+          artistId={artistId}
+        />
+      )}
+
+      {/* Lyric Distributor — after transcription (slideshow-specific) */}
+      {showLyricDistributor && (
+        <LyricDistributor
+          text={transcribedText}
+          slideLabels={Array.from({ length: slideCount }).map((_, i) => getPipelineBankLabel(pipeline, i))}
+          slideCount={slideCount}
+          onConfirm={handleLyricDistributorConfirm}
+          onClose={() => setShowLyricDistributor(false)}
+        />
+      )}
+
+      {/* Bank Picker Modal — assign transcribed lines to slide banks */}
+      {showBankPicker && pendingTranscription && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowBankPicker(false)}>
+          <div className="w-full max-w-md rounded-xl border border-neutral-800 bg-[#111111] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Add to Slide Bank</span>
+              <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherX />} aria-label="Close" onClick={() => setShowBankPicker(false)} />
+            </div>
+            <div className="px-6 py-4">
+              <span className="text-caption font-caption text-neutral-400 mb-3 block">
+                {pendingTranscription.length} line{pendingTranscription.length !== 1 ? 's' : ''} transcribed
+              </span>
+              <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto mb-4 rounded-lg border border-neutral-800 bg-black p-3">
+                {pendingTranscription.slice(0, 5).map((line, idx) => (
+                  <span key={idx} className="text-caption font-caption text-neutral-300 truncate">{line}</span>
+                ))}
+                {pendingTranscription.length > 5 && (
+                  <span className="text-caption font-caption text-neutral-500">...and {pendingTranscription.length - 5} more</span>
+                )}
+              </div>
+              {/* Auto-distribute button */}
+              <Button className="w-full mb-3" variant="brand-primary" size="medium" onClick={handleAutoDistribute}>
+                Auto-distribute across {slideCount} slides
+              </Button>
+              {/* Per-slide bank buttons */}
+              <span className="text-caption font-caption text-neutral-500 mb-2 block">Or add all to one slide:</span>
+              <div className="grid grid-cols-2 gap-2">
+                {Array.from({ length: slideCount }).map((_, bankIdx) => {
+                  const label = getPipelineBankLabel(pipeline, bankIdx);
+                  const color = getBankHeaderColor(label, bankIdx);
+                  return (
+                    <Button
+                      key={bankIdx}
+                      className="flex-1"
+                      variant="neutral-secondary"
+                      size="small"
+                      onClick={() => handleAssignToBank(bankIdx)}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 rounded-full flex-none" style={{ backgroundColor: color }} />
+                        {label}
+                      </span>
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fullscreen lightbox */}
+      {lightboxItem && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+          onClick={() => setLightboxItem(null)}
+        >
+          <button
+            className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-neutral-800 hover:bg-neutral-700 border-none cursor-pointer z-10 transition-colors"
+            onClick={() => setLightboxItem(null)}
+            aria-label="Close preview"
+          >
+            <FeatherX className="text-white" style={{ width: 20, height: 20 }} />
+          </button>
+          <div className="flex flex-col items-center gap-3 max-w-[90vw] max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            <img
+              className="max-w-[90vw] max-h-[85vh] rounded-lg object-contain"
+              src={lightboxItem.url || lightboxItem.thumbnailUrl}
+              alt={lightboxItem.name}
+            />
+            <span className="text-caption font-caption text-neutral-400 truncate max-w-[60vw]">{lightboxItem.name}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

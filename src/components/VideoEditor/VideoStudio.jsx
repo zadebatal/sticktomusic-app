@@ -12,6 +12,7 @@ import SchedulingPage from './SchedulingPage';
 import StudioLibrary from './StudioLibrary';
 import ProjectLanding from './ProjectLanding';
 import ProjectWorkspace from './ProjectWorkspace';
+import ProjectWizard from './ProjectWizard';
 // OnboardingModal removed - auto-setup Music Artist template instead
 import { uploadFile, deleteFile, getMediaDuration, generateThumbnail } from '../../services/firebaseStorage';
 import { generateSlideThumbnail } from '../../services/slideshowExportService';
@@ -49,8 +50,6 @@ import {
   MEDIA_TYPES,
   STARTER_TEMPLATES,
   getUserCollections,
-  saveCollections,
-  saveCollectionToFirestore,
   FORMAT_TEMPLATES,
   migrateToProjects,
   migrateDraftsToNiches,
@@ -161,7 +160,7 @@ class EditorErrorBoundary extends React.Component {
             </p>
             <button
               onClick={() => {
-                this.setState({ hasError: false, error: null });
+                // Only close — don't reset hasError (which would re-render the broken child and cause infinite loop)
                 this.props.onClose?.();
               }}
               style={{
@@ -361,7 +360,9 @@ const VideoStudio = ({
   onSchedulePost,
   onDeleteLatePost,
   onArtistChange = null, // Callback when artist selection changes
-  inline = false // When true, renders inside AppShell instead of fixed overlay
+  inline = false, // When true, renders inside AppShell instead of fixed overlay
+  pendingEditDraft = null, // { post } from App.jsx Schedule tab "Edit in Studio"
+  onClearPendingEditDraft = null // Callback to clear after consuming
 }) => {
   // BUG-034: Toast notifications instead of alert()
   const { success: toastSuccess, error: toastError } = useToast();
@@ -393,6 +394,13 @@ const VideoStudio = ({
     setCurrentArtistId(newArtistId);
     setLastArtistId(newArtistId);
     setHomeTab('production'); // Reset to production on artist switch
+
+    // Reset navigation state so stale project IDs don't persist
+    setCurrentViewState('home');
+    setActiveProjectId(null);
+    setActiveProjectNicheId(null);
+    setSelectedCategory(null);
+    setStudioMode(null);
 
     // Also update selectedArtist to match
     const newArtist = artists.find(a => a.id === newArtistId);
@@ -454,6 +462,7 @@ const VideoStudio = ({
     else if (view === 'scheduling') targetPath = '/operator/studio/scheduling';
     else if (view === 'workspace') targetPath = '/operator/studio/workspace';
     else if (view === 'project') targetPath = '/operator/studio/project';
+    else if (view === 'project-wizard') targetPath = '/operator/studio/wizard';
     if (location.pathname !== targetPath) {
       navigate(targetPath, { replace: false });
     }
@@ -467,14 +476,25 @@ const VideoStudio = ({
     const path = location.pathname;
     if (path === lastHandledPathRef.current) return;
     lastHandledPathRef.current = path;
-    if (path.includes('/studio/project')) setCurrentViewState('project');
+    if (path.includes('/studio/wizard')) setCurrentViewState('project-wizard');
+    else if (path.includes('/studio/project')) setCurrentViewState('project');
     else if (path.includes('/studio/workspace')) setCurrentViewState('workspace');
     else if (path.includes('/studio/scheduling')) setCurrentViewState('scheduling');
     else if (path.includes('/studio/drafts')) setCurrentViewState('drafts');
     else if (path.includes('/studio/media')) setCurrentViewState('media');
     else if (path.includes('/studio/library')) setCurrentViewState('library');
     else if (path.includes('/studio/slideshows')) setCurrentViewState('slideshows');
-    else if (path === '/operator/studio') setCurrentViewState('home');
+    else if (path === '/operator/studio') {
+      setCurrentViewState('home');
+      // Clear project state so stale IDs don't persist
+      setActiveProjectId(null);
+      setActiveProjectNicheId(null);
+    }
+    // Clear project state when navigating away from project view via browser back
+    if (!path.includes('/studio/project')) {
+      setActiveProjectId(null);
+      setActiveProjectNicheId(null);
+    }
   }, [location.pathname, currentView]);
   const [selectedArtist, setSelectedArtist] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
@@ -520,6 +540,9 @@ const VideoStudio = ({
       videos: pipelineMedia
         .filter(v => v.type === MEDIA_TYPES.VIDEO)
         .map(v => ({ ...v, src: v.url, localUrl: v.localUrl || v.url, thumbnail: v.thumbnail || null, name: v.name || 'Clip' })),
+      images: pipelineMedia
+        .filter(i => i.type === MEDIA_TYPES.IMAGE)
+        .map(i => ({ ...i, src: i.url, localUrl: i.localUrl || i.url, thumbnail: i.thumbnailUrl || i.thumbnail || null })),
       audio: pipelineMedia
         .filter(a => a.type === MEDIA_TYPES.AUDIO)
         .map(a => ({ ...a, src: a.url, localUrl: a.localUrl || a.url, savedLyrics: [] })),
@@ -739,6 +762,7 @@ const VideoStudio = ({
   const [libraryMedia, setLibraryMedia] = useState({ videos: [], audio: [], images: [] });
   const [selectedLibraryMedia, setSelectedLibraryMedia] = useState({ videos: [], audio: null, images: [], lyrics: [] });
   const [pullFromCollection, setPullFromCollection] = useState(null);
+  const [clipperSourceVideos, setClipperSourceVideos] = useState([]);
 
   // On mount: try loading categories from Firestore (may have newer data than localStorage)
   useEffect(() => {
@@ -762,7 +786,7 @@ const VideoStudio = ({
       const status = getOnboardingStatus(currentArtistId);
       if (!status.completed) {
         // Auto-complete with Music Artist template
-        completeOnboarding(currentArtistId, STARTER_TEMPLATES.MUSIC_ARTIST.id);
+        completeOnboarding(currentArtistId, STARTER_TEMPLATES.MUSIC_ARTIST.id, db);
         log('[Studio] Auto-completed onboarding with Music Artist template');
       }
       // Migrate existing pipelines to projects, then assign unassigned drafts to niches
@@ -940,6 +964,7 @@ const VideoStudio = ({
 
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [initialEditorMode, setInitialEditorMode] = useState(null);
+  const [pendingTemplateSettings, setPendingTemplateSettings] = useState(null);
 
   const handleMakeVideo = useCallback((existingVideo = null, editorMode = null) => {
     setEditingVideo(existingVideo);
@@ -970,9 +995,11 @@ const VideoStudio = ({
     setShowEditor(false);
     setEditingVideo(null);
     setInitialEditorMode(null);
+    setPendingTemplateSettings(null);
     // Clear library selection so stale clips don't appear next time
     setSelectedLibraryMedia({ videos: [], audio: null, images: [], lyrics: [] });
     setPullFromCollection(null);
+    setClipperSourceVideos([]);
     // If opened from pipeline, go back to pipeline list or project view
     if (activePipelineIdForEditor) {
       const nicheId = activePipelineIdForEditor;
@@ -1743,9 +1770,27 @@ const VideoStudio = ({
     setStudioMode('slideshows');
   }, []);
 
+  // Consume pendingEditDraft from parent (App.jsx Schedule tab → Studio)
+  const pendingEditDraftConsumedRef = useRef(null);
+  useEffect(() => {
+    if (!pendingEditDraft || !pendingEditDraft.post?.editorState) return;
+    if (pendingEditDraftConsumedRef.current === pendingEditDraft) return;
+    pendingEditDraftConsumedRef.current = pendingEditDraft;
+
+    const { post } = pendingEditDraft;
+    setSchedulerEditPostId(post.id);
+    if (post.contentType === 'slideshow') {
+      handleMakeSlideshow(post.editorState);
+    } else {
+      handleMakeVideo(post.editorState);
+    }
+    if (onClearPendingEditDraft) onClearPendingEditDraft();
+  }, [pendingEditDraft, handleMakeSlideshow, handleMakeVideo, onClearPendingEditDraft]);
+
   const handleCloseSlideshowEditor = useCallback(() => {
     setShowSlideshowEditor(false);
     setEditingSlideshow(null);
+    setPendingTemplateSettings(null);
     // Clear selected images so they don't persist into next editor session
     setSelectedLibraryMedia(prev => ({ ...prev, images: [] }));
   }, []);
@@ -2351,8 +2396,13 @@ const VideoStudio = ({
                           setActiveProjectNicheId(null);
                           setCurrentView('home');
                         } else if (currentView === 'drafts' || currentView === 'scheduling' || currentView === 'media') {
-                          setCurrentView('home');
+                          if (activeProjectId) {
+                            setCurrentView('project');
+                          } else {
+                            setCurrentView('home');
+                          }
                           setStudioMode(null);
+                          setDraftsCollectionFilter(null);
                         } else if (studioMode) {
                           setCurrentView('home');
                           setStudioMode(null);
@@ -2576,6 +2626,7 @@ const VideoStudio = ({
             latePages={latePages}
             manualAccounts={manualAccounts}
             onOpenProject={handleOpenProject}
+            onStartWizard={() => setCurrentView('project-wizard')}
             onViewAllMedia={() => setCurrentView('media')}
             onEditSlideshow={(slideshow) => handleMakeSlideshow(slideshow)}
             onOpenVideoEditor={(format, pipelineId) => {
@@ -2609,15 +2660,18 @@ const VideoStudio = ({
               setActiveProjectNicheId(null);
               setCurrentView('home');
             }}
-            onOpenEditor={(p, count, existingDraft) => {
+            onOpenEditor={(p, count, existingDraft, templateSettings) => {
               setPullFromCollection(p.id);
+              setPendingTemplateSettings(templateSettings || null);
               handleMakeSlideshow(existingDraft || null);
             }}
-            onOpenVideoEditor={(format, nicheId, existingDraft) => {
+            onOpenVideoEditor={(format, nicheId, existingDraft, templateSettings, nicheSourceVideos) => {
               if (nicheId) {
                 setActivePipelineIdForEditor(nicheId);
                 setPullFromCollection(nicheId);
               }
+              setPendingTemplateSettings(templateSettings || null);
+              setClipperSourceVideos(nicheSourceVideos || []);
               const editorMode = FORMAT_TO_EDITOR[format?.id] || null;
               handleMakeVideo(existingDraft || null, editorMode);
             }}
@@ -2633,6 +2687,17 @@ const VideoStudio = ({
             onSchedule={() => {
               setCurrentView('scheduling');
             }}
+          />
+        )}
+
+        {currentView === 'project-wizard' && (
+          <ProjectWizard
+            db={db}
+            artistId={currentArtistId}
+            latePages={latePages}
+            manualAccounts={manualAccounts}
+            onComplete={(projId) => handleOpenProject(projId)}
+            onCancel={() => setCurrentView('home')}
           />
         )}
 
@@ -2735,7 +2800,7 @@ const VideoStudio = ({
             category={selectedCategory || libraryCategory}
             collectionFilter={draftsCollectionFilter}
             isMobile={isMobile}
-            onBack={() => { setCurrentView('home'); setDraftsCollectionFilter(null); }}
+            onBack={() => { setCurrentView(activeProjectId ? 'project' : 'home'); setDraftsCollectionFilter(null); }}
             onMakeVideo={handleMakeVideo}
             onEditVideo={handleMakeVideo}
             onDeleteVideo={handleDeleteVideo}
@@ -2789,7 +2854,7 @@ const VideoStudio = ({
                 }
               }
             }}
-            onBack={() => setCurrentView('home')}
+            onBack={() => setCurrentView(activeProjectId ? 'project' : 'home')}
           />
         )}
 
@@ -2841,6 +2906,8 @@ const VideoStudio = ({
             showTemplatePicker={schedulerEditPostId ? false : showTemplatePicker}
             schedulerEditMode={!!schedulerEditPostId}
             initialEditorMode={initialEditorMode}
+            templateSettings={pendingTemplateSettings}
+            clipperSourceVideos={clipperSourceVideos}
           />
         </EditorErrorBoundary>
       )}
@@ -2864,6 +2931,7 @@ const VideoStudio = ({
           initialLyrics={selectedLibraryMedia?.lyrics || []}
           initialSelectedBanks={selectedLibraryMedia?.selectedBanks || null}
           batchMode={slideshowBatchMode}
+          templateSettings={pendingTemplateSettings}
           onSave={handleSaveSlideshow}
           onClose={() => { handleCloseSlideshowEditor(); setSchedulerEditPostId(null); }}
           onSchedulePost={schedulerEditPostId ? null : onSchedulePost}

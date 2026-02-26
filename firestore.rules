@@ -81,6 +81,12 @@ service cloud.firestore {
         allow read: if isOperatorOrAbove() || isLinkedToArtist(artistId);
         allow write: if isConductor() || canAccessArtist(artistId);
       }
+
+      // User settings subcollection (per-user preferences per artist)
+      match /settings/{userId} {
+        allow read: if isOperatorOrAbove() || isLinkedToArtist(artistId);
+        allow write: if isConductor() || canAccessArtist(artistId);
+      }
     }
 
     // Content Templates collection (caption/hashtag templates per artist)

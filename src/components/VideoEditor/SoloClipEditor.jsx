@@ -59,7 +59,8 @@ const SoloClipEditor = ({
   onDeleteLyrics,
   presets = [],
   onSavePreset,
-  nicheTextBanks = null
+  nicheTextBanks = null,
+  templateSettings = null
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
@@ -216,7 +217,7 @@ const SoloClipEditor = ({
   const animationRef = useRef(null);
 
   // ── Aspect ratio ──
-  const [aspectRatio, setAspectRatio] = useState(existingVideo?.cropMode || '9:16');
+  const [aspectRatio, setAspectRatio] = useState(existingVideo?.cropMode || templateSettings?.aspectRatio || '9:16');
 
   // ── Global text style (matches Montage editor pattern) ──
   const [textStyle, setTextStyle] = useState({
@@ -228,7 +229,8 @@ const SoloClipEditor = ({
     outlineColor: '#000000',
     textAlign: 'center',
     textCase: 'default',
-    displayMode: 'word'
+    displayMode: templateSettings?.textDisplayMode || 'word',
+    ...(templateSettings?.textStyle || {}),
   });
   const [activeTab, setActiveTab] = useState('caption');
 
@@ -369,18 +371,18 @@ const SoloClipEditor = ({
   const handleAddToVideoTextBank = useCallback((bankNum, text) => {
     if (!text.trim() || !artistId || collections.length === 0) return;
     const targetCol = collections[0];
-    addToVideoTextBank(artistId, targetCol.id, bankNum, text.trim());
+    addToVideoTextBank(artistId, targetCol.id, bankNum, text.trim(), db);
     setCollections(prev => prev.map(col =>
       col.id === targetCol.id
         ? { ...col, [`videoTextBank${bankNum}`]: [...(col[`videoTextBank${bankNum}`] || []), text.trim()] }
         : col
     ));
-  }, [artistId, collections]);
+  }, [artistId, collections, db]);
 
   const handleRemoveFromVideoTextBank = useCallback((bankNum, index) => {
     if (!artistId || collections.length === 0) return;
     const targetCol = collections[0];
-    removeFromVideoTextBank(artistId, targetCol.id, bankNum, index);
+    removeFromVideoTextBank(artistId, targetCol.id, bankNum, index, db);
     setCollections(prev => prev.map(col =>
       col.id === targetCol.id
         ? { ...col, [`videoTextBank${bankNum}`]: (col[`videoTextBank${bankNum}`] || []).filter((_, i) => i !== index) }

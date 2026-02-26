@@ -90,6 +90,7 @@ const ClipperEditor = ({
   onClose,
   artistId = null,
   db = null,
+  sourceVideos = [],
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { isMobile } = useIsMobile();
@@ -131,6 +132,24 @@ const ClipperEditor = ({
     setActiveBucketRaw(val);
   }, []);
 
+  // Merge source candidates: explicit sourceVideos prop (from niche) + category.videos fallback
+  const availableSourceVideos = useMemo(() => {
+    const fromProp = (sourceVideos || []).map(v => ({
+      id: v.id,
+      url: v.url || v.cloudUrl,
+      name: v.name || v.originalName || 'Video',
+      thumbnailUrl: v.thumbnailUrl || v.thumbnail || null,
+    })).filter(v => v.url);
+    if (fromProp.length > 0) return fromProp;
+    // Fallback to category.videos (pipelineCategory)
+    return (category?.videos || []).map(v => ({
+      id: v.id,
+      url: v.url || v.cloudUrl,
+      name: v.name || v.originalName || 'Video',
+      thumbnailUrl: v.thumbnailUrl || v.thumbnail || null,
+    })).filter(v => v.url);
+  }, [sourceVideos, category?.videos]);
+
   // ── Load existing data ──
   useEffect(() => {
     if (existingVideo?.editorMode === 'clipper') {
@@ -145,12 +164,12 @@ const ClipperEditor = ({
       setClips(existingVideo.clips);
       setSourceUrl(existingVideo.sourceUrl);
       setSourceName(existingVideo.sourceName || '');
-    } else if (category?.videos?.length > 0) {
-      const firstVideo = category.videos[0];
-      setSourceUrl(firstVideo.url || firstVideo.cloudUrl);
-      setSourceName(firstVideo.name || firstVideo.originalName || 'Source');
+    } else if (availableSourceVideos.length > 0) {
+      const firstVideo = availableSourceVideos[0];
+      setSourceUrl(firstVideo.url);
+      setSourceName(firstVideo.name);
     }
-  }, [existingVideo, category, setActiveBucket]);
+  }, [existingVideo, availableSourceVideos, setActiveBucket]);
 
   // ── Time display update (throttled via timeupdate ~4x/sec for the badge) ──
   useEffect(() => {
@@ -558,19 +577,44 @@ const ClipperEditor = ({
               <span className="text-body font-body text-neutral-400 text-center max-w-sm">
                 Choose a video to split into multiple clips using stream-copy (instant, no quality loss)
               </span>
+
+              {/* Niche source video selector grid */}
+              {availableSourceVideos.length > 0 && (
+                <div className="flex flex-col gap-2 w-full max-w-lg">
+                  <span className="text-caption-bold font-caption-bold text-neutral-400">Source Videos</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {availableSourceVideos.map(v => (
+                      <div
+                        key={v.id}
+                        className="relative group rounded-lg overflow-hidden bg-neutral-800 aspect-video cursor-pointer border border-neutral-700 hover:border-indigo-500/50 transition-colors"
+                        onClick={() => {
+                          setSourceUrl(v.url);
+                          setSourceName(v.name);
+                          setClips([]);
+                          markInRef.current = null;
+                          setMarkIn(null);
+                        }}
+                      >
+                        {v.thumbnailUrl ? (
+                          <img src={v.thumbnailUrl} alt={v.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <FeatherPlay className="text-neutral-500" style={{ width: 24, height: 24 }} />
+                          </div>
+                        )}
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 px-2 py-1">
+                          <span className="text-[11px] text-neutral-300 line-clamp-1">{v.name}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center gap-3">
                 <Button variant="brand-primary" size="medium" icon={<FeatherUpload />} onClick={() => fileInputRef.current?.click()}>
                   Upload Video
                 </Button>
-                {category?.videos?.length > 0 && (
-                  <Button variant="neutral-secondary" size="medium" onClick={() => {
-                    const v = category.videos[0];
-                    setSourceUrl(v.url || v.cloudUrl);
-                    setSourceName(v.name || v.originalName || 'Source');
-                  }}>
-                    Use Collection Video
-                  </Button>
-                )}
               </div>
               <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={handleFileSelect} />
             </div>
@@ -815,12 +859,46 @@ const ClipperEditor = ({
               )}
             </div>
 
-            {/* Source info */}
+            {/* Source info + niche video switcher */}
             {hasSource && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-neutral-900/50 border-b border-neutral-800">
-                <FeatherPlay className="text-neutral-500 flex-none" style={{ width: 12, height: 12 }} />
-                <span className="text-caption font-caption text-neutral-400 truncate">{sourceName}</span>
-                <span className="text-caption font-caption text-neutral-600 flex-none">{formatTime(duration)}</span>
+              <div className="flex flex-col border-b border-neutral-800">
+                <div className="flex items-center gap-2 px-4 py-2 bg-neutral-900/50">
+                  <FeatherPlay className="text-neutral-500 flex-none" style={{ width: 12, height: 12 }} />
+                  <span className="text-caption font-caption text-neutral-400 truncate">{sourceName}</span>
+                  <span className="text-caption font-caption text-neutral-600 flex-none">{formatTime(duration)}</span>
+                </div>
+                {availableSourceVideos.length > 1 && (
+                  <div className="flex gap-1 px-3 py-2 overflow-x-auto">
+                    {availableSourceVideos.map(v => {
+                      const isActive = sourceUrl === v.url;
+                      return (
+                        <div
+                          key={v.id}
+                          className={`relative flex-none w-14 h-10 rounded overflow-hidden cursor-pointer border transition-colors ${
+                            isActive ? 'border-indigo-500' : 'border-neutral-700 hover:border-neutral-500'
+                          }`}
+                          title={v.name}
+                          onClick={() => {
+                            if (isActive) return;
+                            setSourceUrl(v.url);
+                            setSourceName(v.name);
+                            setClips([]);
+                            markInRef.current = null;
+                            setMarkIn(null);
+                          }}
+                        >
+                          {v.thumbnailUrl ? (
+                            <img src={v.thumbnailUrl} alt={v.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-neutral-800">
+                              <FeatherPlay className="text-neutral-600" style={{ width: 10, height: 10 }} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 

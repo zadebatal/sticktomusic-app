@@ -4,7 +4,6 @@ import {
   getCollectionHashtagBank,
   updateCollectionCaptionBank,
   updateCollectionHashtagBank,
-  saveCollectionToFirestore
 } from '../../services/libraryService';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -34,21 +33,13 @@ const CollectionBankEditor = ({
   // Save and notify parent
   const saveCaptionBank = useCallback((updated) => {
     setCaptionBank(updated);
-    updateCollectionCaptionBank(artistId, collection.id, updated);
-    // Sync to Firestore
-    if (db && artistId && collection) {
-      saveCollectionToFirestore(db, artistId, { ...collection, captionBank: updated });
-    }
+    updateCollectionCaptionBank(artistId, collection.id, updated, db);
     onBankChange?.();
   }, [artistId, db, collection, onBankChange]);
 
   const saveHashtagBank = useCallback((updated) => {
     setHashtagBank(updated);
-    updateCollectionHashtagBank(artistId, collection.id, updated);
-    // Sync to Firestore
-    if (db && artistId && collection) {
-      saveCollectionToFirestore(db, artistId, { ...collection, hashtagBank: updated });
-    }
+    updateCollectionHashtagBank(artistId, collection.id, updated, db);
     onBankChange?.();
   }, [artistId, db, collection, onBankChange]);
 

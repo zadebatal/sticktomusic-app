@@ -68,6 +68,19 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: `Webhook Error: ${err.message}` });
   }
 
+  // Idempotency: check if we've already processed this event
+  try {
+    const eventRef = db.collection('processedEvents').doc(event.id);
+    const eventDoc = await eventRef.get();
+    if (eventDoc.exists) {
+      console.log(`Event already processed: ${event.id}`);
+      return res.status(200).json({ received: true, duplicate: true });
+    }
+    await eventRef.set({ type: event.type, processedAt: new Date().toISOString() });
+  } catch (err) {
+    console.warn('Idempotency check failed, proceeding:', err.message);
+  }
+
   // Handle checkout.session.completed — user paid after approval
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;

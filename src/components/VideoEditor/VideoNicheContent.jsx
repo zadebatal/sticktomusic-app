@@ -1,22 +1,35 @@
 /**
  * VideoNicheContent — "Create [Format]" button + draft grid for video niches
  */
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { Badge } from '../../ui/components/Badge';
 import {
-  FeatherPlay, FeatherImage, FeatherFilm, FeatherLayers, FeatherCamera,
-  FeatherHash, FeatherMessageSquare, FeatherPlus, FeatherX,
-  FeatherTrash2,
+  FeatherPlay, FeatherSquare, FeatherImage, FeatherFilm, FeatherLayers, FeatherCamera,
+  FeatherPlus, FeatherX,
+  FeatherType,
+  FeatherUpload, FeatherDownloadCloud, FeatherScissors,
+  FeatherMusic,
 } from '@subframe/core';
 import {
-  updateNicheCaptionBank,
-  updateNicheHashtagBank,
-  moveNicheBankEntry,
-  getUserCollections,
-  saveCollectionToFirestore,
+  updateNicheAudioId,
+  updateNicheMediaOrder,
+  updateMediaTrimPoints,
+  addToVideoTextBank,
+  removeFromVideoTextBank,
 } from '../../services/libraryService';
+import useDragReorder from './shared/useDragReorder';
+import QuickTrimPopover from './shared/QuickTrimPopover';
+import TemplateConfigurator from './shared/TemplateConfigurator';
+import AudioClipSelector from './AudioClipSelector';
+import WordTimeline from './WordTimeline';
+import MontagePreview from './shared/previews/MontagePreview';
+import SoloClipPreview from './shared/previews/SoloClipPreview';
+import MultiClipPreview from './shared/previews/MultiClipPreview';
+import PhotoMontagePreview from './shared/previews/PhotoMontagePreview';
+import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
+import { useToast } from '../ui';
 
 const FORMAT_ICONS = {
   montage: FeatherFilm,
@@ -29,14 +42,62 @@ const VideoNicheContent = ({
   db,
   artistId,
   niche,
+  library = [],
   createdContent,
+  projectAudio = [],
   onMakeVideo,
-  allNiches = [],
+  onUpload,
+  onUploadAudio,
+  onImport,
+  onImportAudio,
 }) => {
   const activeFormat = niche?.formats?.find(f => f.id === niche.activeFormatId) || niche?.formats?.[0];
   const IconComponent = FORMAT_ICONS[activeFormat?.id] || FeatherPlay;
-  const [newCaption, setNewCaption] = useState('');
-  const [newHashtag, setNewHashtag] = useState('');
+  const [textBankInput1, setTextBankInput1] = useState('');
+  const [textBankInput2, setTextBankInput2] = useState('');
+  const [lightboxItem, setLightboxItem] = useState(null);
+  const [createCount, setCreateCount] = useState(1);
+  const [liveSettings, setLiveSettings] = useState(null);
+  const [trimItemId, setTrimItemId] = useState(null);
+
+  // Audio preview playback
+  const [playingAudioId, setPlayingAudioId] = useState(null);
+  const audioPreviewRef = useRef(null);
+
+  const handlePlayAudio = useCallback((e, audio) => {
+    e.stopPropagation();
+    const el = audioPreviewRef.current;
+    if (!el) return;
+    if (playingAudioId === audio.id) {
+      el.pause();
+      el.currentTime = 0;
+      setPlayingAudioId(null);
+    } else {
+      el.src = audio.localUrl || audio.url;
+      el.play().catch(() => {});
+      setPlayingAudioId(audio.id);
+    }
+  }, [playingAudioId]);
+
+  // Audio tools
+  const [showAudioTrimmer, setShowAudioTrimmer] = useState(false);
+  const [showWordTimeline, setShowWordTimeline] = useState(false);
+  const [transcribedWords, setTranscribedWords] = useState([]);
+  const [transcribedDuration, setTranscribedDuration] = useState(30);
+  const [showBankPicker, setShowBankPicker] = useState(false);
+  const [pendingTranscription, setPendingTranscription] = useState(null);
+  const { analyze: analyzeAudio, isAnalyzing, progress: analyzeProgress } = useLyricAnalyzer();
+  const { success: toastSuccess, error: toastError } = useToast();
+
+  // WordTimeline playback state
+  const wordTimelineAudioRef = useRef(null);
+  const [wtCurrentTime, setWtCurrentTime] = useState(0);
+  const [wtIsPlaying, setWtIsPlaying] = useState(false);
+  const wtAnimRef = useRef(null);
+
+  // Text bank preview overlay
+  const [previewTextA, setPreviewTextA] = useState(null);
+  const [previewTextB, setPreviewTextB] = useState(null);
 
   // Drafts for this niche
   const nicheDrafts = useMemo(() =>
@@ -44,206 +105,806 @@ const VideoNicheContent = ({
     [createdContent, niche?.id]
   );
 
-  const captions = niche?.captionBank || [];
-  const hashtags = niche?.hashtagBank || [];
-  const otherNiches = (allNiches || []).filter(n => n.id !== niche?.id);
+  // Per-niche audio selection
+  const selectedAudio = useMemo(
+    () => projectAudio.find(a => a.id === niche?.audioId) || projectAudio[0] || null,
+    [projectAudio, niche?.audioId]
+  );
 
-  const syncToFirestore = useCallback((nicheId) => {
-    if (!db || !artistId) return;
-    const col = getUserCollections(artistId).find(c => c.id === nicheId);
-    if (col) saveCollectionToFirestore(db, artistId, col);
-  }, [db, artistId]);
-
-  const handleAddCaption = useCallback(() => {
-    const text = newCaption.trim();
-    if (!text || !niche) return;
-    updateNicheCaptionBank(artistId, niche.id, [...captions, text]);
-    syncToFirestore(niche.id);
-    setNewCaption('');
-  }, [newCaption, captions, artistId, niche, syncToFirestore]);
-
-  const handleRemoveCaption = useCallback((idx) => {
+  const handleSelectAudio = useCallback((audioId) => {
     if (!niche) return;
-    updateNicheCaptionBank(artistId, niche.id, captions.filter((_, i) => i !== idx));
-    syncToFirestore(niche.id);
-  }, [captions, artistId, niche, syncToFirestore]);
+    updateNicheAudioId(artistId, niche.id, audioId, db);
+  }, [artistId, niche, db]);
 
-  const handleMoveCaption = useCallback((entry, toNicheId) => {
+  // Audio URL for preview components
+  const audioUrl = useMemo(() => selectedAudio?.localUrl || selectedAudio?.url || null, [selectedAudio]);
+
+  // Text banks (videoTextBank1 / videoTextBank2)
+  const textBank1 = niche?.videoTextBank1 || [];
+  const textBank2 = niche?.videoTextBank2 || [];
+
+  const handleAddTextBank = useCallback((bankNum, text, setter) => {
+    if (!text.trim() || !niche) return;
+    addToVideoTextBank(artistId, niche.id, bankNum, text.trim(), db);
+    setter('');
+  }, [artistId, niche, db]);
+
+  const handleRemoveTextBank = useCallback((bankNum, idx) => {
     if (!niche) return;
-    moveNicheBankEntry(artistId, niche.id, toNicheId, entry, 'caption');
-    syncToFirestore(niche.id);
-    syncToFirestore(toNicheId);
-  }, [artistId, niche, syncToFirestore]);
+    removeFromVideoTextBank(artistId, niche.id, bankNum, idx, db);
+  }, [artistId, niche, db]);
 
-  const handleAddHashtag = useCallback(() => {
-    let text = newHashtag.trim();
-    if (!text || !niche) return;
-    if (!text.startsWith('#')) text = '#' + text;
-    if (hashtags.includes(text)) return;
-    updateNicheHashtagBank(artistId, niche.id, [...hashtags, text]);
-    syncToFirestore(niche.id);
-    setNewHashtag('');
-  }, [newHashtag, hashtags, artistId, niche, syncToFirestore]);
+  // Post-process Whisper words for singing:
+  // 1. Enforce minimum duration (sung words are never < 0.15s)
+  // 2. Legato fill — extend each word to the next word's start (fills held-note gaps)
+  // 3. Energy-based refinement runs async after initial display
+  const postProcessWords = useCallback((words, totalDuration) => {
+    if (!words?.length) return words;
+    const MIN_DURATION = 0.15;
+    const sorted = [...words].sort((a, b) => a.startTime - b.startTime);
+    return sorted.map((word, i) => {
+      let dur = Math.max(word.duration, MIN_DURATION);
+      if (i < sorted.length - 1) {
+        const nextStart = sorted[i + 1].startTime;
+        const gap = nextStart - (word.startTime + dur);
+        if (gap > 0) {
+          // Extend to fill gap (singer was holding the note)
+          dur = nextStart - word.startTime;
+        }
+      } else {
+        // Last word: extend to end of audio or cap at 4s
+        dur = Math.min(totalDuration - word.startTime, Math.max(dur, 4));
+      }
+      return { ...word, duration: dur };
+    });
+  }, []);
 
-  const handleRemoveHashtag = useCallback((idx) => {
+  // Energy-based word boundary refinement — trims word endings at actual silence
+  const refineWordsWithEnergy = useCallback(async (words, audioSrc, totalDuration) => {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
+      const resp = await fetch(audioSrc, { mode: 'cors' });
+      const arrayBuf = await resp.arrayBuffer();
+      const buffer = await audioCtx.decodeAudioData(arrayBuf);
+      await audioCtx.close();
+
+      const rawData = buffer.getChannelData(0);
+      const sampleRate = buffer.sampleRate;
+
+      // Compute RMS energy in small windows (20ms)
+      const windowSize = Math.floor(sampleRate * 0.02);
+      const getRMS = (startSec, endSec) => {
+        const s = Math.floor(startSec * sampleRate);
+        const e = Math.min(Math.floor(endSec * sampleRate), rawData.length);
+        if (e <= s) return 0;
+        let sum = 0;
+        for (let i = s; i < e; i++) sum += rawData[i] * rawData[i];
+        return Math.sqrt(sum / (e - s));
+      };
+
+      // For each word, find where energy drops below threshold after word midpoint
+      const sorted = [...words].sort((a, b) => a.startTime - b.startTime);
+      const refined = sorted.map((word, i) => {
+        const wordEnd = word.startTime + word.duration;
+        const nextStart = i < sorted.length - 1 ? sorted[i + 1].startTime : totalDuration;
+
+        // Only refine if word extends past its Whisper end into a gap
+        if (wordEnd <= word.startTime + 0.3) return word;
+
+        // Scan backwards from word end to find where energy actually drops
+        // Use 10% of peak energy within the word as silence threshold
+        const peakRMS = getRMS(word.startTime, Math.min(word.startTime + 0.5, wordEnd));
+        const threshold = peakRMS * 0.08;
+
+        // Scan forward from 60% through the word to find silence
+        const scanStart = word.startTime + word.duration * 0.6;
+        const scanEnd = Math.min(nextStart, word.startTime + word.duration);
+        const step = 0.02;
+
+        let silenceStart = scanEnd;
+        for (let t = scanStart; t < scanEnd; t += step) {
+          const rms = getRMS(t, t + step);
+          if (rms < threshold) {
+            // Found silence — but require 60ms+ of consecutive silence
+            let silenceLen = step;
+            let tt = t + step;
+            while (tt < scanEnd && getRMS(tt, tt + step) < threshold) {
+              silenceLen += step;
+              tt += step;
+            }
+            if (silenceLen >= 0.06) {
+              silenceStart = t + 0.02; // Small buffer past silence start
+              break;
+            }
+          }
+        }
+
+        const newDuration = Math.max(0.15, silenceStart - word.startTime);
+        return { ...word, duration: newDuration };
+      });
+
+      return refined;
+    } catch (e) {
+      // Energy analysis failed — return words as-is (legato-processed)
+      return words;
+    }
+  }, []);
+
+  // Auto-transcribe — runs directly, opens WordTimeline with results
+  const handleAutoTranscribe = useCallback(async () => {
+    if (!selectedAudio) return;
+    const audioSrc = selectedAudio.localUrl || selectedAudio.url;
+    if (!audioSrc || audioSrc.startsWith('blob:')) {
+      toastError('Audio URL not available for transcription');
+      return;
+    }
+    try {
+      const result = await analyzeAudio(audioSrc);
+      if (!result?.words?.length) { toastError('No words transcribed'); return; }
+      const dur = result.duration || 30;
+      const legatoWords = postProcessWords(result.words, dur);
+      setTranscribedWords(legatoWords);
+      setTranscribedDuration(dur);
+      setWtCurrentTime(0);
+      setWtIsPlaying(false);
+      // Set audio source for WordTimeline playback
+      if (wordTimelineAudioRef.current) {
+        wordTimelineAudioRef.current.src = audioSrc;
+        wordTimelineAudioRef.current.currentTime = 0;
+      }
+      setShowWordTimeline(true);
+      toastSuccess(`Transcribed ${result.words.length} word${result.words.length !== 1 ? 's' : ''}`);
+      // Async energy-based refinement — updates WordTimeline in place
+      refineWordsWithEnergy(legatoWords, audioSrc, dur).then(refined => {
+        setTranscribedWords(refined);
+      });
+    } catch (err) {
+      if (err.message === 'API_KEY_REQUIRED') {
+        toastError('OpenAI API key required — set it in Settings');
+      } else {
+        toastError(`Transcription failed: ${err.message}`);
+      }
+    }
+  }, [selectedAudio, analyzeAudio, toastSuccess, toastError]);
+
+  // WordTimeline playback controls
+  const handleWtPlayPause = useCallback(() => {
+    const audio = wordTimelineAudioRef.current;
+    if (!audio) return;
+    if (wtIsPlaying) {
+      audio.pause();
+      cancelAnimationFrame(wtAnimRef.current);
+      setWtIsPlaying(false);
+    } else {
+      audio.play().catch(() => {});
+      const tick = () => {
+        setWtCurrentTime(audio.currentTime);
+        wtAnimRef.current = requestAnimationFrame(tick);
+      };
+      wtAnimRef.current = requestAnimationFrame(tick);
+      setWtIsPlaying(true);
+    }
+  }, [wtIsPlaying]);
+
+  const handleWtSeek = useCallback((time) => {
+    const audio = wordTimelineAudioRef.current;
+    if (!audio) return;
+    audio.currentTime = time;
+    setWtCurrentTime(time);
+  }, []);
+
+  // Stop WordTimeline playback on close or audio end
+  const handleWtClose = useCallback(() => {
+    const audio = wordTimelineAudioRef.current;
+    if (audio) { audio.pause(); audio.currentTime = 0; }
+    cancelAnimationFrame(wtAnimRef.current);
+    setWtIsPlaying(false);
+    setShowWordTimeline(false);
+  }, []);
+
+  // WordTimeline "Add to Bank" — collects all words as lines, opens bank picker
+  const handleWtAddToBank = useCallback((lyricId, wordsToSave) => {
+    const allText = (wordsToSave || transcribedWords).map(w => w.text).join(' ');
+    const lines = allText.split(/[.!?]+/).map(s => s.trim()).filter(Boolean);
+    setPendingTranscription(lines.length > 0 ? lines : [allText]);
+    setShowWordTimeline(false);
+    setShowBankPicker(true);
+  }, [transcribedWords]);
+
+  const handleAssignToBank = useCallback((bankNum) => {
+    if (!pendingTranscription || !niche) return;
+    pendingTranscription.forEach(text => addToVideoTextBank(artistId, niche.id, bankNum, text, db));
+    setPendingTranscription(null);
+    setShowBankPicker(false);
+  }, [pendingTranscription, artistId, niche, db]);
+
+  // Template text style for preview overlay
+  const templateTextStyle = useMemo(() => {
+    const tmpl = (niche?.templates || []).find(t => t.id === niche?.activeTemplateId);
+    const defaults = { fontFamily: 'Inter, sans-serif', fontSize: 48, fontWeight: '600',
+      color: '#ffffff', textAlign: 'center', textCase: 'default', outline: true, outlineColor: '#000000' };
+    return tmpl?.settings?.textStyle ? { ...defaults, ...tmpl.settings.textStyle } : defaults;
+  }, [niche]);
+
+  // All niche media (images + videos) for the grid
+  const nicheMedia = useMemo(() => {
+    if (!niche) return [];
+    return library.filter(item => (niche.mediaIds || []).includes(item.id) && item.type !== 'audio');
+  }, [niche, library]);
+
+  // Niche images only (for photo_montage preview)
+  const nicheImages = useMemo(() => {
+    return nicheMedia.filter(item => item.type === 'image');
+  }, [nicheMedia]);
+
+  // First video for solo clip preview
+  const firstVideo = useMemo(() => nicheMedia.find(m => m.type === 'video'), [nicheMedia]);
+
+  // Drag-to-reorder media
+  const handleMediaReorder = useCallback((reordered) => {
     if (!niche) return;
-    updateNicheHashtagBank(artistId, niche.id, hashtags.filter((_, i) => i !== idx));
-    syncToFirestore(niche.id);
-  }, [hashtags, artistId, niche, syncToFirestore]);
+    const orderedIds = reordered.map(m => m.id);
+    updateNicheMediaOrder(artistId, niche.id, orderedIds, db);
+  }, [artistId, niche, db]);
+  const { makeDragProps, dragOverIndex, isDragging } = useDragReorder(nicheMedia, handleMediaReorder);
 
-  const handleMoveHashtag = useCallback((entry, toNicheId) => {
-    if (!niche) return;
-    moveNicheBankEntry(artistId, niche.id, toNicheId, entry, 'hashtag');
-    syncToFirestore(niche.id);
-    syncToFirestore(toNicheId);
-  }, [artistId, niche, syncToFirestore]);
+  // Quick trim handlers
+  const handleTrimSave = useCallback((trimStart, trimEnd) => {
+    if (!niche || !trimItemId) return;
+    updateMediaTrimPoints(artistId, niche.id, trimItemId, trimStart, trimEnd, db);
+    setTrimItemId(null);
+  }, [artistId, niche, trimItemId, db]);
 
-  const handleCopyAllHashtags = useCallback(() => {
-    if (!hashtags.length) return;
-    navigator.clipboard.writeText(hashtags.join(' '));
-  }, [hashtags]);
+  const trimItem = useMemo(() => nicheMedia.find(m => m.id === trimItemId), [nicheMedia, trimItemId]);
+  const trimData = niche?.trimData || {};
 
   if (!niche || !activeFormat) return null;
 
   return (
-    <div className="flex flex-1 flex-col items-center self-stretch overflow-y-auto">
-      {/* Create button area */}
-      <div className="flex w-full flex-col items-center gap-6 px-12 py-12">
-        <div className="flex flex-col items-center gap-3">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-500/10 border border-indigo-500/30">
-            <IconComponent className="text-indigo-400" style={{ width: 28, height: 28 }} />
+    <div className="flex items-stretch overflow-hidden flex-1 self-stretch">
+      {/* Left/center — scrollable content */}
+      <div className="flex grow shrink-0 basis-0 flex-col items-center self-stretch overflow-y-auto">
+        {/* Media section */}
+        {nicheMedia.length === 0 ? (
+          /* Empty state — hero with upload/import */
+          <div className="flex w-full flex-col items-center gap-5 px-8 py-8">
+            <div className="flex flex-col items-center gap-3">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-500/10 border border-indigo-500/30">
+                <IconComponent className="text-indigo-400" style={{ width: 28, height: 28 }} />
+              </div>
+              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{activeFormat.name}</span>
+              {activeFormat.description && (
+                <span className="text-body font-body text-neutral-400 text-center max-w-sm">{activeFormat.description}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <Button variant="brand-primary" size="large" icon={<FeatherUpload />} onClick={onUpload}>
+                Upload Media
+              </Button>
+              <Button variant="neutral-secondary" size="large" icon={<FeatherDownloadCloud />} onClick={onImport}>
+                Import from Library
+              </Button>
+            </div>
+            <Button variant="neutral-tertiary" size="medium" icon={<FeatherPlay />}
+              onClick={() => onMakeVideo && onMakeVideo(activeFormat, niche.id)}>
+              Create {activeFormat.name}
+            </Button>
           </div>
-          <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{activeFormat.name}</span>
-          {activeFormat.description && (
-            <span className="text-body font-body text-neutral-400 text-center max-w-sm">{activeFormat.description}</span>
-          )}
+        ) : (
+          /* Media grid — images & videos in scrollable area */
+          <div className="flex w-full flex-col gap-3 px-8 py-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-body-bold font-body-bold text-[#ffffffff]">Media</span>
+                <Badge variant="neutral">{nicheMedia.length}</Badge>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="brand-tertiary" size="small" icon={<FeatherUpload />} onClick={onUpload}>Upload</Button>
+                <Button variant="neutral-tertiary" size="small" icon={<FeatherDownloadCloud />} onClick={onImport}>Import</Button>
+                <Button variant="neutral-tertiary" size="small" icon={<FeatherPlay />}
+                  onClick={() => onMakeVideo && onMakeVideo(activeFormat, niche.id)}>
+                  Create {activeFormat.name}
+                </Button>
+              </div>
+            </div>
+            <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-800 bg-[#111118] p-2" style={{ maxHeight: 280 }}>
+              <div className="grid w-full grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-1.5">
+                {nicheMedia.map((item, idx) => (
+                  <div
+                    key={item.id}
+                    className={`relative aspect-square rounded overflow-hidden bg-[#171717] cursor-pointer group ${
+                      dragOverIndex === idx ? 'ring-2 ring-indigo-500' : ''
+                    }`}
+                    onClick={() => setLightboxItem(item)}
+                    {...makeDragProps(idx)}
+                  >
+                    {item.type === 'video' ? (
+                      <>
+                        {item.thumbnailUrl ? (
+                          <img src={item.thumbnailUrl} alt={item.name} className="w-full h-full object-cover" loading="lazy" draggable={false} />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <FeatherFilm className="text-neutral-600" style={{ width: 16, height: 16 }} />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-black/60 border border-white/20">
+                            <FeatherPlay className="text-white" style={{ width: 8, height: 8 }} />
+                          </div>
+                        </div>
+                        {/* Scissors for quick trim */}
+                        <button
+                          className="absolute bottom-0.5 right-0.5 z-[4] flex h-4 w-4 items-center justify-center rounded bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => { e.stopPropagation(); setTrimItemId(item.id); }}
+                          title="Quick trim"
+                        >
+                          <FeatherScissors className="text-white" style={{ width: 9, height: 9 }} />
+                        </button>
+                        {/* Trim indicator */}
+                        {trimData[item.id] && (
+                          <div className="absolute bottom-0.5 left-0.5 z-[3] rounded bg-green-500/80 px-0.5 py-px">
+                            <span className="text-[7px] font-mono text-white">trimmed</span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <img
+                        src={item.thumbnailUrl || item.url}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        draggable={false}
+                      />
+                    )}
+                    {/* Order badge */}
+                    <div className="absolute top-0.5 left-0.5 z-[3] rounded bg-black/60 px-1 py-px">
+                      <span className="text-[9px] font-mono text-white/70">{idx + 1}</span>
+                    </div>
+                  </div>
+                ))}
+                {/* Upload placeholder tile */}
+                <div
+                  className="flex flex-col items-center justify-center aspect-square rounded border border-dashed border-neutral-700 cursor-pointer hover:border-indigo-500 hover:bg-indigo-500/5 transition-colors"
+                  onClick={onUpload}
+                  title="Upload media"
+                >
+                  <FeatherPlus className="text-neutral-500" style={{ width: 12, height: 12 }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Text Banks */}
+        <div className="flex w-full gap-4 px-8 pb-4">
+          {/* Bank A — Indigo */}
+          <div className="flex flex-1 min-w-0 flex-col gap-2 rounded-lg border border-solid border-indigo-500/30 bg-indigo-500/5 p-3 overflow-hidden">
+            <div className="flex items-center gap-2">
+              <div className="h-2.5 w-2.5 rounded-full bg-indigo-500 flex-none" />
+              <span className="text-caption-bold font-caption-bold text-indigo-300">Text Bank A</span>
+              <Badge variant="brand">{textBank1.length}</Badge>
+            </div>
+            {textBank1.length > 0 && (
+              <div className="flex flex-col gap-1 max-h-[120px] overflow-y-auto">
+                {textBank1.map((text, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex items-center gap-2 rounded-md px-2 py-1 min-w-0 group cursor-pointer transition-colors ${
+                      previewTextA === text ? 'bg-indigo-500/30 ring-1 ring-indigo-500' : 'bg-black/40 hover:bg-black/60'
+                    }`}
+                    onClick={() => setPreviewTextA(prev => prev === text ? null : text)}
+                  >
+                    <FeatherType className="text-indigo-400 flex-none" style={{ width: 10, height: 10 }} />
+                    <span className="grow text-caption font-caption text-neutral-300 truncate">{text}</span>
+                    <button
+                      className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => { e.stopPropagation(); handleRemoveTextBank(1, idx); if (previewTextA === text) setPreviewTextA(null); }}
+                    >
+                      <FeatherX style={{ width: 10, height: 10 }} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <input
+                className="flex-1 rounded-md border border-solid border-neutral-800 bg-black px-2 py-1 text-caption font-caption text-white outline-none placeholder-neutral-500"
+                placeholder="Add text..."
+                value={textBankInput1}
+                onChange={e => setTextBankInput1(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddTextBank(1, textBankInput1, setTextBankInput1); }}
+              />
+              <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add"
+                onClick={() => handleAddTextBank(1, textBankInput1, setTextBankInput1)} />
+            </div>
+          </div>
+
+          {/* Bank B — Amber */}
+          <div className="flex flex-1 min-w-0 flex-col gap-2 rounded-lg border border-solid border-amber-500/30 bg-amber-500/5 p-3 overflow-hidden">
+            <div className="flex items-center gap-2">
+              <div className="h-2.5 w-2.5 rounded-full bg-amber-500 flex-none" />
+              <span className="text-caption-bold font-caption-bold text-amber-300">Text Bank B</span>
+              <Badge variant="warning">{textBank2.length}</Badge>
+            </div>
+            {textBank2.length > 0 && (
+              <div className="flex flex-col gap-1 max-h-[120px] overflow-y-auto">
+                {textBank2.map((text, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex items-center gap-2 rounded-md px-2 py-1 min-w-0 group cursor-pointer transition-colors ${
+                      previewTextB === text ? 'bg-amber-500/30 ring-1 ring-amber-500' : 'bg-black/40 hover:bg-black/60'
+                    }`}
+                    onClick={() => setPreviewTextB(prev => prev === text ? null : text)}
+                  >
+                    <FeatherType className="text-amber-400 flex-none" style={{ width: 10, height: 10 }} />
+                    <span className="grow text-caption font-caption text-neutral-300 truncate">{text}</span>
+                    <button
+                      className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => { e.stopPropagation(); handleRemoveTextBank(2, idx); if (previewTextB === text) setPreviewTextB(null); }}
+                    >
+                      <FeatherX style={{ width: 10, height: 10 }} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <input
+                className="flex-1 rounded-md border border-solid border-neutral-800 bg-black px-2 py-1 text-caption font-caption text-white outline-none placeholder-neutral-500"
+                placeholder="Add text..."
+                value={textBankInput2}
+                onChange={e => setTextBankInput2(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddTextBank(2, textBankInput2, setTextBankInput2); }}
+              />
+              <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add"
+                onClick={() => handleAddTextBank(2, textBankInput2, setTextBankInput2)} />
+            </div>
+          </div>
         </div>
-        <Button variant="brand-primary" size="large" icon={<FeatherPlay />}
-          onClick={() => onMakeVideo && onMakeVideo(activeFormat, niche.id)}>
-          Create {activeFormat.name}
-        </Button>
+
+        {/* Audio Bank — vertical list like text banks */}
+        <div className="flex w-full flex-col gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-4 py-3 mx-8 mb-4" style={{ maxWidth: 'calc(100% - 64px)', maxHeight: 200 }}>
+          <div className="flex w-full flex-none items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FeatherMusic className="text-neutral-400" style={{ width: 14, height: 14 }} />
+              <span className="text-caption-bold font-caption-bold text-[#ffffffff]">Audio</span>
+              <Badge variant="neutral">{projectAudio.length}</Badge>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
+                onClick={() => onImportAudio?.()}
+              >Import</button>
+              <button
+                className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
+                onClick={() => onUploadAudio?.()}
+              >Upload</button>
+            </div>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="flex flex-col gap-1.5">
+              {projectAudio.length === 0 ? (
+                <div className="flex items-center justify-center rounded-md border-2 border-dashed border-neutral-700 py-3">
+                  <span className="text-caption font-caption text-neutral-500">No audio uploaded</span>
+                </div>
+              ) : (
+                projectAudio.map(audio => {
+                  const isActive = niche?.audioId === audio.id;
+                  const isPlaying = playingAudioId === audio.id;
+                  const dur = audio.duration ? `${Math.floor(audio.duration / 60)}:${String(Math.floor(audio.duration % 60)).padStart(2, '0')}` : '';
+                  return (
+                    <div
+                      key={audio.id}
+                      className={`group flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 cursor-pointer transition-colors flex-none ${
+                        isActive ? 'bg-indigo-500/15 border border-indigo-500 ring-1 ring-indigo-500' : 'bg-black border border-transparent hover:border-neutral-700'
+                      }`}
+                      onClick={() => handleSelectAudio(audio.id)}
+                    >
+                      <button
+                        className="flex-none flex items-center justify-center w-5 h-5 rounded-full bg-neutral-800 hover:bg-neutral-700 border-none cursor-pointer transition-colors"
+                        onClick={(e) => handlePlayAudio(e, audio)}
+                        title={isPlaying ? 'Stop' : 'Preview'}
+                      >
+                        {isPlaying
+                          ? <FeatherSquare className="text-indigo-400" style={{ width: 8, height: 8 }} />
+                          : <FeatherPlay className={isActive ? 'text-indigo-400' : 'text-neutral-400'} style={{ width: 8, height: 8 }} />
+                        }
+                      </button>
+                      <span className="text-caption font-caption text-white truncate flex-1">{audio.name}</span>
+                      <span className="text-[10px] text-neutral-500 flex-none">{dur}</span>
+                      <button
+                        className="flex-none opacity-0 group-hover:opacity-100 flex items-center justify-center w-4 h-4 bg-transparent border-none cursor-pointer transition-opacity"
+                        onClick={(e) => { e.stopPropagation(); /* remove handled by parent */ }}
+                        title="Remove"
+                      >
+                        <FeatherX className="text-neutral-500 hover:text-red-400" style={{ width: 10, height: 10 }} />
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+        <audio ref={audioPreviewRef} preload="none" style={{ display: 'none' }} onEnded={() => setPlayingAudioId(null)} />
+
+        {/* Draft grid */}
+        {nicheDrafts.length > 0 && (
+          <div className="flex w-full flex-col gap-4 px-8 pb-6">
+            <div className="flex items-center gap-2">
+              <span className="text-body-bold font-body-bold text-[#ffffffff]">Drafts</span>
+              <Badge variant="neutral">{nicheDrafts.length}</Badge>
+            </div>
+            <div className="grid w-full grid-cols-2 sm:grid-cols-3 gap-3">
+              {nicheDrafts
+                .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+                .map(draft => (
+                  <div
+                    key={draft.id}
+                    className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
+                    onClick={() => onMakeVideo && onMakeVideo(activeFormat, niche.id, draft)}
+                  >
+                    {draft.thumbnail ? (
+                      <div className="w-full aspect-video bg-[#171717]">
+                        <img src={draft.thumbnail} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      </div>
+                    ) : (
+                      <div className="w-full aspect-video bg-[#171717] flex items-center justify-center">
+                        <FeatherImage className="text-neutral-700" style={{ width: 24, height: 24 }} />
+                      </div>
+                    )}
+                    <div className="flex w-full flex-col gap-0.5 px-3 pb-3">
+                      <span className="text-caption font-caption text-neutral-300 truncate">{draft.name || 'Untitled'}</span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
       </div>
 
-      {/* Draft grid */}
-      {nicheDrafts.length > 0 && (
-        <div className="flex w-full flex-col gap-4 px-12 pb-6">
-          <div className="flex items-center gap-2">
-            <span className="text-body-bold font-body-bold text-[#ffffffff]">Drafts</span>
-            <Badge variant="neutral">{nicheDrafts.length}</Badge>
-          </div>
-          <div className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {nicheDrafts
-              .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
-              .map(draft => (
-                <div
-                  key={draft.id}
-                  className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
-                  onClick={() => onMakeVideo && onMakeVideo(activeFormat, niche.id, draft)}
+      {/* Right — Template Configurator */}
+      <div className="flex w-96 flex-none flex-col items-start self-stretch border-l border-solid border-neutral-800 bg-black overflow-y-auto">
+      <TemplateConfigurator
+        niche={niche}
+        activeFormat={activeFormat}
+        artistId={artistId}
+        db={db}
+        onSettingsChange={setLiveSettings}
+        previewContent={
+          nicheMedia.length > 0 ? (() => {
+            const settings = liveSettings || {};
+            const ts = settings.textStyle || templateTextStyle;
+            const ar = settings.aspectRatio || '9:16';
+            const tp = settings.textPosition || 'center';
+            switch (activeFormat?.id) {
+              case 'montage':
+                return (
+                  <MontagePreview
+                    media={nicheMedia}
+                    audioUrl={audioUrl}
+                    textBankA={textBank1}
+                    textBankB={textBank2}
+                    textStyle={ts}
+                    textPosition={tp}
+                    aspectRatio={ar}
+                  />
+                );
+              case 'solo_clip':
+                return (
+                  <SoloClipPreview
+                    video={firstVideo}
+                    allVideos={nicheMedia.filter(m => m.type === 'video')}
+                    audioUrl={audioUrl}
+                    words={transcribedWords}
+                    textStyle={ts}
+                    textPosition={tp}
+                    textDisplayMode={settings.textDisplayMode || 'word'}
+                    textBankA={textBank1}
+                    textBankB={textBank2}
+                    aspectRatio={ar}
+                  />
+                );
+              case 'multi_clip':
+                return (
+                  <MultiClipPreview
+                    media={nicheMedia}
+                    audioUrl={audioUrl}
+                    textBankA={textBank1}
+                    textBankB={textBank2}
+                    textStyle={ts}
+                    textPosition={tp}
+                    transition={settings.transition || 'cut'}
+                    aspectRatio={ar}
+                  />
+                );
+              case 'photo_montage':
+                return (
+                  <PhotoMontagePreview
+                    images={nicheImages}
+                    audioUrl={audioUrl}
+                    textStyle={ts}
+                    textPosition={tp}
+                    kenBurns={settings.kenBurns !== false}
+                    transition={settings.transition || 'fade'}
+                    beatSync={!!settings.beatSync}
+                    speed={settings.speed || 1}
+                    textBankA={textBank1}
+                    textBankB={textBank2}
+                    aspectRatio={ar}
+                  />
+                );
+              default:
+                return (
+                  <MontagePreview
+                    media={nicheMedia}
+                    audioUrl={audioUrl}
+                    textBankA={textBank1}
+                    textBankB={textBank2}
+                    textStyle={ts}
+                    textPosition={tp}
+                    aspectRatio={ar}
+                  />
+                );
+            }
+          })() : (
+            <div className="flex flex-col items-center gap-2 px-4">
+              <IconComponent className="text-neutral-600" style={{ width: 24, height: 24 }} />
+              <span className="text-caption font-caption text-neutral-500 text-center">Upload media to preview</span>
+            </div>
+          )
+        }
+        createCount={createCount}
+        onCreateCountChange={setCreateCount}
+        onCreateClick={(templateSettings) => onMakeVideo && onMakeVideo(activeFormat, niche.id, null, templateSettings)}
+        createLabel={`Create ${createCount} ${activeFormat.name}${createCount > 1 ? 's' : ''}`}
+        selectedAudio={selectedAudio}
+        projectAudio={projectAudio}
+        onSelectAudio={handleSelectAudio}
+        onUploadAudio={onUploadAudio}
+        onTrimAudio={() => setShowAudioTrimmer(true)}
+        onAutoTranscribe={handleAutoTranscribe}
+        isTranscribing={isAnalyzing}
+        draftCount={nicheDrafts.length}
+        onOpenLatestDraft={nicheDrafts.length > 0 ? () => onMakeVideo && nicheDrafts[0] && onMakeVideo(activeFormat, niche.id, nicheDrafts[0]) : null}
+      />
+
+      </div>
+
+      {/* Audio Trimmer Modal */}
+      {showAudioTrimmer && selectedAudio && (
+        <AudioClipSelector
+          audioUrl={selectedAudio.localUrl || selectedAudio.url}
+          audioName={selectedAudio.name || 'Audio'}
+          onSave={(trimData) => { setShowAudioTrimmer(false); }}
+          onCancel={() => setShowAudioTrimmer(false)}
+          db={db}
+          artistId={artistId}
+        />
+      )}
+
+      {/* WordTimeline audio element */}
+      <audio
+        ref={wordTimelineAudioRef}
+        preload="none"
+        style={{ display: 'none' }}
+        onEnded={() => { cancelAnimationFrame(wtAnimRef.current); setWtIsPlaying(false); }}
+      />
+
+      {/* Word Timeline — after transcription */}
+      {showWordTimeline && (
+        <WordTimeline
+          words={transcribedWords}
+          setWords={setTranscribedWords}
+          duration={transcribedDuration}
+          currentTime={wtCurrentTime}
+          onSeek={handleWtSeek}
+          isPlaying={wtIsPlaying}
+          onPlayPause={handleWtPlayPause}
+          onClose={handleWtClose}
+          audioRef={wordTimelineAudioRef}
+          onAddToBank={handleWtAddToBank}
+        />
+      )}
+
+      {/* Bank Picker Modal — after transcription */}
+      {showBankPicker && pendingTranscription && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowBankPicker(false)}>
+          <div className="w-full max-w-md rounded-xl border border-neutral-800 bg-[#111111] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Add to Text Bank</span>
+              <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherX />} aria-label="Close" onClick={() => setShowBankPicker(false)} />
+            </div>
+            <div className="px-6 py-4">
+              <span className="text-caption font-caption text-neutral-400 mb-3 block">
+                {pendingTranscription.length} line{pendingTranscription.length !== 1 ? 's' : ''} transcribed
+              </span>
+              <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto mb-4 rounded-lg border border-neutral-800 bg-black p-3">
+                {pendingTranscription.slice(0, 5).map((line, idx) => (
+                  <span key={idx} className="text-caption font-caption text-neutral-300 truncate">{line}</span>
+                ))}
+                {pendingTranscription.length > 5 && (
+                  <span className="text-caption font-caption text-neutral-500">...and {pendingTranscription.length - 5} more</span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  className="flex-1"
+                  variant="brand-primary"
+                  size="medium"
+                  onClick={() => handleAssignToBank(1)}
                 >
-                  {draft.thumbnail ? (
-                    <div className="w-full aspect-video bg-[#171717]">
-                      <img src={draft.thumbnail} alt="" className="w-full h-full object-cover" loading="lazy" />
-                    </div>
-                  ) : (
-                    <div className="w-full aspect-video bg-[#171717] flex items-center justify-center">
-                      <FeatherImage className="text-neutral-700" style={{ width: 24, height: 24 }} />
-                    </div>
-                  )}
-                  <div className="flex w-full flex-col gap-0.5 px-3 pb-3">
-                    <span className="text-caption font-caption text-neutral-300 truncate">{draft.name || 'Untitled'}</span>
-                  </div>
-                </div>
-              ))}
+                  <span className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-indigo-500 flex-none" />
+                    Text Bank A
+                  </span>
+                </Button>
+                <Button
+                  className="flex-1"
+                  variant="neutral-secondary"
+                  size="medium"
+                  onClick={() => handleAssignToBank(2)}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-amber-500 flex-none" />
+                    Text Bank B
+                  </span>
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Captions & Hashtags */}
-      <div className="flex w-full flex-col items-start gap-3 border-t border-solid border-neutral-800 px-12 py-4">
-        {/* Captions */}
-        <div className="flex w-full flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <FeatherMessageSquare className="text-neutral-400" style={{ width: 12, height: 12 }} />
-            <span className="text-caption-bold font-caption-bold text-neutral-300">Captions</span>
-            <Badge variant="neutral">{captions.length}</Badge>
-          </div>
-          {captions.length > 0 && (
-            <div className="flex flex-col gap-1.5 max-h-[120px] overflow-y-auto">
-              {captions.map((cap, idx) => (
-                <div key={idx} className="flex items-start gap-2 rounded-md bg-[#1a1a1aff] border border-solid border-neutral-800 px-3 py-1.5 group">
-                  <span
-                    className="grow text-caption font-caption text-neutral-300 cursor-pointer hover:text-white line-clamp-2"
-                    title="Click to copy"
-                    onClick={() => navigator.clipboard.writeText(cap)}
-                  >{cap}</span>
-                  <div className="flex items-center gap-1 flex-none opacity-0 group-hover:opacity-100 transition-opacity">
-                    {otherNiches.length > 0 && (
-                      <select
-                        className="bg-neutral-800 text-caption text-neutral-300 border-none rounded px-1 py-0.5 cursor-pointer outline-none"
-                        value=""
-                        onChange={e => { if (e.target.value) handleMoveCaption(cap, e.target.value); }}
-                      >
-                        <option value="" disabled>Move to...</option>
-                        {otherNiches.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
-                      </select>
-                    )}
-                    <button className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0" onClick={() => handleRemoveCaption(idx)}>
-                      <FeatherTrash2 style={{ width: 12, height: 12 }} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="flex w-full gap-2">
-            <textarea
-              className="flex-1 min-h-[32px] max-h-[64px] rounded-md border border-solid border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500 resize-none"
-              placeholder="Add caption..."
-              value={newCaption}
-              onChange={e => setNewCaption(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddCaption(); } }}
-              rows={1}
-            />
-            <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add" onClick={handleAddCaption} />
-          </div>
-        </div>
 
-        {/* Hashtags */}
-        <div className="flex w-full flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <FeatherHash className="text-neutral-400" style={{ width: 12, height: 12 }} />
-            <span className="text-caption-bold font-caption-bold text-neutral-300">Hashtags</span>
-            <Badge variant="neutral">{hashtags.length}</Badge>
-            {hashtags.length > 0 && (
-              <button className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer ml-auto" onClick={handleCopyAllHashtags}>
-                Copy All
-              </button>
+      {/* Quick Trim Popover */}
+      {trimItemId && trimItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setTrimItemId(null)}>
+          <QuickTrimPopover
+            item={trimItem}
+            initialTrimStart={trimData[trimItemId]?.trimStart || 0}
+            initialTrimEnd={trimData[trimItemId]?.trimEnd || trimItem.duration}
+            onSave={handleTrimSave}
+            onClose={() => setTrimItemId(null)}
+          />
+        </div>
+      )}
+
+      {/* Fullscreen lightbox */}
+      {lightboxItem && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+          onClick={() => setLightboxItem(null)}
+        >
+          <button
+            className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-neutral-800 hover:bg-neutral-700 border-none cursor-pointer z-10 transition-colors"
+            onClick={() => setLightboxItem(null)}
+            aria-label="Close preview"
+          >
+            <FeatherX className="text-white" style={{ width: 20, height: 20 }} />
+          </button>
+          <div className="flex flex-col items-center gap-3 max-w-[90vw] max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            {lightboxItem.type === 'video' ? (
+              <video
+                className="max-w-[90vw] max-h-[85vh] rounded-lg"
+                src={lightboxItem.url}
+                controls
+                autoPlay
+                playsInline
+              />
+            ) : (
+              <img
+                className="max-w-[90vw] max-h-[85vh] rounded-lg object-contain"
+                src={lightboxItem.url}
+                alt={lightboxItem.name}
+              />
             )}
-          </div>
-          {hashtags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 max-h-[80px] overflow-y-auto">
-              {hashtags.map((tag, idx) => (
-                <div key={idx} className="flex items-center gap-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 px-2.5 py-0.5 group">
-                  <span className="text-caption font-caption text-indigo-300">{tag}</span>
-                  <button className="text-indigo-400 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleRemoveHashtag(idx)}>
-                    <FeatherX style={{ width: 10, height: 10 }} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="flex w-full gap-2">
-            <input
-              className="flex-1 rounded-md border border-solid border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500"
-              placeholder="#hashtag"
-              value={newHashtag}
-              onChange={e => setNewHashtag(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleAddHashtag(); }}
-            />
-            <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add" onClick={handleAddHashtag} />
+            <span className="text-caption font-caption text-neutral-400 truncate max-w-[60vw]">{lightboxItem.name}</span>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

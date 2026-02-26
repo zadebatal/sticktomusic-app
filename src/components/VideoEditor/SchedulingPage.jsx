@@ -220,23 +220,37 @@ const SchedulingPage = ({
 
   // ── Load & Subscribe (with ghost draft detection) ──
   useEffect(() => {
-    if (!db || !artistId) return;
+    if (!db || !artistId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
 
-    // Get current drafts to detect ghosts
-    let draftIds = new Set();
-    try {
-      const content = getCreatedContent(artistId);
-      (content.videos || []).forEach(v => draftIds.add(v.id));
-      (content.slideshows || []).forEach(s => draftIds.add(s.id));
-    } catch (e) { /* no local content yet */ }
-
     const unsubscribe = subscribeToScheduledPosts(db, artistId, (newPosts) => {
-      // Tag posts whose source draft no longer exists
-      const tagged = newPosts.map(p => ({
-        ...p,
-        _isGhost: p.contentId ? !draftIds.has(p.contentId) : false
-      }));
+      // Recalculate draft IDs on every update (not just once at init)
+      // so orphan detection stays fresh after draft deletions
+      let draftIds = new Set();
+      try {
+        const content = getCreatedContent(artistId);
+        (content.videos || []).forEach(v => draftIds.add(v.id));
+        (content.slideshows || []).forEach(s => draftIds.add(s.id));
+      } catch (e) { /* no local content yet */ }
+
+      const now = new Date();
+      // Tag posts whose source draft no longer exists + detect overdue posts
+      const tagged = newPosts.map(p => {
+        const isGhost = p.contentId ? !draftIds.has(p.contentId) : false;
+        // Mark scheduled posts with past dates as "missed" for display
+        let computedStatus = p.status;
+        if (p.status === POST_STATUS.SCHEDULED && p.scheduledTime) {
+          const scheduledDate = new Date(p.scheduledTime);
+          const minutesOverdue = (now - scheduledDate) / (60 * 1000);
+          if (minutesOverdue > 30 && !p.latePostId) {
+            computedStatus = 'missed';
+          }
+        }
+        return { ...p, _isGhost: isGhost, _computedStatus: computedStatus };
+      });
       setPosts(tagged);
       setLoading(false);
     });
@@ -1630,8 +1644,8 @@ const SchedulingPage = ({
                           key={platform}
                           onClick={() => setBatchPlatforms(prev => ({ ...prev, [platform]: !prev[platform] }))}
                           style={{
-                            padding: '3px 10px', borderRadius: '6px', border: '1px solid', fontSize: '11px', fontWeight: '600', cursor: 'pointer',
-                            backgroundColor: isOn ? color + '22' : theme.bg.input, borderColor: isOn ? color : theme.border.default,
+                            padding: '3px 10px', borderRadius: '6px', borderWidth: '1px', borderStyle: 'solid', borderColor: isOn ? color : theme.border.default, fontSize: '11px', fontWeight: '600', cursor: 'pointer',
+                            backgroundColor: isOn ? color + '22' : theme.bg.input,
                             color: isOn ? color : '#52525b', transition: 'all 0.12s'
                           }}
                         >
@@ -2250,13 +2264,14 @@ const PostRow = ({
         {/* Status */}
         <div style={{ width: isMobile ? 'auto' : '80px', textAlign: 'center', flexShrink: 0 }}>
           <Badge variant={
+            post._computedStatus === 'missed' ? 'error' :
             post.status === POST_STATUS.SCHEDULED ? 'brand' :
             post.status === POST_STATUS.POSTED ? 'success' :
             post.status === POST_STATUS.FAILED ? 'error' :
             post.status === POST_STATUS.POSTING ? 'warning' :
             'neutral'
           }>
-            {post.status}
+            {post._computedStatus === 'missed' ? 'missed' : post.status}
           </Badge>
         </div>
 
@@ -2763,7 +2778,7 @@ const CalendarView = ({ posts, expandedPostId, onSelectPost, onEditPost, calenda
           return (
             <div
               key={idx}
-              style={{ ...s.calCell, ...(isToday ? { borderColor: '#6366f1', borderWidth: '2px' } : {}), ...(isMobile ? { minHeight: '60px', padding: '3px' } : {}) }}
+              style={{ ...s.calCell, ...(isToday ? { border: '2px solid #6366f1' } : {}), ...(isMobile ? { minHeight: '60px', padding: '3px' } : {}) }}
               onDragOver={date ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } : null}
               onDrop={date ? (e) => { e.preventDefault(); if (draggedPostId && dragFromDate) onDragPost(draggedPostId, dragFromDate, date); setDraggedPostId(null); setDragFromDate(null); } : null}
             >
@@ -2855,7 +2870,7 @@ const CalendarView = ({ posts, expandedPostId, onSelectPost, onEditPost, calenda
 const getS = (theme) => ({
   page: { display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', backgroundColor: theme.bg.page, color: theme.text.primary, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
   loadingState: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' },
-  spinner: { width: '32px', height: '32px', border: `3px solid ${theme.border.default}`, borderTop: `3px solid ${theme.accent.primary}`, borderRadius: '50%', animation: 'spin 1s linear infinite' },
+  spinner: { width: '32px', height: '32px', borderWidth: '3px', borderStyle: 'solid', borderTopColor: theme.accent.primary, borderRightColor: theme.border.default, borderBottomColor: theme.border.default, borderLeftColor: theme.border.default, borderRadius: '50%', animation: 'spin 1s linear infinite' },
 
   // Header
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderBottom: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.surface, flexShrink: 0 },

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { doc, setDoc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { shouldShowPaymentUI } from '../../services/subscriptionService';
-import { useToast } from '../ui';
+import { useToast, ConfirmDialog } from '../ui';
 import { Button } from '../../ui/components/Button';
 import { Badge } from '../../ui/components/Badge';
 import { TextField } from '../../ui/components/TextField';
@@ -44,6 +44,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelMessage, setCancelMessage] = useState('');
   const [showPfpUpload, setShowPfpUpload] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Conductor user management state
   const [inviteRole, setInviteRole] = useState('operator');
@@ -536,7 +537,7 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
             variant="destructive-secondary"
             size="medium"
             icon={<FeatherLogOut />}
-            onClick={() => { if (window.confirm('Log out of your account?')) onLogout(); }}
+            onClick={() => setShowLogoutConfirm(true)}
           >
             Log Out
           </Button>
@@ -550,6 +551,16 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
           onClose={() => setShowPfpUpload(false)}
         />
       )}
+
+      <ConfirmDialog
+        isOpen={showLogoutConfirm}
+        title="Log Out"
+        message="Log out of your account?"
+        confirmLabel="Log Out"
+        confirmVariant="destructive"
+        onConfirm={() => { setShowLogoutConfirm(false); onLogout(); }}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
     </div>
   );
 };

@@ -403,7 +403,6 @@ const loadAppSession = () => {
     const saved = localStorage.getItem(APP_SESSION_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      log.debug('[App Session] Loaded:', parsed);
       return parsed;
     }
   } catch (e) {
@@ -417,7 +416,6 @@ const saveAppSession = (state) => {
     // Only save authenticated pages (not landing/marketing pages)
     if (['operator', 'artist-portal', 'artist-dashboard', 'dashboard'].includes(state.currentPage)) {
       localStorage.setItem(APP_SESSION_KEY, JSON.stringify({ ...state, savedAt: Date.now() }));
-      log.debug('[App Session] Saved:', state);
     }
   } catch (e) {
     log.warn('Failed to save app session:', e);
@@ -492,6 +490,8 @@ const StickToMusic = () => {
   const [showVideoEditor, setShowVideoEditor] = useState(initialState.showStudio); // Moved up for restore effect
   const [artistTab, setArtistTab] = useState('dashboard'); // Tab for artist-dashboard view
   const [artistScheduleFilter, setArtistScheduleFilter] = useState(null); // Filter for artist schedule tab
+  const [pendingEditDraft, setPendingEditDraft] = useState(null); // Operator: Schedule → Studio draft edit
+  const [artistPendingEditDraft, setArtistPendingEditDraft] = useState(null); // Artist: Schedule → Studio draft edit
   const [openFaq, setOpenFaq] = useState(null);
 
   // ═══ Theme bridge: since ThemeProvider wraps return JSX, we listen for changes via custom event ═══
@@ -1147,8 +1147,13 @@ const StickToMusic = () => {
           socialSetsAllowed: 999,
           onboardingComplete: true,
         };
-        log('👑 Setting conductor user:', newUser);
-        setUser(newUser);
+        // Only update user if fields actually changed (avoids unnecessary re-renders)
+        setUser(prev => {
+          if (prev && prev.email === newUser.email && prev.role === newUser.role &&
+              prev.name === newUser.name && prev.photoURL === newUser.photoURL) return prev;
+          log('👑 Setting conductor user:', newUser);
+          return newUser;
+        });
       } else if (allowedUsers.some(u => u.email?.toLowerCase() === email?.toLowerCase() && u.status === 'active')) {
         const userData = allowedUsers.find(u => u.email?.toLowerCase() === email?.toLowerCase());
         const newUser = {
@@ -1168,8 +1173,15 @@ const StickToMusic = () => {
           ownerOperatorId: userData?.ownerOperatorId || null,
           invitedBy: userData?.invitedBy || null,
         };
-        log('🎨 Setting allowed user:', newUser);
-        setUser(newUser);
+        // Only update user if fields actually changed (avoids unnecessary re-renders)
+        setUser(prev => {
+          if (prev && prev.email === newUser.email && prev.role === newUser.role &&
+              prev.name === newUser.name && prev.photoURL === newUser.photoURL &&
+              prev.artistId === newUser.artistId && prev.onboardingComplete === newUser.onboardingComplete &&
+              prev.paymentExempt === newUser.paymentExempt) return prev;
+          log('🎨 Setting allowed user:', newUser);
+          return newUser;
+        });
       } else {
         log('🚫 User not in allowed list:', email);
         setUser(null);
@@ -1179,9 +1191,11 @@ const StickToMusic = () => {
     }
   }, [authChecked, firestoreLoaded, currentAuthUser, allowedUsers]);
 
-  // Restore saved page after user is authenticated
+  // Restore saved page after user is authenticated (once only)
+  const sessionRestoredRef = useRef(false);
   useEffect(() => {
-    if (user && pendingPage) {
+    if (user && pendingPage && !sessionRestoredRef.current) {
+      sessionRestoredRef.current = true;
       // Verify user has access to the pending page
       if (pendingPage === 'operator' && (user.role === 'operator' || user.role === 'conductor')) {
         log.debug('[App Session] Restoring operator page, tab:', pendingOperatorTab, 'editor:', pendingShowVideoEditor);
@@ -1512,15 +1526,25 @@ const StickToMusic = () => {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
 
-  // Check if first time user (would normally check localStorage)
+  // Check if first time user — check both localStorage and Firestore-backed settings
   useEffect(() => {
     if (user && user.role === 'operator') {
       const hasSeenOnboarding = localStorage.getItem('stm_onboarding_complete');
-      if (!hasSeenOnboarding) {
+      if (hasSeenOnboarding) return; // Already dismissed — don't show
+      // Also check Firestore settings (handles cross-device persistence)
+      if (db && currentArtistId) {
+        loadSettings(db, currentArtistId).then(settings => {
+          if (settings?.onboarding?.completed) {
+            localStorage.setItem('stm_onboarding_complete', 'true'); // Sync to localStorage
+          } else {
+            setShowOnboarding(true);
+          }
+        }).catch(() => setShowOnboarding(true));
+      } else {
         setShowOnboarding(true);
       }
     }
-  }, [user]);
+  }, [user, db, currentArtistId]);
 
   // Onboarding steps
   const onboardingSteps = [
@@ -2273,16 +2297,16 @@ const StickToMusic = () => {
   });
   const [savingTemplate, setSavingTemplate] = useState(false);
 
-  // Subscribe to templates when artist changes
+  // Subscribe to templates when artist changes (after auth is verified)
   useEffect(() => {
-    if (!currentArtistId || !db) return;
+    if (!authChecked || !currentAuthUser || !currentArtistId || !db) return;
 
     const unsubscribe = subscribeToTemplates(db, currentArtistId, (templates) => {
       setContentBanks(templates);
     });
 
     return () => unsubscribe();
-  }, [currentArtistId]);
+  }, [authChecked, currentAuthUser, currentArtistId]);
 
   // Helper function to generate hashtags and caption for a post
   const generatePostContent = (category, platform) => {
@@ -3268,6 +3292,8 @@ const StickToMusic = () => {
               manualAccounts={manualAccountsByArtist[effectiveArtistId] || []}
               onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: effectiveArtistId })}
               onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, effectiveArtistId)}
+              pendingEditDraft={artistPendingEditDraft}
+              onClearPendingEditDraft={() => setArtistPendingEditDraft(null)}
             />
           ) : artistTab === 'schedule' ? (
             <SchedulingPage
@@ -3280,6 +3306,7 @@ const StickToMusic = () => {
               onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, effectiveArtistId)}
               onEditDraft={(post) => {
                 if (post.editorState) {
+                  setArtistPendingEditDraft({ post });
                   setArtistTab('studio');
                 }
               }}
@@ -3656,6 +3683,8 @@ const StickToMusic = () => {
             manualAccounts={manualAccountsByArtist[currentArtistId] || []}
             onSchedulePost={(params) => lateApi.schedulePost({ ...params, artistId: currentArtistId })}
             onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, currentArtistId)}
+            pendingEditDraft={pendingEditDraft}
+            onClearPendingEditDraft={() => setPendingEditDraft(null)}
           />
         ) : operatorTab === 'schedule' ? null : (
         <div className="w-full overflow-y-auto" style={{ maxHeight: '100%' }}>
@@ -5797,6 +5826,7 @@ const StickToMusic = () => {
             onDeleteLatePost={(latePostId) => lateApi.deletePost(latePostId, currentArtistId)}
             onEditDraft={(post) => {
               if (post.editorState) {
+                setPendingEditDraft({ post });
                 setShowVideoEditor(true);
               }
             }}

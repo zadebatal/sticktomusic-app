@@ -804,7 +804,7 @@ const LibraryBrowser = ({
     const newCol = createNewCollection(artistId, {
       name: newCollectionName.trim(),
       description: ''
-    });
+    }, db);
 
     setNewCollectionName('');
     setShowNewCollectionModal(false);
@@ -1415,7 +1415,7 @@ const LibraryBrowser = ({
 
   const handleRemoveFromBank = (bankIndex, mediaIds) => {
     if (!mediaIds || mediaIds.length === 0) return;
-    removeFromBank(artistId, activeView, mediaIds);
+    removeFromBank(artistId, activeView, mediaIds, db);
     setSelectedBankItems(prev => ({ ...prev, [bankIndex]: new Set() }));
     loadData();
     syncCollection(activeView);
@@ -2358,7 +2358,7 @@ const LibraryBrowser = ({
                               <button
                                 onClick={() => {
                                   if (window.confirm(`Delete ${getBankLabel(idx)}? All images will be moved to Library.`)) {
-                                    removeBankFromCollection(artistId, activeView, idx);
+                                    removeBankFromCollection(artistId, activeView, idx, db);
                                     loadData();
                                     syncCollection(activeView);
                                   }
@@ -2397,7 +2397,7 @@ const LibraryBrowser = ({
                     {/* + Add Slide Bank button */}
                     {(collectionBanks?.banks?.length || 0) < MAX_BANKS && (
                       <button
-                        onClick={() => { addBankToCollection(artistId, activeView); loadData(); syncCollection(activeView); }}
+                        onClick={() => { addBankToCollection(artistId, activeView, db); loadData(); syncCollection(activeView); }}
                         style={{
                           padding: '10px', borderRadius: '10px',
                           border: `1px dashed ${theme.text.muted}`,
@@ -2433,12 +2433,12 @@ const LibraryBrowser = ({
                                 label={getBankLabel(idx)}
                                 color={bankColor.light}
                                 texts={migrated.textBanks?.[idx] || []}
-                                onAdd={(text) => { addToTextBank(artistId, activeView, bankNum, text); loadData(); syncCollection(activeView); }}
-                                onRemove={(index) => { removeFromTextBank(artistId, activeView, bankNum, index); loadData(); syncCollection(activeView); }}
-                                onUpdate={(texts) => { updateTextBank(artistId, activeView, bankNum, texts); loadData(); syncCollection(activeView); }}
+                                onAdd={(text) => { addToTextBank(artistId, activeView, bankNum, text, db); loadData(); syncCollection(activeView); }}
+                                onRemove={(index) => { removeFromTextBank(artistId, activeView, bankNum, index, db); loadData(); syncCollection(activeView); }}
+                                onUpdate={(texts) => { updateTextBank(artistId, activeView, bankNum, texts, db); loadData(); syncCollection(activeView); }}
                                 onDelete={numBanks > 2 ? () => {
                                   if (window.confirm(`Delete ${getBankLabel(idx)}? All text entries will be removed.`)) {
-                                    removeBankFromCollection(artistId, activeView, idx);
+                                    removeBankFromCollection(artistId, activeView, idx, db);
                                     loadData();
                                     syncCollection(activeView);
                                   }
@@ -2449,7 +2449,7 @@ const LibraryBrowser = ({
                           {/* + Add Text Bank button */}
                           {numBanks < MAX_BANKS && (
                             <button
-                              onClick={() => { addBankToCollection(artistId, activeView); loadData(); syncCollection(activeView); }}
+                              onClick={() => { addBankToCollection(artistId, activeView, db); loadData(); syncCollection(activeView); }}
                               style={{
                                 padding: '10px', borderRadius: '10px',
                                 border: `1px dashed ${theme.text.muted}`,
@@ -2477,9 +2477,9 @@ const LibraryBrowser = ({
                             const col = collections.find(c => c.id === activeView);
                             return col?.videoTextBank1 || [];
                           })()}
-                          onAdd={(text) => { addToVideoTextBank(artistId, activeView, 1, text); loadData(); syncCollection(activeView); }}
-                          onRemove={(index) => { removeFromVideoTextBank(artistId, activeView, 1, index); loadData(); syncCollection(activeView); }}
-                          onUpdate={(texts) => { updateVideoTextBank(artistId, activeView, 1, texts); loadData(); syncCollection(activeView); }}
+                          onAdd={(text) => { addToVideoTextBank(artistId, activeView, 1, text, db); loadData(); syncCollection(activeView); }}
+                          onRemove={(index) => { removeFromVideoTextBank(artistId, activeView, 1, index, db); loadData(); syncCollection(activeView); }}
+                          onUpdate={(texts) => { updateVideoTextBank(artistId, activeView, 1, texts, db); loadData(); syncCollection(activeView); }}
                         />
                         {/* Video Text Bank 2 */}
                         <TextBankPanel
@@ -2490,9 +2490,9 @@ const LibraryBrowser = ({
                             const col = collections.find(c => c.id === activeView);
                             return col?.videoTextBank2 || [];
                           })()}
-                          onAdd={(text) => { addToVideoTextBank(artistId, activeView, 2, text); loadData(); syncCollection(activeView); }}
-                          onRemove={(index) => { removeFromVideoTextBank(artistId, activeView, 2, index); loadData(); syncCollection(activeView); }}
-                          onUpdate={(texts) => { updateVideoTextBank(artistId, activeView, 2, texts); loadData(); syncCollection(activeView); }}
+                          onAdd={(text) => { addToVideoTextBank(artistId, activeView, 2, text, db); loadData(); syncCollection(activeView); }}
+                          onRemove={(index) => { removeFromVideoTextBank(artistId, activeView, 2, index, db); loadData(); syncCollection(activeView); }}
+                          onUpdate={(texts) => { updateVideoTextBank(artistId, activeView, 2, texts, db); loadData(); syncCollection(activeView); }}
                         />
                       </>
                     )}
@@ -2939,7 +2939,7 @@ const LibraryBrowser = ({
                 variant="brand-primary"
                 className="flex-1"
                 onClick={() => {
-                  saveTextTemplates(artistId, activeView, [editingTemplate]);
+                  saveTextTemplates(artistId, activeView, [editingTemplate], db);
                   loadData();
                   syncCollection(activeView);
                   setShowTemplateEditor(false);

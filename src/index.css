@@ -2,9 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Prevent layout shift from scrollbar appearing/disappearing */
-html {
-  overflow-y: scroll;
+/* Prevent body from scrolling past the app shell */
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
 }
 
 /* Custom utilities for mobile responsiveness */

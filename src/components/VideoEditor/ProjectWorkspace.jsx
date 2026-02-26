@@ -13,6 +13,7 @@ import {
   getProjectNiches,
   createNiche,
   addToProjectPool,
+  addToCollection,
   assignToBank,
   migrateCollectionBanks,
   addToCollectionAsync,
@@ -30,32 +31,28 @@ import {
   THUMB_QUALITY,
   THUMB_VERSION,
   migrateThumbnails,
-  updateNicheCaptionBank,
-  updateNicheHashtagBank,
-  moveNicheBankEntry,
+  updateProjectCaptionBank,
+  updateProjectHashtagBank,
 } from '../../services/libraryService';
-import { uploadFile } from '../../services/firebaseStorage';
+import { uploadFile, getMediaDuration } from '../../services/firebaseStorage';
 import { convertImageIfNeeded } from '../../utils/imageConverter';
 import { convertAudioIfNeeded } from '../../utils/audioConverter';
 import { runPool } from '../../utils/uploadPool';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { Badge } from '../../ui/components/Badge';
-import { ToggleGroup } from '../../ui/components/ToggleGroup';
 import {
-  FeatherUpload, FeatherUploadCloud, FeatherDownloadCloud, FeatherPlus, FeatherX,
+  FeatherPlus, FeatherX, FeatherUploadCloud,
   FeatherArrowLeft, FeatherImage, FeatherMusic, FeatherPlay,
   FeatherCheck, FeatherFilm, FeatherLayers, FeatherCamera,
-  FeatherFileText, FeatherSearch, FeatherChevronDown,
   FeatherHash, FeatherMessageSquare, FeatherTrash2, FeatherScissors,
 } from '@subframe/core';
-import * as SubframeCore from '@subframe/core';
 import { useToast, ConfirmDialog } from '../ui';
 import SlideshowNicheContent from './SlideshowNicheContent';
 import VideoNicheContent from './VideoNicheContent';
 import FinishedMediaNicheContent from './FinishedMediaNicheContent';
 import ClipperNicheContent from './ClipperNicheContent';
-import useMediaMultiSelect from './shared/useMediaMultiSelect';
+import AllMediaContent from './AllMediaContent';
 import log from '../../utils/logger';
 
 const FORMAT_TO_EDITOR = {
@@ -106,36 +103,59 @@ const ProjectWorkspace = ({
   const [uploadProgress, setUploadProgress] = useState(null);
 
   // Active niche tab
-  const [activeNicheId, setActiveNicheId] = useState(initialNicheId);
+  const [activeNicheId, setActiveNicheIdRaw] = useState(initialNicheId);
 
-  // Media pool scope: 'all' = project root, 'niche' = active niche only
-  const [mediaScope, setMediaScope] = useState('all');
-
-  // Selected audio
-  const [selectedAudioId, setSelectedAudioId] = useState(null);
-
-  // (Multi-select hook called after filteredImages is computed below)
+  // All Media tab
+  const [showAllMedia, setShowAllMediaRaw] = useState(false);
 
   // Show niche format picker
   const [showNichePicker, setShowNichePicker] = useState(false);
 
   // Caption & Hashtag page
-  const [showCaptionPage, setShowCaptionPage] = useState(false);
+  const [showCaptionPage, setShowCaptionPageRaw] = useState(false);
+
+  // Navigation history stack for in-project back button
+  const navHistoryRef = useRef([]);
+  const getCurrentNavState = useCallback(() => ({
+    nicheId: activeNicheId,
+    allMedia: showAllMedia,
+    captionPage: showCaptionPage,
+  }), [activeNicheId, showAllMedia, showCaptionPage]);
+
+  // Wrapped navigators that push current state onto history before changing
+  const navigateTo = useCallback(({ nicheId, allMedia, captionPage }) => {
+    navHistoryRef.current.push(getCurrentNavState());
+    // Cap stack size to prevent unbounded growth
+    if (navHistoryRef.current.length > 50) navHistoryRef.current.shift();
+    setActiveNicheIdRaw(nicheId !== undefined ? nicheId : activeNicheId);
+    setShowAllMediaRaw(!!allMedia);
+    setShowCaptionPageRaw(!!captionPage);
+  }, [getCurrentNavState, activeNicheId]);
+
+  const navigateBack = useCallback(() => {
+    const prev = navHistoryRef.current.pop();
+    if (prev) {
+      setActiveNicheIdRaw(prev.nicheId);
+      setShowAllMediaRaw(prev.allMedia);
+      setShowCaptionPageRaw(prev.captionPage);
+    } else {
+      onBack();
+    }
+  }, [onBack]);
+
+  // Convenience setters used by auto-select effect (no history push)
+  const setActiveNicheId = setActiveNicheIdRaw;
 
   // Import from library modal
   const [showImportModal, setShowImportModal] = useState(false);
+  const [importAudioOnly, setImportAudioOnly] = useState(false);
+
 
   // Bank upload: when user clicks "+" in a bank, we track which bank to assign after upload
   const pendingBankIndexRef = useRef(null);
 
   // Bank import: when user clicks "Import" in a bank, track which bank to assign after import
   const pendingImportBankRef = useRef(null);
-
-  // Media search filter
-  const [mediaSearch, setMediaSearch] = useState('');
-
-  // Audio picker expanded
-  const [audioPickerOpen, setAudioPickerOpen] = useState(false);
 
   // Subscribe to data
   useEffect(() => {
@@ -196,56 +216,8 @@ const ProjectWorkspace = ({
     return library.filter(item => (project.mediaIds || []).includes(item.id));
   }, [project, library]);
 
-  // Niche media
-  const nicheMedia = useMemo(() => {
-    if (!activeNiche) return [];
-    return library.filter(item => (activeNiche.mediaIds || []).includes(item.id));
-  }, [activeNiche, library]);
-
-  // Scoped media for display
-  const scopedMedia = mediaScope === 'niche' ? nicheMedia : projectMedia;
-  const scopedImages = useMemo(() => scopedMedia.filter(m => m.type === 'image'), [scopedMedia]);
-
-  // Search-filtered images
-  const filteredImages = useMemo(() => {
-    if (!mediaSearch.trim()) return scopedImages;
-    const q = mediaSearch.toLowerCase();
-    return scopedImages.filter(m => (m.name || '').toLowerCase().includes(q));
-  }, [scopedImages, mediaSearch]);
-
-  // Multi-select (shared hook)
-  const {
-    selectedIds: selectedMediaIds,
-    setSelectedIds: setSelectedMediaIds,
-    isDragSelecting,
-    rubberBand,
-    gridRef,
-    gridMouseHandlers,
-    toggleSelect: toggleMediaSelect,
-    selectAll,
-    clearSelection,
-    draggingIds: draggingMediaIds,
-    setDraggingIds: setDraggingMediaIds,
-    makeDraggableProps,
-  } = useMediaMultiSelect(filteredImages);
-
   // Audio always from project pool
   const projectAudio = useMemo(() => projectMedia.filter(m => m.type === 'audio'), [projectMedia]);
-
-  // Selected audio item
-  const selectedAudio = useMemo(
-    () => projectAudio.find(a => a.id === selectedAudioId) || projectAudio[0] || null,
-    [projectAudio, selectedAudioId]
-  );
-
-  // Bank assignment check
-  const getImageBankIndex = useCallback((mediaId) => {
-    if (!activeNiche?.banks) return -1;
-    for (let i = 0; i < activeNiche.banks.length; i++) {
-      if (activeNiche.banks[i]?.includes(mediaId)) return i;
-    }
-    return -1;
-  }, [activeNiche]);
 
   // Draft counts per niche
   const nicheDraftCounts = useMemo(() => {
@@ -270,15 +242,43 @@ const ProjectWorkspace = ({
 
     const processOne = async (rawFile) => {
       let file = rawFile;
+      const isVideo = rawFile.type?.startsWith('video');
       if (rawFile.type?.startsWith('image')) file = await convertImageIfNeeded(rawFile);
       else if (rawFile.type?.startsWith('audio')) file = await convertAudioIfNeeded(rawFile);
 
       const isAudio = file.type?.startsWith('audio');
-      const folder = isAudio ? 'audio' : 'images';
+      const folder = isVideo ? 'videos' : isAudio ? 'audio' : 'images';
       const { url, path } = await uploadFile(file, folder);
 
       let thumbnailUrl = null;
-      if (!isAudio) {
+      if (isVideo) {
+        // Generate thumbnail from video first frame
+        try {
+          const video = document.createElement('video');
+          video.preload = 'metadata';
+          video.muted = true;
+          const objUrl = URL.createObjectURL(file);
+          video.src = objUrl;
+          await new Promise((resolve, reject) => {
+            video.onloadeddata = resolve;
+            video.onerror = reject;
+          });
+          video.currentTime = 0.1;
+          await new Promise((resolve) => { video.onseeked = resolve; });
+          const canvas = document.createElement('canvas');
+          const scale = Math.min(1, THUMB_MAX_SIZE / Math.max(video.videoWidth, video.videoHeight));
+          canvas.width = Math.round(video.videoWidth * scale);
+          canvas.height = Math.round(video.videoHeight * scale);
+          canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+          const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', THUMB_QUALITY));
+          if (blob) {
+            const tf = new File([blob], `thumb_${file.name}.jpg`, { type: 'image/jpeg' });
+            const tr = await uploadFile(tf, 'thumbnails');
+            thumbnailUrl = tr.url;
+          }
+          URL.revokeObjectURL(objUrl);
+        } catch (e) { /* skip video thumb */ }
+      } else if (!isAudio) {
         try {
           const img = new Image();
           img.src = URL.createObjectURL(file);
@@ -297,11 +297,27 @@ const ProjectWorkspace = ({
         } catch (e) { /* skip thumb */ }
       }
 
+      // Extract duration for audio/video — try local blob first (no CORS), fall back to remote URL
+      let duration = undefined;
+      if (isAudio || isVideo) {
+        const localBlobUrl = URL.createObjectURL(file);
+        try {
+          duration = await getMediaDuration(localBlobUrl, isVideo ? 'video' : 'audio');
+        } catch (e) { /* try remote */ }
+        URL.revokeObjectURL(localBlobUrl);
+        if (!duration) {
+          try {
+            duration = await getMediaDuration(url, isVideo ? 'video' : 'audio');
+          } catch (e) { /* duration stays undefined */ }
+        }
+      }
+
       // Target collection: active niche (if exists) or project root
       const targetCollectionId = activeNicheId || projectId;
 
+      const mediaType = isVideo ? MEDIA_TYPES.VIDEO : isAudio ? MEDIA_TYPES.AUDIO : MEDIA_TYPES.IMAGE;
       const item = {
-        type: isAudio ? MEDIA_TYPES.AUDIO : MEDIA_TYPES.IMAGE,
+        type: mediaType,
         name: file.name,
         url,
         thumbnailUrl,
@@ -309,6 +325,7 @@ const ProjectWorkspace = ({
         storagePath: path,
         collectionIds: [targetCollectionId],
         metadata: { fileSize: file.size, mimeType: file.type },
+        ...(duration ? { duration } : {}),
       };
 
       const savedItem = await addToLibraryAsync(db, artistId, item);
@@ -316,11 +333,7 @@ const ProjectWorkspace = ({
       await addToCollectionAsync(db, artistId, targetCollectionId, savedItem.id);
       // Also add to project pool if uploading in a niche
       if (activeNicheId && activeNicheId !== projectId) {
-        addToProjectPool(artistId, projectId, [savedItem.id]);
-        if (db && project) {
-          const updatedProject = getCollections(artistId).find(c => c.id === projectId);
-          if (updatedProject) saveCollectionToFirestore(db, artistId, updatedProject);
-        }
+        addToProjectPool(artistId, projectId, [savedItem.id], db);
       }
       return savedItem;
     };
@@ -341,11 +354,7 @@ const ProjectWorkspace = ({
         const bankIdx = pendingBankIndexRef.current;
         if (bankIdx != null && activeNicheId) {
           const imageItems = uploadedItems.filter(i => i.type !== MEDIA_TYPES.AUDIO);
-          imageItems.forEach(item => assignToBank(artistId, activeNicheId, item.id, bankIdx));
-          if (db) {
-            const updated = getCollections(artistId).find(c => c.id === activeNicheId);
-            if (updated) saveCollectionToFirestore(db, artistId, updated);
-          }
+          imageItems.forEach(item => assignToBank(artistId, activeNicheId, item.id, bankIdx, db));
           pendingBankIndexRef.current = null;
         }
         setCollections(getCollections(artistId));
@@ -390,12 +399,18 @@ const ProjectWorkspace = ({
     setShowImportModal(true);
   }, []);
 
+  // Import audio only — opens import modal filtered to audio
+  const handleImportAudio = useCallback(() => {
+    pendingImportBankRef.current = null;
+    setImportAudioOnly(true);
+    setShowImportModal(true);
+  }, []);
+
   // Create niche
   const handleCreateNiche = useCallback(async (format) => {
     try {
-      const niche = createNiche(artistId, { projectId, format });
-      if (db) await saveCollectionToFirestore(db, artistId, niche);
-      setActiveNicheId(niche.id);
+      const niche = createNiche(artistId, { projectId, format }, db);
+      navigateTo({ nicheId: niche.id });
       setShowNichePicker(false);
       toastSuccess(`"${format.name}" niche created`);
     } catch (err) {
@@ -420,10 +435,6 @@ const ProjectWorkspace = ({
     }
   }, [collections, db, artistId, activeNicheId, niches, toastSuccess, toastError]);
 
-  // Clear selection when scope/search changes
-  useEffect(() => { clearSelection(); }, [mediaScope, mediaSearch, clearSelection]);
-
-
   // Import from library
   const availableLibraryMedia = useMemo(() => {
     if (!project) return [];
@@ -431,24 +442,42 @@ const ProjectWorkspace = ({
     return library.filter(item => !poolIds.has(item.id));
   }, [library, project]);
 
+  // Pull from project: media in project pool (or other niches) not in active niche
+  const availableProjectMedia = useMemo(() => {
+    if (!project || !activeNicheId) return [];
+    const nicheIds = new Set(activeNiche?.mediaIds || []);
+    // Include all project pool media + media from other niches in this project
+    const allProjectIds = new Set(project.mediaIds || []);
+    niches.forEach(n => {
+      if (n.id !== activeNicheId) {
+        (n.mediaIds || []).forEach(id => allProjectIds.add(id));
+      }
+    });
+    return library.filter(item => allProjectIds.has(item.id) && !nicheIds.has(item.id));
+  }, [library, project, activeNicheId, activeNiche, niches]);
+
+  // Media from OTHER projects (roots + their niches), excluding items already in current project or active niche
+  const availableOtherProjectMedia = useMemo(() => {
+    if (!project) return [];
+    const allOtherProjects = collections.filter(c => c.isProjectRoot && c.id !== projectId);
+    if (allOtherProjects.length === 0) return [];
+    const nicheIds = new Set(activeNiche?.mediaIds || []);
+    const poolIds = new Set(project.mediaIds || []);
+    const otherIds = new Set();
+    allOtherProjects.forEach(proj => {
+      (proj.mediaIds || []).forEach(id => otherIds.add(id));
+      collections.filter(c => c.projectId === proj.id && c.isPipeline)
+        .forEach(n => (n.mediaIds || []).forEach(id => otherIds.add(id)));
+    });
+    return library.filter(item => otherIds.has(item.id) && !nicheIds.has(item.id) && !poolIds.has(item.id));
+  }, [collections, projectId, library, activeNiche, project]);
+
   const handleImportFromLibrary = useCallback((selectedIds) => {
     if (!selectedIds.length || !project) return;
-    addToProjectPool(artistId, projectId, selectedIds);
+    addToProjectPool(artistId, projectId, selectedIds, db);
     if (activeNicheId) {
       // Also add to niche
-      const cols = getCollections(artistId);
-      const nicheIdx = cols.findIndex(c => c.id === activeNicheId);
-      if (nicheIdx !== -1) {
-        const existing = new Set(cols[nicheIdx].mediaIds || []);
-        const newIds = selectedIds.filter(id => !existing.has(id));
-        cols[nicheIdx] = { ...cols[nicheIdx], mediaIds: [...(cols[nicheIdx].mediaIds || []), ...newIds], updatedAt: new Date().toISOString() };
-        saveCollections(artistId, cols);
-        if (db) saveCollectionToFirestore(db, artistId, cols[nicheIdx]);
-      }
-    }
-    if (db && project) {
-      const updatedProject = getCollections(artistId).find(c => c.id === projectId);
-      if (updatedProject) saveCollectionToFirestore(db, artistId, updatedProject);
+      addToCollection(artistId, activeNicheId, selectedIds, db);
     }
     // If triggered from a bank "Import", assign imported images to that bank
     const bankIdx = pendingImportBankRef.current;
@@ -457,16 +486,34 @@ const ProjectWorkspace = ({
         const item = library.find(m => m.id === id);
         return item && item.type !== MEDIA_TYPES.AUDIO;
       });
-      imageIds.forEach(id => assignToBank(artistId, activeNicheId, id, bankIdx));
-      if (db) {
-        const updated = getCollections(artistId).find(c => c.id === activeNicheId);
-        if (updated) saveCollectionToFirestore(db, artistId, updated);
-      }
+      imageIds.forEach(id => assignToBank(artistId, activeNicheId, id, bankIdx, db));
       pendingImportBankRef.current = null;
     }
     setShowImportModal(false);
     toastSuccess(`Imported ${selectedIds.length} item${selectedIds.length !== 1 ? 's' : ''}`);
   }, [project, artistId, projectId, activeNicheId, db, library, toastSuccess]);
+
+  // Pull from project pool → add to active niche (+ project pool if not already there)
+  const handlePullFromProject = useCallback((selectedIds) => {
+    if (!selectedIds.length || !activeNicheId) return;
+    const cols = getCollections(artistId);
+    const nicheIdx = cols.findIndex(c => c.id === activeNicheId);
+    if (nicheIdx === -1) return;
+    const existing = new Set(cols[nicheIdx].mediaIds || []);
+    const newIds = selectedIds.filter(id => !existing.has(id));
+    if (newIds.length === 0) { setShowImportModal(false); return; }
+    cols[nicheIdx] = { ...cols[nicheIdx], mediaIds: [...(cols[nicheIdx].mediaIds || []), ...newIds], updatedAt: new Date().toISOString() };
+    // Also ensure items are in the project pool
+    const poolIds = new Set(project?.mediaIds || []);
+    const missingFromPool = newIds.filter(id => !poolIds.has(id));
+    if (missingFromPool.length > 0) {
+      addToProjectPool(artistId, projectId, missingFromPool, db);
+    }
+    saveCollections(artistId, cols);
+    if (db) saveCollectionToFirestore(db, artistId, cols[nicheIdx]);
+    setShowImportModal(false);
+    toastSuccess(`Pulled ${newIds.length} item${newIds.length !== 1 ? 's' : ''} into niche`);
+  }, [artistId, activeNicheId, projectId, project, db, toastSuccess]);
 
   if (!project) {
     return (
@@ -484,7 +531,7 @@ const ProjectWorkspace = ({
       {/* Top header bar */}
       <div className="flex w-full items-center justify-between border-b border-solid border-neutral-800 bg-black px-6 py-4">
         <div className="flex items-center gap-4">
-          <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherArrowLeft />} aria-label="Back" onClick={onBack} />
+          <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherArrowLeft />} aria-label="Back" onClick={navigateBack} />
           <div
             className="flex h-9 w-9 flex-none items-center justify-center rounded-full"
             style={{ backgroundColor: project.projectColor || '#6366f1' }}
@@ -514,7 +561,7 @@ const ProjectWorkspace = ({
       {/* Niche tabs */}
       <div className="flex w-full items-center gap-0 border-b border-solid border-neutral-800 bg-black px-6 overflow-x-auto">
         {niches.map(niche => {
-          const isActive = niche.id === activeNicheId;
+          const isActive = niche.id === activeNicheId && !showAllMedia && !showCaptionPage;
           const fmt = niche.formats?.[0];
           const draftCount = nicheDraftCounts[niche.id] || 0;
           return (
@@ -523,7 +570,7 @@ const ProjectWorkspace = ({
               className={`group flex items-center gap-2 px-4 py-3 border-b-2 cursor-pointer transition-colors whitespace-nowrap ${
                 isActive ? 'border-[#6366f1ff] text-white' : 'border-transparent text-neutral-400 hover:text-neutral-200'
               }`}
-              onClick={() => setActiveNicheId(niche.id)}
+              onClick={() => navigateTo({ nicheId: niche.id })}
             >
               <span className="text-body-bold font-body-bold">{niche.name}</span>
               {draftCount > 0 && (
@@ -550,266 +597,132 @@ const ProjectWorkspace = ({
           <FeatherPlus style={{ width: 14, height: 14 }} />
           <span className="text-caption-bold font-caption-bold">New Niche</span>
         </button>
-        <div className="flex-1" />
-        <div
-          className={`flex items-center gap-1.5 px-4 py-3 border-b-2 cursor-pointer transition-colors whitespace-nowrap ${
+        <div className="flex-1 min-w-0" />
+        <button
+          className={`flex items-center gap-1.5 px-4 py-3 border-b-2 cursor-pointer transition-colors whitespace-nowrap flex-shrink-0 bg-transparent ${
+            showAllMedia ? 'border-[#6366f1ff] text-white' : 'border-transparent text-neutral-400 hover:text-neutral-200'
+          }`}
+          onClick={() => {
+            if (showAllMedia) {
+              navigateBack();
+            } else {
+              navHistoryRef.current.push({ nicheId: activeNicheId, allMedia: false, captionPage: showCaptionPage });
+              setShowAllMediaRaw(true);
+              setShowCaptionPageRaw(false);
+            }
+          }}
+        >
+          <FeatherImage style={{ width: 14, height: 14 }} />
+          <span className="text-caption-bold font-caption-bold">All Media</span>
+        </button>
+        <button
+          className={`flex items-center gap-1.5 px-4 py-3 border-b-2 cursor-pointer transition-colors whitespace-nowrap flex-shrink-0 bg-transparent ${
             showCaptionPage ? 'border-[#6366f1ff] text-white' : 'border-transparent text-neutral-400 hover:text-neutral-200'
           }`}
-          onClick={() => setShowCaptionPage(!showCaptionPage)}
+          onClick={() => { if (showCaptionPage) { navigateBack(); } else { navigateTo({ nicheId: activeNicheId, captionPage: true }); } }}
         >
           <FeatherHash style={{ width: 14, height: 14 }} />
           <span className="text-caption-bold font-caption-bold">Captions & Hashtags</span>
-        </div>
+        </button>
       </div>
 
-      {/* Main content area */}
+      {/* Hidden file input */}
+      <input
+        ref={setFileInputRef} type="file" multiple accept="image/*,audio/*,video/*"
+        style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' }}
+      />
+
+      {/* Main content area — full width, no sidebar */}
       <div className="flex items-start overflow-hidden flex-1 self-stretch">
-        {/* Left — Media Pool */}
-        <div className="flex w-72 flex-none flex-col items-start self-stretch border-r border-solid border-neutral-800 bg-black">
-          {/* Header + actions */}
-          <div className="flex w-full items-center justify-between border-b border-solid border-neutral-800 px-3 py-2">
-            <div className="flex items-center gap-2">
-              <span className="text-caption-bold font-caption-bold text-[#ffffffff]">Media</span>
-              <Badge variant="neutral">{scopedImages.length}</Badge>
-            </div>
-            <div className="flex items-center gap-1">
-              <Button className="h-auto" variant="neutral-tertiary" size="small" icon={<FeatherUpload />}
-                onClick={() => { pendingBankIndexRef.current = null; if (fileInputRef.current) { fileInputRef.current.accept = 'image/*,audio/*'; fileInputRef.current.click(); } }} />
-              <Button className="h-auto" variant="neutral-tertiary" size="small" icon={<FeatherDownloadCloud />}
-                onClick={() => { pendingImportBankRef.current = null; setShowImportModal(true); }} />
-            </div>
-          </div>
-
-          {/* Search */}
-          <div className="flex w-full items-center gap-2 px-3 py-2 border-b border-solid border-neutral-800">
-            <FeatherSearch className="text-neutral-500 flex-none" style={{ width: 14, height: 14 }} />
-            <input
-              className="w-full bg-transparent text-caption font-caption text-white placeholder-neutral-500 outline-none"
-              placeholder="Search images..."
-              value={mediaSearch}
-              onChange={e => setMediaSearch(e.target.value)}
-            />
-            {mediaSearch && (
-              <button className="text-neutral-500 hover:text-white flex-none" onClick={() => setMediaSearch('')}>
-                <FeatherX style={{ width: 12, height: 12 }} />
-              </button>
-            )}
-          </div>
-
-          {/* Scope toggle */}
-          {activeNicheId && (
-            <div className="flex w-full items-center justify-center px-3 py-1.5 border-b border-solid border-neutral-800">
-              <ToggleGroup value={mediaScope} onValueChange={(v) => v && setMediaScope(v)}>
-                <ToggleGroup.Item icon={null} value="all">All Media</ToggleGroup.Item>
-                <ToggleGroup.Item icon={null} value="niche">This Niche</ToggleGroup.Item>
-              </ToggleGroup>
-            </div>
-          )}
-
-          <input
-            ref={setFileInputRef} type="file" multiple accept="image/*,audio/*"
-            style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' }}
-          />
-
-          {/* Upload progress */}
-          {isUploading && uploadProgress && (
-            <div className="w-full px-3 py-1.5 border-b border-solid border-neutral-800">
-              <div className="h-1 w-full bg-neutral-800 rounded-full overflow-hidden">
-                <div className="h-full bg-indigo-500" style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }} />
-              </div>
-              <span className="text-caption font-caption text-neutral-400 mt-1">{uploadProgress.current}/{uploadProgress.total}</span>
-            </div>
-          )}
-
-          {/* Select All / count bar */}
-          {filteredImages.length > 0 && (
-            <div className="flex w-full items-center justify-between px-3 py-1 border-b border-solid border-neutral-800">
-              <button
-                className="text-caption font-caption text-indigo-400 hover:text-indigo-300"
-                onClick={selectAll}
-              >
-                {selectedMediaIds.size === filteredImages.length ? 'Deselect All' : 'Select All'}
-              </button>
-              {selectedMediaIds.size > 0 && (
-                <span className="text-caption font-caption text-neutral-400">{selectedMediaIds.size} selected</span>
-              )}
-            </div>
-          )}
-
-          {/* Compact image grid — 4 columns with multi-select + rubber-band */}
-          <div
-            className="flex w-full grow flex-col items-start px-2 py-2 overflow-y-auto relative"
-            ref={gridRef}
-            {...gridMouseHandlers}
-            style={{ userSelect: isDragSelecting ? 'none' : undefined }}
-          >
-            {rubberBand && (
-              <div
-                className="absolute pointer-events-none border border-indigo-400 bg-indigo-500/20 z-10 rounded-sm"
-                style={{ left: rubberBand.left, top: rubberBand.top, width: rubberBand.width, height: rubberBand.height }}
-              />
-            )}
-            <div className="w-full gap-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-              {filteredImages.map(item => {
-                const bankIdx = getImageBankIndex(item.id);
-                const bankColor = bankIdx >= 0 ? getBankColor(bankIdx) : null;
-                const isSelected = selectedMediaIds.has(item.id);
-                return (
-                  <div
-                    key={item.id}
-                    data-media-id={item.id}
-                    className="relative aspect-square"
-                    {...makeDraggableProps(item.id)}
-                    onClick={(e) => {
-                      if (isDragSelecting) return;
-                      e.stopPropagation();
-                      toggleMediaSelect(item.id, e);
-                    }}
-                  >
-                    <img
-                      className={`w-full h-full rounded object-cover border-2 transition ${
-                        isSelected ? 'border-indigo-500' : 'border-neutral-800 hover:border-neutral-600'
-                      }`}
-                      src={item.thumbnailUrl || item.url}
-                      alt={item.name}
-                      loading="lazy"
-                      draggable={false}
-                      style={{ pointerEvents: isDragSelecting ? 'none' : undefined }}
-                    />
-                    {isSelected && (
-                      <div className="absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-indigo-500 flex items-center justify-center">
-                        <FeatherCheck className="text-white" style={{ width: 10, height: 10 }} />
-                      </div>
-                    )}
-                    {bankColor && !isSelected && (
-                      <div className="h-1.5 w-1.5 rounded-full absolute bottom-0.5 right-0.5"
-                        style={{ backgroundColor: bankColor.primary }} />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {filteredImages.length === 0 && scopedImages.length > 0 && mediaSearch && (
-              <div className="flex w-full items-center justify-center py-6">
-                <span className="text-caption font-caption text-neutral-500">No matches for "{mediaSearch}"</span>
-              </div>
-            )}
-
-            {scopedMedia.length === 0 && (
-              <div className="flex flex-col items-center justify-center gap-3 py-16 text-center w-full">
-                <FeatherImage className="w-12 h-12 text-zinc-600" />
-                <h3 className="text-lg font-semibold text-white">No media in pool</h3>
-                <p className="text-sm text-zinc-400 max-w-xs">
-                  Upload images and audio to start creating
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Audio — pinned at bottom, dropdown opens upward */}
-          {projectAudio.length > 0 && (
-            <div className="relative flex w-full flex-col flex-none border-t border-solid border-neutral-800">
-              {audioPickerOpen && (
-                <div className="absolute bottom-full left-0 right-0 flex flex-col gap-0.5 px-2 py-2 bg-[#111111] border border-neutral-700 rounded-t-lg max-h-64 overflow-y-auto shadow-xl">
-                  {projectAudio.map(audio => {
-                    const isSelected = selectedAudio?.id === audio.id;
-                    return (
-                      <button
-                        key={audio.id}
-                        className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition ${
-                          isSelected ? 'bg-indigo-600' : 'hover:bg-neutral-800'
-                        }`}
-                        onClick={() => { setSelectedAudioId(audio.id); setAudioPickerOpen(false); }}
-                      >
-                        <FeatherPlay className="text-neutral-300 flex-none" style={{ width: 10, height: 10 }} />
-                        <span className="text-caption font-caption text-[#ffffffff] truncate grow">{audio.name}</span>
-                        {isSelected && <FeatherCheck className="text-indigo-300 flex-none" style={{ width: 12, height: 12 }} />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-              <button
-                className="flex w-full items-center gap-2 px-3 py-2.5 hover:bg-[#262626] transition"
-                onClick={() => setAudioPickerOpen(!audioPickerOpen)}
-              >
-                <FeatherMusic className="text-indigo-400 flex-none" style={{ width: 14, height: 14 }} />
-                <span className="text-caption-bold font-caption-bold text-[#ffffffff] truncate grow text-left">
-                  {selectedAudio?.name || 'Select audio'}
-                </span>
-                <FeatherChevronDown
-                  className="text-neutral-400 flex-none transition-transform"
-                  style={{ width: 14, height: 14, transform: audioPickerOpen ? 'rotate(180deg)' : 'none' }}
-                />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Right content — Caption page or niche content */}
-        {showCaptionPage && (
-          <ProjectCaptionPage
-            artistId={artistId}
-            niches={niches}
-            collections={collections}
+        {/* All Media tab */}
+        {showAllMedia && (
+          <AllMediaContent
+            projectMedia={projectMedia}
+            library={library}
+            activeNicheId={activeNicheId}
+            activeNiche={activeNiche}
+            onUpload={() => { pendingBankIndexRef.current = null; if (fileInputRef.current) { fileInputRef.current.accept = 'image/*,audio/*,video/*'; fileInputRef.current.click(); } }}
+            onImport={() => { pendingImportBankRef.current = null; setShowImportModal(true); }}
+            isUploading={isUploading}
+            uploadProgress={uploadProgress}
           />
         )}
 
-        {!showCaptionPage && activeNiche && activeFormat?.type === 'slideshow' && (
+        {/* Caption page */}
+        {!showAllMedia && showCaptionPage && (
+          <ProjectCaptionPage
+            db={db}
+            artistId={artistId}
+            projectId={projectId}
+            project={project}
+          />
+        )}
+
+        {!showAllMedia && !showCaptionPage && activeNiche && activeFormat?.type === 'slideshow' && (
           <SlideshowNicheContent
             db={db}
             artistId={artistId}
             niche={activeNiche}
             library={library}
             createdContent={createdContent}
-            selectedAudio={selectedAudio}
-            draggingMediaIds={draggingMediaIds}
+            projectAudio={projectAudio}
+            draggingMediaIds={[]}
             onOpenEditor={onOpenEditor}
             onViewDrafts={onViewDrafts}
-            allNiches={niches}
+
             onUploadToBank={handleUploadToBank}
             onImportToBank={handleImportToBank}
+            onUploadAudio={() => { pendingBankIndexRef.current = null; if (fileInputRef.current) { fileInputRef.current.accept = 'audio/*'; fileInputRef.current.click(); } }}
+            onImportAudio={handleImportAudio}
           />
         )}
 
-        {!showCaptionPage && activeNiche && activeFormat?.id === 'clipper' && (
+        {!showAllMedia && !showCaptionPage && activeNiche && activeFormat?.id === 'clipper' && (
           <ClipperNicheContent
             db={db}
             artistId={artistId}
             niche={activeNiche}
+            library={library}
             createdContent={createdContent}
-            onMakeVideo={(format, nicheId, existingDraft) => {
-              onOpenVideoEditor?.(format, nicheId, existingDraft);
+            projectAudio={projectAudio}
+            onMakeVideo={(format, nicheId, existingDraft, templateSettings, nicheSourceVideos) => {
+              onOpenVideoEditor?.(format, nicheId, existingDraft, templateSettings, nicheSourceVideos);
             }}
-            allNiches={niches}
+            onUpload={() => { pendingBankIndexRef.current = null; if (fileInputRef.current) { fileInputRef.current.accept = 'video/*'; fileInputRef.current.click(); } }}
+            onImport={() => { pendingImportBankRef.current = null; setShowImportModal(true); }}
           />
         )}
 
-        {!showCaptionPage && activeNiche && activeFormat?.type === 'video' && activeFormat?.id !== 'finished_media' && activeFormat?.id !== 'clipper' && (
+        {!showAllMedia && !showCaptionPage && activeNiche && activeFormat?.type === 'video' && activeFormat?.id !== 'finished_media' && activeFormat?.id !== 'clipper' && (
           <VideoNicheContent
             db={db}
             artistId={artistId}
             niche={activeNiche}
+            library={library}
             createdContent={createdContent}
-            onMakeVideo={(format, nicheId, existingDraft) => {
-              onOpenVideoEditor?.(format, nicheId, existingDraft);
+            projectAudio={projectAudio}
+            onMakeVideo={(format, nicheId, existingDraft, templateSettings) => {
+              onOpenVideoEditor?.(format, nicheId, existingDraft, templateSettings);
             }}
-            allNiches={niches}
+            onUpload={() => { pendingBankIndexRef.current = null; if (fileInputRef.current) { fileInputRef.current.accept = 'image/*,audio/*,video/*'; fileInputRef.current.click(); } }}
+            onUploadAudio={() => { pendingBankIndexRef.current = null; if (fileInputRef.current) { fileInputRef.current.accept = 'audio/*'; fileInputRef.current.click(); } }}
+            onImport={() => { pendingImportBankRef.current = null; setShowImportModal(true); }}
+            onImportAudio={handleImportAudio}
           />
         )}
 
-        {!showCaptionPage && activeNiche && activeFormat?.id === 'finished_media' && (
+        {!showAllMedia && !showCaptionPage && activeNiche && activeFormat?.id === 'finished_media' && (
           <FinishedMediaNicheContent
             db={db}
             artistId={artistId}
             niche={activeNiche}
-            allNiches={niches}
+            projectAudio={projectAudio}
+
           />
         )}
 
         {/* No niches — format picker */}
-        {!showCaptionPage && niches.length === 0 && !showNichePicker && (
+        {!showAllMedia && !showCaptionPage && niches.length === 0 && !showNichePicker && (
           <div className="flex flex-1 flex-col items-center justify-center gap-6 self-stretch">
             <div className="flex flex-col items-center gap-3">
               <FeatherPlus className="text-neutral-500" style={{ width: 32, height: 32 }} />
@@ -923,25 +836,101 @@ const ProjectWorkspace = ({
         </div>
       )}
 
-      {/* Import from Library Modal */}
-      {showImportModal && (
-        <ImportFromLibraryModal
-          items={availableLibraryMedia}
-          onImport={handleImportFromLibrary}
-          onClose={() => setShowImportModal(false)}
-        />
+      {/* Import Modal — Library + Project tabs */}
+      {showImportModal && (() => {
+        const closeImport = () => { setShowImportModal(false); setImportAudioOnly(false); };
+        const filterAudio = (items) => importAudioOnly ? items.filter(i => i.type === 'audio') : items;
+        return (
+          <ImportFromLibraryModal
+            onClose={closeImport}
+            title={importAudioOnly ? 'Import Audio' : 'Import Media'}
+            sources={[
+              { label: 'Library', items: filterAudio(availableLibraryMedia), onImport: (ids) => { handleImportFromLibrary(ids); setImportAudioOnly(false); } },
+              ...(filterAudio(availableProjectMedia).length > 0
+                ? [{ label: 'This Project', items: filterAudio(availableProjectMedia), onImport: (ids) => { handlePullFromProject(ids); setImportAudioOnly(false); } }]
+                : []),
+              ...(filterAudio(availableOtherProjectMedia).length > 0
+                ? [{ label: 'Other Projects', items: filterAudio(availableOtherProjectMedia), onImport: (ids) => { handleImportFromLibrary(ids); setImportAudioOnly(false); } }]
+                : []),
+            ]}
+            allCollections={collections}
+            activeNicheId={activeNicheId}
+          />
+        );
+      })()}
+
+      {/* Upload progress banner */}
+      {isUploading && uploadProgress && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-xl border border-neutral-700 bg-[#111111] px-5 py-3 shadow-2xl">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent flex-none" />
+          <div className="flex flex-col gap-0.5">
+            <span className="text-body-bold font-body-bold text-[#ffffffff]">
+              Uploading {uploadProgress.current} of {uploadProgress.total}
+            </span>
+            <div className="w-48 h-1.5 rounded-full bg-neutral-800 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-indigo-500 transition-all"
+                style={{ width: `${Math.round((uploadProgress.current / uploadProgress.total) * 100)}%` }}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 };
 
-// Reused ImportFromLibraryModal with rubber-band drag selection
-const ImportFromLibraryModal = ({ items, onImport, onClose }) => {
+// Reused ImportFromLibraryModal with rubber-band drag selection + optional source tabs
+// sources = [{ label, items, onImport }] — when provided, shows tabs to switch between sources
+const ImportFromLibraryModal = ({ items: defaultItems, onImport: defaultOnImport, onClose, title = 'Import from Library', subtitle, sources, allCollections = [], activeNicheId }) => {
+  const [activeSourceIdx, setActiveSourceIdx] = useState(0);
+  const [nicheFilter, setNicheFilter] = useState(null);
+  const resolvedSources = sources || [{ label: 'Library', items: defaultItems, onImport: defaultOnImport }];
+  const activeSource = resolvedSources[activeSourceIdx] || resolvedSources[0];
+
+  // All niches except the active one — always show all so user can filter across tabs
+  const filterableNiches = useMemo(() => {
+    return allCollections
+      .filter(c => c.isPipeline && c.id !== activeNicheId && (c.mediaIds || []).length > 0)
+      .map(c => ({ id: c.id, name: c.name }));
+  }, [allCollections, activeNicheId]);
+
+  // Filter items by niche if a niche filter is selected
+  const items = useMemo(() => {
+    const sourceItems = activeSource.items;
+    if (!nicheFilter) return sourceItems;
+    const niche = allCollections.find(c => c.id === nicheFilter);
+    if (!niche) return sourceItems;
+    const nicheMediaIds = new Set(niche.mediaIds || []);
+    return sourceItems.filter(item => nicheMediaIds.has(item.id));
+  }, [activeSource.items, nicheFilter, allCollections]);
+
+  // Count of niche-filtered items per source (for showing match counts on pills)
+  const nicheFilterCount = useMemo(() => {
+    if (!nicheFilter) return null;
+    const niche = allCollections.find(c => c.id === nicheFilter);
+    if (!niche) return null;
+    const nicheMediaIds = new Set(niche.mediaIds || []);
+    return resolvedSources.reduce((acc, src, idx) => {
+      acc[idx] = src.items.filter(item => nicheMediaIds.has(item.id)).length;
+      return acc;
+    }, {});
+  }, [nicheFilter, allCollections, resolvedSources]);
+
+  const onImport = activeSource.onImport;
+
   const [selected, setSelected] = useState(new Set());
   const gridRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
   const [rubberBand, setRubberBand] = useState(null);
+
+  // Clear selection and niche filter when switching sources
+  const handleSwitchSource = (idx) => {
+    setActiveSourceIdx(idx);
+    setSelected(new Set());
+    setNicheFilter(null);
+  };
 
   const toggle = (id) => {
     setSelected(prev => {
@@ -958,6 +947,7 @@ const ImportFromLibraryModal = ({ items, onImport, onClose }) => {
   };
 
   const images = useMemo(() => items.filter(i => i.type === 'image'), [items]);
+  const videos = useMemo(() => items.filter(i => i.type === 'video'), [items]);
   const audio = useMemo(() => items.filter(i => i.type === 'audio'), [items]);
 
   // Use full-quality URL: prefer v2 thumbnails (200px/40%), fall back to full URL for v1 or missing
@@ -1029,17 +1019,61 @@ const ImportFromLibraryModal = ({ items, onImport, onClose }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={onClose}>
       <div className="w-full max-w-2xl rounded-xl border border-neutral-800 bg-[#111111] overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-neutral-800 px-6 py-4">
-          <div className="flex flex-col gap-1">
-            <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Import from Library</span>
-            <span className="text-caption font-caption text-neutral-400">{items.length} item{items.length !== 1 ? 's' : ''} available</span>
+        <div className="flex flex-col border-b border-neutral-800">
+          <div className="flex items-center justify-between px-6 py-4">
+            <div className="flex flex-col gap-1">
+              <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{title}</span>
+              <span className="text-caption font-caption text-neutral-400">{subtitle || `${items.length} item${items.length !== 1 ? 's' : ''} available`}</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button variant="neutral-tertiary" size="small" onClick={selectAll}>
+                {selected.size === items.length ? 'Deselect All' : 'Select All'}
+              </Button>
+              <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherX />} aria-label="Close" onClick={onClose} />
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <Button variant="neutral-tertiary" size="small" onClick={selectAll}>
-              {selected.size === items.length ? 'Deselect All' : 'Select All'}
-            </Button>
-            <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherX />} aria-label="Close" onClick={onClose} />
-          </div>
+          {resolvedSources.length > 1 && (
+            <div className="flex items-center gap-0 px-6">
+              {resolvedSources.map((src, idx) => (
+                <button
+                  key={idx}
+                  className={`px-4 py-2 text-caption-bold font-caption-bold border-b-2 transition-colors cursor-pointer bg-transparent ${
+                    idx === activeSourceIdx
+                      ? 'border-indigo-500 text-white'
+                      : 'border-transparent text-neutral-400 hover:text-neutral-200'
+                  }`}
+                  onClick={() => handleSwitchSource(idx)}
+                >
+                  {src.label} ({nicheFilterCount ? nicheFilterCount[idx] : src.items.length})
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Niche filter */}
+          {filterableNiches.length > 0 && (
+            <div className="flex items-center gap-2 px-6 py-2 border-t border-neutral-800/50">
+              <span className="text-caption font-caption text-neutral-500">Filter:</span>
+              <button
+                className={`px-2.5 py-1 rounded-full text-caption font-caption transition-colors cursor-pointer border ${
+                  !nicheFilter ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-transparent border-neutral-700 text-neutral-400 hover:text-neutral-200'
+                }`}
+                onClick={() => { setNicheFilter(null); setSelected(new Set()); }}
+              >
+                All
+              </button>
+              {filterableNiches.map(n => (
+                <button
+                  key={n.id}
+                  className={`px-2.5 py-1 rounded-full text-caption font-caption transition-colors cursor-pointer border ${
+                    nicheFilter === n.id ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-transparent border-neutral-700 text-neutral-400 hover:text-neutral-200'
+                  }`}
+                  onClick={() => { setNicheFilter(n.id); setSelected(new Set()); }}
+                >
+                  {n.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div
           ref={gridRef}
@@ -1073,6 +1107,41 @@ const ImportFromLibraryModal = ({ items, onImport, onClose }) => {
                         onClick={() => { if (!isDragging) toggle(item.id); }}
                       >
                         <img src={getImgSrc(item)} alt={item.name} className="h-full w-full object-cover" loading="lazy" draggable={false} />
+                        {selected.has(item.id) && (
+                          <div className="absolute inset-0 bg-indigo-500/30 flex items-center justify-center">
+                            <FeatherCheck className="text-white" style={{ width: 20, height: 20 }} />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              {videos.length > 0 && (
+                <>
+                  <span className="text-body-bold font-body-bold text-neutral-300 mb-3 block">Videos ({videos.length})</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-6">
+                    {videos.map(item => (
+                      <div key={item.id}
+                        data-media-id={item.id}
+                        className={`relative aspect-video rounded-lg overflow-hidden cursor-pointer border-2 transition-colors ${
+                          selected.has(item.id) ? 'border-indigo-500' : 'border-transparent hover:border-neutral-600'
+                        }`}
+                        onClick={() => { if (!isDragging) toggle(item.id); }}
+                      >
+                        {item.thumbnailUrl ? (
+                          <img src={item.thumbnailUrl} alt={item.name} className="h-full w-full object-cover" loading="lazy" draggable={false} />
+                        ) : (
+                          <div className="h-full w-full bg-neutral-800 flex items-center justify-center">
+                            <FeatherFilm className="text-neutral-500" style={{ width: 24, height: 24 }} />
+                          </div>
+                        )}
+                        <div className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5">
+                          <FeatherPlay className="text-white" style={{ width: 10, height: 10 }} />
+                          {item.duration && (
+                            <span className="text-[10px] text-white">{Math.floor(item.duration / 60)}:{String(Math.floor(item.duration % 60)).padStart(2, '0')}</span>
+                          )}
+                        </div>
                         {selected.has(item.id) && (
                           <div className="absolute inset-0 bg-indigo-500/30 flex items-center justify-center">
                             <FeatherCheck className="text-white" style={{ width: 20, height: 20 }} />
@@ -1124,195 +1193,155 @@ const ImportFromLibraryModal = ({ items, onImport, onClose }) => {
 };
 
 // ═══════════════════════════════════════════════════
-// ProjectCaptionPage — Captions & Hashtags across all niches
+// ProjectCaptionPage — Project-level Captions & Hashtags
 // ═══════════════════════════════════════════════════
-const ProjectCaptionPage = ({ artistId, niches, collections }) => {
+const ProjectCaptionPage = ({ db, artistId, projectId, project }) => {
   const { success: toastSuccess } = useToast();
-  const [newCaptions, setNewCaptions] = useState({});
-  const [newHashtags, setNewHashtags] = useState({});
+  const [newCaption, setNewCaption] = useState('');
+  const [newHashtag, setNewHashtag] = useState('');
 
-  // Get fresh data from collections
-  const getNiche = (nicheId) => collections.find(c => c.id === nicheId) || null;
+  // Read from project root
+  const captions = useMemo(() => {
+    if (!project) return [];
+    return Array.isArray(project.captionBank)
+      ? project.captionBank
+      : [...(project.captionBank?.always || []), ...(project.captionBank?.pool || [])];
+  }, [project]);
 
-  const handleAddCaption = (nicheId) => {
-    const text = (newCaptions[nicheId] || '').trim();
-    if (!text) return;
-    const niche = getNiche(nicheId);
-    if (!niche) return;
-    const captions = [...(niche.captionBank || []), text];
-    updateNicheCaptionBank(artistId, nicheId, captions);
-    setNewCaptions(prev => ({ ...prev, [nicheId]: '' }));
-  };
+  const hashtags = useMemo(() => {
+    if (!project) return [];
+    return Array.isArray(project.hashtagBank)
+      ? project.hashtagBank
+      : [...(project.hashtagBank?.always || []), ...(project.hashtagBank?.pool || [])];
+  }, [project]);
 
-  const handleRemoveCaption = (nicheId, idx) => {
-    const niche = getNiche(nicheId);
-    if (!niche) return;
-    const captions = [...(niche.captionBank || [])];
-    captions.splice(idx, 1);
-    updateNicheCaptionBank(artistId, nicheId, captions);
-  };
+  const handleAddCaption = useCallback(() => {
+    const text = newCaption.trim();
+    if (!text || !projectId) return;
+    updateProjectCaptionBank(artistId, projectId, [...captions, text], db);
+    setNewCaption('');
+  }, [db, artistId, projectId, captions, newCaption]);
 
-  const handleAddHashtag = (nicheId) => {
-    const raw = (newHashtags[nicheId] || '').trim();
-    if (!raw) return;
+  const handleRemoveCaption = useCallback((idx) => {
+    const updated = [...captions];
+    updated.splice(idx, 1);
+    updateProjectCaptionBank(artistId, projectId, updated, db);
+  }, [db, artistId, projectId, captions]);
+
+  const handleAddHashtag = useCallback(() => {
+    const raw = newHashtag.trim();
+    if (!raw || !projectId) return;
     const tag = raw.startsWith('#') ? raw : `#${raw}`;
-    const niche = getNiche(nicheId);
-    if (!niche) return;
-    const hashtags = [...(niche.hashtagBank || [])];
-    if (!hashtags.includes(tag)) hashtags.push(tag);
-    updateNicheHashtagBank(artistId, nicheId, hashtags);
-    setNewHashtags(prev => ({ ...prev, [nicheId]: '' }));
-  };
+    if (hashtags.includes(tag)) return;
+    updateProjectHashtagBank(artistId, projectId, [...hashtags, tag], db);
+    setNewHashtag('');
+  }, [db, artistId, projectId, hashtags, newHashtag]);
 
-  const handleRemoveHashtag = (nicheId, idx) => {
-    const niche = getNiche(nicheId);
-    if (!niche) return;
-    const hashtags = [...(niche.hashtagBank || [])];
-    hashtags.splice(idx, 1);
-    updateNicheHashtagBank(artistId, nicheId, hashtags);
-  };
+  const handleRemoveHashtag = useCallback((idx) => {
+    const updated = [...hashtags];
+    updated.splice(idx, 1);
+    updateProjectHashtagBank(artistId, projectId, updated, db);
+  }, [db, artistId, projectId, hashtags]);
 
-  const handleCopyAll = (nicheId) => {
-    const niche = getNiche(nicheId);
-    if (!niche?.hashtagBank?.length) return;
-    navigator.clipboard.writeText(niche.hashtagBank.join(' '));
+  const handleCopyAll = useCallback(() => {
+    if (hashtags.length === 0) return;
+    navigator.clipboard.writeText(hashtags.join(' '));
     toastSuccess('Copied all hashtags');
-  };
+  }, [hashtags, toastSuccess]);
 
-  const handleMoveCaption = (fromNicheId, caption, toNicheId) => {
-    moveNicheBankEntry(artistId, fromNicheId, toNicheId, caption, 'caption');
-  };
-
-  const handleMoveHashtag = (fromNicheId, hashtag, toNicheId) => {
-    moveNicheBankEntry(artistId, fromNicheId, toNicheId, hashtag, 'hashtag');
-  };
+  if (!project) return null;
 
   return (
     <div className="flex flex-1 flex-col items-start self-stretch overflow-y-auto px-8 py-6 gap-8">
       <div className="flex flex-col gap-1">
         <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Captions & Hashtags</span>
-        <span className="text-body font-body text-neutral-400">Manage captions and hashtags for each niche</span>
+        <span className="text-body font-body text-neutral-400">
+          Shared across all niches in this project
+        </span>
       </div>
 
-      {niches.map(niche => {
-        const nicheData = getNiche(niche.id);
-        const captions = nicheData?.captionBank || [];
-        const hashtags = nicheData?.hashtagBank || [];
-        const otherNiches = niches.filter(n => n.id !== niche.id);
-        const nicheColor = niche.pipelineColor || getBankColor(niches.indexOf(niche)).primary;
-
-        return (
-          <div key={niche.id} className="flex w-full flex-col gap-4 rounded-lg border border-solid border-neutral-800 bg-[#111111] p-5">
-            {/* Niche header */}
-            <div className="flex items-center gap-2">
-              <div className="h-3 w-3 rounded-full flex-none" style={{ backgroundColor: nicheColor }} />
-              <span className="text-body-bold font-body-bold text-[#ffffffff]">{niche.name}</span>
-              <Badge variant="neutral">{captions.length + hashtags.length}</Badge>
-            </div>
-
-            {/* Captions */}
-            <div className="flex w-full flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <FeatherMessageSquare className="text-neutral-400" style={{ width: 12, height: 12 }} />
-                <span className="text-caption-bold font-caption-bold text-neutral-300">Captions</span>
-                <Badge variant="neutral">{captions.length}</Badge>
+      {/* Captions */}
+      <div className="flex w-full flex-col gap-3 rounded-lg border border-solid border-neutral-800 bg-[#111111] p-5">
+        <div className="flex items-center gap-2">
+          <FeatherMessageSquare className="text-neutral-400" style={{ width: 14, height: 14 }} />
+          <span className="text-body-bold font-body-bold text-[#ffffffff]">Captions</span>
+          <Badge variant="neutral">{captions.length}</Badge>
+        </div>
+        {captions.length > 0 && (
+          <div className="flex flex-col gap-1.5 max-h-[300px] overflow-y-auto">
+            {captions.map((cap, idx) => (
+              <div key={idx} className="flex items-start gap-2 rounded-md bg-black px-2.5 py-1.5 group">
+                <span
+                  className="grow text-caption font-caption text-neutral-300 cursor-pointer hover:text-white line-clamp-3"
+                  title="Click to copy"
+                  onClick={() => { navigator.clipboard.writeText(cap); toastSuccess('Copied'); }}
+                >{cap}</span>
+                <button
+                  className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 flex-none opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => handleRemoveCaption(idx)}
+                >
+                  <FeatherTrash2 style={{ width: 12, height: 12 }} />
+                </button>
               </div>
-              {captions.length > 0 && (
-                <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto">
-                  {captions.map((cap, idx) => (
-                    <div key={idx} className="flex items-start gap-2 rounded-md bg-black px-2.5 py-1.5 group">
-                      <span
-                        className="grow text-caption font-caption text-neutral-300 cursor-pointer hover:text-white line-clamp-2"
-                        title="Click to copy"
-                        onClick={() => { navigator.clipboard.writeText(cap); toastSuccess('Copied'); }}
-                      >{cap}</span>
-                      <div className="flex items-center gap-1 flex-none opacity-0 group-hover:opacity-100 transition-opacity">
-                        {otherNiches.length > 0 && (
-                          <select
-                            className="bg-neutral-800 text-caption text-neutral-300 border-none rounded px-1 py-0.5 cursor-pointer outline-none"
-                            value=""
-                            onChange={e => { if (e.target.value) handleMoveCaption(niche.id, cap, e.target.value); }}
-                          >
-                            <option value="" disabled>Move to...</option>
-                            {otherNiches.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
-                          </select>
-                        )}
-                        <button className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0" onClick={() => handleRemoveCaption(niche.id, idx)}>
-                          <FeatherTrash2 style={{ width: 12, height: 12 }} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="flex w-full gap-2">
-                <textarea
-                  className="flex-1 min-h-[32px] max-h-[64px] rounded-md border border-solid border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500 resize-none"
-                  placeholder="Add caption..."
-                  value={newCaptions[niche.id] || ''}
-                  onChange={e => setNewCaptions(prev => ({ ...prev, [niche.id]: e.target.value }))}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddCaption(niche.id); } }}
-                  rows={1}
-                />
-                <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add caption" onClick={() => handleAddCaption(niche.id)} />
-              </div>
-            </div>
-
-            {/* Hashtags */}
-            <div className="flex w-full flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <FeatherHash className="text-neutral-400" style={{ width: 12, height: 12 }} />
-                <span className="text-caption-bold font-caption-bold text-neutral-300">Hashtags</span>
-                <Badge variant="neutral">{hashtags.length}</Badge>
-                {hashtags.length > 0 && (
-                  <button className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer ml-auto" onClick={() => handleCopyAll(niche.id)}>
-                    Copy All
-                  </button>
-                )}
-              </div>
-              {hashtags.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 max-h-[120px] overflow-y-auto">
-                  {hashtags.map((tag, idx) => (
-                    <div key={idx} className="flex items-center gap-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 px-2.5 py-0.5 group">
-                      <span className="text-caption font-caption text-indigo-300">{tag}</span>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {otherNiches.length > 0 && (
-                          <select
-                            className="bg-neutral-800 text-caption text-neutral-300 border-none rounded px-1 py-0.5 cursor-pointer outline-none"
-                            value=""
-                            onChange={e => { if (e.target.value) handleMoveHashtag(niche.id, tag, e.target.value); }}
-                          >
-                            <option value="" disabled>Move to...</option>
-                            {otherNiches.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
-                          </select>
-                        )}
-                        <button className="text-indigo-400 hover:text-red-400 bg-transparent border-none cursor-pointer p-0" onClick={() => handleRemoveHashtag(niche.id, idx)}>
-                          <FeatherX style={{ width: 10, height: 10 }} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="flex w-full gap-2">
-                <input
-                  className="flex-1 rounded-md border border-solid border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500"
-                  placeholder="#hashtag"
-                  value={newHashtags[niche.id] || ''}
-                  onChange={e => setNewHashtags(prev => ({ ...prev, [niche.id]: e.target.value }))}
-                  onKeyDown={e => { if (e.key === 'Enter') handleAddHashtag(niche.id); }}
-                />
-                <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add hashtag" onClick={() => handleAddHashtag(niche.id)} />
-              </div>
-            </div>
+            ))}
           </div>
-        );
-      })}
+        )}
+        <div className="flex w-full gap-2">
+          <textarea
+            className="flex-1 min-h-[32px] max-h-[80px] rounded-md border border-solid border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500 resize-none"
+            placeholder="Add caption..."
+            value={newCaption}
+            onChange={e => setNewCaption(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddCaption(); } }}
+            rows={1}
+          />
+          <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add caption" onClick={handleAddCaption} />
+        </div>
+      </div>
 
-      {niches.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16 w-full text-neutral-500">
-          <FeatherHash style={{ width: 32, height: 32 }} />
-          <p className="mt-3 text-body font-body">Create niches first to manage captions & hashtags</p>
+      {/* Hashtags */}
+      <div className="flex w-full flex-col gap-3 rounded-lg border border-solid border-neutral-800 bg-[#111111] p-5">
+        <div className="flex items-center gap-2">
+          <FeatherHash className="text-neutral-400" style={{ width: 14, height: 14 }} />
+          <span className="text-body-bold font-body-bold text-[#ffffffff]">Hashtags</span>
+          <Badge variant="neutral">{hashtags.length}</Badge>
+          {hashtags.length > 0 && (
+            <button className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer ml-auto" onClick={handleCopyAll}>
+              Copy All
+            </button>
+          )}
+        </div>
+        {hashtags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 max-h-[200px] overflow-y-auto">
+            {hashtags.map((tag, idx) => (
+              <div key={idx} className="flex items-center gap-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 px-2.5 py-0.5 group">
+                <span className="text-caption font-caption text-indigo-300">{tag}</span>
+                <button
+                  className="text-indigo-400 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => handleRemoveHashtag(idx)}
+                >
+                  <FeatherX style={{ width: 10, height: 10 }} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex w-full gap-2">
+          <input
+            className="flex-1 rounded-md border border-solid border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500"
+            placeholder="#hashtag"
+            value={newHashtag}
+            onChange={e => setNewHashtag(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleAddHashtag(); }}
+          />
+          <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add hashtag" onClick={handleAddHashtag} />
+        </div>
+      </div>
+
+      {captions.length === 0 && hashtags.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-8 w-full text-neutral-500">
+          <FeatherMessageSquare style={{ width: 28, height: 28 }} />
+          <p className="mt-3 text-body font-body">Add your first caption or hashtag above</p>
         </div>
       )}
     </div>

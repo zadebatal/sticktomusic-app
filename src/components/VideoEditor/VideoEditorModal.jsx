@@ -67,7 +67,9 @@ const VideoEditorModal = ({
   db = null,
   showTemplatePicker = false,
   schedulerEditMode = false,
-  initialEditorMode = null
+  initialEditorMode = null,
+  templateSettings = null,
+  clipperSourceVideos = []
 }) => {
   // Editor mode: null = show picker, 'montage' = current editor, 'solo-clip' = solo clip editor
   // Show picker only when explicitly creating a new video (showTemplatePicker=true)
@@ -304,7 +306,7 @@ const VideoEditorModal = ({
   const handleAddToTextBank = useCallback((bankNum, text) => {
     if (!text.trim() || !artistId || sidebarCollections.length === 0) return;
     const targetCol = sidebarCollections[0];
-    addToTextBank(artistId, targetCol.id, bankNum, text.trim());
+    addToTextBank(artistId, targetCol.id, bankNum, text.trim(), db);
     setSidebarCollections(prev => prev.map(col =>
       col.id === targetCol.id
         ? { ...col, [`textBank${bankNum}`]: [...(col[`textBank${bankNum}`] || []), text.trim()] }
@@ -2072,6 +2074,7 @@ const VideoEditorModal = ({
       <SoloClipEditor
         category={category}
         existingVideo={existingVideo}
+        templateSettings={templateSettings}
         onSave={onSave}
         onClose={onClose}
         artistId={artistId}
@@ -2093,6 +2096,7 @@ const VideoEditorModal = ({
       <MultiClipEditor
         category={category}
         existingVideo={existingVideo}
+        templateSettings={templateSettings}
         onSave={onSave}
         onClose={onClose}
         artistId={artistId}
@@ -2114,6 +2118,7 @@ const VideoEditorModal = ({
       <PhotoMontageEditor
         category={category}
         existingVideo={existingVideo}
+        templateSettings={templateSettings}
         onSave={onSave}
         onClose={onClose}
         artistId={artistId}
@@ -2139,6 +2144,7 @@ const VideoEditorModal = ({
         onClose={onClose}
         artistId={artistId}
         db={db}
+        sourceVideos={clipperSourceVideos}
       />
     );
   }

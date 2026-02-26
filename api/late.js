@@ -72,8 +72,7 @@ const ALLOWED_ORIGINS = [
 // Also allow Vercel preview deployments
 const isVercelPreview = (origin) => {
   if (!origin) return false;
-  // Strict match: only allow <hash>-sticktomusic-<hash>.vercel.app or sticktomusic-app*.vercel.app
-  return /^https:\/\/[a-z0-9-]*sticktomusic[a-z0-9-]*\.vercel\.app$/i.test(origin);
+  return /^https:\/\/sticktomusic-app(-[a-z0-9]+)*\.vercel\.app$/i.test(origin);
 };
 
 // Check if origin is localhost (any port) for development

@@ -20,7 +20,7 @@ const ALLOWED_ORIGINS = [
 
 const isVercelPreview = (origin) => {
   if (!origin) return false;
-  return /^https:\/\/[a-z0-9-]*sticktomusic[a-z0-9-]*\.vercel\.app$/i.test(origin);
+  return /^https:\/\/sticktomusic-app(-[a-z0-9]+)*\.vercel\.app$/i.test(origin);
 };
 
 const isLocalhostOrigin = (origin) => {
@@ -116,8 +116,14 @@ export default async function handler(req, res) {
 
   try {
     // Collect the raw body (multipart form data) and forward to OpenAI
+    const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB (OpenAI Whisper limit)
     const chunks = [];
+    let totalSize = 0;
     for await (const chunk of req) {
+      totalSize += chunk.length;
+      if (totalSize > MAX_FILE_SIZE) {
+        return res.status(413).json({ error: 'File too large. Maximum size is 25 MB.' });
+      }
       chunks.push(chunk);
     }
     const body = Buffer.concat(chunks);

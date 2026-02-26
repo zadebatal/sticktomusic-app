@@ -2640,18 +2640,18 @@ const StudioHome = ({
                       label="Text Bank 1"
                       color="#c4b5fd"
                       texts={(() => { const m = migrateCollectionBanks(col); return m.textBanks?.[0] || []; })()}
-                      onAdd={(text) => { addToTextBank(artistId, selectedCollection, 1, text); syncCol(); }}
-                      onRemove={(index) => { removeFromTextBank(artistId, selectedCollection, 1, index); syncCol(); }}
-                      onUpdate={(texts) => { updateTextBank(artistId, selectedCollection, 1, texts); syncCol(); }}
+                      onAdd={(text) => { addToTextBank(artistId, selectedCollection, 1, text, db); syncCol(); }}
+                      onRemove={(index) => { removeFromTextBank(artistId, selectedCollection, 1, index, db); syncCol(); }}
+                      onUpdate={(texts) => { updateTextBank(artistId, selectedCollection, 1, texts, db); syncCol(); }}
                     />
                     <TextBankPanel
                       bankNum={2}
                       label="Text Bank 2"
                       color="#86efac"
                       texts={(() => { const m = migrateCollectionBanks(col); return m.textBanks?.[1] || []; })()}
-                      onAdd={(text) => { addToTextBank(artistId, selectedCollection, 2, text); syncCol(); }}
-                      onRemove={(index) => { removeFromTextBank(artistId, selectedCollection, 2, index); syncCol(); }}
-                      onUpdate={(texts) => { updateTextBank(artistId, selectedCollection, 2, texts); syncCol(); }}
+                      onAdd={(text) => { addToTextBank(artistId, selectedCollection, 2, text, db); syncCol(); }}
+                      onRemove={(index) => { removeFromTextBank(artistId, selectedCollection, 2, index, db); syncCol(); }}
+                      onUpdate={(texts) => { updateTextBank(artistId, selectedCollection, 2, texts, db); syncCol(); }}
                     />
                   </div>
                 </div>

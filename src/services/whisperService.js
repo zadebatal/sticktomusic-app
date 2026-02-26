@@ -89,6 +89,7 @@ export async function transcribeAudio(audioFileOrUrl, apiKey, onProgress, option
   formData.append('model', 'whisper-1');
   formData.append('response_format', 'verbose_json');
   formData.append('timestamp_granularities[]', 'word');
+  formData.append('prompt', 'This is a song with singing vocals. Transcribe the sung lyrics.');
 
   onProgress?.('Uploading to Whisper API...');
 

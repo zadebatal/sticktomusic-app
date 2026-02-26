@@ -8,15 +8,11 @@ import { IconButton } from '../../ui/components/IconButton';
 import { Badge } from '../../ui/components/Badge';
 import {
   FeatherPlay, FeatherScissors, FeatherChevronDown, FeatherChevronRight,
-  FeatherHash, FeatherMessageSquare, FeatherPlus, FeatherX,
-  FeatherTrash2,
+  FeatherX, FeatherUpload, FeatherDownloadCloud,
+  FeatherMusic, FeatherCheck,
 } from '@subframe/core';
 import {
-  updateNicheCaptionBank,
-  updateNicheHashtagBank,
-  moveNicheBankEntry,
-  getUserCollections,
-  saveCollectionToFirestore,
+  updateNicheAudioId,
 } from '../../services/libraryService';
 
 const BUCKET_COLORS = [
@@ -48,15 +44,17 @@ const ClipperNicheContent = ({
   db,
   artistId,
   niche,
+  library = [],
   createdContent,
+  projectAudio = [],
   onMakeVideo,
-  allNiches = [],
+  onUpload,
+  onImport,
 }) => {
   const activeFormat = niche?.formats?.find(f => f.id === niche.activeFormatId) || niche?.formats?.[0];
   const [collapsedBuckets, setCollapsedBuckets] = useState({});
   const [previewUrl, setPreviewUrl] = useState(null);
-  const [newCaption, setNewCaption] = useState('');
-  const [newHashtag, setNewHashtag] = useState('');
+  const [audioPickerOpen, setAudioPickerOpen] = useState(false);
 
   // All clipper drafts for this niche
   const clipperDrafts = useMemo(() =>
@@ -95,86 +93,84 @@ const ClipperNicheContent = ({
     setCollapsedBuckets(prev => ({ ...prev, [name]: !prev[name] }));
   }, []);
 
-  // Captions & Hashtags
-  const captions = niche?.captionBank || [];
-  const hashtags = niche?.hashtagBank || [];
-  const otherNiches = (allNiches || []).filter(n => n.id !== niche?.id);
+  // Per-niche audio selection
+  const selectedAudio = useMemo(
+    () => projectAudio.find(a => a.id === niche?.audioId) || projectAudio[0] || null,
+    [projectAudio, niche?.audioId]
+  );
 
-  const syncToFirestore = useCallback((nicheId) => {
-    if (!db || !artistId) return;
-    const col = getUserCollections(artistId).find(c => c.id === nicheId);
-    if (col) saveCollectionToFirestore(db, artistId, col);
-  }, [db, artistId]);
-
-  const handleAddCaption = useCallback(() => {
-    const text = newCaption.trim();
-    if (!text || !niche) return;
-    updateNicheCaptionBank(artistId, niche.id, [...captions, text]);
-    syncToFirestore(niche.id);
-    setNewCaption('');
-  }, [newCaption, captions, artistId, niche, syncToFirestore]);
-
-  const handleRemoveCaption = useCallback((idx) => {
+  const handleSelectAudio = useCallback((audioId) => {
     if (!niche) return;
-    updateNicheCaptionBank(artistId, niche.id, captions.filter((_, i) => i !== idx));
-    syncToFirestore(niche.id);
-  }, [captions, artistId, niche, syncToFirestore]);
+    updateNicheAudioId(artistId, niche.id, audioId, db);
+    setAudioPickerOpen(false);
+  }, [artistId, niche, db]);
 
-  const handleMoveCaption = useCallback((entry, toNicheId) => {
-    if (!niche) return;
-    moveNicheBankEntry(artistId, niche.id, toNicheId, entry, 'caption');
-    syncToFirestore(niche.id);
-    syncToFirestore(toNicheId);
-  }, [artistId, niche, syncToFirestore]);
-
-  const handleAddHashtag = useCallback(() => {
-    let text = newHashtag.trim();
-    if (!text || !niche) return;
-    if (!text.startsWith('#')) text = '#' + text;
-    if (hashtags.includes(text)) return;
-    updateNicheHashtagBank(artistId, niche.id, [...hashtags, text]);
-    syncToFirestore(niche.id);
-    setNewHashtag('');
-  }, [newHashtag, hashtags, artistId, niche, syncToFirestore]);
-
-  const handleRemoveHashtag = useCallback((idx) => {
-    if (!niche) return;
-    updateNicheHashtagBank(artistId, niche.id, hashtags.filter((_, i) => i !== idx));
-    syncToFirestore(niche.id);
-  }, [hashtags, artistId, niche, syncToFirestore]);
-
-  const handleMoveHashtag = useCallback((entry, toNicheId) => {
-    if (!niche) return;
-    moveNicheBankEntry(artistId, niche.id, toNicheId, entry, 'hashtag');
-    syncToFirestore(niche.id);
-    syncToFirestore(toNicheId);
-  }, [artistId, niche, syncToFirestore]);
-
-  const handleCopyAllHashtags = useCallback(() => {
-    if (!hashtags.length) return;
-    navigator.clipboard.writeText(hashtags.join(' '));
-  }, [hashtags]);
+  // Niche videos (from bank)
+  const nicheVideos = useMemo(() => {
+    if (!niche) return [];
+    return library.filter(item => (niche.mediaIds || []).includes(item.id) && item.type === 'video');
+  }, [niche, library]);
 
   if (!niche || !activeFormat) return null;
 
   return (
     <div className="flex flex-1 flex-col items-center self-stretch overflow-y-auto">
-      {/* Create button */}
-      <div className="flex w-full flex-col items-center gap-6 px-12 py-12">
-        <div className="flex flex-col items-center gap-3">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/10 border border-rose-500/30">
-            <FeatherScissors className="text-rose-400" style={{ width: 28, height: 28 }} />
+      {/* Hero — Create / Upload / Import */}
+      {nicheVideos.length === 0 ? (
+        <div className="flex w-full flex-col items-center gap-6 px-12 py-12">
+          <div className="flex flex-col items-center gap-3">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-500/10 border border-rose-500/30">
+              <FeatherScissors className="text-rose-400" style={{ width: 28, height: 28 }} />
+            </div>
+            <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Clipper</span>
+            <span className="text-body font-body text-neutral-400 text-center max-w-sm">
+              Add a source video to split into multiple clips
+            </span>
           </div>
-          <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Clipper</span>
-          <span className="text-body font-body text-neutral-400 text-center max-w-sm">
-            Split a video into multiple clips
-          </span>
+          <div className="flex items-center gap-3">
+            <Button variant="brand-primary" size="large" icon={<FeatherUpload />} onClick={onUpload}>
+              Upload Video
+            </Button>
+            <Button variant="neutral-secondary" size="large" icon={<FeatherDownloadCloud />} onClick={onImport}>
+              Import from Library
+            </Button>
+          </div>
         </div>
-        <Button variant="brand-primary" size="large" icon={<FeatherScissors />}
-          onClick={() => onMakeVideo && onMakeVideo(activeFormat, niche.id)}>
-          Create Clipper
-        </Button>
-      </div>
+      ) : (
+        <div className="flex w-full flex-col gap-3 px-8 py-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-body-bold font-body-bold text-[#ffffffff]">Source Videos</span>
+              <Badge variant="neutral">{nicheVideos.length}</Badge>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="brand-tertiary" size="small" icon={<FeatherUpload />} onClick={onUpload}>Upload</Button>
+              <Button variant="neutral-tertiary" size="small" icon={<FeatherDownloadCloud />} onClick={onImport}>Import</Button>
+              <Button variant="brand-primary" size="small" icon={<FeatherScissors />}
+                onClick={() => onMakeVideo && onMakeVideo(activeFormat, niche.id, null, null, nicheVideos)}>
+                Create Clipper
+              </Button>
+            </div>
+          </div>
+          <div className="grid grid-cols-4 gap-3">
+            {nicheVideos.map(v => (
+              <div key={v.id} className="relative group rounded-lg overflow-hidden bg-neutral-800 aspect-video cursor-pointer border border-neutral-700 hover:border-indigo-500/50 transition-colors"
+                onClick={() => setPreviewUrl(v.url)}>
+                {v.thumbnailUrl || v.thumbnail ? (
+                  <img src={v.thumbnailUrl || v.thumbnail} alt={v.name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <FeatherPlay className="text-neutral-500" style={{ width: 24, height: 24 }} />
+                  </div>
+                )}
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 px-2 py-1">
+                  <span className="text-[11px] text-neutral-300 line-clamp-1">{v.name || 'Video'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Clip Buckets */}
       {totalClips > 0 && (
@@ -286,7 +282,7 @@ const ClipperNicheContent = ({
                 <div
                   key={draft.id}
                   className="flex flex-col items-start gap-2 rounded-lg border border-neutral-800 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
-                  onClick={() => onMakeVideo && onMakeVideo(activeFormat, niche.id, draft)}
+                  onClick={() => onMakeVideo && onMakeVideo(activeFormat, niche.id, draft, null, nicheVideos)}
                 >
                   <div className="w-full aspect-video bg-[#171717] flex items-center justify-center">
                     <FeatherScissors className="text-neutral-700" style={{ width: 24, height: 24 }} />
@@ -303,92 +299,49 @@ const ClipperNicheContent = ({
         </div>
       )}
 
-      {/* Captions & Hashtags */}
-      <div className="flex w-full flex-col items-start gap-3 border-t border-solid border-neutral-800 px-12 py-4">
-        {/* Captions */}
-        <div className="flex w-full flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <FeatherMessageSquare className="text-neutral-400" style={{ width: 12, height: 12 }} />
-            <span className="text-caption-bold font-caption-bold text-neutral-300">Captions</span>
-            <Badge variant="neutral">{captions.length}</Badge>
-          </div>
-          {captions.length > 0 && (
-            <div className="flex flex-col gap-1.5 max-h-[120px] overflow-y-auto">
-              {captions.map((cap, idx) => (
-                <div key={idx} className="flex items-start gap-2 rounded-md bg-[#1a1a1aff] border border-neutral-800 px-3 py-1.5 group">
-                  <span
-                    className="grow text-caption font-caption text-neutral-300 cursor-pointer hover:text-white line-clamp-2"
-                    title="Click to copy"
-                    onClick={() => navigator.clipboard.writeText(cap)}
-                  >{cap}</span>
-                  <div className="flex items-center gap-1 flex-none opacity-0 group-hover:opacity-100 transition-opacity">
-                    {otherNiches.length > 0 && (
-                      <select
-                        className="bg-neutral-800 text-caption text-neutral-300 border-none rounded px-1 py-0.5 cursor-pointer outline-none"
-                        value=""
-                        onChange={e => { if (e.target.value) handleMoveCaption(cap, e.target.value); }}
-                      >
-                        <option value="" disabled>Move to...</option>
-                        {otherNiches.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
-                      </select>
-                    )}
-                    <button className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0" onClick={() => handleRemoveCaption(idx)}>
-                      <FeatherTrash2 style={{ width: 12, height: 12 }} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="flex w-full gap-2">
-            <textarea
-              className="flex-1 min-h-[32px] max-h-[64px] rounded-md border border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500 resize-none"
-              placeholder="Add caption..."
-              value={newCaption}
-              onChange={e => setNewCaption(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddCaption(); } }}
-              rows={1}
+      {/* Audio picker */}
+      <div className="flex w-full flex-col gap-2 border-t border-solid border-neutral-800 px-12 py-4">
+        <span className="text-caption-bold font-caption-bold text-neutral-300">Audio</span>
+        <div className="relative max-w-sm">
+          <button
+            className="flex w-full items-center gap-2 rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2 hover:bg-[#262626] transition"
+            onClick={() => setAudioPickerOpen(!audioPickerOpen)}
+          >
+            <FeatherMusic className="text-indigo-400 flex-none" style={{ width: 14, height: 14 }} />
+            <span className="text-caption font-caption text-[#ffffffff] truncate grow text-left">
+              {selectedAudio?.name || 'No audio'}
+            </span>
+            <FeatherChevronDown
+              className="text-neutral-400 flex-none transition-transform"
+              style={{ width: 14, height: 14, transform: audioPickerOpen ? 'rotate(180deg)' : 'none' }}
             />
-            <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add" onClick={handleAddCaption} />
-          </div>
-        </div>
-
-        {/* Hashtags */}
-        <div className="flex w-full flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <FeatherHash className="text-neutral-400" style={{ width: 12, height: 12 }} />
-            <span className="text-caption-bold font-caption-bold text-neutral-300">Hashtags</span>
-            <Badge variant="neutral">{hashtags.length}</Badge>
-            {hashtags.length > 0 && (
-              <button className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer ml-auto"
-                onClick={handleCopyAllHashtags}>Copy All</button>
-            )}
-          </div>
-          {hashtags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 max-h-[80px] overflow-y-auto">
-              {hashtags.map((tag, idx) => (
-                <div key={idx} className="flex items-center gap-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 px-2.5 py-0.5 group">
-                  <span className="text-caption font-caption text-indigo-300">{tag}</span>
-                  <button className="text-indigo-400 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={() => handleRemoveHashtag(idx)}>
-                    <FeatherX style={{ width: 10, height: 10 }} />
+          </button>
+          {audioPickerOpen && (
+            <div className="absolute top-full left-0 right-0 mt-1 flex flex-col gap-0.5 px-2 py-2 bg-[#111111] border border-neutral-700 rounded-lg max-h-48 overflow-y-auto shadow-xl z-20">
+              {projectAudio.length === 0 && (
+                <span className="text-caption font-caption text-neutral-500 px-2 py-1">No audio uploaded</span>
+              )}
+              {projectAudio.map(audio => {
+                const isActive = selectedAudio?.id === audio.id;
+                return (
+                  <button
+                    key={audio.id}
+                    className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition ${
+                      isActive ? 'bg-indigo-600' : 'hover:bg-neutral-800'
+                    }`}
+                    onClick={() => handleSelectAudio(audio.id)}
+                  >
+                    <FeatherPlay className="text-neutral-300 flex-none" style={{ width: 10, height: 10 }} />
+                    <span className="text-caption font-caption text-[#ffffffff] truncate grow">{audio.name}</span>
+                    {isActive && <FeatherCheck className="text-indigo-300 flex-none" style={{ width: 12, height: 12 }} />}
                   </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
-          <div className="flex w-full gap-2">
-            <input
-              className="flex-1 rounded-md border border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500"
-              placeholder="#hashtag"
-              value={newHashtag}
-              onChange={e => setNewHashtag(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleAddHashtag(); }}
-            />
-            <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add" onClick={handleAddHashtag} />
-          </div>
         </div>
       </div>
+
     </div>
   );
 };

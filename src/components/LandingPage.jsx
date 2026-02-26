@@ -112,7 +112,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
   ];
 
   return (
-    <div className="flex h-full w-full flex-col items-center bg-black">
+    <div className="flex h-screen w-full flex-col items-center bg-black overflow-auto">
       {/* NAV */}
       <div className="flex w-full items-center justify-between border-b border-solid border-neutral-800 bg-black px-4 sm:px-12 py-4">
         <span className="text-heading-2 font-heading-2 text-[#ffffffff]">StickToMusic</span>

@@ -37,6 +37,8 @@ const CaptionHashtagBank = ({
   const [loading, setLoading] = useState(true);
 
   // Subscribe to real-time template updates
+  const selectedCategoryRef = React.useRef(selectedCategory);
+  selectedCategoryRef.current = selectedCategory;
   useEffect(() => {
     if (!db || !artistId) {
       setLoading(false);
@@ -47,14 +49,14 @@ const CaptionHashtagBank = ({
     const unsubscribe = subscribeToTemplates(db, artistId, (updatedTemplates) => {
       setTemplates(updatedTemplates);
       const categories = getCategoryNames(updatedTemplates);
-      if (categories.length > 0 && !selectedCategory) {
+      if (categories.length > 0 && !selectedCategoryRef.current) {
         setSelectedCategory(categories[0]);
       }
       setLoading(false);
     });
 
     return unsubscribe;
-  }, [db, artistId, selectedCategory]);
+  }, [db, artistId]);
 
   const categories = getCategoryNames(templates);
   const currentTemplate = selectedCategory ? templates[selectedCategory] : null;

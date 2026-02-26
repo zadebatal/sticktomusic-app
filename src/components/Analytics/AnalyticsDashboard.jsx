@@ -102,7 +102,10 @@ const AnalyticsDashboard = ({
   // Load analytics data
   const loadAnalytics = useCallback(() => {
     const capturedArtistId = currentArtistId;
-    if (!capturedArtistId) return;
+    if (!capturedArtistId) {
+      setIsLoading(false);
+      return;
+    }
     const stored = getStoredAnalytics(capturedArtistId);
 
     // If no data, show empty state instead of mock data
