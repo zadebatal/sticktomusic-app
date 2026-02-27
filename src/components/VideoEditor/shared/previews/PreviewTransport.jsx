@@ -25,10 +25,6 @@ const PreviewTransport = ({
   // Text tracks: [{ id, label, color, start, end }]
   textTracks = [],
   onTextTrackChange,
-  // Cut-by-beat/word controls (optional)
-  onCutByBeat,
-  onCutByWord,
-  bpmLabel,
 }) => {
   const timelineRef = useRef(null);
   const progressBarRef = useRef(null);
@@ -288,33 +284,6 @@ const PreviewTransport = ({
           </button>
         )}
       </div>
-
-      {/* Cut by beat/word controls */}
-      {(onCutByBeat || onCutByWord) && (
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
-            {onCutByWord && (
-              <button
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
-                onClick={onCutByWord}
-              >
-                <span className="text-caption font-caption text-neutral-300">Cut by word</span>
-              </button>
-            )}
-            {onCutByBeat && (
-              <button
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
-                onClick={onCutByBeat}
-              >
-                <span className="text-caption font-caption text-neutral-300">Cut by beat</span>
-              </button>
-            )}
-          </div>
-          {bpmLabel && (
-            <span className="text-[10px] text-neutral-500 tabular-nums">{bpmLabel}</span>
-          )}
-        </div>
-      )}
     </div>
   );
 };

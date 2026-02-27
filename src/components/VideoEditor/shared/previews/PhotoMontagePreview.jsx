@@ -6,6 +6,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import usePreviewPlayback from '../usePreviewPlayback';
 import { KB_EFFECTS, getKenBurnsTransform } from '../kenBurnsPresets';
 import { useBeatDetection } from '../../../../hooks/useBeatDetection';
+import { FeatherRefreshCw } from '@subframe/core';
 import PreviewTransport from './PreviewTransport';
 import DraggableTextOverlay from './DraggableTextOverlay';
 
@@ -279,7 +280,7 @@ const PhotoMontagePreview = ({
       <PreviewTransport
         isPlaying={isPlaying}
         onToggle={toggle}
-        onReroll={handleReroll}
+        showReroll={false}
         progress={progress}
         items={playlist}
         activeIdx={playlist.length > 0 ? Math.min(Math.floor(progress * playlist.length), playlist.length - 1) : 0}
@@ -289,10 +290,39 @@ const PhotoMontagePreview = ({
         totalDuration={totalDuration}
         textTracks={textTracks}
         onTextTrackChange={handleTextTrackChange}
-        onCutByBeat={audioUrl ? handleCutByBeat : undefined}
-        onCutByWord={(textBankA.length > 0 || textBankB.length > 0) ? handleCutByWord : undefined}
-        bpmLabel={bpmLabel}
       />
+
+      {/* Controls below preview — matches SlideshowNicheContent pattern */}
+      <div className="flex items-center justify-center gap-3 mt-1">
+        {images.length >= 2 && (
+          <button
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
+            onClick={handleReroll}
+          >
+            <FeatherRefreshCw className="text-neutral-300" style={{ width: 12, height: 12 }} />
+            <span className="text-caption font-caption text-neutral-300">Reroll</span>
+          </button>
+        )}
+        {audioUrl && (
+          <button
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
+            onClick={handleCutByBeat}
+          >
+            <span className="text-caption font-caption text-neutral-300">Cut by beat</span>
+          </button>
+        )}
+        {(textBankA.length > 0 || textBankB.length > 0) && (
+          <button
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
+            onClick={handleCutByWord}
+          >
+            <span className="text-caption font-caption text-neutral-300">Cut by word</span>
+          </button>
+        )}
+        {bpmLabel && (
+          <span className="text-[10px] text-neutral-500 tabular-nums">{bpmLabel}</span>
+        )}
+      </div>
     </div>
   );
 };
