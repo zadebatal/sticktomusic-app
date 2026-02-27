@@ -6,6 +6,8 @@ import {
   getCollections,
   getLibrary,
   getCreatedContent,
+  deleteCreatedSlideshow,
+  deleteCreatedVideo,
   getProjects,
   getProjectStats,
   getProjectNiches,
@@ -234,9 +236,25 @@ const ProjectLanding = ({
     // Mark as pending deletion FIRST to prevent subscription race condition
     markCollectionPendingDeletion(projectId);
 
-    // Unlink niches from this project
     const niches = cols.filter(c => c.projectId === projectId);
-    niches.forEach(n => { delete n.projectId; n.updatedAt = new Date().toISOString(); });
+
+    // Cascade-delete all drafts in project niches
+    const content = getCreatedContent(artistId);
+    for (const n of niches) {
+      const nicheDrafts = [...(content.slideshows || []), ...(content.videos || [])].filter(d => d.collectionId === n.id);
+      for (const draft of nicheDrafts) {
+        if (draft.slides) {
+          deleteCreatedSlideshow(artistId, draft.id);
+        } else {
+          deleteCreatedVideo(artistId, draft.id);
+        }
+      }
+    }
+
+    // Delete niches themselves
+    for (const n of niches) {
+      await deleteCollectionAsync(db, artistId, n.id);
+    }
 
     // Mark that user has explicitly deleted projects (prevents migration re-creation)
     const remaining = cols.filter(c => c.id !== projectId && c.isProjectRoot);
@@ -244,15 +262,8 @@ const ProjectLanding = ({
       localStorage.setItem(`stm_projects_deleted_${artistId}`, Date.now().toString());
     }
 
-    // Delete via libraryService (handles both localStorage + Firestore)
+    // Delete project root via libraryService (handles both localStorage + Firestore)
     await deleteCollectionAsync(db, artistId, projectId);
-
-    // Sync unlinked niches to Firestore
-    if (db) {
-      for (const n of niches) {
-        try { await saveCollectionToFirestore(db, artistId, n); } catch (e) { /* ok */ }
-      }
-    }
 
     // Clear pending deletion now that Firestore doc is gone
     clearPendingDeletion(projectId);

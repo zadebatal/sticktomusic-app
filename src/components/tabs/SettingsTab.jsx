@@ -10,7 +10,9 @@ import {
   FeatherLogOut, FeatherAlertTriangle, FeatherCloud,
   FeatherUsers, FeatherUser, FeatherCreditCard, FeatherMail,
   FeatherCheck, FeatherCamera, FeatherEdit2, FeatherTrash2,
+  FeatherHardDrive,
 } from '@subframe/core';
+import { formatStorageSize } from '../../services/storageQuotaService';
 import ProfilePictureUpload from '../ProfilePictureUpload';
 import log from '../../utils/logger';
 import {
@@ -490,6 +492,55 @@ const SettingsTab = ({ user, onLogout, db, artistId, onPhotoUpdated, allUsers = 
               </Button>
             )}
           </div>
+        </div>
+
+        {/* ── STORAGE USAGE ── */}
+        <div className="flex flex-col items-start gap-4 rounded-xl border border-solid border-neutral-800 bg-[#111118] p-6">
+          <div className="flex w-full items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-600/20">
+              <FeatherHardDrive style={{ width: 18, height: 18, color: '#8b5cf6' }} />
+            </div>
+            <span className="text-body-bold font-body-bold text-[#ffffffff]">Storage</span>
+            {user?.storageQuotaBytes != null && user.storageUsedBytes / user.storageQuotaBytes >= 0.8 && (
+              <Badge variant="warning">Running low</Badge>
+            )}
+          </div>
+
+          {(() => {
+            const used = user?.storageUsedBytes || 0;
+            const quota = user?.storageQuotaBytes;
+            const isUnlimited = quota === null || quota === undefined;
+            const pct = isUnlimited ? 0 : Math.min(100, (used / quota) * 100);
+
+            return (
+              <>
+                <span className="text-caption font-caption text-neutral-400">
+                  {isUnlimited
+                    ? `${formatStorageSize(used)} used (Unlimited)`
+                    : `${formatStorageSize(used)} / ${formatStorageSize(quota)} used`
+                  }
+                </span>
+
+                {!isUnlimited && (
+                  <div className="w-full h-2 rounded-full bg-neutral-800 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-300"
+                      style={{
+                        width: `${pct}%`,
+                        backgroundColor: pct >= 90 ? '#ef4444' : pct >= 80 ? '#f59e0b' : '#8b5cf6',
+                      }}
+                    />
+                  </div>
+                )}
+
+                {!isUnlimited && (
+                  <Button variant="neutral-secondary" size="small" disabled>
+                    Upgrade Storage (Coming Soon)
+                  </Button>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         {/* ── SUBSCRIPTION / ACCOUNT ── */}

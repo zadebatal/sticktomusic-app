@@ -14,7 +14,8 @@ import ProjectLanding from './ProjectLanding';
 import ProjectWorkspace from './ProjectWorkspace';
 import ProjectWizard from './ProjectWizard';
 // OnboardingModal removed - auto-setup Music Artist template instead
-import { uploadFile, deleteFile, getMediaDuration, generateThumbnail } from '../../services/firebaseStorage';
+import { uploadFile, uploadFileWithQuota, deleteFile, getMediaDuration, generateThumbnail } from '../../services/firebaseStorage';
+import { decrementStorageUsed } from '../../services/storageQuotaService';
 import { generateSlideThumbnail } from '../../services/slideshowExportService';
 import {
   saveCategories, loadCategories, savePresets, loadPresets, cleanupStorage,
@@ -351,6 +352,7 @@ const AllMediaView = ({ artistId, onBack }) => {
 
 const VideoStudio = ({
   db = null, // Firestore instance for cross-device sync
+  user = null, // Current user (for storage quota)
   onClose,
   artists = [],
   artistId: initialArtistId = null,
@@ -1152,10 +1154,11 @@ const VideoStudio = ({
       try {
         setUploadProgress({ type: 'video', current: i + 1, total: files.length, name: file.name, progress: 0 });
 
-        // Upload to Firebase Storage
-        const { url, path } = await uploadFile(file, 'videos', (progress) => {
+        // Upload to Firebase Storage (with quota check)
+        const quotaCtx = { userData: user, userEmail: user?.email };
+        const { url, path } = await uploadFileWithQuota(file, 'videos', (progress) => {
           setUploadProgress(prev => ({ ...prev, progress }));
-        });
+        }, {}, quotaCtx);
 
         log(`Upload complete for ${file.name}, getting metadata...`);
 
@@ -1186,6 +1189,7 @@ const VideoStudio = ({
           url,
           localUrl: localBlobUrl, // Local blob URL for current session (no CORS issues)
           storagePath: path,
+          size: file.size,
           duration,
           thumbnail,
           createdAt: new Date().toISOString()
@@ -1248,10 +1252,11 @@ const VideoStudio = ({
         const displayName = customName || file.name;
         setUploadProgress({ type: 'audio', current: i + 1, total: files.length, name: displayName });
 
-        // Upload to Firebase Storage
-        const { url, path } = await uploadFile(file, 'audio', (progress) => {
+        // Upload to Firebase Storage (with quota check)
+        const quotaCtx = { userData: user, userEmail: user?.email };
+        const { url, path } = await uploadFileWithQuota(file, 'audio', (progress) => {
           setUploadProgress(prev => ({ ...prev, progress }));
-        });
+        }, {}, quotaCtx);
 
         // Create local blob URL for reliable metadata access and beat detection (avoids CORS)
         const localBlobUrl = URL.createObjectURL(file);
@@ -1314,10 +1319,11 @@ const VideoStudio = ({
     setUploadProgress({ type: 'audio', current: 1, total: 1, name: clipData.name });
 
     try {
-      // Upload the original file to Firebase Storage
-      const { url, path } = await uploadFile(clipData.file, 'audio', (progress) => {
+      // Upload the original file to Firebase Storage (with quota check)
+      const quotaCtx = { userData: user, userEmail: user?.email };
+      const { url, path } = await uploadFileWithQuota(clipData.file, 'audio', (progress) => {
         setUploadProgress(prev => ({ ...prev, progress }));
-      });
+      }, {}, quotaCtx);
 
       // Create local blob URL for reliable playback (avoids CORS)
       const localBlobUrl = URL.createObjectURL(clipData.file);
@@ -1418,6 +1424,7 @@ const VideoStudio = ({
     // Delete from Firebase Storage if there's a storage path
     if (video?.storagePath) {
       await deleteFile(video.storagePath);
+      if (video.size && user?.email) decrementStorageUsed(db, user.email, video.size).catch(() => {});
     }
     // Also try to delete thumbnail if it has a storage path
     if (video?.thumbnailPath) {
@@ -1481,6 +1488,7 @@ const VideoStudio = ({
     if (video?.storagePath) {
       const result = await deleteFile(video.storagePath);
       log('Deleted video from storage:', result);
+      if (video.size && user?.email) decrementStorageUsed(db, user.email, video.size).catch(() => {});
     }
 
     setCategories(prev => prev.map(cat =>
@@ -1506,6 +1514,7 @@ const VideoStudio = ({
     if (audio?.storagePath) {
       const result = await deleteFile(audio.storagePath);
       log('Deleted audio from storage:', result);
+      if (audio.size && user?.email) decrementStorageUsed(db, user.email, audio.size).catch(() => {});
     }
 
     setCategories(prev => prev.map(cat =>
@@ -1979,10 +1988,11 @@ const VideoStudio = ({
       try {
         setUploadProgress({ type: 'image', current: i + 1, total: files.length, name: file.name, progress: 0 });
 
-        // Upload to Firebase Storage
-        const { url, path } = await uploadFile(file, 'images', (progress) => {
+        // Upload to Firebase Storage (with quota check)
+        const quotaCtx = { userData: user, userEmail: user?.email };
+        const { url, path } = await uploadFileWithQuota(file, 'images', (progress) => {
           setUploadProgress(prev => ({ ...prev, progress }));
-        });
+        }, {}, quotaCtx);
 
         // Create local blob for preview
         const localUrl = URL.createObjectURL(file);
@@ -2028,6 +2038,7 @@ const VideoStudio = ({
 
     if (image?.storagePath) {
       await deleteFile(image.storagePath);
+      if (image.size && user?.email) decrementStorageUsed(db, user.email, image.size).catch(() => {});
     }
 
     setCategories(prev => prev.map(cat =>
@@ -2651,6 +2662,7 @@ const VideoStudio = ({
         {currentView === 'project' && activeProjectId && (
           <ProjectWorkspace
             db={db}
+            user={user}
             artistId={currentArtistId}
             projectId={activeProjectId}
             initialNicheId={activeProjectNicheId}
@@ -2667,6 +2679,7 @@ const VideoStudio = ({
             }}
             onOpenVideoEditor={(format, nicheId, existingDraft, templateSettings, nicheSourceVideos) => {
               if (nicheId) {
+                setSelectedCategory(null); // Clear stale category so pipelineCategory is used
                 setActivePipelineIdForEditor(nicheId);
                 setPullFromCollection(nicheId);
               }

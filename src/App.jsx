@@ -81,6 +81,9 @@ import {
 // Firebase Storage for video uploads
 import { uploadFile } from './services/firebaseStorage';
 
+// Storage quota tracking
+import { DEFAULT_QUOTA_BYTES, migrateExistingUsersQuota } from './services/storageQuotaService';
+
 // Firebase imports
 import { initializeApp, getApps } from 'firebase/app';
 import {
@@ -649,6 +652,7 @@ const StickToMusic = () => {
 
   // Track if we've already initialized Boon artist (prevents double-calls)
   const boonInitializedRef = useRef(false);
+  const quotaMigrationRef = useRef(false);
 
   // Subscribe to artists from Firestore (for multi-artist support)
   useEffect(() => {
@@ -670,6 +674,12 @@ const StickToMusic = () => {
 
     // Determine if current user is a conductor (super-admin)
     const isCond = CONDUCTOR_EMAILS.includes(currentAuthUser?.email?.toLowerCase());
+
+    // One-time: migrate existing users to storage quota system (conductor only)
+    if (!quotaMigrationRef.current && isCond) {
+      quotaMigrationRef.current = true;
+      migrateExistingUsersQuota(db).catch(err => log.warn('Quota migration skipped:', err.message));
+    }
 
     // Only ensure Boon exists for conductor users — Boon is the conductor's default artist.
     // Non-conductors must only see their assigned artists, never Boon.
@@ -1172,6 +1182,9 @@ const StickToMusic = () => {
           subscriptionStatus: userData?.subscriptionStatus || null,
           ownerOperatorId: userData?.ownerOperatorId || null,
           invitedBy: userData?.invitedBy || null,
+          // Storage quota fields
+          storageQuotaBytes: userData?.storageQuotaBytes !== undefined ? userData.storageQuotaBytes : null,
+          storageUsedBytes: userData?.storageUsedBytes || 0,
         };
         // Only update user if fields actually changed (avoids unnecessary re-renders)
         setUser(prev => {
@@ -2476,7 +2489,9 @@ const StickToMusic = () => {
         role: role,
         artistId: artistId || name.toLowerCase().replace(/\s+/g, '-'),
         status: 'active',
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        storageQuotaBytes: DEFAULT_QUOTA_BYTES,
+        storageUsedBytes: 0,
       };
 
       // If we have application data, add all the profile fields
@@ -3283,6 +3298,7 @@ const StickToMusic = () => {
             <VideoStudio
               inline
               db={db}
+              user={user}
               onClose={() => { setArtistTab('dashboard'); }}
               artists={[firestoreArtists.find(a => a.id === effectiveArtistId)].filter(Boolean)}
               artistId={effectiveArtistId}
@@ -3674,6 +3690,7 @@ const StickToMusic = () => {
           <VideoStudio
             inline
             db={db}
+            user={user}
             onClose={() => { setShowVideoEditor(false); }}
             artists={getVisibleArtists()}
             artistId={currentArtistId}

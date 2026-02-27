@@ -9,6 +9,8 @@ import {
   getLibrary,
   getCollections,
   getCreatedContent,
+  deleteCreatedSlideshow,
+  deleteCreatedVideo,
   getProjectById,
   getProjectNiches,
   createNiche,
@@ -34,7 +36,7 @@ import {
   updateProjectCaptionBank,
   updateProjectHashtagBank,
 } from '../../services/libraryService';
-import { uploadFile, getMediaDuration } from '../../services/firebaseStorage';
+import { uploadFile, uploadFileWithQuota, getMediaDuration } from '../../services/firebaseStorage';
 import { convertImageIfNeeded } from '../../utils/imageConverter';
 import { convertAudioIfNeeded } from '../../utils/audioConverter';
 import { runPool } from '../../utils/uploadPool';
@@ -83,6 +85,7 @@ const VIDEO_FORMAT_COLORS = {
 
 const ProjectWorkspace = ({
   db,
+  user = null,
   artistId,
   projectId,
   initialNicheId = null,
@@ -133,15 +136,21 @@ const ProjectWorkspace = ({
   }, [getCurrentNavState, activeNicheId]);
 
   const navigateBack = useCallback(() => {
-    const prev = navHistoryRef.current.pop();
-    if (prev) {
+    // Pop history entries until we find a valid target (or exhaust stack)
+    while (navHistoryRef.current.length > 0) {
+      const prev = navHistoryRef.current.pop();
+      // Validate niche still exists before navigating to it
+      if (prev.nicheId) {
+        const nicheExists = collections.some(c => c.id === prev.nicheId);
+        if (!nicheExists) continue; // skip deleted niche entries
+      }
       setActiveNicheIdRaw(prev.nicheId);
       setShowAllMediaRaw(prev.allMedia);
       setShowCaptionPageRaw(prev.captionPage);
-    } else {
-      onBack();
+      return;
     }
-  }, [onBack]);
+    onBack();
+  }, [onBack, collections]);
 
   // Convenience setters used by auto-select effect (no history push)
   const setActiveNicheId = setActiveNicheIdRaw;
@@ -248,7 +257,8 @@ const ProjectWorkspace = ({
 
       const isAudio = file.type?.startsWith('audio');
       const folder = isVideo ? 'videos' : isAudio ? 'audio' : 'images';
-      const { url, path } = await uploadFile(file, folder);
+      const quotaCtx = { userData: user, userEmail: user?.email };
+      const { url, path } = await uploadFileWithQuota(file, folder, null, {}, quotaCtx);
 
       let thumbnailUrl = null;
       if (isVideo) {
@@ -424,6 +434,16 @@ const ProjectWorkspace = ({
     if (!niche) return;
     if (!window.confirm(`Delete "${niche.name}"? This cannot be undone.`)) return;
     try {
+      // Cascade-delete drafts belonging to this niche
+      const content = getCreatedContent(artistId);
+      const nicheDrafts = [...(content.slideshows || []), ...(content.videos || [])].filter(d => d.collectionId === nicheId);
+      for (const draft of nicheDrafts) {
+        if (draft.slides) {
+          deleteCreatedSlideshow(artistId, draft.id);
+        } else {
+          deleteCreatedVideo(artistId, draft.id);
+        }
+      }
       await deleteCollectionAsync(db, artistId, nicheId);
       if (activeNicheId === nicheId) {
         const remaining = niches.filter(n => n.id !== nicheId);
@@ -714,6 +734,7 @@ const ProjectWorkspace = ({
         {!showAllMedia && !showCaptionPage && activeNiche && activeFormat?.id === 'finished_media' && (
           <FinishedMediaNicheContent
             db={db}
+            user={user}
             artistId={artistId}
             niche={activeNiche}
             projectAudio={projectAudio}
