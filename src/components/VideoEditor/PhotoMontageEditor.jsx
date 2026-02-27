@@ -20,6 +20,7 @@ import LyricBank from './LyricBank';
 import WordTimeline from './WordTimeline';
 import LyricAnalyzer from './LyricAnalyzer';
 import CloudImportButton from './CloudImportButton';
+import BeatSelector from './BeatSelector';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
@@ -220,6 +221,7 @@ const PhotoMontageEditor = ({
   // ── Modals ──
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showTranscriber, setShowTranscriber] = useState(false);
+  const [showBeatSelector, setShowBeatSelector] = useState(false);
 
   // ── Preset state ──
   const [selectedPreset, setSelectedPreset] = useState(null);
@@ -537,9 +539,11 @@ const PhotoMontageEditor = ({
   }, [isPlaying, startPlayback, stopPlayback]);
 
   const handleSeek = useCallback((time) => {
-    setCurrentTime(Math.max(0, Math.min(time, totalDuration || 0)));
+    const clamped = Math.max(0, Math.min(time, totalDuration || 0));
+    setCurrentTime(clamped);
+    lastFrameTimeRef.current = performance.now();
     if (audioRef.current && selectedAudio?.url) {
-      audioRef.current.currentTime = (selectedAudio.startTime || 0) + time;
+      audioRef.current.currentTime = (selectedAudio.startTime || 0) + clamped;
     }
   }, [totalDuration, selectedAudio]);
 
@@ -620,6 +624,79 @@ const PhotoMontageEditor = ({
       return updated;
     });
   }, []);
+
+  // ── Re-roll: swap current photo with random from library ──
+  const handleReroll = useCallback(() => {
+    if (photos.length === 0) return;
+    const pool = libraryImages.filter(img => img.id !== photos[currentPhotoIndex]?.id);
+    if (pool.length === 0) {
+      toastError('No other photos available to reroll from.');
+      return;
+    }
+    const replacement = pool[Math.floor(Math.random() * pool.length)];
+    setPhotos(prev => {
+      const updated = [...prev];
+      updated[currentPhotoIndex] = {
+        id: replacement.id,
+        url: replacement.url,
+        name: replacement.name,
+        libraryId: replacement.id,
+        isLocal: false
+      };
+      return updated;
+    });
+    toastSuccess('Rerolled photo');
+  }, [photos, currentPhotoIndex, libraryImages, setPhotos, toastSuccess, toastError]);
+
+  // ── Cut by beat — opens BeatSelector modal ──
+  const handleCutByBeat = useCallback(() => {
+    if (!filteredBeats.length) {
+      toastError('No beats detected. Try a different audio track or check the trim range.');
+      return;
+    }
+    setShowBeatSelector(true);
+  }, [filteredBeats, toastError]);
+
+  // ── Apply selected beats — sets customDuration on photos to match beat intervals ──
+  const handleBeatSelectionApply = useCallback((selectedBeatTimes) => {
+    if (!selectedBeatTimes.length || photos.length === 0) {
+      setShowBeatSelector(false);
+      return;
+    }
+    const effectiveDur = (selectedAudio?.endTime || selectedAudio?.duration || audioDuration) - (selectedAudio?.startTime || 0);
+    setPhotos(prev => {
+      const updated = [...prev];
+      for (let i = 0; i < updated.length; i++) {
+        const beatIdx = i % selectedBeatTimes.length;
+        const start = selectedBeatTimes[beatIdx];
+        const end = selectedBeatTimes[beatIdx + 1] || effectiveDur;
+        updated[i] = { ...updated[i], customDuration: Math.max(0.1, end - start) };
+      }
+      return updated;
+    });
+    setShowBeatSelector(false);
+    toastSuccess('Photos synced to beats');
+  }, [photos.length, selectedAudio, audioDuration, setPhotos, toastSuccess]);
+
+  // ── Cut by word — creates timed text overlays from words ──
+  const handleCutByWord = useCallback(() => {
+    if (!words.length) {
+      toastError('No words available. Use the Lyrics section to add words first.');
+      return;
+    }
+    const dur = totalDuration || 10;
+    const timestamp = Date.now();
+    const newOverlays = words.map((w, i) => ({
+      id: `text_${timestamp}_${i}`,
+      text: w.text,
+      style: getDefaultTextStyle(),
+      position: { x: 50, y: 50, width: 80, height: 20 },
+      startTime: Math.min(w.startTime || (i * dur / words.length), dur),
+      endTime: Math.min((w.startTime || (i * dur / words.length)) + (w.duration || dur / words.length), dur)
+    }));
+    setTextOverlays(newOverlays);
+    toastSuccess(`Created ${newOverlays.length} timed word overlays`);
+  }, [words, totalDuration, getDefaultTextStyle, setTextOverlays, toastSuccess, toastError]);
 
   // ── Drag handlers ──
   const handleDragStart = useCallback((index) => setDragIndex(index), []);
@@ -1374,7 +1451,7 @@ const PhotoMontageEditor = ({
                   value={currentTime}
                   onChange={(e) => {
                     stopPlayback();
-                    setCurrentTime(parseFloat(e.target.value));
+                    handleSeek(parseFloat(e.target.value));
                   }}
                   className="flex-1 accent-brand-600"
                 />
@@ -1386,6 +1463,11 @@ const PhotoMontageEditor = ({
                   <IconButton size="small" icon={<FeatherMaximize2 />} aria-label="Fullscreen" onClick={() => previewRef.current?.requestFullscreen()} />
                 )}
               </div>
+
+              {/* Re-roll Photo */}
+              {photos.length > 0 && libraryImages.length > 1 && (
+                <Button variant="neutral-secondary" size="small" icon={<FeatherRefreshCw />} onClick={handleReroll}>Re-roll Photo</Button>
+              )}
 
               {/* Variation Tabs */}
               <div className="flex w-full overflow-auto gap-1">
@@ -1423,6 +1505,19 @@ const PhotoMontageEditor = ({
                   {isGenerating ? 'Remixing...' : 'Remix'}
                 </Button>
               </div>
+
+              {/* Cut by beat / word + BPM badge */}
+              {photos.length > 0 && (
+                <div className="flex items-center justify-between w-full max-w-[500px]">
+                  <div className="flex items-center gap-2">
+                    <Button variant="neutral-secondary" size="small" onClick={handleCutByWord}>Cut by word</Button>
+                    <Button variant="neutral-secondary" size="small" onClick={handleCutByBeat}>Cut by beat</Button>
+                  </div>
+                  <Badge variant="neutral">
+                    {beatAnalyzing ? 'Analyzing beats...' : bpm ? `${Math.round(bpm)} BPM (${filteredBeats.length} beats)` : 'No beats detected'}
+                  </Badge>
+                </div>
+              )}
 
               {/* Photo filmstrip timeline */}
               {photos.length > 0 && (
@@ -1803,6 +1898,17 @@ const PhotoMontageEditor = ({
             />
           );
         })()}
+
+        {/* ── Beat Selector Modal ── */}
+        {showBeatSelector && (
+          <BeatSelector
+            beats={filteredBeats}
+            bpm={bpm}
+            duration={(audioEndTime || audioDuration) - audioStartTime}
+            onApply={handleBeatSelectionApply}
+            onCancel={() => setShowBeatSelector(false)}
+          />
+        )}
 
         {/* ── Lyric Analyzer Modal ── */}
         {showTranscriber && selectedAudio && (

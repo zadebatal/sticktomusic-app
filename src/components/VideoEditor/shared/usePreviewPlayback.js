@@ -9,6 +9,7 @@ const usePreviewPlayback = ({ audioUrl, duration = 30 }) => {
   const rafRef = useRef(null);
   const timerStartRef = useRef(null);
   const timerOffsetRef = useRef(0);
+  const isSeekingRef = useRef(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
 
@@ -17,6 +18,11 @@ const usePreviewPlayback = ({ audioUrl, duration = 30 }) => {
 
   // rAF tick — reads from audio element or performance timer
   const tick = useCallback(() => {
+    if (isSeekingRef.current) {
+      // Skip audio readback during async seek — keep scheduling rAF
+      rafRef.current = requestAnimationFrame(tick);
+      return;
+    }
     if (audioUrl && audioRef.current) {
       setCurrentTime(audioRef.current.currentTime);
     } else if (timerStartRef.current !== null) {
@@ -67,7 +73,15 @@ const usePreviewPlayback = ({ audioUrl, duration = 30 }) => {
     const clamped = Math.max(0, Math.min(time, effectiveDuration));
     setCurrentTime(clamped);
     if (audioUrl && audioRef.current) {
+      isSeekingRef.current = true;
       audioRef.current.currentTime = clamped;
+      // Clear seeking flag once browser confirms seek, with timeout fallback
+      const clearSeeking = () => { isSeekingRef.current = false; };
+      audioRef.current.addEventListener('seeked', clearSeeking, { once: true });
+      setTimeout(() => {
+        audioRef.current?.removeEventListener('seeked', clearSeeking);
+        clearSeeking();
+      }, 150);
     } else {
       timerOffsetRef.current = clamped;
       if (timerStartRef.current !== null) {

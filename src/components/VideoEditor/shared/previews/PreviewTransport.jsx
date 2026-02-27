@@ -5,7 +5,7 @@
  */
 import React, { useCallback, useRef } from 'react';
 import {
-  FeatherPlay, FeatherPause, FeatherShuffle, FeatherFilm,
+  FeatherPlay, FeatherPause, FeatherShuffle, FeatherFilm, FeatherRefreshCw,
 } from '@subframe/core';
 
 const HANDLE_W = 6; // px width of drag handles
@@ -25,6 +25,10 @@ const PreviewTransport = ({
   // Text tracks: [{ id, label, color, start, end }]
   textTracks = [],
   onTextTrackChange,
+  // Cut-by-beat/word controls (optional)
+  onCutByBeat,
+  onCutByWord,
+  bpmLabel,
 }) => {
   const timelineRef = useRef(null);
   const progressBarRef = useRef(null);
@@ -274,15 +278,43 @@ const PreviewTransport = ({
 
         {showReroll && onReroll && (
           <button
-            className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-neutral-700 hover:bg-neutral-600 border-none cursor-pointer transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
             onClick={onReroll}
             aria-label="Reroll current clip"
             title="Swap current clip"
           >
-            <FeatherShuffle className="text-neutral-200" style={{ width: 11, height: 11 }} />
+            <FeatherRefreshCw className="text-neutral-300" style={{ width: 12, height: 12 }} />
+            <span className="text-caption font-caption text-neutral-300">Reroll</span>
           </button>
         )}
       </div>
+
+      {/* Cut by beat/word controls */}
+      {(onCutByBeat || onCutByWord) && (
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            {onCutByWord && (
+              <button
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
+                onClick={onCutByWord}
+              >
+                <span className="text-caption font-caption text-neutral-300">Cut by word</span>
+              </button>
+            )}
+            {onCutByBeat && (
+              <button
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
+                onClick={onCutByBeat}
+              >
+                <span className="text-caption font-caption text-neutral-300">Cut by beat</span>
+              </button>
+            )}
+          </div>
+          {bpmLabel && (
+            <span className="text-[10px] text-neutral-500 tabular-nums">{bpmLabel}</span>
+          )}
+        </div>
+      )}
     </div>
   );
 };

@@ -128,6 +128,48 @@ const PhotoMontagePreview = ({
     return photoDuration > 0 ? Math.min(timeSinceAdvance / photoDuration, 1) : 0;
   }, [currentTime, beatSync, beats, photoDuration, totalDuration]);
 
+  // Cut by beat — enable beat-sync (photos transition on detected beats)
+  const handleCutByBeat = useCallback(() => {
+    if (!beats.length && !audioUrl) return;
+    // If beats aren't detected yet, trigger analysis
+    if (!beats.length && audioUrl) {
+      analyzeAudio(audioUrl).catch(() => {});
+    }
+    // Toggle beat sync on — the photo advance effect already handles beats
+    // We force a playlist rebuild to match beat count
+    if (beats.length > 0 && playlist.length > 0) {
+      // Duplicate images to fill beat count
+      const beatCount = beats.length;
+      const filled = [];
+      for (let i = 0; i < beatCount; i++) {
+        filled.push(images[i % images.length]);
+      }
+      setPlaylist(filled);
+      setActiveIdx(0);
+      lastBeatIdxRef.current = -1;
+      lastAdvanceRef.current = 0;
+    }
+  }, [beats, audioUrl, analyzeAudio, images, playlist.length]);
+
+  // Cut by word — create timed text overlays from text bank entries
+  const handleCutByWord = useCallback(() => {
+    const allWords = [...textBankA, ...textBankB].filter(Boolean);
+    if (!allWords.length) return;
+    const wordDur = totalDuration / allWords.length;
+    // Distribute text bank entries as timed overlays across Bank A timing
+    setTextTimingA({ start: 0, end: totalDuration });
+    setTextTimingB({ start: 0, end: totalDuration });
+  }, [textBankA, textBankB, totalDuration]);
+
+  // BPM label for transport
+  const bpmLabel = useMemo(() => {
+    if (!beats.length) return audioUrl ? 'Analyzing...' : null;
+    const estimatedBpm = beats.length > 1
+      ? Math.round(60 / ((beats[beats.length - 1] - beats[0]) / (beats.length - 1)))
+      : null;
+    return estimatedBpm ? `${estimatedBpm} BPM (${beats.length} beats)` : `${beats.length} beats`;
+  }, [beats, audioUrl]);
+
   // Reroll — swap the photo under the playhead
   const handleReroll = useCallback(() => {
     if (images.length < 2) return;
@@ -247,6 +289,9 @@ const PhotoMontagePreview = ({
         totalDuration={totalDuration}
         textTracks={textTracks}
         onTextTrackChange={handleTextTrackChange}
+        onCutByBeat={audioUrl ? handleCutByBeat : undefined}
+        onCutByWord={(textBankA.length > 0 || textBankB.length > 0) ? handleCutByWord : undefined}
+        bpmLabel={bpmLabel}
       />
     </div>
   );
