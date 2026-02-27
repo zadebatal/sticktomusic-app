@@ -468,17 +468,19 @@ const TemplateConfigurator = ({
 
         {/* Create button with embedded count */}
         {!savePromptOpen && (
-          <div className="flex w-full items-center gap-0">
-            <Button className="h-auto flex-1" variant="brand-primary" size="medium" icon={<FeatherPlay />}
-              onClick={handleCreateClick}>
-              {`Create`}
-            </Button>
+          <button
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 border-none cursor-pointer transition-colors h-11 px-4"
+            onClick={handleCreateClick}
+          >
+            <FeatherPlay className="text-white flex-none" style={{ width: 14, height: 14 }} />
+            <span className="text-[14px] font-semibold text-white">Create</span>
             <input
               type="number" min={1} max={50} value={createCount}
+              onClick={e => e.stopPropagation()}
               onChange={e => onCreateCountChange(Math.max(1, parseInt(e.target.value) || 1))}
-              className="w-12 h-10 rounded-r-md border border-solid border-neutral-600 bg-neutral-700 px-1 py-1 text-center text-body font-body text-white outline-none -ml-1"
+              className="w-10 h-7 rounded-md border border-white/20 bg-white/15 px-1 text-center text-[13px] font-semibold text-white outline-none ml-1"
             />
-          </div>
+          </button>
         )}
       </div>
 
