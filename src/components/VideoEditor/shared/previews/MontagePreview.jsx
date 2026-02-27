@@ -264,10 +264,16 @@ const MontagePreview = ({
           />
         )}
 
-        {/* BPM badge */}
-        {bpm && (
-          <div className="absolute top-2 left-2 z-10 rounded-full bg-black/60 border border-white/20 px-2 py-0.5">
-            <span className="text-[10px] font-mono text-white/80">{Math.round(bpm)} BPM</span>
+        {/* Reroll — overlaid at bottom center of preview */}
+        {media.length >= 2 && (
+          <div className="absolute bottom-3 left-0 right-0 flex justify-center z-10">
+            <button
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-black/60 hover:bg-black/80 border border-white/20 cursor-pointer transition-colors backdrop-blur-sm"
+              onClick={handleReroll}
+            >
+              <FeatherRefreshCw className="text-white/80" style={{ width: 12, height: 12 }} />
+              <span className="text-caption font-caption text-white/80">Reroll</span>
+            </button>
           </div>
         )}
 
@@ -290,37 +296,30 @@ const MontagePreview = ({
         onTextTrackChange={handleTextTrackChange}
       />
 
-      {/* Controls below preview — matches SlideshowNicheContent pattern */}
-      <div className="flex items-center justify-center gap-3 mt-1">
-        {media.length >= 2 && (
-          <button
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
-            onClick={handleReroll}
-          >
-            <FeatherRefreshCw className="text-neutral-300" style={{ width: 12, height: 12 }} />
-            <span className="text-caption font-caption text-neutral-300">Reroll</span>
-          </button>
-        )}
-        {audioUrl && (
-          <button
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
-            onClick={handleCutByBeat}
-          >
-            <span className="text-caption font-caption text-neutral-300">Cut by beat</span>
-          </button>
-        )}
-        {(textBankA.length > 0 || textBankB.length > 0) && (
-          <button
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
-            onClick={handleCutByWord}
-          >
-            <span className="text-caption font-caption text-neutral-300">Cut by word</span>
-          </button>
-        )}
-        {bpmLabel && (
-          <span className="text-[10px] text-neutral-500 tabular-nums">{bpmLabel}</span>
-        )}
-      </div>
+      {/* Cut by beat/word + BPM — below transport */}
+      {(audioUrl || textBankA.length > 0 || textBankB.length > 0) && (
+        <div className="flex items-center justify-center gap-3 mt-1">
+          {audioUrl && (
+            <button
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
+              onClick={handleCutByBeat}
+            >
+              <span className="text-caption font-caption text-neutral-300">Cut by beat</span>
+            </button>
+          )}
+          {(textBankA.length > 0 || textBankB.length > 0) && (
+            <button
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
+              onClick={handleCutByWord}
+            >
+              <span className="text-caption font-caption text-neutral-300">Cut by word</span>
+            </button>
+          )}
+          {bpmLabel && (
+            <span className="text-[10px] text-neutral-500 tabular-nums">{bpmLabel}</span>
+          )}
+        </div>
+      )}
     </div>
   );
 };
