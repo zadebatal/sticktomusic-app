@@ -295,192 +295,85 @@ const TemplateConfigurator = ({
         </div>
       )}
 
-      {/* Settings */}
-      <div className="flex w-full flex-col gap-3 border-t border-solid border-neutral-800 px-4 py-4">
-        {/* Aspect Ratio */}
-        <div className="flex w-full items-center justify-between">
-          <span className="text-caption font-caption text-neutral-400">Aspect Ratio</span>
-          <ToggleGroup value={settings.aspectRatio} onValueChange={(val) => { if (val) updateSetting('aspectRatio', val); }}>
-            {ASPECT_RATIOS.map(ar => (
-              <ToggleGroup.Item key={ar.value} value={ar.value}>{ar.label}</ToggleGroup.Item>
-            ))}
-          </ToggleGroup>
+      {/* Slide Duration — right after preview */}
+      {settings.slideDuration !== undefined && (
+        <div className="flex w-full items-center justify-between border-t border-solid border-neutral-800 px-4 py-3">
+          <span className="text-caption font-caption text-neutral-400">Slide Duration</span>
+          <div className="flex items-center gap-2">
+            <input
+              type="range" min={0.5} max={10} step={0.5}
+              value={settings.slideDuration}
+              onChange={e => updateSetting('slideDuration', parseFloat(e.target.value))}
+              className="w-20 accent-indigo-500"
+            />
+            <span className="text-caption font-caption text-[#ffffffff] w-8 text-right">{settings.slideDuration}s</span>
+          </div>
         </div>
+      )}
 
-        {/* Format-specific controls */}
-        {/* Slideshow: slide duration */}
-        {settings.slideDuration !== undefined && (
-          <div className="flex w-full items-center justify-between">
-            <span className="text-caption font-caption text-neutral-400">Slide Duration</span>
-            <div className="flex items-center gap-2">
-              <input
-                type="range" min={0.5} max={10} step={0.5}
-                value={settings.slideDuration}
-                onChange={e => updateSetting('slideDuration', parseFloat(e.target.value))}
-                className="w-20 accent-indigo-500"
-              />
-              <span className="text-caption font-caption text-[#ffffffff] w-8 text-right">{settings.slideDuration}s</span>
-            </div>
-          </div>
-        )}
-
-        {/* Solo Clip: text display mode */}
-        {settings.textDisplayMode !== undefined && (
-          <div className="flex w-full items-center justify-between">
-            <span className="text-caption font-caption text-neutral-400">Text Display</span>
-            <ToggleGroup value={settings.textDisplayMode} onValueChange={(val) => { if (val) updateSetting('textDisplayMode', val); }}>
-              <ToggleGroup.Item value="word">Word</ToggleGroup.Item>
-              <ToggleGroup.Item value="line">Line</ToggleGroup.Item>
-              <ToggleGroup.Item value="full">Full</ToggleGroup.Item>
-            </ToggleGroup>
-          </div>
-        )}
-
-        {/* Transition — shown for multi_clip + photo_montage */}
-        {settings.transition !== undefined && (
-          <div className="flex w-full items-center justify-between">
-            <span className="text-caption font-caption text-neutral-400">Transition</span>
-            <ToggleGroup value={settings.transition} onValueChange={(val) => { if (val) updateSetting('transition', val); }}>
-              {TRANSITION_OPTIONS.map(t => (
-                <ToggleGroup.Item key={t.value} value={t.value}>{t.label}</ToggleGroup.Item>
-              ))}
-            </ToggleGroup>
-          </div>
-        )}
-
-        {/* Photo Montage: speed, ken burns, beat sync */}
-        {settings.speed !== undefined && (
-          <>
+      {/* Format-specific controls (non-slide-duration) */}
+      {(settings.textDisplayMode !== undefined || settings.transition !== undefined || settings.speed !== undefined) && (
+        <div className="flex w-full flex-col gap-3 border-t border-solid border-neutral-800 px-4 py-3">
+          {/* Solo Clip: text display mode */}
+          {settings.textDisplayMode !== undefined && (
             <div className="flex w-full items-center justify-between">
-              <span className="text-caption font-caption text-neutral-400">Speed</span>
-              <ToggleGroup value={String(settings.speed)} onValueChange={(val) => { if (val) updateSetting('speed', parseFloat(val)); }}>
-                {SPEED_OPTIONS.map(s => (
-                  <ToggleGroup.Item key={s.value} value={String(s.value)}>{s.label}</ToggleGroup.Item>
+              <span className="text-caption font-caption text-neutral-400">Text Display</span>
+              <ToggleGroup value={settings.textDisplayMode} onValueChange={(val) => { if (val) updateSetting('textDisplayMode', val); }}>
+                <ToggleGroup.Item value="word">Word</ToggleGroup.Item>
+                <ToggleGroup.Item value="line">Line</ToggleGroup.Item>
+                <ToggleGroup.Item value="full">Full</ToggleGroup.Item>
+              </ToggleGroup>
+            </div>
+          )}
+
+          {/* Transition — shown for multi_clip + photo_montage */}
+          {settings.transition !== undefined && (
+            <div className="flex w-full items-center justify-between">
+              <span className="text-caption font-caption text-neutral-400">Transition</span>
+              <ToggleGroup value={settings.transition} onValueChange={(val) => { if (val) updateSetting('transition', val); }}>
+                {TRANSITION_OPTIONS.map(t => (
+                  <ToggleGroup.Item key={t.value} value={t.value}>{t.label}</ToggleGroup.Item>
                 ))}
               </ToggleGroup>
             </div>
-            <div className="flex w-full items-center justify-between">
-              <span className="text-caption font-caption text-neutral-400">Ken Burns</span>
-              <button
-                className={`flex h-5 w-9 items-center rounded-full px-0.5 transition-colors cursor-pointer ${settings.kenBurns ? 'bg-indigo-600' : 'bg-neutral-700'}`}
-                onClick={() => updateSetting('kenBurns', !settings.kenBurns)}
-              >
-                <div className={`h-4 w-4 rounded-full bg-white transition-transform ${settings.kenBurns ? 'translate-x-4' : 'translate-x-0'}`} />
-              </button>
-            </div>
-            <div className="flex w-full items-center justify-between">
-              <span className="text-caption font-caption text-neutral-400">Beat Sync</span>
-              <button
-                className={`flex h-5 w-9 items-center rounded-full px-0.5 transition-colors cursor-pointer ${settings.beatSync ? 'bg-indigo-600' : 'bg-neutral-700'}`}
-                onClick={() => updateSetting('beatSync', !settings.beatSync)}
-              >
-                <div className={`h-4 w-4 rounded-full bg-white transition-transform ${settings.beatSync ? 'translate-x-4' : 'translate-x-0'}`} />
-              </button>
-            </div>
-          </>
-        )}
+          )}
 
-        {/* Text Style section */}
-        <div className="flex w-full flex-col gap-2 border-t border-solid border-neutral-800 pt-3">
-          <span className="text-caption-bold font-caption-bold text-neutral-300">Text Style</span>
-
-          {/* Position */}
-          <div className="flex w-full items-center justify-between">
-            <span className="text-caption font-caption text-neutral-400">Position</span>
-            <ToggleGroup value={settings.textPosition || 'center'} onValueChange={(val) => { if (val) updateSetting('textPosition', val); }}>
-              {TEXT_POSITION_OPTIONS.map(tp => (
-                <ToggleGroup.Item key={tp.value} value={tp.value}>{tp.label}</ToggleGroup.Item>
-              ))}
-            </ToggleGroup>
-          </div>
-
-          {/* Font */}
-          <div className="flex w-full items-center justify-between">
-            <span className="text-caption font-caption text-neutral-400">Font</span>
-            <select
-              className="rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-2 py-1 text-caption font-caption text-white outline-none cursor-pointer"
-              value={ts.fontFamily || "'Inter', sans-serif"}
-              onChange={e => updateTextStyle('fontFamily', e.target.value)}
-            >
-              {FONT_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-            </select>
-          </div>
-
-          {/* Size + Weight */}
-          <div className="flex w-full items-center justify-between gap-2">
-            <span className="text-caption font-caption text-neutral-400">Size</span>
-            <input
-              type="number" min={12} max={120} step={2}
-              value={ts.fontSize || 48}
-              onChange={e => updateTextStyle('fontSize', parseInt(e.target.value) || 48)}
-              className="w-14 rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-2 py-1 text-center text-caption font-caption text-white outline-none"
-            />
-            <span className="text-caption font-caption text-neutral-400">Weight</span>
-            <select
-              className="rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-2 py-1 text-caption font-caption text-white outline-none cursor-pointer"
-              value={ts.fontWeight || '600'}
-              onChange={e => updateTextStyle('fontWeight', e.target.value)}
-            >
-              {WEIGHT_OPTIONS.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
-            </select>
-          </div>
-
-          {/* Color + Case */}
-          <div className="flex w-full items-center justify-between gap-2">
-            <span className="text-caption font-caption text-neutral-400">Color</span>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="color"
-                value={ts.color || '#ffffff'}
-                onChange={e => updateTextStyle('color', e.target.value)}
-                className="h-6 w-6 rounded border border-neutral-700 cursor-pointer bg-transparent"
-              />
-              <span className="text-caption font-caption text-neutral-500 w-14">{ts.color || '#ffffff'}</span>
-            </div>
-            <span className="text-caption font-caption text-neutral-400">Case</span>
-            <ToggleGroup value={ts.textCase || 'default'} onValueChange={(val) => { if (val) updateTextStyle('textCase', val); }}>
-              {CASE_OPTIONS.map(c => (
-                <ToggleGroup.Item key={c.value} value={c.value}>{c.label}</ToggleGroup.Item>
-              ))}
-            </ToggleGroup>
-          </div>
-
-          {/* Outline */}
-          <div className="flex w-full items-center justify-between gap-2">
-            <span className="text-caption font-caption text-neutral-400">Outline</span>
-            <button
-              className={`flex h-5 w-9 items-center rounded-full px-0.5 transition-colors cursor-pointer ${ts.outline ? 'bg-indigo-600' : 'bg-neutral-700'}`}
-              onClick={() => updateTextStyle('outline', !ts.outline)}
-            >
-              <div className={`h-4 w-4 rounded-full bg-white transition-transform ${ts.outline ? 'translate-x-4' : 'translate-x-0'}`} />
-            </button>
-            {ts.outline && (
-              <>
-                <span className="text-caption font-caption text-neutral-400">Color</span>
-                <input
-                  type="color"
-                  value={ts.outlineColor || '#000000'}
-                  onChange={e => updateTextStyle('outlineColor', e.target.value)}
-                  className="h-6 w-6 rounded border border-neutral-700 cursor-pointer bg-transparent"
-                />
-              </>
-            )}
-          </div>
+          {/* Photo Montage: speed, ken burns, beat sync */}
+          {settings.speed !== undefined && (
+            <>
+              <div className="flex w-full items-center justify-between">
+                <span className="text-caption font-caption text-neutral-400">Speed</span>
+                <ToggleGroup value={String(settings.speed)} onValueChange={(val) => { if (val) updateSetting('speed', parseFloat(val)); }}>
+                  {SPEED_OPTIONS.map(s => (
+                    <ToggleGroup.Item key={s.value} value={String(s.value)}>{s.label}</ToggleGroup.Item>
+                  ))}
+                </ToggleGroup>
+              </div>
+              <div className="flex w-full items-center justify-between">
+                <span className="text-caption font-caption text-neutral-400">Ken Burns</span>
+                <button
+                  className={`flex h-5 w-9 items-center rounded-full px-0.5 transition-colors cursor-pointer ${settings.kenBurns ? 'bg-indigo-600' : 'bg-neutral-700'}`}
+                  onClick={() => updateSetting('kenBurns', !settings.kenBurns)}
+                >
+                  <div className={`h-4 w-4 rounded-full bg-white transition-transform ${settings.kenBurns ? 'translate-x-4' : 'translate-x-0'}`} />
+                </button>
+              </div>
+              <div className="flex w-full items-center justify-between">
+                <span className="text-caption font-caption text-neutral-400">Beat Sync</span>
+                <button
+                  className={`flex h-5 w-9 items-center rounded-full px-0.5 transition-colors cursor-pointer ${settings.beatSync ? 'bg-indigo-600' : 'bg-neutral-700'}`}
+                  onClick={() => updateSetting('beatSync', !settings.beatSync)}
+                >
+                  <div className={`h-4 w-4 rounded-full bg-white transition-transform ${settings.beatSync ? 'translate-x-4' : 'translate-x-0'}`} />
+                </button>
+              </div>
+            </>
+          )}
         </div>
-      </div>
+      )}
 
-      {/* Create section */}
+      {/* Audio + Create section */}
       <div className="flex w-full flex-col items-start gap-3 border-t border-solid border-neutral-800 px-4 py-4">
-        {/* Amount */}
-        <div className="flex w-full items-center justify-between">
-          <span className="text-caption font-caption text-neutral-400">Amount</span>
-          <input
-            type="number" min={1} max={50} value={createCount}
-            onChange={e => onCreateCountChange(Math.max(1, parseInt(e.target.value) || 1))}
-            className="w-14 rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-2 py-1 text-center text-body font-body text-white outline-none"
-          />
-        </div>
-
         {/* Audio — dropdown + tools */}
         <div className="flex w-full flex-col gap-2">
           <span className="text-caption font-caption text-neutral-400">Audio</span>
@@ -573,13 +466,110 @@ const TemplateConfigurator = ({
           </div>
         )}
 
-        {/* Create button */}
+        {/* Create button with embedded count */}
         {!savePromptOpen && (
-          <Button className="h-auto w-full flex-none" variant="brand-primary" size="medium" icon={<FeatherPlay />}
-            onClick={handleCreateClick}>
-            {createLabel || `Create ${createCount}`}
-          </Button>
+          <div className="flex w-full items-center gap-0">
+            <Button className="h-auto flex-1" variant="brand-primary" size="medium" icon={<FeatherPlay />}
+              onClick={handleCreateClick}>
+              {`Create`}
+            </Button>
+            <input
+              type="number" min={1} max={50} value={createCount}
+              onChange={e => onCreateCountChange(Math.max(1, parseInt(e.target.value) || 1))}
+              className="w-12 h-10 rounded-r-md border border-solid border-neutral-600 bg-neutral-700 px-1 py-1 text-center text-body font-body text-white outline-none -ml-1"
+            />
+          </div>
         )}
+      </div>
+
+      {/* Text Style section */}
+      <div className="flex w-full flex-col gap-3 border-t border-solid border-neutral-800 px-4 py-4">
+        <div className="flex w-full flex-col gap-2">
+          <span className="text-caption-bold font-caption-bold text-neutral-300">Text Style</span>
+
+          {/* Position */}
+          <div className="flex w-full items-center justify-between">
+            <span className="text-caption font-caption text-neutral-400">Position</span>
+            <ToggleGroup value={settings.textPosition || 'center'} onValueChange={(val) => { if (val) updateSetting('textPosition', val); }}>
+              {TEXT_POSITION_OPTIONS.map(tp => (
+                <ToggleGroup.Item key={tp.value} value={tp.value}>{tp.label}</ToggleGroup.Item>
+              ))}
+            </ToggleGroup>
+          </div>
+
+          {/* Font */}
+          <div className="flex w-full items-center justify-between">
+            <span className="text-caption font-caption text-neutral-400">Font</span>
+            <select
+              className="rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-2 py-1 text-caption font-caption text-white outline-none cursor-pointer"
+              value={ts.fontFamily || "'Inter', sans-serif"}
+              onChange={e => updateTextStyle('fontFamily', e.target.value)}
+            >
+              {FONT_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+          </div>
+
+          {/* Size + Weight */}
+          <div className="flex w-full items-center justify-between gap-2">
+            <span className="text-caption font-caption text-neutral-400">Size</span>
+            <input
+              type="number" min={12} max={120} step={2}
+              value={ts.fontSize || 48}
+              onChange={e => updateTextStyle('fontSize', parseInt(e.target.value) || 48)}
+              className="w-14 rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-2 py-1 text-center text-caption font-caption text-white outline-none"
+            />
+            <span className="text-caption font-caption text-neutral-400">Weight</span>
+            <select
+              className="rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-2 py-1 text-caption font-caption text-white outline-none cursor-pointer"
+              value={ts.fontWeight || '600'}
+              onChange={e => updateTextStyle('fontWeight', e.target.value)}
+            >
+              {WEIGHT_OPTIONS.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
+            </select>
+          </div>
+
+          {/* Color + Case */}
+          <div className="flex w-full items-center justify-between gap-2">
+            <span className="text-caption font-caption text-neutral-400">Color</span>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="color"
+                value={ts.color || '#ffffff'}
+                onChange={e => updateTextStyle('color', e.target.value)}
+                className="h-6 w-6 rounded border border-neutral-700 cursor-pointer bg-transparent"
+              />
+              <span className="text-caption font-caption text-neutral-500 w-14">{ts.color || '#ffffff'}</span>
+            </div>
+            <span className="text-caption font-caption text-neutral-400">Case</span>
+            <ToggleGroup value={ts.textCase || 'default'} onValueChange={(val) => { if (val) updateTextStyle('textCase', val); }}>
+              {CASE_OPTIONS.map(c => (
+                <ToggleGroup.Item key={c.value} value={c.value}>{c.label}</ToggleGroup.Item>
+              ))}
+            </ToggleGroup>
+          </div>
+
+          {/* Outline */}
+          <div className="flex w-full items-center justify-between gap-2">
+            <span className="text-caption font-caption text-neutral-400">Outline</span>
+            <button
+              className={`flex h-5 w-9 items-center rounded-full px-0.5 transition-colors cursor-pointer ${ts.outline ? 'bg-indigo-600' : 'bg-neutral-700'}`}
+              onClick={() => updateTextStyle('outline', !ts.outline)}
+            >
+              <div className={`h-4 w-4 rounded-full bg-white transition-transform ${ts.outline ? 'translate-x-4' : 'translate-x-0'}`} />
+            </button>
+            {ts.outline && (
+              <>
+                <span className="text-caption font-caption text-neutral-400">Color</span>
+                <input
+                  type="color"
+                  value={ts.outlineColor || '#000000'}
+                  onChange={e => updateTextStyle('outlineColor', e.target.value)}
+                  className="h-6 w-6 rounded border border-neutral-700 cursor-pointer bg-transparent"
+                />
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Drafts row */}
