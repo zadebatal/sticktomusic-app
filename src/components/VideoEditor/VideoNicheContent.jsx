@@ -63,6 +63,9 @@ const VideoNicheContent = ({
   const [liveSettings, setLiveSettings] = useState(null);
   const [trimItemId, setTrimItemId] = useState(null);
 
+  // Track latest cut points from preview (Cut by beat / Cut to music)
+  const latestCutsRef = useRef(null);
+
   // Audio preview playback
   const [playingAudioId, setPlayingAudioId] = useState(null);
   const audioPreviewRef = useRef(null);
@@ -748,6 +751,9 @@ const VideoNicheContent = ({
                     textPosition={tp}
                     aspectRatio={ar}
                     onCutByWord={selectedAudio ? handleAutoTranscribe : undefined}
+                    onCutsApplied={(cuts) => { latestCutsRef.current = cuts; }}
+                    selectedTextA={previewTextA}
+                    selectedTextB={previewTextB}
                   />
                 );
               case 'solo_clip':
@@ -763,6 +769,9 @@ const VideoNicheContent = ({
                     textBankA={textBank1}
                     textBankB={textBank2}
                     aspectRatio={ar}
+                    onCutsApplied={(cuts) => { latestCutsRef.current = cuts; }}
+                    selectedTextA={previewTextA}
+                    selectedTextB={previewTextB}
                   />
                 );
               case 'multi_clip':
@@ -776,6 +785,10 @@ const VideoNicheContent = ({
                     textPosition={tp}
                     transition={settings.transition || 'cut'}
                     aspectRatio={ar}
+                    onCutsApplied={(cuts) => { latestCutsRef.current = cuts; }}
+                    onCutByWord={selectedAudio ? handleAutoTranscribe : undefined}
+                    selectedTextA={previewTextA}
+                    selectedTextB={previewTextB}
                   />
                 );
               case 'photo_montage':
@@ -793,6 +806,9 @@ const VideoNicheContent = ({
                     textBankB={textBank2}
                     aspectRatio={ar}
                     onCutByWord={selectedAudio ? handleAutoTranscribe : undefined}
+                    onCutsApplied={(cuts) => { latestCutsRef.current = cuts; }}
+                    selectedTextA={previewTextA}
+                    selectedTextB={previewTextB}
                   />
                 );
               default:
@@ -806,6 +822,9 @@ const VideoNicheContent = ({
                     textPosition={tp}
                     aspectRatio={ar}
                     onCutByWord={selectedAudio ? handleAutoTranscribe : undefined}
+                    onCutsApplied={(cuts) => { latestCutsRef.current = cuts; }}
+                    selectedTextA={previewTextA}
+                    selectedTextB={previewTextB}
                   />
                 );
             }
@@ -818,7 +837,88 @@ const VideoNicheContent = ({
         }
         createCount={createCount}
         onCreateCountChange={setCreateCount}
-        onCreateClick={(templateSettings) => onMakeVideo && onMakeVideo(activeFormat, niche.id, createCount > 1 ? { _nicheGenerateCount: createCount } : null, templateSettings)}
+        onCreateClick={(templateSettings) => {
+          if (!onMakeVideo) return;
+          const formatId = activeFormat?.id;
+
+          if (formatId === 'solo_clip') {
+            // Solo = pass niche videos directly so SoloClipEditor doesn't depend on pipelineCategory
+            const videos = nicheMedia.filter(m => m.type === 'video');
+            const draft = {
+              ...(createCount > 1 ? { _nicheGenerateCount: createCount } : {}),
+              audio: selectedAudio ? { ...selectedAudio } : null,
+              _nicheVideos: videos.map(v => ({
+                id: v.id, url: v.url, localUrl: v.localUrl || v.url,
+                thumbnailUrl: v.thumbnailUrl || v.thumbnail, name: v.name || 'Clip',
+                type: 'video'
+              })),
+            };
+            onMakeVideo(activeFormat, niche.id, draft, templateSettings);
+
+          } else if (formatId === 'photo_montage') {
+            // Photo Montage = images, not video clips
+            const draft = {
+              editorMode: 'photo-montage',
+              ...(createCount > 1 ? { _nicheGenerateCount: createCount } : {}),
+              audio: selectedAudio ? { ...selectedAudio } : null,
+              montagePhotos: nicheImages.map(img => ({
+                id: img.id, sourceImageId: img.id,
+                url: img.url, thumbnailUrl: img.thumbnailUrl || null,
+                name: img.name,
+              })),
+              clips: [],
+              textBankA: textBank1,
+              textBankB: textBank2,
+            };
+            onMakeVideo(activeFormat, niche.id, draft, templateSettings);
+
+          } else {
+            // multi_clip + montage: all videos as clips
+            const editorMode = formatId === 'multi_clip' ? 'multi-clip' : 'montage';
+            const videos = nicheMedia.filter(m => m.type === 'video');
+            const cuts = latestCutsRef.current;
+            let clips;
+            if (cuts && cuts.length > 1 && videos.length > 0) {
+              clips = cuts.map((t, i) => {
+                const endTime = cuts[i + 1] != null ? cuts[i + 1] : (selectedAudio?.duration || 30);
+                const v = videos[i % videos.length];
+                return {
+                  id: `clip_${Date.now()}_${i}`,
+                  sourceId: v.id,
+                  url: v.url || v.localUrl,
+                  localUrl: v.localUrl || v.url,
+                  thumbnail: v.thumbnailUrl || v.thumbnail,
+                  startTime: t,
+                  duration: Math.max(0.1, endTime - t),
+                  locked: false,
+                  sourceOffset: 0,
+                };
+              });
+            } else {
+              clips = videos.map((v, i) => ({
+                id: `clip_${Date.now()}_${i}`,
+                sourceId: v.id,
+                url: v.url || v.localUrl,
+                localUrl: v.localUrl || v.url,
+                thumbnail: v.thumbnailUrl || v.thumbnail,
+                startTime: i * 2,
+                duration: 2,
+                locked: false,
+                sourceOffset: 0,
+              }));
+            }
+            const draft = {
+              editorMode,
+              ...(createCount > 1 ? { _nicheGenerateCount: createCount } : {}),
+              audio: selectedAudio ? { ...selectedAudio } : null,
+              clips,
+              textBankA: textBank1,
+              textBankB: textBank2,
+            };
+            latestCutsRef.current = null;
+            onMakeVideo(activeFormat, niche.id, draft, templateSettings);
+          }
+        }}
         createLabel={`Create ${createCount} ${activeFormat.name}${createCount > 1 ? 's' : ''}`}
         selectedAudio={selectedAudio}
         projectAudio={projectAudio}

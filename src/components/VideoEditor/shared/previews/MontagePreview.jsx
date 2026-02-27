@@ -9,6 +9,7 @@ import { FeatherRefreshCw } from '@subframe/core';
 import PreviewTransport from './PreviewTransport';
 import DraggableTextOverlay from './DraggableTextOverlay';
 import BeatSelector from '../../BeatSelector';
+import MomentumSelector from '../../MomentumSelector';
 
 const ASPECT_CSS = { '9:16': '9/16', '16:9': '16/9', '1:1': '1/1', '4:5': '4/5' };
 const MAX_PRELOADED = 10;
@@ -22,6 +23,9 @@ const MontagePreview = ({
   textPosition = 'center',
   aspectRatio = '9:16',
   onCutByWord,
+  onCutsApplied,
+  selectedTextA,
+  selectedTextB,
 }) => {
   const [playlist, setPlaylist] = useState(() => [...media]);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -30,6 +34,7 @@ const MontagePreview = ({
   const lastBeatIdxRef = useRef(-1);
   const videoRefsMap = useRef({});
   const [showBeatSelector, setShowBeatSelector] = useState(false);
+  const [showMomentumSelector, setShowMomentumSelector] = useState(false);
 
   const { beats, bpm, analyzeAudio } = useBeatDetection();
   const { audioRef, currentTime, isPlaying, progress, toggle, seek } = usePreviewPlayback({
@@ -116,6 +121,14 @@ const MontagePreview = ({
     if (textBankB.length > 0 && !previewTextB) setPreviewTextB(textBankB[0]);
   }, [textBankB, previewTextB]);
 
+  // Sync text from parent click (overrides internal state)
+  useEffect(() => {
+    if (selectedTextA !== undefined) setPreviewTextA(selectedTextA || '');
+  }, [selectedTextA]);
+  useEffect(() => {
+    if (selectedTextB !== undefined) setPreviewTextB(selectedTextB || '');
+  }, [selectedTextB]);
+
   // Cut by beat — open BeatSelector modal (same as full editors)
   const handleCutByBeat = useCallback(() => {
     if (!beats.length && audioUrl) {
@@ -137,9 +150,10 @@ const MontagePreview = ({
       setPlaylist(filled);
       setActiveIdx(0);
       lastBeatIdxRef.current = -1;
+      onCutsApplied?.(selectedBeatTimes);
     }
     setShowBeatSelector(false);
-  }, [media]);
+  }, [media, onCutsApplied]);
 
   // Cut by word — delegate to parent's transcription flow
   const handleCutByWord = useCallback(() => {
@@ -281,7 +295,7 @@ const MontagePreview = ({
         )}
 
         {/* Reroll — overlaid at bottom center of preview */}
-        {media.length >= 2 && (
+        {media.length > 0 && (
           <div className="absolute bottom-3 left-0 right-0 flex justify-center z-10">
             <button
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-black/60 hover:bg-black/80 border border-white/20 cursor-pointer transition-colors backdrop-blur-sm"
@@ -323,6 +337,14 @@ const MontagePreview = ({
               <span className="text-caption font-caption text-neutral-300">Cut by beat</span>
             </button>
           )}
+          {audioUrl && (
+            <button
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-indigo-900/50 hover:bg-indigo-800/50 border border-indigo-700/50 cursor-pointer transition-colors"
+              onClick={() => setShowMomentumSelector(true)}
+            >
+              <span className="text-caption font-caption text-indigo-300">Cut to music</span>
+            </button>
+          )}
           {(textBankA.length > 0 || textBankB.length > 0 || onCutByWord) && (
             <button
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
@@ -345,6 +367,19 @@ const MontagePreview = ({
           duration={30}
           onApply={handleBeatSelectionApply}
           onCancel={() => setShowBeatSelector(false)}
+        />
+      )}
+
+      {/* MomentumSelector modal */}
+      {showMomentumSelector && (
+        <MomentumSelector
+          audioSource={audioUrl}
+          duration={30}
+          onApply={(cutPoints) => {
+            handleBeatSelectionApply(cutPoints);
+            setShowMomentumSelector(false);
+          }}
+          onCancel={() => setShowMomentumSelector(false)}
         />
       )}
     </div>

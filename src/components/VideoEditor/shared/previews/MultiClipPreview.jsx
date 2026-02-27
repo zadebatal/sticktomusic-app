@@ -4,8 +4,12 @@
  */
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import usePreviewPlayback from '../usePreviewPlayback';
+import { useBeatDetection } from '../../../../hooks/useBeatDetection';
 import PreviewTransport from './PreviewTransport';
 import DraggableTextOverlay from './DraggableTextOverlay';
+import BeatSelector from '../../BeatSelector';
+import MomentumSelector from '../../MomentumSelector';
+import { FeatherRefreshCw } from '@subframe/core';
 
 const ASPECT_CSS = { '9:16': '9/16', '16:9': '16/9', '1:1': '1/1', '4:5': '4/5' };
 const TRANSITION_DURATION = 0.3;
@@ -19,8 +23,16 @@ const MultiClipPreview = ({
   textPosition = 'center',
   transition = 'cut',
   aspectRatio = '9:16',
+  onCutByWord,
+  onCutsApplied,
+  selectedTextA,
+  selectedTextB,
 }) => {
   const [playlist, setPlaylist] = useState(() => [...media]);
+  const [showMomentumSelector, setShowMomentumSelector] = useState(false);
+  const [showBeatSelector, setShowBeatSelector] = useState(false);
+  const [previewTextA, setPreviewTextA] = useState(() => textBankA[0] || '');
+  const [previewTextB, setPreviewTextB] = useState(() => textBankB[0] || '');
 
   // Sync playlist when media changes
   useEffect(() => { setPlaylist([...media]); }, [media]);
@@ -31,10 +43,43 @@ const MultiClipPreview = ({
   }, [playlist]);
 
   const containerRef = useRef(null);
+  const { beats, bpm, analyzeAudio } = useBeatDetection();
   const { audioRef, currentTime, isPlaying, progress, toggle, seek } = usePreviewPlayback({
     audioUrl,
     duration: totalDuration,
   });
+
+  // Analyze audio for beats when audioUrl changes
+  const analyzedUrlRef = useRef(null);
+  useEffect(() => {
+    if (audioUrl && audioUrl !== analyzedUrlRef.current) {
+      analyzedUrlRef.current = audioUrl;
+      analyzeAudio(audioUrl).catch(() => {});
+    }
+  }, [audioUrl, analyzeAudio]);
+
+  // Pick random text from bank
+  const pickText = useCallback((bank) => {
+    if (!bank || bank.length === 0) return '';
+    return bank[Math.floor(Math.random() * bank.length)];
+  }, []);
+
+  // Auto-show text when banks change from empty→non-empty
+  useEffect(() => {
+    if (textBankA.length > 0 && !previewTextA) setPreviewTextA(textBankA[0]);
+  }, [textBankA, previewTextA]);
+  useEffect(() => {
+    if (textBankB.length > 0 && !previewTextB) setPreviewTextB(textBankB[0]);
+  }, [textBankB, previewTextB]);
+
+  // Sync text from parent click (overrides internal state)
+  useEffect(() => {
+    if (selectedTextA !== undefined) setPreviewTextA(selectedTextA || '');
+  }, [selectedTextA]);
+  useEffect(() => {
+    if (selectedTextB !== undefined) setPreviewTextB(selectedTextB || '');
+  }, [selectedTextB]);
+
   // Independent position state per text overlay
   const textPosY = textPosition === 'top' ? 15 : textPosition === 'bottom' ? 85 : 50;
   const [textPosA, setTextPosA] = useState({ x: 50, y: Math.max(textPosY - 10, 10), width: 80 });
@@ -85,9 +130,14 @@ const MultiClipPreview = ({
     return 1 - (timeLeft / TRANSITION_DURATION);
   }, [seg, currentTime, transition]);
 
-  // Text per segment
-  const textA = textBankA.length > 0 ? textBankA[activeSegIdx % textBankA.length] : '';
-  const textB = textBankB.length > 0 ? textBankB[activeSegIdx % textBankB.length] : '';
+  // Cycle text on segment advance
+  useEffect(() => {
+    if (textBankA.length > 0) setPreviewTextA(textBankA[activeSegIdx % textBankA.length]);
+    if (textBankB.length > 0) setPreviewTextB(textBankB[activeSegIdx % textBankB.length]);
+  }, [activeSegIdx, textBankA, textBankB]);
+
+  const textA = previewTextA;
+  const textB = previewTextB;
 
   const videoRefs = useRef({});
 
@@ -109,7 +159,7 @@ const MultiClipPreview = ({
     }
   }, [isPlaying]);
 
-  // Reroll — swap the clip under the playhead
+  // Reroll — swap the clip under the playhead + randomize text
   const handleReroll = useCallback(() => {
     if (media.length < 2) return;
     setPlaylist(prev => {
@@ -122,12 +172,58 @@ const MultiClipPreview = ({
       next[playheadIdx] = candidates[Math.floor(Math.random() * candidates.length)];
       return next;
     });
-  }, [media, progress]);
+    setPreviewTextA(pickText(textBankA));
+    setPreviewTextB(pickText(textBankB));
+  }, [media, progress, pickText, textBankA, textBankB]);
 
   // Jump to segment from timeline cell
   const handleCellClick = useCallback((idx) => {
     if (segments[idx]) seek(segments[idx].start);
-  }, [segments, seek]);
+    setPreviewTextA(pickText(textBankA));
+    setPreviewTextB(pickText(textBankB));
+  }, [segments, seek, pickText, textBankA, textBankB]);
+
+  // Beat/Momentum apply — rebuild playlist from cut points
+  const handleBeatSelectionApply = useCallback((selectedBeatTimes) => {
+    if (selectedBeatTimes.length > 0 && media.length > 0) {
+      const filled = [];
+      for (let i = 0; i < selectedBeatTimes.length; i++) {
+        filled.push(media[i % media.length]);
+      }
+      setPlaylist(filled);
+      onCutsApplied?.(selectedBeatTimes);
+    }
+    setShowBeatSelector(false);
+  }, [media, onCutsApplied]);
+
+  // Cut by beat — open BeatSelector modal
+  const handleCutByBeat = useCallback(() => {
+    if (!beats.length && audioUrl) {
+      analyzeAudio(audioUrl).catch(() => {});
+      return;
+    }
+    if (beats.length > 0) {
+      setShowBeatSelector(true);
+    }
+  }, [beats, audioUrl, analyzeAudio]);
+
+  // Cut by word — delegate to parent's transcription flow
+  const handleCutByWord = useCallback(() => {
+    if (onCutByWord) {
+      onCutByWord();
+      return;
+    }
+    const allWords = [...textBankA, ...textBankB].filter(Boolean);
+    if (!allWords.length) return;
+    setTextTimingA({ start: 0, end: totalDuration });
+    setTextTimingB({ start: 0, end: totalDuration });
+  }, [onCutByWord, textBankA, textBankB, totalDuration]);
+
+  // BPM label
+  const bpmLabel = useMemo(() => {
+    if (!beats.length) return audioUrl ? 'Analyzing...' : null;
+    return bpm ? `${Math.round(bpm)} BPM (${beats.length} beats)` : `${beats.length} beats`;
+  }, [beats, bpm, audioUrl]);
 
   // Text track timing change
   const handleTextTrackChange = useCallback((trackId, changes) => {
@@ -233,6 +329,19 @@ const MultiClipPreview = ({
           />
         )}
 
+        {/* Reroll — overlaid at bottom center of preview */}
+        {media.length > 0 && (
+          <div className="absolute bottom-3 left-0 right-0 flex justify-center z-10">
+            <button
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-black/60 hover:bg-black/80 border border-white/20 cursor-pointer transition-colors backdrop-blur-sm"
+              onClick={handleReroll}
+            >
+              <FeatherRefreshCw className="text-white/80" style={{ width: 12, height: 12 }} />
+              <span className="text-caption font-caption text-white/80">Reroll</span>
+            </button>
+          </div>
+        )}
+
         <audio ref={audioRef} preload="auto" style={{ display: 'none' }} />
       </div>
 
@@ -240,7 +349,7 @@ const MultiClipPreview = ({
       <PreviewTransport
         isPlaying={isPlaying}
         onToggle={toggle}
-        onReroll={handleReroll}
+        showReroll={false}
         progress={progress}
         items={playlist}
         activeIdx={playlist.length > 0 ? Math.min(Math.floor(progress * playlist.length), playlist.length - 1) : 0}
@@ -251,6 +360,61 @@ const MultiClipPreview = ({
         textTracks={textTracks}
         onTextTrackChange={handleTextTrackChange}
       />
+
+      {/* Controls below transport */}
+      <div className="flex items-center justify-center gap-3 mt-1">
+        {audioUrl && (
+          <button
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
+            onClick={handleCutByBeat}
+          >
+            <span className="text-caption font-caption text-neutral-300">Cut by beat</span>
+          </button>
+        )}
+        {audioUrl && (
+          <button
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-indigo-900/50 hover:bg-indigo-800/50 border border-indigo-700/50 cursor-pointer transition-colors"
+            onClick={() => setShowMomentumSelector(true)}
+          >
+            <span className="text-caption font-caption text-indigo-300">Cut to music</span>
+          </button>
+        )}
+        {(textBankA.length > 0 || textBankB.length > 0 || onCutByWord) && (
+          <button
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
+            onClick={handleCutByWord}
+          >
+            <span className="text-caption font-caption text-neutral-300">Cut by word</span>
+          </button>
+        )}
+        {bpmLabel && (
+          <span className="text-[10px] text-neutral-500 tabular-nums">{bpmLabel}</span>
+        )}
+      </div>
+
+      {/* BeatSelector modal */}
+      {showBeatSelector && (
+        <BeatSelector
+          beats={beats}
+          bpm={bpm}
+          duration={totalDuration}
+          onApply={handleBeatSelectionApply}
+          onCancel={() => setShowBeatSelector(false)}
+        />
+      )}
+
+      {/* MomentumSelector modal */}
+      {showMomentumSelector && (
+        <MomentumSelector
+          audioSource={audioUrl}
+          duration={totalDuration}
+          onApply={(cutPoints) => {
+            handleBeatSelectionApply(cutPoints);
+            setShowMomentumSelector(false);
+          }}
+          onCancel={() => setShowMomentumSelector(false)}
+        />
+      )}
     </div>
   );
 };

@@ -7,6 +7,7 @@ import usePreviewPlayback from '../usePreviewPlayback';
 import WordOverlay from './WordOverlay';
 import PreviewTransport from './PreviewTransport';
 import DraggableTextOverlay from './DraggableTextOverlay';
+import { FeatherRefreshCw } from '@subframe/core';
 
 const ASPECT_CSS = { '9:16': '9/16', '16:9': '16/9', '1:1': '1/1', '4:5': '4/5' };
 
@@ -21,6 +22,8 @@ const SoloClipPreview = ({
   textBankA = [],
   textBankB = [],
   aspectRatio = '9:16',
+  selectedTextA,
+  selectedTextB,
 }) => {
   // If allVideos provided, support cycling through them
   const videoPool = useMemo(() => {
@@ -68,18 +71,46 @@ const SoloClipPreview = ({
     }
   }, [currentTime, isPlaying]);
 
-  // Reroll — cycle to next video in pool
-  const handleReroll = useCallback(() => {
-    if (videoPool.length < 2) return;
-    setActiveVideoIdx(prev => {
-      let next;
-      do { next = Math.floor(Math.random() * videoPool.length); } while (next === prev && videoPool.length > 1);
-      return next;
-    });
-  }, [videoPool.length]);
+  // Pick random text from bank
+  const pickText = useCallback((bank) => {
+    if (!bank || bank.length === 0) return '';
+    return bank[Math.floor(Math.random() * bank.length)];
+  }, []);
 
-  const textA = textBankA.length > 0 ? textBankA[0] : '';
-  const textB = textBankB.length > 0 ? textBankB[0] : '';
+  // Reroll — cycle to next video in pool + randomize text from banks
+  const handleReroll = useCallback(() => {
+    if (videoPool.length > 1) {
+      setActiveVideoIdx(prev => {
+        let next;
+        do { next = Math.floor(Math.random() * videoPool.length); } while (next === prev && videoPool.length > 1);
+        return next;
+      });
+    }
+    setPreviewTextA(pickText(textBankA));
+    setPreviewTextB(pickText(textBankB));
+  }, [videoPool.length, pickText, textBankA, textBankB]);
+
+  const [previewTextA, setPreviewTextA] = useState(() => textBankA.length > 0 ? textBankA[0] : '');
+  const [previewTextB, setPreviewTextB] = useState(() => textBankB.length > 0 ? textBankB[0] : '');
+
+  // Auto-show text when banks change from empty→non-empty
+  useEffect(() => {
+    if (textBankA.length > 0 && !previewTextA) setPreviewTextA(textBankA[0]);
+  }, [textBankA, previewTextA]);
+  useEffect(() => {
+    if (textBankB.length > 0 && !previewTextB) setPreviewTextB(textBankB[0]);
+  }, [textBankB, previewTextB]);
+
+  // Sync text from parent click (overrides internal state)
+  useEffect(() => {
+    if (selectedTextA !== undefined) setPreviewTextA(selectedTextA || '');
+  }, [selectedTextA]);
+  useEffect(() => {
+    if (selectedTextB !== undefined) setPreviewTextB(selectedTextB || '');
+  }, [selectedTextB]);
+
+  const textA = previewTextA;
+  const textB = previewTextB;
 
   // Text track timing change
   const handleTextTrackChange = useCallback((trackId, changes) => {
@@ -162,6 +193,19 @@ const SoloClipPreview = ({
           />
         )}
 
+        {/* Reroll — overlaid at bottom center of preview */}
+        {videoPool.length > 0 && (
+          <div className="absolute bottom-3 left-0 right-0 flex justify-center z-10">
+            <button
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-black/60 hover:bg-black/80 border border-white/20 cursor-pointer transition-colors backdrop-blur-sm"
+              onClick={handleReroll}
+            >
+              <FeatherRefreshCw className="text-white/80" style={{ width: 12, height: 12 }} />
+              <span className="text-caption font-caption text-white/80">Reroll</span>
+            </button>
+          </div>
+        )}
+
         <audio ref={audioRef} preload="auto" style={{ display: 'none' }} />
       </div>
 
@@ -169,8 +213,7 @@ const SoloClipPreview = ({
       <PreviewTransport
         isPlaying={isPlaying}
         onToggle={toggle}
-        onReroll={videoPool.length > 1 ? handleReroll : null}
-        showReroll={videoPool.length > 1}
+        showReroll={false}
         progress={progress}
         items={videoPool}
         activeIdx={videoPool.length > 0 ? Math.min(Math.floor(progress * videoPool.length), videoPool.length - 1) : 0}

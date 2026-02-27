@@ -10,6 +10,7 @@ import { FeatherRefreshCw } from '@subframe/core';
 import PreviewTransport from './PreviewTransport';
 import DraggableTextOverlay from './DraggableTextOverlay';
 import BeatSelector from '../../BeatSelector';
+import MomentumSelector from '../../MomentumSelector';
 
 const ASPECT_CSS = { '9:16': '9/16', '16:9': '16/9', '1:1': '1/1', '4:5': '4/5' };
 
@@ -26,6 +27,9 @@ const PhotoMontagePreview = ({
   textBankB = [],
   aspectRatio = '9:16',
   onCutByWord,
+  onCutsApplied,
+  selectedTextA,
+  selectedTextB,
 }) => {
   const [playlist, setPlaylist] = useState(() => [...images]);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -34,6 +38,9 @@ const PhotoMontagePreview = ({
   const lastBeatIdxRef = useRef(-1);
   const lastAdvanceRef = useRef(0);
   const [showBeatSelector, setShowBeatSelector] = useState(false);
+  const [showMomentumSelector, setShowMomentumSelector] = useState(false);
+  const [previewTextA, setPreviewTextA] = useState(() => textBankA[0] || '');
+  const [previewTextB, setPreviewTextB] = useState(() => textBankB[0] || '');
 
   const totalDuration = 30;
   const photoDuration = playlist.length > 0 ? (totalDuration / playlist.length) / speed : 3;
@@ -66,6 +73,28 @@ const PhotoMontagePreview = ({
   const kbPresets = useMemo(() => {
     return playlist.map(() => KB_EFFECTS[Math.floor(Math.random() * KB_EFFECTS.length)]);
   }, [playlist]);
+
+  // Pick random text from bank
+  const pickText = useCallback((bank) => {
+    if (!bank || bank.length === 0) return '';
+    return bank[Math.floor(Math.random() * bank.length)];
+  }, []);
+
+  // Auto-show text when banks change from empty→non-empty
+  useEffect(() => {
+    if (textBankA.length > 0 && !previewTextA) setPreviewTextA(textBankA[0]);
+  }, [textBankA, previewTextA]);
+  useEffect(() => {
+    if (textBankB.length > 0 && !previewTextB) setPreviewTextB(textBankB[0]);
+  }, [textBankB, previewTextB]);
+
+  // Sync text from parent click (overrides internal state)
+  useEffect(() => {
+    if (selectedTextA !== undefined) setPreviewTextA(selectedTextA || '');
+  }, [selectedTextA]);
+  useEffect(() => {
+    if (selectedTextB !== undefined) setPreviewTextB(selectedTextB || '');
+  }, [selectedTextB]);
 
   // Advance photos
   useEffect(() => {
@@ -154,9 +183,10 @@ const PhotoMontagePreview = ({
       setActiveIdx(0);
       lastBeatIdxRef.current = -1;
       lastAdvanceRef.current = 0;
+      onCutsApplied?.(selectedBeatTimes);
     }
     setShowBeatSelector(false);
-  }, [images]);
+  }, [images, onCutsApplied]);
 
   // Cut by word — delegate to parent's transcription flow
   const handleCutByWord = useCallback(() => {
@@ -180,7 +210,7 @@ const PhotoMontagePreview = ({
     return estimatedBpm ? `${estimatedBpm} BPM (${beats.length} beats)` : `${beats.length} beats`;
   }, [beats, audioUrl]);
 
-  // Reroll — swap the photo under the playhead
+  // Reroll — swap the photo under the playhead + randomize text
   const handleReroll = useCallback(() => {
     if (images.length < 2) return;
     setPlaylist(prev => {
@@ -193,16 +223,26 @@ const PhotoMontagePreview = ({
       next[playheadIdx] = candidates[Math.floor(Math.random() * candidates.length)];
       return next;
     });
-  }, [images, progress]);
+    setPreviewTextA(pickText(textBankA));
+    setPreviewTextB(pickText(textBankB));
+  }, [images, progress, pickText, textBankA, textBankB]);
 
   // Jump to photo from timeline cell
   const handleCellClick = useCallback((idx) => {
     setActiveIdx(idx);
     lastAdvanceRef.current = currentTime;
-  }, [currentTime]);
+    setPreviewTextA(pickText(textBankA));
+    setPreviewTextB(pickText(textBankB));
+  }, [currentTime, pickText, textBankA, textBankB]);
 
-  const textA = textBankA.length > 0 ? textBankA[activeIdx % textBankA.length] : '';
-  const textB = textBankB.length > 0 ? textBankB[activeIdx % textBankB.length] : '';
+  // Cycle text on photo advance
+  useEffect(() => {
+    if (textBankA.length > 0) setPreviewTextA(textBankA[activeIdx % textBankA.length]);
+    if (textBankB.length > 0) setPreviewTextB(textBankB[activeIdx % textBankB.length]);
+  }, [activeIdx, textBankA, textBankB]);
+
+  const textA = previewTextA;
+  const textB = previewTextB;
 
   // Text track timing change
   const handleTextTrackChange = useCallback((trackId, changes) => {
@@ -282,6 +322,19 @@ const PhotoMontagePreview = ({
           />
         )}
 
+        {/* Reroll — overlaid at bottom center of preview */}
+        {images.length > 0 && (
+          <div className="absolute bottom-3 left-0 right-0 flex justify-center z-10">
+            <button
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-black/60 hover:bg-black/80 border border-white/20 cursor-pointer transition-colors backdrop-blur-sm"
+              onClick={handleReroll}
+            >
+              <FeatherRefreshCw className="text-white/80" style={{ width: 12, height: 12 }} />
+              <span className="text-caption font-caption text-white/80">Reroll</span>
+            </button>
+          </div>
+        )}
+
         <audio ref={audioRef} preload="auto" style={{ display: 'none' }} />
       </div>
 
@@ -301,23 +354,22 @@ const PhotoMontagePreview = ({
         onTextTrackChange={handleTextTrackChange}
       />
 
-      {/* Controls below preview — matches SlideshowNicheContent pattern */}
+      {/* Controls below transport */}
       <div className="flex items-center justify-center gap-3 mt-1">
-        {images.length >= 2 && (
-          <button
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
-            onClick={handleReroll}
-          >
-            <FeatherRefreshCw className="text-neutral-300" style={{ width: 12, height: 12 }} />
-            <span className="text-caption font-caption text-neutral-300">Reroll</span>
-          </button>
-        )}
         {audioUrl && (
           <button
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
             onClick={handleCutByBeat}
           >
             <span className="text-caption font-caption text-neutral-300">Cut by beat</span>
+          </button>
+        )}
+        {audioUrl && (
+          <button
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-indigo-900/50 hover:bg-indigo-800/50 border border-indigo-700/50 cursor-pointer transition-colors"
+            onClick={() => setShowMomentumSelector(true)}
+          >
+            <span className="text-caption font-caption text-indigo-300">Cut to music</span>
           </button>
         )}
         {(textBankA.length > 0 || textBankB.length > 0 || onCutByWord) && (
@@ -341,6 +393,19 @@ const PhotoMontagePreview = ({
           duration={totalDuration}
           onApply={handleBeatSelectionApply}
           onCancel={() => setShowBeatSelector(false)}
+        />
+      )}
+
+      {/* MomentumSelector modal */}
+      {showMomentumSelector && (
+        <MomentumSelector
+          audioSource={audioUrl}
+          duration={totalDuration}
+          onApply={(cutPoints) => {
+            handleBeatSelectionApply(cutPoints);
+            setShowMomentumSelector(false);
+          }}
+          onCancel={() => setShowMomentumSelector(false)}
         />
       )}
     </div>
