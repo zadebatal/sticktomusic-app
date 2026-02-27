@@ -18,6 +18,9 @@ import {
   updateMediaTrimPoints,
   addToVideoTextBank,
   removeFromVideoTextBank,
+  addToLibraryAsync,
+  addToCollectionAsync,
+  addToProjectPool,
 } from '../../services/libraryService';
 import useDragReorder from './shared/useDragReorder';
 import QuickTrimPopover from './shared/QuickTrimPopover';
@@ -368,6 +371,50 @@ const VideoNicheContent = ({
 
   const trimItem = useMemo(() => nicheMedia.find(m => m.id === trimItemId), [nicheMedia, trimItemId]);
   const trimData = niche?.trimData || {};
+
+  // Handle "Trim & Use" from AudioClipSelector — upload trimmed file, add to library, select as niche audio
+  const handleAudioTrimAndUse = useCallback(async (trimResult) => {
+    setShowAudioTrimmer(false);
+    if (!trimResult?.trimmedFile || !niche) return;
+
+    const { trimmedFile, trimmedName, duration: trimDuration } = trimResult;
+
+    try {
+      // Create a local blob URL for immediate use
+      const localUrl = URL.createObjectURL(trimmedFile);
+
+      // Upload to Firebase Storage
+      const { uploadFile } = await import('../../services/firebaseStorage');
+      const { url: storageUrl } = await uploadFile(trimmedFile, 'audio');
+
+      // Add to library
+      const mediaItem = {
+        type: 'audio',
+        name: trimmedName || trimmedFile.name,
+        url: storageUrl,
+        localUrl: storageUrl,
+        duration: trimDuration,
+        isTrimmed: true,
+        originalName: selectedAudio?.name,
+        createdAt: new Date().toISOString(),
+      };
+      const savedItem = await addToLibraryAsync(db, artistId, mediaItem);
+
+      // Add to niche collection + project pool
+      await addToCollectionAsync(db, artistId, niche.id, savedItem.id);
+      if (niche.projectId) {
+        addToProjectPool(artistId, niche.projectId, [savedItem.id], db);
+      }
+
+      // Select as niche audio
+      updateNicheAudioId(artistId, niche.id, savedItem.id, db);
+
+      URL.revokeObjectURL(localUrl);
+      toastSuccess(`Trimmed audio "${trimmedName}" is now active`);
+    } catch (err) {
+      toastError(`Failed to use trimmed audio: ${err.message}`);
+    }
+  }, [niche, artistId, db, selectedAudio, toastSuccess, toastError]);
 
   if (!niche || !activeFormat) return null;
 
@@ -791,7 +838,7 @@ const VideoNicheContent = ({
         <AudioClipSelector
           audioUrl={selectedAudio.localUrl || selectedAudio.url}
           audioName={selectedAudio.name || 'Audio'}
-          onSave={(trimData) => { setShowAudioTrimmer(false); }}
+          onSave={handleAudioTrimAndUse}
           onCancel={() => setShowAudioTrimmer(false)}
           db={db}
           artistId={artistId}
