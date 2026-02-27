@@ -32,7 +32,8 @@ const DraggableTextOverlay = ({
   }, [text]);
 
   const ts = textStyle;
-  const scaledSize = Math.round((ts.fontSize || 48) * 0.35);
+  const widthScale = (position.width || 80) / 80;
+  const scaledSize = Math.round((ts.fontSize || 48) * 0.35 * widthScale);
   const textTransform = ts.textCase === 'upper' ? 'uppercase' : ts.textCase === 'lower' ? 'lowercase' : 'none';
   const textShadow = ts.outline
     ? `0 0 4px ${ts.outlineColor || '#000'}, 1px 1px 2px ${ts.outlineColor || '#000'}, -1px -1px 2px ${ts.outlineColor || '#000'}`
