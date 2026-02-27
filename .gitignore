@@ -50,3 +50,6 @@ QA_OPENCLAW_TEST.md
 # E2E infrastructure
 e2e/
 playwright.config.js
+
+# Dogfood output
+dogfood-output/

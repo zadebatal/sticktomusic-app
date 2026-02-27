@@ -7,6 +7,7 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { getFirestore } from 'firebase/firestore';
 import log from '../utils/logger';
+import { checkQuotaBeforeUpload, incrementStorageUsed } from './storageQuotaService';
 
 // Firebase configuration - loaded from environment variables
 // IMPORTANT: Never hardcode credentials. Set these in Vercel environment variables.
@@ -252,8 +253,43 @@ export async function uploadThumbnail(dataUrl, fileName) {
   return result.url;
 }
 
+/**
+ * Upload a file with quota enforcement.
+ * Checks user quota before upload, increments usage counter on success.
+ * Use this for user-initiated uploads (media, audio, video).
+ * System-generated uploads (thumbnails, exports) should use raw uploadFile().
+ *
+ * @param {File} file - The file to upload
+ * @param {string} folder - Storage folder
+ * @param {function} onProgress - Progress callback
+ * @param {object} options - Additional options
+ * @param {object} quotaContext - { userData, userEmail } for quota enforcement
+ * @returns {Promise<{url: string, path: string}>}
+ */
+export async function uploadFileWithQuota(file, folder, onProgress, options = {}, quotaContext = {}) {
+  const { userData, userEmail } = quotaContext;
+
+  // Check quota before upload (skip if no userData — backwards compatible)
+  if (userData) {
+    const { allowed, message } = checkQuotaBeforeUpload(userData, file.size);
+    if (!allowed) {
+      throw new Error(message);
+    }
+  }
+
+  const result = await uploadFile(file, folder, onProgress, options);
+
+  // Increment usage counter after successful upload
+  if (userEmail && db) {
+    incrementStorageUsed(db, userEmail, file.size).catch(() => {});
+  }
+
+  return result;
+}
+
 export default {
   uploadFile,
+  uploadFileWithQuota,
   uploadVideo,
   uploadThumbnail,
   deleteFile,

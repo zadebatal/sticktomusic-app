@@ -1,0 +1,37 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ============================================
+    // HELPER FUNCTIONS
+    // ============================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidSize() {
+      return request.resource.size <= 500 * 1024 * 1024; // 500MB max per file
+    }
+
+    function isValidContentType() {
+      return request.resource.contentType.matches('video/.*')
+          || request.resource.contentType.matches('image/.*')
+          || request.resource.contentType.matches('audio/.*');
+    }
+
+    // ============================================
+    // STORAGE RULES
+    // ============================================
+
+    // All paths: authenticated writes with size/type validation, public reads
+    // (download URLs already contain security tokens)
+    match /{allPaths=**} {
+      allow read: if true;
+      allow write: if isAuthenticated()
+                   && isValidSize()
+                   && isValidContentType();
+      allow delete: if isAuthenticated();
+    }
+  }
+}

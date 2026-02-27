@@ -102,8 +102,12 @@ service cloud.firestore {
     match /allowedUsers/{userEmail} {
       allow read: if isAuthenticated();
       allow create, delete: if isConductor();
-      // Operators can update their own doc (e.g. assignedArtistIds), conductors can update any
-      allow update: if isConductor() || (isOperatorOrAbove() && request.auth.token.email == userEmail);
+      // Conductors can update any user; operators can update their own doc;
+      // any authenticated user can update ONLY their own storageUsedBytes field
+      allow update: if isConductor()
+        || (isOperatorOrAbove() && request.auth.token.email == userEmail)
+        || (isAuthenticated() && request.auth.token.email == userEmail
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['storageUsedBytes']));
     }
 
     // Applications collection (artist signup applications)
