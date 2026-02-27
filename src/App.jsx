@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 // Shared UI Components
@@ -15,25 +15,24 @@ import {
   ToastProvider
 } from './components/ui';
 
-// Video Studio - Flowstage-inspired workflow
-import { VideoStudio, SchedulingPage } from './components/VideoEditor';
+// Route-level lazy imports for code splitting
+const VideoStudio = React.lazy(() => import('./components/VideoEditor/VideoStudio'));
+const SchedulingPage = React.lazy(() => import('./components/VideoEditor/SchedulingPage'));
+const AnalyticsDashboard = React.lazy(() => import('./components/Analytics/AnalyticsDashboard'));
+const LandingPage = React.lazy(() => import('./components/LandingPage'));
+const TermsPage = React.lazy(() => import('./components/TermsPage'));
+const PrivacyPage = React.lazy(() => import('./components/PrivacyPage'));
+const PagesTab = React.lazy(() => import('./components/tabs/PagesTab'));
+const SettingsTab = React.lazy(() => import('./components/tabs/SettingsTab'));
+const ArtistDashboard = React.lazy(() => import('./components/tabs/ArtistDashboard'));
+const ArtistsManagement = React.lazy(() => import('./components/tabs/ArtistsManagement'));
+const OnboardingWizard = React.lazy(() => import('./components/OnboardingWizard'));
 
-// Analytics Dashboard
-import { AnalyticsDashboard } from './components/Analytics';
+// Non-lazy imports (needed at app shell level)
+import AppShell from './components/AppShell';
 
 // Theme system
 import { ThemeProvider, THEMES } from './contexts/ThemeContext';
-
-// New UI components (redesign)
-import LandingPage from './components/LandingPage';
-import TermsPage from './components/TermsPage';
-import PrivacyPage from './components/PrivacyPage';
-import AppShell from './components/AppShell';
-import PagesTab from './components/tabs/PagesTab';
-import SettingsTab from './components/tabs/SettingsTab';
-import ArtistDashboard from './components/tabs/ArtistDashboard';
-import ArtistsManagement from './components/tabs/ArtistsManagement';
-import OnboardingWizard from './components/OnboardingWizard';
 
 // Domain enforcement utilities
 import { isUserOperator, isArtistOrCollaborator, getEffectiveArtistId, ROLES } from './utils/roles';
@@ -3069,10 +3068,10 @@ const StickToMusic = () => {
 
   // ═══ Legal pages — accessible without auth ═══
   if (location.pathname === '/terms') {
-    return <ThemeProvider><TermsPage /></ThemeProvider>;
+    return <ThemeProvider><Suspense fallback={<LoadingSpinner />}><TermsPage /></Suspense></ThemeProvider>;
   }
   if (location.pathname === '/privacy') {
-    return <ThemeProvider><PrivacyPage /></ThemeProvider>;
+    return <ThemeProvider><Suspense fallback={<LoadingSpinner />}><PrivacyPage /></Suspense></ThemeProvider>;
   }
 
   // ═══ NEW ROUTING: Non-authenticated users → Landing Page ═══
@@ -3080,13 +3079,15 @@ const StickToMusic = () => {
     return (
       <ThemeProvider>
         <ToastProvider>
-          <LandingPage
-            onLogin={handleLandingLogin}
-            onSignup={handleLandingSignup}
-            onGoogleAuth={handleGoogleSignIn}
-            authError={authError}
-            authLoading={isLoggingIn || isSigningUp}
-          />
+          <Suspense fallback={<LoadingSpinner />}>
+            <LandingPage
+              onLogin={handleLandingLogin}
+              onSignup={handleLandingSignup}
+              onGoogleAuth={handleGoogleSignIn}
+              authError={authError}
+              authLoading={isLoggingIn || isSigningUp}
+            />
+          </Suspense>
         </ToastProvider>
       </ThemeProvider>
     );
@@ -3293,6 +3294,7 @@ const StickToMusic = () => {
           currentArtistId={effectiveArtistId}
           onArtistChange={() => {}}
         >
+          <Suspense fallback={<LoadingSpinner />}>
           {/* Studio — rendered inline inside AppShell so sidebar stays visible */}
           {artistTab === 'studio' ? (
             <VideoStudio
@@ -3396,6 +3398,7 @@ const StickToMusic = () => {
             />
           )}
 
+          </Suspense>
           <ToastContainer />
         </AppShell>
         </ToastProvider>
@@ -3685,6 +3688,7 @@ const StickToMusic = () => {
           currentArtistId={currentArtistId}
           onArtistChange={handleArtistChange}
         >
+        <Suspense fallback={<LoadingSpinner />}>
         {/* Video Studio — rendered inline inside AppShell so sidebar stays visible */}
         {showVideoEditor ? (
           <VideoStudio
@@ -5853,6 +5857,7 @@ const StickToMusic = () => {
           />
         )}
 
+        </Suspense>
         </AppShell>
 
         {/* ADD ARTIST MODAL */}

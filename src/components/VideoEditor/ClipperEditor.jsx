@@ -27,10 +27,7 @@ import useIsMobile from '../../hooks/useIsMobile';
 import useUnsavedChanges from './shared/useUnsavedChanges';
 import { uploadFile } from '../../services/firebaseStorage';
 import { addToLibrary, addToCollection, addToProjectPool } from '../../services/libraryService';
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile, toBlobURL } from '@ffmpeg/util';
-
-// ── FFmpeg singleton ──
+// ── FFmpeg singleton (lazy-loaded) ──
 let ffmpegInstance = null;
 let ffmpegLoadPromise = null;
 
@@ -39,6 +36,8 @@ const loadFFmpeg = async () => {
   if (ffmpegLoadPromise) return ffmpegLoadPromise;
   ffmpegLoadPromise = (async () => {
     try {
+      const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+      const { toBlobURL } = await import('@ffmpeg/util');
       const ffmpeg = new FFmpeg();
       const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
       await ffmpeg.load({
@@ -417,6 +416,7 @@ const ClipperEditor = ({
 
     try {
       const ffmpeg = await loadFFmpeg();
+      const { fetchFile } = await import('@ffmpeg/util');
       let sourceData;
       if (sourceFile) {
         sourceData = await fetchFile(sourceFile);

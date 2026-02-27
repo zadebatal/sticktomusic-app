@@ -1,5 +1,3 @@
-import { Mp3Encoder } from '@breezystack/lamejs';
-
 /**
  * Audio Trimmer Utility
  * Extracts a section of audio using the Web Audio API and returns it as a new File.
@@ -64,7 +62,7 @@ export async function trimAudioToFile(audioSource, startTime, endTime, outputNam
   onProgress?.('Encoding MP3...');
 
   // Encode as MP3
-  const mp3Blob = encodeMP3(trimmedBuffer);
+  const mp3Blob = await encodeMP3(trimmedBuffer);
 
   // Clean up
   await audioContext.close();
@@ -79,7 +77,8 @@ export async function trimAudioToFile(audioSource, startTime, endTime, outputNam
  * @param {AudioBuffer} buffer - The audio buffer to encode
  * @returns {Blob} - MP3-encoded blob
  */
-function encodeMP3(buffer) {
+async function encodeMP3(buffer) {
+  const { Mp3Encoder } = await import('@breezystack/lamejs');
   const numChannels = buffer.numberOfChannels;
   const sampleRate = buffer.sampleRate;
   const kbps = 128; // Bitrate: 128kbps provides good quality-to-size ratio

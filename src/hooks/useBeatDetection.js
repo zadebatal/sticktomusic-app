@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { guess } from 'web-audio-beat-detector';
 import { normalizeBeatsToTrimRange } from '../utils/timelineNormalization';
 import log from '../utils/logger';
 
@@ -102,6 +101,7 @@ export const useBeatDetection = () => {
       log('Beat detection: Running BPM analysis...');
 
       try {
+        const { guess } = await import('web-audio-beat-detector');
         const result = await guess(audioBuffer);
 
         log('Beat detection result:', result);

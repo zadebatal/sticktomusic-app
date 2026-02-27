@@ -1,14 +1,14 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo, Suspense } from 'react';
 import { useBeatDetection } from '../../hooks/useBeatDetection';
 import WordTimeline from './WordTimeline';
 import BeatSelector from './BeatSelector';
 import MomentumSelector from './MomentumSelector';
 import LyricBank from './LyricBank';
 import TemplatePicker from './TemplatePicker';
-import SoloClipEditor from './SoloClipEditor';
-import MultiClipEditor from './MultiClipEditor';
-import PhotoMontageEditor from './PhotoMontageEditor';
-import ClipperEditor from './ClipperEditor';
+const SoloClipEditor = React.lazy(() => import('./SoloClipEditor'));
+const MultiClipEditor = React.lazy(() => import('./MultiClipEditor'));
+const PhotoMontageEditor = React.lazy(() => import('./PhotoMontageEditor'));
+const ClipperEditor = React.lazy(() => import('./ClipperEditor'));
 import AudioClipSelector from './AudioClipSelector';
 import CloudImportButton from './CloudImportButton';
 import useEditorHistory from '../../hooks/useEditorHistory';
@@ -2297,6 +2297,7 @@ const VideoEditorModal = ({
   // ── Solo Clip mode ──
   if (editorMode === 'solo-clip') {
     return (
+      <Suspense fallback={<EditorShell><div className="flex items-center justify-center h-full text-neutral-500">Loading editor...</div></EditorShell>}>
       <SoloClipEditor
         category={category}
         existingVideo={existingVideo}
@@ -2313,12 +2314,14 @@ const VideoEditorModal = ({
         onSavePreset={onSavePreset}
         nicheTextBanks={category?.nicheTextBanks || null}
       />
+      </Suspense>
     );
   }
 
   // ── Multi-Clip mode ──
   if (editorMode === 'multi-clip') {
     return (
+      <Suspense fallback={<EditorShell><div className="flex items-center justify-center h-full text-neutral-500">Loading editor...</div></EditorShell>}>
       <MultiClipEditor
         category={category}
         existingVideo={existingVideo}
@@ -2335,12 +2338,14 @@ const VideoEditorModal = ({
         onSavePreset={onSavePreset}
         nicheTextBanks={category?.nicheTextBanks || null}
       />
+      </Suspense>
     );
   }
 
   // ── Photo Montage mode ──
   if (editorMode === 'photo-montage') {
     return (
+      <Suspense fallback={<EditorShell><div className="flex items-center justify-center h-full text-neutral-500">Loading editor...</div></EditorShell>}>
       <PhotoMontageEditor
         category={category}
         existingVideo={existingVideo}
@@ -2357,12 +2362,14 @@ const VideoEditorModal = ({
         onSavePreset={onSavePreset}
         nicheTextBanks={category?.nicheTextBanks || null}
       />
+      </Suspense>
     );
   }
 
   // ── Clipper mode ──
   if (editorMode === 'clipper') {
     return (
+      <Suspense fallback={<EditorShell><div className="flex items-center justify-center h-full text-neutral-500">Loading editor...</div></EditorShell>}>
       <ClipperEditor
         category={category}
         existingVideo={existingVideo}
@@ -2374,6 +2381,7 @@ const VideoEditorModal = ({
         nicheId={category?.id}
         projectId={category?.projectId}
       />
+      </Suspense>
     );
   }
 

@@ -4,8 +4,6 @@
  * Uses Canvas + MediaRecorder for capture, FFmpeg.wasm for MP4 conversion.
  */
 
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import log from '../utils/logger';
 import { KB_EFFECTS } from '../components/VideoEditor/shared/kenBurnsPresets';
 
@@ -23,6 +21,8 @@ const loadFFmpeg = async () => {
 
   ffmpegLoadPromise = (async () => {
     try {
+      const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+      const { toBlobURL } = await import('@ffmpeg/util');
       const ffmpeg = new FFmpeg();
       const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
       await ffmpeg.load({
@@ -249,6 +249,7 @@ export const renderPhotoMontage = async ({ photos, aspectRatio = '9:16', transit
   onProgress(safeProgress(78));
   try {
     const ffmpeg = await loadFFmpeg();
+    const { fetchFile } = await import('@ffmpeg/util');
     const inputExt = isNativeMP4 ? 'mp4' : 'webm';
     await ffmpeg.writeFile(`input.${inputExt}`, await fetchFile(rawBlob));
 

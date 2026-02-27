@@ -4,8 +4,6 @@
  * With FFmpeg.wasm for WebM to MP4 conversion (TikTok compatibility)
  */
 
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import log from '../utils/logger';
 
 let ffmpegInstance = null;
@@ -39,6 +37,8 @@ const loadFFmpeg = async (onProgress = () => {}) => {
   ffmpegLoadPromise = (async () => {
     try {
       log('[VideoExport] Loading FFmpeg.wasm...');
+      const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+      const { toBlobURL } = await import('@ffmpeg/util');
       const ffmpeg = new FFmpeg();
 
       ffmpeg.on('progress', ({ progress }) => {
@@ -96,6 +96,7 @@ const processVideo = async (videoBlob, onProgress = () => {}, audioInfo = null, 
     const audioName = 'audio.mp3';
     const outputName = 'output.mp4';
 
+    const { fetchFile } = await import('@ffmpeg/util');
     await ffmpeg.writeFile(inputName, await fetchFile(videoBlob));
 
     // Build FFmpeg command

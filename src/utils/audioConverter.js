@@ -6,8 +6,6 @@
  *
  * Uses Web Audio API for decoding + lamejs for MP3 encoding (already in project).
  */
-import { Mp3Encoder } from '@breezystack/lamejs';
-
 const AUDIO_EXTENSIONS = ['.wav', '.m4a', '.aif', '.aiff', '.ogg', '.flac', '.aac', '.wma'];
 
 /**
@@ -36,7 +34,8 @@ export const needsAudioConversion = (file) => {
 /**
  * Encode an AudioBuffer as MP3 using lamejs.
  */
-function encodeMP3(buffer) {
+async function encodeMP3(buffer) {
+  const { Mp3Encoder } = await import('@breezystack/lamejs');
   const numChannels = Math.min(buffer.numberOfChannels, 2);
   const sampleRate = buffer.sampleRate;
   const kbps = 192;
@@ -94,7 +93,7 @@ export const convertAudioToMp3 = async (file) => {
 
   try {
     const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-    const mp3Blob = encodeMP3(audioBuffer);
+    const mp3Blob = await encodeMP3(audioBuffer);
     const newName = file.name.replace(/\.[^.]+$/, '.mp3');
     return new File([mp3Blob], newName, { type: 'audio/mpeg' });
   } finally {
