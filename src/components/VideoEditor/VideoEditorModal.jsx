@@ -240,7 +240,7 @@ const VideoEditorModal = ({
 
   // Auto-populate timeline with collection/library videos on first open
   useEffect(() => {
-    if (!existingVideo && clips.length === 0 && category?.videos?.length > 0) {
+    if ((!existingVideo || existingVideo._nicheGenerateCount) && clips.length === 0 && category?.videos?.length > 0) {
       const initialClips = category.videos.map((v, i) => ({
         id: `clip_${Date.now()}_${i}`,
         sourceId: v.id,

@@ -1116,9 +1116,18 @@ const MultiClipEditor = ({
   const autoGenTriggeredRef = useRef(false);
   useEffect(() => {
     if (autoGenTriggeredRef.current || !nicheGenCount) return;
+    const categoryVideos = category?.videos || [];
+    if (categoryVideos.length < 2) return;
     const template = allVideos[0];
-    if (!template?.clips || template.clips.length === 0) return;
-    if ((category?.videos || []).length < 2) return;
+    // Auto-populate template with first clip if empty (category loads async)
+    if (!template?.clips || template.clips.length === 0) {
+      setAllVideos(prev => {
+        const copy = [...prev];
+        copy[0] = { ...copy[0], clips: [categoryVideos[0]] };
+        return copy;
+      });
+      return; // Re-render will trigger this effect again with clip populated
+    }
     autoGenTriggeredRef.current = true;
     executeGeneration();
   }, [nicheGenCount, allVideos, category, executeGeneration]);

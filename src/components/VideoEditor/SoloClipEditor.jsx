@@ -1021,9 +1021,18 @@ const SoloClipEditor = ({
   const autoGenTriggeredRef = useRef(false);
   useEffect(() => {
     if (autoGenTriggeredRef.current || !nicheGenCount) return;
+    const categoryVideos = category?.videos || [];
+    if (categoryVideos.length < 2) return;
     const template = allVideos[0];
-    if (!template?.clip) return;
-    if ((category?.videos || []).length < 2) return;
+    // Auto-populate template with first clip if empty (category loads async)
+    if (!template?.clip) {
+      setAllVideos(prev => {
+        const copy = [...prev];
+        copy[0] = { ...copy[0], clip: categoryVideos[0] };
+        return copy;
+      });
+      return; // Re-render will trigger this effect again with clip populated
+    }
     autoGenTriggeredRef.current = true;
     executeGeneration();
   }, [nicheGenCount, allVideos, category, executeGeneration]);
