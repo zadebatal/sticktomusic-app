@@ -100,7 +100,8 @@ const VideoEditorModal = ({
     isTemplate: true
   }]);
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
-  const [generateCount, setGenerateCount] = useState(10);
+  const nicheGenCount = existingVideo?._nicheGenerateCount || null;
+  const [generateCount, setGenerateCount] = useState(nicheGenCount ? Math.max(nicheGenCount - 1, 1) : 10);
   const [isGenerating, setIsGenerating] = useState(false);
   const [keepTemplateText, setKeepTemplateText] = useState('none');
 
@@ -1196,9 +1197,20 @@ const VideoEditorModal = ({
     }
 
     setAllVideos(prev => [...prev, ...newVideos]);
+    setActiveVideoIndex(allVideos.length);
     setIsGenerating(false);
     toast.success(`Generated ${generateCount} variations`);
   }, [allVideos, generateCount, libraryVideos, getTextBanks, keepTemplateText, toast]);
+
+  // Auto-generate on mount when coming from niche preview (Create N flow)
+  const autoGenTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (autoGenTriggeredRef.current || !nicheGenCount) return;
+    const template = allVideos[0];
+    if (!template?.clips?.length) return;
+    autoGenTriggeredRef.current = true;
+    executeGeneration();
+  }, [nicheGenCount, allVideos, executeGeneration]);
 
   // ── Save all videos ──
   const handleSaveAllAndClose = useCallback(async () => {

@@ -98,8 +98,9 @@ const SoloClipEditor = ({
     }];
   });
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
+  const nicheGenCount = existingVideo?._nicheGenerateCount || null;
   const [generateCount, setGenerateCount] = useState(
-    Math.min(10, Math.max(1, (category?.videos?.length || 1) - 1))
+    nicheGenCount ? Math.max(nicheGenCount - 1, 1) : Math.min(10, Math.max(1, (category?.videos?.length || 1) - 1))
   );
   const [isGenerating, setIsGenerating] = useState(false);
   const [keepTemplateText, setKeepTemplateText] = useState('none');
@@ -963,11 +964,6 @@ const SoloClipEditor = ({
       toastError('No clip loaded. Add a clip first.');
       return;
     }
-    if (template.textOverlays.length === 0) {
-      toastError('Add at least one text overlay to the template before generating.');
-      return;
-    }
-
     const availableClips = (category?.videos || []).filter(v => v.id !== template.clip.id);
     if (availableClips.length === 0) {
       toastError('Need more than one clip to generate.');
@@ -1014,11 +1010,23 @@ const SoloClipEditor = ({
       }
 
       setAllVideos(prev => [...prev, ...generated]);
+      setActiveVideoIndex(allVideos.length);
       toastSuccess(`Generated ${generated.length} video${generated.length !== 1 ? 's' : ''}!`);
     } finally {
       setIsGenerating(false);
     }
   }, [allVideos, generateCount, category, getVideoTextBanks, keepTemplateText, toastSuccess, toastError]);
+
+  // Auto-generate on mount when coming from niche preview (Create N flow)
+  const autoGenTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (autoGenTriggeredRef.current || !nicheGenCount) return;
+    const template = allVideos[0];
+    if (!template?.clip) return;
+    if ((category?.videos || []).length < 2) return;
+    autoGenTriggeredRef.current = true;
+    executeGeneration();
+  }, [nicheGenCount, allVideos, category, executeGeneration]);
 
   // ── Save Draft (active video only) ──
   const handleSaveDraft = useCallback(() => {
@@ -1469,15 +1477,15 @@ const SoloClipEditor = ({
                     <span className="w-20 text-caption font-caption text-neutral-400 text-right shrink-0">Audio</span>
                     <div className="flex-1 h-8 rounded-md border border-neutral-800 bg-black relative overflow-hidden">
                       <div style={{ position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', gap: '3px', zIndex: 3, backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: '4px', padding: '2px 5px' }}>
-                        <span style={{ fontSize: '10px' }}>{'\uD83C\uDFB5'}</span>
+                        <FeatherMusic style={{ width: 10, height: 10, color: '#22c55e' }} />
                         <input type="range" min="0" max="1" step="0.05" value={externalAudioVolume}
                           onChange={e => setExternalAudioVolume(parseFloat(e.target.value))}
                           style={{ width: '36px', height: '3px', accentColor: '#22c55e', cursor: 'pointer' }}
                           onClick={e => e.stopPropagation()} />
                       </div>
-                      <div style={{ position: 'absolute', left: '68px', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: '1px' }}>
+                      <div style={{ position: 'absolute', left: '68px', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: 0 }}>
                         {waveformData.map((amplitude, i) => (
-                          <div key={i} style={{ flex: 1, minWidth: '1px', backgroundColor: 'rgba(34, 197, 94, 0.5)', height: `${amplitude * 100}%`, opacity: 0.6 }} />
+                          <div key={i} style={{ flex: 1, backgroundColor: 'rgba(34, 197, 94, 0.5)', height: `${amplitude * 100}%`, opacity: 0.6 }} />
                         ))}
                       </div>
                     </div>
@@ -1494,18 +1502,18 @@ const SoloClipEditor = ({
                       <div className="flex-1 h-8 rounded-md border border-neutral-800 bg-black relative overflow-hidden">
                         <div style={{ position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', gap: '3px', zIndex: 3, backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: '4px', padding: '2px 5px' }}>
                           <button onClick={e => { e.stopPropagation(); setSourceVideoMuted(m => !m); }}
-                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '10px', opacity: (hasExternal && sourceVideoMuted) ? 0.4 : 1 }}
-                          >{sourceVideoMuted ? '\uD83D\uDD07' : '\uD83C\uDFAC'}</button>
+                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', opacity: (hasExternal && sourceVideoMuted) ? 0.4 : 1, display: 'flex', alignItems: 'center' }}
+                          >{sourceVideoMuted ? <FeatherVolumeX style={{ width: 10, height: 10 }} /> : <FeatherVolume2 style={{ width: 10, height: 10 }} />}</button>
                           {hasExternal && (
                             <input type="range" min="0" max="1" step="0.05" value={sourceVideoVolume}
                               onChange={e => setSourceVideoVolume(parseFloat(e.target.value))}
-                              style={{ width: '36px', height: '3px', accentColor: '#f59e0b', cursor: 'pointer' }}
+                              style={{ width: '36px', height: '3px', accentColor: '#f59e0b', cursor: 'pointer', opacity: sourceVideoMuted ? 0.3 : 1 }}
                               onClick={e => e.stopPropagation()} />
                           )}
                         </div>
-                        <div style={{ position: 'absolute', left: hasExternal ? '68px' : '20px', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: '1px' }}>
+                        <div style={{ position: 'absolute', left: hasExternal ? '68px' : '20px', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: 0 }}>
                           {data.map((amplitude, i) => (
-                            <div key={i} style={{ flex: 1, minWidth: '1px', backgroundColor: 'rgba(245, 158, 11, 0.4)', height: `${amplitude * 100}%`, opacity: (hasExternal && sourceVideoMuted) ? 0.3 : 0.6 }} />
+                            <div key={i} style={{ flex: 1, backgroundColor: 'rgba(245, 158, 11, 0.4)', height: `${amplitude * 100}%`, opacity: (hasExternal && sourceVideoMuted) ? 0.3 : 0.6 }} />
                           ))}
                         </div>
                       </div>
@@ -1522,7 +1530,7 @@ const SoloClipEditor = ({
                   }} onMouseDown={(e) => {
                     e.preventDefault(); e.stopPropagation();
                     setPlayheadDragging(true);
-                    document.body.style.userSelect = 'none';
+                    document.body.style.userSelect = 'none'; document.body.style.WebkitUserSelect = 'none';
                     const wasPlaying = isPlaying;
                     if (isPlaying) { videoRef.current?.pause(); audioRef.current?.pause(); cancelAnimationFrame(animationRef.current); setIsPlaying(false); }
                     const handleDragMove = (moveE) => {
@@ -1532,7 +1540,7 @@ const SoloClipEditor = ({
                       handleSeek(pct * timelineDuration);
                     };
                     const handleDragEnd = () => {
-                      setPlayheadDragging(false); document.body.style.userSelect = '';
+                      setPlayheadDragging(false); document.body.style.userSelect = ''; document.body.style.WebkitUserSelect = '';
                       window.removeEventListener('mousemove', handleDragMove);
                       window.removeEventListener('mouseup', handleDragEnd);
                       if (wasPlaying) { videoRef.current?.play(); if (audioRef.current?.src) audioRef.current.play().catch(() => {}); animationRef.current = requestAnimationFrame(playbackLoop); setIsPlaying(true); }

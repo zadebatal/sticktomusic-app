@@ -94,8 +94,9 @@ const MultiClipEditor = ({
     }];
   });
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
+  const nicheGenCount = existingVideo?._nicheGenerateCount || null;
   const [generateCount, setGenerateCount] = useState(
-    Math.min(10, Math.max(1, (category?.videos?.length || 1) - 1))
+    nicheGenCount ? Math.max(nicheGenCount - 1, 1) : Math.min(10, Math.max(1, (category?.videos?.length || 1) - 1))
   );
   const [isGenerating, setIsGenerating] = useState(false);
   const [keepTemplateText, setKeepTemplateText] = useState('none');
@@ -1052,11 +1053,6 @@ const MultiClipEditor = ({
       toastError('No clips in timeline. Add clips first.');
       return;
     }
-    if (template.textOverlays.length === 0) {
-      toastError('Add at least one text overlay to the template before generating.');
-      return;
-    }
-
     const availableClips = (category?.videos || []).filter(v => !template.clips.some(tc => tc.id === v.id));
     if (availableClips.length === 0) {
       toastError('Need more clips available to generate.');
@@ -1109,11 +1105,23 @@ const MultiClipEditor = ({
       }
 
       setAllVideos(prev => [...prev, ...generated]);
+      setActiveVideoIndex(allVideos.length);
       toastSuccess(`Generated ${generated.length} video${generated.length !== 1 ? 's' : ''}!`);
     } finally {
       setIsGenerating(false);
     }
   }, [allVideos, generateCount, category, getVideoTextBanks, keepTemplateText, toastSuccess, toastError]);
+
+  // Auto-generate on mount when coming from niche preview (Create N flow)
+  const autoGenTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (autoGenTriggeredRef.current || !nicheGenCount) return;
+    const template = allVideos[0];
+    if (!template?.clips || template.clips.length === 0) return;
+    if ((category?.videos || []).length < 2) return;
+    autoGenTriggeredRef.current = true;
+    executeGeneration();
+  }, [nicheGenCount, allVideos, category, executeGeneration]);
 
   // ── Save Draft (active video only) ──
   const handleSaveDraft = useCallback(() => {
@@ -1892,9 +1900,9 @@ const MultiClipEditor = ({
                     <FeatherMusic className="w-3 h-3" />Audio
                   </span>
                   <div className="flex-1 h-8 rounded-md border border-neutral-800 bg-black relative overflow-hidden">
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', gap: '1px' }}>
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', gap: 0 }}>
                       {waveformData.map((amplitude, i) => (
-                        <div key={i} style={{ flex: 1, minWidth: '1px', backgroundColor: 'rgba(34, 197, 94, 0.5)', height: `${amplitude * 100}%`, opacity: 0.6 }} />
+                        <div key={i} style={{ flex: 1, backgroundColor: 'rgba(34, 197, 94, 0.5)', height: `${amplitude * 100}%`, opacity: 0.6 }} />
                       ))}
                     </div>
                   </div>
@@ -1915,9 +1923,9 @@ const MultiClipEditor = ({
                       const widthPct = timelineDuration > 0 ? (clipDur / timelineDuration) * 100 : 100;
                       const data = clipWaveforms[clipId] || [];
                       return (
-                        <div key={idx} style={{ position: 'absolute', left: `${leftPct}%`, width: `${widthPct}%`, top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: '1px', borderRight: idx < clips.length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none' }}>
+                        <div key={idx} style={{ position: 'absolute', left: `${leftPct}%`, width: `${widthPct}%`, top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: 0, borderRight: idx < clips.length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none' }}>
                           {data.map((amplitude, i) => (
-                            <div key={i} style={{ flex: 1, minWidth: '1px', backgroundColor: 'rgba(245, 158, 11, 0.4)', height: `${amplitude * 100}%`, opacity: sourceVideoMuted ? 0.3 : 0.6 }} />
+                            <div key={i} style={{ flex: 1, backgroundColor: 'rgba(245, 158, 11, 0.4)', height: `${amplitude * 100}%`, opacity: sourceVideoMuted ? 0.3 : 0.6 }} />
                           ))}
                         </div>
                       );
@@ -1996,8 +2004,9 @@ const MultiClipEditor = ({
                           <span className="text-caption font-caption text-neutral-400 w-16">Source</span>
                           <input type="range" min="0" max="1" step="0.05" value={sourceVideoVolume}
                             onChange={e => setSourceVideoVolume(parseFloat(e.target.value))}
-                            className="flex-1 h-1 accent-blue-500 cursor-pointer" />
-                          <span className="text-caption font-caption text-neutral-400 w-8">{Math.round(sourceVideoVolume * 100)}%</span>
+                            className="flex-1 h-1 accent-blue-500 cursor-pointer"
+                            style={{ opacity: sourceVideoMuted ? 0.3 : 1, pointerEvents: sourceVideoMuted ? 'none' : 'auto' }} />
+                          <span className="text-caption font-caption text-neutral-400 w-8" style={{ opacity: sourceVideoMuted ? 0.3 : 1 }}>{Math.round(sourceVideoVolume * 100)}%</span>
                         </div>
                         <Button variant={sourceVideoMuted ? 'destructive-secondary' : 'neutral-tertiary'} size="small" onClick={() => setSourceVideoMuted(m => !m)}>
                           {sourceVideoMuted ? 'Source Muted' : 'Mute Source'}

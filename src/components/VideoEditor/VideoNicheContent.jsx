@@ -768,7 +768,7 @@ const VideoNicheContent = ({
         }
         createCount={createCount}
         onCreateCountChange={setCreateCount}
-        onCreateClick={(templateSettings) => onMakeVideo && onMakeVideo(activeFormat, niche.id, null, templateSettings)}
+        onCreateClick={(templateSettings) => onMakeVideo && onMakeVideo(activeFormat, niche.id, createCount > 1 ? { _nicheGenerateCount: createCount } : null, templateSettings)}
         createLabel={`Create ${createCount} ${activeFormat.name}${createCount > 1 ? 's' : ''}`}
         selectedAudio={selectedAudio}
         projectAudio={projectAudio}

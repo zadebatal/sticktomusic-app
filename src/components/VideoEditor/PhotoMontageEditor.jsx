@@ -91,7 +91,8 @@ const PhotoMontageEditor = ({
     }];
   });
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
-  const [generateCount, setGenerateCount] = useState(5);
+  const nicheGenCount = existingVideo?._nicheGenerateCount || null;
+  const [generateCount, setGenerateCount] = useState(nicheGenCount ? Math.max(nicheGenCount - 1, 1) : 5);
   const [isGenerating, setIsGenerating] = useState(false);
   const [keepTemplateText, setKeepTemplateText] = useState('none');
   const [name, setName] = useState(existingVideo?.name || 'Photo Montage');
@@ -354,6 +355,7 @@ const PhotoMontageEditor = ({
     }
 
     setAllVideos(prev => [...prev, ...newVideos]);
+    setActiveVideoIndex(allVideos.length);
     setIsGenerating(false);
     toastSuccess(`Generated ${generateCount} variations`);
   }, [allVideos, generateCount, keepTemplateText, toastSuccess, toastError]);
@@ -384,6 +386,25 @@ const PhotoMontageEditor = ({
     // Fallback to full library for non-niche usage
     return library.filter(m => m.type === MEDIA_TYPES.IMAGE && m.url && !m.url.startsWith('blob:'));
   }, [library, category]);
+
+  // Auto-generate on mount when coming from niche preview (Create N flow)
+  const autoGenTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (autoGenTriggeredRef.current || !nicheGenCount) return;
+    if (libraryImages.length === 0) return;
+    const template = allVideos[0];
+    // Auto-populate template with all library images if empty
+    if (!template?.photos?.length) {
+      setAllVideos(prev => {
+        const copy = [...prev];
+        copy[0] = { ...copy[0], photos: libraryImages };
+        return copy;
+      });
+      return; // Let re-render trigger this effect again with photos populated
+    }
+    autoGenTriggeredRef.current = true;
+    executeGeneration();
+  }, [nicheGenCount, allVideos, libraryImages, executeGeneration]);
 
   // ── Multi-select for library picker ──
   const {

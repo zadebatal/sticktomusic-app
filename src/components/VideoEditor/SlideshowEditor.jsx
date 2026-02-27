@@ -2162,6 +2162,7 @@ const SlideshowEditor = ({
       }
 
       setAllSlideshows(prev => [...prev, ...generated]);
+      setActiveSlideshowIndex(allSlideshows.length);
       toastSuccess(`Generated ${generated.length} slideshows!`);
     } finally {
       setIsGenerating(false);

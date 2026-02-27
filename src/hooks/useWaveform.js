@@ -47,7 +47,7 @@ export default function useWaveform({ selectedAudio, clips = [], getClipUrl }) {
           ? selectedAudio.localUrl
           : selectedAudio.url;
       if (!source) { setWaveformData([]); return; }
-      const data = await generateWaveformData(source);
+      const data = await generateWaveformData(source, 400);
       if (!cancelled && mountedRef.current) {
         setWaveformData(data);
       }
@@ -74,8 +74,8 @@ export default function useWaveform({ selectedAudio, clips = [], getClipUrl }) {
         // Use clip-duration-aware waveform so same-URL clips show their own audio portion
         const clipDur = clip.duration || 0;
         const data = clipDur > 0
-          ? await generateWaveformForClip(url, clipDur, 200)
-          : await generateWaveformData(url, 200);
+          ? await generateWaveformForClip(url, clipDur, 400)
+          : await generateWaveformData(url, 400);
         if (data.length > 0) {
           results[key] = data;
         }
