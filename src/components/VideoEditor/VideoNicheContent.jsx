@@ -700,6 +700,7 @@ const VideoNicheContent = ({
                     textStyle={ts}
                     textPosition={tp}
                     aspectRatio={ar}
+                    onCutByWord={selectedAudio ? handleAutoTranscribe : undefined}
                   />
                 );
               case 'solo_clip':
@@ -744,6 +745,7 @@ const VideoNicheContent = ({
                     textBankA={textBank1}
                     textBankB={textBank2}
                     aspectRatio={ar}
+                    onCutByWord={selectedAudio ? handleAutoTranscribe : undefined}
                   />
                 );
               default:
@@ -756,6 +758,7 @@ const VideoNicheContent = ({
                     textStyle={ts}
                     textPosition={tp}
                     aspectRatio={ar}
+                    onCutByWord={selectedAudio ? handleAutoTranscribe : undefined}
                   />
                 );
             }

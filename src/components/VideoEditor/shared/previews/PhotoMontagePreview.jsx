@@ -9,6 +9,7 @@ import { useBeatDetection } from '../../../../hooks/useBeatDetection';
 import { FeatherRefreshCw } from '@subframe/core';
 import PreviewTransport from './PreviewTransport';
 import DraggableTextOverlay from './DraggableTextOverlay';
+import BeatSelector from '../../BeatSelector';
 
 const ASPECT_CSS = { '9:16': '9/16', '16:9': '16/9', '1:1': '1/1', '4:5': '4/5' };
 
@@ -24,6 +25,7 @@ const PhotoMontagePreview = ({
   textBankA = [],
   textBankB = [],
   aspectRatio = '9:16',
+  onCutByWord,
 }) => {
   const [playlist, setPlaylist] = useState(() => [...images]);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -31,6 +33,7 @@ const PhotoMontagePreview = ({
   const [transProgress, setTransProgress] = useState(0);
   const lastBeatIdxRef = useRef(-1);
   const lastAdvanceRef = useRef(0);
+  const [showBeatSelector, setShowBeatSelector] = useState(false);
 
   const totalDuration = 30;
   const photoDuration = playlist.length > 0 ? (totalDuration / playlist.length) / speed : 3;
@@ -129,20 +132,22 @@ const PhotoMontagePreview = ({
     return photoDuration > 0 ? Math.min(timeSinceAdvance / photoDuration, 1) : 0;
   }, [currentTime, beatSync, beats, photoDuration, totalDuration]);
 
-  // Cut by beat — enable beat-sync (photos transition on detected beats)
+  // Cut by beat — open BeatSelector modal (same as full editors)
   const handleCutByBeat = useCallback(() => {
-    if (!beats.length && !audioUrl) return;
-    // If beats aren't detected yet, trigger analysis
     if (!beats.length && audioUrl) {
       analyzeAudio(audioUrl).catch(() => {});
+      return;
     }
-    // Toggle beat sync on — the photo advance effect already handles beats
-    // We force a playlist rebuild to match beat count
-    if (beats.length > 0 && playlist.length > 0) {
-      // Duplicate images to fill beat count
-      const beatCount = beats.length;
+    if (beats.length > 0) {
+      setShowBeatSelector(true);
+    }
+  }, [beats, audioUrl, analyzeAudio]);
+
+  // BeatSelector apply — rebuild playlist with one photo per selected beat
+  const handleBeatSelectionApply = useCallback((selectedBeatTimes) => {
+    if (selectedBeatTimes.length > 0 && images.length > 0) {
       const filled = [];
-      for (let i = 0; i < beatCount; i++) {
+      for (let i = 0; i < selectedBeatTimes.length; i++) {
         filled.push(images[i % images.length]);
       }
       setPlaylist(filled);
@@ -150,17 +155,21 @@ const PhotoMontagePreview = ({
       lastBeatIdxRef.current = -1;
       lastAdvanceRef.current = 0;
     }
-  }, [beats, audioUrl, analyzeAudio, images, playlist.length]);
+    setShowBeatSelector(false);
+  }, [images]);
 
-  // Cut by word — create timed text overlays from text bank entries
+  // Cut by word — delegate to parent's transcription flow
   const handleCutByWord = useCallback(() => {
+    if (onCutByWord) {
+      onCutByWord();
+      return;
+    }
+    // Fallback: inline text timing
     const allWords = [...textBankA, ...textBankB].filter(Boolean);
     if (!allWords.length) return;
-    const wordDur = totalDuration / allWords.length;
-    // Distribute text bank entries as timed overlays across Bank A timing
     setTextTimingA({ start: 0, end: totalDuration });
     setTextTimingB({ start: 0, end: totalDuration });
-  }, [textBankA, textBankB, totalDuration]);
+  }, [onCutByWord, textBankA, textBankB, totalDuration]);
 
   // BPM label for transport
   const bpmLabel = useMemo(() => {
@@ -311,7 +320,7 @@ const PhotoMontagePreview = ({
             <span className="text-caption font-caption text-neutral-300">Cut by beat</span>
           </button>
         )}
-        {(textBankA.length > 0 || textBankB.length > 0) && (
+        {(textBankA.length > 0 || textBankB.length > 0 || onCutByWord) && (
           <button
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
             onClick={handleCutByWord}
@@ -323,6 +332,17 @@ const PhotoMontagePreview = ({
           <span className="text-[10px] text-neutral-500 tabular-nums">{bpmLabel}</span>
         )}
       </div>
+
+      {/* BeatSelector modal */}
+      {showBeatSelector && (
+        <BeatSelector
+          beats={beats}
+          bpm={beats.length > 1 ? Math.round(60 / ((beats[beats.length - 1] - beats[0]) / (beats.length - 1))) : 120}
+          duration={totalDuration}
+          onApply={handleBeatSelectionApply}
+          onCancel={() => setShowBeatSelector(false)}
+        />
+      )}
     </div>
   );
 };

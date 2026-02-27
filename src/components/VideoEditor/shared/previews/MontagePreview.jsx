@@ -8,6 +8,7 @@ import { useBeatDetection } from '../../../../hooks/useBeatDetection';
 import { FeatherRefreshCw } from '@subframe/core';
 import PreviewTransport from './PreviewTransport';
 import DraggableTextOverlay from './DraggableTextOverlay';
+import BeatSelector from '../../BeatSelector';
 
 const ASPECT_CSS = { '9:16': '9/16', '16:9': '16/9', '1:1': '1/1', '4:5': '4/5' };
 const MAX_PRELOADED = 10;
@@ -20,6 +21,7 @@ const MontagePreview = ({
   textStyle = {},
   textPosition = 'center',
   aspectRatio = '9:16',
+  onCutByWord,
 }) => {
   const [playlist, setPlaylist] = useState(() => [...media]);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -27,6 +29,7 @@ const MontagePreview = ({
   const [previewTextB, setPreviewTextB] = useState(() => textBankB[0] || '');
   const lastBeatIdxRef = useRef(-1);
   const videoRefsMap = useRef({});
+  const [showBeatSelector, setShowBeatSelector] = useState(false);
 
   const { beats, bpm, analyzeAudio } = useBeatDetection();
   const { audioRef, currentTime, isPlaying, progress, toggle, seek } = usePreviewPlayback({
@@ -113,30 +116,43 @@ const MontagePreview = ({
     if (textBankB.length > 0 && !previewTextB) setPreviewTextB(textBankB[0]);
   }, [textBankB, previewTextB]);
 
-  // Cut by beat — expand playlist to one clip per beat
+  // Cut by beat — open BeatSelector modal (same as full editors)
   const handleCutByBeat = useCallback(() => {
     if (!beats.length && audioUrl) {
       analyzeAudio(audioUrl).catch(() => {});
       return;
     }
-    if (beats.length > 0 && media.length > 0) {
+    if (beats.length > 0) {
+      setShowBeatSelector(true);
+    }
+  }, [beats, audioUrl, analyzeAudio]);
+
+  // BeatSelector apply — rebuild playlist with one clip per selected beat
+  const handleBeatSelectionApply = useCallback((selectedBeatTimes) => {
+    if (selectedBeatTimes.length > 0 && media.length > 0) {
       const filled = [];
-      for (let i = 0; i < beats.length; i++) {
+      for (let i = 0; i < selectedBeatTimes.length; i++) {
         filled.push(media[i % media.length]);
       }
       setPlaylist(filled);
       setActiveIdx(0);
       lastBeatIdxRef.current = -1;
     }
-  }, [beats, audioUrl, analyzeAudio, media]);
+    setShowBeatSelector(false);
+  }, [media]);
 
-  // Cut by word — set text timing to span full duration
+  // Cut by word — delegate to parent's transcription flow
   const handleCutByWord = useCallback(() => {
+    if (onCutByWord) {
+      onCutByWord();
+      return;
+    }
+    // Fallback: inline text timing
     const allWords = [...textBankA, ...textBankB].filter(Boolean);
     if (!allWords.length) return;
     setTextTimingA({ start: 0, end: 30 });
     setTextTimingB({ start: 0, end: 30 });
-  }, [textBankA, textBankB]);
+  }, [onCutByWord, textBankA, textBankB]);
 
   // BPM label
   const bpmLabel = useMemo(() => {
@@ -307,7 +323,7 @@ const MontagePreview = ({
               <span className="text-caption font-caption text-neutral-300">Cut by beat</span>
             </button>
           )}
-          {(textBankA.length > 0 || textBankB.length > 0) && (
+          {(textBankA.length > 0 || textBankB.length > 0 || onCutByWord) && (
             <button
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
               onClick={handleCutByWord}
@@ -319,6 +335,17 @@ const MontagePreview = ({
             <span className="text-[10px] text-neutral-500 tabular-nums">{bpmLabel}</span>
           )}
         </div>
+      )}
+
+      {/* BeatSelector modal */}
+      {showBeatSelector && (
+        <BeatSelector
+          beats={beats}
+          bpm={bpm}
+          duration={30}
+          onApply={handleBeatSelectionApply}
+          onCancel={() => setShowBeatSelector(false)}
+        />
       )}
     </div>
   );
