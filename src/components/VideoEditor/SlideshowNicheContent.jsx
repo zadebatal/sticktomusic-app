@@ -93,6 +93,7 @@ const SlideshowNicheContent = ({
   const [textPositions, setTextPositions] = useState({});
   const [textOverrides, setTextOverrides] = useState({}); // { [bankIdx]: editedText } — preview-only, doesn't modify bank
   const [lockedSlides, setLockedSlides] = useState({}); // { [bankIdx]: true } — locked text persists across generated timelines
+  const [selectedTextIdx, setSelectedTextIdx] = useState({}); // { [bankIdx]: entryIdx | null } — which text entry is selected for preview
   const [liveSettings, setLiveSettings] = useState(null);
   const [lightboxItem, setLightboxItem] = useState(null);
 
@@ -373,10 +374,24 @@ const SlideshowNicheContent = ({
                     const text = getTextBankText(entry);
                     const style = getTextBankStyle(entry);
                     return (
-                      <div key={entryIdx} className="flex w-full items-center gap-2 rounded-md bg-black px-2 py-1.5 flex-none">
+                      <div
+                        key={entryIdx}
+                        className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 flex-none cursor-pointer transition-colors ${
+                          selectedTextIdx[bankIdx] === entryIdx
+                            ? 'bg-indigo-500/30 ring-1 ring-indigo-500'
+                            : 'bg-black hover:bg-black/60'
+                        }`}
+                        onClick={() => {
+                          setSelectedTextIdx(prev => ({
+                            ...prev,
+                            [bankIdx]: prev[bankIdx] === entryIdx ? null : entryIdx,
+                          }));
+                          setPreviewSlideIdx(bankIdx);
+                        }}
+                      >
                         <FeatherType className="text-caption font-caption flex-none" style={{ color: style?.color || getTextIconColor(label), width: 12, height: 12 }} />
                         <span className="grow text-caption font-caption text-[#ffffffff] truncate">{text}</span>
-                        <IconButton variant="neutral-tertiary" size="small" icon={<FeatherX />} aria-label="Remove text" onClick={() => handleRemoveText(bankIdx, entryIdx)} />
+                        <IconButton variant="neutral-tertiary" size="small" icon={<FeatherX />} aria-label="Remove text" onClick={(e) => { e.stopPropagation(); handleRemoveText(bankIdx, entryIdx); if (selectedTextIdx[bankIdx] === entryIdx) setSelectedTextIdx(prev => ({ ...prev, [bankIdx]: null })); }} />
                       </div>
                     );
                   })}
@@ -492,7 +507,8 @@ const SlideshowNicheContent = ({
                 {(() => {
                   const texts = pipeline?.textBanks?.[previewSlideIdx] || [];
                   if (!texts.length) return null;
-                  const entry = texts[0];
+                  const selIdx = selectedTextIdx[previewSlideIdx];
+                  const entry = selIdx != null && texts[selIdx] ? texts[selIdx] : texts[0];
                   const bankText = getTextBankText(entry);
                   if (!bankText) return null;
                   const displayText = textOverrides[previewSlideIdx] ?? bankText;
@@ -579,11 +595,12 @@ const SlideshowNicheContent = ({
               const pickedId = previewPicks[bankIdx];
               const item = pickedId ? library.find(m => m.id === pickedId) : null;
               const imgUrl = item?.url || item?.thumbnailUrl || null;
-              // Build text overlays from first text bank entry + any overrides
+              // Build text overlays from selected (or first) text bank entry + any overrides
               const texts = pipeline?.textBanks?.[bankIdx] || [];
               const textOverlayList = [];
               if (texts.length > 0) {
-                const entry = texts[0];
+                const selIdx = selectedTextIdx[bankIdx];
+                const entry = selIdx != null && texts[selIdx] ? texts[selIdx] : texts[0];
                 const bankText = getTextBankText(entry);
                 const displayText = textOverrides[bankIdx] ?? bankText;
                 if (displayText) {
