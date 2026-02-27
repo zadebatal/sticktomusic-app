@@ -56,7 +56,7 @@ const ClipperNicheContent = ({
   const [previewUrl, setPreviewUrl] = useState(null);
   const [audioPickerOpen, setAudioPickerOpen] = useState(false);
 
-  // All clipper drafts for this niche
+  // All clipper drafts for this niche (for Sessions section / re-editing)
   const clipperDrafts = useMemo(() =>
     (createdContent?.videos || []).filter(v =>
       v.collectionId === niche?.id && v.editorMode === 'clipper'
@@ -64,30 +64,28 @@ const ClipperNicheContent = ({
     [createdContent, niche?.id]
   );
 
-  // Collect all buckets and clips across all drafts
+  // Exported clips from niche media bank (first-class library items)
+  const exportedClips = useMemo(() => {
+    if (!niche) return [];
+    return library.filter(item =>
+      (niche.mediaIds || []).includes(item.id) && item.isClipperClip
+    );
+  }, [niche, library]);
+
+  // Group exported clips by bucket
   const { allBuckets, clipsByBucket, totalClips } = useMemo(() => {
     const bucketSet = new Set();
     const clipMap = {};
-    let total = 0;
 
-    for (const draft of clipperDrafts) {
-      (draft.buckets || []).forEach(b => bucketSet.add(b));
-      (draft.clips || []).forEach(clip => {
-        const bucket = clip.bucket || 'Bucket 1';
-        bucketSet.add(bucket);
-        if (!clipMap[bucket]) clipMap[bucket] = [];
-        clipMap[bucket].push({
-          ...clip,
-          draftId: draft.id,
-          draftName: draft.name,
-          sourceName: draft.sourceName,
-        });
-        total++;
-      });
+    for (const clip of exportedClips) {
+      const bucket = clip.bucket || 'Bucket 1';
+      bucketSet.add(bucket);
+      if (!clipMap[bucket]) clipMap[bucket] = [];
+      clipMap[bucket].push(clip);
     }
 
-    return { allBuckets: Array.from(bucketSet), clipsByBucket: clipMap, totalClips: total };
-  }, [clipperDrafts]);
+    return { allBuckets: Array.from(bucketSet), clipsByBucket: clipMap, totalClips: exportedClips.length };
+  }, [exportedClips]);
 
   const toggleBucket = useCallback((name) => {
     setCollapsedBuckets(prev => ({ ...prev, [name]: !prev[name] }));
@@ -208,14 +206,14 @@ const ClipperNicheContent = ({
                   <div className="flex flex-col">
                     {clips.map((clip, i) => (
                       <div
-                        key={clip.id || `${clip.draftId}_${i}`}
+                        key={clip.id || i}
                         className="flex items-center gap-3 px-4 py-2.5 border-t border-neutral-800/50 hover:bg-neutral-800/20 transition-colors"
                       >
                         {/* Play button */}
-                        {clip.cloudUrl ? (
+                        {clip.url ? (
                           <button
                             className="flex h-9 w-9 items-center justify-center rounded-md bg-neutral-800 hover:bg-neutral-700 transition-colors flex-none"
-                            onClick={() => setPreviewUrl(previewUrl === clip.cloudUrl ? null : clip.cloudUrl)}
+                            onClick={() => setPreviewUrl(previewUrl === clip.url ? null : clip.url)}
                           >
                             <FeatherPlay className="text-white" style={{ width: 14, height: 14 }} />
                           </button>
@@ -230,17 +228,16 @@ const ClipperNicheContent = ({
                           <span className="text-sm text-white truncate">{clip.name}</span>
                           <div className="flex items-center gap-2">
                             <span className="text-[11px] text-neutral-500">
-                              {formatTimePrecise(clip.start)} → {formatTimePrecise(clip.end)}
+                              {formatTimePrecise(clip.sourceStart)} → {formatTimePrecise(clip.sourceEnd)}
                             </span>
                             <Badge variant="neutral">{formatTime(clip.duration)}</Badge>
-                            {clip.cloudUrl && <Badge variant="success">Exported</Badge>}
                           </div>
                         </div>
 
                         {/* Source */}
-                        {clip.sourceName && (
-                          <span className="text-[10px] text-neutral-600 truncate max-w-[100px]" title={clip.sourceName}>
-                            {clip.sourceName}
+                        {clip.sourceVideoName && (
+                          <span className="text-[10px] text-neutral-600 truncate max-w-[100px]" title={clip.sourceVideoName}>
+                            {clip.sourceVideoName}
                           </span>
                         )}
                       </div>

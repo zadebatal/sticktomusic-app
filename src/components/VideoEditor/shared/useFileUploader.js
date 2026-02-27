@@ -3,13 +3,13 @@
  * Used by UploadFinishedMediaModal and FinishedMediaNicheContent
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { uploadFile, generateThumbnail } from '../../../services/firebaseStorage';
+import { uploadFileWithQuota, generateThumbnail } from '../../../services/firebaseStorage';
 import { createScheduledPost } from '../../../services/scheduledPostsService';
 import log from '../../../utils/logger';
 
 const MAX_CONCURRENT = 3;
 
-export default function useFileUploader({ db, artistId, nicheId = null, nicheName = null }) {
+export default function useFileUploader({ db, artistId, nicheId = null, nicheName = null, user = null }) {
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const mountedRef = useRef(true);
@@ -84,10 +84,11 @@ export default function useFileUploader({ db, artistId, nicheId = null, nicheNam
         setFiles(prev => prev.map((f, i) => i === currentIdx ? { ...f, status: 'uploading' } : f));
 
         try {
-          const { url: cloudUrl } = await uploadFile(entry.file, 'finished-media', (pct) => {
+          const quotaCtx = { userData: user, userEmail: user?.email };
+          const { url: cloudUrl } = await uploadFileWithQuota(entry.file, 'finished-media', (pct) => {
             if (!mountedRef.current) return;
             setFiles(prev => prev.map((f, i) => i === currentIdx ? { ...f, progress: Math.round(pct) } : f));
-          });
+          }, {}, quotaCtx);
 
           let thumbnail = cloudUrl;
           if (entry.type === 'video') {
@@ -135,7 +136,7 @@ export default function useFileUploader({ db, artistId, nicheId = null, nicheNam
 
     if (mountedRef.current) setUploading(false);
     return completed;
-  }, [files, db, artistId, nicheId, nicheName]);
+  }, [files, db, artistId, nicheId, nicheName, user]);
 
   const clearFiles = useCallback(() => {
     setFiles(prev => {

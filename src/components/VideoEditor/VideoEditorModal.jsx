@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useBeatDetection } from '../../hooks/useBeatDetection';
 import WordTimeline from './WordTimeline';
 import BeatSelector from './BeatSelector';
+import MomentumSelector from './MomentumSelector';
 import LyricBank from './LyricBank';
 import TemplatePicker from './TemplatePicker';
 import SoloClipEditor from './SoloClipEditor';
@@ -217,7 +218,11 @@ const VideoEditorModal = ({
   const [isMuted, setIsMuted] = useState(false);
 
   // ── Audio leveling state ──
-  const [sourceVideoMuted, setSourceVideoMuted] = useState(existingVideo?.sourceVideoMuted ?? false);
+  const [sourceVideoMuted, setSourceVideoMuted] = useState(() => {
+    if (existingVideo?.sourceVideoMuted != null) return existingVideo.sourceVideoMuted;
+    if (existingVideo?.audio && !existingVideo.audio.isSourceAudio) return true;
+    return false;
+  });
   const [sourceVideoVolume, setSourceVideoVolume] = useState(existingVideo?.sourceVideoVolume ?? 1.0);
   const [externalAudioVolume, setExternalAudioVolume] = useState(existingVideo?.externalAudioVolume ?? 1.0);
 
@@ -249,7 +254,8 @@ const VideoEditorModal = ({
         thumbnail: v.thumbnailUrl || v.thumbnail,
         startTime: i * 2,
         duration: 2,
-        locked: false
+        locked: false,
+        sourceOffset: 0
       }));
       setClips(initialClips);
     }
@@ -333,9 +339,14 @@ const VideoEditorModal = ({
   const [showLyricsEditor, setShowLyricsEditor] = useState(false);
   const [showWordTimeline, setShowWordTimeline] = useState(false);
   const [showBeatSelector, setShowBeatSelector] = useState(false);
+  const [showMomentumSelector, setShowMomentumSelector] = useState(false);
   const [selectedClips, setSelectedClips] = useState([]);
   const [timelineScale, setTimelineScale] = useState(1);
+  const [userMaxDuration, setUserMaxDuration] = useState(existingVideo?.maxDuration || 30);
   const [clipResize, setClipResize] = useState({ active: false, clipIndex: -1, edge: null, startX: 0, startDuration: 0 });
+
+  // Cut line drag state (draggable boundaries between clips on waveform tracks)
+  const [cutLineDrag, setCutLineDrag] = useState(null); // { active, clipIndex, startX, originalStartTime, originalPrevDuration }
 
   // AI Transcription state
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
@@ -376,9 +387,9 @@ const VideoEditorModal = ({
 
   // Waveform via shared hook (below)
 
-  // Marquee selection state for inline timeline
-  const [marqueeState, setMarqueeState] = useState(null);
-  const justFinishedMarqueeRef = useRef(false);
+  // Slip editing state (click-hold + drag to shift sourceOffset within fixed clip boundary)
+  const [slipEdit, setSlipEdit] = useState(null); // { active, clipIndex, startX, originalOffset }
+  const slipTimerRef = useRef(null);
 
   // Audio upload + trim state
   const [showAudioTrimmer, setShowAudioTrimmer] = useState(false);
@@ -388,7 +399,7 @@ const VideoEditorModal = ({
   // ── Right Sidebar: collapsible sections ──
   const [videoName, setVideoName] = useState(existingVideo?.name || 'Untitled Video');
   const { renderCollapsibleSection } = useCollapsibleSections({
-    audio: true, clips: true, lyrics: false, textStyle: false
+    audio: true, clips: true, text: false, lyrics: false, textStyle: false
   });
 
   // Beat detection
@@ -412,6 +423,7 @@ const VideoEditorModal = ({
   const isPlayingRef = useRef(false); // Ref to avoid stale closure in animation loop
   const videoCache = useRef(new Map()); // Cache for preloaded video blobs
   const preloadQueue = useRef([]); // Queue for videos being preloaded
+  const videoLoadingTimer = useRef(null); // Delayed loading indicator (avoids flash for cached videos)
   const lastClipIdRef = useRef(null); // Track last clip to detect changes
   // Track if we're still in initial load phase (loading existing video with words)
   // This prevents clearing words due to minor duration changes when audio loads
@@ -494,6 +506,7 @@ const VideoEditorModal = ({
   const audioStartTime = selectedAudio?.startTime || 0;
   const audioEndTime = selectedAudio?.endTime || selectedAudio?.duration || duration;
   const trimmedDuration = audioEndTime - audioStartTime;
+  const hasExternalAudio = !!(selectedAudio?.url && !selectedAudio?.isSourceAudio);
 
   // Filter beats to only those within the trimmed range and normalize to local time
   // INVARIANT: All beat timestamps shown to user and used for clip creation must be in LOCAL time (0 to trimmedDuration)
@@ -579,6 +592,61 @@ const VideoEditorModal = ({
     getClipUrl
   });
 
+  // Downsample a waveform array to maxBars using peak-picking
+  const downsample = useCallback((data, maxBars = 200) => {
+    if (!data || data.length === 0) return data || [];
+    if (data.length <= maxBars) return data;
+    const step = data.length / maxBars;
+    const result = [];
+    for (let i = 0; i < maxBars; i++) {
+      const start = Math.floor(i * step);
+      const end = Math.floor((i + 1) * step);
+      let max = 0;
+      for (let j = start; j < end; j++) max = Math.max(max, data[j] || 0);
+      result.push(max);
+    }
+    return result;
+  }, []);
+
+  // Per-clip waveform segments for external audio (sliced from waveformData proportionally)
+  const perClipAudioWaveforms = useMemo(() => {
+    if (!waveformData.length || !clips.length) return [];
+    const totalDur = clips.reduce((s, c) => s + (c.duration || 1), 0);
+    let sampleOffset = 0;
+    return clips.map(clip => {
+      const sampleCount = Math.max(1, Math.round((clip.duration || 1) / totalDur * waveformData.length));
+      const sliced = waveformData.slice(sampleOffset, sampleOffset + sampleCount);
+      sampleOffset += sampleCount;
+      return downsample(sliced, 30); // max 30 bars per clip segment
+    });
+  }, [waveformData, clips, downsample]);
+
+  // Per-clip waveform segments for source audio
+  const perClipSourceWaveforms = useMemo(() => {
+    if (!clips.length || !Object.keys(clipWaveforms).length) return [];
+    return clips.map(clip => {
+      const clipId = clip.id || clip.sourceId;
+      const data = clipWaveforms[clipId] || [];
+      return downsample(data, 30); // max 30 bars per clip segment
+    });
+  }, [clips, clipWaveforms, downsample]);
+
+  // Total clip duration for timeline-relative positioning (clips may not span full audio)
+  const totalClipDuration = useMemo(() => clips.reduce((s, c) => s + (c.duration || 1), 0), [clips]);
+
+  // Stable timeline duration: always the max of clips, audio, and user cap — audio is a guide, not a constraint
+  const timelineDuration = useMemo(() => {
+    const audioDur = hasExternalAudio ? trimmedDuration : 0;
+    return Math.max(userMaxDuration, totalClipDuration, audioDur);
+  }, [hasExternalAudio, trimmedDuration, userMaxDuration, totalClipDuration]);
+
+  // Auto-grow userMaxDuration when clips exceed it (adding clips can grow, removing never shrinks)
+  useEffect(() => {
+    if (totalClipDuration > userMaxDuration) {
+      setUserMaxDuration(Math.ceil(totalClipDuration));
+    }
+  }, [totalClipDuration, userMaxDuration]);
+
   // Handle play/pause with trim boundary support + wall-clock fallback
   const playStartRef = useRef(null); // wall-clock start time for fallback
   const playOffsetRef = useRef(0);   // currentTime when play was pressed
@@ -587,6 +655,8 @@ const VideoEditorModal = ({
     const startBoundary = selectedAudio?.startTime || 0;
     const endBoundary = selectedAudio?.endTime || (audioRef.current?.duration > 0 ? audioRef.current.duration : 0) || duration;
     const effectiveDuration = endBoundary - startBoundary;
+    // Loop at the shorter of audio duration and total clip duration (don't play into empty space)
+    const loopEnd = totalClipDuration > 0 ? Math.min(effectiveDuration > 0 ? effectiveDuration : Infinity, totalClipDuration) : effectiveDuration;
 
     // Update ref to avoid stale closure
     isPlayingRef.current = isPlaying;
@@ -612,7 +682,7 @@ const VideoEditorModal = ({
         if (hasAudio && audioRef.current && !audioRef.current.paused && audioRef.current.currentTime > 0) {
           const actualTime = audioRef.current.currentTime;
 
-          if (effectiveDuration > 0 && actualTime >= endBoundary) {
+          if (loopEnd > 0 && actualTime - startBoundary >= loopEnd) {
             audioRef.current.currentTime = startBoundary;
             relTime = 0;
           } else {
@@ -624,7 +694,7 @@ const VideoEditorModal = ({
           relTime = playOffsetRef.current + elapsed;
 
           // Loop if we've exceeded duration
-          if (effectiveDuration > 0 && relTime >= effectiveDuration) {
+          if (loopEnd > 0 && relTime >= loopEnd) {
             relTime = 0;
             playStartRef.current = performance.now();
             playOffsetRef.current = 0;
@@ -651,16 +721,17 @@ const VideoEditorModal = ({
       }
     };
   // eslint-disable-next-line
-  }, [isPlaying, selectedAudio, duration]);
+  }, [isPlaying, selectedAudio, duration, totalClipDuration]);
 
   // Sync video with audio time (use active video element)
   useEffect(() => {
     const activeVideo = activeVideoRef.current === 'A' ? videoRef.current : videoRefB.current;
     if (activeVideo && currentClip?.url) {
-      // Calculate position within the clip
+      // Calculate position within the clip (respects slip editing sourceOffset)
       const clipStartTime = currentClip.startTime || 0;
       const clipDuration = currentClip.duration || 2;
-      const positionInClip = (currentTime - clipStartTime) % clipDuration;
+      const sourceOffset = currentClip.sourceOffset || 0;
+      const positionInClip = sourceOffset + ((currentTime - clipStartTime) % clipDuration);
 
       // Set video time if significantly different
       if (Math.abs(activeVideo.currentTime - positionInClip) > 0.3) {
@@ -726,9 +797,10 @@ const VideoEditorModal = ({
     const handleMouseMove = (e) => {
       if (!timelineRef.current) return;
       const rect = timelineRef.current.getBoundingClientRect();
-      const clickX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-      const percent = clickX / rect.width;
-      const newTime = percent * trimmedDuration;
+      const contentWidth = timelineRef.current.scrollWidth || rect.width;
+      const clickX = Math.max(0, Math.min(contentWidth, e.clientX - rect.left + timelineRef.current.scrollLeft));
+      const percent = clickX / contentWidth;
+      const newTime = percent * timelineDuration;
       handleSeek(newTime);
     };
 
@@ -750,33 +822,34 @@ const VideoEditorModal = ({
       document.body.style.userSelect = '';
       document.body.style.WebkitUserSelect = '';
     };
-  }, [playheadDragging, trimmedDuration, handleSeek]);
+  }, [playheadDragging, timelineDuration, handleSeek]);
 
   // Double-buffered video loading for smooth clip transitions
+  // Uses blob cache when available for instant switching
   useEffect(() => {
-    const clipUrl = getClipUrl(currentClip);
-    if (!clipUrl) return;
+    const rawUrl = getClipUrl(currentClip);
+    if (!rawUrl) return;
 
     const clipChanged = lastClipIdRef.current !== currentClip?.id;
     lastClipIdRef.current = currentClip?.id;
 
     if (!clipChanged) return;
 
-    // Get the inactive video element to preload next clip
+    // Prefer cached blob URL, fall back to raw URL
+    const clipUrl = videoCache.current.get(rawUrl) || rawUrl;
+
     const activeVideo = activeVideoRef.current === 'A' ? videoRef.current : videoRefB.current;
     const inactiveVideo = activeVideoRef.current === 'A' ? videoRefB.current : videoRef.current;
 
     if (activeVideo && activeVideo.src !== clipUrl) {
       // Check if inactive video already has this clip loaded
       if (inactiveVideo && inactiveVideo.src === clipUrl && inactiveVideo.readyState >= 3) {
-        // Swap videos - the inactive one is ready!
         activeVideoRef.current = activeVideoRef.current === 'A' ? 'B' : 'A';
         if (isPlaying) {
           inactiveVideo.play().catch(() => {});
         }
         activeVideo.pause();
       } else {
-        // Load into active video
         activeVideo.src = clipUrl;
         activeVideo.load();
         if (isPlaying) {
@@ -789,7 +862,8 @@ const VideoEditorModal = ({
     const currentIndex = clips.findIndex(c => c.id === currentClip?.id);
     if (currentIndex >= 0 && currentIndex < clips.length - 1) {
       const nextClip = clips[currentIndex + 1];
-      const nextUrl = getClipUrl(nextClip);
+      const nextRaw = getClipUrl(nextClip);
+      const nextUrl = nextRaw ? (videoCache.current.get(nextRaw) || nextRaw) : null;
       if (inactiveVideo && nextUrl && inactiveVideo.src !== nextUrl) {
         inactiveVideo.src = nextUrl;
         inactiveVideo.load();
@@ -797,43 +871,53 @@ const VideoEditorModal = ({
     }
   }, [currentClip?.url, currentClip?.id, currentClip?.localUrl, getClipUrl, isPlaying, clips]);
 
-  // Preload upcoming clips for smoother playback
+  // Preload clip videos as blob URLs — current clip first, then rest sequentially
+  // Prioritizes current clip so it loads fastest, avoids bandwidth contention
   useEffect(() => {
     if (!clips.length) return;
-
-    // Find current clip index
-    const currentIndex = clips.findIndex(c => c.id === currentClip?.id);
-    if (currentIndex === -1) return;
-
-    // Preload next 3 clips
-    const clipsToPreload = clips.slice(currentIndex + 1, currentIndex + 4);
-
-    clipsToPreload.forEach(clip => {
-      const url = getClipUrl(clip);
-      if (!url || videoCache.current.has(url) || preloadQueue.current.includes(url)) return;
-
+    let cancelled = false;
+    const fetchAndCache = async (url) => {
+      if (videoCache.current.has(url) || preloadQueue.current.includes(url)) return;
       preloadQueue.current.push(url);
-
-      // Create a hidden video element to preload
-      const preloadVideo = document.createElement('video');
-      preloadVideo.preload = 'auto';
-      preloadVideo.muted = true;
-      preloadVideo.crossOrigin = 'anonymous';
-      preloadVideo.src = url;
-
-      preloadVideo.oncanplaythrough = () => {
-        videoCache.current.set(url, true);
+      try {
+        const res = await fetch(url, { mode: 'cors' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        if (!cancelled) {
+          const blobUrl = URL.createObjectURL(blob);
+          videoCache.current.set(url, blobUrl);
+          // If this is the current clip, swap the active video to blob URL for faster decode
+          const activeVideo = activeVideoRef.current === 'A' ? videoRef.current : videoRefB.current;
+          if (activeVideo && activeVideo.src === url) {
+            activeVideo.src = blobUrl;
+            activeVideo.load();
+          }
+        }
+      } catch {
+        // Ignore — raw URL still works as fallback
+      } finally {
         preloadQueue.current = preloadQueue.current.filter(u => u !== url);
-      };
-
-      preloadVideo.onerror = () => {
-        preloadQueue.current = preloadQueue.current.filter(u => u !== url);
-      };
-
-      // Start loading
-      preloadVideo.load();
-    });
-  }, [clips, currentClip?.id, getClipUrl]);
+      }
+    };
+    const preloadAll = async () => {
+      // Priority: current clip first
+      const currentUrl = getClipUrl(currentClip);
+      if (currentUrl) await fetchAndCache(currentUrl);
+      if (cancelled) return;
+      // Then remaining clips sequentially (2 at a time to balance speed vs bandwidth)
+      const remaining = [];
+      clips.forEach(clip => {
+        const url = getClipUrl(clip);
+        if (url && url !== currentUrl && !videoCache.current.has(url)) remaining.push(url);
+      });
+      for (let i = 0; i < remaining.length && !cancelled; i += 2) {
+        const batch = remaining.slice(i, i + 2);
+        await Promise.all(batch.map(fetchAndCache));
+      }
+    };
+    preloadAll();
+    return () => { cancelled = true; };
+  }, [clips, currentClip, getClipUrl]);
 
   const handleToggleMute = useCallback(() => {
     setIsMuted(prev => !prev);
@@ -896,6 +980,7 @@ const VideoEditorModal = ({
       bpm,
       thumbnail: clips[0]?.thumbnail || null,
       textOverlay: words[0]?.text || lyrics.split('\n')[0] || '',
+      maxDuration: userMaxDuration,
       // Audio mixing state
       sourceVideoMuted,
       sourceVideoVolume,
@@ -912,7 +997,7 @@ const VideoEditorModal = ({
     // Save directly
     onSave(videoData);
     clearAutoSave();
-  }, [existingVideo, selectedAudio, clips, words, lyrics, textStyle, cropMode, duration, bpm, sourceVideoMuted, sourceVideoVolume, externalAudioVolume, onSave, onSaveLyrics, clearAutoSave]);
+  }, [existingVideo, selectedAudio, clips, words, lyrics, textStyle, cropMode, duration, bpm, userMaxDuration, sourceVideoMuted, sourceVideoVolume, externalAudioVolume, onSave, onSaveLyrics, clearAutoSave]);
 
   // Handle lyrics save prompt response
   const handleLyricsPromptResponse = useCallback((saveLyrics) => {
@@ -1140,36 +1225,36 @@ const VideoEditorModal = ({
     // Get text banks for cycling
     const { textBank1, textBank2 } = getTextBanks();
 
+    // Build the timing skeleton from the template — durations and startTimes are sacred
+    const timingSkeleton = template.clips.map(c => ({
+      startTime: c.startTime,
+      duration: c.duration
+    }));
+
+    // Pool of all source videos to draw from (template clips + extras)
+    const allSourcePool = [
+      ...template.clips.map(c => ({ sourceId: c.sourceId, url: c.url, localUrl: c.localUrl, thumbnail: c.thumbnail })),
+      ...extraClips.map(c => ({ sourceId: c.sourceId, url: c.url, localUrl: c.localUrl, thumbnail: c.thumbnail }))
+    ];
+
     const newVideos = [];
     for (let g = 0; g < generateCount; g++) {
-      // Shuffle clip order
-      let genClips = shuffle(template.clips);
+      // Shuffle the source pool, then slot into the fixed timing skeleton
+      const shuffledSources = shuffle(allSourcePool);
 
-      // Randomly substitute some clips if extras available
-      if (extraClips.length > 0) {
-        const subCount = Math.min(
-          Math.floor(Math.random() * 3), // 0-2 substitutions
-          extraClips.length
-        );
-        for (let s = 0; s < subCount; s++) {
-          const replaceIdx = Math.floor(Math.random() * genClips.length);
-          const extraIdx = Math.floor(Math.random() * extraClips.length);
-          genClips = [...genClips];
-          genClips[replaceIdx] = {
-            ...extraClips[extraIdx],
-            id: `clip_gen_${Date.now()}_${g}_${s}`,
-            startTime: genClips[replaceIdx].startTime,
-            duration: genClips[replaceIdx].duration
-          };
-        }
-      }
-
-      // Recalculate startTimes for sequential playback
-      let runningTime = 0;
-      genClips = genClips.map(c => {
-        const clip = { ...c, id: `clip_${Date.now()}_${g}_${Math.random().toString(36).slice(2)}`, startTime: runningTime };
-        runningTime += clip.duration;
-        return clip;
+      let genClips = timingSkeleton.map((slot, idx) => {
+        const source = shuffledSources[idx % shuffledSources.length];
+        return {
+          id: `clip_${Date.now()}_${g}_${Math.random().toString(36).slice(2)}`,
+          sourceId: source.sourceId,
+          url: source.url,
+          localUrl: source.localUrl,
+          thumbnail: source.thumbnail,
+          startTime: slot.startTime,
+          duration: slot.duration,
+          locked: false,
+          sourceOffset: 0
+        };
       });
 
       // Cycle text from banks if available (unless keepTemplateText is active)
@@ -1334,14 +1419,21 @@ const VideoEditorModal = ({
   // Handle when user selects beats from the BeatSelector modal
   // Note: selectedBeatTimes are now in LOCAL time (0 to trimmedDuration)
   const handleBeatSelectionApply = useCallback((selectedBeatTimes) => {
-    if (!selectedBeatTimes.length || !category?.videos?.length) {
+    if (!selectedBeatTimes.length) {
       setShowBeatSelector(false);
       return;
     }
 
     // Calculate trimmed duration for the end boundary
     const effectiveDuration = (selectedAudio?.endTime || selectedAudio?.duration || duration) - (selectedAudio?.startTime || 0);
-    const availableClips = category.videos;
+    // Use category videos as source pool, fall back to existing clips' sources
+    const availableClips = category?.videos?.length > 0
+      ? category.videos
+      : clips.map(c => ({ id: c.sourceId || c.id, url: c.url, localUrl: c.localUrl, thumbnail: c.thumbnail }));
+    if (!availableClips.length) {
+      setShowBeatSelector(false);
+      return;
+    }
     const newClips = [];
 
     // Create clips for each selected beat (cut points) - all times are LOCAL
@@ -1360,13 +1452,15 @@ const VideoEditorModal = ({
         thumbnail: randomClip.thumbnail,
         startTime: startTime,
         duration: clipDuration,
-        locked: false
+        locked: false,
+        sourceOffset: 0
       });
     }
 
     setClips(newClips);
+    setSelectedClips([]);
     setShowBeatSelector(false);
-  }, [category?.videos, duration, selectedAudio]);
+  }, [category?.videos, clips, duration, selectedAudio]);
 
   const handleCutByWord = useCallback(() => {
     if (!words.length) {
@@ -1389,7 +1483,8 @@ const VideoEditorModal = ({
         thumbnail: randomClip.thumbnail,
         startTime: word.startTime,
         duration: word.duration || 0.5,
-        locked: false
+        locked: false,
+        sourceOffset: 0
       };
     });
 
@@ -1434,10 +1529,16 @@ const VideoEditorModal = ({
       const randomClip = availableClips[Math.floor(Math.random() * availableClips.length)];
       return {
         ...clip,
+        // Preserve timeline position and trim
+        id: clip.id,
+        startTime: clip.startTime,
+        duration: clip.duration,
+        // Swap source media only
         sourceId: randomClip.id,
         url: randomClip.url,
         localUrl: randomClip.localUrl,
-        thumbnail: randomClip.thumbnailUrl || randomClip.thumbnail
+        thumbnail: randomClip.thumbnailUrl || randomClip.thumbnail,
+        sourceOffset: 0
       };
     }));
     toast.success(`Rerolled ${rerollCount} clip${rerollCount !== 1 ? 's' : ''}`);
@@ -1571,13 +1672,15 @@ const VideoEditorModal = ({
     const firstHalf = {
       ...clip,
       id: `${clip.id}_a`,
-      duration: splitPoint
+      duration: splitPoint,
+      sourceOffset: clip.sourceOffset || 0
     };
     const secondHalf = {
       ...clip,
       id: `${clip.id}_b`,
       duration: clipDuration - splitPoint,
-      startTime: clip.startTime + splitPoint
+      startTime: clip.startTime + splitPoint,
+      sourceOffset: (clip.sourceOffset || 0) + splitPoint
     };
 
     setClips(prev => {
@@ -1699,7 +1802,7 @@ const VideoEditorModal = ({
       } else {
         newDuration = clipResize.startDuration - deltaSec;
       }
-      newDuration = Math.max(0.1, Math.min(30, newDuration));
+      newDuration = Math.max(0.1, Math.min(300, newDuration));
       handleUpdateClipDuration(clipResize.clipIndex, newDuration);
     };
 
@@ -1714,6 +1817,151 @@ const VideoEditorModal = ({
       document.removeEventListener('mouseup', handleResizeEnd);
     };
   }, [clipResize, handleUpdateClipDuration, timelineScale]);
+
+  // Cut line drag handler — dragging boundary lines between clips on waveform tracks
+  // Stores both originalPrevDuration and originalCurrDuration at drag start so the handler
+  // never needs to read current clips (avoids stale closure / re-register feedback loops).
+  // Cut line drag — ripple edit: left clip grows/shrinks, right clip keeps duration but shifts start time
+  useEffect(() => {
+    if (!cutLineDrag?.active) return;
+    const pxPerSec = 40 * timelineScale;
+    const { clipIndex, startX, originalPrevDuration } = cutLineDrag;
+
+    const handleCutLineMove = (e) => {
+      const deltaX = e.clientX - startX;
+      const deltaSec = deltaX / pxPerSec;
+      const newPrevDur = Math.max(0.1, Math.min(300, originalPrevDuration + deltaSec));
+
+      setClips(prev => {
+        const updated = [...prev];
+        const prevIdx = clipIndex - 1;
+        if (prevIdx < 0 || !updated[prevIdx] || !updated[clipIndex]) return prev;
+        updated[prevIdx] = { ...updated[prevIdx], duration: newPrevDur };
+        // Shift this clip's start time; keep its own duration unchanged
+        const newStart = (updated[prevIdx].startTime || 0) + newPrevDur;
+        updated[clipIndex] = { ...updated[clipIndex], startTime: newStart };
+        // Ripple: shift all downstream clips
+        for (let i = clipIndex + 1; i < updated.length; i++) {
+          const prevEnd = (updated[i - 1].startTime || 0) + (updated[i - 1].duration || 1);
+          updated[i] = { ...updated[i], startTime: prevEnd };
+        }
+        return updated;
+      });
+    };
+
+    const handleCutLineUp = () => {
+      setCutLineDrag(null);
+      document.body.style.cursor = '';
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.addEventListener('mousemove', handleCutLineMove);
+    document.addEventListener('mouseup', handleCutLineUp);
+    return () => {
+      document.removeEventListener('mousemove', handleCutLineMove);
+      document.removeEventListener('mouseup', handleCutLineUp);
+      document.body.style.cursor = '';
+    };
+  }, [cutLineDrag, timelineScale, setClips]);
+
+  // Slip edit handler — click-hold + drag to shift sourceOffset within fixed clip boundary
+  useEffect(() => {
+    if (!slipEdit?.active) return;
+
+    const handleSlipMove = (e) => {
+      const deltaX = e.clientX - slipEdit.startX;
+      const pxPerSec = 40 * timelineScale;
+      const deltaSec = deltaX / pxPerSec;
+      const newOffset = Math.max(0, slipEdit.originalOffset - deltaSec); // drag right = earlier source, drag left = later
+      setClips(prev => {
+        const updated = [...prev];
+        if (!updated[slipEdit.clipIndex]) return prev;
+        updated[slipEdit.clipIndex] = { ...updated[slipEdit.clipIndex], sourceOffset: newOffset };
+        return updated;
+      });
+    };
+
+    const handleSlipUp = () => {
+      // Capture new thumbnail at the updated sourceOffset
+      const clip = clips[slipEdit.clipIndex];
+      if (clip) {
+        const url = getClipUrl(clip);
+        const cachedBlob = videoCache.current.get(url);
+        const videoSrc = cachedBlob || url;
+        if (videoSrc) {
+          const tmpVideo = document.createElement('video');
+          tmpVideo.crossOrigin = 'anonymous';
+          tmpVideo.muted = true;
+          tmpVideo.preload = 'auto';
+          tmpVideo.src = videoSrc;
+          const seekTo = clip.sourceOffset || 0;
+          tmpVideo.onloadeddata = () => {
+            tmpVideo.currentTime = seekTo;
+          };
+          tmpVideo.onseeked = () => {
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = tmpVideo.videoWidth || 160;
+              canvas.height = tmpVideo.videoHeight || 90;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(tmpVideo, 0, 0, canvas.width, canvas.height);
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+              setClips(prev => {
+                const updated = [...prev];
+                if (updated[slipEdit.clipIndex]) {
+                  updated[slipEdit.clipIndex] = { ...updated[slipEdit.clipIndex], thumbnail: dataUrl };
+                }
+                return updated;
+              });
+            } catch (e) {
+              // CORS or canvas tainted — ignore, keep existing thumbnail
+            }
+            tmpVideo.src = '';
+            tmpVideo.remove();
+          };
+          tmpVideo.onerror = () => { tmpVideo.remove(); };
+          tmpVideo.load();
+        }
+      }
+      setSlipEdit(null);
+      document.body.style.cursor = '';
+    };
+
+    document.body.style.cursor = 'ew-resize';
+    document.addEventListener('mousemove', handleSlipMove);
+    document.addEventListener('mouseup', handleSlipUp);
+    document.addEventListener('pointerup', handleSlipUp);
+    return () => {
+      document.removeEventListener('mousemove', handleSlipMove);
+      document.removeEventListener('mouseup', handleSlipUp);
+      document.removeEventListener('pointerup', handleSlipUp);
+      document.body.style.cursor = '';
+    };
+  }, [slipEdit, timelineScale, setClips, clips, getClipUrl]);
+
+  // Slip edit: pointer down on clip (starts 200ms timer, promotes to slip on hold)
+  const handleClipPointerDown = useCallback((e, index) => {
+    if (clips[index]?.locked) return;
+    const startX = e.clientX;
+    slipTimerRef.current = setTimeout(() => {
+      setSlipEdit({
+        active: true,
+        clipIndex: index,
+        startX,
+        originalOffset: clips[index]?.sourceOffset || 0
+      });
+    }, 200);
+  }, [clips]);
+
+  const handleClipPointerUp = useCallback(() => {
+    if (slipTimerRef.current) {
+      clearTimeout(slipTimerRef.current);
+      slipTimerRef.current = null;
+    }
+    // Always clear any active slip edit on pointer release
+    setSlipEdit(null);
+    document.body.style.cursor = '';
+  }, []);
 
   const handleApplyPreset = useCallback((preset) => {
     setSelectedPreset(preset);
@@ -1987,10 +2235,6 @@ const VideoEditorModal = ({
   }, [apiKeyInput, handleAITranscribe]);
 
   const handleClipSelect = (index, e) => {
-    if (justFinishedMarqueeRef.current) {
-      justFinishedMarqueeRef.current = false;
-      return;
-    }
     if (e.shiftKey) {
       // Multi-select — don't move playhead
       setSelectedClips(prev =>
@@ -1999,75 +2243,45 @@ const VideoEditorModal = ({
           : [...prev, index]
       );
     } else {
-      setSelectedClips([index]);
-      // Jump playhead to clip start time
-      const clip = clips[index];
-      if (clip) {
-        handleSeek(clip.startTime);
-      }
+      setSelectedClips([index]); // Select only — NO seek
     }
   };
-
-  // Marquee selection: pointer down on timeline background
-  const handleTimelineMarqueeDown = (e) => {
-    if (e.target.closest('[data-clip-block]')) return;
-    if (playheadDragging) return;
-    if (!timelineRef.current) return;
-    const rect = timelineRef.current.getBoundingClientRect();
-    const scrollLeft = timelineRef.current.scrollLeft || 0;
-    const startX = e.clientX - rect.left + scrollLeft;
-    const startY = e.clientY - rect.top;
-    setMarqueeState({ startX, startY, currentX: startX, currentY: startY });
-    if (!e.shiftKey) setSelectedClips([]);
-  };
-
-  // Marquee selection: pointermove / pointerup effect
-  useEffect(() => {
-    if (!marqueeState) return;
-    const handlePointerMove = (e) => {
-      const rect = timelineRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const scrollLeft = timelineRef.current?.scrollLeft || 0;
-      const currentX = e.clientX - rect.left + scrollLeft;
-      const currentY = e.clientY - rect.top;
-      setMarqueeState(prev => ({ ...prev, currentX, currentY }));
-      // Calculate which clips overlap
-      const pxPerSec = 40 * timelineScale;
-      const minX = Math.min(marqueeState.startX, currentX);
-      const maxX = Math.max(marqueeState.startX, currentX);
-      const indices = [];
-      let offset = 0;
-      clips.forEach((clip, i) => {
-        const clipW = Math.max(50, (clip.duration || 1) * pxPerSec);
-        const clipRight = offset + clipW;
-        if (clipRight >= minX && offset <= maxX) indices.push(i);
-        offset = clipRight;
-      });
-      setSelectedClips(indices);
-    };
-    const handlePointerUp = () => {
-      const hasDragged = marqueeState && (
-        Math.abs(marqueeState.currentX - marqueeState.startX) > 5 ||
-        Math.abs(marqueeState.currentY - marqueeState.startY) > 5
-      );
-      if (hasDragged) justFinishedMarqueeRef.current = true;
-      setMarqueeState(null);
-    };
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    window.addEventListener('pointercancel', handlePointerUp);
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('pointercancel', handlePointerUp);
-    };
-  }, [marqueeState, clips, timelineScale]);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Ruler click/drag to seek playhead
+  const handleRulerMouseDown = useCallback((e) => {
+    if (!timelineRef.current || timelineDuration <= 0) return;
+    e.preventDefault();
+    const rect = timelineRef.current.getBoundingClientRect();
+    const pxPerSec = 40 * timelineScale;
+    const timelinePx = timelineDuration * pxPerSec;
+    const clickX = e.clientX - rect.left + timelineRef.current.scrollLeft;
+    handleSeek(Math.max(0, Math.min(1, clickX / timelinePx)) * timelineDuration);
+    wasPlayingBeforePlayheadDrag.current = isPlaying;
+    if (isPlaying) setIsPlaying(false);
+    setPlayheadDragging(true);
+  }, [timelineDuration, timelineScale, handleSeek, isPlaying]);
+
+  // Smart ruler ticks based on zoom level
+  const rulerTicks = useMemo(() => {
+    if (timelineDuration <= 0) return [];
+    const pxPerSec = 40 * timelineScale;
+    let minor, labelEvery;
+    if (pxPerSec >= 60) { minor = 0.5; labelEvery = 1; }
+    else if (pxPerSec >= 30) { minor = 1; labelEvery = 5; }
+    else { minor = 2; labelEvery = 10; }
+    const ticks = [];
+    for (let t = 0; t <= timelineDuration; t += minor) {
+      const rounded = Math.round(t * 100) / 100;
+      ticks.push({ time: rounded, isLabel: rounded % labelEvery === 0 });
+    }
+    return ticks;
+  }, [timelineDuration, timelineScale]);
 
   // ── Template Picker (no mode selected yet) ──
   if (!editorMode) {
@@ -2157,6 +2371,8 @@ const VideoEditorModal = ({
         artistId={artistId}
         db={db}
         sourceVideos={clipperSourceVideos}
+        nicheId={category?.id}
+        projectId={category?.projectId}
       />
     );
   }
@@ -2209,11 +2425,23 @@ const VideoEditorModal = ({
                       preload="auto"
                       autoPlay={isPlaying && activeVideoRef.current === 'A'}
                       crossOrigin="anonymous"
-                      onLoadStart={() => { if (activeVideoRef.current === 'A') { setVideoLoading(true); setVideoError(null); } }}
-                      onCanPlay={() => { if (activeVideoRef.current === 'A') setVideoLoading(false); }}
+                      onLoadStart={() => {
+                        if (activeVideoRef.current === 'A') {
+                          setVideoError(null);
+                          clearTimeout(videoLoadingTimer.current);
+                          videoLoadingTimer.current = setTimeout(() => setVideoLoading(true), 200);
+                        }
+                      }}
+                      onCanPlay={() => {
+                        if (activeVideoRef.current === 'A') {
+                          clearTimeout(videoLoadingTimer.current);
+                          setVideoLoading(false);
+                        }
+                      }}
                       onError={(e) => {
                         log.error('Video A load error:', e);
                         if (activeVideoRef.current === 'A') {
+                          clearTimeout(videoLoadingTimer.current);
                           setVideoError('Unable to load video. This may be due to CORS restrictions.');
                           setVideoLoading(false);
                         }
@@ -2235,11 +2463,23 @@ const VideoEditorModal = ({
                       preload="auto"
                       autoPlay={isPlaying && activeVideoRef.current === 'B'}
                       crossOrigin="anonymous"
-                      onLoadStart={() => { if (activeVideoRef.current === 'B') { setVideoLoading(true); setVideoError(null); } }}
-                      onCanPlay={() => { if (activeVideoRef.current === 'B') setVideoLoading(false); }}
+                      onLoadStart={() => {
+                        if (activeVideoRef.current === 'B') {
+                          setVideoError(null);
+                          clearTimeout(videoLoadingTimer.current);
+                          videoLoadingTimer.current = setTimeout(() => setVideoLoading(true), 200);
+                        }
+                      }}
+                      onCanPlay={() => {
+                        if (activeVideoRef.current === 'B') {
+                          clearTimeout(videoLoadingTimer.current);
+                          setVideoLoading(false);
+                        }
+                      }}
                       onError={(e) => {
                         log.error('Video B load error:', e);
                         if (activeVideoRef.current === 'B') {
+                          clearTimeout(videoLoadingTimer.current);
                           setVideoError('Unable to load video. This may be due to CORS restrictions.');
                           setVideoLoading(false);
                         }
@@ -2247,8 +2487,25 @@ const VideoEditorModal = ({
                     />
                     {videoLoading && !videoError && (
                       <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-[#0a0a0aff]">
-                        <div className="w-8 h-8 border-[3px] border-[#333] border-t-[#6366f1] rounded-full animate-spin" />
-                        <p className="mt-2 text-xs" style={{ color: theme.text.secondary }}>Loading video...</p>
+                        {/* Show thumbnail as poster frame while video loads */}
+                        {(currentClip?.thumbnail || currentClip?.thumbnailUrl) ? (
+                          <>
+                            <img
+                              src={currentClip.thumbnail || currentClip.thumbnailUrl}
+                              alt=""
+                              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }}
+                            />
+                            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 rounded-full px-3 py-1.5">
+                              <div className="w-4 h-4 border-2 border-neutral-500 border-t-white rounded-full animate-spin" />
+                              <span className="text-[11px] text-neutral-300">Loading...</span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="w-8 h-8 border-[3px] border-[#333] border-t-[#6366f1] rounded-full animate-spin" />
+                            <p className="mt-2 text-xs" style={{ color: theme.text.secondary }}>Loading video...</p>
+                          </>
+                        )}
                       </div>
                     )}
                     {videoError && (
@@ -2379,8 +2636,19 @@ const VideoEditorModal = ({
                   <span className="text-heading-3 font-heading-3 text-[#ffffffff]">Timeline ({clips.length} clips)</span>
                   <Button variant="neutral-secondary" size="small" onClick={handleCutByWord}>Cut by word</Button>
                   <Button variant="neutral-secondary" size="small" onClick={handleCutByBeat}>Cut by beat</Button>
+                  <Button variant="neutral-secondary" size="small" onClick={() => setShowMomentumSelector(true)}>Cut to music</Button>
                 </div>
                 <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[11px] text-neutral-500">Max:</span>
+                    <input type="number" min={1} max={300} step={1}
+                      value={Math.round(userMaxDuration)}
+                      onChange={(e) => setUserMaxDuration(Math.max(1, Math.min(300, parseInt(e.target.value) || 30)))}
+                      className="w-12 px-1 py-0.5 rounded border border-neutral-700 bg-black text-[11px] text-white text-center"
+                      title="Set minimum timeline duration (seconds)"
+                    />
+                    <span className="text-[11px] text-neutral-500">s</span>
+                  </div>
                   <Badge variant="neutral">
                     {isAnalyzing ? 'Analyzing beats...' : bpm ? `${Math.round(bpm)} BPM (${filteredBeats.length} beats)` : 'No beats detected'}
                   </Badge>
@@ -2412,323 +2680,388 @@ const VideoEditorModal = ({
                   ))}
                 </div>
               )}
-              <div className="flex w-full flex-col gap-2">
-                {/* Clips Track */}
-                <div className="flex w-full items-center gap-3">
-                  <span className="w-20 text-caption font-caption text-neutral-400 text-right shrink-0">Clips</span>
-                  <div className="flex-1 min-h-[48px] rounded-md border border-neutral-800 bg-black overflow-hidden relative" ref={timelineRef} onPointerDown={handleTimelineMarqueeDown}>
-                {/* Marquee overlay */}
-                {marqueeState && (() => {
-                  const minX = Math.min(marqueeState.startX, marqueeState.currentX);
-                  const maxX = Math.max(marqueeState.startX, marqueeState.currentX);
-                  const minY = Math.min(marqueeState.startY, marqueeState.currentY);
-                  const maxY = Math.max(marqueeState.startY, marqueeState.currentY);
-                  return (
-                    <div style={{
-                      position: 'absolute', left: minX, top: minY,
-                      width: maxX - minX, height: maxY - minY,
-                      backgroundColor: 'rgba(99, 102, 241, 0.2)',
-                      border: '1px solid rgba(99, 102, 241, 0.5)',
-                      pointerEvents: 'none', zIndex: 25
-                    }} />
-                  );
-                })()}
-                {/* Playhead indicator — draggable */}
-                {clips.length > 0 && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: `${(currentTime / trimmedDuration) * 100}%`,
-                      top: 0,
-                      bottom: 0,
-                      width: '2px',
-                      background: '#ef4444',
-                      zIndex: 20,
-                      pointerEvents: 'auto',
-                      boxShadow: '0 0 4px rgba(239, 68, 68, 0.5)',
-                      transition: isPlaying ? 'none' : 'left 0.1s ease-out'
-                    }}
-                  >
-                    {/* Wider grab area for easier dragging */}
-                    <div
-                      style={{
+              {/* Volume Controls — above the unified scroll area */}
+              {((selectedAudio && selectedAudio.url && !selectedAudio.isSourceAudio) || Object.keys(clipWaveforms).length > 0) && (
+                <div className="flex w-full items-center gap-3 mb-2">
+                  <span className="w-20 text-caption font-caption text-neutral-400 text-right shrink-0">Volume</span>
+                  <div className="flex-1 flex items-center gap-5 py-1">
+                    {selectedAudio && selectedAudio.url && !selectedAudio.isSourceAudio && (
+                      <div className="flex items-center gap-2">
+                        <span style={{ fontSize: '10px' }}>{'\uD83C\uDFB5'}</span>
+                        <span className="text-[11px] text-green-400 w-10 shrink-0">Audio</span>
+                        <input type="range" min="0" max="1" step="0.05" value={externalAudioVolume}
+                          onChange={e => setExternalAudioVolume(parseFloat(e.target.value))}
+                          style={{ width: '64px', height: '4px', accentColor: '#22c55e', cursor: 'pointer' }}
+                          title={`Added audio: ${Math.round(externalAudioVolume * 100)}%`}
+                        />
+                        <span className="text-[10px] text-neutral-500 w-8">{Math.round(externalAudioVolume * 100)}%</span>
+                      </div>
+                    )}
+                    {Object.keys(clipWaveforms).length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setSourceVideoMuted(m => !m)}
+                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '10px', opacity: sourceVideoMuted ? 0.4 : 1 }}
+                          title={sourceVideoMuted ? 'Unmute source audio' : 'Mute source audio'}
+                        >{sourceVideoMuted ? '\uD83D\uDD07' : '\uD83C\uDFAC'}</button>
+                        <span className="text-[11px] text-amber-400 w-10 shrink-0">Source</span>
+                        <input type="range" min="0" max="1" step="0.05"
+                          value={sourceVideoMuted ? 0 : sourceVideoVolume}
+                          onChange={e => { setSourceVideoVolume(parseFloat(e.target.value)); if (sourceVideoMuted) setSourceVideoMuted(false); }}
+                          style={{ width: '64px', height: '4px', accentColor: '#f59e0b', cursor: 'pointer' }}
+                          title={sourceVideoMuted ? 'Muted' : `Source audio: ${Math.round(sourceVideoVolume * 100)}%`}
+                        />
+                        <span className="text-[10px] text-neutral-500 w-8">{sourceVideoMuted ? 'Off' : `${Math.round(sourceVideoVolume * 100)}%`}</span>
+                      </div>
+                    )}
+                    {/* Zoom slider — right-aligned */}
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      <FeatherZoomOut style={{ width: 12, height: 12, color: '#737373' }} />
+                      <input type="range" min="0.3" max="3" step="0.05" value={timelineScale}
+                        onChange={e => setTimelineScale(parseFloat(e.target.value))}
+                        style={{ width: '80px', height: '4px', accentColor: '#6366f1', cursor: 'pointer' }}
+                        title={`Zoom: ${Math.round(timelineScale * 100)}%`}
+                      />
+                      <FeatherZoomIn style={{ width: 12, height: 12, color: '#737373' }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ═══ UNIFIED TIMELINE: labels column + single scrollable area ═══ */}
+              {(() => {
+                const hasAudioTrack = !!(selectedAudio && selectedAudio.url && !selectedAudio.isSourceAudio && waveformData.length > 0);
+                const hasSourceTrack = Object.keys(clipWaveforms).length > 0;
+                const pxPerSec = 40 * timelineScale;
+                const timelinePx = timelineDuration * pxPerSec;
+                const playheadPercent = timelineDuration > 0 ? (currentTime / timelineDuration) * 100 : 0;
+                const audioTrackH = hasAudioTrack ? Math.round(4 + 28 * externalAudioVolume) : 0;
+                const srcVol = sourceVideoMuted ? 0 : sourceVideoVolume;
+                const sourceTrackH = hasSourceTrack ? Math.round(4 + 28 * srcVol) : 0;
+                return (
+              <div className="flex w-full items-start gap-3">
+                {/* Fixed labels column — heights match waveform tracks */}
+                <div className="w-20 flex flex-col shrink-0">
+                  <div style={{ height: '24px' }} className="flex items-center justify-end pr-1">
+                    <span className="text-[10px] text-neutral-600">Time</span>
+                  </div>
+                  <div style={{ height: '48px' }} className="flex items-center justify-end pr-1">
+                    <span className="text-caption font-caption text-neutral-400">Clips</span>
+                  </div>
+                  {hasAudioTrack && (
+                    <div style={{ height: `${audioTrackH}px`, transition: 'height 0.15s ease-out' }} className="flex items-center justify-end pr-1">
+                      {audioTrackH >= 16 && <span className="text-caption font-caption text-neutral-400">Audio</span>}
+                    </div>
+                  )}
+                  {hasSourceTrack && (
+                    <div style={{ height: `${sourceTrackH}px`, transition: 'height 0.15s ease-out' }} className="flex items-center justify-end pr-1">
+                      {sourceTrackH >= 16 && <span className="text-caption font-caption text-neutral-400">Source</span>}
+                    </div>
+                  )}
+                </div>
+
+                {/* Single scrollable column */}
+                <div className="flex-1 rounded-md border border-neutral-800 bg-black overflow-x-auto" ref={timelineRef}>
+                  <div style={{ position: 'relative', minWidth: '100%', width: `${timelinePx}px` }}>
+                    {/* Playhead line — spans all tracks */}
+                    {timelineDuration > 0 && (
+                      <div style={{
                         position: 'absolute',
-                        top: '-6px',
-                        left: '-8px',
-                        width: '18px',
-                        bottom: 0,
-                        cursor: 'ew-resize',
-                        zIndex: 21
-                      }}
-                      onMouseDown={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        wasPlayingBeforePlayheadDrag.current = isPlaying;
-                        if (isPlaying) setIsPlaying(false);
-                        setPlayheadDragging(true);
-                      }}
-                    />
-                    {/* Playhead top triangle */}
-                    <div style={{
-                      position: 'absolute',
-                      top: '-4px',
-                      left: '-5px',
-                      width: 0,
-                      height: 0,
-                      borderLeft: '6px solid transparent',
-                      borderRight: '6px solid transparent',
-                      borderTop: '8px solid #ef4444',
-                      cursor: 'ew-resize'
-                    }} />
-                  </div>
-                )}
-                {clips.length === 0 ? (
-                  <div className="text-center py-5 text-neutral-500 text-[13px]">
-                    <p>Click clips above to add, or use Cut by beat</p>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    {clips.map((clip, index) => {
-                      const pxPerSec = 40 * timelineScale;
-                      const clipWidth = Math.max(50, (clip.duration || 1) * pxPerSec);
-                      const thumbWidth = 68;
-                      return (
-                      <div
-                        key={clip.id}
-                        data-clip-block="true"
-                        draggable={!clip.locked && !clipResize.active}
-                        onDragStart={() => !clipResize.active && handleClipDragStart(index)}
-                        onDragOver={(e) => { e.preventDefault(); handleClipDragOver(index); }}
-                        onDragEnd={handleClipDragEnd}
-                        style={{
-                          position: 'relative', height: '48px', backgroundColor: '#8b5cf6',
-                          borderRadius: '6px', overflow: 'hidden', flexShrink: 0,
-                          width: `${clipWidth}px`,
-                          minWidth: '50px',
-                          display: 'flex',
-                          flexDirection: 'row',
-                          border: selectedClips.includes(index) ? '2px solid #6366f1' : '2px solid transparent',
-                          ...(clipDrag.dragging && clipDrag.fromIndex === index ? { opacity: 0.5 } : {}),
-                          ...(clipDrag.dragging && clipDrag.toIndex === index && clipDrag.fromIndex !== index ? {
-                            borderLeft: '3px solid #22c55e',
-                            marginLeft: '-3px'
-                          } : {}),
-                          cursor: clip.locked ? 'not-allowed' : 'grab',
-                          position: 'relative',
-                          transition: clipResize.active ? 'none' : 'width 0.15s ease-out'
-                        }}
-                        onClick={(e) => handleClipSelect(index, e)}
-                      >
-                        {/* Thumbnail area - fixed width at start of clip */}
+                        left: `${playheadPercent}%`,
+                        top: 0, bottom: 0, width: '2px',
+                        background: '#ef4444', zIndex: 20,
+                        pointerEvents: 'none',
+                        boxShadow: '0 0 4px rgba(239, 68, 68, 0.5)',
+                        transition: isPlaying ? 'none' : 'left 0.1s ease-out'
+                      }}>
+                        {/* Playhead triangle in ruler */}
                         <div style={{
-                          width: `${thumbWidth}px`,
-                          height: '100%',
-                          flexShrink: 0,
-                          position: 'relative',
-                          overflow: 'hidden',
-                          borderRadius: '6px 0 0 6px'
-                        }}>
-                          {clip.thumbnailUrl || clip.url || clip.localUrl ? (
-                            <video
-                              src={clip.thumbnailUrl || clip.url || clip.localUrl}
-                              style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
-                              preload="metadata"
-                              muted
-                            />
-                          ) : (
-                            <div style={{ width: '100%', height: '100%', backgroundColor: theme.bg.elevated, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <span style={{ fontSize: '10px', color: theme.text.muted }}>No thumb</span>
-                            </div>
-                          )}
-                          {clip.locked && (
+                          position: 'absolute', top: '16px', left: '-5px',
+                          width: 0, height: 0,
+                          borderLeft: '6px solid transparent',
+                          borderRight: '6px solid transparent',
+                          borderTop: '8px solid #ef4444'
+                        }} />
+                      </div>
+                    )}
+
+                    {/* Audio-end marker — dashed line showing where audio stops */}
+                    {hasExternalAudio && trimmedDuration > 0 && trimmedDuration < timelineDuration && (
+                      <>
+                        <div style={{
+                          position: 'absolute',
+                          left: `${(trimmedDuration / timelineDuration) * 100}%`,
+                          top: 0, bottom: 0, width: '1px',
+                          borderLeft: '1px dashed rgba(34, 197, 94, 0.5)',
+                          zIndex: 15, pointerEvents: 'none'
+                        }} />
+                        {/* Dimmed overlay past audio end */}
+                        <div style={{
+                          position: 'absolute',
+                          left: `${(trimmedDuration / timelineDuration) * 100}%`,
+                          right: 0, top: '24px', bottom: 0,
+                          background: 'repeating-linear-gradient(135deg, transparent, transparent 4px, rgba(0,0,0,0.15) 4px, rgba(0,0,0,0.15) 8px)',
+                          zIndex: 10, pointerEvents: 'none'
+                        }} />
+                      </>
+                    )}
+
+                    {/* Ruler row — click/drag to seek */}
+                    <div
+                      style={{ height: '24px', position: 'relative', cursor: 'crosshair', borderBottom: '1px solid #333' }}
+                      onMouseDown={handleRulerMouseDown}
+                    >
+                      {rulerTicks.map((tick, i) => {
+                        const xPx = tick.time * pxPerSec;
+                        return (
+                          <div key={i} style={{ position: 'absolute', left: `${xPx}px`, top: 0, bottom: 0 }}>
                             <div style={{
-                              position: 'absolute', top: 2, right: 2, zIndex: 2,
-                              width: '16px', height: '16px', borderRadius: '50%',
-                              backgroundColor: '#f59e0b', display: 'flex',
-                              alignItems: 'center', justifyContent: 'center', fontSize: '10px'
-                            }}>🔒</div>
-                          )}
-                          {clip.duration > 0 && (
-                            <span style={{
-                              position: 'absolute', bottom: 2, left: 2, padding: '1px 4px',
-                              backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: '3px',
-                              fontSize: '9px', color: '#fff'
-                            }}>
-                              {clip.duration.toFixed(1)}s
-                            </span>
-                          )}
+                              width: '1px', height: tick.isLabel ? '10px' : '6px',
+                              backgroundColor: tick.isLabel ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.15)',
+                              position: 'absolute', bottom: 0
+                            }} />
+                            {tick.isLabel && (
+                              <span style={{
+                                position: 'absolute', top: '1px', left: '3px',
+                                fontSize: '9px', color: 'rgba(255,255,255,0.45)',
+                                whiteSpace: 'nowrap', userSelect: 'none'
+                              }}>
+                                {formatTime(tick.time)}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Clips row — always spans full timelinePx so empty area is visible */}
+                    <div style={{ height: '48px', position: 'relative', width: '100%' }}>
+                      {clips.length === 0 ? (
+                        <div className="text-center py-3 text-neutral-500 text-[13px]">
+                          <p>Click clips above to add, or use Cut by beat</p>
                         </div>
-                        {/* Duration track area after thumbnail */}
+                      ) : (
+                        <div className="flex" style={{ height: '100%', minWidth: '100%' }}>
+                          {clips.map((clip, index) => {
+                            const clipWidth = Math.max(50, (clip.duration || 1) * pxPerSec);
+                            const thumbWidth = Math.min(68, clipWidth - 2);
+                            return (
+                            <div
+                              key={clip.id}
+                              data-clip-block="true"
+                              draggable={!clip.locked && !clipResize.active && !slipEdit?.active}
+                              onDragStart={() => !clipResize.active && !slipEdit?.active && handleClipDragStart(index)}
+                              onDragOver={(e) => { e.preventDefault(); handleClipDragOver(index); }}
+                              onDragEnd={handleClipDragEnd}
+                              onPointerDown={(e) => handleClipPointerDown(e, index)}
+                              onPointerUp={handleClipPointerUp}
+                              onPointerLeave={handleClipPointerUp}
+                              style={{
+                                position: 'relative', height: '48px', backgroundColor: '#8b5cf6',
+                                borderRadius: '6px', overflow: 'hidden', flexShrink: 0,
+                                boxSizing: 'border-box',
+                                width: `${clipWidth}px`,
+                                minWidth: '50px',
+                                display: 'flex',
+                                flexDirection: 'row',
+                                border: slipEdit?.active && slipEdit.clipIndex === index
+                                  ? '2px solid #f59e0b'
+                                  : selectedClips.includes(index) ? '2px solid #a5b4fc' : '2px solid transparent',
+                                boxShadow: selectedClips.includes(index)
+                                  ? '0 0 0 1px rgba(129, 140, 248, 0.6), 0 0 8px rgba(99, 102, 241, 0.4)'
+                                  : 'none',
+                                filter: selectedClips.includes(index) ? 'brightness(1.15)' : 'none',
+                                zIndex: selectedClips.includes(index) ? 5 : 1,
+                                ...(clipDrag.dragging && clipDrag.fromIndex === index ? { opacity: 0.5 } : {}),
+                                ...(clipDrag.dragging && clipDrag.toIndex === index && clipDrag.fromIndex !== index ? {
+                                  borderLeft: '3px solid #22c55e',
+                                  marginLeft: '-3px'
+                                } : {}),
+                                cursor: clip.locked ? 'not-allowed' : 'grab',
+                                transition: clipResize.active ? 'none' : 'width 0.15s ease-out, box-shadow 0.15s ease-out, filter 0.15s ease-out',
+                                borderRight: index < clips.length - 1 ? '1px solid rgba(0,0,0,0.6)' : 'none'
+                              }}
+                              onClick={(e) => handleClipSelect(index, e)}
+                            >
+                              {/* Selected top accent bar */}
+                              {selectedClips.includes(index) && (
+                                <div style={{
+                                  position: 'absolute', top: 0, left: 0, right: 0, height: '3px',
+                                  background: 'linear-gradient(90deg, #818cf8, #a5b4fc)',
+                                  zIndex: 4, borderRadius: '4px 4px 0 0'
+                                }} />
+                              )}
+                              {/* Thumbnail area */}
+                              <div style={{
+                                width: `${thumbWidth}px`, height: '100%', flexShrink: 0,
+                                position: 'relative', overflow: 'hidden', borderRadius: '6px 0 0 6px'
+                              }}>
+                                {(clip.thumbnail || clip.thumbnailUrl) ? (
+                                  <img src={clip.thumbnail || clip.thumbnailUrl} alt=""
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
+                                    loading="lazy" draggable={false}
+                                  />
+                                ) : (
+                                  <div style={{
+                                    width: '100%', height: '100%',
+                                    background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                  }}>
+                                    <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>{index + 1}</span>
+                                  </div>
+                                )}
+                                {clip.locked && (
+                                  <div style={{
+                                    position: 'absolute', top: 2, right: 2, zIndex: 2,
+                                    width: '16px', height: '16px', borderRadius: '50%',
+                                    backgroundColor: '#f59e0b', display: 'flex',
+                                    alignItems: 'center', justifyContent: 'center', fontSize: '10px'
+                                  }}>🔒</div>
+                                )}
+                                {clip.duration > 0 && (
+                                  <span style={{
+                                    position: 'absolute', bottom: 2, left: 2, padding: '1px 4px',
+                                    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: '3px',
+                                    fontSize: '9px', color: '#fff'
+                                  }}>{clip.duration.toFixed(1)}s</span>
+                                )}
+                                {slipEdit?.active && slipEdit.clipIndex === index && (
+                                  <span style={{
+                                    position: 'absolute', top: 2, left: 2, padding: '1px 4px',
+                                    backgroundColor: 'rgba(245, 158, 11, 0.85)', borderRadius: '3px',
+                                    fontSize: '9px', color: '#000', fontWeight: 700, letterSpacing: '0.5px'
+                                  }}>SLIP</span>
+                                )}
+                              </div>
+                              {/* Duration track area */}
+                              <div style={{
+                                flex: 1, height: '100%',
+                                backgroundColor: selectedClips.includes(index) ? `${theme.accent.primary}22` : `${theme.bg.surface}`,
+                                position: 'relative', borderRadius: '0 6px 6px 0', overflow: 'hidden'
+                              }} />
+                              {/* Right-edge resize handle */}
+                              {!clip.locked && (
+                                <div
+                                  onPointerDown={(e) => handleResizeStart(e, index, 'right')}
+                                  style={{
+                                    position: 'absolute', top: 0, right: 0, width: '8px', height: '100%',
+                                    cursor: 'col-resize', zIndex: 3,
+                                    background: 'linear-gradient(to left, rgba(167,139,250,0.4), transparent)',
+                                    opacity: 0, transition: 'opacity 0.15s',
+                                  }}
+                                  onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                                  onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}
+                                />
+                              )}
+                            </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Audio waveform row (external) — continuous strip, height scales with volume */}
+                    {hasAudioTrack && (() => {
+                      const audioPx = trimmedDuration * pxPerSec;
+                      const maxBars = Math.max(50, Math.round(audioPx / 3));
+                      const bars = downsample(waveformData, maxBars);
+                      const vol = externalAudioVolume;
+                      const trackH = Math.round(4 + 28 * vol); // 4px at 0%, 32px at 100%
+                      return (
+                      <div style={{ height: `${trackH}px`, borderTop: '1px solid #333', position: 'relative', transition: 'height 0.15s ease-out' }}>
                         <div style={{
-                          flex: 1,
-                          height: '100%',
-                          backgroundColor: selectedClips.includes(index) ? `${theme.accent.primary}22` : `${theme.bg.surface}`,
-                          position: 'relative',
-                          borderRadius: '0 6px 6px 0',
-                          overflow: 'hidden'
+                          width: `${audioPx}px`, height: '100%',
+                          backgroundColor: 'rgba(34, 197, 94, 0.06)',
+                          display: 'flex', alignItems: 'center'
                         }}>
-                          {/* Duration bars */}
-                          <div style={{
-                            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                            display: 'flex', alignItems: 'flex-end', padding: '2px', gap: '1px', opacity: 0.3
-                          }}>
-                            {Array.from({ length: Math.ceil((clip.duration || 1) * 2) }, (_, i) => (
+                          <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: `${Math.max(2, trackH - 4)}px`, gap: '1px', padding: '0 1px' }}>
+                            {bars.map((amplitude, i) => (
                               <div key={i} style={{
-                                flex: 1, minWidth: '2px',
-                                height: `${20 + Math.random() * 60}%`,
-                                backgroundColor: selectedClips.includes(index) ? theme.accent.primary : theme.text.muted,
-                                borderRadius: '1px'
+                                flex: 1, minWidth: '1px', backgroundColor: 'rgba(34, 197, 94, 0.5)',
+                                height: `${amplitude * vol * 100}%`, opacity: vol > 0 ? 0.6 : 0.2
                               }} />
                             ))}
                           </div>
                         </div>
-                        {/* Right-edge resize handle */}
-                        {!clip.locked && (
-                          <div
-                            onPointerDown={(e) => handleClipResizeStart(e, index)}
-                            style={{
-                              position: 'absolute', top: 0, right: 0, width: '8px', height: '100%',
-                              cursor: 'col-resize',
-                              zIndex: 3,
-                              background: 'linear-gradient(to left, rgba(167,139,250,0.4), transparent)',
-                              opacity: 0,
-                              transition: 'opacity 0.15s',
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                            onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}
-                          />
-                        )}
                       </div>
                       );
-                    })}
-                  </div>
-                )}
-                  </div>
-                </div>
+                    })()}
 
-                {/* Audio Track (External) */}
-                {selectedAudio && selectedAudio.url && !selectedAudio.isSourceAudio && waveformData.length > 0 && (
-                  <div className="flex w-full items-center gap-3">
-                    <span className="w-20 text-caption font-caption text-neutral-400 text-right shrink-0">Audio</span>
-                    <div className="flex-1 rounded-md border border-neutral-800 bg-black overflow-hidden">
-                {(() => {
-                  const pxPerSec = 40 * timelineScale;
-                  const totalDur = clips.reduce((s, c) => s + (c.duration || 1), 0);
-                  let sampleOffset = 0;
-                  return (
-                    <div style={{
-                      display: 'flex', alignItems: 'center', height: '32px',
-                      borderTop: `1px solid ${theme.border.subtle}`, marginTop: '4px',
-                      pointerEvents: 'auto', position: 'relative'
-                    }}>
-                      {/* Controls overlay */}
-                      <div style={{
-                        position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)',
-                        display: 'flex', alignItems: 'center', gap: '3px', zIndex: 3,
-                        backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: '4px', padding: '2px 5px'
-                      }}>
-                        <span style={{ fontSize: '10px' }}>{'\uD83C\uDFB5'}</span>
-                        <input type="range" min="0" max="1" step="0.05" value={externalAudioVolume}
-                          onChange={e => setExternalAudioVolume(parseFloat(e.target.value))}
-                          style={{ width: '36px', height: '3px', accentColor: '#22c55e', cursor: 'pointer' }}
-                          title={`Added audio: ${Math.round(externalAudioVolume * 100)}%`}
-                        />
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', height: '100%', gap: '8px', flexShrink: 0 }}>
+                    {/* Source audio waveform row — per-clip segments, height scales with volume */}
+                    {hasSourceTrack && (() => {
+                      const srcVol = sourceVideoMuted ? 0 : sourceVideoVolume;
+                      const trackH = Math.round(4 + 28 * srcVol); // 4px at 0%, 32px at 100%
+                      return (
+                      <div style={{ height: `${trackH}px`, borderTop: '1px solid #333', position: 'relative', display: 'flex', transition: 'height 0.15s ease-out' }}>
                         {clips.map((clip, idx) => {
-                          const clipWidth = Math.max(50, (clip.duration || 1) * pxPerSec);
-                          const sampleCount = Math.max(1, Math.round((clip.duration || 1) / totalDur * waveformData.length));
-                          const slicedData = waveformData.slice(sampleOffset, sampleOffset + sampleCount);
-                          sampleOffset += sampleCount;
+                          const segWidth = Math.max(50, (clip.duration || 1) * pxPerSec);
+                          const bars = perClipSourceWaveforms[idx] || [];
                           return (
-                            <div key={idx} style={{
-                              width: clipWidth, display: 'flex', alignItems: 'center', gap: '1px',
-                              height: '28px', flexShrink: 0, borderRadius: '4px', overflow: 'hidden',
-                              backgroundColor: 'rgba(34, 197, 94, 0.08)',
-                              border: '1px solid rgba(34, 197, 94, 0.2)'
+                            <div key={`src-seg-${idx}`} style={{
+                              width: `${segWidth}px`, flexShrink: 0, display: 'flex', alignItems: 'center',
+                              height: '100%',
+                              backgroundColor: srcVol > 0 ? 'rgba(245, 158, 11, 0.06)' : 'rgba(245, 158, 11, 0.02)'
                             }}>
-                              {slicedData.map((amplitude, i) => (
-                                <div key={i} style={{
-                                  flex: 1, minWidth: '1px', backgroundColor: 'rgba(34, 197, 94, 0.5)',
-                                  height: `${amplitude * 100}%`, opacity: 0.6
-                                }} />
-                              ))}
+                              <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: `${Math.max(2, trackH - 4)}px`, gap: '1px', padding: '0 1px' }}>
+                                {bars.map((amplitude, i) => (
+                                  <div key={i} style={{
+                                    flex: 1, minWidth: '1px', backgroundColor: 'rgba(245, 158, 11, 0.4)',
+                                    height: `${amplitude * srcVol * 100}%`, opacity: srcVol > 0 ? 0.6 : 0.2
+                                  }} />
+                                ))}
+                              </div>
                             </div>
                           );
                         })}
                       </div>
-                    </div>
-                  );
-                })()}
-                    </div>
-                  </div>
-                )}
+                      );
+                    })()}
 
-                {/* Source Audio Track */}
-                {Object.keys(clipWaveforms).length > 0 && (
-                  <div className="flex w-full items-center gap-3">
-                    <span className="w-20 text-caption font-caption text-neutral-400 text-right shrink-0">Source</span>
-                    <div className="flex-1 rounded-md border border-neutral-800 bg-black overflow-hidden">
-                {(() => {
-                  const pxPerSec = 40 * timelineScale;
-                  const hasExternal = selectedAudio && selectedAudio.url && !selectedAudio.isSourceAudio;
-                  return (
-                    <div style={{
-                      display: 'flex', alignItems: 'center', height: '32px',
-                      borderTop: `1px solid ${theme.border.subtle}`, marginTop: '4px',
-                      pointerEvents: 'auto', position: 'relative'
-                    }}>
-                      {/* Controls overlay */}
-                      <div style={{
-                        position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)',
-                        display: 'flex', alignItems: 'center', gap: '3px', zIndex: 3,
-                        backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: '4px', padding: '2px 5px'
-                      }}>
-                        <button
-                          onClick={() => setSourceVideoMuted(m => !m)}
-                          style={{
-                            background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '10px',
-                            opacity: (hasExternal && sourceVideoMuted) ? 0.4 : 1
-                          }}
-                          title={sourceVideoMuted ? 'Unmute source audio' : 'Mute source audio'}
-                        >{sourceVideoMuted ? '\uD83D\uDD07' : '\uD83C\uDFAC'}</button>
-                        {hasExternal && (
-                          <input type="range" min="0" max="1" step="0.05" value={sourceVideoVolume}
-                            onChange={e => setSourceVideoVolume(parseFloat(e.target.value))}
-                            style={{ width: '36px', height: '3px', accentColor: '#f59e0b', cursor: 'pointer' }}
-                            title={`Source audio: ${Math.round(sourceVideoVolume * 100)}%`}
+                    {/* Unified cut lines — span from clips row through all waveform rows */}
+                    {clips.length > 1 && (() => {
+                      let cumDur = 0;
+                      const boundaries = [];
+                      clips.forEach((clip, idx) => {
+                        cumDur += clip.duration || 1;
+                        if (idx < clips.length - 1) {
+                          boundaries.push({ px: cumDur * pxPerSec, idx });
+                        }
+                      });
+                      return boundaries.map(({ px, idx }) => (
+                        <div key={`cut-${idx}`}>
+                          {/* Visible line spanning clips + audio + source rows (skip ruler) */}
+                          <div style={{
+                            position: 'absolute', top: '24px', bottom: 0,
+                            left: `${px}px`, width: '2px',
+                            backgroundColor: 'rgba(255,255,255,0.5)',
+                            zIndex: 12, pointerEvents: 'none'
+                          }} />
+                          {/* Drag handle */}
+                          <div
+                            style={{
+                              position: 'absolute', top: '24px', bottom: 0,
+                              left: `${px - 6}px`, width: '12px',
+                              cursor: 'col-resize', zIndex: 13
+                            }}
+                            onMouseDown={(e) => {
+                              e.stopPropagation(); e.preventDefault();
+                              const clipIdx = idx + 1;
+                              setCutLineDrag({
+                                active: true, clipIndex: clipIdx, startX: e.clientX,
+                                originalStartTime: clips[clipIdx].startTime,
+                                originalPrevDuration: clips[idx].duration || 1,
+                                originalCurrDuration: clips[clipIdx].duration || 1
+                              });
+                            }}
                           />
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', height: '100%', gap: '8px', flexShrink: 0 }}>
-                        {clips.map((clip, idx) => {
-                          const clipWidth = Math.max(50, (clip.duration || 1) * pxPerSec);
-                          const clipId = clip.id || clip.sourceId;
-                          const data = clipWaveforms[clipId] || [];
-                          return (
-                            <div key={idx} style={{
-                              width: clipWidth, display: 'flex', alignItems: 'center', gap: '1px',
-                              height: '28px', flexShrink: 0, borderRadius: '4px', overflow: 'hidden',
-                              backgroundColor: (hasExternal && sourceVideoMuted) ? 'rgba(245, 158, 11, 0.04)' : 'rgba(245, 158, 11, 0.08)',
-                              border: `1px solid rgba(245, 158, 11, ${(hasExternal && sourceVideoMuted) ? '0.1' : '0.2'})`
-                            }}>
-                              {data.map((amplitude, i) => (
-                                <div key={i} style={{
-                                  flex: 1, minWidth: '1px', backgroundColor: 'rgba(245, 158, 11, 0.4)',
-                                  height: `${amplitude * 100}%`, opacity: (hasExternal && sourceVideoMuted) ? 0.3 : 0.6
-                                }} />
-                              ))}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })()}
-                    </div>
-                  </div>
-                )}
+                        </div>
+                      ));
+                    })()}
+                  </div>{/* inner content wrapper */}
+                </div>{/* scroll container */}
               </div>
+                );
+              })()}
 
               {/* Clip Actions */}
               <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -2755,30 +3088,24 @@ const VideoEditorModal = ({
               <div className="flex w-full flex-col items-start">
                 {renderCollapsibleSection('audio', 'Audio', (
                   <div className="flex flex-col gap-3">
-                    {/* Audio section — populated in Batch 2 */}
                     {selectedAudio ? (
-                      <div className="flex items-center gap-2 rounded-md border border-neutral-800 bg-black px-3 py-2">
-                        <FeatherMusic className="text-neutral-400" style={{ width: 16, height: 16 }} />
-                        <span className="text-body font-body text-[#ffffffff] truncate flex-1">{selectedAudio.name}</span>
-                        {selectedAudio.isTrimmed && <Badge variant="neutral">Trimmed</Badge>}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 rounded-md border border-neutral-800 bg-black px-3 py-2">
-                        <FeatherMusic className="text-neutral-500" style={{ width: 16, height: 16 }} />
-                        <span className="text-body font-body text-neutral-500">No audio selected</span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      {selectedAudio && (
-                        <>
+                      <>
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-black/50">
+                          <FeatherMusic className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                          <span className="text-body font-body text-[#ffffffff] flex-1 truncate">{selectedAudio.name}</span>
+                          {selectedAudio.isTrimmed && <Badge variant="neutral">Trimmed</Badge>}
+                        </div>
+                        <div className="flex gap-2">
                           <Button variant="neutral-secondary" size="small" icon={<FeatherScissors />} onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}>Trim</Button>
                           <Button variant="destructive-tertiary" size="small" icon={<FeatherTrash2 />} onClick={() => {
                             if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; }
                             setSelectedAudio(null); setIsPlaying(false); setCurrentTime(0); setDuration(0); setSourceVideoMuted(false);
                           }}>Remove</Button>
-                        </>
-                      )}
-                    </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center text-neutral-500 text-caption font-caption py-4">No audio selected</div>
+                    )}
                     <Button className="w-full" variant="neutral-secondary" size="small" icon={<FeatherUpload />} onClick={() => audioFileInputRef.current?.click()}>
                       {selectedAudio ? 'Change Audio' : 'Upload Audio'}
                     </Button>
@@ -2827,7 +3154,7 @@ const VideoEditorModal = ({
                           const newClips = visibleVideos.map((v, i) => ({
                             id: `clip_${Date.now()}_${i}`, sourceId: v.id, url: v.url || v.localUrl,
                             localUrl: v.localUrl || v.url, thumbnail: v.thumbnailUrl || v.thumbnail,
-                            startTime: i * 2, duration: 2, locked: false
+                            startTime: i * 2, duration: 2, locked: false, sourceOffset: 0
                           }));
                           setClips(newClips);
                         }}>Add All</Button>
@@ -2837,6 +3164,7 @@ const VideoEditorModal = ({
                     {visibleVideos.length === 0 ? (
                       <div className="py-4 text-center text-neutral-500 text-[13px]">No videos in this collection</div>
                     ) : (
+                      <div className="relative max-h-[300px] overflow-y-auto">
                       <div className="grid grid-cols-2 gap-1.5">
                         {visibleVideos.map((video, i) => {
                           const isInTimeline = clips.some(clip => clip.sourceId === video.id);
@@ -2849,7 +3177,7 @@ const VideoEditorModal = ({
                                   id: `clip_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
                                   sourceId: video.id, url: video.url || video.localUrl,
                                   localUrl: video.localUrl || video.url, thumbnail: video.thumbnailUrl || video.thumbnail,
-                                  startTime: prev.length * 2, duration: 2, locked: false
+                                  startTime: prev.length * 2, duration: 2, locked: false, sourceOffset: 0
                                 }]);
                                 if (video.id && category?.artistId) incrementUseCount(category.artistId, video.id);
                               }}
@@ -2871,12 +3199,17 @@ const VideoEditorModal = ({
                           );
                         })}
                       </div>
+                      </div>
                     )}
-                    {/* Text Banks */}
+                  </div>
+                ))}
+
+                {renderCollapsibleSection('text', 'Text Banks', (
+                  <div className="flex flex-col gap-3">
                     {(() => {
                       const { textBank1, textBank2 } = getTextBanks();
                       return (
-                        <div className="flex flex-col gap-3 pt-3 border-t border-neutral-800">
+                        <>
                           <div>
                             <div className="text-body-bold font-body-bold text-teal-400 mb-2">Text Bank A</div>
                             <div className="flex gap-1.5 mb-2">
@@ -2907,7 +3240,7 @@ const VideoEditorModal = ({
                             ))}
                             {textBank2.length === 0 && <div className="text-[11px] text-neutral-500">No text added yet</div>}
                           </div>
-                        </div>
+                        </>
                       );
                     })()}
                   </div>
@@ -3220,6 +3553,21 @@ const VideoEditorModal = ({
             duration={trimmedDuration}
             onApply={handleBeatSelectionApply}
             onCancel={() => setShowBeatSelector(false)}
+          />
+        )}
+
+        {/* ── Momentum Selector Modal ── */}
+        {showMomentumSelector && selectedAudio?.url && (
+          <MomentumSelector
+            audioSource={selectedAudio.url}
+            duration={trimmedDuration}
+            trimStart={audioStartTime || undefined}
+            trimEnd={audioEndTime || undefined}
+            onApply={(cutPoints) => {
+              handleBeatSelectionApply(cutPoints);
+              setShowMomentumSelector(false);
+            }}
+            onCancel={() => setShowMomentumSelector(false)}
           />
         )}
 

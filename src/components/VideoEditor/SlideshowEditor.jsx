@@ -1938,6 +1938,7 @@ const SlideshowEditor = ({
       status: 'draft',
       createdAt: existingSlideshow?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      editorMode: 'slideshow',
       ...(activePipeline ? { collectionId: activePipeline.id, collectionName: activePipeline.name } : {})
     };
     await onSave?.(slideshowData);
@@ -1956,6 +1957,7 @@ const SlideshowEditor = ({
         status: 'draft',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        editorMode: 'slideshow',
         ...(activePipeline ? { collectionId: activePipeline.id, collectionName: activePipeline.name } : {})
       };
       try {

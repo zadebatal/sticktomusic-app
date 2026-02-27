@@ -17,7 +17,7 @@ import {
 import { useToast } from '../ui';
 import useFileUploader from './shared/useFileUploader';
 
-const FinishedMediaNicheContent = ({ db, artistId, niche, projectAudio = [] }) => {
+const FinishedMediaNicheContent = ({ db, user = null, artistId, niche, projectAudio = [] }) => {
   const { success: toastSuccess } = useToast();
   const [caption, setCaption] = useState('');
   const [hashtags, setHashtags] = useState('');
@@ -27,7 +27,7 @@ const FinishedMediaNicheContent = ({ db, artistId, niche, projectAudio = [] }) =
 
   const {
     files, uploading, addFiles, removeFile, updateFileName, handleDrop, uploadAll, clearFiles, formatSize,
-  } = useFileUploader({ db, artistId, nicheId: niche?.id, nicheName: niche?.name });
+  } = useFileUploader({ db, artistId, nicheId: niche?.id, nicheName: niche?.name, user });
 
   // Audio picker
   const [audioPickerOpen, setAudioPickerOpen] = useState(false);

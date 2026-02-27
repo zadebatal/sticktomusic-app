@@ -26,6 +26,7 @@ import EditorFooter from './shared/EditorFooter';
 import useIsMobile from '../../hooks/useIsMobile';
 import useUnsavedChanges from './shared/useUnsavedChanges';
 import { uploadFile } from '../../services/firebaseStorage';
+import { addToLibrary, addToCollection, addToProjectPool } from '../../services/libraryService';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
@@ -91,6 +92,8 @@ const ClipperEditor = ({
   artistId = null,
   db = null,
   sourceVideos = [],
+  nicheId = null,
+  projectId = null,
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { isMobile } = useIsMobile();
@@ -449,7 +452,28 @@ const ClipperEditor = ({
         await ffmpeg.deleteFile(outputName);
 
         const { url: cloudUrl } = await uploadFile(blob, 'clips', () => {});
-        results.push({ ...clip, cloudUrl });
+
+        // Create a library media item for each exported clip
+        const mediaId = `media_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const mediaItem = {
+          id: mediaId,
+          type: 'video',
+          name: clip.name || `Clip ${i + 1}`,
+          url: cloudUrl,
+          thumbnailUrl: cloudUrl,
+          duration: clip.duration,
+          sourceVideoName: sourceName,
+          sourceStart: clip.start,
+          sourceEnd: clip.end,
+          bucket: clip.bucket,
+          isClipperClip: true,
+          createdAt: new Date().toISOString(),
+        };
+        addToLibrary(artistId, mediaItem);
+        if (nicheId) addToCollection(artistId, nicheId, [mediaId], db);
+        if (projectId) addToProjectPool(artistId, projectId, [mediaId], db);
+
+        results.push({ ...clip, cloudUrl, mediaId });
         setExportedCount(i + 1);
         setExportProgress(Math.round(((i + 1) / clips.length) * 100));
       }
@@ -485,7 +509,7 @@ const ClipperEditor = ({
       toastError(`Export failed: ${err.message}`);
       setExporting(false);
     }
-  }, [clips, sourceFile, sourceUrl, sourceName, videoName, buckets, onSave, toastSuccess, toastError]);
+  }, [clips, sourceFile, sourceUrl, sourceName, videoName, buckets, onSave, toastSuccess, toastError, artistId, db, nicheId, projectId]);
 
   // ── Keyboard shortcuts (reads video.currentTime directly for accuracy) ──
   useEffect(() => {

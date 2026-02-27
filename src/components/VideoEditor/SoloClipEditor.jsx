@@ -12,7 +12,7 @@ import log from '../../utils/logger';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
-import { FeatherX, FeatherPlay, FeatherPause, FeatherVolume2, FeatherVolumeX, FeatherPlus, FeatherTrash2, FeatherRefreshCw, FeatherMusic, FeatherUpload, FeatherDatabase, FeatherMic, FeatherScissors, FeatherSkipBack, FeatherSkipForward, FeatherStar, FeatherCheck } from '@subframe/core';
+import { FeatherX, FeatherPlay, FeatherPause, FeatherVolume2, FeatherVolumeX, FeatherPlus, FeatherTrash2, FeatherRefreshCw, FeatherMusic, FeatherUpload, FeatherDatabase, FeatherMic, FeatherScissors, FeatherSkipBack, FeatherSkipForward, FeatherStar, FeatherCheck, FeatherZoomIn, FeatherZoomOut } from '@subframe/core';
 import { Badge } from '../../ui/components/Badge';
 import { useBeatDetection } from '../../hooks/useBeatDetection';
 import { normalizeBeatsToTrimRange } from '../../utils/timelineNormalization';
@@ -23,6 +23,7 @@ import useCollapsibleSections from './shared/useCollapsibleSections';
 import useIsMobile from '../../hooks/useIsMobile';
 import AudioClipSelector from './AudioClipSelector';
 import BeatSelector from './BeatSelector';
+import MomentumSelector from './MomentumSelector';
 import CloudImportButton from './CloudImportButton';
 import LyricBank from './LyricBank';
 import LyricAnalyzer from './LyricAnalyzer';
@@ -32,6 +33,8 @@ import useWaveform from '../../hooks/useWaveform';
 import useMediaMultiSelect from './shared/useMediaMultiSelect';
 import useEditorSessionState from './shared/useEditorSessionState';
 import useUnsavedChanges from './shared/useUnsavedChanges';
+import usePixelTimeline from './shared/usePixelTimeline';
+import useTimelineZoom from '../../hooks/useTimelineZoom';
 
 /**
  * SoloClipEditor v2 — "Solo Clip" video editor mode
@@ -66,18 +69,21 @@ const SoloClipEditor = ({
   const { theme } = useTheme();
 
   // ── Multi-video state (mirrors SlideshowEditor allSlideshows) ──
+  // _nicheVideos passed directly from VideoNicheContent bypasses pipelineCategory localStorage lookup
+  const nicheVideos = existingVideo?._nicheVideos || [];
+  const availableVideos = nicheVideos.length > 0 ? nicheVideos : (category?.videos || []);
   const [allVideos, setAllVideos] = useState(() => {
     if (existingVideo && existingVideo.editorMode === 'solo-clip') {
       // Re-editing an existing solo clip draft
       const existingClip = existingVideo.clips?.[0]
-        ? (category?.videos || []).find(v => v.id === existingVideo.clips[0].sourceId) || {
+        ? availableVideos.find(v => v.id === existingVideo.clips[0].sourceId) || {
             id: existingVideo.clips[0].sourceId,
             url: existingVideo.clips[0].url,
             localUrl: existingVideo.clips[0].localUrl,
             thumbnailUrl: existingVideo.clips[0].thumbnail,
             thumbnail: existingVideo.clips[0].thumbnail
           }
-        : category?.videos?.[0] || null;
+        : availableVideos[0] || null;
       return [{
         id: 'template',
         name: 'Template',
@@ -87,7 +93,7 @@ const SoloClipEditor = ({
         isTemplate: true
       }];
     }
-    const firstClip = category?.videos?.[0] || null;
+    const firstClip = availableVideos[0] || null;
     return [{
       id: 'template',
       name: 'Template',
@@ -100,7 +106,7 @@ const SoloClipEditor = ({
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
   const nicheGenCount = existingVideo?._nicheGenerateCount || null;
   const [generateCount, setGenerateCount] = useState(
-    nicheGenCount ? Math.max(nicheGenCount - 1, 1) : Math.min(10, Math.max(1, (category?.videos?.length || 1) - 1))
+    nicheGenCount ? Math.max(nicheGenCount - 1, 1) : Math.min(10, Math.max(1, (availableVideos.length || 1) - 1))
   );
   const [isGenerating, setIsGenerating] = useState(false);
   const [keepTemplateText, setKeepTemplateText] = useState('none');
@@ -191,6 +197,7 @@ const SoloClipEditor = ({
   // ── Beat detection ──
   const { beats, bpm, isAnalyzing, analyzeAudio } = useBeatDetection();
   const [showBeatSelector, setShowBeatSelector] = useState(false);
+  const [showMomentumSelector, setShowMomentumSelector] = useState(false);
 
   // Audio trim boundaries for beat normalization
   const audioStartTime = selectedAudio?.startTime || 0;
@@ -214,6 +221,9 @@ const SoloClipEditor = ({
   const [clipDuration, setClipDuration] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [playheadDragging, setPlayheadDragging] = useState(false);
+  const wasPlayingBeforePlayheadDrag = useRef(false);
+  const [timelineScale, setTimelineScale] = useState(1);
+  const [userMaxDuration, setUserMaxDuration] = useState(existingVideo?.maxDuration || 30);
   const videoRef = useRef(null);
   const animationRef = useRef(null);
 
@@ -259,12 +269,12 @@ const SoloClipEditor = ({
 
   // Computed: visible videos based on selected collection (matches Montage pattern)
   const visibleVideos = useMemo(() => {
-    if (selectedCollection === 'category') return category?.videos || [];
+    if (selectedCollection === 'category') return availableVideos.length > 0 ? availableVideos : (category?.videos || []);
     if (selectedCollection === 'all') return libraryVideos;
     const col = collections.find(c => c.id === selectedCollection);
     if (!col?.mediaIds?.length) return [];
     return libraryVideos.filter(v => col.mediaIds.includes(v.id));
-  }, [selectedCollection, libraryVideos, collections, category?.videos]);
+  }, [selectedCollection, libraryVideos, collections, category?.videos, availableVideos]);
 
   // ── Multi-select for clip grid ──
   const {
@@ -290,7 +300,9 @@ const SoloClipEditor = ({
   const [loadedBankLyricId, setLoadedBankLyricId] = useState(null);
 
   // ── Lyrics state ──
+  const [lyrics, setLyrics] = useState('');
   const [lyricsBank, setLyricsBank] = useState([]);
+  const [showLyricBankPicker, setShowLyricBankPicker] = useState(false);
 
   // ── Audio trimmer state ──
   const [showAudioTrimmer, setShowAudioTrimmer] = useState(false);
@@ -304,7 +316,7 @@ const SoloClipEditor = ({
 
   // ── Collapsible sidebar sections ──
   const { openSections, renderCollapsibleSection } = useCollapsibleSections({
-    audio: true, clips: true, lyrics: false, textStyle: false
+    audio: true, clips: true, text: false, lyrics: false, textStyle: false
   });
 
   // ── Session persistence ──
@@ -398,8 +410,51 @@ const SoloClipEditor = ({
     }
   }, []);
 
-  // Timeline duration dictated by audio; falls back to clip length when no audio
-  const timelineDuration = audioDuration > 0 ? audioDuration : (clipDuration || 1);
+  // Timeline duration = max(userMaxDuration, clipDuration, audioDuration)
+  const timelineDuration = useMemo(() => {
+    const audioDur = selectedAudio && !selectedAudio.isSourceVideo ? audioDuration : 0;
+    return Math.max(userMaxDuration, clipDuration || 0, audioDur) || 1;
+  }, [userMaxDuration, clipDuration, audioDuration, selectedAudio]);
+
+  // Auto-grow max duration
+  const userMaxDurationRef = useRef(userMaxDuration);
+  userMaxDurationRef.current = userMaxDuration;
+  useEffect(() => {
+    const maxContentDur = Math.max(clipDuration || 0, audioDuration || 0);
+    if (maxContentDur > userMaxDurationRef.current) {
+      setUserMaxDuration(Math.ceil(maxContentDur));
+    }
+  }, [clipDuration, audioDuration]);
+
+  // Wire shared pixel timeline hook
+  const { pxPerSec, timelinePx, rulerTicks, handleRulerMouseDown, formatTime, downsample } = usePixelTimeline({
+    timelineScale,
+    timelineDuration,
+    timelineRef,
+    handleSeek: useCallback((time) => {
+      if (videoRef.current) {
+        videoRef.current.currentTime = time;
+        setCurrentTime(time);
+      }
+      if (audioRef.current) {
+        const startBoundary = selectedAudio?.startTime || 0;
+        audioRef.current.currentTime = time + startBoundary;
+      }
+    }, [selectedAudio]),
+    isPlaying,
+    setIsPlaying,
+    setPlayheadDragging,
+    wasPlayingRef: wasPlayingBeforePlayheadDrag,
+  });
+
+  // Wire pinch-to-zoom on timeline container
+  useTimelineZoom(timelineRef, {
+    zoom: timelineScale,
+    setZoom: setTimelineScale,
+    minZoom: 0.3,
+    maxZoom: 3,
+    basePixelsPerSecond: 40,
+  });
 
   const playbackLoop = useCallback(() => {
     const startBoundary = selectedAudio?.startTime || 0;
@@ -797,12 +852,12 @@ const SoloClipEditor = ({
 
   // ── Reroll: swap clip with random from visible videos (collection-aware) ──
   const handleReroll = useCallback(() => {
-    const availableClips = visibleVideos.length > 0 ? visibleVideos : (category?.videos || []);
-    if (!availableClips.length) {
+    const rerollPool = visibleVideos.length > 0 ? visibleVideos : availableVideos;
+    if (!rerollPool.length) {
       toastError('No clips available to reroll from.');
       return;
     }
-    const available = availableClips.filter(v => v.id !== clip?.id);
+    const available = rerollPool.filter(v => v.id !== clip?.id);
     if (available.length === 0) {
       toastError('No other clips available to swap with.');
       return;
@@ -810,7 +865,7 @@ const SoloClipEditor = ({
     const randomClip = available[Math.floor(Math.random() * available.length)];
     setClip(randomClip);
     toastSuccess('Swapped clip');
-  }, [visibleVideos, category?.videos, clip, setClip, toastSuccess, toastError]);
+  }, [visibleVideos, availableVideos, clip, setClip, toastSuccess, toastError]);
 
   // ── Audio upload handler — route through trimmer ──
   const handleAudioUpload = useCallback((e) => {
@@ -915,11 +970,10 @@ const SoloClipEditor = ({
 
   useEffect(() => {
     if (!timelineDrag || !timelineRef.current) return;
-    const dur = clipDuration || 1;
+    const dur = timelineDuration || 1;
     const handleMouseMove = (e) => {
-      const rect = timelineRef.current.getBoundingClientRect();
       const deltaX = e.clientX - timelineDrag.startX;
-      const deltaSec = (deltaX / rect.width) * dur;
+      const deltaSec = deltaX / pxPerSec;
       const minDur = 0.5;
 
       if (timelineDrag.type === 'move') {
@@ -944,7 +998,7 @@ const SoloClipEditor = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [timelineDrag, clipDuration, updateTextOverlay]);
+  }, [timelineDrag, timelineDuration, pxPerSec, updateTextOverlay]);
 
   // ── Delete generated video ──
   const handleDeleteVideo = useCallback((index) => {
@@ -964,7 +1018,7 @@ const SoloClipEditor = ({
       toastError('No clip loaded. Add a clip first.');
       return;
     }
-    const availableClips = (category?.videos || []).filter(v => v.id !== template.clip.id);
+    const availableClips = availableVideos.filter(v => v.id !== template.clip.id);
     if (availableClips.length === 0) {
       toastError('Need more than one clip to generate.');
       return;
@@ -1021,14 +1075,13 @@ const SoloClipEditor = ({
   const autoGenTriggeredRef = useRef(false);
   useEffect(() => {
     if (autoGenTriggeredRef.current || !nicheGenCount) return;
-    const categoryVideos = category?.videos || [];
-    if (categoryVideos.length < 2) return;
+    if (availableVideos.length < 2) return;
     const template = allVideos[0];
-    // Auto-populate template with first clip if empty (category loads async)
+    // Auto-populate template with first clip if empty (niche videos load via draft)
     if (!template?.clip) {
       setAllVideos(prev => {
         const copy = [...prev];
-        copy[0] = { ...copy[0], clip: categoryVideos[0] };
+        copy[0] = { ...copy[0], clip: availableVideos[0] };
         return copy;
       });
       return; // Re-render will trigger this effect again with clip populated
@@ -1072,12 +1125,13 @@ const SoloClipEditor = ({
       // Audio mixing state
       sourceVideoMuted,
       sourceVideoVolume,
-      externalAudioVolume
+      externalAudioVolume,
+      maxDuration: userMaxDuration
     };
     onSave(videoData);
     setLastSaved(new Date());
     toastSuccess(`Saved "${video.name || 'Solo Clip'}"`);
-  }, [allVideos, activeVideoIndex, clipDuration, aspectRatio, selectedAudio, existingVideo, sourceVideoMuted, sourceVideoVolume, externalAudioVolume, onSave, toastSuccess, toastError]);
+  }, [allVideos, activeVideoIndex, clipDuration, aspectRatio, selectedAudio, existingVideo, sourceVideoMuted, sourceVideoVolume, externalAudioVolume, userMaxDuration, onSave, toastSuccess, toastError]);
 
   // ── Save All & Close ──
   const handleSaveAllAndClose = useCallback(async () => {
@@ -1110,7 +1164,12 @@ const SoloClipEditor = ({
         isTemplate: video.isTemplate,
         status: 'draft',
         createdAt: existingVideo?.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        // Audio mixing state
+        sourceVideoMuted,
+        sourceVideoVolume,
+        externalAudioVolume,
+        maxDuration: userMaxDuration
       };
       try {
         await onSave(videoData);
@@ -1125,7 +1184,7 @@ const SoloClipEditor = ({
     setIsSavingAll(false);
     toastSuccess(`Saved ${savedCount} video${savedCount !== 1 ? 's' : ''}!`);
     onClose();
-  }, [allVideos, clipDuration, aspectRatio, selectedAudio, existingVideo, onSave, onClose, toastSuccess, toastError, isSavingAll]);
+  }, [allVideos, clipDuration, aspectRatio, selectedAudio, existingVideo, sourceVideoMuted, sourceVideoVolume, externalAudioVolume, userMaxDuration, onSave, onClose, toastSuccess, toastError, isSavingAll]);
 
   // Export removed — was identical to Save Draft but set status='rendered' without actually rendering.
   // Real video export (FFmpeg render + download) will be added as a future feature.
@@ -1203,11 +1262,7 @@ const SoloClipEditor = ({
     return { width: '100%', height: '100%', objectFit: 'cover' };
   };
 
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  // formatTime provided by usePixelTimeline hook
 
   // Video text banks for left panel
   const { videoTextBank1, videoTextBank2 } = getVideoTextBanks();
@@ -1300,54 +1355,21 @@ const SoloClipEditor = ({
                 })}
               </div>
 
-              {/* Variation Tabs */}
-              <div className="flex w-full overflow-auto gap-1">
-                {allVideos.map((video, idx) => (
-                  <div
-                    key={video.id}
-                    onClick={() => switchToVideo(idx)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium cursor-pointer whitespace-nowrap flex-shrink-0 transition-all ${idx === activeVideoIndex ? 'bg-brand-600/15 border border-brand-600/30 text-[#ffffffff]' : 'bg-neutral-800/50 border border-transparent text-neutral-400'}`}
-                  >
-                    {video.isTemplate ? (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" /></svg>
-                    ) : (
-                      <span style={{ fontSize: '10px', opacity: 0.6 }}>#{idx}</span>
-                    )}
-                    <span>{video.isTemplate ? 'Template' : video.name || `Video ${idx}`}</span>
-                    {!video.isTemplate && (
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteVideo(idx); }} className="bg-transparent border-none text-neutral-500 text-[14px] cursor-pointer px-0.5 ml-0.5 leading-none">×</button>
-                    )}
-                  </div>
-                ))}
-              </div>
+              {/* Reroll */}
+              {(visibleVideos.length > 0 || availableVideos.length > 1) && (
+                <Button variant="neutral-tertiary" size="medium" icon={<FeatherRefreshCw />} onClick={handleReroll}>Re-roll</Button>
+              )}
 
               {/* Generation Controls */}
-              <div className="flex w-full items-center gap-2">
-                <ToggleGroup value={keepTemplateText} onValueChange={(v) => v && setKeepTemplateText(v)}>
-                  <ToggleGroup.Item value="none">Random</ToggleGroup.Item>
-                  <ToggleGroup.Item value="all">Keep Text</ToggleGroup.Item>
-                </ToggleGroup>
+              <div className="flex items-center gap-2">
+                <Button variant="brand-primary" size="medium" icon={<FeatherPlus />} onClick={executeGeneration} disabled={isGenerating}>
+                  {isGenerating ? 'Remixing...' : 'Remix'}
+                </Button>
                 <input
                   type="number" min={1} max={50} value={generateCount}
                   onChange={(e) => setGenerateCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
-                  className="w-12 px-2 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[13px] text-center outline-none"
+                  className="w-16 px-2 py-1.5 rounded-md border border-neutral-700 bg-[#1a1a1aff] text-[#ffffffff] text-[12px] text-center outline-none"
                 />
-                <Button variant="brand-primary" size="small" onClick={executeGeneration} disabled={isGenerating}>
-                  {isGenerating ? 'Remixing...' : 'Remix'}
-                </Button>
-              </div>
-
-              {/* Reroll */}
-              {(visibleVideos.length > 0 || (category?.videos?.length || 0) > 1) && (
-                <Button variant="neutral-secondary" size="small" icon={<FeatherRefreshCw />} onClick={handleReroll}>Re-roll</Button>
-              )}
-
-              {/* Playback Controls */}
-              <div className="flex w-full items-center justify-center gap-3">
-                <IconButton variant="neutral-tertiary" size="small" icon={<FeatherSkipBack />} aria-label="Skip to start" onClick={() => handleSeek(0)} />
-                <IconButton variant="neutral-secondary" size="medium" icon={isPlaying ? <FeatherPause /> : <FeatherPlay />} aria-label={isPlaying ? "Pause" : "Play"} onClick={handlePlayPause} />
-                <IconButton variant="neutral-tertiary" size="small" icon={<FeatherSkipForward />} aria-label="Skip to end" onClick={() => handleSeek(timelineDuration)} />
-                <IconButton variant="neutral-tertiary" size="small" icon={isMuted ? <FeatherVolumeX /> : <FeatherVolume2 />} aria-label={isMuted ? "Unmute" : "Mute"} onClick={() => setIsMuted(!isMuted)} />
               </div>
 
             </div>
@@ -1414,155 +1436,306 @@ const SoloClipEditor = ({
               </div>
             )}
 
-            {/* ═══ TIMELINE ═══ */}
-            <div className="flex w-full flex-col items-start border-t border-neutral-800 bg-[#1a1a1aff] px-6 py-4 flex-shrink-0">
-              <div className="flex w-full items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-heading-3 font-heading-3 text-[#ffffffff]">Timeline</span>
-                  <Button variant="neutral-secondary" size="small" onClick={handleCutByWord}>Cut by word</Button>
-                  <Button variant="neutral-secondary" size="small" onClick={handleCutByBeat}>Cut by beat</Button>
-                </div>
-                <Badge variant="neutral">
-                  {isAnalyzing ? 'Analyzing beats...' : bpm ? `${Math.round(bpm)} BPM (${filteredBeats.length} beats)` : 'No beats detected'}
-                </Badge>
-              </div>
-              <div
-                ref={timelineRef}
-                className="flex w-full flex-col gap-2 relative"
-                style={{ minHeight: '140px', cursor: 'pointer', userSelect: 'none' }}
-                onClick={(e) => {
-                  if (playheadDragging) return;
-                  if (e.target === e.currentTarget || e.target.dataset.timelineClickable) {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const clickX = e.clientX - rect.left;
-                    const time = (clickX / rect.width) * (timelineDuration || 1);
-                    handleSeek(Math.max(0, Math.min(timelineDuration || 0, time)));
-                  }
-                }}
-              >
-                {/* Text Track */}
-                <div className="flex w-full items-center gap-3">
-                  <span className="w-20 text-caption font-caption text-neutral-400 text-right shrink-0">Text</span>
-                  <div className="flex-1 h-7 rounded-md border border-neutral-800 bg-black relative" data-timeline-clickable="true">
-                    {textOverlays.map((overlay) => {
-                      const startPct = timelineDuration > 0 ? (overlay.startTime / timelineDuration) * 100 : 0;
-                      const widthPct = timelineDuration > 0 ? ((overlay.endTime - overlay.startTime) / timelineDuration) * 100 : 10;
-                      const isSelected = editingTextId === overlay.id;
-                      return (
-                        <div key={overlay.id} style={{
-                          position: 'absolute', left: `${startPct}%`, width: `${widthPct}%`, top: '2px', height: '24px',
-                          backgroundColor: isSelected ? '#9333ea' : theme.accent.primary, borderRadius: '4px',
-                          display: 'flex', alignItems: 'center', padding: '0 4px', cursor: timelineDrag ? 'grabbing' : 'grab', overflow: 'hidden',
-                          border: isSelected ? '1px solid #a855f7' : '1px solid rgba(124,58,237,0.5)',
-                          zIndex: isSelected ? 10 : 5
-                        }} onMouseDown={(e) => handleTimelineDragStart(e, overlay.id, 'move')}>
-                          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
-                            onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'left'); }} />
-                          <span style={{ fontSize: '10px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none', padding: '0 6px' }}>{overlay.text}</span>
-                          <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
-                            onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'right'); }} />
-                        </div>
-                      );
-                    })}
+            {/* ═══ PIXEL TIMELINE (unified scroll layout) ═══ */}
+            {(() => {
+              const hasAudioTrack = !!(selectedAudio && !selectedAudio.isSourceVideo && waveformData.length > 0);
+              const sourceData = clip ? (clipWaveforms[clip.id || clip.sourceId] || []) : [];
+              const hasSourceTrack = sourceData.length > 0;
+              const playheadPercent = timelineDuration > 0 ? (currentTime / timelineDuration) * 100 : 0;
+              const audioTrackH = hasAudioTrack ? Math.round(4 + 28 * externalAudioVolume) : 0;
+              const srcVol = sourceVideoMuted ? 0 : sourceVideoVolume;
+              const sourceTrackH = hasSourceTrack ? Math.round(4 + 28 * srcVol) : 0;
+              const trimmedDuration = selectedAudio
+                ? ((selectedAudio.endTime || selectedAudio.duration || audioDuration) - (selectedAudio.startTime || 0))
+                : 0;
+              const sourceWaveformBars = hasSourceTrack ? (() => {
+                const clipDur = clipDuration || 1;
+                const segPx = clipDur * pxPerSec;
+                const maxBars = Math.max(10, Math.round(segPx / 3));
+                return downsample(sourceData, maxBars);
+              })() : [];
+              return (
+              <div className="flex w-full flex-col border-t border-neutral-800 bg-[#1a1a1aff] px-4 py-3 flex-shrink-0">
+                {/* Timeline header */}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-heading-3 font-heading-3 text-[#ffffffff]">Timeline</span>
+                    <Button variant="neutral-secondary" size="small" onClick={handleCutByWord}>Cut by word</Button>
+                    <Button variant="neutral-secondary" size="small" onClick={handleCutByBeat}>Cut by beat</Button>
+                    <Badge variant="neutral">
+                      {isAnalyzing ? 'Analyzing beats...' : bpm ? `${Math.round(bpm)} BPM (${filteredBeats.length} beats)` : 'No beats detected'}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-neutral-500">Max</span>
+                    <input type="number" min={1} max={300} step={1} value={userMaxDuration}
+                      onChange={(e) => setUserMaxDuration(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-14 px-1.5 py-0.5 rounded border border-neutral-800 bg-black text-[#ffffffff] text-[11px] text-center outline-none"
+                      title="Max timeline duration (seconds)"
+                      disabled={!!(selectedAudio && !selectedAudio.isSourceVideo)}
+                    />
+                    <span className="text-[10px] text-neutral-500">s</span>
                   </div>
                 </div>
-
-                {/* Clip Track */}
-                <div className="flex w-full items-center gap-3">
-                  <span className="w-20 text-caption font-caption text-neutral-400 text-right shrink-0">Clip</span>
-                  <div className="flex-1 h-10 rounded-md border border-neutral-800 bg-black relative overflow-hidden">
-                    {clip && (clip.thumbnailUrl || clip.thumbnail) && (
-                      <img src={clip.thumbnailUrl || clip.thumbnail} alt="" style={{ width: '60px', height: '100%', objectFit: 'cover', opacity: 0.6 }} />
-                    )}
-                    <span style={{ position: 'absolute', left: '68px', top: '50%', transform: 'translateY(-50%)', fontSize: '10px', color: theme.text.secondary }}>
-                      {clip ? 'Clip' : 'No clip'}
-                    </span>
+                {/* Draft Variation Tabs */}
+                {allVideos.length > 0 && (
+                  <div className="flex w-full gap-1.5 overflow-x-auto mb-3 pb-1">
+                    {allVideos.map((video, idx) => (
+                      <button
+                        key={video.id}
+                        onClick={() => switchToVideo(idx)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[12px] whitespace-nowrap flex-shrink-0 cursor-pointer transition-colors ${
+                          idx === activeVideoIndex
+                            ? 'border-brand-600 bg-brand-600/15 text-brand-600 font-semibold'
+                            : 'border-neutral-700 bg-[#1a1a1aff] text-neutral-400 hover:border-neutral-600'
+                        }`}
+                      >
+                        {video.isTemplate ? 'Template' : (
+                          <>
+                            #{idx}
+                            <span onClick={(e) => { e.stopPropagation(); handleDeleteVideo(idx); }} className="ml-0.5 opacity-50 hover:opacity-100 cursor-pointer text-[10px]">x</span>
+                          </>
+                        )}
+                      </button>
+                    ))}
                   </div>
-                </div>
+                )}
 
-                {/* Audio Track (external) */}
-                {selectedAudio && !selectedAudio.isSourceVideo && waveformData.length > 0 && (
-                  <div className="flex w-full items-center gap-3">
-                    <span className="w-20 text-caption font-caption text-neutral-400 text-right shrink-0">Audio</span>
-                    <div className="flex-1 h-8 rounded-md border border-neutral-800 bg-black relative overflow-hidden">
-                      <div style={{ position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', gap: '3px', zIndex: 3, backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: '4px', padding: '2px 5px' }}>
+                {/* Volume controls row */}
+                {(hasAudioTrack || hasSourceTrack) && (
+                  <div className="flex items-center gap-3 mb-2">
+                    {hasAudioTrack && (
+                      <div className="flex items-center gap-1.5">
                         <FeatherMusic style={{ width: 10, height: 10, color: '#22c55e' }} />
+                        <span className="text-[10px] text-green-400 w-8">Audio</span>
                         <input type="range" min="0" max="1" step="0.05" value={externalAudioVolume}
                           onChange={e => setExternalAudioVolume(parseFloat(e.target.value))}
-                          style={{ width: '36px', height: '3px', accentColor: '#22c55e', cursor: 'pointer' }}
-                          onClick={e => e.stopPropagation()} />
+                          style={{ width: '64px', height: '4px', accentColor: '#22c55e', cursor: 'pointer' }}
+                          title={`Audio: ${Math.round(externalAudioVolume * 100)}%`}
+                        />
+                        <span className="text-[10px] text-neutral-500 w-8">{Math.round(externalAudioVolume * 100)}%</span>
                       </div>
-                      <div style={{ position: 'absolute', left: '68px', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: 0 }}>
-                        {waveformData.map((amplitude, i) => (
-                          <div key={i} style={{ flex: 1, backgroundColor: 'rgba(34, 197, 94, 0.5)', height: `${amplitude * 100}%`, opacity: 0.6 }} />
-                        ))}
+                    )}
+                    {hasSourceTrack && (
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={() => setSourceVideoMuted(m => !m)}
+                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '10px', opacity: sourceVideoMuted ? 0.4 : 1 }}
+                          title={sourceVideoMuted ? 'Unmute source audio' : 'Mute source audio'}
+                        >{sourceVideoMuted ? '\uD83D\uDD07' : '\uD83C\uDFAC'}</button>
+                        <span className="text-[10px] text-amber-400 w-10">Source</span>
+                        <input type="range" min="0" max="1" step="0.05"
+                          value={sourceVideoMuted ? 0 : sourceVideoVolume}
+                          onChange={e => { setSourceVideoVolume(parseFloat(e.target.value)); if (sourceVideoMuted) setSourceVideoMuted(false); }}
+                          style={{ width: '64px', height: '4px', accentColor: '#f59e0b', cursor: 'pointer' }}
+                          title={sourceVideoMuted ? 'Muted' : `Source: ${Math.round(sourceVideoVolume * 100)}%`}
+                        />
+                        <span className="text-[10px] text-neutral-500 w-8">{sourceVideoMuted ? 'Off' : `${Math.round(sourceVideoVolume * 100)}%`}</span>
                       </div>
+                    )}
+                    {/* Zoom controls — right-aligned */}
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      <FeatherZoomOut style={{ width: 12, height: 12, color: '#737373' }} />
+                      <input type="range" min="0.3" max="3" step="0.05" value={timelineScale}
+                        onChange={e => setTimelineScale(parseFloat(e.target.value))}
+                        style={{ width: '80px', height: '4px', accentColor: '#6366f1', cursor: 'pointer' }}
+                        title={`Zoom: ${Math.round(timelineScale * 100)}%`}
+                      />
+                      <FeatherZoomIn style={{ width: 12, height: 12, color: '#737373' }} />
                     </div>
                   </div>
                 )}
-
-                {/* Source Audio Track */}
-                {clip && (clipWaveforms[clip.id || clip.sourceId] || []).length > 0 && (() => {
-                  const data = clipWaveforms[clip.id || clip.sourceId] || [];
-                  const hasExternal = selectedAudio && !selectedAudio.isSourceVideo;
-                  return (
-                    <div className="flex w-full items-center gap-3">
-                      <span className="w-20 text-caption font-caption text-neutral-400 text-right shrink-0">Source</span>
-                      <div className="flex-1 h-8 rounded-md border border-neutral-800 bg-black relative overflow-hidden">
-                        <div style={{ position: 'absolute', left: '4px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', gap: '3px', zIndex: 3, backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: '4px', padding: '2px 5px' }}>
-                          <button onClick={e => { e.stopPropagation(); setSourceVideoMuted(m => !m); }}
-                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', opacity: (hasExternal && sourceVideoMuted) ? 0.4 : 1, display: 'flex', alignItems: 'center' }}
-                          >{sourceVideoMuted ? <FeatherVolumeX style={{ width: 10, height: 10 }} /> : <FeatherVolume2 style={{ width: 10, height: 10 }} />}</button>
-                          {hasExternal && (
-                            <input type="range" min="0" max="1" step="0.05" value={sourceVideoVolume}
-                              onChange={e => setSourceVideoVolume(parseFloat(e.target.value))}
-                              style={{ width: '36px', height: '3px', accentColor: '#f59e0b', cursor: 'pointer', opacity: sourceVideoMuted ? 0.3 : 1 }}
-                              onClick={e => e.stopPropagation()} />
-                          )}
-                        </div>
-                        <div style={{ position: 'absolute', left: hasExternal ? '68px' : '20px', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', gap: 0 }}>
-                          {data.map((amplitude, i) => (
-                            <div key={i} style={{ flex: 1, backgroundColor: 'rgba(245, 158, 11, 0.4)', height: `${amplitude * 100}%`, opacity: (hasExternal && sourceVideoMuted) ? 0.3 : 0.6 }} />
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Playhead */}
-                {timelineDuration > 0 && (
-                  <div style={{
-                    position: 'absolute', left: `${(currentTime / timelineDuration) * 100}%`, top: 0, bottom: 0,
-                    width: '2px', backgroundColor: '#ef4444', zIndex: 20, pointerEvents: 'auto', cursor: 'ew-resize',
-                    transition: (isPlaying && !playheadDragging) ? 'none' : playheadDragging ? 'none' : 'left 0.1s ease-out'
-                  }} onMouseDown={(e) => {
-                    e.preventDefault(); e.stopPropagation();
-                    setPlayheadDragging(true);
-                    document.body.style.userSelect = 'none'; document.body.style.WebkitUserSelect = 'none';
-                    const wasPlaying = isPlaying;
-                    if (isPlaying) { videoRef.current?.pause(); audioRef.current?.pause(); cancelAnimationFrame(animationRef.current); setIsPlaying(false); }
-                    const handleDragMove = (moveE) => {
-                      const rect = timelineRef.current?.getBoundingClientRect();
-                      if (!rect) return;
-                      const pct = Math.max(0, Math.min(1, (moveE.clientX - rect.left) / rect.width));
-                      handleSeek(pct * timelineDuration);
-                    };
-                    const handleDragEnd = () => {
-                      setPlayheadDragging(false); document.body.style.userSelect = ''; document.body.style.WebkitUserSelect = '';
-                      window.removeEventListener('mousemove', handleDragMove);
-                      window.removeEventListener('mouseup', handleDragEnd);
-                      if (wasPlaying) { videoRef.current?.play(); if (audioRef.current?.src) audioRef.current.play().catch(() => {}); animationRef.current = requestAnimationFrame(playbackLoop); setIsPlaying(true); }
-                    };
-                    window.addEventListener('mousemove', handleDragMove);
-                    window.addEventListener('mouseup', handleDragEnd);
-                  }}>
-                    <div style={{ position: 'absolute', left: '-6px', right: '-6px', top: 0, bottom: 0, cursor: 'ew-resize' }} />
-                    <div style={{ position: 'absolute', top: '-2px', left: '50%', transform: 'translateX(-50%)', width: '10px', height: '10px', backgroundColor: '#ef4444', borderRadius: '2px', clipPath: 'polygon(0 0, 100% 0, 50% 100%)' }} />
+                {/* Zoom controls when no audio tracks */}
+                {!hasAudioTrack && !hasSourceTrack && (
+                  <div className="flex items-center gap-1.5 mb-2 justify-end">
+                    <FeatherZoomOut style={{ width: 12, height: 12, color: '#737373' }} />
+                    <input type="range" min="0.3" max="3" step="0.05" value={timelineScale}
+                      onChange={e => setTimelineScale(parseFloat(e.target.value))}
+                      style={{ width: '80px', height: '4px', accentColor: '#6366f1', cursor: 'pointer' }}
+                      title={`Zoom: ${Math.round(timelineScale * 100)}%`}
+                    />
+                    <FeatherZoomIn style={{ width: 12, height: 12, color: '#737373' }} />
                   </div>
                 )}
+
+                {/* ═══ UNIFIED TIMELINE: labels column + single scrollable area ═══ */}
+                <div className="flex w-full items-start gap-3">
+                  {/* Fixed labels column */}
+                  <div className="w-20 flex flex-col shrink-0">
+                    <div style={{ height: '24px' }} className="flex items-center justify-end pr-1">
+                      <span className="text-[10px] text-neutral-600">Time</span>
+                    </div>
+                    <div style={{ height: '28px' }} className="flex items-center justify-end pr-1">
+                      <span className="text-caption font-caption text-neutral-400">Text</span>
+                    </div>
+                    <div style={{ height: '40px' }} className="flex items-center justify-end pr-1">
+                      <span className="text-caption font-caption text-neutral-400">Clip</span>
+                    </div>
+                    {hasAudioTrack && (
+                      <div style={{ height: `${audioTrackH}px`, transition: 'height 0.15s ease-out' }} className="flex items-center justify-end pr-1">
+                        {audioTrackH >= 16 && <span className="text-caption font-caption text-neutral-400">Audio</span>}
+                      </div>
+                    )}
+                    {hasSourceTrack && (
+                      <div style={{ height: `${sourceTrackH}px`, transition: 'height 0.15s ease-out' }} className="flex items-center justify-end pr-1">
+                        {sourceTrackH >= 16 && <span className="text-caption font-caption text-neutral-400">Source</span>}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Single scrollable column */}
+                  <div className="flex-1 rounded-md border border-neutral-800 bg-black overflow-x-auto" ref={timelineRef}>
+                    <div style={{ position: 'relative', minWidth: '100%', width: `${timelinePx}px` }}>
+                      {/* Playhead line — spans all tracks */}
+                      {timelineDuration > 0 && (
+                        <div style={{
+                          position: 'absolute', left: `${playheadPercent}%`, top: 0, bottom: 0, width: '2px',
+                          background: '#ef4444', zIndex: 20, pointerEvents: 'none',
+                          boxShadow: '0 0 4px rgba(239, 68, 68, 0.5)',
+                          transition: isPlaying ? 'none' : 'left 0.1s ease-out'
+                        }}>
+                          <div style={{
+                            position: 'absolute', top: '16px', left: '-5px',
+                            width: 0, height: 0,
+                            borderLeft: '6px solid transparent', borderRight: '6px solid transparent',
+                            borderTop: '8px solid #ef4444'
+                          }} />
+                        </div>
+                      )}
+
+                      {/* Ruler row — click/drag to seek */}
+                      <div style={{ height: '24px', position: 'relative', cursor: 'crosshair', borderBottom: '1px solid #333' }}
+                        onMouseDown={handleRulerMouseDown}
+                      >
+                        {rulerTicks.map((tick, i) => {
+                          const xPx = tick.time * pxPerSec;
+                          return (
+                            <div key={i} style={{ position: 'absolute', left: `${xPx}px`, top: 0, bottom: 0 }}>
+                              <div style={{
+                                width: '1px', height: tick.isLabel ? '10px' : '6px',
+                                backgroundColor: tick.isLabel ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.15)',
+                                position: 'absolute', bottom: 0
+                              }} />
+                              {tick.isLabel && (
+                                <span style={{
+                                  position: 'absolute', top: '1px', left: '3px',
+                                  fontSize: '9px', color: 'rgba(255,255,255,0.45)',
+                                  whiteSpace: 'nowrap', userSelect: 'none'
+                                }}>
+                                  {formatTime(tick.time)}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Text overlay row */}
+                      <div style={{ height: '28px', position: 'relative', borderBottom: '1px solid #222' }}>
+                        {textOverlays.map((overlay) => {
+                          const leftPx = (overlay.startTime || 0) * pxPerSec;
+                          const widthPx = ((overlay.endTime || 0) - (overlay.startTime || 0)) * pxPerSec;
+                          const isSelected = editingTextId === overlay.id;
+                          return (
+                            <div key={overlay.id} style={{
+                              position: 'absolute', left: `${leftPx}px`, width: `${widthPx}px`,
+                              top: '2px', height: '24px', boxSizing: 'border-box',
+                              backgroundColor: isSelected ? '#9333ea' : '#6366f1', borderRadius: '4px',
+                              display: 'flex', alignItems: 'center', padding: '0 4px',
+                              cursor: timelineDrag ? 'grabbing' : 'grab', overflow: 'hidden',
+                              border: isSelected ? '1px solid #a855f7' : '1px solid rgba(124,58,237,0.5)',
+                              zIndex: isSelected ? 10 : 5
+                            }} onMouseDown={(e) => handleTimelineDragStart(e, overlay.id, 'move')}>
+                              <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
+                                onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'left'); }} />
+                              <span style={{ fontSize: '10px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none', padding: '0 6px' }}>{overlay.text}</span>
+                              <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
+                                onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'right'); }} />
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Clip row — single clip spanning its duration */}
+                      <div style={{ height: '40px', position: 'relative', borderBottom: '1px solid #222' }}>
+                        {clip ? (
+                          <div style={{
+                            position: 'relative', height: '40px', backgroundColor: '#8b5cf6',
+                            borderRadius: '6px', overflow: 'hidden',
+                            boxSizing: 'border-box', width: `${Math.max(50, (clipDuration || 1) * pxPerSec)}px`, minWidth: '50px',
+                            display: 'flex', flexDirection: 'row',
+                            border: '2px solid #a5b4fc'
+                          }}>
+                            <div style={{ width: '60px', height: '100%', flexShrink: 0, position: 'relative', overflow: 'hidden', borderRadius: '6px 0 0 6px' }}>
+                              {(clip.thumbnailUrl || clip.thumbnail) ? (
+                                <img src={clip.thumbnailUrl || clip.thumbnail} alt=""
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
+                                  loading="lazy" draggable={false} />
+                              ) : (
+                                <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>1</span>
+                                </div>
+                              )}
+                              {clipDuration > 0 && (
+                                <span style={{ position: 'absolute', bottom: 2, left: 2, padding: '1px 4px', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: '3px', fontSize: '9px', color: '#fff' }}>
+                                  {clipDuration.toFixed(1)}s
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ flex: 1, height: '100%', backgroundColor: 'rgba(99,102,241,0.15)', position: 'relative', borderRadius: '0 6px 6px 0', overflow: 'hidden' }} />
+                          </div>
+                        ) : (
+                          <div className="text-center py-2 text-neutral-500 text-[13px]">
+                            <p>No clip selected</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Audio waveform row — continuous strip, height scales with volume */}
+                      {hasAudioTrack && (() => {
+                        const audioPx = trimmedDuration * pxPerSec;
+                        const maxBars = Math.max(50, Math.round(audioPx / 3));
+                        const bars = downsample(waveformData, maxBars);
+                        const trackH = audioTrackH;
+                        return (
+                          <div style={{ height: `${trackH}px`, borderTop: '1px solid #333', position: 'relative', transition: 'height 0.15s ease-out' }}>
+                            <div style={{ width: `${audioPx}px`, height: '100%', backgroundColor: 'rgba(34, 197, 94, 0.06)', display: 'flex', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: `${Math.max(2, trackH - 4)}px`, gap: '1px', padding: '0 1px' }}>
+                                {bars.map((amplitude, i) => (
+                                  <div key={i} style={{ flex: 1, minWidth: '1px', backgroundColor: 'rgba(34, 197, 94, 0.5)', height: `${amplitude * externalAudioVolume * 100}%`, opacity: externalAudioVolume > 0 ? 0.6 : 0.2 }} />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Source audio waveform row */}
+                      {hasSourceTrack && (() => {
+                        const trackH = sourceTrackH;
+                        const clipDur = clipDuration || 1;
+                        const segWidth = Math.max(50, clipDur * pxPerSec);
+                        return (
+                          <div style={{ height: `${trackH}px`, borderTop: '1px solid #333', position: 'relative', transition: 'height 0.15s ease-out' }}>
+                            <div style={{
+                              width: `${segWidth}px`, display: 'flex', alignItems: 'center',
+                              height: '100%',
+                              backgroundColor: srcVol > 0 ? 'rgba(245, 158, 11, 0.06)' : 'rgba(245, 158, 11, 0.02)'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: `${Math.max(2, trackH - 4)}px`, gap: '1px', padding: '0 1px' }}>
+                                {sourceWaveformBars.map((amplitude, i) => (
+                                  <div key={i} style={{ flex: 1, minWidth: '1px', backgroundColor: 'rgba(245, 158, 11, 0.4)', height: `${amplitude * srcVol * 100}%`, opacity: srcVol > 0 ? 0.6 : 0.2 }} />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
+              );
+            })()}
           </div>
 
           {/* RIGHT: Sidebar */}
@@ -1572,29 +1745,24 @@ const SoloClipEditor = ({
                 {renderCollapsibleSection('audio', 'Audio', (
                   <div className="flex flex-col gap-3">
                     {selectedAudio ? (
-                      <div className="flex items-center gap-2 rounded-md border border-neutral-800 bg-black px-3 py-2">
-                        <FeatherMusic className="text-neutral-400" style={{ width: 16, height: 16 }} />
-                        <span className="text-body font-body text-[#ffffffff] truncate flex-1">{selectedAudio.name}</span>
-                        {selectedAudio.isTrimmed && <Badge variant="neutral">Trimmed</Badge>}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 rounded-md border border-neutral-800 bg-black px-3 py-2">
-                        <FeatherMusic className="text-neutral-500" style={{ width: 16, height: 16 }} />
-                        <span className="text-body font-body text-neutral-500">No audio selected</span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      {selectedAudio && (
-                        <>
+                      <>
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-black/50">
+                          <FeatherMusic className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                          <span className="text-body font-body text-[#ffffffff] flex-1 truncate">{selectedAudio.name}</span>
+                          {selectedAudio.isTrimmed && <Badge variant="neutral">Trimmed</Badge>}
+                        </div>
+                        <div className="flex gap-2">
                           <Button variant="neutral-secondary" size="small" icon={<FeatherScissors />} onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}>Trim</Button>
                           <Button variant="destructive-tertiary" size="small" icon={<FeatherTrash2 />} onClick={() => {
                             if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; }
                             if (animationRef.current) cancelAnimationFrame(animationRef.current);
                             setSelectedAudio(null); setIsPlaying(false); setCurrentTime(0); setAudioDuration(0); setSourceVideoMuted(false);
                           }}>Remove</Button>
-                        </>
-                      )}
-                    </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center text-neutral-500 text-caption font-caption py-4">No audio selected</div>
+                    )}
                     <Button className="w-full" variant="neutral-secondary" size="small" icon={<FeatherUpload />} onClick={() => audioFileInputRef.current?.click()}>
                       {selectedAudio ? 'Change Audio' : 'Upload Audio'}
                     </Button>
@@ -1690,45 +1858,43 @@ const SoloClipEditor = ({
                         </div>
                       </div>
                     )}
-                    {/* Text Banks */}
-                    {(() => {
-                      return (
-                        <div className="flex flex-col gap-3 pt-3 border-t border-neutral-800">
-                          <div>
-                            <div className="text-body-bold font-body-bold text-teal-400 mb-2">Text Bank A</div>
-                            <div className="flex gap-1.5 mb-2">
-                              <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)}
-                                onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
-                                placeholder="Add text..." className="flex-1 px-2.5 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[12px] outline-none" />
-                              <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} aria-label="Add to Text Bank A" onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} />
-                            </div>
-                            {videoTextBank1.map((text, idx) => (
-                              <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-300">
-                                <span className="flex-1 text-[12px] cursor-pointer" onClick={() => addTextOverlay(text)}>{text}</span>
-                                <button onClick={() => handleRemoveFromVideoTextBank(1, idx)} className="bg-transparent border-none text-neutral-500 text-[14px] cursor-pointer px-1">×</button>
-                              </div>
-                            ))}
-                            {videoTextBank1.length === 0 && <div className="text-[11px] text-neutral-500">No text added yet</div>}
-                          </div>
-                          <div>
-                            <div className="text-body-bold font-body-bold text-amber-400 mb-2">Text Bank B</div>
-                            <div className="flex gap-1.5 mb-2">
-                              <input value={newTextB} onChange={(e) => setNewTextB(e.target.value)}
-                                onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
-                                placeholder="Add text..." className="flex-1 px-2.5 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[12px] outline-none" />
-                              <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} aria-label="Add to Text Bank B" onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} />
-                            </div>
-                            {videoTextBank2.map((text, idx) => (
-                              <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-300">
-                                <span className="flex-1 text-[12px] cursor-pointer" onClick={() => addTextOverlay(text)}>{text}</span>
-                                <button onClick={() => handleRemoveFromVideoTextBank(2, idx)} className="bg-transparent border-none text-neutral-500 text-[14px] cursor-pointer px-1">×</button>
-                              </div>
-                            ))}
-                            {videoTextBank2.length === 0 && <div className="text-[11px] text-neutral-500">No text added yet</div>}
-                          </div>
+                  </div>
+                ))}
+
+                {renderCollapsibleSection('text', 'Text Banks', (
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <div className="text-body-bold font-body-bold text-teal-400 mb-2">Text Bank A</div>
+                      <div className="flex gap-1.5 mb-2">
+                        <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
+                          placeholder="Add text..." className="flex-1 px-2.5 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[12px] outline-none" />
+                        <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} aria-label="Add to Text Bank A" onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} />
+                      </div>
+                      {videoTextBank1.map((text, idx) => (
+                        <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-300">
+                          <span className="flex-1 text-[12px] cursor-pointer" onClick={() => addTextOverlay(text)}>{text}</span>
+                          <button onClick={() => handleRemoveFromVideoTextBank(1, idx)} className="bg-transparent border-none text-neutral-500 text-[14px] cursor-pointer px-1">×</button>
                         </div>
-                      );
-                    })()}
+                      ))}
+                      {videoTextBank1.length === 0 && <div className="text-[11px] text-neutral-500">No text added yet</div>}
+                    </div>
+                    <div>
+                      <div className="text-body-bold font-body-bold text-amber-400 mb-2">Text Bank B</div>
+                      <div className="flex gap-1.5 mb-2">
+                        <input value={newTextB} onChange={(e) => setNewTextB(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
+                          placeholder="Add text..." className="flex-1 px-2.5 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[12px] outline-none" />
+                        <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} aria-label="Add to Text Bank B" onClick={() => { if (newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }} />
+                      </div>
+                      {videoTextBank2.map((text, idx) => (
+                        <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-300">
+                          <span className="flex-1 text-[12px] cursor-pointer" onClick={() => addTextOverlay(text)}>{text}</span>
+                          <button onClick={() => handleRemoveFromVideoTextBank(2, idx)} className="bg-transparent border-none text-neutral-500 text-[14px] cursor-pointer px-1">×</button>
+                        </div>
+                      ))}
+                      {videoTextBank2.length === 0 && <div className="text-[11px] text-neutral-500">No text added yet</div>}
+                    </div>
                     {/* Niche Text Banks */}
                     {nicheTextBanks && nicheTextBanks.some(b => b?.length > 0) && (
                       <div className="flex flex-col gap-3 pt-3 border-t border-neutral-800">
@@ -1760,100 +1926,214 @@ const SoloClipEditor = ({
 
                 {renderCollapsibleSection('lyrics', 'Lyrics', (
                   <div className="flex flex-col gap-3">
-                    <span className="text-body font-body text-neutral-400">
-                      {lyricsBank.length > 0 ? `${lyricsBank.length} lyrics in bank` : 'No lyrics in bank'}
-                    </span>
-                    {lyricsBank.map(lyric => (
-                      <div key={lyric.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-neutral-800 text-[12px] text-[#ffffffff]"
-                        onClick={() => addTextOverlay(lyric.content || lyric.title || '')}>
-                        <FeatherDatabase className="w-3.5 h-3.5 opacity-60 flex-shrink-0" />
-                        <span className="truncate">{lyric.title || lyric.content?.slice(0, 30) || 'Untitled'}</span>
-                      </div>
-                    ))}
-                    {selectedAudio && (
-                      <Button variant="neutral-secondary" size="small" icon={<FeatherMic />} onClick={() => setShowTranscriber(true)}>
+                    <textarea
+                      className="w-full rounded-md border border-neutral-800 bg-black px-3 py-2 text-sm text-white placeholder-neutral-500 resize-y outline-none focus:border-brand-600"
+                      style={{ minHeight: 80 }}
+                      placeholder="Enter or paste lyrics here..."
+                      value={lyrics}
+                      onChange={(e) => setLyrics(e.target.value)}
+                      rows={4}
+                    />
+                    <div className="flex w-full items-center gap-2">
+                      <Button className="grow" variant="neutral-secondary" size="small" icon={<FeatherDatabase />}
+                        onClick={() => setShowLyricBankPicker(!showLyricBankPicker)}
+                        disabled={(category?.lyrics?.length || 0) === 0}
+                      >
+                        Load from Bank ({category?.lyrics?.length || 0})
+                      </Button>
+                      <Button className="grow" variant="neutral-secondary" size="small" icon={<FeatherMic />}
+                        onClick={() => setShowTranscriber(true)}
+                        disabled={!selectedAudio}
+                      >
                         AI Transcribe
                       </Button>
+                    </div>
+                    {/* Lyric Bank Dropdown */}
+                    {showLyricBankPicker && (category?.lyrics?.length || 0) > 0 && (
+                      <div className="bg-[#171717] border border-neutral-700 rounded-lg max-h-[200px] overflow-y-auto shadow-lg">
+                        {category.lyrics.map(lyric => (
+                          <div key={lyric.id} className="w-full px-3 py-2.5 border-b border-neutral-800 text-[#ffffffff] text-left cursor-pointer text-[13px] hover:bg-neutral-800"
+                            onClick={() => {
+                              const content = lyric.content || '';
+                              let newWords;
+                              if (lyric.words?.length > 0) { newWords = lyric.words; }
+                              else {
+                                const lyricWords = content.split(/\s+/).filter(w => w.trim().length > 0);
+                                newWords = lyricWords.map((text, i) => ({ id: `word_${Date.now()}_${i}`, text, startTime: i * 0.5, duration: 0.5 }));
+                              }
+                              setLyrics(content); setWords(newWords); setLoadedBankLyricId(lyric.id); setShowLyricBankPicker(false);
+                            }}
+                          >
+                            <div className="font-medium mb-0.5">{lyric.title}</div>
+                            <div className="text-[11px] text-neutral-400 truncate">{lyric.content?.substring(0, 50)}...</div>
+                          </div>
+                        ))}
+                      </div>
                     )}
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button variant="neutral-secondary" size="small" onClick={() => setShowWordTimeline(true)}>Word Timeline</Button>
+                    </div>
+                    {lyrics && (
+                      <Button className="w-full" variant="neutral-tertiary" size="small" icon={<FeatherX />} onClick={() => setLyrics('')}>Clear</Button>
+                    )}
+                    {!selectedAudio && (
+                      <p className="text-neutral-500 text-[11px]">Select audio to enable AI transcription</p>
+                    )}
+                    {/* Full LyricBank component */}
+                    <div className="border-t border-neutral-800 pt-3">
+                      <LyricBank
+                        lyrics={category?.lyrics || []}
+                        onAddLyrics={onAddLyrics}
+                        onUpdateLyrics={onUpdateLyrics}
+                        onDeleteLyrics={onDeleteLyrics}
+                        onSelectText={(selectedText) => { setLyrics(selectedText); toastSuccess('Lyrics loaded!'); }}
+                        compact={false}
+                        showAddForm={true}
+                      />
+                    </div>
                   </div>
                 ))}
 
                 {renderCollapsibleSection('textStyle', 'Text Style', (
                   <div className="flex flex-col gap-3">
-                    <Button variant="brand-secondary" size="small" icon={<FeatherPlus />} onClick={() => addTextOverlay()}>Add Text Overlay</Button>
+                    {/* Global text style controls */}
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-1">
+                        <Button variant="neutral-secondary" size="small" onClick={() => setTextStyle(s => ({ ...s, fontSize: Math.max(24, s.fontSize - 4) }))}>A-</Button>
+                        <Button variant="neutral-secondary" size="small" onClick={() => setTextStyle(s => ({ ...s, fontSize: Math.min(120, s.fontSize + 4) }))}>A+</Button>
+                      </div>
+                      <select value={textStyle.fontFamily} onChange={(e) => setTextStyle(s => ({ ...s, fontFamily: e.target.value }))}
+                        className="flex-1 px-2 py-1.5 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[12px] outline-none">
+                        <option value="Inter, sans-serif">Sans</option>
+                        <option value="'Playfair Display', serif">Serif</option>
+                        <option value="'Space Grotesk', sans-serif">Grotesk</option>
+                        <option value="monospace">Mono</option>
+                      </select>
+                    </div>
+                    <ToggleGroup value={textStyle.outline ? 'outline' : 'none'} onValueChange={(v) => setTextStyle(s => ({ ...s, outline: v === 'outline' }))}>
+                      <ToggleGroup.Item value="none">No outline</ToggleGroup.Item>
+                      <ToggleGroup.Item value="outline">Outline</ToggleGroup.Item>
+                    </ToggleGroup>
+                    <div className="flex w-full items-center gap-2">
+                      <div className="flex grow flex-col items-start gap-1">
+                        <span className="text-caption font-caption text-neutral-400">Text Color</span>
+                        <label className="flex h-10 w-full items-center gap-2 rounded-md border border-neutral-800 bg-black px-3 cursor-pointer">
+                          <input type="color" value={textStyle.color} onChange={(e) => setTextStyle(s => ({ ...s, color: e.target.value }))} className="w-6 h-6 rounded-md border-0 p-0 cursor-pointer" />
+                          <span className="text-caption font-caption text-neutral-400">{textStyle.color}</span>
+                        </label>
+                      </div>
+                      {textStyle.outline && (
+                        <div className="flex grow flex-col items-start gap-1">
+                          <span className="text-caption font-caption text-neutral-400">Outline</span>
+                          <label className="flex h-10 w-full items-center gap-2 rounded-md border border-neutral-800 bg-black px-3 cursor-pointer">
+                            <input type="color" value={textStyle.outlineColor} onChange={(e) => setTextStyle(s => ({ ...s, outlineColor: e.target.value }))} className="w-6 h-6 rounded-md border-0 p-0 cursor-pointer" />
+                            <span className="text-caption font-caption text-neutral-400">{textStyle.outlineColor}</span>
+                          </label>
+                        </div>
+                      )}
+                    </div>
                     <div className="flex flex-col gap-1">
-                      <span className="text-body-bold font-body-bold text-[#ffffffff] mb-1">Text Overlays</span>
-                      {textOverlays.length === 0 && <p className="text-[12px] text-neutral-500">No text overlays yet</p>}
-                      {textOverlays.map((overlay, idx) => {
-                        const isSelected = editingTextId === overlay.id;
-                        return (
-                          <div key={overlay.id} onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
-                            className={`p-2.5 rounded-lg cursor-pointer transition-all ${isSelected ? 'bg-brand-600/10 border border-brand-600/30' : 'bg-neutral-800/50 border border-neutral-800'}`}>
-                            <div className="flex justify-between items-center mb-1">
-                              <span className="text-[11px] text-neutral-400">
-                                Overlay {idx + 1}
-                                {overlay.startTime !== undefined && <span className="ml-1.5 text-[9px] text-neutral-500">{overlay.startTime.toFixed(1)}s – {overlay.endTime.toFixed(1)}s</span>}
-                              </span>
-                              <IconButton size="small" icon={<FeatherX />} aria-label="Remove overlay" onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} />
-                            </div>
-                            {isSelected ? (
-                              <input value={editingTextValue} onChange={(e) => setEditingTextValue(e.target.value)}
-                                onBlur={() => updateTextOverlay(overlay.id, { text: editingTextValue })}
-                                onKeyDown={(e) => { if (e.key === 'Enter') { updateTextOverlay(overlay.id, { text: editingTextValue }); e.target.blur(); } }}
-                                className="w-full px-2 py-1.5 rounded border border-brand-600/30 bg-black text-[#ffffffff] text-[13px] outline-none" autoFocus />
-                            ) : (
-                              <div className="text-[13px] text-[#ffffffff]">{overlay.text}</div>
-                            )}
-                            {isSelected && (
-                              <div className="mt-2 flex flex-col gap-1.5 pt-2 border-t border-neutral-800">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] text-neutral-400 min-w-[34px]">Font</span>
-                                  <select value={overlay.style.fontFamily} onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, fontFamily: e.target.value } })}
-                                    className="flex-1 px-1.5 py-0.5 rounded border border-neutral-800 bg-black text-[#ffffffff] text-[11px]">
-                                    <option value="Inter, sans-serif">Sans</option>
-                                    <option value="'Playfair Display', serif">Serif</option>
-                                    <option value="'Space Grotesk', sans-serif">Grotesk</option>
-                                    <option value="monospace">Mono</option>
-                                  </select>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] text-neutral-400 min-w-[34px]">Size</span>
-                                  <button className="px-2 py-0.5 rounded border border-neutral-800 bg-neutral-800/50 text-[#ffffffff] text-[11px] cursor-pointer"
-                                    onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.max(16, overlay.style.fontSize - 4) } }); }}>A-</button>
-                                  <span className="text-[11px] text-[#ffffffff] min-w-[26px] text-center">{overlay.style.fontSize}</span>
-                                  <button className="px-2 py-0.5 rounded border border-neutral-800 bg-neutral-800/50 text-[#ffffffff] text-[11px] cursor-pointer"
-                                    onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.min(120, overlay.style.fontSize + 4) } }); }}>A+</button>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] text-neutral-400 min-w-[34px]">Color</span>
-                                  <input type="color" value={overlay.style.color} onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, color: e.target.value } })} className="w-6 h-6 rounded border-0 cursor-pointer" />
-                                  <span className="text-[10px] text-neutral-400 ml-2">Outline</span>
-                                  <button className={`px-2 py-0.5 rounded border text-[10px] cursor-pointer ${overlay.style.outline ? 'bg-brand-600/20 border-brand-600 text-brand-400' : 'border-neutral-800 text-neutral-400'}`}
-                                    onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, outline: !overlay.style.outline } }); }}>
-                                    {overlay.style.outline ? 'On' : 'Off'}
-                                  </button>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] text-neutral-400 min-w-[34px]">Align</span>
-                                  {['left', 'center', 'right'].map(align => (
-                                    <button key={align} className={`px-2 py-0.5 rounded border text-[10px] cursor-pointer ${overlay.style.textAlign === align ? 'bg-brand-600/20 border-brand-600 text-brand-400' : 'border-neutral-800 text-neutral-400'}`}
-                                      onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, textAlign: align } }); }}>
-                                      {align.charAt(0).toUpperCase() + align.slice(1)}
-                                    </button>
-                                  ))}
-                                </div>
-                                <div className="flex items-center gap-1 border-t border-neutral-800 pt-1.5 mt-0.5">
-                                  <span className="text-[10px] text-neutral-400">Save to:</span>
-                                  <button className="px-2 py-0.5 rounded border border-teal-500/30 text-teal-500 text-[10px] cursor-pointer bg-transparent"
-                                    onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(1, overlay.text); toastSuccess('Saved to Bank A'); }}>Bank A</button>
-                                  <button className="px-2 py-0.5 rounded border border-amber-500/30 text-amber-500 text-[10px] cursor-pointer bg-transparent"
-                                    onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(2, overlay.text); toastSuccess('Saved to Bank B'); }}>Bank B</button>
-                                </div>
+                      <span className="text-caption font-caption text-neutral-400">Display Mode</span>
+                      <ToggleGroup value={textStyle.displayMode} onValueChange={(v) => setTextStyle(s => ({ ...s, displayMode: v }))}>
+                        <ToggleGroup.Item value="word">By word</ToggleGroup.Item>
+                        <ToggleGroup.Item value="buildLine">Build line</ToggleGroup.Item>
+                        <ToggleGroup.Item value="justify">Justify</ToggleGroup.Item>
+                      </ToggleGroup>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-caption font-caption text-neutral-400">Case</span>
+                      <ToggleGroup value={textStyle.textCase} onValueChange={(v) => setTextStyle(s => ({ ...s, textCase: v }))}>
+                        <ToggleGroup.Item value="default">Default</ToggleGroup.Item>
+                        <ToggleGroup.Item value="lower">lower</ToggleGroup.Item>
+                        <ToggleGroup.Item value="upper">UPPER</ToggleGroup.Item>
+                      </ToggleGroup>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-caption font-caption text-neutral-400">Crop</span>
+                      <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} className="flex-1 px-2 py-1.5 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[12px] outline-none">
+                        <option value="9:16">9:16 (Full)</option>
+                        <option value="4:3">4:3 (Crop)</option>
+                        <option value="1:1">1:1 (Crop)</option>
+                      </select>
+                    </div>
+                    {presets.length > 0 && (
+                      <div className="flex flex-col gap-1">
+                        <span className="text-caption font-caption text-neutral-400">Apply Preset</span>
+                        <select value={selectedPreset?.id || ''} onChange={(e) => { const preset = presets.find(p => p.id === e.target.value); if (preset) handleApplyPreset(preset); }}
+                          className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[13px] outline-none">
+                          <option value="">Choose a preset...</option>
+                          {presets.map(preset => (<option key={preset.id} value={preset.id}>{preset.name}</option>))}
+                        </select>
+                      </div>
+                    )}
+                    {/* Per-overlay editing */}
+                    <div className="border-t border-neutral-800 pt-3">
+                      <Button variant="brand-secondary" size="small" icon={<FeatherPlus />} onClick={() => addTextOverlay()}>Add Text Overlay</Button>
+                      <div className="flex flex-col gap-1 mt-2">
+                        <span className="text-body-bold font-body-bold text-[#ffffffff] mb-1">Text Overlays</span>
+                        {textOverlays.length === 0 && <p className="text-[12px] text-neutral-500">No text overlays yet</p>}
+                        {textOverlays.map((overlay, idx) => {
+                          const isSelected = editingTextId === overlay.id;
+                          return (
+                            <div key={overlay.id} onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
+                              className={`p-2.5 rounded-lg cursor-pointer transition-all ${isSelected ? 'bg-brand-600/10 border border-brand-600/30' : 'bg-neutral-800/50 border border-neutral-800'}`}>
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-[11px] text-neutral-400">
+                                  Overlay {idx + 1}
+                                  {overlay.startTime !== undefined && <span className="ml-1.5 text-[9px] text-neutral-500">{overlay.startTime.toFixed(1)}s – {overlay.endTime.toFixed(1)}s</span>}
+                                </span>
+                                <IconButton size="small" icon={<FeatherX />} aria-label="Remove overlay" onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} />
                               </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                              {isSelected ? (
+                                <input value={editingTextValue} onChange={(e) => setEditingTextValue(e.target.value)}
+                                  onBlur={() => updateTextOverlay(overlay.id, { text: editingTextValue })}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') { updateTextOverlay(overlay.id, { text: editingTextValue }); e.target.blur(); } }}
+                                  className="w-full px-2 py-1.5 rounded border border-brand-600/30 bg-black text-[#ffffffff] text-[13px] outline-none" autoFocus />
+                              ) : (
+                                <div className="text-[13px] text-[#ffffffff]">{overlay.text}</div>
+                              )}
+                              {isSelected && (
+                                <div className="mt-2 flex flex-col gap-1.5 pt-2 border-t border-neutral-800">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-neutral-400 min-w-[34px]">Font</span>
+                                    <select value={overlay.style.fontFamily} onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, fontFamily: e.target.value } })}
+                                      className="flex-1 px-1.5 py-0.5 rounded border border-neutral-800 bg-black text-[#ffffffff] text-[11px]">
+                                      <option value="Inter, sans-serif">Sans</option>
+                                      <option value="'Playfair Display', serif">Serif</option>
+                                      <option value="'Space Grotesk', sans-serif">Grotesk</option>
+                                      <option value="monospace">Mono</option>
+                                    </select>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-neutral-400 min-w-[34px]">Size</span>
+                                    <button className="px-2 py-0.5 rounded border border-neutral-800 bg-neutral-800/50 text-[#ffffffff] text-[11px] cursor-pointer"
+                                      onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.max(16, overlay.style.fontSize - 4) } }); }}>A-</button>
+                                    <span className="text-[11px] text-[#ffffffff] min-w-[26px] text-center">{overlay.style.fontSize}</span>
+                                    <button className="px-2 py-0.5 rounded border border-neutral-800 bg-neutral-800/50 text-[#ffffffff] text-[11px] cursor-pointer"
+                                      onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.min(120, overlay.style.fontSize + 4) } }); }}>A+</button>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-neutral-400 min-w-[34px]">Color</span>
+                                    <input type="color" value={overlay.style.color} onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, color: e.target.value } })} className="w-6 h-6 rounded border-0 cursor-pointer" />
+                                    <span className="text-[10px] text-neutral-400 ml-2">Outline</span>
+                                    <button className={`px-2 py-0.5 rounded border text-[10px] cursor-pointer ${overlay.style.outline ? 'bg-brand-600/20 border-brand-600 text-brand-400' : 'border-neutral-800 text-neutral-400'}`}
+                                      onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, outline: !overlay.style.outline } }); }}>
+                                      {overlay.style.outline ? 'On' : 'Off'}
+                                    </button>
+                                  </div>
+                                  <div className="flex items-center gap-1 border-t border-neutral-800 pt-1.5 mt-0.5">
+                                    <span className="text-[10px] text-neutral-400">Save to:</span>
+                                    <button className="px-2 py-0.5 rounded border border-teal-500/30 text-teal-500 text-[10px] cursor-pointer bg-transparent"
+                                      onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(1, overlay.text); toastSuccess('Saved to Bank A'); }}>Bank A</button>
+                                    <button className="px-2 py-0.5 rounded border border-amber-500/30 text-amber-500 text-[10px] cursor-pointer bg-transparent"
+                                      onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(2, overlay.text); toastSuccess('Saved to Bank B'); }}>Bank B</button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1916,6 +2196,21 @@ const SoloClipEditor = ({
             duration={(audioEndTime || audioDuration) - audioStartTime}
             onApply={handleBeatSelectionApply}
             onCancel={() => setShowBeatSelector(false)}
+          />
+        )}
+
+        {/* ── Momentum Selector Modal ── */}
+        {showMomentumSelector && selectedAudio?.url && (
+          <MomentumSelector
+            audioSource={selectedAudio.url}
+            duration={(audioEndTime || audioDuration) - audioStartTime}
+            trimStart={audioStartTime || undefined}
+            trimEnd={audioEndTime || undefined}
+            onApply={(cutPoints) => {
+              handleBeatSelectionApply(cutPoints);
+              setShowMomentumSelector(false);
+            }}
+            onCancel={() => setShowMomentumSelector(false)}
           />
         )}
 

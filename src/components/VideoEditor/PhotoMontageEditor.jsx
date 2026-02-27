@@ -21,11 +21,12 @@ import WordTimeline from './WordTimeline';
 import LyricAnalyzer from './LyricAnalyzer';
 import CloudImportButton from './CloudImportButton';
 import BeatSelector from './BeatSelector';
+import MomentumSelector from './MomentumSelector';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
 import { Badge } from '../../ui/components/Badge';
-import { FeatherMaximize2, FeatherGrid, FeatherStar, FeatherMusic, FeatherUpload, FeatherTrash2, FeatherScissors, FeatherPlus, FeatherMic, FeatherRefreshCw, FeatherPlay, FeatherPause, FeatherSkipBack, FeatherSkipForward, FeatherCheck } from '@subframe/core';
+import { FeatherMaximize2, FeatherGrid, FeatherStar, FeatherMusic, FeatherUpload, FeatherTrash2, FeatherScissors, FeatherPlus, FeatherMic, FeatherRefreshCw, FeatherPlay, FeatherPause, FeatherSkipBack, FeatherSkipForward, FeatherCheck, FeatherZoomIn, FeatherZoomOut } from '@subframe/core';
 import EditorShell from './shared/EditorShell';
 import EditorTopBar from './shared/EditorTopBar';
 import EditorFooter from './shared/EditorFooter';
@@ -33,6 +34,8 @@ import useCollapsibleSections from './shared/useCollapsibleSections';
 import useMediaMultiSelect from './shared/useMediaMultiSelect';
 import useEditorSessionState from './shared/useEditorSessionState';
 import useUnsavedChanges from './shared/useUnsavedChanges';
+import usePixelTimeline from './shared/usePixelTimeline';
+import useTimelineZoom from '../../hooks/useTimelineZoom';
 
 /**
  * PhotoMontageEditor — Turn photos into a fast-paced video with transitions.
@@ -184,6 +187,9 @@ const PhotoMontageEditor = ({
   const previewRef = useRef(null);
   const timelineRef = useRef(null);
   const [timelineDrag, setTimelineDrag] = useState(null);
+  const wasPlayingBeforePlayheadDrag = useRef(false);
+  const [timelineScale, setTimelineScale] = useState(1);
+  const [playheadDragging, setPlayheadDragging] = useState(false);
 
   // ── Words extra state ──
   const [showWordTimeline, setShowWordTimeline] = useState(false);
@@ -222,6 +228,7 @@ const PhotoMontageEditor = ({
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showTranscriber, setShowTranscriber] = useState(false);
   const [showBeatSelector, setShowBeatSelector] = useState(false);
+  const [showMomentumSelector, setShowMomentumSelector] = useState(false);
 
   // ── Preset state ──
   const [selectedPreset, setSelectedPreset] = useState(null);
@@ -257,6 +264,8 @@ const PhotoMontageEditor = ({
 
   // ── Audio volume state ──
   const [externalAudioVolume, setExternalAudioVolume] = useState(1.0);
+  const [sourceVideoVolume, setSourceVideoVolume] = useState(1.0);
+  const [sourceVideoMuted, setSourceVideoMuted] = useState(false);
 
   // ── Drag reorder ──
   const [dragIndex, setDragIndex] = useState(null);
@@ -449,6 +458,33 @@ const PhotoMontageEditor = ({
     [photoDurations]
   );
 
+  // Wire shared pixel timeline hook
+  const { pxPerSec, timelinePx, rulerTicks, handleRulerMouseDown, formatTime, downsample } = usePixelTimeline({
+    timelineScale,
+    timelineDuration: totalDuration,
+    timelineRef,
+    handleSeek: useCallback((time) => {
+      const clamped = Math.max(0, Math.min(time, totalDuration || 0));
+      setCurrentTime(clamped);
+      if (audioRef.current && selectedAudio?.url) {
+        audioRef.current.currentTime = (selectedAudio.startTime || 0) + clamped;
+      }
+    }, [totalDuration, selectedAudio]),
+    isPlaying,
+    setIsPlaying,
+    setPlayheadDragging,
+    wasPlayingRef: wasPlayingBeforePlayheadDrag,
+  });
+
+  // Wire pinch-to-zoom on timeline container
+  useTimelineZoom(timelineRef, {
+    zoom: timelineScale,
+    setZoom: setTimelineScale,
+    minZoom: 0.3,
+    maxZoom: 3,
+    basePixelsPerSecond: 40,
+  });
+
   // ── Save all variations ──
   const handleSaveAllAndClose = useCallback(async () => {
     if (isSavingAll) return;
@@ -474,7 +510,8 @@ const PhotoMontageEditor = ({
           words: video.words || [],
           status: 'draft',
           createdAt: existingVideo?.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
+          externalAudioVolume,
         };
         onSave(videoData);
         savedCount++;
@@ -486,7 +523,7 @@ const PhotoMontageEditor = ({
     } finally {
       setIsSavingAll(false);
     }
-  }, [allVideos, isSavingAll, existingVideo, name, speed, transition, kenBurnsEnabled, beatSyncEnabled, selectedAudio, aspectRatio, totalDuration, onSave, onClose, toastSuccess, toastError]);
+  }, [allVideos, isSavingAll, existingVideo, name, speed, transition, kenBurnsEnabled, beatSyncEnabled, selectedAudio, aspectRatio, totalDuration, externalAudioVolume, onSave, onClose, toastSuccess, toastError]);
 
   // ── Beat sync: analyze audio when toggled on ──
   useEffect(() => {
@@ -678,6 +715,18 @@ const PhotoMontageEditor = ({
     toastSuccess('Photos synced to beats');
   }, [photos.length, selectedAudio, audioDuration, setPhotos, toastSuccess]);
 
+  // ── Text overlay default style (must be before functions that reference it) ──
+  const getDefaultTextStyle = useCallback(() => ({
+    fontSize: textStyle.fontSize,
+    fontFamily: textStyle.fontFamily,
+    fontWeight: textStyle.fontWeight,
+    color: textStyle.color,
+    outline: textStyle.outline,
+    outlineColor: textStyle.outlineColor,
+    textAlign: textStyle.textAlign,
+    textCase: textStyle.textCase
+  }), [textStyle]);
+
   // ── Cut by word — creates timed text overlays from words ──
   const handleCutByWord = useCallback(() => {
     if (!words.length) {
@@ -713,17 +762,6 @@ const PhotoMontageEditor = ({
   }, [dragIndex, movePhoto]);
 
   // ── Text overlay CRUD (matches SoloClipEditor) ──
-  const getDefaultTextStyle = useCallback(() => ({
-    fontSize: textStyle.fontSize,
-    fontFamily: textStyle.fontFamily,
-    fontWeight: textStyle.fontWeight,
-    color: textStyle.color,
-    outline: textStyle.outline,
-    outlineColor: textStyle.outlineColor,
-    textAlign: textStyle.textAlign,
-    textCase: textStyle.textCase
-  }), [textStyle]);
-
   const addTextOverlay = useCallback((prefillText, overrideStart, overrideEnd) => {
     const start = overrideStart !== undefined ? overrideStart : currentTime;
     const end = overrideEnd !== undefined ? overrideEnd : Math.min(start + 3, totalDuration || start + 3);
@@ -814,9 +852,8 @@ const PhotoMontageEditor = ({
     if (!timelineDrag || !timelineRef.current) return;
     const dur = totalDuration || 1;
     const handleMouseMove = (e) => {
-      const rect = timelineRef.current.getBoundingClientRect();
       const deltaX = e.clientX - timelineDrag.startX;
-      const deltaSec = (deltaX / rect.width) * dur;
+      const deltaSec = deltaX / pxPerSec;
       const minDur = 0.3;
 
       if (timelineDrag.type === 'move') {
@@ -841,7 +878,7 @@ const PhotoMontageEditor = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [timelineDrag, totalDuration, updateTextOverlay]);
+  }, [timelineDrag, totalDuration, pxPerSec, updateTextOverlay]);
 
   // ── Preset handler ──
   const handleApplyPreset = useCallback((preset) => {
@@ -876,12 +913,13 @@ const PhotoMontageEditor = ({
       words,
       status: 'draft',
       createdAt: existingVideo?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      externalAudioVolume,
     };
     onSave(videoData);
     setLastSaved(new Date());
     toastSuccess(`Saved "${name}"`);
-  }, [photos, name, speed, transition, kenBurnsEnabled, beatSyncEnabled, selectedAudio, aspectRatio, totalDuration, textOverlays, textStyle, words, existingVideo, onSave, toastSuccess, toastError]);
+  }, [photos, name, speed, transition, kenBurnsEnabled, beatSyncEnabled, selectedAudio, aspectRatio, totalDuration, textOverlays, textStyle, words, externalAudioVolume, existingVideo, onSave, toastSuccess, toastError]);
 
   // ── Audio handling ──
   const handleAudioUpload = useCallback((e) => {
@@ -1506,124 +1544,205 @@ const PhotoMontageEditor = ({
                 </Button>
               </div>
 
-              {/* Cut by beat / word + BPM badge */}
-              {photos.length > 0 && (
-                <div className="flex items-center justify-between w-full max-w-[500px]">
-                  <div className="flex items-center gap-2">
-                    <Button variant="neutral-secondary" size="small" onClick={handleCutByWord}>Cut by word</Button>
-                    <Button variant="neutral-secondary" size="small" onClick={handleCutByBeat}>Cut by beat</Button>
+              {/* ═══ PIXEL TIMELINE (unified scroll layout) ═══ */}
+              {photos.length > 0 && (() => {
+                const hasAudioTrack = !!(selectedAudio && waveformData.length > 0);
+                const playheadPercent = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
+                const audioTrackH = hasAudioTrack ? Math.round(4 + 28 * externalAudioVolume) : 0;
+                const trimmedDuration = selectedAudio
+                  ? ((selectedAudio.endTime || selectedAudio.duration || audioDuration) - (selectedAudio.startTime || 0))
+                  : 0;
+                return (
+                <div className="flex w-full flex-col border-t border-neutral-800 pt-3 flex-shrink-0">
+                  {/* Timeline header */}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-heading-3 font-heading-3 text-[#ffffffff]">Timeline</span>
+                      <span className="text-caption font-caption text-neutral-500">{photos.length} photo{photos.length !== 1 ? 's' : ''}</span>
+                      <Button variant="neutral-secondary" size="small" onClick={handleCutByWord}>Cut by word</Button>
+                      <Button variant="neutral-secondary" size="small" onClick={handleCutByBeat}>Cut by beat</Button>
+                      <Button variant="neutral-secondary" size="small" onClick={() => setShowMomentumSelector(true)}>Cut to music</Button>
+                      <Badge variant="neutral">
+                        {beatAnalyzing ? 'Analyzing beats...' : bpm ? `${Math.round(bpm)} BPM (${filteredBeats.length} beats)` : 'No beats detected'}
+                      </Badge>
+                    </div>
                   </div>
-                  <Badge variant="neutral">
-                    {beatAnalyzing ? 'Analyzing beats...' : bpm ? `${Math.round(bpm)} BPM (${filteredBeats.length} beats)` : 'No beats detected'}
-                  </Badge>
-                </div>
-              )}
 
-              {/* Photo filmstrip timeline */}
-              {photos.length > 0 && (
-                <div className="flex w-full max-w-[500px] h-8 rounded overflow-hidden relative bg-neutral-800 flex-shrink-0">
-                  {photos.map((photo, i) => {
-                    const widthPct = totalDuration > 0 ? (photoDurations[i] / totalDuration) * 100 : (100 / photos.length);
-                    return (
-                      <div
-                        key={photo.id}
-                        className="h-full overflow-hidden box-border"
-                        style={{
-                          width: `${widthPct}%`,
-                          borderBottom: `2px solid ${currentPhotoIndex === i ? theme.accent.primary : 'transparent'}`
-                        }}
-                      >
-                        <img src={photo.url} alt="" className="w-full h-full object-cover block" />
-                      </div>
-                    );
-                  })}
-                  {/* Playhead */}
-                  <div className="absolute top-0 bottom-0 w-0.5 bg-white z-[2] pointer-events-none" style={{
-                    left: totalDuration > 0 ? `${(currentTime / totalDuration) * 100}%` : '0%'
-                  }} />
-                </div>
-              )}
-
-              {/* Text overlay timeline track */}
-              {textOverlays.length > 0 && (
-                <div ref={timelineRef} className="relative w-full max-w-[500px] h-6 rounded bg-neutral-800 flex-shrink-0 overflow-visible">
-                  {textOverlays.map((overlay) => {
-                    const startPct = totalDuration > 0 ? (overlay.startTime / totalDuration) * 100 : 0;
-                    const widthPct = totalDuration > 0 ? ((overlay.endTime - overlay.startTime) / totalDuration) * 100 : 10;
-                    const isSelected = editingTextId === overlay.id;
-                    return (
-                      <div
-                        key={overlay.id}
-                        style={{
-                          position: 'absolute',
-                          left: `${startPct}%`,
-                          width: `${widthPct}%`,
-                          top: '2px',
-                          height: '20px',
-                          backgroundColor: isSelected ? '#9333ea' : theme.accent.primary,
-                          borderRadius: '3px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          padding: '0 3px',
-                          cursor: timelineDrag ? 'grabbing' : 'grab',
-                          overflow: 'hidden',
-                          border: isSelected ? '1px solid #a855f7' : '1px solid rgba(124,58,237,0.5)',
-                          zIndex: isSelected ? 10 : 5,
-                          transition: timelineDrag ? 'none' : 'background-color 0.15s'
-                        }}
-                        onMouseDown={(e) => handleTimelineDragStart(e, overlay.id, 'move')}
-                      >
-                        <div
-                          style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '5px', cursor: 'col-resize', zIndex: 11 }}
-                          onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'left'); }}
+                  {/* Volume controls row */}
+                  {hasAudioTrack && (
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <FeatherMusic style={{ width: 10, height: 10, color: '#22c55e' }} />
+                        <span className="text-[10px] text-green-400 w-8">Audio</span>
+                        <input type="range" min="0" max="1" step="0.05" value={externalAudioVolume}
+                          onChange={e => setExternalAudioVolume(parseFloat(e.target.value))}
+                          style={{ width: '64px', height: '4px', accentColor: '#22c55e', cursor: 'pointer' }}
+                          title={`Audio: ${Math.round(externalAudioVolume * 100)}%`}
                         />
-                        <span style={{ fontSize: '9px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none', padding: '0 4px' }}>
-                          {overlay.text}
-                        </span>
-                        <div
-                          style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '5px', cursor: 'col-resize', zIndex: 11 }}
-                          onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'right'); }}
-                        />
+                        <span className="text-[10px] text-neutral-500 w-8">{Math.round(externalAudioVolume * 100)}%</span>
                       </div>
-                    );
-                  })}
-                  {/* Playhead on text track */}
-                  <div className="absolute top-0 bottom-0 w-0.5 bg-white z-[2] pointer-events-none" style={{
-                    left: totalDuration > 0 ? `${(currentTime / totalDuration) * 100}%` : '0%'
-                  }} />
-                </div>
-              )}
-
-              {/* Audio waveform track */}
-              {waveformData.length > 0 && selectedAudio && (
-                <div className="flex items-center gap-2 w-full max-w-[500px] h-7 flex-shrink-0">
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={externalAudioVolume}
-                    onChange={(e) => setExternalAudioVolume(parseFloat(e.target.value))}
-                    title={`Volume: ${Math.round(externalAudioVolume * 100)}%`}
-                    className="w-10 accent-purple-500 flex-shrink-0"
-                  />
-                  <div className="flex-1 h-full flex items-end gap-px bg-neutral-800 rounded p-0.5 overflow-hidden">
-                    {waveformData.map((val, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          flex: 1,
-                          height: `${Math.max(2, val * 100)}%`,
-                          backgroundColor: (i / waveformData.length) <= (totalDuration > 0 ? currentTime / totalDuration : 0)
-                            ? '#9333ea' : 'rgba(147, 51, 234, 0.3)',
-                          borderRadius: '1px',
-                          minWidth: '1px'
-                        }}
+                      {/* Zoom controls — right-aligned */}
+                      <div className="flex items-center gap-1.5 ml-auto">
+                        <FeatherZoomOut style={{ width: 12, height: 12, color: '#737373' }} />
+                        <input type="range" min="0.3" max="3" step="0.05" value={timelineScale}
+                          onChange={e => setTimelineScale(parseFloat(e.target.value))}
+                          style={{ width: '80px', height: '4px', accentColor: '#6366f1', cursor: 'pointer' }}
+                          title={`Zoom: ${Math.round(timelineScale * 100)}%`}
+                        />
+                        <FeatherZoomIn style={{ width: 12, height: 12, color: '#737373' }} />
+                      </div>
+                    </div>
+                  )}
+                  {/* Zoom controls when no audio tracks */}
+                  {!hasAudioTrack && (
+                    <div className="flex items-center gap-1.5 mb-2 justify-end">
+                      <FeatherZoomOut style={{ width: 12, height: 12, color: '#737373' }} />
+                      <input type="range" min="0.3" max="3" step="0.05" value={timelineScale}
+                        onChange={e => setTimelineScale(parseFloat(e.target.value))}
+                        style={{ width: '80px', height: '4px', accentColor: '#6366f1', cursor: 'pointer' }}
+                        title={`Zoom: ${Math.round(timelineScale * 100)}%`}
                       />
-                    ))}
+                      <FeatherZoomIn style={{ width: 12, height: 12, color: '#737373' }} />
+                    </div>
+                  )}
+
+                  {/* ═══ UNIFIED TIMELINE: labels column + single scrollable area ═══ */}
+                  <div className="flex w-full items-start gap-3">
+                    {/* Fixed labels column */}
+                    <div className="w-20 flex flex-col shrink-0">
+                      <div style={{ height: '24px' }} className="flex items-center justify-end pr-1">
+                        <span className="text-[10px] text-neutral-600">Time</span>
+                      </div>
+                      <div style={{ height: '36px' }} className="flex items-center justify-end pr-1">
+                        <span className="text-caption font-caption text-neutral-400">Photos</span>
+                      </div>
+                      <div style={{ height: '28px' }} className="flex items-center justify-end pr-1">
+                        <span className="text-caption font-caption text-neutral-400">Text</span>
+                      </div>
+                      {hasAudioTrack && (
+                        <div style={{ height: `${audioTrackH}px`, transition: 'height 0.15s ease-out' }} className="flex items-center justify-end pr-1">
+                          {audioTrackH >= 16 && <span className="text-caption font-caption text-neutral-400">Audio</span>}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Single scrollable column */}
+                    <div className="flex-1 rounded-md border border-neutral-800 bg-black overflow-x-auto" ref={timelineRef}>
+                      <div style={{ position: 'relative', minWidth: '100%', width: `${timelinePx}px` }}>
+                        {/* Playhead line — spans all tracks */}
+                        {totalDuration > 0 && (
+                          <div style={{
+                            position: 'absolute', left: `${playheadPercent}%`, top: 0, bottom: 0, width: '2px',
+                            background: '#ef4444', zIndex: 20, pointerEvents: 'none',
+                            boxShadow: '0 0 4px rgba(239, 68, 68, 0.5)',
+                            transition: isPlaying ? 'none' : 'left 0.1s ease-out'
+                          }}>
+                            <div style={{
+                              position: 'absolute', top: '16px', left: '-5px',
+                              width: 0, height: 0,
+                              borderLeft: '6px solid transparent', borderRight: '6px solid transparent',
+                              borderTop: '8px solid #ef4444'
+                            }} />
+                          </div>
+                        )}
+
+                        {/* Ruler row — click/drag to seek */}
+                        <div style={{ height: '24px', position: 'relative', cursor: 'crosshair', borderBottom: '1px solid #333' }}
+                          onMouseDown={handleRulerMouseDown}
+                        >
+                          {rulerTicks.map((tick, i) => {
+                            const xPx = tick.time * pxPerSec;
+                            return (
+                              <div key={i} style={{ position: 'absolute', left: `${xPx}px`, top: 0, bottom: 0 }}>
+                                <div style={{
+                                  width: '1px', height: tick.isLabel ? '10px' : '6px',
+                                  backgroundColor: tick.isLabel ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.15)',
+                                  position: 'absolute', bottom: 0
+                                }} />
+                                {tick.isLabel && (
+                                  <span style={{
+                                    position: 'absolute', top: '1px', left: '3px',
+                                    fontSize: '9px', color: 'rgba(255,255,255,0.45)',
+                                    whiteSpace: 'nowrap', userSelect: 'none'
+                                  }}>
+                                    {formatTime(tick.time)}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Photo filmstrip row — pixel-width photos */}
+                        <div style={{ height: '36px', position: 'relative', borderBottom: '1px solid #222', display: 'flex' }}>
+                          {photos.map((photo, i) => {
+                            const photoWidth = Math.max(20, photoDurations[i] * pxPerSec);
+                            return (
+                              <div
+                                key={photo.id}
+                                style={{
+                                  width: `${photoWidth}px`, height: '100%', overflow: 'hidden',
+                                  boxSizing: 'border-box', flexShrink: 0,
+                                  borderBottom: `2px solid ${currentPhotoIndex === i ? theme.accent.primary : 'transparent'}`,
+                                  borderRight: i < photos.length - 1 ? '1px solid rgba(0,0,0,0.4)' : 'none'
+                                }}
+                              >
+                                <img src={photo.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} draggable={false} />
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Text overlay row */}
+                        <div style={{ height: '28px', position: 'relative', borderBottom: '1px solid #222' }}>
+                          {textOverlays.map((overlay) => {
+                            const leftPx = (overlay.startTime || 0) * pxPerSec;
+                            const widthPx = ((overlay.endTime || 0) - (overlay.startTime || 0)) * pxPerSec;
+                            const isSelected = editingTextId === overlay.id;
+                            return (
+                              <div key={overlay.id} style={{
+                                position: 'absolute', left: `${leftPx}px`, width: `${widthPx}px`,
+                                top: '2px', height: '24px', boxSizing: 'border-box',
+                                backgroundColor: isSelected ? '#9333ea' : '#6366f1', borderRadius: '4px',
+                                display: 'flex', alignItems: 'center', padding: '0 4px',
+                                cursor: timelineDrag ? 'grabbing' : 'grab', overflow: 'hidden',
+                                border: isSelected ? '1px solid #a855f7' : '1px solid rgba(124,58,237,0.5)',
+                                zIndex: isSelected ? 10 : 5
+                              }} onMouseDown={(e) => handleTimelineDragStart(e, overlay.id, 'move')}>
+                                <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
+                                  onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'left'); }} />
+                                <span style={{ fontSize: '10px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none', padding: '0 6px' }}>{overlay.text}</span>
+                                <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
+                                  onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'right'); }} />
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Audio waveform row — continuous strip, height scales with volume */}
+                        {hasAudioTrack && (() => {
+                          const audioPx = trimmedDuration * pxPerSec;
+                          const maxBars = Math.max(50, Math.round(audioPx / 3));
+                          const bars = downsample(waveformData, maxBars);
+                          const trackH = audioTrackH;
+                          return (
+                            <div style={{ height: `${trackH}px`, borderTop: '1px solid #333', position: 'relative', transition: 'height 0.15s ease-out' }}>
+                              <div style={{ width: `${audioPx}px`, height: '100%', backgroundColor: 'rgba(34, 197, 94, 0.06)', display: 'flex', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: `${Math.max(2, trackH - 4)}px`, gap: '1px', padding: '0 1px' }}>
+                                  {bars.map((amplitude, i) => (
+                                    <div key={i} style={{ flex: 1, minWidth: '1px', backgroundColor: 'rgba(34, 197, 94, 0.5)', height: `${amplitude * externalAudioVolume * 100}%`, opacity: externalAudioVolume > 0 ? 0.6 : 0.2 }} />
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              )}
+                );
+              })()}
 
               {/* Selected overlay edit bar */}
               {editingTextId && (() => {
@@ -1675,27 +1794,21 @@ const PhotoMontageEditor = ({
                         <Button variant="neutral-secondary" size="small" icon={<FeatherScissors />} onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}>Trim</Button>
                         <Button variant="destructive-tertiary" size="small" icon={<FeatherTrash2 />} onClick={handleRemoveAudio}>Remove</Button>
                       </div>
-                      {/* Volume control */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-caption font-caption text-neutral-400 w-16">Volume</span>
-                        <input type="range" min="0" max="1" step="0.05" value={externalAudioVolume}
-                          onChange={e => setExternalAudioVolume(parseFloat(e.target.value))}
-                          className="flex-1 h-1 accent-purple-500 cursor-pointer" />
-                        <span className="text-caption font-caption text-neutral-400 w-8">{Math.round(externalAudioVolume * 100)}%</span>
-                      </div>
                     </>
                   ) : (
                     <div className="text-center text-neutral-500 text-caption font-caption py-4">No audio selected</div>
                   )}
-                  <Button variant="neutral-secondary" size="small" icon={<FeatherUpload />} onClick={() => audioFileInputRef.current?.click()}>Upload Audio</Button>
+                  <Button className="w-full" variant="neutral-secondary" size="small" icon={<FeatherUpload />} onClick={() => audioFileInputRef.current?.click()}>
+                    {selectedAudio ? 'Change Audio' : 'Upload Audio'}
+                  </Button>
                   {libraryAudio.length > 0 && (
-                    <div className="flex flex-col gap-1 mt-1">
-                      <span className="text-caption font-caption text-neutral-500">Library Audio</span>
+                    <div className="flex flex-col gap-1 max-h-[120px] overflow-y-auto">
+                      <span className="text-caption font-caption text-neutral-400">Library Audio</span>
                       {libraryAudio.map(audio => (
-                        <div key={audio.id} className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-neutral-800 transition-colors"
+                        <div key={audio.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-neutral-800 text-[12px] text-[#ffffffff]"
                           onClick={() => { setAudioToTrim(audio); setShowAudioTrimmer(true); }}>
-                          <FeatherMusic className="w-3 h-3 text-neutral-500" />
-                          <span className="text-body font-body text-neutral-300 text-[12px] truncate flex-1">{audio.name}</span>
+                          <FeatherMusic className="w-3.5 h-3.5 opacity-60 flex-shrink-0" />
+                          <span className="truncate">{audio.name}</span>
                         </div>
                       ))}
                     </div>
@@ -1907,6 +2020,21 @@ const PhotoMontageEditor = ({
             duration={(audioEndTime || audioDuration) - audioStartTime}
             onApply={handleBeatSelectionApply}
             onCancel={() => setShowBeatSelector(false)}
+          />
+        )}
+
+        {/* ── Momentum Selector Modal ── */}
+        {showMomentumSelector && selectedAudio?.url && (
+          <MomentumSelector
+            audioSource={selectedAudio.url}
+            duration={(audioEndTime || audioDuration) - audioStartTime}
+            trimStart={audioStartTime || undefined}
+            trimEnd={audioEndTime || undefined}
+            onApply={(cutPoints) => {
+              handleBeatSelectionApply(cutPoints);
+              setShowMomentumSelector(false);
+            }}
+            onCancel={() => setShowMomentumSelector(false)}
           />
         )}
 
