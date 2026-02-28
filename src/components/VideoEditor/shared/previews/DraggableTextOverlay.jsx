@@ -173,7 +173,7 @@ const DraggableTextOverlay = ({
         left: `${position.x}%`,
         top: `${position.y}%`,
         transform: 'translate(-50%, -50%)',
-        width: 'fit-content',
+        width: `${position.width || 80}%`,
         maxWidth: '95%',
         padding: '4px',
         borderRadius: 4,
@@ -225,7 +225,8 @@ const DraggableTextOverlay = ({
           textTransform,
           textShadow,
           lineHeight: 1.2,
-          whiteSpace: 'nowrap',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
           pointerEvents: 'none',
           userSelect: 'none',
         }}>
