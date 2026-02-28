@@ -2187,6 +2187,7 @@ const SlideshowEditor = ({
   }, [allSlideshows, executeGeneration]);
 
   // Auto-generate on mount when coming from niche preview (Create N flow)
+  // Stay on template tab so user sees their previewed content first
   const autoGenTriggeredRef = useRef(false);
   useEffect(() => {
     if (autoGenTriggeredRef.current || !nicheGenCount) return;
@@ -2196,6 +2197,8 @@ const SlideshowEditor = ({
     if (!templateSS || templateSS.slides.length === 0) return;
     autoGenTriggeredRef.current = true;
     executeGeneration();
+    // Keep user on the template tab (index 0) so they see their previewed images/text
+    setActiveSlideshowIndex(0);
   }, [nicheGenCount, collections.length, libraryImages.length, allSlideshows, executeGeneration]);
 
   // Export slideshow as carousel images
