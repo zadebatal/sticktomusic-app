@@ -34,7 +34,8 @@ import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
 import { Badge } from '../../ui/components/Badge';
-import { FeatherX, FeatherPlay, FeatherPause, FeatherVolume2, FeatherVolumeX, FeatherMaximize2, FeatherPlus, FeatherTrash2, FeatherScissors, FeatherRefreshCw, FeatherChevronUp, FeatherZoomIn, FeatherZoomOut, FeatherStar, FeatherMusic, FeatherUpload, FeatherDatabase, FeatherMic } from '@subframe/core';
+import { FeatherX, FeatherPlay, FeatherPause, FeatherVolume2, FeatherVolumeX, FeatherMaximize2, FeatherPlus, FeatherTrash2, FeatherScissors, FeatherRefreshCw, FeatherChevronUp, FeatherZoomIn, FeatherZoomOut, FeatherStar, FeatherMusic, FeatherUpload, FeatherDatabase, FeatherMic, FeatherAlignLeft, FeatherAlignCenter, FeatherAlignRight } from '@subframe/core';
+import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
 import EditorShell from './shared/EditorShell';
 import EditorTopBar from './shared/EditorTopBar';
 import EditorFooter from './shared/EditorFooter';
@@ -47,6 +48,18 @@ const DEFAULT_TEXT_STYLE = {
   color: '#ffffff', outline: true, outlineColor: '#000000',
   textCase: 'default', displayMode: 'word'
 };
+
+const AVAILABLE_FONTS = [
+  { name: 'Inter', value: "'Inter', sans-serif" },
+  { name: 'Arial', value: 'Arial, sans-serif' },
+  { name: 'Arial Narrow', value: "'Arial Narrow', Arial, sans-serif" },
+  { name: 'Georgia', value: 'Georgia, serif' },
+  { name: 'Times New Roman', value: "'Times New Roman', serif" },
+  { name: 'Courier New', value: "'Courier New', monospace" },
+  { name: 'Impact', value: 'Impact, sans-serif' },
+  { name: 'Comic Sans', value: "'Comic Sans MS', cursive" },
+  { name: 'Trebuchet', value: "'Trebuchet MS', sans-serif" },
+];
 
 /**
  * VideoEditorModal - Flowstage-inspired video editor modal
@@ -70,7 +83,11 @@ const VideoEditorModal = ({
   schedulerEditMode = false,
   initialEditorMode = null,
   templateSettings = null,
-  clipperSourceVideos = []
+  clipperSourceVideos = [],
+  clipperSession = null,
+  onSaveClipperSession = null,
+  nicheBankLabels = null,
+  clipperProjectNiches = [],
 }) => {
   // Editor mode: null = show picker, 'montage' = current editor, 'solo-clip' = solo clip editor
   // Show picker only when explicitly creating a new video (showTemplatePicker=true)
@@ -99,12 +116,21 @@ const VideoEditorModal = ({
         position: ov.position || null,
         style: ov.style || null,
       }));
+  const initialTextOverlays = (existingVideo?.textOverlays || []).map((ov, i) => ({
+    id: ov.id || `text_niche_${i}`,
+    text: ov.text,
+    style: ov.style || null,
+    position: ov.position || { x: 50, y: 50, width: 80 },
+    startTime: ov.startTime ?? 0,
+    endTime: ov.endTime ?? (existingVideo?.duration || 30),
+  }));
   const [allVideos, setAllVideos] = useState([{
     id: 'template',
     name: existingVideo?.name || 'Template',
     clips: existingVideo?.clips || [],
     audio: existingVideo?.audio || null,
     words: initialWords,
+    textOverlays: initialTextOverlays,
     lyrics: existingVideo?.lyrics || initialWords.map(w => w.text).join(' '),
     textStyle: existingVideo?.textStyle || { ...DEFAULT_TEXT_STYLE },
     cropMode: '9:16',
@@ -125,8 +151,19 @@ const VideoEditorModal = ({
   const words = allVideos[activeVideoIndex]?.words || [];
   const textStyle = allVideos[activeVideoIndex]?.textStyle || { ...DEFAULT_TEXT_STYLE };
   const cropMode = allVideos[activeVideoIndex]?.cropMode || '9:16';
+  const textOverlays = allVideos[activeVideoIndex]?.textOverlays || [];
 
   // Wrapper setters that route through allVideos
+  const setTextOverlays = useCallback((updater) => {
+    setAllVideos(prev => {
+      const copy = [...prev];
+      const cur = copy[activeVideoIndex];
+      if (!cur) return prev;
+      copy[activeVideoIndex] = { ...cur, textOverlays: typeof updater === 'function' ? updater(cur.textOverlays || []) : updater };
+      return copy;
+    });
+  }, [activeVideoIndex]);
+
   const setSelectedAudio = useCallback((updater) => {
     setAllVideos(prev => {
       const copy = [...prev];
@@ -200,7 +237,7 @@ const VideoEditorModal = ({
   // ── Undo/Redo history ──
   const getHistorySnapshot = useCallback(() => {
     const v = allVideos[activeVideoIndex];
-    return v ? { clips: v.clips, audio: v.audio, words: v.words, lyrics: v.lyrics, textStyle: v.textStyle, cropMode: v.cropMode, duration: v.duration } : null;
+    return v ? { clips: v.clips, audio: v.audio, words: v.words, textOverlays: v.textOverlays, lyrics: v.lyrics, textStyle: v.textStyle, cropMode: v.cropMode, duration: v.duration } : null;
   }, [allVideos, activeVideoIndex]);
 
   const restoreHistorySnapshot = useCallback((snapshot) => {
@@ -216,7 +253,7 @@ const VideoEditorModal = ({
   const { canUndo, canRedo, handleUndo, handleRedo, resetHistory } = useEditorHistory({
     getSnapshot: getHistorySnapshot,
     restoreSnapshot: restoreHistorySnapshot,
-    deps: [clips, words, textStyle, selectedAudio],
+    deps: [clips, words, textOverlays, textStyle, selectedAudio],
     isEditingText: false
   });
 
@@ -311,19 +348,21 @@ const VideoEditorModal = ({
     return libraryVideos.filter(v => col.mediaIds.includes(v.id));
   }, [selectedCollection, libraryVideos, sidebarCollections, category?.videos]);
 
-  // Text banks from niche (video text banks) + collections (slideshow text banks)
+  // Text banks from niche (video text banks) or collections (slideshow text banks)
   const getTextBanks = useCallback(() => {
     let textBank1 = [], textBank2 = [];
-    // Include niche text banks first
+    // Use niche text banks if available (single source of truth from niche)
     if (category?.nicheTextBanks) {
       const extractTexts = (bank) => (bank || []).map(e => typeof e === 'string' ? e : e?.text || '').filter(Boolean);
       if (category.nicheTextBanks[0]?.length > 0) textBank1 = [...extractTexts(category.nicheTextBanks[0])];
       if (category.nicheTextBanks[1]?.length > 0) textBank2 = [...extractTexts(category.nicheTextBanks[1])];
+    } else {
+      // Fallback: merge from collections when not opened from niche
+      sidebarCollections.forEach(col => {
+        if (col.textBank1?.length) textBank1 = [...textBank1, ...col.textBank1];
+        if (col.textBank2?.length) textBank2 = [...textBank2, ...col.textBank2];
+      });
     }
-    sidebarCollections.forEach(col => {
-      if (col.textBank1?.length) textBank1 = [...textBank1, ...col.textBank1];
-      if (col.textBank2?.length) textBank2 = [...textBank2, ...col.textBank2];
-    });
     return { textBank1, textBank2 };
   }, [sidebarCollections, category?.nicheTextBanks]);
 
@@ -391,6 +430,11 @@ const VideoEditorModal = ({
   const [showLyricBankPicker, setShowLyricBankPicker] = useState(false);
   const [loadedBankLyricId, setLoadedBankLyricId] = useState(null); // Track which lyric from bank is loaded
 
+  // Text overlay editing state
+  const [editingTextId, setEditingTextId] = useState(null);
+  const [editingTextValue, setEditingTextValue] = useState('');
+  const previewRef = useRef(null);
+
   // Progress bar dragging state
   const [progressDragging, setProgressDragging] = useState(false);
   const progressBarRef = useRef(null);
@@ -416,7 +460,7 @@ const VideoEditorModal = ({
   // ── Right Sidebar: collapsible sections ──
   const [videoName, setVideoName] = useState(existingVideo?.name || 'Untitled Video');
   const { renderCollapsibleSection } = useCollapsibleSections({
-    audio: true, clips: true, text: false, lyrics: false, textStyle: false
+    audio: true, clips: true, text: false, textStyle: false
   });
 
   // Beat detection
@@ -663,6 +707,35 @@ const VideoEditorModal = ({
       setUserMaxDuration(Math.ceil(totalClipDuration));
     }
   }, [totalClipDuration, userMaxDuration]);
+
+  // ── Text overlay CRUD (matches SoloClipEditor pattern) ──
+  const getDefaultTextStyle = useCallback(() => ({
+    fontSize: textStyle.fontSize, fontFamily: textStyle.fontFamily,
+    fontWeight: textStyle.fontWeight, color: textStyle.color,
+    outline: textStyle.outline, outlineColor: textStyle.outlineColor,
+    textAlign: textStyle.textAlign || 'center', textCase: textStyle.textCase
+  }), [textStyle]);
+
+  const addTextOverlay = useCallback((prefillText) => {
+    const dur = timelineDuration || 30;
+    const newOverlay = {
+      id: `text_${Date.now()}`, text: prefillText || 'Click to edit',
+      style: getDefaultTextStyle(), position: { x: 50, y: 50, width: 80 },
+      startTime: 0, endTime: dur,
+    };
+    setTextOverlays(prev => [...prev, newOverlay]);
+    setEditingTextId(newOverlay.id);
+    setEditingTextValue(newOverlay.text);
+  }, [getDefaultTextStyle, setTextOverlays, timelineDuration]);
+
+  const updateTextOverlay = useCallback((overlayId, updates) => {
+    setTextOverlays(prev => prev.map(o => o.id === overlayId ? { ...o, ...updates } : o));
+  }, [setTextOverlays]);
+
+  const removeTextOverlay = useCallback((overlayId) => {
+    setTextOverlays(prev => prev.filter(o => o.id !== overlayId));
+    if (editingTextId === overlayId) { setEditingTextId(null); setEditingTextValue(''); }
+  }, [setTextOverlays, editingTextId]);
 
   // Handle play/pause with trim boundary support + wall-clock fallback
   const playStartRef = useRef(null); // wall-clock start time for fallback
@@ -957,7 +1030,7 @@ const VideoEditorModal = ({
   }, []);
 
   // Track whether the editor has unsaved work (for beforeunload guard)
-  const hasUnsavedWork = clips.length > 0 || words.length > 0 || !!selectedAudio;
+  const hasUnsavedWork = clips.length > 0 || words.length > 0 || textOverlays.length > 0 || !!selectedAudio;
   useUnsavedChanges(hasUnsavedWork);
 
   // Handle close with confirmation if there's unsaved work
@@ -990,13 +1063,14 @@ const VideoEditorModal = ({
       audio: selectedAudio,
       clips,
       words,
+      textOverlays,
       lyrics,
       textStyle,
       cropMode,
       duration,
       bpm,
       thumbnail: clips[0]?.thumbnail || null,
-      textOverlay: words[0]?.text || lyrics.split('\n')[0] || '',
+      textOverlay: textOverlays[0]?.text || words[0]?.text || lyrics.split('\n')[0] || '',
       maxDuration: userMaxDuration,
       // Audio mixing state
       sourceVideoMuted,
@@ -1014,7 +1088,7 @@ const VideoEditorModal = ({
     // Save directly
     onSave(videoData);
     clearAutoSave();
-  }, [existingVideo, selectedAudio, clips, words, lyrics, textStyle, cropMode, duration, bpm, userMaxDuration, sourceVideoMuted, sourceVideoVolume, externalAudioVolume, onSave, onSaveLyrics, clearAutoSave]);
+  }, [existingVideo, selectedAudio, clips, words, textOverlays, lyrics, textStyle, cropMode, duration, bpm, userMaxDuration, sourceVideoMuted, sourceVideoVolume, externalAudioVolume, onSave, onSaveLyrics, clearAutoSave]);
 
   // Handle lyrics save prompt response
   const handleLyricsPromptResponse = useCallback((saveLyrics) => {
@@ -1114,7 +1188,7 @@ const VideoEditorModal = ({
     const autoSave = () => {
       // Don't auto-save if there's nothing to save
       const template = allVideos[0];
-      if (!template?.audio && (!template?.clips?.length) && (!template?.words?.length)) return;
+      if (!template?.audio && (!template?.clips?.length) && (!template?.words?.length) && (!template?.textOverlays?.length)) return;
 
       try {
         const draftData = {
@@ -1284,12 +1358,22 @@ const VideoEditorModal = ({
         }
       }
 
+      // Cycle textOverlays from banks
+      let genTextOverlays = [...(template.textOverlays || [])];
+      if (keepTemplateText === 'none' && textBank1.length > 0 && genTextOverlays.length > 0) {
+        const bankText = textBank1[g % textBank1.length];
+        if (bankText) {
+          genTextOverlays = genTextOverlays.map((o, i) => i === 0 ? { ...o, text: bankText } : o);
+        }
+      }
+
       newVideos.push({
         id: `gen_${Date.now()}_${g}`,
         name: `#${allVideos.length + g}`,
         clips: genClips,
         audio: template.audio,
         words: genWords,
+        textOverlays: genTextOverlays,
         lyrics: template.lyrics,
         textStyle: { ...template.textStyle },
         cropMode: template.cropMode,
@@ -1326,13 +1410,14 @@ const VideoEditorModal = ({
           audio: video.audio,
           clips: video.clips,
           words: video.words,
+          textOverlays: video.textOverlays || [],
           lyrics: video.lyrics,
           textStyle: video.textStyle,
           cropMode: video.cropMode,
           duration: video.duration,
           bpm,
           thumbnail: video.clips[0]?.thumbnail || null,
-          textOverlay: video.words[0]?.text || video.lyrics.split('\n')[0] || ''
+          textOverlay: (video.textOverlays?.[0]?.text) || video.words[0]?.text || video.lyrics.split('\n')[0] || ''
         };
         try {
           await onSave(videoData);
@@ -1352,11 +1437,10 @@ const VideoEditorModal = ({
     }
   }, [allVideos, existingVideo, bpm, onSave, clearAutoSave, toast, onClose, isSavingAll]);
 
-  // Get current visible text(s) — multiple overlays can be visible simultaneously
-  const visibleTexts = words.filter(w =>
-    currentTime >= w.startTime && currentTime < w.startTime + (w.duration || 0.5)
+  // Get current visible text overlays — multiple overlays can be visible simultaneously
+  const visibleTexts = textOverlays.filter(o =>
+    currentTime >= (o.startTime ?? 0) && currentTime <= (o.endTime ?? timelineDuration)
   );
-  const currentText = visibleTexts[0] || null;
 
   // Handlers
   const handleAudioSelect = (audio) => {
@@ -2391,13 +2475,16 @@ const VideoEditorModal = ({
       <ClipperEditor
         category={category}
         existingVideo={existingVideo}
-        onSave={onSave}
+        existingSession={clipperSession}
+        onSaveSession={onSaveClipperSession}
         onClose={onClose}
         artistId={artistId}
         db={db}
         sourceVideos={clipperSourceVideos}
         nicheId={category?.id}
         projectId={category?.projectId}
+        nicheBankLabels={nicheBankLabels}
+        projectNiches={clipperProjectNiches}
       />
       </Suspense>
     );
@@ -2427,7 +2514,7 @@ const VideoEditorModal = ({
           <div className="flex grow shrink-0 basis-0 flex-col items-center bg-black overflow-hidden">
             <div className="flex w-full max-w-[448px] grow flex-col items-center gap-4 py-6 px-4 overflow-auto">
               {/* Video Preview */}
-              <div className="flex items-center justify-center rounded-lg bg-[#1a1a1aff] border border-neutral-800 relative overflow-hidden" style={{ aspectRatio: '9/16', height: '50vh' }}>
+              <div ref={previewRef} className="flex items-center justify-center rounded-lg bg-[#1a1a1aff] border border-neutral-800 relative overflow-hidden" style={{ aspectRatio: '9/16', height: '50vh' }} onClick={() => setEditingTextId(null)}>
                 {/* Hidden audio element for playback */}
                 <audio ref={audioRef} style={{ display: 'none' }} />
 
@@ -2562,33 +2649,21 @@ const VideoEditorModal = ({
                   </div>
                 )}
 
-                {/* Text Overlays */}
-                {visibleTexts.map(vt => {
-                  const pos = vt.position;
-                  const ts = vt.style || textStyle;
-                  const scaledSize = ts.fontSize ? ts.fontSize * 0.35 : textStyle.fontSize * 0.5;
-                  return (
-                    <div key={vt.id} style={{
-                      position: 'absolute',
-                      ...(pos ? {
-                        left: `${pos.x}%`, top: `${pos.y}%`,
-                        transform: 'translate(-50%, -50%)',
-                      } : {
-                        top: '50%', left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                      }),
-                      textAlign: 'center', maxWidth: '90%',
-                      fontSize: `${scaledSize}px`,
-                      fontFamily: ts.fontFamily || textStyle.fontFamily,
-                      fontWeight: ts.fontWeight || textStyle.fontWeight,
-                      color: ts.color || textStyle.color,
-                      textTransform: (ts.textCase || textStyle.textCase) === 'upper' ? 'uppercase' : (ts.textCase || textStyle.textCase) === 'lower' ? 'lowercase' : 'none',
-                      textShadow: (ts.outline !== undefined ? ts.outline : textStyle.outline) ? `2px 2px 0 ${ts.outlineColor || textStyle.outlineColor}, -2px -2px 0 ${ts.outlineColor || textStyle.outlineColor}, 2px -2px 0 ${ts.outlineColor || textStyle.outlineColor}, -2px 2px 0 ${ts.outlineColor || textStyle.outlineColor}` : 'none'
-                    }}>
-                      {vt.text}
-                    </div>
-                  );
-                })}
+                {/* Text Overlays — DraggableTextOverlay handles click/drag/edit */}
+                {visibleTexts.map(overlay => (
+                  <DraggableTextOverlay
+                    key={overlay.id}
+                    text={overlay.text}
+                    textStyle={overlay.style || textStyle}
+                    color={editingTextId === overlay.id ? '#6366f1' : '#6366f180'}
+                    isSelected={editingTextId === overlay.id}
+                    onSelect={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
+                    position={overlay.position || { x: 50, y: 50, width: 80 }}
+                    onPositionChange={(newPos) => updateTextOverlay(overlay.id, { position: newPos })}
+                    onTextChange={(newText) => updateTextOverlay(overlay.id, { text: newText })}
+                    containerRef={previewRef}
+                  />
+                ))}
 
                 {/* Crop Overlay */}
                 {cropMode === '4:3' && (
@@ -2656,7 +2731,7 @@ const VideoEditorModal = ({
                 <Button variant="brand-primary" size="medium" icon={<FeatherPlus />}
                   onClick={executeGeneration} disabled={isGenerating || clips.length === 0}
                 >
-                  {isGenerating ? 'Remixing...' : 'Remix'}
+                  {isGenerating ? 'Creating...' : 'Create'}
                 </Button>
                 <input
                   type="number" min={1} max={50} value={generateCount}
@@ -2784,6 +2859,11 @@ const VideoEditorModal = ({
                   <div style={{ height: '24px' }} className="flex items-center justify-end pr-1">
                     <span className="text-[10px] text-neutral-600">Time</span>
                   </div>
+                  {textOverlays.length > 0 && (
+                    <div style={{ height: `${textOverlays.length * 24}px` }} className="flex items-center justify-end pr-1">
+                      <span className="text-caption font-caption text-neutral-400">Text</span>
+                    </div>
+                  )}
                   <div style={{ height: '48px' }} className="flex items-center justify-end pr-1">
                     <span className="text-caption font-caption text-neutral-400">Clips</span>
                   </div>
@@ -2872,6 +2952,72 @@ const VideoEditorModal = ({
                         );
                       })}
                     </div>
+
+                    {/* Text overlay rows — one row per overlay */}
+                    {textOverlays.length > 0 && (
+                      <div style={{ position: 'relative', borderBottom: '1px solid #222' }}>
+                        {textOverlays.map((overlay) => {
+                          const start = overlay.startTime ?? 0;
+                          const end = overlay.endTime ?? timelineDuration;
+                          const leftPx = start * pxPerSec;
+                          const widthPx = Math.max(20, (end - start) * pxPerSec);
+                          const isSelected = editingTextId === overlay.id;
+                          const overlayColor = isSelected ? '#818cf8' : '#6366f1';
+                          return (
+                            <div key={overlay.id} style={{ height: '24px', position: 'relative' }}>
+                              <div
+                                style={{
+                                  position: 'absolute', left: `${leftPx}px`, width: `${widthPx}px`, top: 2, bottom: 2,
+                                  backgroundColor: isSelected ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.2)',
+                                  border: `1px solid ${overlayColor}`,
+                                  borderRadius: '4px', cursor: 'pointer', overflow: 'hidden',
+                                  display: 'flex', alignItems: 'center', paddingLeft: '6px',
+                                }}
+                                onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
+                              >
+                                <span style={{ fontSize: '9px', color: '#c7d2fe', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', userSelect: 'none' }}>
+                                  {overlay.text}
+                                </span>
+                                {/* Left resize handle */}
+                                <div
+                                  style={{ position: 'absolute', left: 0, top: 0, width: '6px', height: '100%', cursor: 'col-resize', zIndex: 3 }}
+                                  onPointerDown={(e) => {
+                                    e.stopPropagation();
+                                    const startX = e.clientX;
+                                    const origStart = start;
+                                    const move = (me) => {
+                                      const dx = (me.clientX - startX) / pxPerSec;
+                                      const newStart = Math.max(0, Math.min(end - 0.5, origStart + dx));
+                                      updateTextOverlay(overlay.id, { startTime: newStart });
+                                    };
+                                    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+                                    document.addEventListener('pointermove', move);
+                                    document.addEventListener('pointerup', up);
+                                  }}
+                                />
+                                {/* Right resize handle */}
+                                <div
+                                  style={{ position: 'absolute', right: 0, top: 0, width: '6px', height: '100%', cursor: 'col-resize', zIndex: 3 }}
+                                  onPointerDown={(e) => {
+                                    e.stopPropagation();
+                                    const startX = e.clientX;
+                                    const origEnd = end;
+                                    const move = (me) => {
+                                      const dx = (me.clientX - startX) / pxPerSec;
+                                      const newEnd = Math.max(start + 0.5, Math.min(timelineDuration, origEnd + dx));
+                                      updateTextOverlay(overlay.id, { endTime: newEnd });
+                                    };
+                                    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+                                    document.addEventListener('pointermove', move);
+                                    document.addEventListener('pointerup', up);
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
 
                     {/* Clips row — always spans full timelinePx so empty area is visible */}
                     <div style={{ height: '48px', position: 'relative', width: '100%' }}>
@@ -3136,6 +3282,7 @@ const VideoEditorModal = ({
                         </div>
                         <div className="flex gap-2">
                           <Button variant="neutral-secondary" size="small" icon={<FeatherScissors />} onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}>Trim</Button>
+                          <Button variant="neutral-secondary" size="small" icon={<FeatherMic />} onClick={handleAITranscribe} disabled={isTranscribing}>{isTranscribing ? 'Transcribing...' : 'Auto Transcribe'}</Button>
                           <Button variant="destructive-tertiary" size="small" icon={<FeatherTrash2 />} onClick={() => {
                             if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; }
                             setSelectedAudio(null); setIsPlaying(false); setCurrentTime(0); setDuration(0); setSourceVideoMuted(false);
@@ -3258,7 +3405,7 @@ const VideoEditorModal = ({
                               <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newTextA.trim()) { handleAddToTextBank(1, newTextA); setNewTextA(''); } }} aria-label="Add to Text Bank A" />
                             </div>
                             {textBank1.map((text, idx) => (
-                              <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-300">
+                              <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-300 cursor-pointer hover:bg-neutral-700/50" onClick={() => addTextOverlay(text)}>
                                 <span className="flex-1 text-[12px]">{text}</span>
                               </div>
                             ))}
@@ -3273,7 +3420,7 @@ const VideoEditorModal = ({
                               <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} onClick={() => { if (newTextB.trim()) { handleAddToTextBank(2, newTextB); setNewTextB(''); } }} aria-label="Add to Text Bank B" />
                             </div>
                             {textBank2.map((text, idx) => (
-                              <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-300">
+                              <div key={idx} className="flex items-center px-2 py-1.5 rounded-md bg-neutral-800/50 mb-1 text-neutral-300 cursor-pointer hover:bg-neutral-700/50" onClick={() => addTextOverlay(text)}>
                                 <span className="flex-1 text-[12px]">{text}</span>
                               </div>
                             ))}
@@ -3285,176 +3432,148 @@ const VideoEditorModal = ({
                   </div>
                 ))}
 
-                {renderCollapsibleSection('lyrics', 'Lyrics', (
-                  <div className="flex flex-col gap-3">
-                    <textarea
-                      className="w-full rounded-md border border-neutral-800 bg-black px-3 py-2 text-sm text-white placeholder-neutral-500 resize-y outline-none focus:border-brand-600"
-                      style={{ minHeight: 80 }}
-                      placeholder="Enter or paste lyrics here..."
-                      value={lyrics}
-                      onChange={(e) => setLyrics(e.target.value)}
-                      rows={4}
-                    />
-                    <div className="flex w-full items-center gap-2">
-                      <Button className="grow" variant="neutral-secondary" size="small" icon={<FeatherDatabase />}
-                        onClick={() => setShowLyricBankPicker(!showLyricBankPicker)}
-                        disabled={(category?.lyrics?.length || 0) === 0}
-                      >
-                        Load from Bank ({category?.lyrics?.length || 0})
-                      </Button>
-                      <Button className="grow" variant="neutral-secondary" size="small" icon={<FeatherMic />}
-                        onClick={handleAITranscribe}
-                        disabled={isTranscribing || !selectedAudio}
-                      >
-                        {isTranscribing ? 'Transcribing...' : 'AI Transcribe'}
-                      </Button>
-                    </div>
-                    {/* Lyric Bank Dropdown */}
-                    {showLyricBankPicker && (category?.lyrics?.length || 0) > 0 && (
-                      <div className="bg-[#171717] border border-neutral-700 rounded-lg max-h-[200px] overflow-y-auto shadow-lg">
-                        {category.lyrics.map(lyric => (
-                          <div key={lyric.id} className="w-full px-3 py-2.5 border-b border-neutral-800 text-[#ffffffff] text-left cursor-pointer text-[13px] hover:bg-neutral-800"
-                            onClick={() => {
-                              const content = lyric.content || '';
-                              let newWords;
-                              if (lyric.words?.length > 0) { newWords = lyric.words; }
-                              else {
-                                const lyricWords = content.split(/\s+/).filter(w => w.trim().length > 0);
-                                newWords = lyricWords.map((text, i) => ({ id: `word_${Date.now()}_${i}`, text, startTime: i * 0.5, duration: 0.5 }));
-                              }
-                              setLyrics(content); setWords(newWords); setLoadedBankLyricId(lyric.id); setShowLyricBankPicker(false);
-                            }}
-                          >
-                            <div className="font-medium mb-0.5">{lyric.title}</div>
-                            <div className="text-[11px] text-neutral-400 truncate">{lyric.content?.substring(0, 50)}...</div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex flex-wrap gap-1.5">
-                      <Button variant="neutral-secondary" size="small" onClick={() => setShowLyricsEditor(true)}>Quick Edit</Button>
-                      <Button variant="neutral-secondary" size="small" onClick={() => setShowWordTimeline(true)}>Word Timeline</Button>
-                    </div>
-                    {lyrics && (
-                      <Button className="w-full" variant="neutral-tertiary" size="small" icon={<FeatherX />} onClick={() => setLyrics('')}>Clear</Button>
-                    )}
-                    {transcriptionError && (
-                      <div className="p-3 bg-red-950 border border-red-600 rounded-lg">
-                        <p className="text-red-300 text-[12px] mb-2">{transcriptionError}</p>
-                        <Button variant="destructive-primary" size="small" onClick={() => { setTranscriptionError(null); handleAITranscribe(); }}>Retry</Button>
-                      </div>
-                    )}
-                    {!selectedAudio && !isTranscribing && (
-                      <p className="text-neutral-500 text-[11px]">Select audio to enable AI transcription</p>
-                    )}
-                    {/* Full LyricBank component */}
-                    <div className="border-t border-neutral-800 pt-3">
-                      <LyricBank
-                        lyrics={category?.lyrics || []}
-                        onAddLyrics={onAddLyrics}
-                        onUpdateLyrics={onUpdateLyrics}
-                        onDeleteLyrics={onDeleteLyrics}
-                        onSelectText={(selectedText) => { setLyrics(selectedText); toast.success('Lyrics loaded!'); }}
-                        compact={false}
-                        showAddForm={true}
-                      />
-                    </div>
-                  </div>
-                ))}
 
-                {renderCollapsibleSection('textStyle', 'Text Style', (
-                  <div className="flex flex-col gap-3">
-                    {/* Font Controls */}
-                    <div className="flex items-center gap-2">
-                      <div className="flex gap-1">
-                        <Button variant="neutral-secondary" size="small" onClick={() => setTextStyle(s => ({ ...s, fontSize: Math.max(24, s.fontSize - 4) }))}>A-</Button>
-                        <Button variant="neutral-secondary" size="small" onClick={() => setTextStyle(s => ({ ...s, fontSize: Math.min(120, s.fontSize + 4) }))}>A+</Button>
+                {renderCollapsibleSection('textStyle', 'Text Style', (() => {
+                  const selOverlay = editingTextId ? textOverlays.find(o => o.id === editingTextId) : null;
+                  const activeStyle = selOverlay?.style || getDefaultTextStyle();
+                  const disabled = !selOverlay;
+                  const handleStyleChange = (updates) => {
+                    if (selOverlay) updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, ...updates } });
+                  };
+                  return (
+                    <div className={`flex flex-col gap-4 ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                      {disabled && <div className="text-xs text-neutral-400 italic mb-3">Click text on preview to edit</div>}
+
+                      {/* Add + Delete buttons — always accessible */}
+                      <div className="flex gap-2" style={disabled ? { opacity: 1, pointerEvents: 'auto' } : {}}>
+                        <Button variant="brand-secondary" size="small" icon={<FeatherPlus />}
+                          onClick={() => addTextOverlay()} style={{ opacity: 1, pointerEvents: 'auto' }}>Add Text</Button>
+                        {selOverlay && (
+                          <Button variant="neutral-secondary" size="small" icon={<FeatherTrash2 />}
+                            onClick={() => removeTextOverlay(selOverlay.id)}>Delete</Button>
+                        )}
                       </div>
-                      <select value={textStyle.fontFamily} onChange={(e) => setTextStyle(s => ({ ...s, fontFamily: e.target.value }))}
-                        className="flex-1 px-2 py-1.5 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[12px] outline-none">
-                        <option value="Inter, sans-serif">Sans</option>
-                        <option value="'Playfair Display', serif">Serif</option>
-                        <option value="'Space Grotesk', sans-serif">Grotesk</option>
-                        <option value="monospace">Mono</option>
-                      </select>
-                    </div>
-                    {/* Outline */}
-                    <ToggleGroup value={textStyle.outline ? 'outline' : 'none'} onValueChange={(v) => setTextStyle(s => ({ ...s, outline: v === 'outline' }))}>
-                      <ToggleGroup.Item value="none">No outline</ToggleGroup.Item>
-                      <ToggleGroup.Item value="outline">Outline</ToggleGroup.Item>
-                    </ToggleGroup>
-                    {/* Colors */}
-                    <div className="flex w-full items-center gap-2">
-                      <div className="flex grow flex-col items-start gap-1">
-                        <span className="text-caption font-caption text-neutral-400">Text Color</span>
-                        <label className="flex h-10 w-full items-center gap-2 rounded-md border border-neutral-800 bg-black px-3 cursor-pointer">
-                          <input type="color" value={textStyle.color} onChange={(e) => setTextStyle(s => ({ ...s, color: e.target.value }))} className="w-6 h-6 rounded-md border-0 p-0 cursor-pointer" />
-                          <span className="text-caption font-caption text-neutral-400">{textStyle.color}</span>
-                        </label>
-                      </div>
-                      {textStyle.outline && (
-                        <div className="flex grow flex-col items-start gap-1">
-                          <span className="text-caption font-caption text-neutral-400">Outline</span>
-                          <label className="flex h-10 w-full items-center gap-2 rounded-md border border-neutral-800 bg-black px-3 cursor-pointer">
-                            <input type="color" value={textStyle.outlineColor} onChange={(e) => setTextStyle(s => ({ ...s, outlineColor: e.target.value }))} className="w-6 h-6 rounded-md border-0 p-0 cursor-pointer" />
-                            <span className="text-caption font-caption text-neutral-400">{textStyle.outlineColor}</span>
-                          </label>
-                        </div>
+
+                      {/* Selected overlay text input */}
+                      {selOverlay && (
+                        <input value={selOverlay.text}
+                          onChange={(e) => updateTextOverlay(selOverlay.id, { text: e.target.value })}
+                          className="w-full px-3 py-2 rounded-md border border-neutral-800 bg-black text-white text-sm" />
                       )}
-                    </div>
-                    {/* Display Mode */}
-                    <div className="flex flex-col gap-1">
-                      <span className="text-caption font-caption text-neutral-400">Display Mode</span>
-                      <ToggleGroup value={textStyle.displayMode} onValueChange={(v) => setTextStyle(s => ({ ...s, displayMode: v }))}>
-                        <ToggleGroup.Item value="word">By word</ToggleGroup.Item>
-                        <ToggleGroup.Item value="buildLine">Build line</ToggleGroup.Item>
-                        <ToggleGroup.Item value="justify">Justify</ToggleGroup.Item>
-                      </ToggleGroup>
-                    </div>
-                    {/* Case */}
-                    <div className="flex flex-col gap-1">
-                      <span className="text-caption font-caption text-neutral-400">Case</span>
-                      <ToggleGroup value={textStyle.textCase} onValueChange={(v) => setTextStyle(s => ({ ...s, textCase: v }))}>
-                        <ToggleGroup.Item value="default">Default</ToggleGroup.Item>
-                        <ToggleGroup.Item value="lower">lower</ToggleGroup.Item>
-                        <ToggleGroup.Item value="upper">UPPER</ToggleGroup.Item>
-                      </ToggleGroup>
-                    </div>
-                    {/* Crop Mode */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-caption font-caption text-neutral-400">Crop</span>
-                      <select value={cropMode} onChange={(e) => setCropMode(e.target.value)} className="flex-1 px-2 py-1.5 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[12px] outline-none">
-                        <option value="9:16">9:16 (Full)</option>
-                        <option value="4:3">4:3 (Crop)</option>
-                        <option value="1:1">1:1 (Crop)</option>
-                      </select>
-                    </div>
-                    {/* Preset selector */}
-                    {presets.length > 0 && (
-                      <div className="flex flex-col gap-1">
-                        <span className="text-caption font-caption text-neutral-400">Apply Preset</span>
-                        <select value={selectedPreset?.id || ''} onChange={(e) => { const preset = presets.find(p => p.id === e.target.value); if (preset) handleApplyPreset(preset); }}
-                          className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[13px] outline-none">
-                          <option value="">Choose a preset...</option>
-                          {presets.map(preset => (<option key={preset.id} value={preset.id}>{preset.name}</option>))}
+
+                      {/* Font Family */}
+                      <div>
+                        <div className="text-[13px] text-neutral-500 mb-1.5">Font Family</div>
+                        <select value={activeStyle.fontFamily || "'Inter', sans-serif"}
+                          onChange={(e) => handleStyleChange({ fontFamily: e.target.value })}
+                          className="w-full px-3 py-2 rounded-sm border border-neutral-700 bg-neutral-800 text-white text-[13px] outline-none cursor-pointer">
+                          {AVAILABLE_FONTS.map(f => <option key={f.name} value={f.value}>{f.name}</option>)}
                         </select>
                       </div>
-                    )}
-                    {/* Text Overlays info */}
-                    <div className="border-t border-neutral-800 pt-3">
-                      <span className="text-body-bold font-body-bold text-[#ffffffff] mb-2 block">Text Overlays</span>
-                      {words.length > 0 ? (
-                        <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-neutral-800/50 text-[12px]">
-                          <span className="text-neutral-400">Center</span>
-                          <span className="flex-1 text-[#ffffffff] truncate">{words.slice(0, 5).map(w => w.text).join(' ')}{words.length > 5 ? '...' : ''}</span>
-                          <Badge variant="neutral">{words.length} words</Badge>
+
+                      {/* Font Size */}
+                      <div>
+                        <div className="flex justify-between mb-1.5">
+                          <span className="text-[13px] text-neutral-500">Font Size</span>
+                          <span className="text-[13px] text-white">{activeStyle.fontSize || 48}px</span>
                         </div>
-                      ) : (
-                        <p className="text-[12px] text-neutral-500">No lyrics added yet</p>
+                        <input type="range" min="12" max="120" step="2" value={activeStyle.fontSize || 48}
+                          onChange={(e) => handleStyleChange({ fontSize: parseInt(e.target.value) })}
+                          className="w-full accent-brand-600" />
+                      </div>
+
+                      {/* Text Color + Outline Color */}
+                      <div className="flex gap-3">
+                        <div className="flex-1">
+                          <div className="text-[13px] text-neutral-500 mb-1.5">Text Color</div>
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-neutral-700 bg-neutral-800">
+                            <input type="color" value={activeStyle.color || '#ffffff'}
+                              onChange={(e) => handleStyleChange({ color: e.target.value })}
+                              className="w-6 h-6 border-none rounded-full cursor-pointer p-0 bg-transparent" />
+                            <span className="text-xs text-neutral-500 font-mono">{(activeStyle.color || '#ffffff').toUpperCase()}</span>
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-[13px] text-neutral-500 mb-1.5">Outline</div>
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-neutral-700 bg-neutral-800">
+                            <input type="color" value={activeStyle.outlineColor || '#000000'}
+                              onChange={(e) => handleStyleChange({ outlineColor: e.target.value, outline: true })}
+                              className="w-6 h-6 border-none rounded-full cursor-pointer p-0 bg-transparent" />
+                            <span className="text-xs text-neutral-500 font-mono">{(activeStyle.outlineColor || '#000000').toUpperCase()}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Formatting */}
+                      <div>
+                        <div className="text-[13px] text-neutral-500 mb-1.5">Formatting</div>
+                        <div className="flex gap-1">
+                          {[
+                            { key: 'bold', label: 'B', ariaLabel: 'Bold', active: activeStyle.fontWeight === '700', toggle: () => handleStyleChange({ fontWeight: activeStyle.fontWeight === '700' ? '400' : '700' }), bold: true },
+                            { key: 'caps', label: 'AA', ariaLabel: 'All caps', active: activeStyle.textCase === 'upper', toggle: () => handleStyleChange({ textCase: activeStyle.textCase === 'upper' ? 'default' : 'upper' }) },
+                            { key: 'outline', label: 'O', ariaLabel: 'Outline', active: !!activeStyle.outline, toggle: () => handleStyleChange({ outline: !activeStyle.outline }) },
+                          ].map(btn => (
+                            <IconButton key={btn.key} onClick={btn.toggle}
+                              variant={btn.active ? 'brand-secondary' : 'neutral-secondary'} size="small"
+                              icon={<span className={`text-xs ${btn.bold ? 'font-bold' : 'font-semibold'}`}>{btn.label}</span>}
+                              aria-label={btn.ariaLabel} />
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Alignment */}
+                      <div>
+                        <div className="text-[13px] text-neutral-500 mb-1.5">Alignment</div>
+                        <ToggleGroup value={activeStyle.textAlign || 'center'}
+                          onValueChange={(val) => handleStyleChange({ textAlign: val })}>
+                          <ToggleGroup.Item value="left" icon={<FeatherAlignLeft />}>{null}</ToggleGroup.Item>
+                          <ToggleGroup.Item value="center" icon={<FeatherAlignCenter />}>{null}</ToggleGroup.Item>
+                          <ToggleGroup.Item value="right" icon={<FeatherAlignRight />}>{null}</ToggleGroup.Item>
+                        </ToggleGroup>
+                      </div>
+
+                      {/* Text Overlays list */}
+                      <div className="pt-2 border-t border-neutral-800">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[13px] text-neutral-500">Text Overlays</span>
+                        </div>
+                        {textOverlays.length > 0 ? (
+                          <div className="flex flex-col gap-1.5">
+                            {textOverlays.map(overlay => (
+                              <div key={overlay.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${editingTextId === overlay.id ? 'bg-brand-600/20 border border-brand-600' : 'border border-neutral-800 hover:bg-neutral-800'}`}
+                                onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}>
+                                <span className="text-body font-body text-[#ffffffff] text-[12px] truncate flex-1">{overlay.text}</span>
+                                <IconButton size="small" variant="destructive-tertiary" icon={<FeatherTrash2 className="w-3 h-3" />} onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} aria-label="Remove" />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-[12px] text-neutral-500 text-center py-2">No text overlays yet</div>
+                        )}
+                      </div>
+
+                      {/* Crop */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-neutral-800">
+                        <span className="text-caption font-caption text-neutral-400">Crop</span>
+                        <select value={cropMode} onChange={(e) => setCropMode(e.target.value)} className="flex-1 px-2 py-1.5 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[12px] outline-none">
+                          <option value="9:16">9:16 (Full)</option>
+                          <option value="4:3">4:3 (Crop)</option>
+                          <option value="1:1">1:1 (Crop)</option>
+                        </select>
+                      </div>
+                      {presets.length > 0 && (
+                        <div className="flex flex-col gap-1">
+                          <span className="text-caption font-caption text-neutral-400">Apply Preset</span>
+                          <select value={selectedPreset?.id || ''} onChange={(e) => { const preset = presets.find(p => p.id === e.target.value); if (preset) handleApplyPreset(preset); }}
+                            className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[13px] outline-none">
+                            <option value="">Choose a preset...</option>
+                            {presets.map(preset => (<option key={preset.id} value={preset.id}>{preset.name}</option>))}
+                          </select>
+                        </div>
                       )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })())}
               </div>
             </div>
           )}
