@@ -563,12 +563,17 @@ const ProjectLanding = ({
             )}
           </div>
           <div className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {(createdContent.slideshows || [])
-              .filter(s => !s.isTemplate)
+            {[
+              ...(createdContent.slideshows || []).filter(s => !s.isTemplate).map(s => ({ ...s, _draftType: 'slideshow' })),
+              ...(createdContent.videos || []).map(v => ({ ...v, _draftType: 'video' })),
+            ]
               .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
               .slice(0, 4)
               .map(draft => {
-                const rawUrl = draft.slides?.[0]?.backgroundImage || draft.slides?.[0]?.imageA?.url || draft.slides?.[0]?.url || draft.thumbnail;
+                const isVideo = draft._draftType === 'video';
+                const rawUrl = isVideo
+                  ? (draft.thumbnail || draft.clips?.[0]?.thumbnail)
+                  : (draft.slides?.[0]?.backgroundImage || draft.slides?.[0]?.imageA?.url || draft.slides?.[0]?.url || draft.thumbnail);
                 const firstSlideUrl = rawUrl && !rawUrl.startsWith('blob:') ? rawUrl : null;
                 return (
                   <div
@@ -597,7 +602,7 @@ const ProjectLanding = ({
                     {firstSlideUrl ? (
                       <div className="w-full aspect-[9/16] bg-[#171717] relative overflow-hidden" style={{ containerType: 'inline-size' }}>
                         <img src={firstSlideUrl} alt="" className="w-full h-full object-cover" loading="lazy" onError={e => { e.target.style.display = 'none'; }} />
-                        {(draft.slides?.[0]?.textOverlays || []).map((overlay, oi) => (
+                        {!isVideo && (draft.slides?.[0]?.textOverlays || []).map((overlay, oi) => (
                           <div
                             key={oi}
                             className="absolute text-center pointer-events-none"
@@ -630,7 +635,10 @@ const ProjectLanding = ({
                     )}
                     <div className="flex w-full flex-col gap-0.5 px-3 pb-3">
                       <span className="text-caption font-caption text-neutral-300 truncate">
-                        {draft.slides?.length || 0} slide{(draft.slides?.length || 0) !== 1 ? 's' : ''}
+                        {isVideo
+                          ? `${draft.clips?.length || 0} clip${(draft.clips?.length || 0) !== 1 ? 's' : ''}`
+                          : `${draft.slides?.length || 0} slide${(draft.slides?.length || 0) !== 1 ? 's' : ''}`
+                        }
                       </span>
                       {draft.audio?.name && (
                         <div className="flex items-center gap-1 truncate">
