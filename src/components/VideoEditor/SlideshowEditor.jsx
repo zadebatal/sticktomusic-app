@@ -2558,6 +2558,14 @@ const SlideshowEditor = ({
         {(currentSlide?.textOverlays || []).map(overlay => {
           const isSelected = editingTextId === overlay.id;
           const isDragging = draggingTextId === overlay.id;
+          const oStyle = overlay.style || {};
+          const widthScale = (overlay.position?.width || 80) / 80;
+          const scaledFontSize = Math.round((oStyle.fontSize || 48) * 0.35 * widthScale);
+          const oTextTransform = oStyle.textCase === 'upper' ? 'uppercase' : oStyle.textCase === 'lower' ? 'lowercase' : (oStyle.textTransform || 'none');
+          const oOutlineColor = oStyle.outlineColor || '#000';
+          const oTextShadow = oStyle.outline
+            ? `0 0 4px ${oOutlineColor}, 1px 1px 2px ${oOutlineColor}, -1px -1px 2px ${oOutlineColor}`
+            : 'none';
           return (
             <div
               key={overlay.id}
@@ -2566,14 +2574,12 @@ const SlideshowEditor = ({
                 left: `${overlay.position.x}%`, top: `${overlay.position.y}%`,
                 transform: 'translate(-50%, -50%)',
                 width: `${overlay.position.width || 80}%`,
-                fontSize: `${overlay.style.fontSize * previewScale}px`,
-                fontFamily: overlay.style.fontFamily, fontWeight: overlay.style.fontWeight,
-                color: overlay.style.color, textAlign: overlay.style.textAlign,
-                textTransform: overlay.style.textTransform || 'none',
-                WebkitTextStroke: overlay.style.textStroke || undefined,
-                textShadow: overlay.style.outline
-                  ? `0 0 ${4 * previewScale}px ${overlay.style.outlineColor || '#000'}, ${1 * previewScale}px ${1 * previewScale}px ${2 * previewScale}px ${overlay.style.outlineColor || '#000'}, ${-1 * previewScale}px ${-1 * previewScale}px ${2 * previewScale}px ${overlay.style.outlineColor || '#000'}`
-                  : 'none',
+                fontSize: scaledFontSize,
+                fontFamily: oStyle.fontFamily, fontWeight: oStyle.fontWeight,
+                color: oStyle.color, textAlign: oStyle.textAlign,
+                textTransform: oTextTransform,
+                WebkitTextStroke: oStyle.textStroke || undefined,
+                textShadow: oTextShadow,
                 cursor: isDragging ? 'grabbing' : 'grab',
                 border: isSelected ? '1px dashed rgba(99,102,241,0.8)' : '1px dashed transparent',
                 padding: '4px 8px', borderRadius: '4px',
