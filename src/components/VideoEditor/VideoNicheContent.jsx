@@ -11,6 +11,7 @@ import {
   FeatherType,
   FeatherUpload, FeatherDownloadCloud, FeatherScissors,
   FeatherMusic,
+  FeatherChevronDown, FeatherChevronRight,
 } from '@subframe/core';
 import {
   updateNicheAudioId,
@@ -21,6 +22,7 @@ import {
   addToLibraryAsync,
   addToCollectionAsync,
   addToProjectPool,
+  removeFromCollection,
 } from '../../services/libraryService';
 import useDragReorder from './shared/useDragReorder';
 import QuickTrimPopover from './shared/QuickTrimPopover';
@@ -366,6 +368,7 @@ const VideoNicheContent = ({
   // First video for solo clip preview
   const firstVideo = useMemo(() => nicheMedia.find(m => m.type === 'video'), [nicheMedia]);
 
+
   // Drag-to-reorder media
   const handleMediaReorder = useCallback((reordered) => {
     if (!niche) return;
@@ -530,6 +533,14 @@ const VideoNicheContent = ({
                     <div className="absolute top-0.5 left-0.5 z-[3] rounded bg-black/60 px-1 py-px">
                       <span className="text-[9px] font-mono text-white/70">{idx + 1}</span>
                     </div>
+                    {/* Delete button */}
+                    <button
+                      className="absolute top-0.5 right-0.5 z-[4] flex h-4 w-4 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
+                      onClick={(e) => { e.stopPropagation(); removeFromCollection(artistId, niche.id, [item.id], db); }}
+                      title="Remove from niche"
+                    >
+                      <FeatherX className="text-white" style={{ width: 8, height: 8 }} />
+                    </button>
                   </div>
                 ))}
                 {/* Upload placeholder tile */}
@@ -544,6 +555,7 @@ const VideoNicheContent = ({
             </div>
           </div>
         )}
+
 
         {/* Text Banks */}
         <div className="flex w-full gap-4 px-8 pb-4">
@@ -764,6 +776,8 @@ const VideoNicheContent = ({
                     selectedTextA={previewTextA}
                     selectedTextB={previewTextB}
                     onTextPositionsChange={(posA, posB) => { textPositionsRef.current = { a: posA, b: posB }; }}
+                    onTextAChange={(newText) => setPreviewTextA(newText)}
+                    onTextBChange={(newText) => setPreviewTextB(newText)}
                   />
                 );
               case 'solo_clip':
@@ -783,6 +797,8 @@ const VideoNicheContent = ({
                     selectedTextA={previewTextA}
                     selectedTextB={previewTextB}
                     onTextPositionsChange={(posA, posB) => { textPositionsRef.current = { a: posA, b: posB }; }}
+                    onTextAChange={(newText) => setPreviewTextA(newText)}
+                    onTextBChange={(newText) => setPreviewTextB(newText)}
                   />
                 );
               case 'multi_clip':
@@ -801,6 +817,8 @@ const VideoNicheContent = ({
                     selectedTextA={previewTextA}
                     selectedTextB={previewTextB}
                     onTextPositionsChange={(posA, posB) => { textPositionsRef.current = { a: posA, b: posB }; }}
+                    onTextAChange={(newText) => setPreviewTextA(newText)}
+                    onTextBChange={(newText) => setPreviewTextB(newText)}
                   />
                 );
               case 'photo_montage':
@@ -814,6 +832,7 @@ const VideoNicheContent = ({
                     transition={settings.transition || 'fade'}
                     beatSync={!!settings.beatSync}
                     speed={settings.speed || 1}
+                    displayMode={settings.displayMode || 'cover'}
                     textBankA={textBank1}
                     textBankB={textBank2}
                     aspectRatio={ar}
@@ -822,6 +841,8 @@ const VideoNicheContent = ({
                     selectedTextA={previewTextA}
                     selectedTextB={previewTextB}
                     onTextPositionsChange={(posA, posB) => { textPositionsRef.current = { a: posA, b: posB }; }}
+                    onTextAChange={(newText) => setPreviewTextA(newText)}
+                    onTextBChange={(newText) => setPreviewTextB(newText)}
                   />
                 );
               default:
@@ -839,6 +860,8 @@ const VideoNicheContent = ({
                     selectedTextA={previewTextA}
                     selectedTextB={previewTextB}
                     onTextPositionsChange={(posA, posB) => { textPositionsRef.current = { a: posA, b: posB }; }}
+                    onTextAChange={(newText) => setPreviewTextA(newText)}
+                    onTextBChange={(newText) => setPreviewTextB(newText)}
                   />
                 );
             }
@@ -862,14 +885,12 @@ const VideoNicheContent = ({
             : { ...templateTextStyle };
           const buildTextOverlays = () => {
             const overlays = [];
-            const pos = textPositionsRef.current;
             if (previewTextA) {
               overlays.push({
                 id: `text_niche_a_${Date.now()}`,
                 text: previewTextA,
                 style: { ...resolvedTextStyle },
-                position: { height: 20, ...(pos.a || { x: 50, y: 40, width: 80 }) },
-                scope: 'full', startTime: 0, endTime: 9999
+                position: textPositionsRef.current?.a || { x: 50, y: 40, width: 80 }
               });
             }
             if (previewTextB) {
@@ -877,8 +898,7 @@ const VideoNicheContent = ({
                 id: `text_niche_b_${Date.now()}`,
                 text: previewTextB,
                 style: { ...resolvedTextStyle },
-                position: { height: 20, ...(pos.b || { x: 50, y: 60, width: 80 }) },
-                scope: 'full', startTime: 0, endTime: 9999
+                position: textPositionsRef.current?.b || { x: 50, y: 60, width: 80 }
               });
             }
             return overlays;
@@ -889,6 +909,7 @@ const VideoNicheContent = ({
             // Solo = pass niche videos directly so SoloClipEditor doesn't depend on pipelineCategory
             const videos = nicheMedia.filter(m => m.type === 'video');
             const draft = {
+              editorMode: 'solo-clip',
               ...(createCount > 1 ? { _nicheGenerateCount: createCount } : {}),
               audio: selectedAudio ? { ...selectedAudio } : null,
               _nicheVideos: videos.map(v => ({

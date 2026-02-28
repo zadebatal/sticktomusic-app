@@ -3,7 +3,10 @@ import {
   subscribeToLibrary, subscribeToCollections, getCollections, getLibrary, getLyrics,
   incrementUseCount, MEDIA_TYPES, addToLibraryAsync,
   addCreatedVideo, saveCreatedContentAsync,
-  getBankColor, getBankLabel
+  getBankColor, getBankLabel, BUILT_IN_TEMPLATES, getDefaultTemplateSettings,
+  getTextBankText, getTextBankStyle, addToTextBank, removeFromTextBank,
+  migrateCollectionBanks, addBankToCollection, removeBankFromCollection,
+  saveCollectionToFirestore, MAX_BANKS, MIN_BANKS
 } from '../../services/libraryService';
 import { uploadFile } from '../../services/firebaseStorage';
 import { renderPhotoMontage } from '../../services/photoMontageExportService';
@@ -26,7 +29,7 @@ import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
 import { Badge } from '../../ui/components/Badge';
-import { FeatherMaximize2, FeatherGrid, FeatherStar, FeatherMusic, FeatherUpload, FeatherTrash2, FeatherScissors, FeatherPlus, FeatherMic, FeatherRefreshCw, FeatherPlay, FeatherPause, FeatherSkipBack, FeatherSkipForward, FeatherCheck, FeatherZoomIn, FeatherZoomOut } from '@subframe/core';
+import { FeatherMaximize2, FeatherGrid, FeatherStar, FeatherMusic, FeatherUpload, FeatherTrash2, FeatherScissors, FeatherPlus, FeatherMic, FeatherRefreshCw, FeatherPlay, FeatherPause, FeatherSkipBack, FeatherSkipForward, FeatherCheck, FeatherZoomIn, FeatherZoomOut, FeatherAlignLeft, FeatherAlignCenter, FeatherAlignRight, FeatherX } from '@subframe/core';
 import EditorShell from './shared/EditorShell';
 import EditorTopBar from './shared/EditorTopBar';
 import EditorFooter from './shared/EditorFooter';
@@ -36,6 +39,7 @@ import useEditorSessionState from './shared/useEditorSessionState';
 import useUnsavedChanges from './shared/useUnsavedChanges';
 import usePixelTimeline from './shared/usePixelTimeline';
 import useTimelineZoom from '../../hooks/useTimelineZoom';
+import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
 
 /**
  * PhotoMontageEditor — Turn photos into a fast-paced video with transitions.
@@ -87,10 +91,10 @@ const PhotoMontageEditor = ({
     return [{
       id: 'template',
       name: 'Template',
-      photos: [],
-      textOverlays: [],
-      words: [],
-      textStyle: defaultTextStyle,
+      photos: existingVideo?.montagePhotos || [],
+      textOverlays: existingVideo?.textOverlays || [],
+      words: existingVideo?.words || [],
+      textStyle: existingVideo?.textStyle || defaultTextStyle,
       isTemplate: true
     }];
   });
@@ -171,6 +175,7 @@ const PhotoMontageEditor = ({
   const [transition, setTransition] = useState(existingVideo?.montageTransition || templateSettings?.transition || 'cut');
   const [kenBurnsEnabled, setKenBurnsEnabled] = useState(existingVideo?.montageKenBurns !== undefined ? existingVideo.montageKenBurns !== false : (templateSettings?.kenBurns !== undefined ? templateSettings.kenBurns : true));
   const [aspectRatio, setAspectRatio] = useState(existingVideo?.cropMode || templateSettings?.aspectRatio || '9:16');
+  const [displayMode, setDisplayMode] = useState(existingVideo?.montageDisplayMode || templateSettings?.displayMode || 'cover');
 
   // ── Audio state ──
   const [selectedAudio, setSelectedAudio] = useState(existingVideo?.audio || null);
@@ -182,11 +187,8 @@ const PhotoMontageEditor = ({
   // ── Text editing state ──
   const [editingTextId, setEditingTextId] = useState(null);
   const [editingTextValue, setEditingTextValue] = useState('');
-  const [draggingTextId, setDraggingTextId] = useState(null);
-  const dragStartRef = useRef(null);
   const previewRef = useRef(null);
   const timelineRef = useRef(null);
-  const [timelineDrag, setTimelineDrag] = useState(null);
   const wasPlayingBeforePlayheadDrag = useRef(false);
   const [timelineScale, setTimelineScale] = useState(1);
   const [playheadDragging, setPlayheadDragging] = useState(false);
@@ -235,12 +237,15 @@ const PhotoMontageEditor = ({
   const [showPresetPrompt, setShowPresetPrompt] = useState(false);
   const [presetPromptValue, setPresetPromptValue] = useState('');
 
+  // ── Text bank state ──
+  const [newTextInputs, setNewTextInputs] = useState({});
+
   // ── Footer state ──
   const [lastSaved, setLastSaved] = useState(null);
 
   // ── Right Sidebar: collapsible sections ──
   const { openSections, renderCollapsibleSection } = useCollapsibleSections({
-    audio: true, photoSettings: true, lyrics: false, textStyle: false
+    audio: true, photoSettings: true, textBanks: true, textStyle: (existingVideo?.textOverlays?.length > 0)
   });
 
   // ── Session persistence ──
@@ -299,10 +304,12 @@ const PhotoMontageEditor = ({
   useEffect(() => { resetHistory(); }, [activeVideoIndex, resetHistory]);
 
   // ── Waveform (for future timeline rendering) ──
+  const EMPTY_CLIPS = useRef([]).current;
+  const NULL_URL = useRef(() => null).current;
   const { waveformData } = useWaveform({
     selectedAudio,
-    clips: [],
-    getClipUrl: () => null
+    clips: EMPTY_CLIPS,
+    getClipUrl: NULL_URL
   });
 
   // ── Multi-video: switch, delete, generate ──
@@ -434,7 +441,13 @@ const PhotoMontageEditor = ({
     [library]
   );
 
-  // ── Computed: photo durations (beat-synced or fixed) ──
+  // Effective audio duration (trimmed range or full)
+  const effectiveAudioDuration = useMemo(() => {
+    if (!selectedAudio) return 0;
+    return (selectedAudio.endTime || selectedAudio.duration || audioDuration) - (selectedAudio.startTime || 0);
+  }, [selectedAudio, audioDuration]);
+
+  // ── Computed: photo durations (beat-synced or fixed), expanded to fill audio ──
   const photoDurations = useMemo(() => {
     if (beatSyncEnabled && filteredBeats.length > 1 && photos.length > 0) {
       const durations = [];
@@ -450,8 +463,26 @@ const PhotoMontageEditor = ({
       }
       return durations;
     }
-    return photos.map(p => p.customDuration || speed);
-  }, [photos, speed, beatSyncEnabled, filteredBeats]);
+    // Base durations for one cycle
+    const baseDurations = photos.map(p => p.customDuration || speed);
+    const oneCycleLen = baseDurations.reduce((s, d) => s + d, 0);
+    // If audio is longer than one photo cycle, repeat photos to fill
+    const targetDuration = effectiveAudioDuration > oneCycleLen ? effectiveAudioDuration : 0;
+    if (targetDuration > 0 && oneCycleLen > 0 && photos.length > 0) {
+      const expanded = [];
+      let total = 0;
+      let i = 0;
+      while (total < targetDuration) {
+        const dur = baseDurations[i % baseDurations.length];
+        expanded.push(dur);
+        total += dur;
+        i++;
+        if (i > 10000) break; // safety cap
+      }
+      return expanded;
+    }
+    return baseDurations;
+  }, [photos, speed, beatSyncEnabled, filteredBeats, effectiveAudioDuration]);
 
   const totalDuration = useMemo(() =>
     photoDurations.reduce((sum, d) => sum + d, 0),
@@ -476,6 +507,16 @@ const PhotoMontageEditor = ({
     wasPlayingRef: wasPlayingBeforePlayheadDrag,
   });
 
+  // Effective px/sec: accounts for min cell widths in rapid-fire photo modes
+  const MIN_CELL_W_HOOK = 20;
+  const effectivePxPerSecHook = useMemo(() => {
+    if (!photos.length || !photoDurations.length || totalDuration <= 0) return pxPerSec;
+    // Scale min cell width with zoom so zooming out actually shrinks cells
+    const scaledMinCell = Math.max(4, MIN_CELL_W_HOOK * timelineScale);
+    const stripPx = photoDurations.reduce((sum, dur) => sum + Math.max(scaledMinCell, dur * pxPerSec), 0);
+    return stripPx > timelinePx ? stripPx / totalDuration : pxPerSec;
+  }, [photos.length, photoDurations, totalDuration, pxPerSec, timelinePx, timelineScale]);
+
   // Wire pinch-to-zoom on timeline container
   useTimelineZoom(timelineRef, {
     zoom: timelineScale,
@@ -484,6 +525,46 @@ const PhotoMontageEditor = ({
     maxZoom: 3,
     basePixelsPerSecond: 40,
   });
+
+  // Refs for stable access inside playhead drag effect
+  const selectedAudioRef = useRef(selectedAudio);
+  selectedAudioRef.current = selectedAudio;
+  const timelinePxRef = useRef(timelinePx);
+  timelinePxRef.current = timelinePx;
+
+  // Playhead drag across timeline
+  useEffect(() => {
+    if (!playheadDragging) return;
+    document.body.style.userSelect = 'none';
+    document.body.style.WebkitUserSelect = 'none';
+    const handleMouseMove = (e) => {
+      if (!timelineRef.current) return;
+      const rect = timelineRef.current.getBoundingClientRect();
+      const clickX = e.clientX - rect.left + timelineRef.current.scrollLeft;
+      const pxW = timelinePxRef.current || 1;
+      const seekTime = Math.max(0, Math.min(1, clickX / pxW)) * totalDuration;
+      const clamped = Math.max(0, Math.min(seekTime, totalDuration || 0));
+      setCurrentTime(clamped);
+      const audio = selectedAudioRef.current;
+      if (audioRef.current && audio?.url) {
+        audioRef.current.currentTime = (audio.startTime || 0) + clamped;
+      }
+    };
+    const handleMouseUp = () => {
+      setPlayheadDragging(false);
+      document.body.style.userSelect = '';
+      document.body.style.WebkitUserSelect = '';
+      if (wasPlayingBeforePlayheadDrag.current) setIsPlaying(true);
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = '';
+      document.body.style.WebkitUserSelect = '';
+    };
+  }, [playheadDragging, totalDuration]);
 
   // ── Save all variations ──
   const handleSaveAllAndClose = useCallback(async () => {
@@ -502,6 +583,7 @@ const PhotoMontageEditor = ({
           montageTransition: transition,
           montageKenBurns: kenBurnsEnabled,
           montageBeatSync: beatSyncEnabled,
+          montageDisplayMode: displayMode,
           audio: selectedAudio,
           cropMode: aspectRatio,
           duration: totalDuration,
@@ -523,14 +605,14 @@ const PhotoMontageEditor = ({
     } finally {
       setIsSavingAll(false);
     }
-  }, [allVideos, isSavingAll, existingVideo, name, speed, transition, kenBurnsEnabled, beatSyncEnabled, selectedAudio, aspectRatio, totalDuration, externalAudioVolume, onSave, onClose, toastSuccess, toastError]);
+  }, [allVideos, isSavingAll, existingVideo, name, speed, transition, kenBurnsEnabled, beatSyncEnabled, displayMode, selectedAudio, aspectRatio, totalDuration, externalAudioVolume, onSave, onClose, toastSuccess, toastError]);
 
-  // ── Beat sync: analyze audio when toggled on ──
+  // ── Beat detection: auto-analyze whenever audio is loaded ──
   useEffect(() => {
-    if (beatSyncEnabled && selectedAudio?.url && !bpm) {
+    if (selectedAudio?.url && !bpm) {
       analyzeAudio(selectedAudio.url);
     }
-  }, [beatSyncEnabled, selectedAudio?.url, bpm, analyzeAudio]);
+  }, [selectedAudio?.url, bpm, analyzeAudio]);
 
   // ── Preview playback loop ──
   const startPlayback = useCallback(() => {
@@ -589,26 +671,40 @@ const PhotoMontageEditor = ({
     if (playbackRef.current) cancelAnimationFrame(playbackRef.current);
   }, []);
 
-  // ── Current photo index for preview ──
-  const currentPhotoIndex = useMemo(() => {
+  // ── Current expanded slot index (into photoDurations[]) ──
+  const currentExpandedIndex = useMemo(() => {
+    if (!photos.length) return 0;
     let elapsed = 0;
     for (let i = 0; i < photoDurations.length; i++) {
       elapsed += photoDurations[i];
       if (currentTime < elapsed) return i;
     }
-    return Math.max(0, photos.length - 1);
+    return Math.max(0, photoDurations.length - 1);
   }, [currentTime, photoDurations, photos.length]);
+
+  // Map expanded index back to base photos array
+  const currentPhotoIndex = photos.length > 0 ? currentExpandedIndex % photos.length : 0;
+
+  // Deduplicated base photos for left panel display (unique by id, preserving order)
+  const basePhotos = useMemo(() => {
+    const seen = new Set();
+    return photos.filter(p => {
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
+  }, [photos]);
 
   const currentPhotoProgress = useMemo(() => {
     let elapsed = 0;
     for (let i = 0; i < photoDurations.length; i++) {
-      if (i === currentPhotoIndex) {
+      if (i === currentExpandedIndex) {
         return (currentTime - elapsed) / photoDurations[i];
       }
       elapsed += photoDurations[i];
     }
     return 0;
-  }, [currentTime, currentPhotoIndex, photoDurations]);
+  }, [currentTime, currentExpandedIndex, photoDurations]);
 
   // ── Photo management ──
   const addPhotosFromFiles = useCallback(async (files) => {
@@ -643,15 +739,15 @@ const PhotoMontageEditor = ({
     toastSuccess(`Added ${newPhotos.length} photo${newPhotos.length !== 1 ? 's' : ''}`);
   }, [toastSuccess]);
 
-  const removePhoto = useCallback((index) => {
-    setPhotos(prev => {
-      const photo = prev[index];
-      if (photo?.isLocal && photo.url?.startsWith('blob:')) {
-        URL.revokeObjectURL(photo.url);
-      }
-      return prev.filter((_, i) => i !== index);
-    });
-  }, []);
+  const removePhoto = useCallback((baseIndex) => {
+    const photoToRemove = basePhotos[baseIndex];
+    if (!photoToRemove) return;
+    if (photoToRemove.isLocal && photoToRemove.url?.startsWith('blob:')) {
+      URL.revokeObjectURL(photoToRemove.url);
+    }
+    // Remove all instances of this photo from the (possibly materialized) array
+    setPhotos(prev => prev.filter(p => p.id !== photoToRemove.id));
+  }, [basePhotos]);
 
   const movePhoto = useCallback((fromIndex, toIndex) => {
     setPhotos(prev => {
@@ -662,28 +758,32 @@ const PhotoMontageEditor = ({
     });
   }, []);
 
-  // ── Re-roll: swap current photo with random from library ──
+  // ── Re-roll: swap only the current expanded cell with a random from library ──
   const handleReroll = useCallback(() => {
-    if (photos.length === 0) return;
-    const pool = libraryImages.filter(img => img.id !== photos[currentPhotoIndex]?.id);
+    if (photos.length === 0 || photoDurations.length === 0) return;
+    const currentPhoto = photos[currentExpandedIndex % photos.length];
+    const pool = libraryImages.filter(img => img.id !== currentPhoto?.id);
     if (pool.length === 0) {
       toastError('No other photos available to reroll from.');
       return;
     }
-    const replacement = pool[Math.floor(Math.random() * pool.length)];
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    // If the expanded sequence is longer than base photos, materialize the full sequence first
     setPhotos(prev => {
-      const updated = [...prev];
-      updated[currentPhotoIndex] = {
-        id: replacement.id,
-        url: replacement.url,
-        name: replacement.name,
-        libraryId: replacement.id,
-        isLocal: false
+      let expanded = prev;
+      if (photoDurations.length > prev.length) {
+        expanded = photoDurations.map((_, i) => prev[i % prev.length]);
+      }
+      const updated = [...expanded];
+      updated[currentExpandedIndex] = {
+        id: pick.id, url: pick.url, name: pick.name,
+        thumbnailUrl: pick.thumbnailUrl || null,
+        libraryId: pick.id, isLocal: false
       };
       return updated;
     });
-    toastSuccess('Rerolled photo');
-  }, [photos, currentPhotoIndex, libraryImages, setPhotos, toastSuccess, toastError]);
+    toastSuccess('Rerolled cell');
+  }, [photos, photoDurations, currentExpandedIndex, libraryImages, setPhotos, toastSuccess, toastError]);
 
   // ── Cut by beat — opens BeatSelector modal ──
   const handleCutByBeat = useCallback(() => {
@@ -762,22 +862,20 @@ const PhotoMontageEditor = ({
   }, [dragIndex, movePhoto]);
 
   // ── Text overlay CRUD (matches SoloClipEditor) ──
-  const addTextOverlay = useCallback((prefillText, overrideStart, overrideEnd) => {
-    const start = overrideStart !== undefined ? overrideStart : currentTime;
-    const end = overrideEnd !== undefined ? overrideEnd : Math.min(start + 3, totalDuration || start + 3);
+  const addTextOverlay = useCallback((prefillText) => {
+    const dur = totalDuration || 30;
     const newOverlay = {
       id: `text_${Date.now()}`,
       text: prefillText || 'Click to edit',
       style: getDefaultTextStyle(),
-      position: { x: 50, y: 50, width: 80, height: 20 },
-      scope: 'full',
-      startTime: start,
-      endTime: end
+      position: { x: 50, y: 50, width: 80 },
+      startTime: 0,
+      endTime: dur,
     };
     setTextOverlays(prev => [...prev, newOverlay]);
     setEditingTextId(newOverlay.id);
     setEditingTextValue(newOverlay.text);
-  }, [getDefaultTextStyle, currentTime, totalDuration]);
+  }, [getDefaultTextStyle, totalDuration]);
 
   const updateTextOverlay = useCallback((overlayId, updates) => {
     setTextOverlays(prev => prev.map(o =>
@@ -793,93 +891,6 @@ const PhotoMontageEditor = ({
     }
   }, [editingTextId]);
 
-  // ── Text overlay dragging on preview ──
-  const handleTextMouseDown = useCallback((e, overlayId) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const overlay = textOverlaysRef.current.find(o => o.id === overlayId);
-    if (!overlay) return;
-    setDraggingTextId(overlayId);
-    setEditingTextId(overlayId);
-    setEditingTextValue(overlay.text);
-    dragStartRef.current = {
-      mouseX: e.clientX,
-      mouseY: e.clientY,
-      startPosX: overlay.position.x,
-      startPosY: overlay.position.y
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!draggingTextId) return;
-    const handleMouseMove = (e) => {
-      if (!dragStartRef.current || !previewRef.current) return;
-      const rect = previewRef.current.getBoundingClientRect();
-      const dx = e.clientX - dragStartRef.current.mouseX;
-      const dy = e.clientY - dragStartRef.current.mouseY;
-      const newX = Math.max(5, Math.min(95, dragStartRef.current.startPosX + (dx / rect.width) * 100));
-      const newY = Math.max(5, Math.min(95, dragStartRef.current.startPosY + (dy / rect.height) * 100));
-      const overlay = textOverlaysRef.current.find(o => o.id === draggingTextId);
-      if (overlay) {
-        updateTextOverlay(draggingTextId, { position: { ...overlay.position, x: newX, y: newY } });
-      }
-    };
-    const handleMouseUp = () => setDraggingTextId(null);
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [draggingTextId, updateTextOverlay]);
-
-  // ── Timeline text block drag/resize ──
-  const handleTimelineDragStart = useCallback((e, overlayId, type) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const overlay = textOverlaysRef.current.find(o => o.id === overlayId);
-    if (!overlay) return;
-    setTimelineDrag({
-      overlayId, type,
-      startX: e.clientX,
-      origStart: overlay.startTime,
-      origEnd: overlay.endTime
-    });
-    setEditingTextId(overlayId);
-    setEditingTextValue(overlay.text);
-  }, []);
-
-  useEffect(() => {
-    if (!timelineDrag || !timelineRef.current) return;
-    const dur = totalDuration || 1;
-    const handleMouseMove = (e) => {
-      const deltaX = e.clientX - timelineDrag.startX;
-      const deltaSec = deltaX / pxPerSec;
-      const minDur = 0.3;
-
-      if (timelineDrag.type === 'move') {
-        const length = timelineDrag.origEnd - timelineDrag.origStart;
-        let newStart = Math.max(0, timelineDrag.origStart + deltaSec);
-        let newEnd = newStart + length;
-        if (newEnd > dur) { newEnd = dur; newStart = dur - length; }
-        if (newStart < 0) newStart = 0;
-        updateTextOverlay(timelineDrag.overlayId, { startTime: newStart, endTime: newEnd });
-      } else if (timelineDrag.type === 'left') {
-        const newStart = Math.max(0, Math.min(timelineDrag.origEnd - minDur, timelineDrag.origStart + deltaSec));
-        updateTextOverlay(timelineDrag.overlayId, { startTime: newStart });
-      } else if (timelineDrag.type === 'right') {
-        const newEnd = Math.min(dur, Math.max(timelineDrag.origStart + minDur, timelineDrag.origEnd + deltaSec));
-        updateTextOverlay(timelineDrag.overlayId, { endTime: newEnd });
-      }
-    };
-    const handleMouseUp = () => setTimelineDrag(null);
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [timelineDrag, totalDuration, pxPerSec, updateTextOverlay]);
 
   // ── Preset handler ──
   const handleApplyPreset = useCallback((preset) => {
@@ -906,6 +917,7 @@ const PhotoMontageEditor = ({
       montageTransition: transition,
       montageKenBurns: kenBurnsEnabled,
       montageBeatSync: beatSyncEnabled,
+      montageDisplayMode: displayMode,
       audio: selectedAudio,
       cropMode: aspectRatio,
       duration: totalDuration,
@@ -920,7 +932,7 @@ const PhotoMontageEditor = ({
     onSave(videoData);
     setLastSaved(new Date());
     toastSuccess(`Saved "${name}"`);
-  }, [photos, name, speed, transition, kenBurnsEnabled, beatSyncEnabled, selectedAudio, aspectRatio, totalDuration, textOverlays, textStyle, words, externalAudioVolume, existingVideo, onSave, toastSuccess, toastError]);
+  }, [photos, name, speed, transition, kenBurnsEnabled, beatSyncEnabled, displayMode, selectedAudio, aspectRatio, totalDuration, textOverlays, textStyle, words, externalAudioVolume, existingVideo, onSave, toastSuccess, toastError]);
 
   // ── Audio handling ──
   const handleAudioUpload = useCallback((e) => {
@@ -1139,9 +1151,10 @@ const PhotoMontageEditor = ({
         audioForExport = { ...selectedAudio, url };
       }
 
-      const photosWithDurations = uploadedPhotos.map((p, i) => ({
-        url: p.url,
-        duration: photoDurations[i]
+      // Build full expanded sequence (photos cycle to fill audio duration)
+      const photosWithDurations = photoDurations.map((dur, i) => ({
+        url: uploadedPhotos[i % uploadedPhotos.length].url,
+        duration: dur
       }));
 
       const blob = await renderPhotoMontage({
@@ -1149,6 +1162,7 @@ const PhotoMontageEditor = ({
         aspectRatio,
         transition,
         kenBurns: kenBurnsEnabled,
+        displayMode,
         audio: audioForExport
       }, (progress) => setExportProgress(progress));
 
@@ -1171,6 +1185,7 @@ const PhotoMontageEditor = ({
         montageTransition: transition,
         montageKenBurns: kenBurnsEnabled,
         montageBeatSync: beatSyncEnabled,
+        montageDisplayMode: displayMode,
         textOverlays,
         textStyle,
         words,
@@ -1194,7 +1209,7 @@ const PhotoMontageEditor = ({
       setIsExporting(false);
       setExportProgress(0);
     }
-  }, [photos, selectedAudio, photoDurations, aspectRatio, transition, kenBurnsEnabled, name, speed, beatSyncEnabled, totalDuration, artistId, db, category, textOverlays, textStyle, onSave, onClose, toastSuccess, toastError, stopPlayback]);
+  }, [photos, selectedAudio, photoDurations, aspectRatio, transition, kenBurnsEnabled, displayMode, name, speed, beatSyncEnabled, totalDuration, artistId, db, category, textOverlays, textStyle, onSave, onClose, toastSuccess, toastError, stopPlayback]);
 
   // ── Ken Burns CSS animation for preview ──
   const getKenBurnsStyle = useCallback((photoIndex, progress) => {
@@ -1211,11 +1226,56 @@ const PhotoMontageEditor = ({
   }, [kenBurnsEnabled]);
 
   const SPEED_PRESETS = [
+    { label: '4f', value: 4 / 30 },
     { label: '0.5s', value: 0.5 },
     { label: '1s', value: 1 },
     { label: '2s', value: 2 },
     { label: '3s', value: 3 },
   ];
+
+  const AVAILABLE_FONTS = [
+    { name: 'Inter', value: "'Inter', sans-serif" },
+    { name: 'Arial', value: 'Arial, sans-serif' },
+    { name: 'Arial Narrow', value: "'Arial Narrow', Arial, sans-serif" },
+    { name: 'Georgia', value: 'Georgia, serif' },
+    { name: 'Times New Roman', value: "'Times New Roman', serif" },
+    { name: 'Impact', value: 'Impact, sans-serif' },
+    { name: 'Trebuchet', value: "'Trebuchet MS', sans-serif" },
+    { name: 'Verdana', value: 'Verdana, sans-serif' },
+    { name: 'TikTok Sans', value: "'TikTok Sans', sans-serif" },
+  ];
+
+  // ── Text bank helpers ──
+  const textBanksCache = useMemo(() => {
+    // Use niche text banks if available, otherwise derive from collection
+    if (nicheTextBanks && nicheTextBanks.some(b => b?.length > 0)) {
+      return nicheTextBanks.map(tb => tb?.length > 0 ? [...tb] : []);
+    }
+    const col = category?.id ? collections.find(c => c.id === category.id) : collections[0];
+    if (!col) return [[], []];
+    const migrated = migrateCollectionBanks(col);
+    const result = (migrated.textBanks || []).map(tb => tb?.length > 0 ? [...tb] : []);
+    while (result.length < 2) result.push([]);
+    return result;
+  }, [nicheTextBanks, category, collections]);
+
+  const getTextBanks = useCallback(() => textBanksCache, [textBanksCache]);
+
+  const handleAddToTextBank = useCallback((bankNum, text) => {
+    const col = category?.id ? collections.find(c => c.id === category.id) : collections[0];
+    if (!col) return;
+    addToTextBank(artistId, col.id, bankNum, text, db);
+    setCollections(getCollections(artistId));
+  }, [artistId, category, collections, db]);
+
+  const handleRemoveFromTextBank = useCallback((bankNum, index) => {
+    const col = category?.id ? collections.find(c => c.id === category.id) : collections[0];
+    if (!col) return;
+    removeFromTextBank(artistId, col.id, bankNum, index, db);
+    setCollections(getCollections(artistId));
+  }, [artistId, category, collections, db]);
+
+  const bankLabel = useCallback((idx) => getBankLabel(idx), []);
 
   // ── Render ──
   return (
@@ -1244,7 +1304,7 @@ const PhotoMontageEditor = ({
           {!isMobile && (
           <div className="flex w-72 flex-none flex-col border-r border-neutral-800 bg-[#1a1a1aff] overflow-hidden">
             <div className="flex items-center justify-between px-3 py-2.5 border-b border-neutral-800">
-              <span className="text-[13px] font-semibold text-white">Photos ({photos.length})</span>
+              <span className="text-[13px] font-semibold text-white">Photos ({basePhotos.length})</span>
               <div className="flex gap-1">
                 <label className="flex items-center justify-center w-7 h-7 rounded-md bg-neutral-800 border border-neutral-700 text-neutral-400 cursor-pointer hover:text-white">
                   <FeatherUpload className="w-3.5 h-3.5" />
@@ -1342,9 +1402,9 @@ const PhotoMontageEditor = ({
               </div>
             )}
 
-            {/* Photo list */}
+            {/* Photo list — shows unique base photos */}
             <div className="flex-1 overflow-y-auto p-2">
-              {photos.length === 0 ? (
+              {basePhotos.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 gap-2">
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.5">
                     <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
@@ -1352,9 +1412,9 @@ const PhotoMontageEditor = ({
                   <span className="text-[12px] text-neutral-500">Upload or import photos</span>
                 </div>
               ) : (
-                photos.map((photo, index) => (
+                basePhotos.map((photo, index) => (
                   <div
-                    key={photo.id}
+                    key={`${photo.id}_${index}`}
                     draggable
                     onDragStart={() => handleDragStart(index)}
                     onDragOver={(e) => handleDragOver(e, index)}
@@ -1363,8 +1423,8 @@ const PhotoMontageEditor = ({
                     className="flex items-center gap-2 p-1.5 rounded-md mb-1 border cursor-grab transition-colors"
                     style={{
                       opacity: dragIndex === index ? 0.5 : 1,
-                      borderColor: dragOverIndex === index ? theme.accent.primary : 'rgb(38,38,38)',
-                      backgroundColor: currentPhotoIndex === index && isPlaying ? `${theme.accent.primary}15` : 'transparent'
+                      borderColor: 'rgb(38,38,38)',
+                      backgroundColor: 'transparent'
                     }}
                   >
                     <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0">
@@ -1372,9 +1432,7 @@ const PhotoMontageEditor = ({
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[12px] font-medium text-white truncate">{photo.name || `Photo ${index + 1}`}</div>
-                      <div className="text-[10px] text-neutral-500">
-                        {beatSyncEnabled ? `${photoDurations[index]?.toFixed(2)}s (beat)` : `${photoDurations[index]?.toFixed(1)}s`}
-                      </div>
+                      <div className="text-[10px] text-neutral-500">{speed.toFixed(1)}s</div>
                     </div>
                     <IconButton size="small" variant="destructive-tertiary" icon={<FeatherTrash2 className="w-3 h-3" />} onClick={() => removePhoto(index)} aria-label="Remove" />
                   </div>
@@ -1392,67 +1450,44 @@ const PhotoMontageEditor = ({
               {photos.length > 0 ? (
                 <div
                   ref={previewRef}
-                  className="flex items-center justify-center rounded-lg bg-[#1a1a1aff] border border-neutral-800 relative overflow-hidden"
-                  style={{ aspectRatio: '9/16', height: '50vh' }}
-                  onClick={() => setEditingTextId(null)}
+                  className={`flex items-center justify-center rounded-lg border border-neutral-800 relative overflow-hidden ${displayMode === 'gallery' ? 'bg-[#f5f5f5]' : 'bg-[#1a1a1aff]'}`}
+                  style={{ aspectRatio: aspectRatio === '1:1' ? '1/1' : aspectRatio === '4:5' ? '4/5' : aspectRatio === '16:9' ? '16/9' : '9/16', maxHeight: '50vh', width: 'auto' }}
+                  onPointerDown={(e) => { if (e.target === e.currentTarget || e.target.tagName === 'IMG') setEditingTextId(null); }}
                 >
-                  <img
-                    src={photos[currentPhotoIndex]?.url}
-                    alt=""
-                    style={{
-                      width: '100%', height: '100%', objectFit: 'cover', display: 'block',
-                      ...getKenBurnsStyle(currentPhotoIndex, currentPhotoProgress),
-                      transition: isPlaying ? 'none' : 'transform 0.3s ease'
-                    }}
-                  />
+                  {displayMode === 'gallery' ? (
+                    <img
+                      src={photos[currentPhotoIndex]?.url}
+                      alt=""
+                      className="max-w-[80%] max-h-[85%] object-contain rounded-sm"
+                      style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.1)' }}
+                    />
+                  ) : (
+                    <img
+                      src={photos[currentPhotoIndex]?.url}
+                      alt=""
+                      style={{
+                        width: '100%', height: '100%', objectFit: 'cover', display: 'block',
+                        ...getKenBurnsStyle(currentPhotoIndex, currentPhotoProgress),
+                        transition: isPlaying ? 'none' : 'transform 0.3s ease'
+                      }}
+                    />
+                  )}
 
                   {/* Text overlays on preview */}
-                  {textOverlays.map((overlay) => {
-                    const style = overlay.style || {};
-                    const pos = overlay.position || { x: 50, y: 50 };
-                    if (overlay.startTime !== undefined && overlay.endTime !== undefined) {
-                      if (currentTime < overlay.startTime || currentTime >= overlay.endTime) return null;
-                    }
-                    const displayText = style.textCase === 'upper' ? overlay.text.toUpperCase()
-                      : style.textCase === 'lower' ? overlay.text.toLowerCase()
-                      : overlay.text;
-                    return (
-                      <div
-                        key={overlay.id}
-                        onMouseDown={(e) => handleTextMouseDown(e, overlay.id)}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingTextId(overlay.id);
-                          setEditingTextValue(overlay.text);
-                        }}
-                        style={{
-                          position: 'absolute',
-                          left: `${pos.x}%`,
-                          top: `${pos.y}%`,
-                          transform: 'translate(-50%, -50%)',
-                          cursor: draggingTextId === overlay.id ? 'grabbing' : 'grab',
-                          fontSize: `${(style.fontSize || 48) * 0.5}px`,
-                          fontFamily: style.fontFamily || 'Inter, sans-serif',
-                          fontWeight: style.fontWeight || '600',
-                          color: style.color || '#ffffff',
-                          textAlign: style.textAlign || 'center',
-                          textShadow: style.outline
-                            ? `2px 2px 0 ${style.outlineColor || '#000'}, -2px -2px 0 ${style.outlineColor || '#000'}, 2px -2px 0 ${style.outlineColor || '#000'}, -2px 2px 0 ${style.outlineColor || '#000'}`
-                            : 'none',
-                          userSelect: 'none',
-                          WebkitUserSelect: 'none',
-                          whiteSpace: 'nowrap',
-                          zIndex: 10,
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          border: editingTextId === overlay.id ? `1px dashed ${theme.accent.primary}99` : '1px dashed transparent',
-                          transition: 'border-color 0.15s'
-                        }}
-                      >
-                        {displayText}
-                      </div>
-                    );
-                  })}
+                  {textOverlays.filter(o => currentTime >= (o.startTime ?? 0) && currentTime <= (o.endTime ?? totalDuration)).map((overlay) => (
+                    <DraggableTextOverlay
+                      key={overlay.id}
+                      text={overlay.text}
+                      textStyle={overlay.style || textStyle}
+                      color={editingTextId === overlay.id ? '#6366f1' : '#6366f180'}
+                      isSelected={editingTextId === overlay.id}
+                      onSelect={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
+                      position={overlay.position || { x: 50, y: 50, width: 80 }}
+                      onPositionChange={(newPos) => updateTextOverlay(overlay.id, { position: newPos })}
+                      onTextChange={(newText) => updateTextOverlay(overlay.id, { text: newText })}
+                      containerRef={previewRef}
+                    />
+                  ))}
 
                   {/* Photo counter */}
                   <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/60 text-white text-[11px] font-semibold">
@@ -1460,7 +1495,7 @@ const PhotoMontageEditor = ({
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center rounded-lg bg-[#111118] border-2 border-dashed border-neutral-700" style={{ width: '300px', aspectRatio: '9/16' }}>
+                <div className="flex flex-col items-center justify-center rounded-lg bg-[#111118] border-2 border-dashed border-neutral-700" style={{ width: '300px', aspectRatio: aspectRatio === '1:1' ? '1/1' : aspectRatio === '4:5' ? '4/5' : aspectRatio === '16:9' ? '16/9' : '9/16' }}>
                   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1">
                     <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
                   </svg>
@@ -1508,243 +1543,6 @@ const PhotoMontageEditor = ({
                 <Button variant="neutral-secondary" size="small" icon={<FeatherRefreshCw />} onClick={handleReroll}>Re-roll Photo</Button>
               )}
 
-              {/* Variation Tabs */}
-              <div className="flex w-full overflow-auto gap-1">
-                {allVideos.map((video, idx) => (
-                  <div
-                    key={video.id}
-                    onClick={() => switchToVideo(idx)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium cursor-pointer whitespace-nowrap flex-shrink-0 transition-all ${idx === activeVideoIndex ? 'bg-brand-600/15 border border-brand-600/30 text-[#ffffffff]' : 'bg-neutral-800/50 border border-transparent text-neutral-400'}`}
-                  >
-                    {video.isTemplate ? (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" /></svg>
-                    ) : (
-                      <span style={{ fontSize: '10px', opacity: 0.6 }}>#{idx}</span>
-                    )}
-                    <span>{video.isTemplate ? 'Template' : video.name || `Montage ${idx}`}</span>
-                    {!video.isTemplate && (
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteVideo(idx); }} className="bg-transparent border-none text-neutral-500 text-[14px] cursor-pointer px-0.5 ml-0.5 leading-none">&times;</button>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* Generation Controls */}
-              <div className="flex w-full items-center gap-2">
-                <ToggleGroup value={keepTemplateText} onValueChange={(v) => v && setKeepTemplateText(v)}>
-                  <ToggleGroup.Item value="none">Random</ToggleGroup.Item>
-                  <ToggleGroup.Item value="all">Keep Text</ToggleGroup.Item>
-                </ToggleGroup>
-                <input
-                  type="number" min={1} max={20} value={generateCount}
-                  onChange={(e) => setGenerateCount(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
-                  className="w-12 px-2 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[13px] text-center outline-none"
-                />
-                <Button variant="brand-primary" size="small" onClick={executeGeneration} disabled={isGenerating || photos.length === 0}>
-                  {isGenerating ? 'Remixing...' : 'Remix'}
-                </Button>
-              </div>
-
-              {/* ═══ PIXEL TIMELINE (unified scroll layout) ═══ */}
-              {photos.length > 0 && (() => {
-                const hasAudioTrack = !!(selectedAudio && waveformData.length > 0);
-                const playheadPercent = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
-                const audioTrackH = hasAudioTrack ? Math.round(4 + 28 * externalAudioVolume) : 0;
-                const trimmedDuration = selectedAudio
-                  ? ((selectedAudio.endTime || selectedAudio.duration || audioDuration) - (selectedAudio.startTime || 0))
-                  : 0;
-                return (
-                <div className="flex w-full flex-col border-t border-neutral-800 pt-3 flex-shrink-0">
-                  {/* Timeline header */}
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-heading-3 font-heading-3 text-[#ffffffff]">Timeline</span>
-                      <span className="text-caption font-caption text-neutral-500">{photos.length} photo{photos.length !== 1 ? 's' : ''}</span>
-                      <Button variant="neutral-secondary" size="small" onClick={handleCutByWord}>Cut by word</Button>
-                      <Button variant="neutral-secondary" size="small" onClick={handleCutByBeat}>Cut by beat</Button>
-                      <Button variant="neutral-secondary" size="small" onClick={() => setShowMomentumSelector(true)}>Cut to music</Button>
-                      <Badge variant="neutral">
-                        {beatAnalyzing ? 'Analyzing beats...' : bpm ? `${Math.round(bpm)} BPM (${filteredBeats.length} beats)` : 'No beats detected'}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  {/* Volume controls row */}
-                  {hasAudioTrack && (
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="flex items-center gap-1.5">
-                        <FeatherMusic style={{ width: 10, height: 10, color: '#22c55e' }} />
-                        <span className="text-[10px] text-green-400 w-8">Audio</span>
-                        <input type="range" min="0" max="1" step="0.05" value={externalAudioVolume}
-                          onChange={e => setExternalAudioVolume(parseFloat(e.target.value))}
-                          style={{ width: '64px', height: '4px', accentColor: '#22c55e', cursor: 'pointer' }}
-                          title={`Audio: ${Math.round(externalAudioVolume * 100)}%`}
-                        />
-                        <span className="text-[10px] text-neutral-500 w-8">{Math.round(externalAudioVolume * 100)}%</span>
-                      </div>
-                      {/* Zoom controls — right-aligned */}
-                      <div className="flex items-center gap-1.5 ml-auto">
-                        <FeatherZoomOut style={{ width: 12, height: 12, color: '#737373' }} />
-                        <input type="range" min="0.3" max="3" step="0.05" value={timelineScale}
-                          onChange={e => setTimelineScale(parseFloat(e.target.value))}
-                          style={{ width: '80px', height: '4px', accentColor: '#6366f1', cursor: 'pointer' }}
-                          title={`Zoom: ${Math.round(timelineScale * 100)}%`}
-                        />
-                        <FeatherZoomIn style={{ width: 12, height: 12, color: '#737373' }} />
-                      </div>
-                    </div>
-                  )}
-                  {/* Zoom controls when no audio tracks */}
-                  {!hasAudioTrack && (
-                    <div className="flex items-center gap-1.5 mb-2 justify-end">
-                      <FeatherZoomOut style={{ width: 12, height: 12, color: '#737373' }} />
-                      <input type="range" min="0.3" max="3" step="0.05" value={timelineScale}
-                        onChange={e => setTimelineScale(parseFloat(e.target.value))}
-                        style={{ width: '80px', height: '4px', accentColor: '#6366f1', cursor: 'pointer' }}
-                        title={`Zoom: ${Math.round(timelineScale * 100)}%`}
-                      />
-                      <FeatherZoomIn style={{ width: 12, height: 12, color: '#737373' }} />
-                    </div>
-                  )}
-
-                  {/* ═══ UNIFIED TIMELINE: labels column + single scrollable area ═══ */}
-                  <div className="flex w-full items-start gap-3">
-                    {/* Fixed labels column */}
-                    <div className="w-20 flex flex-col shrink-0">
-                      <div style={{ height: '24px' }} className="flex items-center justify-end pr-1">
-                        <span className="text-[10px] text-neutral-600">Time</span>
-                      </div>
-                      <div style={{ height: '36px' }} className="flex items-center justify-end pr-1">
-                        <span className="text-caption font-caption text-neutral-400">Photos</span>
-                      </div>
-                      <div style={{ height: '28px' }} className="flex items-center justify-end pr-1">
-                        <span className="text-caption font-caption text-neutral-400">Text</span>
-                      </div>
-                      {hasAudioTrack && (
-                        <div style={{ height: `${audioTrackH}px`, transition: 'height 0.15s ease-out' }} className="flex items-center justify-end pr-1">
-                          {audioTrackH >= 16 && <span className="text-caption font-caption text-neutral-400">Audio</span>}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Single scrollable column */}
-                    <div className="flex-1 rounded-md border border-neutral-800 bg-black overflow-x-auto" ref={timelineRef}>
-                      <div style={{ position: 'relative', minWidth: '100%', width: `${timelinePx}px` }}>
-                        {/* Playhead line — spans all tracks */}
-                        {totalDuration > 0 && (
-                          <div style={{
-                            position: 'absolute', left: `${playheadPercent}%`, top: 0, bottom: 0, width: '2px',
-                            background: '#ef4444', zIndex: 20, pointerEvents: 'none',
-                            boxShadow: '0 0 4px rgba(239, 68, 68, 0.5)',
-                            transition: isPlaying ? 'none' : 'left 0.1s ease-out'
-                          }}>
-                            <div style={{
-                              position: 'absolute', top: '16px', left: '-5px',
-                              width: 0, height: 0,
-                              borderLeft: '6px solid transparent', borderRight: '6px solid transparent',
-                              borderTop: '8px solid #ef4444'
-                            }} />
-                          </div>
-                        )}
-
-                        {/* Ruler row — click/drag to seek */}
-                        <div style={{ height: '24px', position: 'relative', cursor: 'crosshair', borderBottom: '1px solid #333' }}
-                          onMouseDown={handleRulerMouseDown}
-                        >
-                          {rulerTicks.map((tick, i) => {
-                            const xPx = tick.time * pxPerSec;
-                            return (
-                              <div key={i} style={{ position: 'absolute', left: `${xPx}px`, top: 0, bottom: 0 }}>
-                                <div style={{
-                                  width: '1px', height: tick.isLabel ? '10px' : '6px',
-                                  backgroundColor: tick.isLabel ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.15)',
-                                  position: 'absolute', bottom: 0
-                                }} />
-                                {tick.isLabel && (
-                                  <span style={{
-                                    position: 'absolute', top: '1px', left: '3px',
-                                    fontSize: '9px', color: 'rgba(255,255,255,0.45)',
-                                    whiteSpace: 'nowrap', userSelect: 'none'
-                                  }}>
-                                    {formatTime(tick.time)}
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* Photo filmstrip row — pixel-width photos */}
-                        <div style={{ height: '36px', position: 'relative', borderBottom: '1px solid #222', display: 'flex' }}>
-                          {photos.map((photo, i) => {
-                            const photoWidth = Math.max(20, photoDurations[i] * pxPerSec);
-                            return (
-                              <div
-                                key={photo.id}
-                                style={{
-                                  width: `${photoWidth}px`, height: '100%', overflow: 'hidden',
-                                  boxSizing: 'border-box', flexShrink: 0,
-                                  borderBottom: `2px solid ${currentPhotoIndex === i ? theme.accent.primary : 'transparent'}`,
-                                  borderRight: i < photos.length - 1 ? '1px solid rgba(0,0,0,0.4)' : 'none'
-                                }}
-                              >
-                                <img src={photo.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} draggable={false} />
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* Text overlay row */}
-                        <div style={{ height: '28px', position: 'relative', borderBottom: '1px solid #222' }}>
-                          {textOverlays.map((overlay) => {
-                            const leftPx = (overlay.startTime || 0) * pxPerSec;
-                            const widthPx = ((overlay.endTime || 0) - (overlay.startTime || 0)) * pxPerSec;
-                            const isSelected = editingTextId === overlay.id;
-                            return (
-                              <div key={overlay.id} style={{
-                                position: 'absolute', left: `${leftPx}px`, width: `${widthPx}px`,
-                                top: '2px', height: '24px', boxSizing: 'border-box',
-                                backgroundColor: isSelected ? '#9333ea' : '#6366f1', borderRadius: '4px',
-                                display: 'flex', alignItems: 'center', padding: '0 4px',
-                                cursor: timelineDrag ? 'grabbing' : 'grab', overflow: 'hidden',
-                                border: isSelected ? '1px solid #a855f7' : '1px solid rgba(124,58,237,0.5)',
-                                zIndex: isSelected ? 10 : 5
-                              }} onMouseDown={(e) => handleTimelineDragStart(e, overlay.id, 'move')}>
-                                <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
-                                  onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'left'); }} />
-                                <span style={{ fontSize: '10px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none', padding: '0 6px' }}>{overlay.text}</span>
-                                <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
-                                  onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'right'); }} />
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* Audio waveform row — continuous strip, height scales with volume */}
-                        {hasAudioTrack && (() => {
-                          const audioPx = trimmedDuration * pxPerSec;
-                          const maxBars = Math.max(50, Math.round(audioPx / 3));
-                          const bars = downsample(waveformData, maxBars);
-                          const trackH = audioTrackH;
-                          return (
-                            <div style={{ height: `${trackH}px`, borderTop: '1px solid #333', position: 'relative', transition: 'height 0.15s ease-out' }}>
-                              <div style={{ width: `${audioPx}px`, height: '100%', backgroundColor: 'rgba(34, 197, 94, 0.06)', display: 'flex', alignItems: 'center' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: `${Math.max(2, trackH - 4)}px`, gap: '1px', padding: '0 1px' }}>
-                                  {bars.map((amplitude, i) => (
-                                    <div key={i} style={{ flex: 1, minWidth: '1px', backgroundColor: 'rgba(34, 197, 94, 0.5)', height: `${amplitude * externalAudioVolume * 100}%`, opacity: externalAudioVolume > 0 ? 0.6 : 0.2 }} />
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                );
-              })()}
-
               {/* Selected overlay edit bar */}
               {editingTextId && (() => {
                 const overlay = textOverlays.find(o => o.id === editingTextId);
@@ -1776,11 +1574,365 @@ const PhotoMontageEditor = ({
               )}
 
             </div>
+
+            {/* ═══ PIXEL TIMELINE (pinned below preview, matches Solo/Multi pattern) ═══ */}
+            {photos.length > 0 && (() => {
+              const hasAudioTrack = !!(selectedAudio && waveformData.length > 0);
+              const playheadPercent = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
+              const audioTrackH = hasAudioTrack ? Math.round(4 + 28 * externalAudioVolume) : 0;
+              const trimmedDuration = selectedAudio
+                ? ((selectedAudio.endTime || selectedAudio.duration || audioDuration) - (selectedAudio.startTime || 0))
+                : 0;
+              const MIN_CELL_W = MIN_CELL_W_HOOK;
+              const effectiveTimelinePx = totalDuration * effectivePxPerSecHook;
+              const effectivePxPerSec = effectivePxPerSecHook;
+              return (
+              <div className="flex w-full flex-col border-t border-neutral-800 bg-[#1a1a1aff] px-4 py-3 flex-shrink-0">
+                {/* Variation Tabs */}
+                {allVideos.length > 0 && (
+                  <div className="flex w-full gap-1.5 overflow-x-auto mb-3 pb-1">
+                    {allVideos.map((video, idx) => (
+                      <button
+                        key={video.id}
+                        onClick={() => switchToVideo(idx)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[12px] whitespace-nowrap flex-shrink-0 cursor-pointer transition-colors ${
+                          idx === activeVideoIndex
+                            ? 'border-brand-600 bg-brand-600/15 text-brand-600 font-semibold'
+                            : 'border-neutral-700 bg-[#1a1a1aff] text-neutral-400 hover:border-neutral-600'
+                        }`}
+                      >
+                        {video.isTemplate ? 'Template' : (
+                          <>
+                            #{idx}
+                            <span onClick={(e) => { e.stopPropagation(); handleDeleteVideo(idx); }} className="ml-0.5 opacity-50 hover:opacity-100 cursor-pointer text-[10px]">x</span>
+                          </>
+                        )}
+                      </button>
+                    ))}
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      <ToggleGroup value={keepTemplateText} onValueChange={(v) => v && setKeepTemplateText(v)}>
+                        <ToggleGroup.Item value="none">Random</ToggleGroup.Item>
+                        <ToggleGroup.Item value="all">Keep Text</ToggleGroup.Item>
+                      </ToggleGroup>
+                      <input
+                        type="number" min={1} max={20} value={generateCount}
+                        onChange={(e) => setGenerateCount(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+                        className="w-12 px-2 py-1.5 rounded-md border border-neutral-800 bg-black text-[#ffffffff] text-[13px] text-center outline-none"
+                      />
+                      <Button variant="brand-primary" size="small" onClick={executeGeneration} disabled={isGenerating || photos.length === 0}>
+                        {isGenerating ? 'Creating...' : 'Create'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Timeline header */}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-heading-3 font-heading-3 text-[#ffffffff]">Timeline</span>
+                    <span className="text-caption font-caption text-neutral-500">{basePhotos.length} photo{basePhotos.length !== 1 ? 's' : ''}</span>
+                    <Button variant="neutral-secondary" size="small" onClick={handleCutByWord}>Cut by word</Button>
+                    <Button variant="neutral-secondary" size="small" onClick={handleCutByBeat}>Cut by beat</Button>
+                    <Button variant="neutral-secondary" size="small" onClick={() => setShowMomentumSelector(true)}>Cut to music</Button>
+                    <Badge variant="neutral">
+                      {beatAnalyzing ? 'Analyzing beats...' : bpm ? `${Math.round(bpm)} BPM (${filteredBeats.length} beats)` : 'No beats detected'}
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Volume controls row */}
+                {hasAudioTrack && (
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <FeatherMusic style={{ width: 10, height: 10, color: '#22c55e' }} />
+                      <span className="text-[10px] text-green-400 w-8">Audio</span>
+                      <input type="range" min="0" max="1" step="0.05" value={externalAudioVolume}
+                        onChange={e => setExternalAudioVolume(parseFloat(e.target.value))}
+                        style={{ width: '64px', height: '4px', accentColor: '#22c55e', cursor: 'pointer' }}
+                        title={`Audio: ${Math.round(externalAudioVolume * 100)}%`}
+                      />
+                      <span className="text-[10px] text-neutral-500 w-8">{Math.round(externalAudioVolume * 100)}%</span>
+                    </div>
+                    {/* Zoom controls — right-aligned */}
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      <FeatherZoomOut style={{ width: 12, height: 12, color: '#737373' }} />
+                      <input type="range" min="0.3" max="3" step="0.05" value={timelineScale}
+                        onChange={e => setTimelineScale(parseFloat(e.target.value))}
+                        style={{ width: '80px', height: '4px', accentColor: '#6366f1', cursor: 'pointer' }}
+                        title={`Zoom: ${Math.round(timelineScale * 100)}%`}
+                      />
+                      <FeatherZoomIn style={{ width: 12, height: 12, color: '#737373' }} />
+                    </div>
+                  </div>
+                )}
+                {/* Zoom controls when no audio tracks */}
+                {!hasAudioTrack && (
+                  <div className="flex items-center gap-1.5 mb-2 justify-end">
+                    <FeatherZoomOut style={{ width: 12, height: 12, color: '#737373' }} />
+                    <input type="range" min="0.3" max="3" step="0.05" value={timelineScale}
+                      onChange={e => setTimelineScale(parseFloat(e.target.value))}
+                      style={{ width: '80px', height: '4px', accentColor: '#6366f1', cursor: 'pointer' }}
+                      title={`Zoom: ${Math.round(timelineScale * 100)}%`}
+                    />
+                    <FeatherZoomIn style={{ width: 12, height: 12, color: '#737373' }} />
+                  </div>
+                )}
+
+                {/* ═══ UNIFIED TIMELINE: labels column + single scrollable area ═══ */}
+                <div className="flex w-full items-start gap-3">
+                  {/* Fixed labels column */}
+                  <div className="w-20 flex flex-col shrink-0">
+                    <div style={{ height: '24px' }} className="flex items-center justify-end pr-1">
+                      <span className="text-[10px] text-neutral-600">Time</span>
+                    </div>
+                    {textOverlays.length > 0 && (
+                      <div style={{ height: `${Math.max(24, textOverlays.length * 24)}px` }} className="flex items-center justify-end pr-1">
+                        <span className="text-caption font-caption text-neutral-400">Text</span>
+                      </div>
+                    )}
+                    <div style={{ height: '36px' }} className="flex items-center justify-end pr-1">
+                      <span className="text-caption font-caption text-neutral-400">Photos</span>
+                    </div>
+                    {hasAudioTrack && (
+                      <div style={{ height: `${audioTrackH}px`, transition: 'height 0.15s ease-out' }} className="flex items-center justify-end pr-1">
+                        {audioTrackH >= 16 && <span className="text-caption font-caption text-neutral-400">Audio</span>}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Single scrollable column */}
+                  <div className="flex-1 rounded-md border border-neutral-800 bg-black overflow-x-auto" ref={timelineRef}>
+                    <div style={{ position: 'relative', minWidth: '100%', width: `${effectiveTimelinePx}px` }}>
+                      {/* Playhead line — spans all tracks */}
+                      {totalDuration > 0 && (
+                        <div style={{
+                          position: 'absolute', left: `${playheadPercent}%`, top: 0, bottom: 0, width: '2px',
+                          background: '#ef4444', zIndex: 20, pointerEvents: 'none',
+                          boxShadow: '0 0 4px rgba(239, 68, 68, 0.5)',
+                          transition: isPlaying ? 'none' : 'left 0.1s ease-out'
+                        }}>
+                          <div style={{
+                            position: 'absolute', top: '16px', left: '-5px',
+                            width: 0, height: 0,
+                            borderLeft: '6px solid transparent', borderRight: '6px solid transparent',
+                            borderTop: '8px solid #ef4444'
+                          }} />
+                        </div>
+                      )}
+
+                      {/* Ruler row — click/drag to seek */}
+                      <div style={{ height: '24px', position: 'relative', cursor: 'crosshair', borderBottom: '1px solid #333' }}
+                        onMouseDown={(e) => {
+                          if (!timelineRef?.current || totalDuration <= 0) return;
+                          e.preventDefault();
+                          const seekFromEvent = (evt) => {
+                            const rect = timelineRef.current.getBoundingClientRect();
+                            const x = (evt.clientX || 0) - rect.left + timelineRef.current.scrollLeft;
+                            const t = Math.max(0, Math.min(1, x / effectiveTimelinePx)) * totalDuration;
+                            setCurrentTime(t);
+                            if (audioRef.current && selectedAudio?.url) {
+                              audioRef.current.currentTime = (selectedAudio.startTime || 0) + t;
+                            }
+                          };
+                          seekFromEvent(e);
+                          if (isPlaying) stopPlayback();
+                          const onMove = (evt) => seekFromEvent(evt);
+                          const onUp = () => {
+                            document.removeEventListener('mousemove', onMove);
+                            document.removeEventListener('mouseup', onUp);
+                          };
+                          document.addEventListener('mousemove', onMove);
+                          document.addEventListener('mouseup', onUp);
+                        }}
+                      >
+                        {rulerTicks.map((tick, i) => {
+                          const xPx = tick.time * effectivePxPerSec;
+                          return (
+                            <div key={i} style={{ position: 'absolute', left: `${xPx}px`, top: 0, bottom: 0 }}>
+                              <div style={{
+                                width: '1px', height: tick.isLabel ? '10px' : '6px',
+                                backgroundColor: tick.isLabel ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.15)',
+                                position: 'absolute', bottom: 0
+                              }} />
+                              {tick.isLabel && (
+                                <span style={{
+                                  position: 'absolute', top: '1px', left: '3px',
+                                  fontSize: '9px', color: 'rgba(255,255,255,0.45)',
+                                  whiteSpace: 'nowrap', userSelect: 'none'
+                                }}>
+                                  {formatTime(tick.time)}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Text overlay rows — one row per overlay */}
+                      {textOverlays.length > 0 && (
+                        <div style={{ position: 'relative', borderBottom: '1px solid #222' }}>
+                          {textOverlays.map((overlay) => {
+                            const start = overlay.startTime ?? 0;
+                            const end = overlay.endTime ?? totalDuration;
+                            const leftPx = start * effectivePxPerSec;
+                            const widthPx = Math.max(20, (end - start) * effectivePxPerSec);
+                            const isSelected = editingTextId === overlay.id;
+                            const overlayColor = isSelected ? '#818cf8' : '#6366f1';
+                            return (
+                              <div key={overlay.id} style={{ height: '24px', position: 'relative' }}>
+                                <div
+                                  style={{
+                                    position: 'absolute', left: `${leftPx}px`, width: `${widthPx}px`, top: 2, bottom: 2,
+                                    backgroundColor: isSelected ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.2)',
+                                    border: `1px solid ${overlayColor}`,
+                                    borderRadius: '4px', cursor: 'pointer', overflow: 'hidden',
+                                    display: 'flex', alignItems: 'center', paddingLeft: '6px',
+                                  }}
+                                  onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
+                                >
+                                  <span style={{ fontSize: '9px', color: '#c7d2fe', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', userSelect: 'none' }}>
+                                    {overlay.text}
+                                  </span>
+                                  <div
+                                    style={{ position: 'absolute', left: 0, top: 0, width: '6px', height: '100%', cursor: 'col-resize', zIndex: 3 }}
+                                    onPointerDown={(e) => {
+                                      e.stopPropagation();
+                                      const startX = e.clientX;
+                                      const origStart = start;
+                                      const move = (me) => {
+                                        const dx = (me.clientX - startX) / effectivePxPerSec;
+                                        const newStart = Math.max(0, Math.min(end - 0.5, origStart + dx));
+                                        updateTextOverlay(overlay.id, { startTime: newStart });
+                                      };
+                                      const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+                                      document.addEventListener('pointermove', move);
+                                      document.addEventListener('pointerup', up);
+                                    }}
+                                  />
+                                  <div
+                                    style={{ position: 'absolute', right: 0, top: 0, width: '6px', height: '100%', cursor: 'col-resize', zIndex: 3 }}
+                                    onPointerDown={(e) => {
+                                      e.stopPropagation();
+                                      const startX = e.clientX;
+                                      const origEnd = end;
+                                      const move = (me) => {
+                                        const dx = (me.clientX - startX) / effectivePxPerSec;
+                                        const newEnd = Math.max(start + 0.5, Math.min(totalDuration, origEnd + dx));
+                                        updateTextOverlay(overlay.id, { endTime: newEnd });
+                                      };
+                                      const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+                                      document.addEventListener('pointermove', move);
+                                      document.addEventListener('pointerup', up);
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Photo filmstrip row — expanded cycling cells */}
+                      <div style={{ height: '36px', position: 'relative', borderBottom: '1px solid #222', display: 'flex' }}>
+                        {(() => {
+                          let cumulativeTime = 0;
+                          return photoDurations.map((dur, i) => {
+                            const photo = photos[i % photos.length];
+                            if (!photo) { cumulativeTime += dur; return null; }
+                            const cellStart = cumulativeTime;
+                            cumulativeTime += dur;
+                            const photoWidth = Math.max(MIN_CELL_W, dur * effectivePxPerSec);
+                            const isActive = currentExpandedIndex === i;
+                            return (
+                              <div
+                                key={`${photo.id}_t${i}`}
+                                onClick={() => {
+                                  setCurrentTime(cellStart);
+                                  if (audioRef.current && selectedAudio?.url) {
+                                    audioRef.current.currentTime = (selectedAudio.startTime || 0) + cellStart;
+                                  }
+                                }}
+                                style={{
+                                  width: `${photoWidth}px`, height: '100%', overflow: 'hidden',
+                                  boxSizing: 'border-box', flexShrink: 0, cursor: 'pointer',
+                                  borderBottom: `2px solid ${isActive ? '#6366f1' : 'transparent'}`,
+                                  borderRight: i < photoDurations.length - 1 ? '1px solid rgba(0,0,0,0.4)' : 'none',
+                                  opacity: isActive ? 1 : 0.6,
+                                }}
+                              >
+                                <img src={photo.thumbnailUrl || photo.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} draggable={false} />
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+
+                      {/* Audio waveform row — continuous strip, height scales with volume */}
+                      {hasAudioTrack && (() => {
+                        const audioPx = trimmedDuration * effectivePxPerSec;
+                        const maxBars = Math.max(50, Math.round(audioPx / 3));
+                        const bars = downsample(waveformData, maxBars);
+                        const trackH = audioTrackH;
+                        return (
+                          <div style={{ height: `${trackH}px`, borderTop: '1px solid #333', position: 'relative', transition: 'height 0.15s ease-out' }}>
+                            <div style={{ width: `${audioPx}px`, height: '100%', backgroundColor: 'rgba(34, 197, 94, 0.06)', display: 'flex', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: `${Math.max(2, trackH - 4)}px`, gap: '1px', padding: '0 1px' }}>
+                                {bars.map((amplitude, i) => (
+                                  <div key={i} style={{ flex: 1, minWidth: '1px', backgroundColor: 'rgba(34, 197, 94, 0.5)', height: `${amplitude * externalAudioVolume * 100}%`, opacity: externalAudioVolume > 0 ? 0.6 : 0.2 }} />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              );
+            })()}
           </div>
 
           {/* ── RIGHT SIDEBAR ── */}
           {!isMobile && (
             <div className="flex w-96 flex-none flex-col border-l border-neutral-800 bg-[#1a1a1aff] overflow-auto">
+
+              {/* Template Picker */}
+              {(() => {
+                const builtIns = BUILT_IN_TEMPLATES.photo_montage || [];
+                const nicheTemplates = category?.templates || [];
+                const allTmpl = [...builtIns, ...nicheTemplates];
+                if (allTmpl.length === 0) return null;
+                return (
+                  <div className="flex flex-col gap-2 px-4 py-3 border-b border-neutral-800">
+                    <span className="text-[12px] font-semibold text-white">Template</span>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const tmpl = allTmpl.find(t => t.id === e.target.value);
+                        if (!tmpl?.settings) return;
+                        const s = tmpl.settings;
+                        if (s.speed !== undefined) setSpeed(s.speed);
+                        if (s.transition !== undefined) setTransition(s.transition);
+                        if (s.kenBurns !== undefined) setKenBurnsEnabled(s.kenBurns);
+                        if (s.beatSync !== undefined) setBeatSyncEnabled(s.beatSync);
+                        if (s.displayMode !== undefined) setDisplayMode(s.displayMode);
+                        if (s.aspectRatio !== undefined) setAspectRatio(s.aspectRatio);
+                        if (s.textStyle) setTextStyle(s.textStyle);
+                        toastSuccess(`Applied "${tmpl.name}" template`);
+                      }}
+                      className="w-full py-1.5 px-2 rounded-md bg-neutral-800 border border-neutral-700 text-[12px] text-white outline-none cursor-pointer"
+                    >
+                      <option value="">Apply a template...</option>
+                      {allTmpl.map(tmpl => (
+                        <option key={tmpl.id} value={tmpl.id}>
+                          {tmpl.name}{tmpl.builtIn ? ' (Preset)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })()}
 
               {renderCollapsibleSection('audio', 'Audio', (
                 <div className="flex flex-col gap-3">
@@ -1793,6 +1945,7 @@ const PhotoMontageEditor = ({
                       </div>
                       <div className="flex gap-2">
                         <Button variant="neutral-secondary" size="small" icon={<FeatherScissors />} onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}>Trim</Button>
+                        <Button variant="neutral-secondary" size="small" icon={<FeatherMic />} onClick={() => setShowTranscriber(true)}>Auto Transcribe</Button>
                         <Button variant="destructive-tertiary" size="small" icon={<FeatherTrash2 />} onClick={handleRemoveAudio}>Remove</Button>
                       </div>
                     </>
@@ -1819,24 +1972,44 @@ const PhotoMontageEditor = ({
 
               {renderCollapsibleSection('photoSettings', 'Photo Settings', (
                 <div className="flex flex-col gap-4">
+                  {/* Display Mode */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-semibold text-white">Display Mode</span>
+                    <ToggleGroup value={displayMode} onValueChange={(val) => { if (val) setDisplayMode(val); }}>
+                      <ToggleGroup.Item value="cover" icon={null}>Cover</ToggleGroup.Item>
+                      <ToggleGroup.Item value="gallery" icon={null}>Gallery</ToggleGroup.Item>
+                    </ToggleGroup>
+                    <span className="text-[11px] text-neutral-500">
+                      {displayMode === 'gallery' ? 'White background with shadow — clean gallery look' : 'Full-bleed photo fill'}
+                    </span>
+                  </div>
+
                   {/* Speed */}
                   <div className="flex flex-col gap-1.5">
                     <span className="text-[12px] font-semibold text-white">Speed (per photo)</span>
-                    <ToggleGroup value={String(speed)} onValueChange={(val) => { if (val) setSpeed(parseFloat(val)); }}>
+                    <ToggleGroup
+                      value={SPEED_PRESETS.find(p => Math.abs(p.value - speed) < 0.001)?.label || ''}
+                      onValueChange={(label) => {
+                        const preset = SPEED_PRESETS.find(p => p.label === label);
+                        if (preset) setSpeed(preset.value);
+                      }}
+                    >
                       {SPEED_PRESETS.map(preset => (
-                        <ToggleGroup.Item key={preset.value} value={String(preset.value)} icon={null}>{preset.label}</ToggleGroup.Item>
+                        <ToggleGroup.Item key={preset.label} value={preset.label} icon={null}>{preset.label}</ToggleGroup.Item>
                       ))}
                     </ToggleGroup>
-                    <input
-                      type="number"
-                      min={0.1}
-                      max={10}
-                      step={0.1}
-                      value={speed}
-                      onChange={(e) => setSpeed(parseFloat(e.target.value) || 1)}
-                      placeholder="Custom (s)"
-                      className="w-full mt-1 py-1.5 px-2 text-[12px] bg-neutral-800 border border-neutral-700 rounded text-white outline-none"
-                    />
+                    <div className="flex items-center gap-2 mt-1">
+                      <input
+                        type="number"
+                        min={0.03}
+                        max={10}
+                        step={0.1}
+                        value={parseFloat(speed.toFixed(2))}
+                        onChange={(e) => setSpeed(parseFloat(e.target.value) || 1)}
+                        className="flex-1 py-1.5 px-2 text-[12px] bg-neutral-800 border border-neutral-700 rounded text-white outline-none"
+                      />
+                      <span className="text-[11px] text-neutral-500">sec</span>
+                    </div>
                   </div>
 
                   {/* Transition */}
@@ -1885,75 +2058,237 @@ const PhotoMontageEditor = ({
                 </div>
               ))}
 
-              {renderCollapsibleSection('lyrics', 'Lyrics', (
-                <div className="flex flex-col gap-3">
-                  <LyricBank
-                    lyrics={category?.lyrics || lyricsBank || []}
-                    onAddLyrics={onAddLyrics}
-                    onUpdateLyrics={onUpdateLyrics}
-                    onDeleteLyrics={onDeleteLyrics}
-                    onSelectText={(selectedText) => addLyricsAsTimedOverlays(selectedText)}
-                    compact={true}
-                    showAddForm={true}
-                  />
-                  {selectedAudio && (
-                    <Button variant="neutral-secondary" size="small" icon={<FeatherMic />} onClick={() => setShowTranscriber(true)}>AI Transcribe</Button>
-                  )}
-                  {(words.length > 0 || selectedAudio) && (
-                    <Button variant="neutral-secondary" size="small" onClick={() => setShowWordTimeline(true)}>Word Timeline</Button>
-                  )}
-                </div>
-              ))}
 
-              {renderCollapsibleSection('textStyle', 'Text Style', (
-                <div className="flex flex-col gap-3">
-                  <Button variant="neutral-secondary" size="small" icon={<FeatherPlus />} onClick={() => addTextOverlay()}>Add Text</Button>
-                  {/* Niche Text Banks */}
-                  {nicheTextBanks && nicheTextBanks.some(b => b?.length > 0) && (
-                    <div className="flex flex-col gap-2 pt-2 border-t border-neutral-800">
-                      {nicheTextBanks.map((bank, bankIdx) => {
-                        if (!bank?.length) return null;
-                        const bankLabel = bankIdx === 0 ? 'Text Bank A' : 'Text Bank B';
-                        const labelColor = bankIdx === 0 ? '#818cf8' : '#fbbf24';
-                        const borderColor = bankIdx === 0 ? '#6366f1' : '#f59e0b';
-                        return (
-                          <div key={bankIdx}>
-                            <div className="text-[12px] font-semibold mb-1.5" style={{ color: labelColor }}>{bankLabel}</div>
-                            {bank.map((entry, entryIdx) => {
-                              const text = typeof entry === 'string' ? entry : entry?.text || '';
-                              if (!text) return null;
+              {renderCollapsibleSection('textBanks', 'Text Banks', (
+                <div className="flex flex-col gap-4">
+                  {getTextBanks().slice(0, Math.max(photos.length, 2)).map((textBank, idx) => {
+                    const color = getBankColor(idx);
+                    const inputVal = newTextInputs[idx] || '';
+                    return (
+                      <div key={`tb-${idx}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-semibold" style={{ color: color.light || color }}>{bankLabel(idx)} Text</span>
+                          {idx >= MIN_BANKS && (
+                            <IconButton variant="neutral-tertiary" size="small" icon={<FeatherTrash2 />}
+                              aria-label={`Delete ${bankLabel(idx)} bank`}
+                              onClick={() => {
+                                const col = category?.id ? collections.find(c => c.id === category.id) : collections[0];
+                                if (!col) return;
+                                removeBankFromCollection(artistId, col.id, idx);
+                                if (db) {
+                                  const freshCols = getCollections(artistId);
+                                  const updated = freshCols.find(c => c.id === col.id);
+                                  if (updated) saveCollectionToFirestore(db, artistId, updated).catch(log.error);
+                                }
+                                setCollections(getCollections(artistId));
+                                toastSuccess(`${bankLabel(idx)} deleted`);
+                              }}
+                            />
+                          )}
+                        </div>
+                        {textBank.length > 0 && (
+                          <div className="flex flex-col gap-1.5 mb-2">
+                            {textBank.map((entry, i) => {
+                              const entryText = getTextBankText(entry);
                               return (
-                                <div key={entryIdx} className="flex items-center px-2 py-1 rounded-md mb-0.5 cursor-pointer hover:bg-neutral-800/50"
-                                  style={{ borderLeft: `2px solid ${borderColor}` }}
-                                  onClick={() => addTextOverlay(text)}>
-                                  <span className="text-[12px] text-neutral-300 truncate">{text}</span>
+                                <div key={i} className="flex items-center gap-2">
+                                  <div className="flex-1 px-3 py-2 rounded-sm border border-neutral-200 bg-neutral-50 text-white text-[13px] cursor-pointer leading-snug break-words"
+                                    style={{ borderLeft: `3px solid ${color.light || color}` }}
+                                    onClick={() => addTextOverlay(entryText)}>
+                                    {entryText}
+                                  </div>
+                                  <IconButton variant="neutral-tertiary" size="small" icon={<FeatherX />}
+                                    onClick={() => handleRemoveFromTextBank(idx + 1, i)}
+                                    aria-label="Remove text"
+                                  />
                                 </div>
                               );
                             })}
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {textOverlays.length > 0 && (
-                    <div className="flex flex-col gap-1.5">
-                      {textOverlays.map(overlay => (
-                        <div key={overlay.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${editingTextId === overlay.id ? 'bg-brand-600/20 border border-brand-600' : 'border border-neutral-800 hover:bg-neutral-800'}`}
-                          onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}>
-                          <span className="text-body font-body text-[#ffffffff] text-[12px] truncate flex-1">{overlay.text}</span>
-                          <IconButton size="small" variant="destructive-tertiary" icon={<FeatherTrash2 className="w-3 h-3" />} onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} aria-label="Remove" />
+                        )}
+                        {textBank.length === 0 && <div className="text-[13px] text-neutral-400 py-2 text-center">No text yet</div>}
+                        <div className="flex gap-1.5">
+                          <input type="text" value={inputVal} onChange={(e) => setNewTextInputs(prev => ({ ...prev, [idx]: e.target.value }))}
+                            onKeyDown={(e) => { if (e.key === 'Enter' && inputVal.trim()) { handleAddToTextBank(idx + 1, inputVal); setNewTextInputs(prev => ({ ...prev, [idx]: '' })); } }}
+                            placeholder="Add text..."
+                            className="flex-1 px-3 py-2 rounded-sm border border-neutral-200 bg-neutral-50 text-white text-[13px] outline-none"
+                          />
+                          <IconButton
+                            variant={inputVal.trim() ? 'neutral-secondary' : 'neutral-tertiary'}
+                            size="small"
+                            icon={<FeatherPlus />}
+                            disabled={!inputVal.trim()}
+                            onClick={() => { if (inputVal.trim()) { handleAddToTextBank(idx + 1, inputVal); setNewTextInputs(prev => ({ ...prev, [idx]: '' })); } }}
+                            aria-label="Add text"
+                          />
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    );
+                  })}
+                  {getTextBanks().length < MAX_BANKS && collections.length > 0 && (
+                    <Button
+                      variant="neutral-secondary" size="small" icon={<FeatherPlus />}
+                      onClick={() => {
+                        const col = category?.id ? collections.find(c => c.id === category.id) : collections[0];
+                        if (!col) return;
+                        addBankToCollection(artistId, col.id);
+                        if (db) {
+                          const freshCols = getCollections(artistId);
+                          const updated = freshCols.find(c => c.id === col.id);
+                          if (updated) saveCollectionToFirestore(db, artistId, updated).catch(log.error);
+                        }
+                        setCollections(getCollections(artistId));
+                        toastSuccess(`${bankLabel(getTextBanks().length)} added`);
+                      }}
+                      className="w-full"
+                    >
+                      Add Text Bank
+                    </Button>
                   )}
-                  {/* Summary */}
-                  <div className="text-[11px] text-neutral-500 pt-2 border-t border-neutral-800">
-                    {photos.length} photo{photos.length !== 1 ? 's' : ''} · {totalDuration.toFixed(1)}s total
-                    {bpm ? ` · ${bpm} BPM` : ''}
-                    {textOverlays.length > 0 ? ` · ${textOverlays.length} texts` : ''}
-                  </div>
                 </div>
               ))}
+
+              {renderCollapsibleSection('textStyle', 'Text Style', (() => {
+                  const selOverlay = editingTextId ? textOverlays.find(o => o.id === editingTextId) : null;
+                  const activeStyle = selOverlay?.style || getDefaultTextStyle();
+                  const disabled = !selOverlay;
+                  const handleStyleChange = (updates) => {
+                    if (selOverlay) updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, ...updates } });
+                  };
+                  return (
+                    <div className={`flex flex-col gap-4 ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                      {disabled && <div className="text-xs text-neutral-400 italic mb-3">Click text on preview to edit</div>}
+
+                      {/* Add + Delete buttons — always accessible */}
+                      <div className="flex gap-2" style={disabled ? { opacity: 1, pointerEvents: 'auto' } : {}}>
+                        <Button variant="brand-secondary" size="small" icon={<FeatherPlus />}
+                          onClick={() => addTextOverlay()} style={{ opacity: 1, pointerEvents: 'auto' }}>Add Text</Button>
+                        {selOverlay && (
+                          <Button variant="neutral-secondary" size="small" icon={<FeatherTrash2 />}
+                            onClick={() => removeTextOverlay(selOverlay.id)}>Delete</Button>
+                        )}
+                      </div>
+
+                      {/* Selected overlay text input */}
+                      {selOverlay && (
+                        <input value={selOverlay.text}
+                          onChange={(e) => updateTextOverlay(selOverlay.id, { text: e.target.value })}
+                          className="w-full px-3 py-2 rounded-md border border-neutral-800 bg-black text-white text-sm" />
+                      )}
+
+                      {/* Font Family */}
+                      <div>
+                        <div className="text-[13px] text-neutral-500 mb-1.5">Font Family</div>
+                        <select value={activeStyle.fontFamily || "'Inter', sans-serif"}
+                          onChange={(e) => handleStyleChange({ fontFamily: e.target.value })}
+                          className="w-full px-3 py-2 rounded-sm border border-neutral-200 bg-neutral-50 text-white text-[13px] outline-none cursor-pointer">
+                          {AVAILABLE_FONTS.map(f => <option key={f.name} value={f.value}>{f.name}</option>)}
+                        </select>
+                      </div>
+
+                      {/* Font Size */}
+                      <div>
+                        <div className="flex justify-between mb-1.5">
+                          <span className="text-[13px] text-neutral-500">Font Size</span>
+                          <span className="text-[13px] text-white">{activeStyle.fontSize || 48}px</span>
+                        </div>
+                        <input type="range" min="12" max="120" step="2" value={activeStyle.fontSize || 48}
+                          onChange={(e) => handleStyleChange({ fontSize: parseInt(e.target.value) })}
+                          className="w-full accent-brand-600" />
+                      </div>
+
+                      {/* Text Color + Outline Color */}
+                      <div className="flex gap-3">
+                        <div className="flex-1">
+                          <div className="text-[13px] text-neutral-500 mb-1.5">Text Color</div>
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-neutral-200 bg-neutral-50">
+                            <input type="color" value={activeStyle.color || '#ffffff'}
+                              onChange={(e) => handleStyleChange({ color: e.target.value })}
+                              className="w-6 h-6 border-none rounded-full cursor-pointer p-0 bg-transparent" />
+                            <span className="text-xs text-neutral-500 font-mono">{(activeStyle.color || '#ffffff').toUpperCase()}</span>
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-[13px] text-neutral-500 mb-1.5">Outline</div>
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-neutral-200 bg-neutral-50">
+                            <input type="color" value={activeStyle.outlineColor || '#000000'}
+                              onChange={(e) => handleStyleChange({ outlineColor: e.target.value, outline: true })}
+                              className="w-6 h-6 border-none rounded-full cursor-pointer p-0 bg-transparent" />
+                            <span className="text-xs text-neutral-500 font-mono">{(activeStyle.outlineColor || '#000000').toUpperCase()}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Formatting */}
+                      <div>
+                        <div className="text-[13px] text-neutral-500 mb-1.5">Formatting</div>
+                        <div className="flex gap-1">
+                          {[
+                            { key: 'bold', label: 'B', ariaLabel: 'Bold', active: activeStyle.fontWeight === '700', toggle: () => handleStyleChange({ fontWeight: activeStyle.fontWeight === '700' ? '400' : '700' }), bold: true },
+                            { key: 'caps', label: 'AA', ariaLabel: 'All caps', active: activeStyle.textCase === 'upper', toggle: () => handleStyleChange({ textCase: activeStyle.textCase === 'upper' ? 'default' : 'upper' }) },
+                            { key: 'outline', label: 'O', ariaLabel: 'Outline', active: !!activeStyle.outline, toggle: () => handleStyleChange({ outline: !activeStyle.outline }) },
+                          ].map(btn => (
+                            <IconButton key={btn.key} onClick={btn.toggle}
+                              variant={btn.active ? 'brand-secondary' : 'neutral-secondary'} size="small"
+                              icon={<span className={`text-xs ${btn.bold ? 'font-bold' : 'font-semibold'}`}>{btn.label}</span>}
+                              aria-label={btn.ariaLabel} />
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Alignment */}
+                      <div>
+                        <div className="text-[13px] text-neutral-500 mb-1.5">Alignment</div>
+                        <ToggleGroup value={activeStyle.textAlign || 'center'}
+                          onValueChange={(val) => handleStyleChange({ textAlign: val })}>
+                          <ToggleGroup.Item value="left" icon={<FeatherAlignLeft />}>{null}</ToggleGroup.Item>
+                          <ToggleGroup.Item value="center" icon={<FeatherAlignCenter />}>{null}</ToggleGroup.Item>
+                          <ToggleGroup.Item value="right" icon={<FeatherAlignRight />}>{null}</ToggleGroup.Item>
+                        </ToggleGroup>
+                      </div>
+
+                      {/* Text Overlays list */}
+                      <div className="pt-2 border-t border-neutral-800">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[13px] text-neutral-500">Text Overlays</span>
+                        </div>
+                        {textOverlays.length > 0 ? (
+                          <div className="flex flex-col gap-1.5">
+                            {textOverlays.map(overlay => (
+                              <div key={overlay.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${editingTextId === overlay.id ? 'bg-brand-600/20 border border-brand-600' : 'border border-neutral-800 hover:bg-neutral-800'}`}
+                                onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}>
+                                <span className="text-body font-body text-[#ffffffff] text-[12px] truncate flex-1">{overlay.text}</span>
+                                <IconButton size="small" variant="destructive-tertiary" icon={<FeatherTrash2 className="w-3 h-3" />} onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} aria-label="Remove" />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-[12px] text-neutral-500 text-center py-2">No text overlays yet</div>
+                        )}
+                      </div>
+
+                      {/* Crop */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-neutral-800">
+                        <span className="text-caption font-caption text-neutral-400">Crop</span>
+                        <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} className="flex-1 px-2 py-1.5 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[12px] outline-none">
+                          <option value="9:16">9:16 (Full)</option>
+                          <option value="4:3">4:3 (Crop)</option>
+                          <option value="1:1">1:1 (Crop)</option>
+                        </select>
+                      </div>
+                      {presets.length > 0 && (
+                        <div className="flex flex-col gap-1">
+                          <span className="text-caption font-caption text-neutral-400">Apply Preset</span>
+                          <select value={selectedPreset?.id || ''} onChange={(e) => { const preset = presets.find(p => p.id === e.target.value); if (preset) handleApplyPreset(preset); }}
+                            className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[13px] outline-none">
+                            <option value="">Choose a preset...</option>
+                            {presets.map(preset => (<option key={preset.id} value={preset.id}>{preset.name}</option>))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })())}
 
             </div>
           )}

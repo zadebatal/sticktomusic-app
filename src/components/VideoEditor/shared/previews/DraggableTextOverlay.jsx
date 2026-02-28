@@ -12,8 +12,11 @@ const DraggableTextOverlay = ({
   onPositionChange,
   onTextChange, // optional — called with new text on inline edit
   containerRef,
+  isSelected: isSelectedProp, // optional — controlled selection from parent
+  onSelect, // optional — called when overlay is clicked/selected
 }) => {
-  const [selected, setSelected] = useState(false);
+  const [selectedInternal, setSelectedInternal] = useState(false);
+  const selected = isSelectedProp !== undefined ? isSelectedProp : selectedInternal;
   const [dragging, setDragging] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(text);
@@ -55,7 +58,7 @@ const DraggableTextOverlay = ({
     }
   }, [isEditing]);
 
-  // Click outside to deselect (and exit editing)
+  // Click outside to deselect (and exit editing) — only when managing own state
   useEffect(() => {
     if (!selected) return;
     const handler = (e) => {
@@ -64,18 +67,19 @@ const DraggableTextOverlay = ({
           setIsEditing(false);
           if (onTextChange && editText !== text) onTextChange(editText);
         }
-        setSelected(false);
+        if (isSelectedProp === undefined) setSelectedInternal(false);
       }
     };
     document.addEventListener('pointerdown', handler);
     return () => document.removeEventListener('pointerdown', handler);
-  }, [selected, isEditing, editText, text, onTextChange]);
+  }, [selected, isSelectedProp, isEditing, editText, text, onTextChange]);
 
   // Drag to move
   const handleDragStart = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
-    setSelected(true);
+    if (isSelectedProp === undefined) setSelectedInternal(true);
+    if (onSelect) onSelect();
     setDragging(true);
     const rect = getContainerRect();
     if (!rect) return;
@@ -177,6 +181,7 @@ const DraggableTextOverlay = ({
         outline: selected ? `1px solid ${color}` : 'none',
       }}
       onPointerDown={isEditing ? undefined : handleDragStart}
+      onClick={(e) => e.stopPropagation()}
       onDoubleClick={handleDoubleClick}
     >
       {isEditing ? (

@@ -1,18 +1,16 @@
 /**
  * AllMediaContent — Full-width tab content replacing the old sidebar.
- * Shows project media grid (images + audio) with search, scope toggle, upload/import.
+ * Shows project media grid (images + videos + audio) with search, scope toggle, upload/import.
  */
 import React, { useState, useMemo, useCallback } from 'react';
 import { Button } from '../../ui/components/Button';
-import { IconButton } from '../../ui/components/IconButton';
 import { Badge } from '../../ui/components/Badge';
 import { ToggleGroup } from '../../ui/components/ToggleGroup';
 import {
   FeatherUpload, FeatherDownloadCloud, FeatherImage, FeatherMusic,
-  FeatherPlay, FeatherCheck, FeatherX, FeatherSearch,
+  FeatherPlay, FeatherX, FeatherSearch, FeatherFilm,
 } from '@subframe/core';
-import { getBankColor, MEDIA_TYPES } from '../../services/libraryService';
-import useMediaMultiSelect from './shared/useMediaMultiSelect';
+import { MEDIA_TYPES } from '../../services/libraryService';
 
 const AllMediaContent = ({
   projectMedia,
@@ -26,6 +24,7 @@ const AllMediaContent = ({
 }) => {
   const [mediaScope, setMediaScope] = useState('all');
   const [mediaSearch, setMediaSearch] = useState('');
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState(null);
 
   // Scoped media
   const nicheMedia = useMemo(() => {
@@ -35,6 +34,7 @@ const AllMediaContent = ({
 
   const scopedMedia = mediaScope === 'niche' ? nicheMedia : projectMedia;
   const scopedImages = useMemo(() => scopedMedia.filter(m => m.type === 'image'), [scopedMedia]);
+  const scopedVideos = useMemo(() => scopedMedia.filter(m => m.type === 'video'), [scopedMedia]);
 
   const filteredImages = useMemo(() => {
     if (!mediaSearch.trim()) return scopedImages;
@@ -42,29 +42,29 @@ const AllMediaContent = ({
     return scopedImages.filter(m => (m.name || '').toLowerCase().includes(q));
   }, [scopedImages, mediaSearch]);
 
-  const {
-    selectedIds, isDragSelecting, rubberBand, gridRef, gridMouseHandlers,
-    toggleSelect, selectAll, clearSelection,
-  } = useMediaMultiSelect(filteredImages);
+  const filteredVideos = useMemo(() => {
+    if (!mediaSearch.trim()) return scopedVideos;
+    const q = mediaSearch.toLowerCase();
+    return scopedVideos.filter(m => (m.name || '').toLowerCase().includes(q));
+  }, [scopedVideos, mediaSearch]);
 
   const projectAudio = useMemo(() => projectMedia.filter(m => m.type === 'audio'), [projectMedia]);
 
-  // Bank assignment check
-  const getImageBankIndex = useCallback((mediaId) => {
-    if (!activeNiche?.banks) return -1;
-    for (let i = 0; i < activeNiche.banks.length; i++) {
-      if (activeNiche.banks[i]?.includes(mediaId)) return i;
-    }
-    return -1;
-  }, [activeNiche]);
+  const formatDuration = (seconds) => {
+    if (!Number.isFinite(seconds)) return '';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div className="flex flex-1 flex-col items-start self-stretch overflow-y-auto">
       {/* Header */}
-      <div className="flex w-full items-center justify-between px-6 py-4 border-b border-solid border-neutral-800">
+      <div className="flex w-full items-center justify-between px-8 py-4 border-b border-solid border-neutral-800">
         <div className="flex items-center gap-3">
           <span className="text-heading-2 font-heading-2 text-[#ffffffff]">All Media</span>
           <Badge variant="neutral">{scopedImages.length} images</Badge>
+          <Badge variant="neutral">{scopedVideos.length} videos</Badge>
           <Badge variant="neutral">{projectAudio.length} audio</Badge>
         </div>
         <div className="flex items-center gap-2">
@@ -78,17 +78,17 @@ const AllMediaContent = ({
       </div>
 
       {/* Search + scope */}
-      <div className="flex w-full items-center gap-4 px-6 py-3 border-b border-solid border-neutral-800">
+      <div className="flex w-full items-center gap-4 px-8 py-3">
         <div className="flex items-center gap-2 flex-1 rounded-md border border-solid border-neutral-800 bg-black px-3 py-1.5">
           <FeatherSearch className="text-neutral-500 flex-none" style={{ width: 14, height: 14 }} />
           <input
             className="w-full bg-transparent text-body font-body text-white placeholder-neutral-500 outline-none"
-            placeholder="Search images..."
+            placeholder="Search media..."
             value={mediaSearch}
             onChange={e => setMediaSearch(e.target.value)}
           />
           {mediaSearch && (
-            <button className="text-neutral-500 hover:text-white flex-none" onClick={() => setMediaSearch('')}>
+            <button className="text-neutral-500 hover:text-white flex-none bg-transparent border-none cursor-pointer" onClick={() => setMediaSearch('')}>
               <FeatherX style={{ width: 14, height: 14 }} />
             </button>
           )}
@@ -103,7 +103,7 @@ const AllMediaContent = ({
 
       {/* Upload progress */}
       {isUploading && uploadProgress && (
-        <div className="w-full px-6 py-2 border-b border-solid border-neutral-800">
+        <div className="w-full px-8 py-2">
           <div className="h-1.5 w-full bg-neutral-800 rounded-full overflow-hidden">
             <div className="h-full bg-indigo-500" style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }} />
           </div>
@@ -111,111 +111,131 @@ const AllMediaContent = ({
         </div>
       )}
 
-      {/* Select All bar */}
+      {/* Images section */}
       {filteredImages.length > 0 && (
-        <div className="flex w-full items-center justify-between px-6 py-1.5 border-b border-solid border-neutral-800">
-          <button
-            className="text-caption font-caption text-indigo-400 hover:text-indigo-300"
-            onClick={selectAll}
-          >
-            {selectedIds.size === filteredImages.length ? 'Deselect All' : 'Select All'}
-          </button>
-          {selectedIds.size > 0 && (
-            <span className="text-caption font-caption text-neutral-400">{selectedIds.size} selected</span>
-          )}
+        <div className="flex w-full flex-col gap-3 px-8 py-4">
+          <div className="flex items-center gap-2">
+            <FeatherImage className="text-indigo-400" style={{ width: 14, height: 14 }} />
+            <span className="text-body-bold font-body-bold text-[#ffffffff]">Images</span>
+            <Badge variant="neutral">{filteredImages.length}</Badge>
+          </div>
+          <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-800 bg-[#111118] p-2" style={{ maxHeight: 280 }}>
+            <div className="grid w-full grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-1.5">
+              {filteredImages.map(item => (
+                <div
+                  key={item.id}
+                  className="relative aspect-square rounded overflow-hidden bg-[#171717] cursor-pointer group"
+                >
+                  <img
+                    src={item.thumbnailUrl || item.url}
+                    alt={item.name}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                    draggable={false}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Image grid */}
-      <div
-        className="flex w-full grow flex-col items-start px-6 py-4 overflow-y-auto relative"
-        ref={gridRef}
-        {...gridMouseHandlers}
-        style={{ userSelect: isDragSelecting ? 'none' : undefined }}
-      >
-        {rubberBand && (
-          <div
-            className="absolute pointer-events-none border border-indigo-400 bg-indigo-500/20 z-10 rounded-sm"
-            style={{ left: rubberBand.left, top: rubberBand.top, width: rubberBand.width, height: rubberBand.height }}
-          />
-        )}
-        <div className="w-full gap-2 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6">
-          {filteredImages.map(item => {
-            const bankIdx = getImageBankIndex(item.id);
-            const bankColor = bankIdx >= 0 ? getBankColor(bankIdx) : null;
-            const isSelected = selectedIds.has(item.id);
-            return (
-              <div
-                key={item.id}
-                data-media-id={item.id}
-                className="relative aspect-square"
-                onClick={(e) => {
-                  if (isDragSelecting) return;
-                  e.stopPropagation();
-                  toggleSelect(item.id, e);
-                }}
-              >
-                <img
-                  className={`w-full h-full rounded object-cover border-2 transition ${
-                    isSelected ? 'border-indigo-500' : 'border-neutral-800 hover:border-neutral-600'
-                  }`}
-                  src={item.thumbnailUrl || item.url}
-                  alt={item.name}
-                  loading="lazy"
-                  draggable={false}
-                  style={{ pointerEvents: isDragSelecting ? 'none' : undefined }}
-                />
-                {isSelected && (
-                  <div className="absolute top-1 left-1 h-5 w-5 rounded-full bg-indigo-500 flex items-center justify-center">
-                    <FeatherCheck className="text-white" style={{ width: 12, height: 12 }} />
+      {/* Videos section */}
+      {filteredVideos.length > 0 && (
+        <div className="flex w-full flex-col gap-3 px-8 py-4">
+          <div className="flex items-center gap-2">
+            <FeatherFilm className="text-indigo-400" style={{ width: 14, height: 14 }} />
+            <span className="text-body-bold font-body-bold text-[#ffffffff]">Videos</span>
+            <Badge variant="neutral">{filteredVideos.length}</Badge>
+          </div>
+          <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-800 bg-[#111118] p-2" style={{ maxHeight: 280 }}>
+            <div className="grid w-full grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-1.5">
+              {filteredVideos.map(item => (
+                <div
+                  key={item.id}
+                  className="relative aspect-square rounded overflow-hidden bg-[#171717] cursor-pointer group"
+                  onClick={() => setVideoPreviewUrl(item.url)}
+                >
+                  {item.thumbnailUrl || item.thumbnail ? (
+                    <img src={item.thumbnailUrl || item.thumbnail} alt={item.name} className="w-full h-full object-cover" loading="lazy" draggable={false} />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <FeatherFilm className="text-neutral-600" style={{ width: 16, height: 16 }} />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-black/60 border border-white/20">
+                      <FeatherPlay className="text-white" style={{ width: 8, height: 8 }} />
+                    </div>
                   </div>
-                )}
-                {bankColor && !isSelected && (
-                  <div className="h-2 w-2 rounded-full absolute bottom-1 right-1"
-                    style={{ backgroundColor: bankColor.primary }} />
-                )}
-              </div>
-            );
-          })}
+                  {item.duration && (
+                    <div className="absolute top-0.5 right-0.5 bg-black/70 rounded px-1 py-px">
+                      <span className="text-[8px] text-neutral-300 font-mono">{formatDuration(item.duration)}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-
-        {filteredImages.length === 0 && scopedImages.length > 0 && mediaSearch && (
-          <div className="flex w-full items-center justify-center py-8">
-            <span className="text-body font-body text-neutral-500">No matches for "{mediaSearch}"</span>
-          </div>
-        )}
-
-        {scopedMedia.length === 0 && (
-          <div className="flex flex-col items-center justify-center gap-3 py-16 text-center w-full">
-            <FeatherImage className="w-12 h-12 text-zinc-600" />
-            <h3 className="text-lg font-semibold text-white">No media in pool</h3>
-            <p className="text-sm text-zinc-400 max-w-xs">
-              Upload images and audio to start creating
-            </p>
-            <Button variant="brand-primary" size="medium" icon={<FeatherUpload />} onClick={onUpload}>
-              Upload Media
-            </Button>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Audio section */}
       {projectAudio.length > 0 && (
-        <div className="flex w-full flex-col gap-2 border-t border-solid border-neutral-800 px-6 py-4">
+        <div className="flex w-full flex-col gap-2 px-8 py-4">
           <div className="flex items-center gap-2">
             <FeatherMusic className="text-indigo-400" style={{ width: 14, height: 14 }} />
             <span className="text-body-bold font-body-bold text-[#ffffffff]">Audio</span>
             <Badge variant="neutral">{projectAudio.length}</Badge>
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1 rounded-lg border border-solid border-neutral-800 bg-[#111118] overflow-hidden">
             {projectAudio.map(audio => (
-              <div key={audio.id} className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-[#262626] transition-colors">
-                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-indigo-500/10 flex-none">
-                  <FeatherPlay className="text-indigo-400" style={{ width: 12, height: 12 }} />
+              <div key={audio.id} className="flex items-center gap-3 px-3 py-2 hover:bg-neutral-800/30 transition-colors">
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-indigo-500/10 flex-none">
+                  <FeatherPlay className="text-indigo-400" style={{ width: 11, height: 11 }} />
                 </div>
-                <span className="text-body font-body text-[#ffffffff] truncate flex-1">{audio.name}</span>
+                <span className="text-caption font-caption text-[#ffffffff] truncate flex-1">{audio.name}</span>
+                {audio.duration && (
+                  <span className="text-[11px] text-neutral-500 tabular-nums flex-none">{formatDuration(audio.duration)}</span>
+                )}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* No search results */}
+      {filteredImages.length === 0 && filteredVideos.length === 0 && (scopedImages.length > 0 || scopedVideos.length > 0) && mediaSearch && (
+        <div className="flex w-full items-center justify-center py-8">
+          <span className="text-body font-body text-neutral-500">No matches for "{mediaSearch}"</span>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {scopedMedia.length === 0 && (
+        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center w-full">
+          <FeatherImage className="w-12 h-12 text-zinc-600" />
+          <h3 className="text-lg font-semibold text-white">No media in pool</h3>
+          <p className="text-sm text-zinc-400 max-w-xs">
+            Upload images and audio to start creating
+          </p>
+          <Button variant="brand-primary" size="medium" icon={<FeatherUpload />} onClick={onUpload}>
+            Upload Media
+          </Button>
+        </div>
+      )}
+
+      {/* Video preview lightbox */}
+      {videoPreviewUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setVideoPreviewUrl(null)}>
+          <div className="relative max-w-2xl max-h-[80vh]" onClick={e => e.stopPropagation()}>
+            <video src={videoPreviewUrl} controls autoPlay className="max-w-full max-h-[80vh] rounded-lg" />
+            <button
+              className="absolute top-2 right-2 h-8 w-8 rounded-full bg-black/80 flex items-center justify-center hover:bg-black transition-colors border-none cursor-pointer"
+              onClick={() => setVideoPreviewUrl(null)}
+            >
+              <FeatherX className="text-white" style={{ width: 16, height: 16 }} />
+            </button>
           </div>
         </div>
       )}

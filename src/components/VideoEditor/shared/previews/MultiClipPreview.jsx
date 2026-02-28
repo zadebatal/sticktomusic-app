@@ -28,6 +28,8 @@ const MultiClipPreview = ({
   selectedTextA,
   selectedTextB,
   onTextPositionsChange,
+  onTextAChange,
+  onTextBChange,
 }) => {
   const [playlist, setPlaylist] = useState(() => [...media]);
   const [showMomentumSelector, setShowMomentumSelector] = useState(false);
@@ -317,6 +319,7 @@ const MultiClipPreview = ({
             color="#6366f1"
             position={textPosA}
             onPositionChange={setTextPosA}
+            onTextChange={(newText) => { setPreviewTextA(newText); onTextAChange?.(newText); }}
             containerRef={containerRef}
           />
         )}
@@ -329,6 +332,7 @@ const MultiClipPreview = ({
             color="#f59e0b"
             position={textPosB}
             onPositionChange={setTextPosB}
+            onTextChange={(newText) => { setPreviewTextB(newText); onTextBChange?.(newText); }}
             containerRef={containerRef}
           />
         )}

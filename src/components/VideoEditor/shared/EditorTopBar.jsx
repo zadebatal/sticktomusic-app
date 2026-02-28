@@ -24,6 +24,7 @@ const EditorTopBar = ({
   exportDisabled = false,
   exportLoading = false,
   exportLabel = 'Export',
+  saveLabel = 'Save',
   rightExtra = null
 }) => {
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -51,7 +52,7 @@ const EditorTopBar = ({
             title="Keyboard shortcuts"
             onClick={() => setShowShortcuts(true)}
           />
-          <Button variant="neutral-secondary" size="medium" icon={<FeatherSave />} onClick={onSave}>Save</Button>
+          <Button variant="neutral-secondary" size="medium" icon={<FeatherSave />} onClick={onSave}>{saveLabel}</Button>
           <Button variant="brand-primary" size="medium" icon={<FeatherDownload />} onClick={onExport} disabled={exportDisabled} loading={exportLoading}>
             {exportLabel}
           </Button>

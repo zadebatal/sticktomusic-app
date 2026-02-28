@@ -125,33 +125,75 @@ const drawCrossfade = (ctx, imgA, imgB, fadeProgress, effectA, effectB, progress
 };
 
 /**
+ * Draw a photo in gallery mode: white background, contained image with shadow.
+ */
+const drawPhotoGallery = (ctx, img, canvasW, canvasH) => {
+  // White background
+  ctx.fillStyle = '#f5f5f5';
+  ctx.fillRect(0, 0, canvasW, canvasH);
+
+  // Calculate contain-fit with 10% padding
+  const padX = canvasW * 0.1;
+  const padY = canvasH * 0.075;
+  const maxW = canvasW - padX * 2;
+  const maxH = canvasH - padY * 2;
+
+  const imgAspect = img.width / img.height;
+  const boxAspect = maxW / maxH;
+
+  let drawW, drawH;
+  if (imgAspect > boxAspect) {
+    drawW = maxW;
+    drawH = maxW / imgAspect;
+  } else {
+    drawH = maxH;
+    drawW = maxH * imgAspect;
+  }
+
+  const x = (canvasW - drawW) / 2;
+  const y = (canvasH - drawH) / 2;
+
+  // Drop shadow
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+  ctx.shadowBlur = 20;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 4;
+  ctx.drawImage(img, x, y, drawW, drawH);
+  ctx.restore();
+};
+
+/**
  * Render a photo montage to a video Blob
  * @param {Object} params
  * @param {Array<{url: string, duration: number}>} params.photos - Photos with URLs and durations
  * @param {string} params.aspectRatio - '9:16', '1:1', '4:5', '16:9'
  * @param {string} params.transition - 'cut' or 'crossfade'
  * @param {boolean} params.kenBurns - Enable Ken Burns effects
+ * @param {string} params.displayMode - 'cover' (full-bleed) or 'gallery' (white bg, contained)
  * @param {Object|null} params.audio - Optional audio { url, startTime, endTime }
  * @param {Function} onProgress - Progress callback (0-100)
  * @returns {Promise<Blob>} Final MP4 video blob
  */
-export const renderPhotoMontage = async ({ photos, aspectRatio = '9:16', transition = 'cut', kenBurns = true, audio = null }, onProgress = () => {}) => {
+export const renderPhotoMontage = async ({ photos, aspectRatio = '9:16', transition = 'cut', kenBurns = true, displayMode = 'cover', audio = null }, onProgress = () => {}) => {
   if (!photos || photos.length === 0) throw new Error('No photos to render');
 
   const FPS = 30;
   const CROSSFADE_DURATION = 0.3; // seconds
   const { width: canvasW, height: canvasH } = getCanvasSize(aspectRatio);
 
-  // Phase 1: Load all images (0-20%)
+  // Phase 1: Load unique images (0-20%) — dedupe URLs for cycling sequences
   onProgress(safeProgress(5));
-  log('[PhotoMontage] Loading', photos.length, 'images...');
-  const loadedImages = await Promise.all(
-    photos.map(async (photo, i) => {
-      const img = await loadImage(photo.url);
-      onProgress(safeProgress(5 + (i / photos.length) * 15));
-      return img;
+  const uniqueUrls = [...new Set(photos.map(p => p.url))];
+  log('[PhotoMontage] Loading', uniqueUrls.length, 'unique images (', photos.length, 'slots)...');
+  const imageCache = {};
+  await Promise.all(
+    uniqueUrls.map(async (url, i) => {
+      imageCache[url] = await loadImage(url);
+      onProgress(safeProgress(5 + (i / uniqueUrls.length) * 15));
     })
   );
+  const loadedImages = photos.map(p => imageCache[p.url]);
 
   // Assign Ken Burns effects (randomized per photo)
   const effects = photos.map((_, i) => kenBurns ? KB_EFFECTS[i % KB_EFFECTS.length] : { startScale: 1, endScale: 1, startX: 0, startY: 0, endX: 0, endY: 0 });
@@ -209,23 +251,27 @@ export const renderPhotoMontage = async ({ photos, aspectRatio = '9:16', transit
     const slot = timeline[currentPhotoIdx];
     const localProgress = (currentTime - slot.startTime) / (slot.endTime - slot.startTime);
 
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, canvasW, canvasH);
+    if (displayMode === 'gallery') {
+      // Gallery mode: white bg, contained photo with shadow, no Ken Burns/crossfade
+      drawPhotoGallery(ctx, loadedImages[currentPhotoIdx], canvasW, canvasH);
+    } else {
+      // Cover mode: full-bleed with Ken Burns and crossfade
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvasW, canvasH);
 
-    if (transition === 'crossfade' && currentPhotoIdx < timeline.length - 1) {
-      const timeUntilEnd = slot.endTime - currentTime;
-      if (timeUntilEnd < CROSSFADE_DURATION) {
-        // In crossfade zone
-        const fadeProgress = 1 - (timeUntilEnd / CROSSFADE_DURATION);
-        const nextIdx = currentPhotoIdx + 1;
-        const nextSlot = timeline[nextIdx];
-        const nextLocalProgress = 0; // just starting
-        drawCrossfade(ctx, loadedImages[currentPhotoIdx], loadedImages[nextIdx], fadeProgress, effects[currentPhotoIdx], effects[nextIdx], localProgress, nextLocalProgress, canvasW, canvasH);
+      if (transition === 'crossfade' && currentPhotoIdx < timeline.length - 1) {
+        const timeUntilEnd = slot.endTime - currentTime;
+        if (timeUntilEnd < CROSSFADE_DURATION) {
+          const fadeProgress = 1 - (timeUntilEnd / CROSSFADE_DURATION);
+          const nextIdx = currentPhotoIdx + 1;
+          const nextLocalProgress = 0;
+          drawCrossfade(ctx, loadedImages[currentPhotoIdx], loadedImages[nextIdx], fadeProgress, effects[currentPhotoIdx], effects[nextIdx], localProgress, nextLocalProgress, canvasW, canvasH);
+        } else {
+          drawPhotoWithKenBurns(ctx, loadedImages[currentPhotoIdx], localProgress, effects[currentPhotoIdx], canvasW, canvasH);
+        }
       } else {
         drawPhotoWithKenBurns(ctx, loadedImages[currentPhotoIdx], localProgress, effects[currentPhotoIdx], canvasW, canvasH);
       }
-    } else {
-      drawPhotoWithKenBurns(ctx, loadedImages[currentPhotoIdx], localProgress, effects[currentPhotoIdx], canvasW, canvasH);
     }
 
     if (videoTrack.requestFrame) videoTrack.requestFrame();

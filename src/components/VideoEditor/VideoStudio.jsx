@@ -54,6 +54,10 @@ import {
   FORMAT_TEMPLATES,
   migrateToProjects,
   migrateDraftsToNiches,
+  saveClipperSession,
+  getCollections,
+  getPipelineBankLabel,
+  migrateCollectionBanks,
 } from '../../services/libraryService';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { updateScheduledPost, deletePostsByContentId } from '../../services/scheduledPostsService';
@@ -567,6 +571,17 @@ const VideoStudio = ({
     };
   }, [activePipelineIdForEditor, currentArtistId, pipelineCategoryVersion]);
 
+  // Project niches for clipper destination picker (all niches in same project, excluding current)
+  const clipperProjectNiches = useMemo(() => {
+    if (!activePipelineIdForEditor || !currentArtistId) return [];
+    const cols = getUserCollections(currentArtistId);
+    const current = cols.find(c => c.id === activePipelineIdForEditor);
+    if (!current?.projectId) return [];
+    return cols
+      .filter(c => c.projectId === current.projectId && c.id !== activePipelineIdForEditor && c.isPipeline)
+      .map(c => ({ id: c.id, name: c.name, contentType: c.contentType || c.formats?.[0]?.id }));
+  }, [activePipelineIdForEditor, currentArtistId]);
+
   // Load created content from Firestore on mount (ensures drafts persist across refreshes)
   useEffect(() => {
     if (firestoreContentLoaded || !db || !currentArtistId) return;
@@ -775,6 +790,8 @@ const VideoStudio = ({
   const [selectedLibraryMedia, setSelectedLibraryMedia] = useState({ videos: [], audio: null, images: [], lyrics: [] });
   const [pullFromCollection, setPullFromCollection] = useState(null);
   const [clipperSourceVideos, setClipperSourceVideos] = useState([]);
+  const [clipperSession, setClipperSession] = useState(null);
+  const [clipperBankLabels, setClipperBankLabels] = useState(null);
 
   // On mount: try loading categories from Firestore (may have newer data than localStorage)
   useEffect(() => {
@@ -1012,6 +1029,8 @@ const VideoStudio = ({
     setSelectedLibraryMedia({ videos: [], audio: null, images: [], lyrics: [] });
     setPullFromCollection(null);
     setClipperSourceVideos([]);
+    setClipperSession(null);
+    setClipperBankLabels(null);
     // If opened from pipeline, go back to pipeline list or project view
     if (activePipelineIdForEditor) {
       const nicheId = activePipelineIdForEditor;
@@ -1027,7 +1046,15 @@ const VideoStudio = ({
     }
   }, [activePipelineIdForEditor, activeProjectId]);
 
+  // Clipper session save callback
+  const handleSaveClipperSession = useCallback((sessionData) => {
+    if (!currentArtistId || !activePipelineIdForEditor) return;
+    saveClipperSession(currentArtistId, activePipelineIdForEditor, sessionData, db);
+  }, [currentArtistId, activePipelineIdForEditor, db]);
+
   const handleSaveVideo = useCallback(async (videoData) => {
+    // Clipper sessions are saved separately — don't create drafts
+    if (videoData.editorMode === 'clipper') return;
     // Upload audio to Firebase Storage if it has a blob URL (prevents stale blob URLs in saved drafts)
     let data = { ...videoData };
     if (data.audio && (data.audio.file || data.audio.url?.startsWith('blob:') || data.audio.localUrl?.startsWith('blob:'))) {
@@ -2696,6 +2723,29 @@ const VideoStudio = ({
               }
               setPendingTemplateSettings(templateSettings || null);
               setClipperSourceVideos(nicheSourceVideos || []);
+              // Clipper: compute bank labels from niche + handle session objects
+              if (format?.id === 'clipper' && nicheId && currentArtistId) {
+                const cols = getCollections(currentArtistId);
+                const niche = cols.find(c => c.id === nicheId);
+                if (niche) {
+                  const migrated = migrateCollectionBanks(niche);
+                  const banks = migrated.banks || [];
+                  if (banks.length > 0) {
+                    setClipperBankLabels(banks.map((_, i) => getPipelineBankLabel(migrated, i)));
+                  } else {
+                    setClipperBankLabels(['Bucket 1']);
+                  }
+                }
+                // If existingDraft has .clips and an .id, treat as session object
+                if (existingDraft?.clips && existingDraft?.id?.startsWith('session_')) {
+                  setClipperSession(existingDraft);
+                  handleMakeVideo(null, 'clipper');
+                  return;
+                }
+              } else {
+                setClipperSession(null);
+                setClipperBankLabels(null);
+              }
               const editorMode = FORMAT_TO_EDITOR[format?.id] || null;
               handleMakeVideo(existingDraft || null, editorMode);
             }}
@@ -2932,6 +2982,10 @@ const VideoStudio = ({
             initialEditorMode={initialEditorMode}
             templateSettings={pendingTemplateSettings}
             clipperSourceVideos={clipperSourceVideos}
+            clipperSession={clipperSession}
+            onSaveClipperSession={handleSaveClipperSession}
+            nicheBankLabels={clipperBankLabels}
+            clipperProjectNiches={clipperProjectNiches}
           />
         </EditorErrorBoundary>
       )}

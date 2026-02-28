@@ -4,7 +4,6 @@
  */
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import usePreviewPlayback from '../usePreviewPlayback';
-import { KB_EFFECTS, getKenBurnsTransform } from '../kenBurnsPresets';
 import { useBeatDetection } from '../../../../hooks/useBeatDetection';
 import { FeatherRefreshCw } from '@subframe/core';
 import PreviewTransport from './PreviewTransport';
@@ -19,32 +18,34 @@ const PhotoMontagePreview = ({
   audioUrl,
   textStyle = {},
   textPosition = 'center',
-  kenBurns = true,
   transition = 'fade',
   beatSync = false,
   speed = 1,
   textBankA = [],
   textBankB = [],
   aspectRatio = '9:16',
+  displayMode = 'cover',
   onCutByWord,
   onCutsApplied,
   selectedTextA,
   selectedTextB,
   onTextPositionsChange,
+  onTextAChange,
+  onTextBChange,
 }) => {
   const [playlist, setPlaylist] = useState(() => [...images]);
   const [activeIdx, setActiveIdx] = useState(0);
   const [prevIdx, setPrevIdx] = useState(-1);
   const [transProgress, setTransProgress] = useState(0);
-  const lastBeatIdxRef = useRef(-1);
   const lastAdvanceRef = useRef(0);
   const [showBeatSelector, setShowBeatSelector] = useState(false);
   const [showMomentumSelector, setShowMomentumSelector] = useState(false);
   const [previewTextA, setPreviewTextA] = useState(() => textBankA[0] || '');
   const [previewTextB, setPreviewTextB] = useState(() => textBankB[0] || '');
 
+  // Timeline = full audio/30s duration; speed = seconds each photo is shown
   const totalDuration = 30;
-  const photoDuration = playlist.length > 0 ? (totalDuration / playlist.length) / speed : 3;
+  const photoDuration = speed;
 
   const containerRef = useRef(null);
   const { beats, analyzeAudio } = useBeatDetection();
@@ -73,10 +74,6 @@ const PhotoMontagePreview = ({
     }
   }, [beatSync, audioUrl, analyzeAudio]);
 
-  // Memoize random Ken Burns preset per image
-  const kbPresets = useMemo(() => {
-    return playlist.map(() => KB_EFFECTS[Math.floor(Math.random() * KB_EFFECTS.length)]);
-  }, [playlist]);
 
   // Pick random text from bank
   const pickText = useCallback((bank) => {
@@ -100,32 +97,59 @@ const PhotoMontagePreview = ({
     if (selectedTextB !== undefined) setPreviewTextB(selectedTextB || '');
   }, [selectedTextB]);
 
-  // Advance photos
-  useEffect(() => {
-    if (!isPlaying || !playlist.length) return;
+  // Expanded timeline: photos repeated to fill duration (for scrolling filmstrip)
+  const timelineItems = useMemo(() => {
+    if (!playlist.length || photoDuration <= 0) return playlist;
+    const count = Math.ceil(totalDuration / photoDuration);
+    if (count <= playlist.length) return playlist;
+    const items = [];
+    for (let i = 0; i < count; i++) {
+      const src = playlist[i % playlist.length];
+      items.push({ ...src, id: `${src.id || 'p'}_t${i}` });
+    }
+    return items;
+  }, [playlist, photoDuration, totalDuration]);
 
+  // Absolute index into the expanded timeline (for filmstrip active cell)
+  const displayTimelineIdx = useMemo(() => {
+    if (!timelineItems.length) return 0;
     if (beatSync && beats.length > 0) {
       let beatIdx = -1;
       for (let i = beats.length - 1; i >= 0; i--) {
         if (currentTime >= beats[i]) { beatIdx = i; break; }
       }
-      if (beatIdx !== lastBeatIdxRef.current && beatIdx >= 0) {
-        lastBeatIdxRef.current = beatIdx;
-        setPrevIdx(activeIdx);
-        setActiveIdx(prev => (prev + 1) % playlist.length);
-        setTransProgress(0);
-        lastAdvanceRef.current = currentTime;
-      }
-    } else {
-      const timeSinceAdvance = currentTime - lastAdvanceRef.current;
-      if (timeSinceAdvance >= photoDuration) {
-        setPrevIdx(activeIdx);
-        setActiveIdx(prev => (prev + 1) % playlist.length);
-        setTransProgress(0);
-        lastAdvanceRef.current = currentTime;
-      }
+      return beatIdx >= 0 ? Math.min(beatIdx, timelineItems.length - 1) : 0;
     }
-  }, [currentTime, isPlaying, beats, beatSync, playlist.length, photoDuration, activeIdx]);
+    return photoDuration > 0 ? Math.min(Math.floor(currentTime / photoDuration), timelineItems.length - 1) : 0;
+  }, [currentTime, timelineItems.length, photoDuration, beatSync, beats]);
+
+  // Display index into the original playlist (for rendering the preview image)
+  const displayIdx = useMemo(() => {
+    if (!playlist.length) return 0;
+    return timelineItems.length > 0 ? displayTimelineIdx % playlist.length : 0;
+  }, [displayTimelineIdx, playlist.length, timelineItems.length]);
+
+  // Refs for transition tracking (avoid stale closure issues in displayIdx effect)
+  const activeIdxRef = useRef(activeIdx);
+  activeIdxRef.current = activeIdx;
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+  const currentTimeRef = useRef(currentTime);
+  currentTimeRef.current = currentTime;
+
+  // Track transitions (crossfade) when displayIdx changes during playback
+  useEffect(() => {
+    if (displayIdx !== activeIdxRef.current) {
+      if (isPlayingRef.current) {
+        setPrevIdx(activeIdxRef.current);
+        setTransProgress(0);
+      } else {
+        setPrevIdx(-1); // No crossfade when scrubbing
+      }
+      setActiveIdx(displayIdx);
+      lastAdvanceRef.current = currentTimeRef.current;
+    }
+  }, [displayIdx]);
 
   // Crossfade transition progress
   useEffect(() => {
@@ -145,25 +169,9 @@ const PhotoMontagePreview = ({
     setPlaylist([...images]);
     setActiveIdx(0);
     setPrevIdx(-1);
-    lastBeatIdxRef.current = -1;
     lastAdvanceRef.current = 0;
   }, [images]);
 
-  // Local progress for Ken Burns
-  const localProgress = useMemo(() => {
-    if (beatSync && beats.length > 0) {
-      let curBeat = lastAdvanceRef.current;
-      let nextBeatTime = totalDuration;
-      const beatIdx = lastBeatIdxRef.current;
-      if (beatIdx >= 0 && beatIdx < beats.length - 1) {
-        nextBeatTime = beats[beatIdx + 1];
-      }
-      const segDur = nextBeatTime - curBeat;
-      return segDur > 0 ? Math.min((currentTime - curBeat) / segDur, 1) : 0;
-    }
-    const timeSinceAdvance = currentTime - lastAdvanceRef.current;
-    return photoDuration > 0 ? Math.min(timeSinceAdvance / photoDuration, 1) : 0;
-  }, [currentTime, beatSync, beats, photoDuration, totalDuration]);
 
   // Cut by beat — open BeatSelector modal (same as full editors)
   const handleCutByBeat = useCallback(() => {
@@ -185,7 +193,6 @@ const PhotoMontagePreview = ({
       }
       setPlaylist(filled);
       setActiveIdx(0);
-      lastBeatIdxRef.current = -1;
       lastAdvanceRef.current = 0;
       onCutsApplied?.(selectedBeatTimes);
     }
@@ -231,9 +238,10 @@ const PhotoMontagePreview = ({
     setPreviewTextB(pickText(textBankB));
   }, [images, progress, pickText, textBankA, textBankB]);
 
-  // Jump to photo from timeline cell
+  // Jump to photo from timeline cell (idx is into the expanded timeline)
   const handleCellClick = useCallback((idx) => {
-    setActiveIdx(idx);
+    const photoIdx = playlist.length > 0 ? idx % playlist.length : 0;
+    setActiveIdx(photoIdx);
     lastAdvanceRef.current = currentTime;
     setPreviewTextA(pickText(textBankA));
     setPreviewTextB(pickText(textBankB));
@@ -274,33 +282,60 @@ const PhotoMontagePreview = ({
 
   if (!playlist.length) return null;
 
-  const renderImage = (idx, opacity, zIndex) => {
-    const img = playlist[idx];
-    if (!img) return null;
-    const transform = kenBurns ? getKenBurnsTransform(kbPresets[idx % kbPresets.length], idx === activeIdx ? localProgress : 1) : 'none';
-    return (
-      <div className="absolute inset-0 overflow-hidden" style={{ opacity, zIndex }}>
-        <img
-          src={img.url || img.thumbnailUrl}
-          alt=""
-          className="w-full h-full object-cover"
-          style={{ transform, transition: kenBurns ? 'none' : undefined }}
-          loading="lazy"
-        />
-      </div>
-    );
-  };
+  const isGallery = displayMode === 'gallery';
+
+  // Ref-based image switching: all photos pre-rendered, toggle visibility via DOM
+  const layersRef = useRef(null);
+  const prevDisplayIdxRef = useRef(-1);
+  useEffect(() => {
+    const container = layersRef.current;
+    if (!container) return;
+    const children = container.children;
+    const prev = prevDisplayIdxRef.current;
+    if (prev >= 0 && prev < children.length) {
+      children[prev].style.opacity = '0';
+      children[prev].style.zIndex = '0';
+    }
+    if (displayIdx >= 0 && displayIdx < children.length) {
+      children[displayIdx].style.opacity = '1';
+      children[displayIdx].style.zIndex = '2';
+    }
+    prevDisplayIdxRef.current = displayIdx;
+  }, [displayIdx]);
 
   return (
     <div className="flex w-full flex-col gap-0">
       {/* Visual area */}
       <div
         ref={containerRef}
-        className="relative w-full overflow-hidden rounded-xl border border-solid border-neutral-700 bg-[#0a0a0f]"
+        className={`relative w-full overflow-hidden rounded-xl border border-solid border-neutral-700 ${isGallery ? 'bg-[#f5f5f5]' : 'bg-[#0a0a0f]'}`}
         style={{ aspectRatio: ASPECT_CSS[aspectRatio] || '9/16' }}
       >
-        {prevIdx >= 0 && transition === 'fade' && renderImage(prevIdx, 1 - transProgress, 1)}
-        {renderImage(activeIdx, prevIdx >= 0 && transition === 'fade' ? transProgress : 1, 2)}
+        {/* Pre-rendered photo stack — all loaded, visibility toggled via ref */}
+        <div ref={layersRef} className="absolute inset-0">
+          {playlist.map((img, i) => (
+            <div
+              key={img.id || i}
+              className={`absolute inset-0 ${isGallery ? 'flex items-center justify-center' : 'overflow-hidden'}`}
+              style={{
+                opacity: i === 0 ? 1 : 0,
+                zIndex: i === 0 ? 2 : 0,
+                backgroundColor: isGallery ? '#f5f5f5' : 'transparent',
+              }}
+            >
+              <img
+                src={img.url || img.thumbnailUrl}
+                alt=""
+                className={isGallery
+                  ? 'max-w-[80%] max-h-[85%] object-contain rounded-sm'
+                  : 'w-full h-full object-cover'
+                }
+                style={isGallery ? { boxShadow: '0 4px 20px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.1)' } : undefined}
+                draggable={false}
+              />
+            </div>
+          ))}
+        </div>
 
         {/* Independent text overlays — Bank A (indigo) */}
         {showA && (
@@ -310,6 +345,7 @@ const PhotoMontagePreview = ({
             color="#6366f1"
             position={textPosA}
             onPositionChange={setTextPosA}
+            onTextChange={(newText) => { setPreviewTextA(newText); onTextAChange?.(newText); }}
             containerRef={containerRef}
           />
         )}
@@ -322,6 +358,7 @@ const PhotoMontagePreview = ({
             color="#f59e0b"
             position={textPosB}
             onPositionChange={setTextPosB}
+            onTextChange={(newText) => { setPreviewTextB(newText); onTextBChange?.(newText); }}
             containerRef={containerRef}
           />
         )}
@@ -348,8 +385,8 @@ const PhotoMontagePreview = ({
         onToggle={toggle}
         showReroll={false}
         progress={progress}
-        items={playlist}
-        activeIdx={playlist.length > 0 ? Math.min(Math.floor(progress * playlist.length), playlist.length - 1) : 0}
+        items={timelineItems}
+        activeIdx={displayTimelineIdx}
         onCellClick={handleCellClick}
         onScrub={seek}
         showPlayhead={true}

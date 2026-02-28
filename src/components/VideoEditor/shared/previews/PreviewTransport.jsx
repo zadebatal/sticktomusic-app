@@ -3,7 +3,7 @@
  * Play/pause, reroll, scrub-able mini timeline with cells + playhead,
  * and optional text track rows with draggable start/end edges.
  */
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useEffect } from 'react';
 import {
   FeatherPlay, FeatherPause, FeatherShuffle, FeatherFilm, FeatherRefreshCw,
 } from '@subframe/core';
@@ -30,13 +30,14 @@ const PreviewTransport = ({
   const progressBarRef = useRef(null);
   const scrubbingRef = useRef(false);
 
-  // Convert pointer X on timeline to 0-1 fraction
+  // Convert pointer X on timeline to 0-1 fraction (accounts for scroll offset + full strip width)
   const getProgressFromEvent = useCallback((e) => {
     const el = timelineRef.current;
     if (!el) return null;
     const rect = el.getBoundingClientRect();
-    const x = (e.clientX || e.touches?.[0]?.clientX || 0) - rect.left;
-    return Math.max(0, Math.min(1, x / rect.width));
+    const x = (e.clientX || e.touches?.[0]?.clientX || 0) - rect.left + el.scrollLeft;
+    const fullWidth = el.scrollWidth || rect.width;
+    return Math.max(0, Math.min(1, x / fullWidth));
   }, []);
 
   // --- Cell strip interaction ---
@@ -144,47 +145,69 @@ const PreviewTransport = ({
     document.addEventListener('pointerup', upHandler);
   }, [textTracks, onTextTrackChange, totalDuration]);
 
+  const stripRef = useRef(null);
+  const MIN_CELL_W = 24; // minimum px per cell so thumbnails are visible
+
+  // Auto-scroll filmstrip to keep active cell in view
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip || items.length <= 1) return;
+    const cellW = Math.max(MIN_CELL_W, strip.parentElement?.clientWidth / items.length || MIN_CELL_W);
+    const needsScroll = cellW * items.length > strip.parentElement?.clientWidth;
+    if (!needsScroll) return;
+    const targetX = activeIdx * cellW - strip.parentElement.clientWidth / 2 + cellW / 2;
+    strip.scrollLeft = Math.max(0, targetX);
+  }, [activeIdx, items.length]);
+
   return (
     <div className="flex w-full flex-col gap-1 pt-2">
-      {/* Mini timeline — media cells with optional playhead */}
+      {/* Mini timeline — scrolling filmstrip with optional playhead */}
       {items.length > 1 && (
         <div
-          ref={timelineRef}
-          className="relative w-full h-7 flex items-end gap-px cursor-pointer select-none"
+          ref={(el) => { timelineRef.current = el; stripRef.current = el; }}
+          className="relative w-full h-7 overflow-x-auto cursor-pointer select-none scrollbar-none"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           onPointerDown={handleTimelinePointerDown}
         >
-          {items.map((item, i) => {
-            const isActive = i === activeIdx;
-            return (
-              <div
-                key={item.id || i}
-                className={`relative flex-1 h-full rounded-sm overflow-hidden transition-all ${
-                  isActive ? 'ring-1 ring-indigo-500 brightness-100' : 'brightness-50 hover:brightness-75'
-                }`}
-                title={item.name || `Item ${i + 1}`}
-              >
-                {item.type === 'video' ? (
-                  item.thumbnailUrl ? (
-                    <img src={item.thumbnailUrl} alt="" className="w-full h-full object-cover" draggable={false} />
+          <div
+            className="relative flex items-end gap-px h-full"
+            style={{ width: items.length > 0 ? `max(100%, ${items.length * MIN_CELL_W}px)` : '100%' }}
+          >
+            {items.map((item, i) => {
+              const isActive = i === activeIdx;
+              return (
+                <div
+                  key={item.id || i}
+                  className={`relative flex-1 h-full rounded-sm overflow-hidden ${
+                    isActive ? 'ring-1 ring-indigo-500 brightness-100' : 'brightness-50 hover:brightness-75'
+                  }`}
+                  style={{ minWidth: MIN_CELL_W }}
+                  title={item.name || `Item ${i + 1}`}
+                >
+                  {item.type === 'video' ? (
+                    item.thumbnailUrl ? (
+                      <img src={item.thumbnailUrl} alt="" className="w-full h-full object-cover" draggable={false} />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-neutral-800">
+                        <FeatherFilm className="text-neutral-600" style={{ width: 8, height: 8 }} />
+                      </div>
+                    )
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-neutral-800">
-                      <FeatherFilm className="text-neutral-600" style={{ width: 8, height: 8 }} />
-                    </div>
-                  )
-                ) : (
-                  <img src={item.thumbnailUrl || item.url} alt="" className="w-full h-full object-cover" draggable={false} />
-                )}
+                    <img src={item.thumbnailUrl || item.url} alt="" className="w-full h-full object-cover" draggable={false} />
+                  )}
+                </div>
+              );
+            })}
+            {/* Playhead — inside the strip so it scrolls with cells */}
+            {showPlayhead && (
+              <div
+                className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10 pointer-events-none"
+                style={{ left: `${Math.min(progress * 100, 100)}%`, transition: 'none' }}
+              >
+                <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-red-500" />
               </div>
-            );
-          })}
-          {showPlayhead && (
-            <div
-              className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10 pointer-events-none"
-              style={{ left: `${Math.min(progress * 100, 100)}%`, transition: 'none' }}
-            >
-              <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-red-500" />
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 

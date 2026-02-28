@@ -1,6 +1,6 @@
 /**
- * ClipperNicheContent — Clip bucket display for clipper niches
- * Shows saved clip buckets from clipper sessions, create button, captions/hashtags
+ * ClipperNicheContent — Clip bank display for clipper niches
+ * Shows saved clipper sessions from niche, exported clips by bank, create button, audio picker
  */
 import React, { useState, useMemo, useCallback } from 'react';
 import { Button } from '../../ui/components/Button';
@@ -9,21 +9,14 @@ import { Badge } from '../../ui/components/Badge';
 import {
   FeatherPlay, FeatherScissors, FeatherChevronDown, FeatherChevronRight,
   FeatherX, FeatherUpload, FeatherDownloadCloud,
-  FeatherMusic, FeatherCheck,
+  FeatherDatabase,
 } from '@subframe/core';
 import {
-  updateNicheAudioId,
+  getBankColor,
+  getPipelineBankLabel,
+  deleteClipperSession,
+  removeFromCollection,
 } from '../../services/libraryService';
-
-const BUCKET_COLORS = [
-  { dot: '#6366f1', bg: 'rgba(99,102,241,0.12)', border: 'rgba(99,102,241,0.25)' },
-  { dot: '#22c55e', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.25)' },
-  { dot: '#a855f7', bg: 'rgba(168,85,247,0.12)', border: 'rgba(168,85,247,0.25)' },
-  { dot: '#f43f5e', bg: 'rgba(244,63,94,0.12)', border: 'rgba(244,63,94,0.25)' },
-  { dot: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.25)' },
-  { dot: '#06b6d4', bg: 'rgba(6,182,212,0.12)', border: 'rgba(6,182,212,0.25)' },
-];
-const getBucketColor = (index) => BUCKET_COLORS[index % BUCKET_COLORS.length];
 
 const formatTimePrecise = (seconds) => {
   if (!Number.isFinite(seconds)) return '0:00.0';
@@ -45,24 +38,20 @@ const ClipperNicheContent = ({
   artistId,
   niche,
   library = [],
-  createdContent,
-  projectAudio = [],
+  projectMedia = [],
   onMakeVideo,
   onUpload,
   onImport,
 }) => {
   const activeFormat = niche?.formats?.find(f => f.id === niche.activeFormatId) || niche?.formats?.[0];
-  const [collapsedBuckets, setCollapsedBuckets] = useState({});
+  const [collapsedBanks, setCollapsedBanks] = useState({});
   const [previewUrl, setPreviewUrl] = useState(null);
-  const [audioPickerOpen, setAudioPickerOpen] = useState(false);
 
-  // All clipper drafts for this niche (for Sessions section / re-editing)
-  const clipperDrafts = useMemo(() =>
-    (createdContent?.videos || []).filter(v =>
-      v.collectionId === niche?.id && v.editorMode === 'clipper'
-    ),
-    [createdContent, niche?.id]
-  );
+  // Clipper sessions stored on the niche (replaces draft-based sessions)
+  const clipperSessions = useMemo(() =>
+    (niche?.clipperSessions || []).sort((a, b) =>
+      (b.updatedAt || '').localeCompare(a.updatedAt || '')
+    ), [niche?.clipperSessions]);
 
   // Exported clips from niche media bank (first-class library items)
   const exportedClips = useMemo(() => {
@@ -72,42 +61,39 @@ const ClipperNicheContent = ({
     );
   }, [niche, library]);
 
-  // Group exported clips by bucket
-  const { allBuckets, clipsByBucket, totalClips } = useMemo(() => {
-    const bucketSet = new Set();
+  // Group exported clips by bankIndex
+  const { bankIndices, clipsByBank, totalClips } = useMemo(() => {
+    const bankSet = new Set();
     const clipMap = {};
 
     for (const clip of exportedClips) {
-      const bucket = clip.bucket || 'Bucket 1';
-      bucketSet.add(bucket);
-      if (!clipMap[bucket]) clipMap[bucket] = [];
-      clipMap[bucket].push(clip);
+      const bankIdx = typeof clip.bankIndex === 'number' ? clip.bankIndex : 0;
+      bankSet.add(bankIdx);
+      if (!clipMap[bankIdx]) clipMap[bankIdx] = [];
+      clipMap[bankIdx].push(clip);
     }
 
-    return { allBuckets: Array.from(bucketSet), clipsByBucket: clipMap, totalClips: exportedClips.length };
+    return { bankIndices: Array.from(bankSet).sort((a, b) => a - b), clipsByBank: clipMap, totalClips: exportedClips.length };
   }, [exportedClips]);
 
-  const toggleBucket = useCallback((name) => {
-    setCollapsedBuckets(prev => ({ ...prev, [name]: !prev[name] }));
+  const toggleBank = useCallback((bankIdx) => {
+    setCollapsedBanks(prev => ({ ...prev, [bankIdx]: !prev[bankIdx] }));
   }, []);
 
-  // Per-niche audio selection
-  const selectedAudio = useMemo(
-    () => projectAudio.find(a => a.id === niche?.audioId) || projectAudio[0] || null,
-    [projectAudio, niche?.audioId]
-  );
-
-  const handleSelectAudio = useCallback((audioId) => {
-    if (!niche) return;
-    updateNicheAudioId(artistId, niche.id, audioId, db);
-    setAudioPickerOpen(false);
-  }, [artistId, niche, db]);
 
   // Niche videos (from bank)
   const nicheVideos = useMemo(() => {
     if (!niche) return [];
     return library.filter(item => (niche.mediaIds || []).includes(item.id) && item.type === 'video');
   }, [niche, library]);
+
+  // Project pool videos NOT in this niche
+  const [poolExpanded, setPoolExpanded] = useState(false);
+  const poolOnlyVideos = useMemo(() => {
+    if (!niche || !projectMedia.length) return [];
+    const nicheIds = new Set(niche.mediaIds || []);
+    return projectMedia.filter(m => !nicheIds.has(m.id) && m.type === 'video');
+  }, [niche, projectMedia]);
 
   if (!niche || !activeFormat) return null;
 
@@ -150,58 +136,70 @@ const ClipperNicheContent = ({
               </Button>
             </div>
           </div>
-          <div className="grid grid-cols-4 gap-3">
-            {nicheVideos.map(v => (
-              <div key={v.id} className="relative group rounded-lg overflow-hidden bg-neutral-800 aspect-video cursor-pointer border border-neutral-700 hover:border-indigo-500/50 transition-colors"
-                onClick={() => setPreviewUrl(v.url)}>
-                {v.thumbnailUrl || v.thumbnail ? (
-                  <img src={v.thumbnailUrl || v.thumbnail} alt={v.name} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <FeatherPlay className="text-neutral-500" style={{ width: 24, height: 24 }} />
+          <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-800 bg-[#111118] p-2" style={{ maxHeight: 280 }}>
+            <div className="grid w-full grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-1.5">
+              {nicheVideos.map(v => (
+                <div key={v.id} className="relative aspect-square rounded overflow-hidden bg-[#171717] cursor-pointer group"
+                  onClick={() => setPreviewUrl(v.url)}>
+                  {v.thumbnailUrl || v.thumbnail ? (
+                    <img src={v.thumbnailUrl || v.thumbnail} alt={v.name} className="w-full h-full object-cover" loading="lazy" draggable={false} />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <FeatherPlay className="text-neutral-600" style={{ width: 16, height: 16 }} />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-black/60 border border-white/20">
+                      <FeatherPlay className="text-white" style={{ width: 8, height: 8 }} />
+                    </div>
                   </div>
-                )}
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 px-2 py-1">
-                  <span className="text-[11px] text-neutral-300 line-clamp-1">{v.name || 'Video'}</span>
+                  <button
+                    className="absolute top-0.5 right-0.5 z-[4] flex h-4 w-4 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
+                    onClick={(e) => { e.stopPropagation(); removeFromCollection(artistId, niche.id, [v.id], db); }}
+                    title="Remove from niche"
+                  >
+                    <FeatherX className="text-white" style={{ width: 8, height: 8 }} />
+                  </button>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Clip Buckets */}
+      {/* Clip Banks */}
       {totalClips > 0 && (
         <div className="flex w-full flex-col gap-4 px-12 pb-6">
           <div className="flex items-center gap-2">
-            <span className="text-body-bold font-body-bold text-[#ffffffff]">Clip Buckets</span>
+            <span className="text-body-bold font-body-bold text-[#ffffffff]">Clip Banks</span>
             <Badge variant="neutral">{totalClips} clip{totalClips !== 1 ? 's' : ''}</Badge>
           </div>
 
-          {allBuckets.map((bucketName, bIdx) => {
-            const clips = clipsByBucket[bucketName] || [];
+          {bankIndices.map((bankIdx) => {
+            const clips = clipsByBank[bankIdx] || [];
             if (clips.length === 0) return null;
-            const color = getBucketColor(bIdx);
-            const isCollapsed = collapsedBuckets[bucketName];
+            const color = getBankColor(bankIdx);
+            const bankLabel = getPipelineBankLabel(niche, bankIdx);
+            const isCollapsed = collapsedBanks[bankIdx];
 
             return (
-              <div key={bucketName} className="flex flex-col rounded-lg border border-neutral-800 overflow-hidden">
-                {/* Bucket header */}
+              <div key={bankIdx} className="flex flex-col rounded-lg border border-neutral-800 overflow-hidden">
+                {/* Bank header */}
                 <div
                   className="flex items-center gap-2 px-4 py-3 cursor-pointer hover:bg-neutral-800/30 transition-colors"
                   style={{ backgroundColor: color.bg, borderBottom: `1px solid ${color.border}` }}
-                  onClick={() => toggleBucket(bucketName)}
+                  onClick={() => toggleBank(bankIdx)}
                 >
                   {isCollapsed
                     ? <FeatherChevronRight className="text-neutral-400 flex-none" style={{ width: 16, height: 16 }} />
                     : <FeatherChevronDown className="text-neutral-400 flex-none" style={{ width: 16, height: 16 }} />
                   }
-                  <div className="w-3 h-3 rounded-full flex-none" style={{ backgroundColor: color.dot }} />
-                  <span className="text-body-bold font-body-bold text-white flex-1">{bucketName}</span>
+                  <div className="w-3 h-3 rounded-full flex-none" style={{ backgroundColor: color.primary }} />
+                  <span className="text-body-bold font-body-bold text-white flex-1">{bankLabel}</span>
                   <Badge variant="neutral">{clips.length}</Badge>
                 </div>
 
-                {/* Clips in bucket */}
+                {/* Clips in bank */}
                 {!isCollapsed && (
                   <div className="flex flex-col">
                     {clips.map((clip, i) => (
@@ -265,79 +263,93 @@ const ClipperNicheContent = ({
         </div>
       )}
 
-      {/* Sessions (re-open clipper drafts) */}
-      {clipperDrafts.length > 0 && (
+      {/* Sessions (re-open clipper sessions) */}
+      {clipperSessions.length > 0 && (
         <div className="flex w-full flex-col gap-4 px-12 pb-6">
           <div className="flex items-center gap-2">
             <span className="text-body-bold font-body-bold text-[#ffffffff]">Sessions</span>
-            <Badge variant="neutral">{clipperDrafts.length}</Badge>
+            <Badge variant="neutral">{clipperSessions.length}</Badge>
           </div>
           <div className="grid w-full grid-cols-4 gap-3">
-            {clipperDrafts
-              .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
-              .map(draft => (
+            {clipperSessions.map(session => {
+              const clipCount = (session.clips || []).length;
+              const exportedCount = (session.clips || []).filter(c => c.exported || c.exportedMediaId).length;
+              return (
                 <div
-                  key={draft.id}
-                  className="flex flex-col items-start gap-2 rounded-lg border border-neutral-800 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
-                  onClick={() => onMakeVideo && onMakeVideo(activeFormat, niche.id, draft, null, nicheVideos)}
+                  key={session.id}
+                  className="relative group flex flex-col items-start gap-2 rounded-lg border border-neutral-800 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
+                  onClick={() => onMakeVideo && onMakeVideo(activeFormat, niche.id, session, null, nicheVideos)}
                 >
+                  <button
+                    className="absolute top-1.5 right-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600/90"
+                    onClick={(e) => { e.stopPropagation(); deleteClipperSession(artistId, niche.id, session.id, db); }}
+                    title="Delete session"
+                  >
+                    <FeatherX className="text-white" style={{ width: 10, height: 10 }} />
+                  </button>
                   <div className="w-full aspect-video bg-[#171717] flex items-center justify-center">
                     <FeatherScissors className="text-neutral-700" style={{ width: 24, height: 24 }} />
                   </div>
                   <div className="flex w-full flex-col gap-0.5 px-3 pb-3">
-                    <span className="text-caption font-caption text-neutral-300 truncate">{draft.name || 'Untitled'}</span>
+                    <span className="text-caption font-caption text-neutral-300 truncate">{session.name || 'Untitled'}</span>
                     <span className="text-[10px] text-neutral-500">
-                      {(draft.clips || []).length} clips · {(draft.buckets || []).length} bucket{(draft.buckets || []).length !== 1 ? 's' : ''}
+                      {clipCount} clip{clipCount !== 1 ? 's' : ''}
+                      {exportedCount > 0 && (
+                        <> · <span className="text-green-500">{exportedCount} exported</span></>
+                      )}
                     </span>
                   </div>
                 </div>
-              ))}
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* Audio picker */}
-      <div className="flex w-full flex-col gap-2 border-t border-solid border-neutral-800 px-12 py-4">
-        <span className="text-caption-bold font-caption-bold text-neutral-300">Audio</span>
-        <div className="relative max-w-sm">
+      {/* From Project Pool — videos in project but not in this niche */}
+      {poolOnlyVideos.length > 0 && (
+        <div className="flex w-full flex-col gap-3 border-t border-neutral-800 px-12 py-4">
           <button
-            className="flex w-full items-center gap-2 rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2 hover:bg-[#262626] transition"
-            onClick={() => setAudioPickerOpen(!audioPickerOpen)}
+            className="flex items-center gap-2 bg-transparent border-none cursor-pointer p-0 w-full text-left"
+            onClick={() => setPoolExpanded(prev => !prev)}
           >
-            <FeatherMusic className="text-indigo-400 flex-none" style={{ width: 14, height: 14 }} />
-            <span className="text-caption font-caption text-[#ffffffff] truncate grow text-left">
-              {selectedAudio?.name || 'No audio'}
-            </span>
-            <FeatherChevronDown
-              className="text-neutral-400 flex-none transition-transform"
-              style={{ width: 14, height: 14, transform: audioPickerOpen ? 'rotate(180deg)' : 'none' }}
-            />
+            {poolExpanded
+              ? <FeatherChevronDown className="text-neutral-400 flex-none" style={{ width: 14, height: 14 }} />
+              : <FeatherChevronRight className="text-neutral-400 flex-none" style={{ width: 14, height: 14 }} />
+            }
+            <FeatherDatabase className="text-neutral-400 flex-none" style={{ width: 14, height: 14 }} />
+            <span className="text-caption-bold font-caption-bold text-neutral-300">From Project Pool</span>
+            <Badge variant="neutral">{poolOnlyVideos.length}</Badge>
           </button>
-          {audioPickerOpen && (
-            <div className="absolute top-full left-0 right-0 mt-1 flex flex-col gap-0.5 px-2 py-2 bg-[#111111] border border-neutral-700 rounded-lg max-h-48 overflow-y-auto shadow-xl z-20">
-              {projectAudio.length === 0 && (
-                <span className="text-caption font-caption text-neutral-500 px-2 py-1">No audio uploaded</span>
-              )}
-              {projectAudio.map(audio => {
-                const isActive = selectedAudio?.id === audio.id;
-                return (
-                  <button
-                    key={audio.id}
-                    className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition ${
-                      isActive ? 'bg-indigo-600' : 'hover:bg-neutral-800'
-                    }`}
-                    onClick={() => handleSelectAudio(audio.id)}
+          {poolExpanded && (
+            <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-800 bg-[#111118] p-2" style={{ maxHeight: 280 }}>
+              <div className="grid w-full grid-cols-5 sm:grid-cols-7 lg:grid-cols-10 gap-1.5">
+                {poolOnlyVideos.map(v => (
+                  <div
+                    key={v.id}
+                    className="relative aspect-square rounded overflow-hidden bg-[#171717] cursor-pointer group"
+                    onClick={() => setPreviewUrl(v.url)}
                   >
-                    <FeatherPlay className="text-neutral-300 flex-none" style={{ width: 10, height: 10 }} />
-                    <span className="text-caption font-caption text-[#ffffffff] truncate grow">{audio.name}</span>
-                    {isActive && <FeatherCheck className="text-indigo-300 flex-none" style={{ width: 12, height: 12 }} />}
-                  </button>
-                );
-              })}
+                    {v.thumbnailUrl || v.thumbnail ? (
+                      <img src={v.thumbnailUrl || v.thumbnail} alt={v.name} className="w-full h-full object-cover" loading="lazy" draggable={false} />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <FeatherPlay className="text-neutral-600" style={{ width: 16, height: 16 }} />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-black/60 border border-white/20">
+                        <FeatherPlay className="text-white" style={{ width: 8, height: 8 }} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
-      </div>
+      )}
+
 
     </div>
   );

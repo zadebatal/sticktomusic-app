@@ -2,9 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
 import { useTheme } from '../contexts/ThemeContext';
-import { calculateOperatorPrice } from '../services/subscriptionService';
 import { Button } from '../ui/components/Button';
-import { Badge } from '../ui/components/Badge';
 import { TextField } from '../ui/components/TextField';
 import { IconWithBackground } from '../ui/components/IconWithBackground';
 import { Accordion } from '../ui/components/Accordion';
@@ -26,11 +24,6 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [selectedTier, setSelectedTier] = useState(null);
-  const [pricingTab, setPricingTab] = useState('artist');
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [checkoutError, setCheckoutError] = useState(null);
-  const [applicationSubmitted, setApplicationSubmitted] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const navigate = useNavigate();
 
@@ -38,48 +31,19 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
   const [resetMessage, setResetMessage] = useState(null);
   const [resetLoading, setResetLoading] = useState(false);
 
-  // Operator calculator state
-  const [opArtists, setOpArtists] = useState('5');
-  const [opSetsPerArtist, setOpSetsPerArtist] = useState('10');
-  const operatorPrice = calculateOperatorPrice(parseInt(opArtists) || 0, parseInt(opSetsPerArtist) || 0);
-
   // FAQ data
   const faqItems = [
-    { q: 'What is a Social Set?', a: 'A Social Set covers one artist across all platforms — Facebook, TikTok, Twitter, and Instagram. Each set lets you manage content and scheduling for one artist on all four platforms.' },
     { q: 'What platforms does StickToMusic support?', a: 'TikTok, Instagram, YouTube, and Facebook. Schedule posts to all platforms from one dashboard.' },
     { q: 'How does the Studio work?', a: 'Upload your clips, photos, and tracks. Our Studio remixes your media into ready-to-post videos and slideshows — professionally cut, synced to your music, at the click of a button.' },
-    { q: 'Can I try it before I buy?', a: 'Contact us for a demo. We\'ll walk you through the platform and set up your first project.' },
-    { q: 'How many team members can I add?', a: 'Each operator account can manage multiple artists with unlimited collaborators.' },
-    { q: 'What happens if I need more Social Sets later?', a: 'You can upgrade your plan at any time. Your content, scheduled posts, and analytics carry over seamlessly.' },
+    { q: 'How do I get access?', a: 'Request a demo and we\'ll walk you through the platform. We work directly with labels and artist teams to build a package that fits your roster.' },
+    { q: 'How many artists can I manage?', a: 'There\'s no limit. Manage your entire roster from one dashboard — each artist gets their own isolated workspace.' },
+    { q: 'Can my team use it too?', a: 'Absolutely. Add managers, collaborators, and artists to your account. Everyone gets the right level of access.' },
   ];
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (authMode === 'login') onLogin?.(email, password);
     else onSignup?.(email, password, name);
-  };
-
-  const handleTierClick = (tier) => {
-    setSelectedTier(tier);
-    setAuthMode('signup');
-    setShowAuth(true);
-  };
-
-  const handleApply = async (tierSets, tierName, role = 'artist') => {
-    if (!email) { setCheckoutError('Please enter your email first'); return; }
-    setCheckoutLoading(true);
-    setCheckoutError(null);
-    try {
-      const response = await fetch('/api/create-checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.toLowerCase(), name: name || email.split('@')[0], tier: tierName, sets: tierSets, role }),
-      });
-      const data = await response.json();
-      if (data.success) setApplicationSubmitted(true);
-      else setCheckoutError(data.error || 'Failed to submit application');
-    } catch (err) { setCheckoutError('Could not submit application. Please try again.'); }
-    setCheckoutLoading(false);
   };
 
   const handleForgotPassword = async () => {
@@ -103,13 +67,6 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
     }
     setResetLoading(false);
   };
-
-  const tierCards = [
-    { name: 'Starter', price: '$500', sets: 5, features: ['5 Social Sets', 'Unlimited posts', 'Full analytics', 'Priority support'] },
-    { name: 'Growth', price: '$1,000', sets: 10, features: ['10 Social Sets', 'Unlimited posts', 'Full analytics', 'Priority support'], popular: true },
-    { name: 'Scale', price: '$2,500', sets: 25, features: ['25 Social Sets', 'Unlimited posts', 'Full analytics', 'Priority support'] },
-    { name: 'Sensation', price: '$5,000', sets: 50, features: ['50 Social Sets', 'Unlimited posts', 'Full analytics', 'Priority support'] },
-  ];
 
   return (
     <div className="flex h-screen w-full flex-col items-center bg-black overflow-auto">
@@ -205,122 +162,19 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
           </div>
         </div>
 
-        {/* ═══ PRICING ═══ */}
-        <div className="flex w-full flex-col items-center gap-12">
+        {/* ═══ REQUEST A DEMO ═══ */}
+        <div className="flex w-full flex-col items-center gap-8">
           <div className="flex w-full max-w-[768px] flex-col items-center gap-4">
             <span className="text-heading-1 font-heading-1 text-[#ffffffff] text-center">
-              Simple pricing
+              See it in action
             </span>
             <span className="text-body font-body text-brand-900 text-center">
-              Every plan includes unlimited posts, full analytics, and priority support. Pick the plan that fits how many pages you manage.
-            </span>
-            <span className="text-caption font-caption text-brand-700 text-center mt-1">
-              1 Social Set = Facebook + TikTok + Twitter + Instagram
+              We work directly with labels and artist teams. Request a demo and we'll show you how StickToMusic fits your roster.
             </span>
           </div>
-
-          {/* Tab toggle */}
-          <div className="flex items-center rounded-lg border border-solid border-neutral-800 bg-black px-1 py-1">
-            <div
-              className={`flex h-10 items-center justify-center rounded-md px-4 py-2 cursor-pointer ${pricingTab === 'artist' ? 'bg-neutral-100' : ''}`}
-              onClick={() => setPricingTab('artist')}
-            >
-              <span className={`${pricingTab === 'artist' ? 'text-body-bold font-body-bold text-default-font' : 'text-body font-body text-brand-700'}`}>
-                Artist
-              </span>
-            </div>
-            <div
-              className={`flex h-10 items-center justify-center rounded-md px-4 py-2 cursor-pointer ${pricingTab === 'operator' ? 'bg-neutral-100' : ''}`}
-              onClick={() => setPricingTab('operator')}
-            >
-              <span className={`${pricingTab === 'operator' ? 'text-body-bold font-body-bold text-default-font' : 'text-body font-body text-brand-700'}`}>
-                Operator
-              </span>
-            </div>
-          </div>
-
-          {/* Pricing container */}
-          <div className="flex w-full flex-col items-start gap-6 rounded-lg border border-solid border-neutral-800 bg-[#000000ff] px-8 py-8">
-            {/* Tier cards */}
-            {pricingTab === 'artist' && (
-              <div className="w-full items-start gap-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-                {tierCards.map((tier, i) => (
-                  <div
-                    key={i}
-                    className={`flex grow shrink-0 basis-0 flex-col items-start gap-6 rounded-md px-6 py-8 ${
-                      tier.popular
-                        ? 'border-2 border-solid border-brand-primary bg-black'
-                        : 'border border-solid border-neutral-800 bg-black'
-                    }`}
-                  >
-                    <div className="flex w-full flex-col items-start gap-2">
-                      {tier.popular ? (
-                        <div className="flex w-full items-center gap-2">
-                          <span className="grow shrink-0 basis-0 text-heading-3 font-heading-3 text-[#ffffffff]">{tier.name}</span>
-                          <Badge variant="brand">POPULAR</Badge>
-                        </div>
-                      ) : (
-                        <span className="text-heading-3 font-heading-3 text-[#ffffffff]">{tier.name}</span>
-                      )}
-                      <div className="flex gap-1 items-baseline">
-                        <span className="font-['Outfit'] text-[36px] font-[700] leading-[40px] text-[#ffffffff]">{tier.price}</span>
-                        <span className="text-body font-body text-brand-900">/mo</span>
-                      </div>
-                    </div>
-                    <div className="flex w-full flex-col items-start gap-3">
-                      {tier.features.map((f, j) => (
-                        <div key={j} className="flex items-center gap-2">
-                          <FeatherCheck className="text-body font-body text-[#ffffffff]" />
-                          <span className="text-body font-body text-brand-900">{f}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <Button
-                      className="h-10 w-full flex-none"
-                      variant="neutral-secondary"
-                      size="large"
-                      onClick={() => handleTierClick(tier)}
-                    >
-                      Get Started
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Operator calculator */}
-            {pricingTab === 'operator' && (
-              <div className="flex w-full flex-col items-start gap-4 rounded-md border border-solid border-neutral-800 bg-black px-6 py-6">
-                <span className="text-heading-3 font-heading-3 text-[#ffffffff]">Operator Pricing</span>
-                <span className="text-body font-body text-brand-900">
-                  Managing multiple artists? Pay only for what you need: Artists × Social Sets × $100/set per month.
-                </span>
-                <div className="flex w-full items-center gap-4">
-                  <TextField className="h-auto grow shrink-0 basis-0" label="Number of Artists" helpText="">
-                    <TextField.Input
-                      placeholder="e.g. 5"
-                      value={opArtists}
-                      onChange={(e) => setOpArtists(e.target.value)}
-                    />
-                  </TextField>
-                  <TextField className="h-auto grow shrink-0 basis-0" label="Sets per Artist" helpText="">
-                    <TextField.Input
-                      placeholder="e.g. 10"
-                      value={opSetsPerArtist}
-                      onChange={(e) => setOpSetsPerArtist(e.target.value)}
-                    />
-                  </TextField>
-                </div>
-                <div className="flex w-full gap-2 items-baseline">
-                  <span className="text-caption font-caption text-brand-900">Estimated monthly cost:</span>
-                  <span className="font-['Outfit'] text-[28px] font-[700] leading-[32px] text-[#ffffffff]">
-                    ${operatorPrice.toLocaleString()}
-                  </span>
-                  <span className="text-body font-body text-brand-900">/mo</span>
-                </div>
-              </div>
-            )}
-          </div>
+          <Button className="min-h-[48px] px-10" variant="brand-tertiary" size="large" iconRight={<FeatherArrowRight />} onClick={() => window.location.href = 'mailto:zadebatal@gmail.com?subject=StickToMusic Demo Request'}>
+            Request a Demo
+          </Button>
         </div>
 
         {/* ═══ FAQ ═══ */}
@@ -386,18 +240,11 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
           <div className="bg-[#0a0a0aff] border border-solid border-neutral-800 rounded-xl w-full max-w-md mx-4 px-8 py-8">
             {/* Header */}
             <div className="flex justify-between items-center mb-6">
-              <div>
-                <span className="text-heading-2 font-heading-2 text-[#ffffffff] block">
-                  {authMode === 'login' ? 'Welcome back' : 'Create your account'}
-                </span>
-                {selectedTier && authMode === 'signup' && (
-                  <p className="text-caption font-caption text-neutral-400 mt-1">
-                    {selectedTier.name} plan — {selectedTier.sets} Social Sets — {selectedTier.price}/mo
-                  </p>
-                )}
-              </div>
+              <span className="text-heading-2 font-heading-2 text-[#ffffffff] block">
+                {authMode === 'login' ? 'Welcome back' : 'Create your account'}
+              </span>
               <button
-                onClick={() => { setShowAuth(false); setSelectedTier(null); setCheckoutError(null); setResetMessage(null); }}
+                onClick={() => { setShowAuth(false); setResetMessage(null); }}
                 className="flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
               >
                 <FeatherX className="w-5 h-5" />
@@ -408,7 +255,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
             <div className="flex items-center rounded-lg border border-solid border-neutral-800 bg-black px-1 py-1 mb-6">
               <div
                 className={`flex flex-1 h-9 items-center justify-center rounded-md cursor-pointer transition-colors ${authMode === 'login' ? 'bg-neutral-100' : ''}`}
-                onClick={() => { setAuthMode('login'); setCheckoutError(null); setResetMessage(null); }}
+                onClick={() => { setAuthMode('login'); setResetMessage(null); }}
               >
                 <span className={`text-sm ${authMode === 'login' ? 'text-default-font font-semibold' : 'text-neutral-400'}`}>
                   Login
@@ -416,7 +263,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
               </div>
               <div
                 className={`flex flex-1 h-9 items-center justify-center rounded-md cursor-pointer transition-colors ${authMode === 'signup' ? 'bg-neutral-100' : ''}`}
-                onClick={() => { setAuthMode('signup'); setCheckoutError(null); setResetMessage(null); }}
+                onClick={() => { setAuthMode('signup'); setResetMessage(null); }}
               >
                 <span className={`text-sm ${authMode === 'signup' ? 'text-default-font font-semibold' : 'text-neutral-400'}`}>
                   Sign Up
@@ -424,20 +271,12 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
               </div>
             </div>
 
-            {applicationSubmitted && (
-              <div className="mb-4 p-4 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 text-sm text-center">
-                <p className="font-semibold mb-1">Application submitted!</p>
-                <p>We'll review your application and get back to you shortly.</p>
-              </div>
-            )}
-
-            {(authError || checkoutError) && !applicationSubmitted && (
+            {authError && (
               <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
-                {authError || checkoutError}
+                {authError}
               </div>
             )}
 
-            {!applicationSubmitted && (
               <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                 {authMode === 'signup' && (
                   <TextField label="Name">
@@ -497,7 +336,7 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
                     </span>
                   </label>
                 )}
-                <Button className="w-full min-h-[44px]" variant="brand-primary" size="large" disabled={authLoading || checkoutLoading || (authMode === 'signup' && !agreedToTerms)} onClick={handleSubmit}>
+                <Button className="w-full min-h-[44px]" variant="brand-primary" size="large" disabled={authLoading || (authMode === 'signup' && !agreedToTerms)} onClick={handleSubmit}>
                   {authLoading ? (
                     <span className="flex items-center gap-2">
                       <FeatherLoader className="w-4 h-4 animate-spin" />
@@ -506,25 +345,20 @@ const LandingPage = ({ onLogin, onSignup, onGoogleAuth, authError, authLoading }
                   ) : authMode === 'login' ? 'Log In' : 'Sign Up'}
                 </Button>
               </form>
-            )}
 
-            {!applicationSubmitted && (
-              <>
-                <div className="my-5 flex items-center gap-3">
-                  <div className="flex-1 h-px bg-neutral-800" />
-                  <span className="text-caption font-caption text-neutral-400">or</span>
-                  <div className="flex-1 h-px bg-neutral-800" />
-                </div>
-                <Button className="w-full min-h-[44px]" variant="neutral-secondary" size="large" disabled={authLoading} onClick={onGoogleAuth}>
-                  {authLoading ? (
-                    <span className="flex items-center gap-2">
-                      <FeatherLoader className="w-4 h-4 animate-spin" />
-                      Signing in...
-                    </span>
-                  ) : 'Continue with Google'}
-                </Button>
-              </>
-            )}
+              <div className="my-5 flex items-center gap-3">
+                <div className="flex-1 h-px bg-neutral-800" />
+                <span className="text-caption font-caption text-neutral-400">or</span>
+                <div className="flex-1 h-px bg-neutral-800" />
+              </div>
+              <Button className="w-full min-h-[44px]" variant="neutral-secondary" size="large" disabled={authLoading} onClick={onGoogleAuth}>
+                {authLoading ? (
+                  <span className="flex items-center gap-2">
+                    <FeatherLoader className="w-4 h-4 animate-spin" />
+                    Signing in...
+                  </span>
+                ) : 'Continue with Google'}
+              </Button>
           </div>
         </div>
       )}

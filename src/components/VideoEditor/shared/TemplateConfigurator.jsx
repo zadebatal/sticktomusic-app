@@ -17,6 +17,7 @@ import {
   deleteNicheTemplate,
   setNicheActiveTemplate,
   getDefaultTemplateSettings,
+  BUILT_IN_TEMPLATES,
 } from '../../../services/libraryService';
 
 const generateTemplateId = () =>
@@ -151,8 +152,10 @@ const TemplateConfigurator = ({
 
   // ── Template state ──
   const templates = niche?.templates || [];
+  const builtIns = BUILT_IN_TEMPLATES[formatId] || [];
+  const allTemplates = [...builtIns, ...templates];
   const activeTemplateId = niche?.activeTemplateId || null;
-  const activeTemplate = templates.find(t => t.id === activeTemplateId) || null;
+  const activeTemplate = allTemplates.find(t => t.id === activeTemplateId) || null;
 
   // Settings state (initialized from active template or defaults)
   const defaults = useMemo(() => getDefaultTemplateSettings(formatId), [formatId]);
@@ -170,6 +173,15 @@ const TemplateConfigurator = ({
     return JSON.stringify(settings) !== JSON.stringify({ ...defaults, ...activeTemplate.settings });
   }, [settings, activeTemplate, defaults]);
 
+  // Broadcast initial settings to parent on mount so preview gets correct values
+  const initialBroadcastRef = useRef(false);
+  useEffect(() => {
+    if (!initialBroadcastRef.current && onSettingsChange) {
+      initialBroadcastRef.current = true;
+      onSettingsChange(settings);
+    }
+  }, [settings, onSettingsChange]);
+
   // Sync settings when niche or active template changes
   const prevNicheIdRef = useRef(niche?.id);
   const prevTemplateIdRef = useRef(activeTemplateId);
@@ -177,12 +189,15 @@ const TemplateConfigurator = ({
     if (prevNicheIdRef.current !== niche?.id || prevTemplateIdRef.current !== activeTemplateId) {
       prevNicheIdRef.current = niche?.id;
       prevTemplateIdRef.current = activeTemplateId;
-      const tmpl = (niche?.templates || []).find(t => t.id === (niche?.activeTemplateId || null));
+      const allTmpls = [...(BUILT_IN_TEMPLATES[formatId] || []), ...(niche?.templates || [])];
+      const tmpl = allTmpls.find(t => t.id === (niche?.activeTemplateId || null));
       const def = getDefaultTemplateSettings(formatId);
-      setSettings(tmpl?.settings ? { ...def, ...tmpl.settings } : { ...def });
+      const next = tmpl?.settings ? { ...def, ...tmpl.settings } : { ...def };
+      setSettings(next);
+      if (onSettingsChange) onSettingsChange(next);
       setSavePromptOpen(false);
     }
-  }, [niche?.id, activeTemplateId, formatId, niche?.templates, niche?.activeTemplateId]);
+  }, [niche?.id, activeTemplateId, formatId, niche?.templates, niche?.activeTemplateId, onSettingsChange]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -213,9 +228,17 @@ const TemplateConfigurator = ({
 
   // ── Template actions ──
   const handleSelectTemplate = useCallback((tmplId) => {
+    // If selecting a built-in, apply its settings immediately
+    const builtIn = (BUILT_IN_TEMPLATES[formatId] || []).find(t => t.id === tmplId);
+    if (builtIn) {
+      const def = getDefaultTemplateSettings(formatId);
+      const next = { ...def, ...builtIn.settings };
+      setSettings(next);
+      if (onSettingsChange) onSettingsChange(next);
+    }
     setNicheActiveTemplate(artistId, niche.id, tmplId, db);
     setDropdownOpen(false);
-  }, [artistId, niche, db]);
+  }, [artistId, niche, db, formatId, onSettingsChange]);
 
   const handleNewTemplate = useCallback(() => {
     setNicheActiveTemplate(artistId, niche.id, null, db);
@@ -229,10 +252,12 @@ const TemplateConfigurator = ({
   }, [artistId, niche, db]);
 
   const handleSaveTemplate = useCallback((name) => {
-    const id = activeTemplate?.id || generateTemplateId();
+    // Built-in templates can't be overwritten — always create new
+    const isBuiltIn = activeTemplate?.builtIn;
+    const id = (isBuiltIn || !activeTemplate?.id) ? generateTemplateId() : activeTemplate.id;
     const tmpl = {
       id,
-      name: name || activeTemplate?.name || 'Untitled Template',
+      name: name || (isBuiltIn ? `${activeTemplate.name} (Custom)` : activeTemplate?.name) || 'Untitled Template',
       settings: { ...settings },
     };
     saveNicheTemplate(artistId, niche.id, tmpl, db);
@@ -242,6 +267,12 @@ const TemplateConfigurator = ({
 
   const handleSaveExisting = useCallback(() => {
     if (!activeTemplate) return;
+    if (activeTemplate.builtIn) {
+      // Can't overwrite built-in — open save-as prompt
+      setSavePromptOpen(true);
+      setTemplateName(`${activeTemplate.name} (Custom)`);
+      return;
+    }
     handleSaveTemplate(activeTemplate.name);
   }, [activeTemplate, handleSaveTemplate]);
 
@@ -275,7 +306,7 @@ const TemplateConfigurator = ({
   // ── Derived ──
   const templateLabel = activeTemplate
     ? (isModified ? `${activeTemplate.name} (modified)` : activeTemplate.name)
-    : 'Unsaved Template';
+    : 'Custom Settings';
 
   const ts = settings.textStyle || {};
 
@@ -302,7 +333,7 @@ const TemplateConfigurator = ({
 
         {dropdownOpen && (
           <div className="flex flex-col gap-0.5 rounded-lg border border-neutral-700 bg-[#111111] px-2 py-2 max-h-48 overflow-y-auto shadow-xl z-20">
-            {templates.map(tmpl => (
+            {allTemplates.map(tmpl => (
               <div
                 key={tmpl.id}
                 className={`flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer transition ${
@@ -310,16 +341,27 @@ const TemplateConfigurator = ({
                 }`}
                 onClick={() => handleSelectTemplate(tmpl.id)}
               >
-                <span className="text-caption font-caption text-[#ffffffff] truncate flex-1">{tmpl.name}</span>
+                <div className="flex flex-col flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-caption font-caption text-[#ffffffff] truncate">{tmpl.name}</span>
+                    {tmpl.builtIn && (
+                      <span className="text-[9px] font-semibold text-indigo-300 bg-indigo-500/20 px-1.5 py-0.5 rounded flex-none">Preset</span>
+                    )}
+                  </div>
+                  {tmpl.description && (
+                    <span className="text-[10px] text-neutral-500 truncate">{tmpl.description}</span>
+                  )}
+                </div>
                 {tmpl.id === activeTemplateId && <FeatherCheck className="text-indigo-300 flex-none" style={{ width: 12, height: 12 }} />}
-                <button
-                  className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100 flex-none"
-                  style={{ opacity: 1 }}
-                  onClick={(e) => handleDeleteTemplate(tmpl.id, e)}
-                  aria-label="Delete template"
-                >
-                  <FeatherTrash2 style={{ width: 11, height: 11 }} />
-                </button>
+                {!tmpl.builtIn && (
+                  <button
+                    className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 flex-none"
+                    onClick={(e) => handleDeleteTemplate(tmpl.id, e)}
+                    aria-label="Delete template"
+                  >
+                    <FeatherTrash2 style={{ width: 11, height: 11 }} />
+                  </button>
+                )}
               </div>
             ))}
             <button
@@ -357,8 +399,19 @@ const TemplateConfigurator = ({
       )}
 
       {/* Format-specific controls (non-slide-duration) */}
-      {(settings.textDisplayMode !== undefined || settings.transition !== undefined || settings.speed !== undefined) && (
+      {(settings.textDisplayMode !== undefined || settings.transition !== undefined || settings.speed !== undefined || settings.displayMode !== undefined) && (
         <div className="flex w-full flex-col gap-3 border-t border-solid border-neutral-800 px-4 py-3">
+          {/* Display Mode — photo_montage only */}
+          {settings.displayMode !== undefined && (
+            <div className="flex w-full items-center justify-between">
+              <span className="text-caption font-caption text-neutral-400">Display</span>
+              <ToggleGroup value={settings.displayMode || 'cover'} onValueChange={(val) => { if (val) updateSetting('displayMode', val); }}>
+                <ToggleGroup.Item value="cover">Cover</ToggleGroup.Item>
+                <ToggleGroup.Item value="gallery">Gallery</ToggleGroup.Item>
+              </ToggleGroup>
+            </div>
+          )}
+
           {/* Solo Clip: text display mode */}
           {settings.textDisplayMode !== undefined && (
             <div className="flex w-full items-center justify-between">
@@ -489,7 +542,7 @@ const TemplateConfigurator = ({
         {savePromptOpen && (
           <div className="flex w-full flex-col gap-2 rounded-lg border border-solid border-indigo-500/30 bg-indigo-500/5 p-3">
             <span className="text-caption-bold font-caption-bold text-indigo-300">Save as template?</span>
-            {!activeTemplate && (
+            {(!activeTemplate || activeTemplate.builtIn) && (
               <input
                 className="w-full rounded-md border border-solid border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500"
                 placeholder="Template name..."

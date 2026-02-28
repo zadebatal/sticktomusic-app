@@ -27,6 +27,8 @@ const MontagePreview = ({
   selectedTextA,
   selectedTextB,
   onTextPositionsChange,
+  onTextAChange,
+  onTextBChange,
 }) => {
   const [playlist, setPlaylist] = useState(() => [...media]);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -282,6 +284,7 @@ const MontagePreview = ({
             color="#6366f1"
             position={textPosA}
             onPositionChange={setTextPosA}
+            onTextChange={(newText) => { setPreviewTextA(newText); onTextAChange?.(newText); }}
             containerRef={containerRef}
           />
         )}
@@ -294,6 +297,7 @@ const MontagePreview = ({
             color="#f59e0b"
             position={textPosB}
             onPositionChange={setTextPosB}
+            onTextChange={(newText) => { setPreviewTextB(newText); onTextBChange?.(newText); }}
             containerRef={containerRef}
           />
         )}

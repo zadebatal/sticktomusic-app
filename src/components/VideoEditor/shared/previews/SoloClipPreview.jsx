@@ -25,6 +25,8 @@ const SoloClipPreview = ({
   selectedTextA,
   selectedTextB,
   onTextPositionsChange,
+  onTextAChange,
+  onTextBChange,
 }) => {
   // If allVideos provided, support cycling through them
   const videoPool = useMemo(() => {
@@ -181,6 +183,7 @@ const SoloClipPreview = ({
             color="#6366f1"
             position={textPosA}
             onPositionChange={setTextPosA}
+            onTextChange={(newText) => { setPreviewTextA(newText); onTextAChange?.(newText); }}
             containerRef={containerRef}
           />
         )}
@@ -193,6 +196,7 @@ const SoloClipPreview = ({
             color="#f59e0b"
             position={textPosB}
             onPositionChange={setTextPosB}
+            onTextChange={(newText) => { setPreviewTextB(newText); onTextBChange?.(newText); }}
             containerRef={containerRef}
           />
         )}

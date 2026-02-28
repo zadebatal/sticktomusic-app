@@ -8,7 +8,7 @@ import {
 import { getTemplates, generateFromTemplate } from '../../services/contentTemplateService';
 
 import { useToast, ConfirmDialog } from '../ui';
-import { getCreatedContent, getCollections, getCollectionHashtagBank, getCollectionCaptionBank } from '../../services/libraryService';
+import { getCreatedContent, getCollections, getCollectionHashtagBank, getCollectionCaptionBank, getLibrary } from '../../services/libraryService';
 import { renderVideo } from '../../services/videoExportService';
 import { exportSlideshowAsImages, generateSlideThumbnail } from '../../services/slideshowExportService';
 import { uploadFile } from '../../services/firebaseStorage';
@@ -226,14 +226,24 @@ const SchedulingPage = ({
     }
     setLoading(true);
 
+    // Build media library lookup maps for thumbnail repair
+    const libraryItems = getLibrary(artistId);
+    const idToItem = new Map();
+    const urlToThumb = new Map();
+    libraryItems.forEach(item => {
+      if (item.id) idToItem.set(item.id, item);
+      if (item.url) urlToThumb.set(item.url, item.thumbnailUrl || item.url);
+    });
+
     const unsubscribe = subscribeToScheduledPosts(db, artistId, (newPosts) => {
       // Recalculate draft IDs on every update (not just once at init)
       // so orphan detection stays fresh after draft deletions
       let draftIds = new Set();
+      let contentMap = new Map();
       try {
         const content = getCreatedContent(artistId);
-        (content.videos || []).forEach(v => draftIds.add(v.id));
-        (content.slideshows || []).forEach(s => draftIds.add(s.id));
+        (content.videos || []).forEach(v => { draftIds.add(v.id); contentMap.set(v.id, v); });
+        (content.slideshows || []).forEach(s => { draftIds.add(s.id); contentMap.set(s.id, s); });
       } catch (e) { /* no local content yet */ }
 
       const now = new Date();
@@ -249,7 +259,57 @@ const SchedulingPage = ({
             computedStatus = 'missed';
           }
         }
-        return { ...p, _isGhost: isGhost, _computedStatus: computedStatus };
+
+        // Repair missing thumbnails by looking up source media in library
+        let repairedThumb = null;
+        if (!getPostThumb(p)) {
+          const source = p.contentId ? contentMap.get(p.contentId) : null;
+          const es = source || p.editorState;
+          if (es) {
+            // 1. Try sourceImageId on slides → match to library item
+            const slides = es.slides || [];
+            for (const slide of slides) {
+              if (slide.sourceImageId && idToItem.has(slide.sourceImageId)) {
+                const libItem = idToItem.get(slide.sourceImageId);
+                repairedThumb = libItem.thumbnailUrl || libItem.url;
+                break;
+              }
+              const bg = slide.backgroundImage || slide.thumbnail || slide.imageA?.url;
+              if (bg && !bg.startsWith('blob:')) { repairedThumb = bg; break; }
+            }
+            // 2. Try video clips → match clip source to library
+            if (!repairedThumb) {
+              for (const clip of (es.clips || [])) {
+                if (clip.sourceMediaId && idToItem.has(clip.sourceMediaId)) {
+                  const libItem = idToItem.get(clip.sourceMediaId);
+                  repairedThumb = libItem.thumbnailUrl || libItem.url;
+                  break;
+                }
+                if (clip.id && idToItem.has(clip.id)) {
+                  const libItem = idToItem.get(clip.id);
+                  repairedThumb = libItem.thumbnailUrl || libItem.url;
+                  break;
+                }
+                const url = clip.thumbnailUrl || clip.thumbnail || clip.url;
+                if (url && !url.startsWith('blob:')) { repairedThumb = url; break; }
+              }
+            }
+            // 3. Try montage photos
+            if (!repairedThumb) {
+              for (const photo of (es.montagePhotos || [])) {
+                if (photo.id && idToItem.has(photo.id)) {
+                  const libItem = idToItem.get(photo.id);
+                  repairedThumb = libItem.thumbnailUrl || libItem.url;
+                  break;
+                }
+                const url = photo.thumbnailUrl || photo.url;
+                if (url && !url.startsWith('blob:')) { repairedThumb = url; break; }
+              }
+            }
+          }
+        }
+
+        return { ...p, _isGhost: isGhost, _computedStatus: computedStatus, _repairedThumb: repairedThumb };
       });
       setPosts(tagged);
       setLoading(false);
@@ -2109,7 +2169,7 @@ const PostRow = ({
     [POST_STATUS.FAILED]: '#7f1d1d'
   }[post.status] || (theme?.border?.default || '#27272a');
 
-  const previewImage = post.editorState?.exportedImages?.[0]?.url || post.thumbnail || post.editorState?.thumbnail || post.editorState?.slides?.[0]?.backgroundImage || null;
+  const previewImage = post.editorState?.exportedImages?.[0]?.url || post.thumbnail || post.editorState?.thumbnail || post.editorState?.slides?.[0]?.backgroundImage || post.editorState?.slides?.[0]?.thumbnail || post.editorState?.slides?.[0]?.imageA?.url || post.editorState?.clips?.[0]?.thumbnailUrl || post.editorState?.clips?.[0]?.thumbnail || post.editorState?.montagePhotos?.[0]?.thumbnailUrl || post.editorState?.montagePhotos?.[0]?.url || post._repairedThumb || null;
 
   return (
     <div className="rounded-lg border border-solid border-neutral-800 mb-1 mx-2 overflow-hidden">
@@ -2387,7 +2447,7 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
   }, [accounts]);
 
   const selectedPlatforms = post.platforms || {};
-  const previewImage = post.editorState?.exportedImages?.[0]?.url || post.thumbnail || post.editorState?.thumbnail || post.editorState?.slides?.[0]?.backgroundImage || post.editorState?.slides?.[0]?.imageUrl || post.editorState?.clips?.[0]?.thumbnail || null;
+  const previewImage = post.editorState?.exportedImages?.[0]?.url || post.thumbnail || post.editorState?.thumbnail || post.editorState?.slides?.[0]?.backgroundImage || post.editorState?.slides?.[0]?.thumbnail || post.editorState?.slides?.[0]?.imageA?.url || post.editorState?.slides?.[0]?.imageUrl || post.editorState?.clips?.[0]?.thumbnailUrl || post.editorState?.clips?.[0]?.thumbnail || post.editorState?.montagePhotos?.[0]?.thumbnailUrl || post.editorState?.montagePhotos?.[0]?.url || post._repairedThumb || null;
 
   // Separate per-post tags from always-on tags
   const perPostTags = toHashtagArray(post.hashtags).filter(t => !alwaysOnHashtags.includes(t));
@@ -2712,12 +2772,13 @@ const STATUS_COLORS = {
 
 const getPostThumb = (post) => {
   if (post.thumbnail && !post.thumbnail.startsWith('blob:')) return post.thumbnail;
+  if (post._repairedThumb) return post._repairedThumb;
   const es = post.editorState;
   if (!es) return null;
-  // Slideshow: try first slide's background image
+  // Slideshow: try first slide's background image or thumbnail
   const slide = es.slides?.[0];
   if (slide) {
-    const url = slide.backgroundImage || slide.imageA?.url || slide.thumbnail;
+    const url = slide.backgroundImage || slide.thumbnail || slide.imageA?.url || slide.imageUrl;
     if (url && !url.startsWith('blob:')) return url;
   }
   // Video: try thumbnail or first clip
@@ -2725,7 +2786,7 @@ const getPostThumb = (post) => {
   if (es.thumbnail && !es.thumbnail.startsWith('blob:')) return es.thumbnail;
   const clip = es.clips?.[0];
   if (clip) {
-    const url = clip.thumbnailUrl || clip.thumbnail;
+    const url = clip.thumbnailUrl || clip.thumbnail || clip.url;
     if (url && !url.startsWith('blob:')) return url;
   }
   // PhotoMontage: try first montage photo

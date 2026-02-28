@@ -35,6 +35,44 @@ export const markCollectionPendingDeletion = (id) => pendingDeletionIds.add(id);
 export const clearPendingDeletion = (id) => pendingDeletionIds.delete(id);
 
 // ============================================================================
+// RECENT COLLECTION WRITES (protects against subscription overwriting fresh data)
+// The subscription handler reads Firestore + localStorage, but the Firestore data
+// may be stale. If addToCollection/assignToBank wrote to localStorage between
+// Firestore sync and subscription fire, the subscription may overwrite the fresh
+// localStorage with stale merged data. This map tracks recent writes so guards
+// can always recover the data.
+// ============================================================================
+const recentCollectionSnapshots = new Map(); // collectionId -> { mediaIds, banks, ts }
+export const getRecentCollectionSnapshots = () => recentCollectionSnapshots;
+const trackCollectionWrite = (collectionId, collection) => {
+  const ts = Date.now();
+  recentCollectionSnapshots.set(collectionId, {
+    mediaIds: [...(collection.mediaIds || [])],
+    banks: (collection.banks || []).map(b => [...(b || [])]),
+    ts,
+  });
+  // Auto-expire after 60 seconds
+  setTimeout(() => {
+    const entry = recentCollectionSnapshots.get(collectionId);
+    if (entry && entry.ts === ts) recentCollectionSnapshots.delete(collectionId);
+  }, 60000);
+};
+
+// Track recent REMOVALS so subscription guards don't re-add deleted items
+const recentCollectionRemovals = new Map(); // collectionId -> { removedIds: Set, ts }
+export const getRecentCollectionRemovals = () => recentCollectionRemovals;
+const trackCollectionRemoval = (collectionId, removedMediaIds) => {
+  const ts = Date.now();
+  const existing = recentCollectionRemovals.get(collectionId);
+  const removedIds = new Set([...(existing?.removedIds || []), ...removedMediaIds]);
+  recentCollectionRemovals.set(collectionId, { removedIds, ts });
+  setTimeout(() => {
+    const entry = recentCollectionRemovals.get(collectionId);
+    if (entry && entry.ts === ts) recentCollectionRemovals.delete(collectionId);
+  }, 60000);
+};
+
+// ============================================================================
 // CONSTANTS
 // ============================================================================
 
@@ -709,6 +747,20 @@ export const saveCollections = (artistId, collections) => {
   try {
     // Filter out smart collections before saving
     const userCollections = collections.filter(c => c.type !== COLLECTION_TYPES.SMART);
+
+    // SAFETY GUARD: Never lose collections. If existing localStorage has collections
+    // that are missing from the new data (and aren't pending deletion), preserve them.
+    const existing = getUserCollections(artistId);
+    if (existing.length > 0) {
+      const newIds = new Set(userCollections.map(c => c.id));
+      const lost = existing.filter(e => !newIds.has(e.id) && !pendingDeletionIds.has(e.id));
+      if (lost.length > 0) {
+        log.warn('[saveCollections] Would lose', lost.length, 'collections, preserving:',
+          lost.map(c => `${c.name}(${c.id})`));
+        userCollections.push(...lost);
+      }
+    }
+
     localStorage.setItem(getCollectionsKey(artistId), JSON.stringify(userCollections));
   } catch (error) {
     log.error('Error saving collections:', error);
@@ -791,10 +843,15 @@ export const addToCollection = (artistId, collectionId, mediaIds, db = null) => 
   const collections = getUserCollections(artistId);
   const collection = collections.find(c => c.id === collectionId);
   if (collection) {
-    collection.mediaIds = [...new Set([...collection.mediaIds, ...idsToAdd])];
+    const beforeCount = collection.mediaIds?.length || 0;
+    collection.mediaIds = [...new Set([...(collection.mediaIds || []), ...idsToAdd])];
     collection.updatedAt = new Date().toISOString();
+    log('[addToCollection]', collection.name, '| before:', beforeCount, '→ after:', collection.mediaIds.length, '| added:', idsToAdd);
     saveCollections(artistId, collections);
+    trackCollectionWrite(collectionId, collection);
     if (db) saveCollectionToFirestore(db, artistId, collection).catch(log.error);
+  } else {
+    log.warn('[addToCollection] Collection not found:', collectionId);
   }
 
   // Update library items' collectionIds
@@ -935,6 +992,7 @@ export const assignToBank = (artistId, collectionId, mediaIds, bank, db = null) 
   collection.banks[bankIndex] = [...new Set([...collection.banks[bankIndex], ...idsToAssign])];
   collection.updatedAt = new Date().toISOString();
   saveCollections(artistId, collections);
+  trackCollectionWrite(collectionId, collection);
   if (db) saveCollectionToFirestore(db, artistId, collection).catch(log.error);
 
   // Also update library items' collectionIds
@@ -1473,6 +1531,9 @@ export const getWorkspaceStatus = (workspace, library) => {
 export const removeFromCollection = (artistId, collectionId, mediaIds, db = null) => {
   const idsToRemove = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
 
+  // Track removal so subscription guards don't re-add these items
+  trackCollectionRemoval(collectionId, idsToRemove);
+
   // Update collection's mediaIds
   const collections = getUserCollections(artistId);
   const collection = collections.find(c => c.id === collectionId);
@@ -1757,10 +1818,43 @@ export const getDefaultTemplateSettings = (formatId) => {
     case 'montage':
       return { ...shared };
     case 'photo_montage':
-      return { ...shared, speed: 1, transition: 'cut', kenBurns: true, beatSync: false };
+      return { ...shared, speed: 1, transition: 'cut', kenBurns: true, beatSync: false, displayMode: 'cover' };
     default:
       return shared;
   }
+};
+
+/**
+ * Built-in preset templates that ship with the app.
+ * Keyed by formatId, each value is an array of template objects.
+ * Built-in templates use `builtin_` prefix IDs and `builtIn: true` flag.
+ */
+export const BUILT_IN_TEMPLATES = {
+  photo_montage: [
+    {
+      id: 'builtin_art_gallery',
+      name: 'Art Gallery',
+      description: 'Photos on a white background with shadow. Clean gallery look.',
+      builtIn: true,
+      settings: {
+        displayMode: 'gallery',
+        transition: 'cut',
+        kenBurns: false,
+        speed: 4 / 30,  // 4 frames at 30fps — rapid hard cuts
+        beatSync: false,
+        textStyle: {
+          fontFamily: "'Inter', sans-serif",
+          fontSize: 48,
+          fontWeight: '600',
+          color: '#1a1a1a',
+          textAlign: 'center',
+          textCase: 'default',
+          outline: false,
+          outlineColor: '#000000',
+        },
+      },
+    },
+  ],
 };
 
 /**
@@ -1797,6 +1891,41 @@ export const deleteNicheTemplate = (artistId, nicheId, templateId, db = null) =>
   if (cols[idx].activeTemplateId === templateId) {
     cols[idx].activeTemplateId = null;
   }
+  cols[idx].updatedAt = new Date().toISOString();
+  saveCollections(artistId, cols);
+  if (db) saveCollectionToFirestore(db, artistId, cols[idx]).catch(log.error);
+};
+
+/**
+ * Save (create or update) a clipper session on a niche
+ */
+export const saveClipperSession = (artistId, nicheId, session, db = null) => {
+  const cols = getUserCollections(artistId);
+  const idx = cols.findIndex(c => c.id === nicheId);
+  if (idx === -1) return null;
+  const sessions = [...(cols[idx].clipperSessions || [])];
+  const existingIdx = sessions.findIndex(s => s.id === session.id);
+  const now = new Date().toISOString();
+  if (existingIdx !== -1) {
+    sessions[existingIdx] = { ...session, updatedAt: now };
+  } else {
+    sessions.push({ ...session, createdAt: session.createdAt || now, updatedAt: now });
+  }
+  cols[idx].clipperSessions = sessions;
+  cols[idx].updatedAt = now;
+  saveCollections(artistId, cols);
+  if (db) saveCollectionToFirestore(db, artistId, cols[idx]).catch(log.error);
+  return session;
+};
+
+/**
+ * Delete a clipper session from a niche
+ */
+export const deleteClipperSession = (artistId, nicheId, sessionId, db = null) => {
+  const cols = getUserCollections(artistId);
+  const idx = cols.findIndex(c => c.id === nicheId);
+  if (idx === -1) return;
+  cols[idx].clipperSessions = (cols[idx].clipperSessions || []).filter(s => s.id !== sessionId);
   cols[idx].updatedAt = new Date().toISOString();
   saveCollections(artistId, cols);
   if (db) saveCollectionToFirestore(db, artistId, cols[idx]).catch(log.error);
@@ -2383,18 +2512,19 @@ export const saveCreatedContent = (artistId, content) => {
     const cleanedContent = {
       videos: (content.videos || []).map(v => ({
         ...v,
-        thumbnail: null, // Remove base64 thumbnails (saved in Firebase Storage)
+        thumbnail: v.thumbnail?.startsWith('blob:') ? null : (v.thumbnail || null),
         clips: (v.clips || []).map(c => ({
           ...c,
-          thumbnail: null,
           file: undefined,
           localUrl: undefined,
-          url: c.url?.startsWith('blob:') ? null : c.url
+          url: c.url?.startsWith('blob:') ? null : c.url,
+          thumbnail: c.thumbnail?.startsWith('blob:') ? null : (c.thumbnail || null),
+          thumbnailUrl: c.thumbnailUrl || null
         })).filter(c => c.url)
       })),
       slideshows: (content.slideshows || []).map(s => ({
         ...s,
-        thumbnail: null, // Remove base64 thumbnails
+        thumbnail: s.thumbnail?.startsWith('blob:') ? null : (s.thumbnail || null),
         audio: s.audio ? {
           ...s.audio,
           file: undefined,
@@ -2522,6 +2652,27 @@ export const updateCreatedVideo = (artistId, videoId, updates) => {
   return content.videos[index];
 };
 
+// Track IDs deleted locally so Firestore subscription can reconcile
+const getLocallyDeletedKey = (artistId) => `stm_deleted_content_${artistId}`;
+
+const trackLocallyDeletedContent = (artistId, itemId) => {
+  try {
+    const key = getLocallyDeletedKey(artistId);
+    const ids = JSON.parse(localStorage.getItem(key) || '[]');
+    if (!ids.includes(itemId)) ids.push(itemId);
+    localStorage.setItem(key, JSON.stringify(ids));
+  } catch (e) { /* ignore */ }
+};
+
+export const getAndClearLocallyDeletedContent = (artistId) => {
+  try {
+    const key = getLocallyDeletedKey(artistId);
+    const ids = JSON.parse(localStorage.getItem(key) || '[]');
+    if (ids.length > 0) localStorage.removeItem(key);
+    return ids;
+  } catch (e) { return []; }
+};
+
 /**
  * Delete a created video
  * @param {string} artistId
@@ -2535,6 +2686,8 @@ export const deleteCreatedVideo = (artistId, videoId) => {
 
   content.videos = filtered;
   saveCreatedContent(artistId, content);
+  // Track locally-deleted ID so Firestore subscription can reconcile
+  trackLocallyDeletedContent(artistId, videoId);
   return true;
 };
 
@@ -2620,6 +2773,8 @@ export const deleteCreatedSlideshow = (artistId, slideshowId) => {
 
   content.slideshows = filtered;
   saveCreatedContent(artistId, content);
+  // Track locally-deleted ID so Firestore subscription can reconcile
+  trackLocallyDeletedContent(artistId, slideshowId);
   return true;
 };
 
@@ -2749,9 +2904,21 @@ export const loadCreatedContentAsync = async (db, artistId) => {
     const videos = [];
     const slideshows = [];
 
+    // Reconcile: soft-delete any items tracked as locally deleted
+    const pendingDeletes = new Set(getAndClearLocallyDeletedContent(artistId));
+    if (pendingDeletes.size > 0) {
+      snapshot.docs.forEach(d => {
+        if (pendingDeletes.has(d.id) && !d.data().deletedAt) {
+          updateDoc(d.ref, { deletedAt: serverTimestamp() }).catch(err =>
+            log.error('[Library] Reconcile soft-delete in load:', err)
+          );
+        }
+      });
+    }
+
     snapshot.docs.forEach(doc => {
       const data = doc.data();
-      if (data.deletedAt) return; // Skip soft-deleted items
+      if (data.deletedAt || pendingDeletes.has(doc.id)) return; // Skip soft-deleted items
       // Infer type from data shape if type field is missing (backwards compat)
       const type = data.type || (data.slides ? 'slideshow' : data.clips ? 'video' : null);
       if (type === 'video') {
@@ -2835,12 +3002,37 @@ export const subscribeToCreatedContent = (db, artistId, callback) => {
     if (cancelled) return; // Component unmounted before load finished
     const collectionRef = collection(db, 'artists', artistId, 'library', 'data', 'createdContent');
     unsubscribeSnapshot = onSnapshot(collectionRef, (snapshot) => {
+      // Reconcile: soft-delete items in Firestore that were deleted locally
+      const pendingDeletes = new Set(getAndClearLocallyDeletedContent(artistId));
+
+      // Also apply any tracked local deletes
+      if (pendingDeletes.size > 0) {
+        snapshot.docs.forEach(d => {
+          if (pendingDeletes.has(d.id) && !d.data().deletedAt) {
+            updateDoc(d.ref, { deletedAt: serverTimestamp() }).catch(err =>
+              log.error('[Library] Reconcile soft-delete failed:', err)
+            );
+          }
+        });
+      }
+
+      // Soft-delete all reconciled items in Firestore
+      if (pendingDeletes.size > 0) {
+        snapshot.docs.forEach(d => {
+          if (pendingDeletes.has(d.id) && !d.data().deletedAt) {
+            updateDoc(d.ref, { deletedAt: serverTimestamp() }).catch(err =>
+              log.error('[Library] Reconcile soft-delete failed:', err)
+            );
+          }
+        });
+      }
+
       const videos = [];
       const slideshows = [];
 
       snapshot.docs.forEach(doc => {
         const data = cleanLoadedData(doc.data());
-        if (data.deletedAt) return; // Skip soft-deleted items
+        if (data.deletedAt || pendingDeletes.has(doc.id)) return; // Skip soft-deleted items
         // Infer type from data shape if type field is missing (backwards compat)
         const type = data.type || (data.slides ? 'slideshow' : data.clips ? 'video' : null);
         if (type === 'video') {
@@ -2852,11 +3044,8 @@ export const subscribeToCreatedContent = (db, artistId, callback) => {
 
       const content = { videos, slideshows };
 
-      // Only overwrite localStorage if we have data OR if localStorage is also empty
-      const localContent = getCreatedContent(artistId);
-      if (videos.length > 0 || slideshows.length > 0 || (localContent.videos.length === 0 && localContent.slideshows.length === 0)) {
-        saveCreatedContent(artistId, content);
-      }
+      // Always save to localStorage (reconciliation ensures only valid items remain)
+      saveCreatedContent(artistId, content);
 
       callback(content);
     }, (error) => {
@@ -3528,21 +3717,25 @@ export const subscribeToLibrary = (db, artistId, callback) => {
   return onSnapshot(
     mediaRef,
     (snapshot) => {
-      const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      log('[Library] Real-time update:', items.length, 'items');
+      const firestoreItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const localItems = getLibrary(artistId);
 
-      // If Firestore returns empty, check localStorage as fallback
-      // This handles the case where Firestore writes failed but localStorage has data
-      if (items.length === 0) {
-        const localItems = getLibrary(artistId);
-        if (localItems.length > 0) {
-          log('[Library] Firestore empty, using localStorage fallback:', localItems.length, 'items');
-          callback(localItems);
-          return;
-        }
+      // Merge: start with localStorage items, overlay Firestore items (Firestore wins per-item).
+      // This prevents data loss when Firestore has fewer items than localStorage
+      // (e.g., writes that haven't synced yet, or items added before Firestore sync existed).
+      const merged = new Map();
+      for (const item of localItems) merged.set(item.id, item);
+      for (const item of firestoreItems) merged.set(item.id, item);
+      const result = [...merged.values()];
+
+      log('[Library] Real-time merge:', firestoreItems.length, 'Firestore +', localItems.length, 'local →', result.length, 'merged');
+
+      // Save merged result to localStorage so future reads are consistent
+      if (result.length > localItems.length) {
+        try { saveLibrary(artistId, result); } catch (_) { /* best-effort */ }
       }
 
-      callback(items);
+      callback(result);
     },
     (error) => {
       log.error('[Library] Subscription error:', error);
@@ -3757,21 +3950,20 @@ export const subscribeToCollections = (db, artistId, callback) => {
         // Deserialize banks/textBanks (stored as JSON strings to avoid Firestore nested array restriction)
         if (typeof data.banks === 'string') try { data.banks = JSON.parse(data.banks); } catch { data.banks = []; }
         if (typeof data.textBanks === 'string') try { data.textBanks = JSON.parse(data.textBanks); } catch { data.textBanks = []; }
+        if (typeof data.clipperSessions === 'string') try { data.clipperSessions = JSON.parse(data.clipperSessions); } catch { data.clipperSessions = []; }
         return { id: doc.id, ...data };
       });
 
       // Deduplicate project roots by normalized name (migration may have created duplicates)
+      // NOTE: Only dedup project roots by name. Niches are NOT deduped by name because
+      // multiple niches can legitimately share the same name (e.g., two "Montage" niches
+      // in different projects). Deduping niches by name causes data loss.
       const seenProjectNames = new Set();
-      const seenOtherNames = new Set();
       const firestoreCollections = rawFirestoreCollections.filter(col => {
         if (col.isProjectRoot) {
           const key = (col.name || col.id).replace(/^@+/, '');
           if (seenProjectNames.has(key)) return false;
           seenProjectNames.add(key);
-        } else {
-          const key = col.name || col.id;
-          if (seenOtherNames.has(key)) return false;
-          seenOtherNames.add(key);
         }
         return true;
       });
@@ -3787,10 +3979,10 @@ export const subscribeToCollections = (db, artistId, callback) => {
             // Migrate both sources to new format, then merge
             const migratedCol = migrateCollectionBanks(col);
             const migratedLocal = migrateCollectionBanks(localCol);
-            // Merge banks: prefer Firestore if it has data, fallback to local
+            // Merge banks: union Firestore + local to prevent race condition data loss
             const mergedBanks = (migratedCol.banks || []).map((fsBank, i) => {
               const localBank = (migratedLocal.banks || [])[i] || [];
-              return (fsBank?.length > 0 ? fsBank : localBank);
+              return [...new Set([...(fsBank || []), ...localBank])];
             });
             // If local has more banks than Firestore, append them
             if ((migratedLocal.banks || []).length > mergedBanks.length) {
@@ -3819,7 +4011,7 @@ export const subscribeToCollections = (db, artistId, callback) => {
               videoTextBank1: (col.videoTextBank1?.length > 0 ? col.videoTextBank1 : localCol.videoTextBank1) || [],
               videoTextBank2: (col.videoTextBank2?.length > 0 ? col.videoTextBank2 : localCol.videoTextBank2) || [],
               textTemplates: (col.textTemplates?.length > 0 ? col.textTemplates : localCol.textTemplates) || [],
-              mediaIds: (col.mediaIds?.length > 0 ? col.mediaIds : localCol.mediaIds) || [],
+              mediaIds: [...new Set([...(col.mediaIds || []), ...(localCol.mediaIds || [])])],
             };
           }
           return migrateCollectionBanks(col);
@@ -3839,8 +4031,41 @@ export const subscribeToCollections = (db, artistId, callback) => {
           }
           return true;
         });
-        const allMerged = [...mergedCollections, ...localOnlyCollections]
+        let allMerged = [...mergedCollections, ...localOnlyCollections]
           .filter(c => !pendingDeletionIds.has(c.id));
+
+        // SAFETY GUARD: Never lose collections during merge.
+        // If a collection exists in localStorage but NOT in the merge result
+        // (and isn't pending deletion), preserve it to prevent data loss.
+        const mergedIds = new Set(allMerged.map(c => c.id));
+        const lostCollections = localCollections.filter(lc =>
+          !mergedIds.has(lc.id) && !pendingDeletionIds.has(lc.id)
+        );
+        if (lostCollections.length > 0) {
+          log.warn('[Collections] Subscription merge would lose', lostCollections.length,
+            'collections, preserving:', lostCollections.map(c => `${c.name}(${c.id})`));
+          allMerged = [...allMerged, ...lostCollections];
+        }
+
+        // SAFETY GUARD: Never reduce a collection's mediaIds count during merge.
+        // If localStorage has more mediaIds than the merge result, keep the union.
+        for (const merged of allMerged) {
+          const local = localCollections.find(lc => lc.id === merged.id);
+          if (local && local.mediaIds?.length > 0 && (!merged.mediaIds || merged.mediaIds.length < local.mediaIds.length)) {
+            const union = [...new Set([...(merged.mediaIds || []), ...local.mediaIds])];
+            if (union.length > merged.mediaIds?.length) {
+              log.warn('[Collections] Subscription merge would reduce mediaIds for',
+                merged.name, 'from', local.mediaIds.length, 'to', merged.mediaIds?.length,
+                '- preserving union of', union.length);
+              merged.mediaIds = union;
+            }
+          }
+        }
+
+        // Log merge results for debugging
+        const pipelines = allMerged.filter(c => c.isPipeline);
+        log('[subscribeToCollections] Merge result:', pipelines.length, 'niches →',
+          pipelines.map(c => `${c.name}(${c.mediaIds?.length || 0}media)`).join(', '));
 
         // Save merged data to localStorage for offline access
         try {
@@ -3887,6 +4112,7 @@ export const saveCollectionToFirestore = async (db, artistId, collectionData) =>
     const data = { ...collectionData, updatedAt: serverTimestamp() };
     if (Array.isArray(data.banks)) data.banks = JSON.stringify(data.banks);
     if (Array.isArray(data.textBanks)) data.textBanks = JSON.stringify(data.textBanks);
+    if (Array.isArray(data.clipperSessions)) data.clipperSessions = JSON.stringify(data.clipperSessions);
     await setDoc(docRef, data);
     return true;
   } catch (error) {
@@ -4480,6 +4706,7 @@ export default {
   createPipeline,
   getPipelineBankLabel,
   getDefaultTemplateSettings,
+  BUILT_IN_TEMPLATES,
   saveNicheTemplate,
   deleteNicheTemplate,
   setNicheActiveTemplate,

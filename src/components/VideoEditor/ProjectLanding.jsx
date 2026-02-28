@@ -6,8 +6,8 @@ import {
   getCollections,
   getLibrary,
   getCreatedContent,
-  deleteCreatedSlideshow,
-  deleteCreatedVideo,
+  deleteCreatedSlideshowAsync,
+  softDeleteCreatedVideoAsync,
   getProjects,
   getProjectStats,
   getProjectNiches,
@@ -40,6 +40,7 @@ import * as SubframeCore from '@subframe/core';
 import { DropdownMenu } from '../../ui/components/DropdownMenu';
 import { useToast } from '../ui';
 import useIsMobile from '../../hooks/useIsMobile';
+import log from '../../utils/logger';
 
 /** Format a scheduledTime ISO string as relative/short time */
 function formatRelativeTime(isoString) {
@@ -244,9 +245,9 @@ const ProjectLanding = ({
       const nicheDrafts = [...(content.slideshows || []), ...(content.videos || [])].filter(d => d.collectionId === n.id);
       for (const draft of nicheDrafts) {
         if (draft.slides) {
-          deleteCreatedSlideshow(artistId, draft.id);
+          deleteCreatedSlideshowAsync(db, artistId, draft.id).catch(log.error);
         } else {
-          deleteCreatedVideo(artistId, draft.id);
+          softDeleteCreatedVideoAsync(db, artistId, draft.id).catch(log.error);
         }
       }
     }
@@ -572,9 +573,27 @@ const ProjectLanding = ({
                 return (
                   <div
                     key={draft.id}
-                    className="flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
+                    className="group relative flex flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] overflow-hidden cursor-pointer hover:border-neutral-600 transition-colors"
                     onClick={() => setPreviewingDraft(draft)}
                   >
+                    {/* Delete button */}
+                    <button
+                      className="absolute top-1.5 right-1.5 z-10 p-1 rounded bg-black/60 text-neutral-400 hover:text-red-400 hover:bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity"
+                      aria-label="Delete draft"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm('Delete this draft?')) {
+                          deleteCreatedSlideshowAsync(db, artistId, draft.id).then(() => {
+                            toastSuccess('Draft deleted');
+                          }).catch(err => {
+                            log.error('Delete draft error:', err);
+                            toastError('Failed to delete draft');
+                          });
+                        }
+                      }}
+                    >
+                      <FeatherTrash2 style={{ width: 14, height: 14 }} />
+                    </button>
                     {firstSlideUrl ? (
                       <div className="w-full aspect-[9/16] bg-[#171717] relative overflow-hidden" style={{ containerType: 'inline-size' }}>
                         <img src={firstSlideUrl} alt="" className="w-full h-full object-cover" loading="lazy" onError={e => { e.target.style.display = 'none'; }} />

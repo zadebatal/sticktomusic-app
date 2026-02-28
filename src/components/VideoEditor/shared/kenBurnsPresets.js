@@ -4,12 +4,8 @@
  */
 
 export const KB_EFFECTS = [
-  { name: 'zoom-in', startScale: 1.0, endScale: 1.15, startX: 0, startY: 0, endX: 0, endY: 0 },
-  { name: 'zoom-out', startScale: 1.15, endScale: 1.0, startX: 0, startY: 0, endX: 0, endY: 0 },
-  { name: 'pan-right', startScale: 1.1, endScale: 1.1, startX: -0.05, startY: 0, endX: 0.05, endY: 0 },
-  { name: 'pan-left', startScale: 1.1, endScale: 1.1, startX: 0.05, startY: 0, endX: -0.05, endY: 0 },
-  { name: 'pan-up', startScale: 1.1, endScale: 1.1, startX: 0, startY: 0.05, endX: 0, endY: -0.05 },
-  { name: 'pan-down', startScale: 1.1, endScale: 1.1, startX: 0, startY: -0.05, endX: 0, endY: 0.05 },
+  { name: 'zoom-in', startScale: 1.0, endScale: 1.12, startX: 0, startY: 0, endX: 0, endY: 0 },
+  { name: 'zoom-out', startScale: 1.12, endScale: 1.0, startX: 0, startY: 0, endX: 0, endY: 0 },
 ];
 
 /**

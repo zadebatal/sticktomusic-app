@@ -3,10 +3,12 @@
  *
  * Features:
  * - Mark in/out to define clip segments
- * - Organize clips into named buckets (accessible in niches)
+ * - Organize clips into banks (mapped to niche slide banks)
  * - rAF-based smooth playhead (60fps DOM updates)
  * - Keyboard shortcuts (Space, I, O, arrows)
  * - FFmpeg stream-copy extraction (no re-encoding)
+ * - Session persistence (markers saved to niche, not as drafts)
+ * - Export to niche banks (assignToBank)
  */
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import log from '../../utils/logger';
@@ -18,7 +20,7 @@ import {
   FeatherPlay, FeatherPause, FeatherScissors, FeatherTrash2,
   FeatherPlus, FeatherDownload, FeatherUpload, FeatherX,
   FeatherSkipBack, FeatherSkipForward, FeatherVolume2, FeatherVolumeX,
-  FeatherChevronDown, FeatherChevronRight,
+  FeatherChevronDown, FeatherChevronRight, FeatherCheck,
 } from '@subframe/core';
 import EditorShell from './shared/EditorShell';
 import EditorTopBar from './shared/EditorTopBar';
@@ -26,7 +28,7 @@ import EditorFooter from './shared/EditorFooter';
 import useIsMobile from '../../hooks/useIsMobile';
 import useUnsavedChanges from './shared/useUnsavedChanges';
 import { uploadFile } from '../../services/firebaseStorage';
-import { addToLibrary, addToCollection, addToProjectPool } from '../../services/libraryService';
+import { addToLibraryAsync, addToLibrary, addToCollection, addToProjectPool, getBankColor } from '../../services/libraryService';
 // ── FFmpeg singleton (lazy-loaded) ──
 let ffmpegInstance = null;
 let ffmpegLoadPromise = null;
@@ -37,15 +39,14 @@ const loadFFmpeg = async () => {
   ffmpegLoadPromise = (async () => {
     try {
       const { FFmpeg } = await import('@ffmpeg/ffmpeg');
-      const { toBlobURL } = await import('@ffmpeg/util');
-      const ffmpeg = new FFmpeg();
+      const ff = new FFmpeg();
       const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-      await ffmpeg.load({
-        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+      await ff.load({
+        coreURL: `${baseURL}/ffmpeg-core.js`,
+        wasmURL: `${baseURL}/ffmpeg-core.wasm`,
       });
-      ffmpegInstance = ffmpeg;
-      return ffmpeg;
+      ffmpegInstance = ff;
+      return ff;
     } catch (error) {
       log.error('[Clipper] Failed to load FFmpeg:', error);
       ffmpegLoadPromise = null;
@@ -71,28 +72,20 @@ const formatTimePrecise = (seconds) => {
   return `${m}:${s.toString().padStart(2, '0')}.${ms}`;
 };
 
-// ── Bucket colors (rotating palette) ──
-const BUCKET_COLORS = [
-  { bg: 'rgba(99,102,241,0.2)', border: 'rgba(99,102,241,0.4)', active: 'rgba(99,102,241,0.45)', activeBorder: '#818cf8', dot: '#6366f1' },
-  { bg: 'rgba(34,197,94,0.2)', border: 'rgba(34,197,94,0.4)', active: 'rgba(34,197,94,0.45)', activeBorder: '#22c55e', dot: '#22c55e' },
-  { bg: 'rgba(168,85,247,0.2)', border: 'rgba(168,85,247,0.4)', active: 'rgba(168,85,247,0.45)', activeBorder: '#a855f7', dot: '#a855f7' },
-  { bg: 'rgba(244,63,94,0.2)', border: 'rgba(244,63,94,0.4)', active: 'rgba(244,63,94,0.45)', activeBorder: '#f43f5e', dot: '#f43f5e' },
-  { bg: 'rgba(245,158,11,0.2)', border: 'rgba(245,158,11,0.4)', active: 'rgba(245,158,11,0.45)', activeBorder: '#f59e0b', dot: '#f59e0b' },
-  { bg: 'rgba(6,182,212,0.2)', border: 'rgba(6,182,212,0.4)', active: 'rgba(6,182,212,0.45)', activeBorder: '#06b6d4', dot: '#06b6d4' },
-];
-const getBucketColor = (index) => BUCKET_COLORS[index % BUCKET_COLORS.length];
-
 // ── Component ──
 const ClipperEditor = ({
   category,
   existingVideo = null,
-  onSave,
+  existingSession = null,
+  onSaveSession,
   onClose,
   artistId = null,
   db = null,
   sourceVideos = [],
   nicheId = null,
   projectId = null,
+  nicheBankLabels = null,
+  projectNiches = [],
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { isMobile } = useIsMobile();
@@ -105,7 +98,7 @@ const ClipperEditor = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [videoName, setVideoName] = useState(existingVideo?.name || 'Untitled Clip');
+  const [videoName, setVideoName] = useState(existingSession?.name || existingVideo?.name || 'Untitled Clip');
   const [clips, setClips] = useState([]);
   const [markIn, setMarkIn] = useState(null);
   const [activeClipIdx, setActiveClipIdx] = useState(null);
@@ -113,10 +106,16 @@ const ClipperEditor = ({
   const [exportProgress, setExportProgress] = useState(0);
   const [exportedCount, setExportedCount] = useState(0);
 
-  // Bucket state
-  const [buckets, setBuckets] = useState(['Bucket 1']);
-  const [activeBucket, setActiveBucketRaw] = useState('Bucket 1');
-  const [collapsedBuckets, setCollapsedBuckets] = useState({});
+  // Bank state (replaces buckets)
+  const [bankLabels, setBankLabels] = useState(() =>
+    existingSession?.bankLabels || nicheBankLabels || ['Bucket 1']
+  );
+  const [activeBankIndex, setActiveBankIndexRaw] = useState(0);
+  const [collapsedBanks, setCollapsedBanks] = useState({});
+
+  // Export destination: 'current-niche' | 'project-pool' | 'library-only' | nicheId
+  const [exportDestination, setExportDestination] = useState('current-niche');
+  const [destPickerOpen, setDestPickerOpen] = useState(false);
 
   // ── Refs ──
   const videoRef = useRef(null);
@@ -125,13 +124,15 @@ const ClipperEditor = ({
   const playheadRef = useRef(null);
   const pendingRegionRef = useRef(null);
   const markInRef = useRef(null);
-  const activeBucketRef = useRef('Bucket 1');
+  const activeBankIndexRef = useRef(0);
   const rafRef = useRef(null);
+  // Stable session ID: set from existingSession on mount, persists across saves
+  const sessionIdRef = useRef(existingSession?.id || null);
 
   // Keep refs in sync with state
-  const setActiveBucket = useCallback((val) => {
-    activeBucketRef.current = val;
-    setActiveBucketRaw(val);
+  const setActiveBankIndex = useCallback((val) => {
+    activeBankIndexRef.current = val;
+    setActiveBankIndexRaw(val);
   }, []);
 
   // Merge source candidates: explicit sourceVideos prop (from niche) + category.videos fallback
@@ -154,16 +155,34 @@ const ClipperEditor = ({
 
   // ── Load existing data ──
   useEffect(() => {
-    if (existingVideo?.editorMode === 'clipper') {
-      if (existingVideo.clips) setClips(existingVideo.clips);
-      if (existingVideo.buckets?.length) {
-        setBuckets(existingVideo.buckets);
-        setActiveBucket(existingVideo.buckets[0]);
+    if (existingSession) {
+      // Restore from clipper session
+      if (existingSession.clips) {
+        setClips(existingSession.clips.map(c => ({
+          ...c,
+          bankIndex: typeof c.bankIndex === 'number' ? c.bankIndex : 0,
+        })));
+      }
+      if (existingSession.bankLabels?.length) {
+        setBankLabels(existingSession.bankLabels);
+      }
+      if (existingSession.sourceVideoUrl) setSourceUrl(existingSession.sourceVideoUrl);
+      if (existingSession.sourceVideoName) setSourceName(existingSession.sourceVideoName);
+      if (existingSession.name) setVideoName(existingSession.name);
+    } else if (existingVideo?.editorMode === 'clipper') {
+      // Backward compat: old draft-based sessions with bucket strings
+      if (existingVideo.clips) {
+        const oldBuckets = existingVideo.buckets || ['Bucket 1'];
+        setClips(existingVideo.clips.map(c => ({
+          ...c,
+          bankIndex: typeof c.bankIndex === 'number' ? c.bankIndex : Math.max(0, oldBuckets.indexOf(c.bucket || oldBuckets[0])),
+        })));
+        setBankLabels(oldBuckets);
       }
       if (existingVideo.sourceUrl) setSourceUrl(existingVideo.sourceUrl);
       if (existingVideo.sourceName) setSourceName(existingVideo.sourceName);
     } else if (existingVideo?.clips) {
-      setClips(existingVideo.clips);
+      setClips(existingVideo.clips.map(c => ({ ...c, bankIndex: typeof c.bankIndex === 'number' ? c.bankIndex : 0 })));
       setSourceUrl(existingVideo.sourceUrl);
       setSourceName(existingVideo.sourceName || '');
     } else if (availableSourceVideos.length > 0) {
@@ -171,7 +190,7 @@ const ClipperEditor = ({
       setSourceUrl(firstVideo.url);
       setSourceName(firstVideo.name);
     }
-  }, [existingVideo, availableSourceVideos, setActiveBucket]);
+  }, [existingSession, existingVideo, availableSourceVideos]);
 
   // ── Time display update (throttled via timeupdate ~4x/sec for the badge) ──
   useEffect(() => {
@@ -228,7 +247,10 @@ const ClipperEditor = ({
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
-      video.play();
+      video.play().catch(err => {
+        log.error('[Clipper] Play failed:', err.message);
+        setIsPlaying(false);
+      });
       setIsPlaying(true);
     } else {
       video.pause();
@@ -306,7 +328,10 @@ const ClipperEditor = ({
         end,
         duration: end - start,
         name: `Clip ${prev.length + 1}`,
-        bucket: activeBucketRef.current,
+        bankIndex: activeBankIndexRef.current,
+        exported: false,
+        exportedMediaId: null,
+        exportedUrl: null,
       };
       return [...prev, newClip].sort((a, b) => a.start - b.start);
     });
@@ -349,33 +374,36 @@ const ClipperEditor = ({
     seekTo(clip.start);
   }, [seekTo]);
 
-  const moveClipToBucket = useCallback((clipIdx, bucketName) => {
-    setClips(prev => prev.map((c, i) => i === clipIdx ? { ...c, bucket: bucketName } : c));
+  const moveClipToBank = useCallback((clipIdx, newBankIndex) => {
+    setClips(prev => prev.map((c, i) => i === clipIdx ? { ...c, bankIndex: newBankIndex } : c));
   }, []);
 
-  // ── Bucket management ──
-  const addBucket = useCallback(() => {
-    const n = buckets.length + 1;
-    setBuckets(prev => [...prev, `Bucket ${n}`]);
-  }, [buckets.length]);
+  // ── Bank management ──
+  const addBank = useCallback(() => {
+    if (bankLabels.length >= 10) return;
+    setBankLabels(prev => [...prev, `Bucket ${prev.length + 1}`]);
+  }, [bankLabels.length]);
 
-  const removeBucket = useCallback((bucketName) => {
-    if (buckets.length <= 1) return;
-    const fallback = buckets.find(b => b !== bucketName) || buckets[0];
-    setBuckets(prev => prev.filter(b => b !== bucketName));
-    setClips(prev => prev.map(c => c.bucket === bucketName ? { ...c, bucket: fallback } : c));
-    if (activeBucket === bucketName) setActiveBucket(fallback);
-  }, [buckets, activeBucket, setActiveBucket]);
+  const removeBank = useCallback((bankIdx) => {
+    if (bankLabels.length <= 1) return;
+    setBankLabels(prev => prev.filter((_, i) => i !== bankIdx));
+    // Re-index clips: clips in removed bank go to bank 0, clips above shift down
+    setClips(prev => prev.map(c => {
+      if (c.bankIndex === bankIdx) return { ...c, bankIndex: 0 };
+      if (c.bankIndex > bankIdx) return { ...c, bankIndex: c.bankIndex - 1 };
+      return c;
+    }));
+    if (activeBankIndex === bankIdx) setActiveBankIndex(0);
+    else if (activeBankIndex > bankIdx) setActiveBankIndex(activeBankIndex - 1);
+  }, [bankLabels.length, activeBankIndex, setActiveBankIndex]);
 
-  const renameBucket = useCallback((oldName, newName) => {
+  const renameBank = useCallback((bankIdx, newName) => {
     if (!newName.trim()) return;
-    setBuckets(prev => prev.map(b => b === oldName ? newName : b));
-    setClips(prev => prev.map(c => c.bucket === oldName ? { ...c, bucket: newName } : c));
-    if (activeBucket === oldName) setActiveBucket(newName);
-  }, [activeBucket, setActiveBucket]);
+    setBankLabels(prev => prev.map((b, i) => i === bankIdx ? newName : b));
+  }, []);
 
-  const toggleBucketCollapse = useCallback((bucketName) => {
-    setCollapsedBuckets(prev => ({ ...prev, [bucketName]: !prev[bucketName] }));
+  const toggleBankCollapse = useCallback((bankIdx) => {
+    setCollapsedBanks(prev => ({ ...prev, [bankIdx]: !prev[bankIdx] }));
   }, []);
 
   // ── Track click-to-seek (uses trackAreaRef for correct position math) ──
@@ -388,32 +416,51 @@ const ClipperEditor = ({
     seekTo(pct * d);
   }, [seekTo]);
 
-  // ── Save (clip marks + buckets, no FFmpeg) ──
-  const handleSave = useCallback(() => {
-    if (!onSave) return;
-    onSave({
+  // ── Build session data from current state ──
+  const buildSessionData = useCallback(() => {
+    // Use stable ref so all saves (manual + auto) share the same session ID
+    if (!sessionIdRef.current) {
+      sessionIdRef.current = `session_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    }
+    return {
+      id: sessionIdRef.current,
       name: videoName,
-      editorMode: 'clipper',
-      sourceUrl: sourceUrl?.startsWith('blob:') ? null : sourceUrl,
-      sourceName,
+      sourceVideoUrl: sourceUrl?.startsWith('blob:') ? null : sourceUrl,
+      sourceVideoName: sourceName,
+      bankLabels,
       clips: clips.map(c => ({
         id: c.id, name: c.name, start: c.start, end: c.end,
-        duration: c.duration, bucket: c.bucket,
-        ...(c.cloudUrl ? { cloudUrl: c.cloudUrl } : {}),
+        duration: c.duration, bankIndex: c.bankIndex,
+        exported: !!c.exportedMediaId,
+        exportedMediaId: c.exportedMediaId || null,
+        exportedUrl: c.exportedUrl || null,
       })),
-      buckets,
-      thumbnail: null,
-    });
-    toastSuccess('Clip session saved');
-  }, [videoName, sourceUrl, sourceName, clips, buckets, onSave, toastSuccess]);
+      createdAt: existingSession?.createdAt || new Date().toISOString(),
+    };
+  }, [existingSession?.createdAt, videoName, sourceUrl, sourceName, bankLabels, clips]);
 
-  // ── Export clips using FFmpeg stream-copy ──
-  const handleExport = useCallback(async () => {
-    if (clips.length === 0) return;
+  // ── Save session (markers only, instant) ──
+  const handleSaveSession = useCallback(() => {
+    if (!onSaveSession) return;
+    const sessionData = buildSessionData();
+    onSaveSession(sessionData);
+    setSavedClean(true);
+    savedClipsSnapshotRef.current = clips.map(c => ({ id: c.id, start: c.start, end: c.end, bankIndex: c.bankIndex }));
+    toastSuccess('Session saved');
+  }, [onSaveSession, buildSessionData, clips, toastSuccess]);
+
+  // ── Export clips to banks (replaces handleExport) ──
+  const handleExportToBanks = useCallback(async () => {
+    const unexported = clips.filter(c => !c.exportedMediaId);
+    if (unexported.length === 0) {
+      toastSuccess('All clips already exported');
+      return;
+    }
     setExporting(true);
     setExportProgress(0);
     setExportedCount(0);
 
+    const results = [];
     try {
       const ffmpeg = await loadFFmpeg();
       const { fetchFile } = await import('@ffmpeg/util');
@@ -430,86 +477,130 @@ const ClipperEditor = ({
       const inputName = `source.${ext}`;
       await ffmpeg.writeFile(inputName, sourceData);
 
-      const results = [];
-      for (let i = 0; i < clips.length; i++) {
-        const clip = clips[i];
+      for (let i = 0; i < unexported.length; i++) {
+        const clip = unexported[i];
         const outputName = `clip_${i}.${ext}`;
         const clipDuration = clip.end - clip.start;
 
-        // -ss before -i for fast keyframe seek, -t for duration
-        await ffmpeg.exec([
-          '-ss', clip.start.toFixed(3),
-          '-i', inputName,
-          '-t', clipDuration.toFixed(3),
-          '-c', 'copy',
-          '-avoid_negative_ts', 'make_zero',
-          outputName,
-        ]);
+        try {
+          // -ss before -i for fast keyframe seek, -t for duration
+          await ffmpeg.exec([
+            '-ss', clip.start.toFixed(3),
+            '-i', inputName,
+            '-t', clipDuration.toFixed(3),
+            '-c', 'copy',
+            '-avoid_negative_ts', 'make_zero',
+            outputName,
+          ]);
 
-        const data = await ffmpeg.readFile(outputName);
-        const mimeType = ext === 'webm' ? 'video/webm' : 'video/mp4';
-        const blob = new Blob([data.buffer], { type: mimeType });
-        await ffmpeg.deleteFile(outputName);
+          const data = await ffmpeg.readFile(outputName);
+          const mimeType = ext === 'webm' ? 'video/webm' : 'video/mp4';
+          const blob = new Blob([data.buffer], { type: mimeType });
+          // Give blob a name — uploadFile requires file.name for the storage path
+          blob.name = `${clip.name || `clip_${i + 1}`}.${ext}`;
+          await ffmpeg.deleteFile(outputName);
 
-        const { url: cloudUrl } = await uploadFile(blob, 'clips', () => {});
+          const { url: cloudUrl } = await uploadFile(blob, 'clips', () => {});
 
-        // Create a library media item for each exported clip
-        const mediaId = `media_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const mediaItem = {
-          id: mediaId,
-          type: 'video',
-          name: clip.name || `Clip ${i + 1}`,
-          url: cloudUrl,
-          thumbnailUrl: cloudUrl,
-          duration: clip.duration,
-          sourceVideoName: sourceName,
-          sourceStart: clip.start,
-          sourceEnd: clip.end,
-          bucket: clip.bucket,
-          isClipperClip: true,
-          createdAt: new Date().toISOString(),
-        };
-        addToLibrary(artistId, mediaItem);
-        if (nicheId) addToCollection(artistId, nicheId, [mediaId], db);
-        if (projectId) addToProjectPool(artistId, projectId, [mediaId], db);
+          // Generate thumbnail from the clip video
+          let thumbUrl = cloudUrl;
+          try {
+            const vidEl = document.createElement('video');
+            vidEl.muted = true;
+            vidEl.playsInline = true;
+            const blobUrl = URL.createObjectURL(blob);
+            vidEl.src = blobUrl;
+            await new Promise((res, rej) => { vidEl.onloadeddata = res; vidEl.onerror = rej; });
+            vidEl.currentTime = 0.1;
+            await new Promise(res => { vidEl.onseeked = res; });
+            const canvas = document.createElement('canvas');
+            canvas.width = vidEl.videoWidth;
+            canvas.height = vidEl.videoHeight;
+            canvas.getContext('2d').drawImage(vidEl, 0, 0);
+            const thumbBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.7));
+            thumbBlob.name = `thumb_${clip.name || `clip_${i + 1}`}.jpg`;
+            URL.revokeObjectURL(blobUrl);
+            const { url: uploadedThumbUrl } = await uploadFile(thumbBlob, 'thumbnails', () => {});
+            thumbUrl = uploadedThumbUrl;
+          } catch (thumbErr) {
+            log.warn('[Clipper] Failed to generate thumbnail, using video URL:', thumbErr.message);
+          }
 
-        results.push({ ...clip, cloudUrl, mediaId });
+          // Create a library media item for each exported clip
+          const mediaId = `media_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const mediaItem = {
+            id: mediaId,
+            type: 'video',
+            name: clip.name || `Clip ${i + 1}`,
+            url: cloudUrl,
+            thumbnailUrl: thumbUrl,
+            duration: clip.duration,
+            sourceVideoName: sourceName,
+            sourceStart: clip.start,
+            sourceEnd: clip.end,
+            bankIndex: clip.bankIndex,
+            isClipperClip: true,
+            createdAt: new Date().toISOString(),
+          };
+          // Always add to library (write to both localStorage + Firestore)
+          await addToLibraryAsync(db, artistId, mediaItem);
+
+          // Route based on export destination
+          if (exportDestination === 'library-only') {
+            // Library only — done
+          } else if (exportDestination === 'project-pool') {
+            if (projectId) addToProjectPool(artistId, projectId, [mediaId], db);
+          } else {
+            // 'current-niche' or a specific nicheId
+            const targetNicheId = exportDestination === 'current-niche' ? nicheId : exportDestination;
+            if (targetNicheId) {
+              addToCollection(artistId, targetNicheId, [mediaId], db);
+            }
+            if (projectId) addToProjectPool(artistId, projectId, [mediaId], db);
+          }
+
+          results.push({ clipId: clip.id, cloudUrl, mediaId });
+        } catch (clipErr) {
+          log.error(`[Clipper] Failed to export clip ${clip.name}:`, clipErr);
+        }
+
         setExportedCount(i + 1);
-        setExportProgress(Math.round(((i + 1) / clips.length) * 100));
+        setExportProgress(Math.round(((i + 1) / unexported.length) * 100));
       }
 
       await ffmpeg.deleteFile(inputName);
-
-      // Update clips with cloudUrls
-      setClips(prev => prev.map(c => {
-        const result = results.find(r => r.id === c.id);
-        return result ? { ...c, cloudUrl: result.cloudUrl } : c;
-      }));
-
-      // Save full session with exported URLs
-      if (onSave) {
-        onSave({
-          name: videoName,
-          editorMode: 'clipper',
-          sourceUrl: sourceUrl?.startsWith('blob:') ? null : sourceUrl,
-          sourceName,
-          clips: results.map(r => ({
-            id: r.id, name: r.name, start: r.start, end: r.end,
-            duration: r.duration, bucket: r.bucket, cloudUrl: r.cloudUrl,
-          })),
-          buckets,
-          thumbnail: results[0]?.cloudUrl || null,
-        });
-      }
-
-      toastSuccess(`Exported ${results.length} clip${results.length !== 1 ? 's' : ''}`);
-      setExporting(false);
     } catch (err) {
       log.error('[Clipper] Export failed:', err);
       toastError(`Export failed: ${err.message}`);
+    } finally {
+      // Update clips with exported info (partial success supported)
+      if (results.length > 0) {
+        setClips(prev => prev.map(c => {
+          const result = results.find(r => r.clipId === c.id);
+          return result ? { ...c, exportedMediaId: result.mediaId, exportedUrl: result.cloudUrl } : c;
+        }));
+      }
       setExporting(false);
+
+      // Auto-save session after export (use setTimeout to read updated clips state)
+      if (onSaveSession) {
+        const exportResults = results;
+        setTimeout(() => {
+          const sessionData = buildSessionData();
+          // Merge export results into the clip data
+          sessionData.clips = sessionData.clips.map(c => {
+            const result = exportResults.find(r => r.clipId === c.id);
+            return result ? { ...c, exported: true, exportedMediaId: result.mediaId, exportedUrl: result.cloudUrl } : c;
+          });
+          onSaveSession(sessionData);
+        }, 0);
+      }
+
+      if (results.length > 0) {
+        toastSuccess(`Exported ${results.length} clip${results.length !== 1 ? 's' : ''} to banks`);
+      }
     }
-  }, [clips, sourceFile, sourceUrl, sourceName, videoName, buckets, onSave, toastSuccess, toastError, artistId, db, nicheId, projectId]);
+  }, [clips, sourceFile, sourceUrl, sourceName, videoName, bankLabels, buildSessionData, onSaveSession, toastSuccess, toastError, artistId, db, nicheId, projectId, exportDestination]);
 
   // ── Keyboard shortcuts (reads video.currentTime directly for accuracy) ──
   useEffect(() => {
@@ -552,20 +643,34 @@ const ClipperEditor = ({
   // ── Computed ──
   const hasSource = !!sourceUrl;
 
-  const clipsByBucket = useMemo(() => {
+  const clipsByBank = useMemo(() => {
     const map = {};
-    for (const b of buckets) map[b] = [];
+    for (let bIdx = 0; bIdx < bankLabels.length; bIdx++) map[bIdx] = [];
     for (let i = 0; i < clips.length; i++) {
       const c = clips[i];
-      const bucket = c.bucket || buckets[0];
-      if (!map[bucket]) map[bucket] = [];
-      map[bucket].push({ ...c, _idx: i });
+      const bankIdx = typeof c.bankIndex === 'number' ? c.bankIndex : 0;
+      if (!map[bankIdx]) map[bankIdx] = [];
+      map[bankIdx].push({ ...c, _idx: i });
     }
     return map;
-  }, [clips, buckets]);
+  }, [clips, bankLabels]);
+
+  const unexportedCount = useMemo(() => clips.filter(c => !c.exportedMediaId).length, [clips]);
 
   // ── Unsaved changes guard (beforeunload + back button) ──
-  const hasUnsavedWork = clips.length > 0 || !!sourceUrl;
+  const [savedClean, setSavedClean] = useState(false);
+  const savedClipsSnapshotRef = useRef(null);
+  // Compare current clips to last saved snapshot to detect new edits after save
+  const hasNewEditsAfterSave = useMemo(() => {
+    if (!savedClean || !savedClipsSnapshotRef.current) return false;
+    const snapshot = savedClipsSnapshotRef.current;
+    if (snapshot.length !== clips.length) return true;
+    return snapshot.some((sc, i) => {
+      const c = clips[i];
+      return !c || sc.id !== c.id || sc.start !== c.start || sc.end !== c.end || sc.bankIndex !== c.bankIndex;
+    });
+  }, [savedClean, clips]);
+  const hasUnsavedWork = (clips.length > 0 || !!sourceUrl) && (!savedClean || hasNewEditsAfterSave);
   const { confirmLeave } = useUnsavedChanges(hasUnsavedWork);
 
   const handleCloseRequest = useCallback(() => {
@@ -582,11 +687,12 @@ const ClipperEditor = ({
         placeholder="Untitled Clip"
         onBack={handleCloseRequest}
         isMobile={isMobile}
-        onSave={handleSave}
-        onExport={handleExport}
-        exportDisabled={clips.length === 0 || exporting}
+        onSave={handleSaveSession}
+        saveLabel="Save Session"
+        onExport={handleExportToBanks}
+        exportDisabled={unexportedCount === 0 || exporting}
         exportLoading={exporting}
-        exportLabel={exporting ? `Exporting ${exportedCount}/${clips.length}...` : `Export ${clips.length || 0}`}
+        exportLabel={exporting ? `Exporting ${exportedCount}/${unexportedCount}...` : `Export ${unexportedCount} to Banks`}
       />
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -649,6 +755,7 @@ const ClipperEditor = ({
                 <video
                   ref={videoRef}
                   src={sourceUrl}
+                  crossOrigin="anonymous"
                   className="max-w-full max-h-full rounded-lg"
                   onClick={togglePlay}
                   playsInline
@@ -664,15 +771,15 @@ const ClipperEditor = ({
                     <Badge variant="neutral">{formatTimePrecise(currentTime)} / {formatTime(duration)}</Badge>
                   </div>
                   <div className="flex items-center gap-2">
-                    {/* Target bucket for new clips */}
+                    {/* Target bank for new clips */}
                     <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getBucketColor(buckets.indexOf(activeBucket)).dot }} />
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getBankColor(activeBankIndex).primary }} />
                       <select
                         className="bg-neutral-800 text-caption font-caption text-neutral-300 border border-neutral-700 rounded px-2 py-1 cursor-pointer outline-none"
-                        value={activeBucket}
-                        onChange={e => setActiveBucket(e.target.value)}
+                        value={activeBankIndex}
+                        onChange={e => setActiveBankIndex(Number(e.target.value))}
                       >
-                        {buckets.map(b => <option key={b} value={b}>{b}</option>)}
+                        {bankLabels.map((label, i) => <option key={i} value={i}>{label}</option>)}
                       </select>
                     </div>
                     {markIn !== null && (
@@ -721,8 +828,9 @@ const ClipperEditor = ({
                         const startPct = duration > 0 ? (clip.start / duration) * 100 : 0;
                         const widthPct = duration > 0 ? ((clip.end - clip.start) / duration) * 100 : 0;
                         const isActive = activeClipIdx === i;
-                        const bucketIdx = buckets.indexOf(clip.bucket);
-                        const color = getBucketColor(bucketIdx >= 0 ? bucketIdx : 0);
+                        const bankIdx = typeof clip.bankIndex === 'number' ? clip.bankIndex : 0;
+                        const bankColor = getBankColor(bankIdx);
+                        const isExported = !!clip.exportedMediaId;
                         return (
                           <div
                             key={clip.id}
@@ -734,17 +842,20 @@ const ClipperEditor = ({
                               bottom: '2px',
                               borderRadius: '4px',
                               cursor: 'pointer',
-                              backgroundColor: isActive ? color.active : color.bg,
-                              border: `2px solid ${isActive ? color.activeBorder : color.border}`,
+                              backgroundColor: isActive ? `${bankColor.primary}66` : `${bankColor.primary}33`,
+                              border: `2px solid ${isActive ? bankColor.primary : `${bankColor.primary}66`}`,
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
                               overflow: 'hidden',
                               zIndex: isActive ? 10 : 5,
-                              boxShadow: isActive ? `0 0 8px ${color.border}` : 'none',
+                              boxShadow: isActive ? `0 0 8px ${bankColor.primary}66` : 'none',
                             }}
                             onClick={(e) => { e.stopPropagation(); setActiveClipIdx(i); jumpToClip(clip); }}
                           >
+                            {isExported && (
+                              <FeatherCheck style={{ width: 8, height: 8, color: '#22c55e', flexShrink: 0, marginRight: 2 }} />
+                            )}
                             <span style={{
                               fontSize: '10px', fontWeight: 600, color: '#fff',
                               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -829,7 +940,7 @@ const ClipperEditor = ({
                             document.body.style.userSelect = '';
                             window.removeEventListener('mousemove', handleDragMove);
                             window.removeEventListener('mouseup', handleDragEnd);
-                            if (wasPlaying) { videoRef.current?.play(); setIsPlaying(true); }
+                            if (wasPlaying) { videoRef.current?.play()?.catch(() => {}); setIsPlaying(true); }
                           };
                           window.addEventListener('mousemove', handleDragMove);
                           window.addEventListener('mouseup', handleDragEnd);
@@ -867,7 +978,7 @@ const ClipperEditor = ({
           )}
         </div>
 
-        {/* ── Right panel: Clip list with buckets ── */}
+        {/* ── Right panel: Clip list with banks ── */}
         {!isMobile && (
           <div className="flex flex-col w-[300px] bg-[#0a0a0f] overflow-y-auto">
             {/* Header */}
@@ -926,7 +1037,7 @@ const ClipperEditor = ({
               </div>
             )}
 
-            {/* Clip list — grouped by bucket */}
+            {/* Clip list — grouped by bank */}
             {clips.length === 0 ? (
               <div className="flex flex-1 flex-col items-center justify-center px-4 gap-2">
                 <FeatherScissors className="text-neutral-700" style={{ width: 24, height: 24 }} />
@@ -936,44 +1047,45 @@ const ClipperEditor = ({
               </div>
             ) : (
               <div className="flex flex-col flex-1">
-                {buckets.map((bucketName, bIdx) => {
-                  const bucketClips = clipsByBucket[bucketName] || [];
-                  const color = getBucketColor(bIdx);
-                  const isCollapsed = collapsedBuckets[bucketName];
+                {bankLabels.map((bankLabel, bIdx) => {
+                  const bankClips = clipsByBank[bIdx] || [];
+                  const bankColor = getBankColor(bIdx);
+                  const isCollapsed = collapsedBanks[bIdx];
                   return (
-                    <div key={bucketName} className="flex flex-col">
-                      {/* Bucket header */}
+                    <div key={bIdx} className="flex flex-col">
+                      {/* Bank header */}
                       <div
                         className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-neutral-800/50 border-b border-neutral-800/50"
-                        onClick={() => toggleBucketCollapse(bucketName)}
+                        onClick={() => toggleBankCollapse(bIdx)}
                       >
                         {isCollapsed
                           ? <FeatherChevronRight className="text-neutral-500 flex-none" style={{ width: 14, height: 14 }} />
                           : <FeatherChevronDown className="text-neutral-500 flex-none" style={{ width: 14, height: 14 }} />
                         }
-                        <div className="w-2.5 h-2.5 rounded-full flex-none" style={{ backgroundColor: color.dot }} />
+                        <div className="w-2.5 h-2.5 rounded-full flex-none" style={{ backgroundColor: bankColor.primary }} />
                         <input
                           className="bg-transparent text-caption-bold font-caption-bold text-neutral-300 outline-none flex-1 min-w-0"
-                          value={bucketName}
-                          onChange={(e) => renameBucket(bucketName, e.target.value)}
+                          value={bankLabel}
+                          onChange={(e) => renameBank(bIdx, e.target.value)}
                           onClick={(e) => e.stopPropagation()}
                         />
-                        <Badge variant="neutral">{bucketClips.length}</Badge>
-                        {buckets.length > 1 && (
+                        <Badge variant="neutral">{bankClips.length}</Badge>
+                        {bankLabels.length > 1 && (
                           <IconButton
                             variant="neutral-tertiary" size="small"
                             icon={<FeatherTrash2 />}
-                            aria-label="Delete bucket"
-                            onClick={(e) => { e.stopPropagation(); removeBucket(bucketName); }}
+                            aria-label="Delete bank"
+                            onClick={(e) => { e.stopPropagation(); removeBank(bIdx); }}
                           />
                         )}
                       </div>
 
-                      {/* Clips in this bucket */}
+                      {/* Clips in this bank */}
                       {!isCollapsed && (
                         <div className="flex flex-col gap-1 p-2">
-                          {bucketClips.map((clip) => {
+                          {bankClips.map((clip) => {
                             const isActive = activeClipIdx === clip._idx;
+                            const isExported = !!clip.exportedMediaId;
                             return (
                               <div
                                 key={clip.id}
@@ -982,9 +1094,15 @@ const ClipperEditor = ({
                                     ? 'border border-solid'
                                     : 'bg-neutral-800/40 border border-transparent hover:bg-neutral-800/70'
                                 }`}
-                                style={isActive ? { backgroundColor: color.active, borderColor: color.activeBorder } : {}}
+                                style={isActive ? { backgroundColor: `${bankColor.primary}66`, borderColor: bankColor.primary } : {}}
                                 onClick={() => { setActiveClipIdx(clip._idx); jumpToClip(clip); }}
                               >
+                                {/* Exported indicator */}
+                                {isExported && (
+                                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-green-500/20 flex-none">
+                                    <FeatherCheck className="text-green-400" style={{ width: 10, height: 10 }} />
+                                  </div>
+                                )}
                                 <div className="flex flex-col gap-0.5 flex-1 min-w-0">
                                   <input
                                     className="bg-transparent text-sm text-white outline-none w-full truncate"
@@ -996,19 +1114,19 @@ const ClipperEditor = ({
                                     <span className="text-[11px] text-neutral-500">
                                       {formatTimePrecise(clip.start)} → {formatTimePrecise(clip.end)}
                                     </span>
-                                    <Badge variant="neutral">{formatTime(clip.duration)}</Badge>
+                                    <Badge variant="neutral">{formatTimePrecise(clip.duration)}</Badge>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1">
-                                  {buckets.length > 1 && (
+                                  {bankLabels.length > 1 && (
                                     <select
                                       className="bg-neutral-800 text-[10px] text-neutral-400 border border-neutral-700 rounded px-1 py-0.5 cursor-pointer outline-none w-14"
-                                      value={clip.bucket}
-                                      onChange={(e) => { e.stopPropagation(); moveClipToBucket(clip._idx, e.target.value); }}
+                                      value={clip.bankIndex}
+                                      onChange={(e) => { e.stopPropagation(); moveClipToBank(clip._idx, Number(e.target.value)); }}
                                       onClick={(e) => e.stopPropagation()}
-                                      title="Move to bucket"
+                                      title="Move to bank"
                                     >
-                                      {buckets.map(b => <option key={b} value={b}>{b}</option>)}
+                                      {bankLabels.map((bl, bi) => <option key={bi} value={bi}>{bl}</option>)}
                                     </select>
                                   )}
                                   <IconButton
@@ -1027,12 +1145,14 @@ const ClipperEditor = ({
                   );
                 })}
 
-                {/* Add bucket button */}
-                <div className="px-3 py-2">
-                  <Button variant="neutral-tertiary" size="small" icon={<FeatherPlus />} onClick={addBucket}>
-                    Add Bucket
-                  </Button>
-                </div>
+                {/* Add bank button */}
+                {bankLabels.length < 10 && (
+                  <div className="px-3 py-2">
+                    <Button variant="neutral-tertiary" size="small" icon={<FeatherPlus />} onClick={addBank}>
+                      Add Bank
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1042,7 +1162,7 @@ const ClipperEditor = ({
                 {exporting && (
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-caption font-caption text-neutral-400">Exporting {exportedCount}/{clips.length}...</span>
+                      <span className="text-caption font-caption text-neutral-400">Exporting {exportedCount}/{unexportedCount}...</span>
                       <span className="text-caption font-caption text-neutral-500">{exportProgress}%</span>
                     </div>
                     <div className="w-full h-1.5 rounded-full bg-neutral-800">
@@ -1050,15 +1170,62 @@ const ClipperEditor = ({
                     </div>
                   </div>
                 )}
+                {/* Destination picker */}
+                <div className="relative">
+                  <span className="text-caption font-caption text-neutral-500 mb-1 block">Destination</span>
+                  <button
+                    className="flex w-full items-center gap-2 rounded-md border border-solid border-neutral-700 bg-[#1a1a1aff] px-3 py-2 hover:bg-[#262626] transition text-left"
+                    onClick={() => setDestPickerOpen(!destPickerOpen)}
+                  >
+                    <span className="text-caption font-caption text-white truncate grow">
+                      {exportDestination === 'current-niche' ? `Current Niche${category?.name ? ` (${category.name})` : ''}`
+                        : exportDestination === 'project-pool' ? 'Project Pool Only'
+                        : exportDestination === 'library-only' ? 'All Media Only'
+                        : projectNiches.find(n => n.id === exportDestination)?.name || 'Other Niche'}
+                    </span>
+                    <FeatherChevronDown
+                      className="text-neutral-400 flex-none transition-transform"
+                      style={{ width: 14, height: 14, transform: destPickerOpen ? 'rotate(180deg)' : 'none' }}
+                    />
+                  </button>
+                  {destPickerOpen && (
+                    <div className="absolute bottom-full left-0 right-0 mb-1 flex flex-col gap-0.5 px-2 py-2 bg-[#111111] border border-neutral-700 rounded-lg max-h-48 overflow-y-auto shadow-xl z-20">
+                      {[
+                        { value: 'current-niche', label: `Current Niche${category?.name ? ` — ${category.name}` : ''}` },
+                        { value: 'project-pool', label: 'Project Pool Only' },
+                        { value: 'library-only', label: 'All Media Only' },
+                        ...projectNiches.map(n => ({ value: n.id, label: n.name })),
+                      ].map(opt => (
+                        <button
+                          key={opt.value}
+                          className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition ${
+                            exportDestination === opt.value ? 'bg-indigo-600' : 'hover:bg-neutral-800'
+                          }`}
+                          onClick={() => { setExportDestination(opt.value); setDestPickerOpen(false); }}
+                        >
+                          <span className="text-caption font-caption text-white truncate grow">{opt.label}</span>
+                          {exportDestination === opt.value && <FeatherCheck className="text-indigo-300 flex-none" style={{ width: 12, height: 12 }} />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <Button
                   variant="brand-primary" size="medium"
                   icon={exporting ? undefined : <FeatherDownload />}
-                  disabled={exporting} loading={exporting}
-                  onClick={handleExport}
+                  disabled={unexportedCount === 0 || exporting} loading={exporting}
+                  onClick={handleExportToBanks}
                 >
                   {exporting
-                    ? `Exporting ${exportedCount}/${clips.length}...`
-                    : `Export ${clips.length} Clip${clips.length !== 1 ? 's' : ''}`}
+                    ? `Exporting ${exportedCount}/${unexportedCount}...`
+                    : unexportedCount > 0
+                      ? `Export ${unexportedCount} to ${
+                          exportDestination === 'current-niche' ? 'Banks'
+                          : exportDestination === 'project-pool' ? 'Project Pool'
+                          : exportDestination === 'library-only' ? 'Library'
+                          : projectNiches.find(n => n.id === exportDestination)?.name || 'Niche'
+                        }`
+                      : 'All Exported'}
                 </Button>
               </div>
             )}
@@ -1072,27 +1239,36 @@ const ClipperEditor = ({
       {/* Mobile clip list */}
       {isMobile && hasSource && clips.length > 0 && (
         <div className="flex flex-col gap-1 px-3 py-2 border-t border-neutral-800 bg-[#0a0a0f] max-h-[200px] overflow-y-auto">
-          {clips.map((clip, i) => (
-            <div key={clip.id} className="flex items-center gap-2 rounded-lg px-3 py-2 bg-neutral-800/50">
-              <div className="w-2 h-2 rounded-full flex-none" style={{ backgroundColor: getBucketColor(buckets.indexOf(clip.bucket)).dot }} />
-              <span className="text-sm text-white flex-1 truncate">{clip.name}</span>
-              <span className="text-[11px] text-neutral-500">{formatTimePrecise(clip.start)}→{formatTimePrecise(clip.end)}</span>
-              <IconButton variant="neutral-tertiary" size="small" icon={<FeatherTrash2 />} aria-label="Remove" onClick={() => removeClip(i)} />
-            </div>
-          ))}
+          {clips.map((clip, i) => {
+            const isExported = !!clip.exportedMediaId;
+            return (
+              <div key={clip.id} className="flex items-center gap-2 rounded-lg px-3 py-2 bg-neutral-800/50">
+                <div className="w-2 h-2 rounded-full flex-none" style={{ backgroundColor: getBankColor(typeof clip.bankIndex === 'number' ? clip.bankIndex : 0).primary }} />
+                {isExported && <FeatherCheck className="text-green-400 flex-none" style={{ width: 10, height: 10 }} />}
+                <span className="text-sm text-white flex-1 truncate">{clip.name}</span>
+                <span className="text-[11px] text-neutral-500">{formatTimePrecise(clip.start)}→{formatTimePrecise(clip.end)}</span>
+                <IconButton variant="neutral-tertiary" size="small" icon={<FeatherTrash2 />} aria-label="Remove" onClick={() => removeClip(i)} />
+              </div>
+            );
+          })}
           {/* Mobile export button */}
           <Button
             variant="brand-primary" size="medium"
             icon={<FeatherDownload />}
-            disabled={exporting} loading={exporting}
-            onClick={handleExport}
+            disabled={unexportedCount === 0 || exporting} loading={exporting}
+            onClick={handleExportToBanks}
           >
-            Export {clips.length} Clip{clips.length !== 1 ? 's' : ''}
+            {unexportedCount > 0 ? `Export ${unexportedCount} to ${
+              exportDestination === 'current-niche' ? 'Banks'
+              : exportDestination === 'project-pool' ? 'Project Pool'
+              : exportDestination === 'library-only' ? 'Library'
+              : projectNiches.find(n => n.id === exportDestination)?.name || 'Niche'
+            }` : 'All Exported'}
           </Button>
         </div>
       )}
 
-      <EditorFooter onCancel={onClose} onSaveAll={handleSave} saveLabel="Save" />
+      <EditorFooter onCancel={onClose} onSaveAll={handleSaveSession} saveLabel="Save Session" />
     </EditorShell>
   );
 };

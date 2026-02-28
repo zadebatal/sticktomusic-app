@@ -29,6 +29,7 @@ import {
   FeatherPlus, FeatherX, FeatherType, FeatherPlay, FeatherSquare,
   FeatherImage, FeatherMusic, FeatherZap, FeatherTrash2,
   FeatherRefreshCw, FeatherLock, FeatherUnlock,
+  FeatherChevronDown, FeatherChevronRight, FeatherDatabase,
 } from '@subframe/core';
 
 // Bank header colors keyed by label
@@ -76,6 +77,7 @@ const SlideshowNicheContent = ({
   library,
   createdContent,
   projectAudio = [],
+  projectMedia = [],
   draggingMediaIds,
   onOpenEditor,
   onViewDrafts,
@@ -96,6 +98,14 @@ const SlideshowNicheContent = ({
   const [selectedTextIdx, setSelectedTextIdx] = useState({}); // { [bankIdx]: entryIdx | null } — which text entry is selected for preview
   const [liveSettings, setLiveSettings] = useState(null);
   const [lightboxItem, setLightboxItem] = useState(null);
+  const [poolExpanded, setPoolExpanded] = useState(false);
+
+  // Project pool media NOT in this niche
+  const poolOnlyMedia = useMemo(() => {
+    if (!niche || !projectMedia.length) return [];
+    const nicheIds = new Set(niche.mediaIds || []);
+    return projectMedia.filter(m => !nicheIds.has(m.id) && m.type === 'image');
+  }, [niche, projectMedia]);
 
   // Audio preview playback
   const [playingAudioId, setPlayingAudioId] = useState(null);
@@ -484,6 +494,42 @@ const SlideshowNicheContent = ({
           </div>
         </div>
         </div>
+        {/* From Project Pool — media in project but not in this niche */}
+        {poolOnlyMedia.length > 0 && (
+          <div className="flex flex-col gap-2 px-4 py-3 border-t border-neutral-800">
+            <button
+              className="flex items-center gap-2 bg-transparent border-none cursor-pointer p-0 w-full text-left"
+              onClick={() => setPoolExpanded(prev => !prev)}
+            >
+              {poolExpanded
+                ? <FeatherChevronDown className="text-neutral-400 flex-none" style={{ width: 14, height: 14 }} />
+                : <FeatherChevronRight className="text-neutral-400 flex-none" style={{ width: 14, height: 14 }} />
+              }
+              <FeatherDatabase className="text-neutral-400 flex-none" style={{ width: 14, height: 14 }} />
+              <span className="text-caption-bold font-caption-bold text-neutral-300">From Project Pool</span>
+              <Badge variant="neutral">{poolOnlyMedia.length}</Badge>
+            </button>
+            {poolExpanded && (
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
+                {poolOnlyMedia.slice(0, 24).map(item => (
+                  <img
+                    key={item.id}
+                    className="rounded-sm aspect-square object-cover w-full cursor-pointer border border-neutral-800 hover:border-neutral-600 transition-colors"
+                    src={item.thumbnailUrl || item.url}
+                    alt={item.name}
+                    loading="lazy"
+                    onClick={() => setLightboxItem(item)}
+                  />
+                ))}
+                {poolOnlyMedia.length > 24 && (
+                  <div className="flex items-center justify-center aspect-square rounded-sm bg-neutral-800">
+                    <span className="text-[10px] text-neutral-400">+{poolOnlyMedia.length - 24}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         {/* Hidden audio element for preview playback */}
         <audio ref={audioPreviewRef} preload="none" style={{ display: 'none' }} onEnded={() => setPlayingAudioId(null)} />
 

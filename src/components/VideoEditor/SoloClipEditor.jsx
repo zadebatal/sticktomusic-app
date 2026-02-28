@@ -35,6 +35,23 @@ import useEditorSessionState from './shared/useEditorSessionState';
 import useUnsavedChanges from './shared/useUnsavedChanges';
 import usePixelTimeline from './shared/usePixelTimeline';
 import useTimelineZoom from '../../hooks/useTimelineZoom';
+import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
+import { FeatherAlignLeft, FeatherAlignCenter, FeatherAlignRight } from '@subframe/core';
+
+const AVAILABLE_FONTS = [
+  { name: 'Inter', value: "'Inter', sans-serif" },
+  { name: 'Arial', value: 'Arial, sans-serif' },
+  { name: 'Arial Narrow', value: "'Arial Narrow', Arial, sans-serif" },
+  { name: 'Georgia', value: 'Georgia, serif' },
+  { name: 'Times New Roman', value: "'Times New Roman', serif" },
+  { name: 'Courier New', value: "'Courier New', monospace" },
+  { name: 'Impact', value: 'Impact, sans-serif' },
+  { name: 'Comic Sans', value: "'Comic Sans MS', cursive" },
+  { name: 'Trebuchet', value: "'Trebuchet MS', sans-serif" },
+  { name: 'Verdana', value: 'Verdana, sans-serif' },
+  { name: 'Palatino', value: "'Palatino Linotype', serif" },
+  { name: 'TikTok Sans', value: "'TikTok Sans', sans-serif" }
+];
 
 /**
  * SoloClipEditor v2 — "Solo Clip" video editor mode
@@ -98,8 +115,8 @@ const SoloClipEditor = ({
       id: 'template',
       name: 'Template',
       clip: firstClip,
-      textOverlays: [],
-      words: [],
+      textOverlays: existingVideo?.textOverlays || [],
+      words: existingVideo?.words || [],
       isTemplate: true
     }];
   });
@@ -249,13 +266,10 @@ const SoloClipEditor = ({
   // ── Text editing state ──
   const [editingTextId, setEditingTextId] = useState(null);
   const [editingTextValue, setEditingTextValue] = useState('');
-  const [draggingTextId, setDraggingTextId] = useState(null);
-  const dragStartRef = useRef(null);
   const previewRef = useRef(null);
 
-  // ── Timeline drag state ──
+  // ── Timeline refs ──
   const timelineRef = useRef(null);
-  const [timelineDrag, setTimelineDrag] = useState(null); // { overlayId, type: 'move'|'left'|'right', startX, origStart, origEnd }
 
   // ── Library state ──
   const [collections, setCollections] = useState([]);
@@ -301,7 +315,10 @@ const SoloClipEditor = ({
   const [loadedBankLyricId, setLoadedBankLyricId] = useState(null);
 
   // ── Lyrics state ──
-  const [lyrics, setLyrics] = useState('');
+  const [lyrics, setLyrics] = useState(() => {
+    const initialWords = existingVideo?.words || [];
+    return initialWords.length > 0 ? initialWords.map(w => w.text).join('\n') : '';
+  });
   const [lyricsBank, setLyricsBank] = useState([]);
   const [showLyricBankPicker, setShowLyricBankPicker] = useState(false);
 
@@ -317,7 +334,7 @@ const SoloClipEditor = ({
 
   // ── Collapsible sidebar sections ──
   const { openSections, renderCollapsibleSection } = useCollapsibleSections({
-    audio: true, clips: true, text: false, lyrics: false, textStyle: false
+    audio: true, clips: true, text: false, textStyle: (existingVideo?.textOverlays?.length > 0)
   });
 
   // ── Session persistence ──
@@ -375,15 +392,17 @@ const SoloClipEditor = ({
   // ── Video Text Banks (uses videoTextBank1/videoTextBank2, NOT textBank1/textBank2) ──
   const getVideoTextBanks = useCallback(() => {
     let videoTextBank1 = [], videoTextBank2 = [];
-    // Include niche text banks first
+    // Use niche text banks if available (single source of truth from niche)
     if (nicheTextBanks) {
       const extractTexts = (bank) => (bank || []).map(e => typeof e === 'string' ? e : e?.text || '').filter(Boolean);
       if (nicheTextBanks[0]?.length > 0) videoTextBank1 = [...extractTexts(nicheTextBanks[0])];
       if (nicheTextBanks[1]?.length > 0) videoTextBank2 = [...extractTexts(nicheTextBanks[1])];
-    }
-    for (const col of collections) {
-      if (col.videoTextBank1?.length > 0) videoTextBank1 = [...videoTextBank1, ...col.videoTextBank1];
-      if (col.videoTextBank2?.length > 0) videoTextBank2 = [...videoTextBank2, ...col.videoTextBank2];
+    } else {
+      // Fallback: merge from all collections when not opened from niche
+      for (const col of collections) {
+        if (col.videoTextBank1?.length > 0) videoTextBank1 = [...videoTextBank1, ...col.videoTextBank1];
+        if (col.videoTextBank2?.length > 0) videoTextBank2 = [...videoTextBank2, ...col.videoTextBank2];
+      }
     }
     return { videoTextBank1, videoTextBank2 };
   }, [collections, nicheTextBanks]);
@@ -512,17 +531,50 @@ const SoloClipEditor = ({
     setIsPlaying(!isPlaying);
   }, [isPlaying, playbackLoop, selectedAudio]);
 
+  // Stable ref for seek during playhead drag (avoids stale closure issues)
   const handleSeek = useCallback((time) => {
     if (videoRef.current) {
       videoRef.current.currentTime = time;
       setCurrentTime(time);
     }
     if (audioRef.current) {
-      // Add audio start boundary offset for trimmed audio
       const startBoundary = selectedAudio?.startTime || 0;
       audioRef.current.currentTime = time + startBoundary;
     }
   }, [selectedAudio]);
+  const handleSeekRef = useRef(handleSeek);
+  handleSeekRef.current = handleSeek;
+  const timelinePxRef = useRef(timelinePx);
+  timelinePxRef.current = timelinePx;
+
+  // Playhead drag across timeline
+  useEffect(() => {
+    if (!playheadDragging) return;
+    document.body.style.userSelect = 'none';
+    document.body.style.WebkitUserSelect = 'none';
+    const handleMouseMove = (e) => {
+      if (!timelineRef.current) return;
+      const rect = timelineRef.current.getBoundingClientRect();
+      const clickX = e.clientX - rect.left + timelineRef.current.scrollLeft;
+      const pxW = timelinePxRef.current || 1;
+      const time = Math.max(0, Math.min(1, clickX / pxW)) * timelineDuration;
+      handleSeekRef.current(time);
+    };
+    const handleMouseUp = () => {
+      setPlayheadDragging(false);
+      document.body.style.userSelect = '';
+      document.body.style.WebkitUserSelect = '';
+      if (wasPlayingBeforePlayheadDrag.current) setIsPlaying(true);
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = '';
+      document.body.style.WebkitUserSelect = '';
+    };
+  }, [playheadDragging, timelineDuration]);
 
   // ── Audio selection — just set state, useEffect handles element config ──
   const handleAudioSelect = useCallback((audio) => {
@@ -819,22 +871,20 @@ const SoloClipEditor = ({
     };
   }, []);
 
-  const addTextOverlay = useCallback((prefillText, overrideStart, overrideEnd) => {
-    const start = overrideStart !== undefined ? overrideStart : currentTime;
-    const end = overrideEnd !== undefined ? overrideEnd : Math.min(start + 3, clipDuration || start + 3);
+  const addTextOverlay = useCallback((prefillText) => {
+    const dur = timelineDuration || 30;
     const newOverlay = {
       id: `text_${Date.now()}`,
       text: prefillText || 'Click to edit',
       style: getDefaultTextStyle(),
-      position: { x: 50, y: 50, width: 80, height: 20 },
-      scope: 'full',
-      startTime: start,
-      endTime: end
+      position: { x: 50, y: 50, width: 80 },
+      startTime: 0,
+      endTime: dur,
     };
     setTextOverlays(prev => [...prev, newOverlay]);
     setEditingTextId(newOverlay.id);
     setEditingTextValue(newOverlay.text);
-  }, [getDefaultTextStyle, setTextOverlays, currentTime, clipDuration]);
+  }, [getDefaultTextStyle, setTextOverlays, timelineDuration]);
 
   // Add lyrics as timed word overlays (one per word, evenly spread across clip)
   const addLyricsAsTimedOverlays = useCallback((lyricsText) => {
@@ -906,43 +956,7 @@ const SoloClipEditor = ({
     }
   }, [setTextOverlays, editingTextId]);
 
-  // ── Text overlay dragging ──
-  const handleTextMouseDown = useCallback((e, overlayId) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const overlay = textOverlaysRef.current.find(o => o.id === overlayId);
-    if (!overlay) return;
-    setDraggingTextId(overlayId);
-    setEditingTextId(overlayId);
-    setEditingTextValue(overlay.text);
-    dragStartRef.current = {
-      mouseX: e.clientX,
-      mouseY: e.clientY,
-      startPosX: overlay.position.x,
-      startPosY: overlay.position.y
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!draggingTextId) return;
-    const handleMouseMove = (e) => {
-      if (!dragStartRef.current || !previewRef.current) return;
-      const rect = previewRef.current.getBoundingClientRect();
-      const dx = e.clientX - dragStartRef.current.mouseX;
-      const dy = e.clientY - dragStartRef.current.mouseY;
-      const newX = Math.max(5, Math.min(95, dragStartRef.current.startPosX + (dx / rect.width) * 100));
-      const newY = Math.max(5, Math.min(95, dragStartRef.current.startPosY + (dy / rect.height) * 100));
-      const overlay = textOverlaysRef.current.find(o => o.id === draggingTextId);
-      updateTextOverlay(draggingTextId, { position: { ...overlay?.position, x: newX, y: newY } });
-    };
-    const handleMouseUp = () => setDraggingTextId(null);
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [draggingTextId, updateTextOverlay]);
+  // Text overlay drag is handled by DraggableTextOverlay component
 
   // ── Switch between videos ──
   const switchToVideo = useCallback((index) => {
@@ -959,54 +973,7 @@ const SoloClipEditor = ({
     setActiveVideoIndex(index);
   }, [activeVideoIndex]);
 
-  // ── Timeline text block drag/resize ──
-  const handleTimelineDragStart = useCallback((e, overlayId, type) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const overlay = textOverlaysRef.current.find(o => o.id === overlayId);
-    if (!overlay) return;
-    setTimelineDrag({
-      overlayId,
-      type, // 'move', 'left', 'right'
-      startX: e.clientX,
-      origStart: overlay.startTime,
-      origEnd: overlay.endTime
-    });
-    setEditingTextId(overlayId);
-    setEditingTextValue(overlay.text);
-  }, []);
-
-  useEffect(() => {
-    if (!timelineDrag || !timelineRef.current) return;
-    const dur = timelineDuration || 1;
-    const handleMouseMove = (e) => {
-      const deltaX = e.clientX - timelineDrag.startX;
-      const deltaSec = deltaX / pxPerSec;
-      const minDur = 0.5;
-
-      if (timelineDrag.type === 'move') {
-        const length = timelineDrag.origEnd - timelineDrag.origStart;
-        let newStart = Math.max(0, timelineDrag.origStart + deltaSec);
-        let newEnd = newStart + length;
-        if (newEnd > dur) { newEnd = dur; newStart = dur - length; }
-        if (newStart < 0) newStart = 0;
-        updateTextOverlay(timelineDrag.overlayId, { startTime: newStart, endTime: newEnd });
-      } else if (timelineDrag.type === 'left') {
-        const newStart = Math.max(0, Math.min(timelineDrag.origEnd - minDur, timelineDrag.origStart + deltaSec));
-        updateTextOverlay(timelineDrag.overlayId, { startTime: newStart });
-      } else if (timelineDrag.type === 'right') {
-        const newEnd = Math.min(dur, Math.max(timelineDrag.origStart + minDur, timelineDrag.origEnd + deltaSec));
-        updateTextOverlay(timelineDrag.overlayId, { endTime: newEnd });
-      }
-    };
-    const handleMouseUp = () => setTimelineDrag(null);
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [timelineDrag, timelineDuration, pxPerSec, updateTextOverlay]);
+  // Timeline text drag removed — text overlays now use DraggableTextOverlay on preview
 
   // ── Delete generated video ──
   const handleDeleteVideo = useCallback((index) => {
@@ -1303,7 +1270,7 @@ const SoloClipEditor = ({
                 ref={previewRef}
                 className="flex items-center justify-center rounded-lg bg-[#1a1a1aff] border border-neutral-800 relative overflow-hidden"
                 style={{ aspectRatio: '9/16', height: '50vh' }}
-                onClick={() => setEditingTextId(null)}
+                onPointerDown={(e) => { if (e.target === e.currentTarget || e.target.tagName === 'VIDEO') setEditingTextId(null); }}
               >
                 {clip ? (
                   <video
@@ -1330,37 +1297,21 @@ const SoloClipEditor = ({
                   </div>
                 )}
 
-                {/* Text Overlays on video */}
-                {textOverlays.map((overlay) => {
-                  const style = overlay.style || {};
-                  const pos = overlay.position || { x: 50, y: 50 };
-                  if (overlay.startTime !== undefined && overlay.endTime !== undefined) {
-                    if (currentTime < overlay.startTime || currentTime >= overlay.endTime) return null;
-                  }
-                  const displayText = style.textCase === 'upper' ? overlay.text.toUpperCase()
-                    : style.textCase === 'lower' ? overlay.text.toLowerCase()
-                    : overlay.text;
-                  return (
-                    <div
-                      key={overlay.id}
-                      onMouseDown={(e) => handleTextMouseDown(e, overlay.id)}
-                      onClick={(e) => { e.stopPropagation(); setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
-                      style={{
-                        position: 'absolute', left: `${pos.x}%`, top: `${pos.y}%`, transform: 'translate(-50%, -50%)',
-                        cursor: draggingTextId === overlay.id ? 'grabbing' : 'grab',
-                        fontSize: `${(style.fontSize || 48) * (previewDims.width / 1080) * 2}px`,
-                        fontFamily: style.fontFamily || 'Inter, sans-serif', fontWeight: style.fontWeight || '600',
-                        color: style.color || '#ffffff', textAlign: style.textAlign || 'center',
-                        textShadow: style.outline ? `2px 2px 0 ${style.outlineColor || '#000'}, -2px -2px 0 ${style.outlineColor || '#000'}, 2px -2px 0 ${style.outlineColor || '#000'}, -2px 2px 0 ${style.outlineColor || '#000'}` : 'none',
-                        userSelect: 'none', WebkitUserSelect: 'none', whiteSpace: 'nowrap', zIndex: 10,
-                        padding: '4px 8px', borderRadius: '4px',
-                        border: editingTextId === overlay.id ? `1px dashed ${theme.accent.primary}99` : '1px dashed transparent'
-                      }}
-                    >
-                      {displayText}
-                    </div>
-                  );
-                })}
+                {/* Text Overlays on video — DraggableTextOverlay handles drag/edit */}
+                {textOverlays.filter(o => currentTime >= (o.startTime ?? 0) && currentTime <= (o.endTime ?? timelineDuration)).map((overlay) => (
+                  <DraggableTextOverlay
+                    key={overlay.id}
+                    text={overlay.text}
+                    textStyle={overlay.style || textStyle}
+                    color={editingTextId === overlay.id ? '#6366f1' : '#6366f180'}
+                    isSelected={editingTextId === overlay.id}
+                    onSelect={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
+                    position={overlay.position || { x: 50, y: 50, width: 80 }}
+                    onPositionChange={(newPos) => updateTextOverlay(overlay.id, { position: newPos })}
+                    onTextChange={(newText) => updateTextOverlay(overlay.id, { text: newText })}
+                    containerRef={previewRef}
+                  />
+                ))}
               </div>
 
               {/* Reroll */}
@@ -1371,7 +1322,7 @@ const SoloClipEditor = ({
               {/* Generation Controls */}
               <div className="flex items-center gap-2">
                 <Button variant="brand-primary" size="medium" icon={<FeatherPlus />} onClick={executeGeneration} disabled={isGenerating}>
-                  {isGenerating ? 'Remixing...' : 'Remix'}
+                  {isGenerating ? 'Creating...' : 'Create'}
                 </Button>
                 <input
                   type="number" min={1} max={50} value={generateCount}
@@ -1572,9 +1523,11 @@ const SoloClipEditor = ({
                     <div style={{ height: '24px' }} className="flex items-center justify-end pr-1">
                       <span className="text-[10px] text-neutral-600">Time</span>
                     </div>
-                    <div style={{ height: '28px' }} className="flex items-center justify-end pr-1">
-                      <span className="text-caption font-caption text-neutral-400">Text</span>
-                    </div>
+                    {textOverlays.length > 0 && (
+                      <div style={{ height: `${Math.max(24, textOverlays.length * 24)}px` }} className="flex items-center justify-end pr-1">
+                        <span className="text-caption font-caption text-neutral-400">Text</span>
+                      </div>
+                    )}
                     <div style={{ height: '40px' }} className="flex items-center justify-end pr-1">
                       <span className="text-caption font-caption text-neutral-400">Clip</span>
                     </div>
@@ -1637,31 +1590,71 @@ const SoloClipEditor = ({
                         })}
                       </div>
 
-                      {/* Text overlay row */}
-                      <div style={{ height: '28px', position: 'relative', borderBottom: '1px solid #222' }}>
-                        {textOverlays.map((overlay) => {
-                          const leftPx = (overlay.startTime || 0) * pxPerSec;
-                          const widthPx = ((overlay.endTime || 0) - (overlay.startTime || 0)) * pxPerSec;
-                          const isSelected = editingTextId === overlay.id;
-                          return (
-                            <div key={overlay.id} style={{
-                              position: 'absolute', left: `${leftPx}px`, width: `${widthPx}px`,
-                              top: '2px', height: '24px', boxSizing: 'border-box',
-                              backgroundColor: isSelected ? '#9333ea' : '#6366f1', borderRadius: '4px',
-                              display: 'flex', alignItems: 'center', padding: '0 4px',
-                              cursor: timelineDrag ? 'grabbing' : 'grab', overflow: 'hidden',
-                              border: isSelected ? '1px solid #a855f7' : '1px solid rgba(124,58,237,0.5)',
-                              zIndex: isSelected ? 10 : 5
-                            }} onMouseDown={(e) => handleTimelineDragStart(e, overlay.id, 'move')}>
-                              <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
-                                onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'left'); }} />
-                              <span style={{ fontSize: '10px', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none', padding: '0 6px' }}>{overlay.text}</span>
-                              <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', zIndex: 11 }}
-                                onMouseDown={(e) => { e.stopPropagation(); handleTimelineDragStart(e, overlay.id, 'right'); }} />
-                            </div>
-                          );
-                        })}
-                      </div>
+                      {/* Text overlay rows — one row per overlay */}
+                      {textOverlays.length > 0 && (
+                        <div style={{ position: 'relative', borderBottom: '1px solid #222' }}>
+                          {textOverlays.map((overlay) => {
+                            const start = overlay.startTime ?? 0;
+                            const end = overlay.endTime ?? timelineDuration;
+                            const leftPx = start * pxPerSec;
+                            const widthPx = Math.max(20, (end - start) * pxPerSec);
+                            const isSelected = editingTextId === overlay.id;
+                            const overlayColor = isSelected ? '#818cf8' : '#6366f1';
+                            return (
+                              <div key={overlay.id} style={{ height: '24px', position: 'relative' }}>
+                                <div
+                                  style={{
+                                    position: 'absolute', left: `${leftPx}px`, width: `${widthPx}px`, top: 2, bottom: 2,
+                                    backgroundColor: isSelected ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.2)',
+                                    border: `1px solid ${overlayColor}`,
+                                    borderRadius: '4px', cursor: 'pointer', overflow: 'hidden',
+                                    display: 'flex', alignItems: 'center', paddingLeft: '6px',
+                                  }}
+                                  onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
+                                >
+                                  <span style={{ fontSize: '9px', color: '#c7d2fe', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', userSelect: 'none' }}>
+                                    {overlay.text}
+                                  </span>
+                                  {/* Left resize handle */}
+                                  <div
+                                    style={{ position: 'absolute', left: 0, top: 0, width: '6px', height: '100%', cursor: 'col-resize', zIndex: 3 }}
+                                    onPointerDown={(e) => {
+                                      e.stopPropagation();
+                                      const startX = e.clientX;
+                                      const origStart = start;
+                                      const move = (me) => {
+                                        const dx = (me.clientX - startX) / pxPerSec;
+                                        const newStart = Math.max(0, Math.min(end - 0.5, origStart + dx));
+                                        updateTextOverlay(overlay.id, { startTime: newStart });
+                                      };
+                                      const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+                                      document.addEventListener('pointermove', move);
+                                      document.addEventListener('pointerup', up);
+                                    }}
+                                  />
+                                  {/* Right resize handle */}
+                                  <div
+                                    style={{ position: 'absolute', right: 0, top: 0, width: '6px', height: '100%', cursor: 'col-resize', zIndex: 3 }}
+                                    onPointerDown={(e) => {
+                                      e.stopPropagation();
+                                      const startX = e.clientX;
+                                      const origEnd = end;
+                                      const move = (me) => {
+                                        const dx = (me.clientX - startX) / pxPerSec;
+                                        const newEnd = Math.max(start + 0.5, Math.min(timelineDuration, origEnd + dx));
+                                        updateTextOverlay(overlay.id, { endTime: newEnd });
+                                      };
+                                      const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+                                      document.addEventListener('pointermove', move);
+                                      document.addEventListener('pointerup', up);
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
 
                       {/* Clip row — single clip spanning its duration */}
                       <div style={{ height: '40px', position: 'relative', borderBottom: '1px solid #222' }}>
@@ -1761,6 +1754,7 @@ const SoloClipEditor = ({
                         </div>
                         <div className="flex gap-2">
                           <Button variant="neutral-secondary" size="small" icon={<FeatherScissors />} onClick={() => { setAudioToTrim(selectedAudio); setShowAudioTrimmer(true); }}>Trim</Button>
+                          <Button variant="neutral-secondary" size="small" icon={<FeatherMic />} onClick={() => setShowTranscriber(true)}>Auto Transcribe</Button>
                           <Button variant="destructive-tertiary" size="small" icon={<FeatherTrash2 />} onClick={() => {
                             if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; }
                             if (animationRef.current) cancelAnimationFrame(animationRef.current);
@@ -1906,219 +1900,148 @@ const SoloClipEditor = ({
                   </div>
                 ))}
 
-                {renderCollapsibleSection('lyrics', 'Lyrics', (
-                  <div className="flex flex-col gap-3">
-                    <textarea
-                      className="w-full rounded-md border border-neutral-800 bg-black px-3 py-2 text-sm text-white placeholder-neutral-500 resize-y outline-none focus:border-brand-600"
-                      style={{ minHeight: 80 }}
-                      placeholder="Enter or paste lyrics here..."
-                      value={lyrics}
-                      onChange={(e) => setLyrics(e.target.value)}
-                      rows={4}
-                    />
-                    <div className="flex w-full items-center gap-2">
-                      <Button className="grow" variant="neutral-secondary" size="small" icon={<FeatherDatabase />}
-                        onClick={() => setShowLyricBankPicker(!showLyricBankPicker)}
-                        disabled={(category?.lyrics?.length || 0) === 0}
-                      >
-                        Load from Bank ({category?.lyrics?.length || 0})
-                      </Button>
-                      <Button className="grow" variant="neutral-secondary" size="small" icon={<FeatherMic />}
-                        onClick={() => setShowTranscriber(true)}
-                        disabled={!selectedAudio}
-                      >
-                        AI Transcribe
-                      </Button>
-                    </div>
-                    {/* Lyric Bank Dropdown */}
-                    {showLyricBankPicker && (category?.lyrics?.length || 0) > 0 && (
-                      <div className="bg-[#171717] border border-neutral-700 rounded-lg max-h-[200px] overflow-y-auto shadow-lg">
-                        {category.lyrics.map(lyric => (
-                          <div key={lyric.id} className="w-full px-3 py-2.5 border-b border-neutral-800 text-[#ffffffff] text-left cursor-pointer text-[13px] hover:bg-neutral-800"
-                            onClick={() => {
-                              const content = lyric.content || '';
-                              let newWords;
-                              if (lyric.words?.length > 0) { newWords = lyric.words; }
-                              else {
-                                const lyricWords = content.split(/\s+/).filter(w => w.trim().length > 0);
-                                newWords = lyricWords.map((text, i) => ({ id: `word_${Date.now()}_${i}`, text, startTime: i * 0.5, duration: 0.5 }));
-                              }
-                              setLyrics(content); setWords(newWords); setLoadedBankLyricId(lyric.id); setShowLyricBankPicker(false);
-                            }}
-                          >
-                            <div className="font-medium mb-0.5">{lyric.title}</div>
-                            <div className="text-[11px] text-neutral-400 truncate">{lyric.content?.substring(0, 50)}...</div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex flex-wrap gap-1.5">
-                      <Button variant="neutral-secondary" size="small" onClick={() => setShowWordTimeline(true)}>Word Timeline</Button>
-                    </div>
-                    {lyrics && (
-                      <Button className="w-full" variant="neutral-tertiary" size="small" icon={<FeatherX />} onClick={() => setLyrics('')}>Clear</Button>
-                    )}
-                    {!selectedAudio && (
-                      <p className="text-neutral-500 text-[11px]">Select audio to enable AI transcription</p>
-                    )}
-                    {/* Full LyricBank component */}
-                    <div className="border-t border-neutral-800 pt-3">
-                      <LyricBank
-                        lyrics={category?.lyrics || []}
-                        onAddLyrics={onAddLyrics}
-                        onUpdateLyrics={onUpdateLyrics}
-                        onDeleteLyrics={onDeleteLyrics}
-                        onSelectText={(selectedText) => { setLyrics(selectedText); toastSuccess('Lyrics loaded!'); }}
-                        compact={false}
-                        showAddForm={true}
-                      />
-                    </div>
-                  </div>
-                ))}
 
-                {renderCollapsibleSection('textStyle', 'Text Style', (
-                  <div className="flex flex-col gap-3">
-                    {/* Global text style controls */}
-                    <div className="flex items-center gap-2">
-                      <div className="flex gap-1">
-                        <Button variant="neutral-secondary" size="small" onClick={() => setTextStyle(s => ({ ...s, fontSize: Math.max(24, s.fontSize - 4) }))}>A-</Button>
-                        <Button variant="neutral-secondary" size="small" onClick={() => setTextStyle(s => ({ ...s, fontSize: Math.min(120, s.fontSize + 4) }))}>A+</Button>
+                {renderCollapsibleSection('textStyle', 'Text Style', (() => {
+                  const selOverlay = editingTextId ? textOverlays.find(o => o.id === editingTextId) : null;
+                  const activeStyle = selOverlay?.style || getDefaultTextStyle();
+                  const disabled = !selOverlay;
+                  const handleStyleChange = (updates) => {
+                    if (selOverlay) updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, ...updates } });
+                  };
+                  return (
+                    <div className={`flex flex-col gap-4 ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                      {disabled && <div className="text-xs text-neutral-400 italic mb-3">Click text on preview to edit</div>}
+
+                      {/* Add + Delete buttons — always accessible */}
+                      <div className="flex gap-2" style={disabled ? { opacity: 1, pointerEvents: 'auto' } : {}}>
+                        <Button variant="brand-secondary" size="small" icon={<FeatherPlus />}
+                          onClick={() => addTextOverlay()} style={{ opacity: 1, pointerEvents: 'auto' }}>Add Text</Button>
+                        {selOverlay && (
+                          <Button variant="neutral-secondary" size="small" icon={<FeatherTrash2 />}
+                            onClick={() => removeTextOverlay(selOverlay.id)}>Delete</Button>
+                        )}
                       </div>
-                      <select value={textStyle.fontFamily} onChange={(e) => setTextStyle(s => ({ ...s, fontFamily: e.target.value }))}
-                        className="flex-1 px-2 py-1.5 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[12px] outline-none">
-                        <option value="Inter, sans-serif">Sans</option>
-                        <option value="'Playfair Display', serif">Serif</option>
-                        <option value="'Space Grotesk', sans-serif">Grotesk</option>
-                        <option value="monospace">Mono</option>
-                      </select>
-                    </div>
-                    <ToggleGroup value={textStyle.outline ? 'outline' : 'none'} onValueChange={(v) => setTextStyle(s => ({ ...s, outline: v === 'outline' }))}>
-                      <ToggleGroup.Item value="none">No outline</ToggleGroup.Item>
-                      <ToggleGroup.Item value="outline">Outline</ToggleGroup.Item>
-                    </ToggleGroup>
-                    <div className="flex w-full items-center gap-2">
-                      <div className="flex grow flex-col items-start gap-1">
-                        <span className="text-caption font-caption text-neutral-400">Text Color</span>
-                        <label className="flex h-10 w-full items-center gap-2 rounded-md border border-neutral-800 bg-black px-3 cursor-pointer">
-                          <input type="color" value={textStyle.color} onChange={(e) => setTextStyle(s => ({ ...s, color: e.target.value }))} className="w-6 h-6 rounded-md border-0 p-0 cursor-pointer" />
-                          <span className="text-caption font-caption text-neutral-400">{textStyle.color}</span>
-                        </label>
+
+                      {/* Selected overlay text input */}
+                      {selOverlay && (
+                        <input value={selOverlay.text}
+                          onChange={(e) => updateTextOverlay(selOverlay.id, { text: e.target.value })}
+                          className="w-full px-3 py-2 rounded-md border border-neutral-800 bg-black text-white text-sm" />
+                      )}
+
+                      {/* Font Family */}
+                      <div>
+                        <div className="text-[13px] text-neutral-500 mb-1.5">Font Family</div>
+                        <select value={activeStyle.fontFamily || "'Inter', sans-serif"}
+                          onChange={(e) => handleStyleChange({ fontFamily: e.target.value })}
+                          className="w-full px-3 py-2 rounded-sm border border-neutral-200 bg-neutral-50 text-white text-[13px] outline-none cursor-pointer">
+                          {AVAILABLE_FONTS.map(f => <option key={f.name} value={f.value}>{f.name}</option>)}
+                        </select>
                       </div>
-                      {textStyle.outline && (
-                        <div className="flex grow flex-col items-start gap-1">
-                          <span className="text-caption font-caption text-neutral-400">Outline</span>
-                          <label className="flex h-10 w-full items-center gap-2 rounded-md border border-neutral-800 bg-black px-3 cursor-pointer">
-                            <input type="color" value={textStyle.outlineColor} onChange={(e) => setTextStyle(s => ({ ...s, outlineColor: e.target.value }))} className="w-6 h-6 rounded-md border-0 p-0 cursor-pointer" />
-                            <span className="text-caption font-caption text-neutral-400">{textStyle.outlineColor}</span>
-                          </label>
+
+                      {/* Font Size */}
+                      <div>
+                        <div className="flex justify-between mb-1.5">
+                          <span className="text-[13px] text-neutral-500">Font Size</span>
+                          <span className="text-[13px] text-white">{activeStyle.fontSize || 48}px</span>
+                        </div>
+                        <input type="range" min="12" max="120" step="2" value={activeStyle.fontSize || 48}
+                          onChange={(e) => handleStyleChange({ fontSize: parseInt(e.target.value) })}
+                          className="w-full accent-brand-600" />
+                      </div>
+
+                      {/* Text Color + Outline Color */}
+                      <div className="flex gap-3">
+                        <div className="flex-1">
+                          <div className="text-[13px] text-neutral-500 mb-1.5">Text Color</div>
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-neutral-200 bg-neutral-50">
+                            <input type="color" value={activeStyle.color || '#ffffff'}
+                              onChange={(e) => handleStyleChange({ color: e.target.value })}
+                              className="w-6 h-6 border-none rounded-full cursor-pointer p-0 bg-transparent" />
+                            <span className="text-xs text-neutral-500 font-mono">{(activeStyle.color || '#ffffff').toUpperCase()}</span>
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-[13px] text-neutral-500 mb-1.5">Outline</div>
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-neutral-200 bg-neutral-50">
+                            <input type="color" value={activeStyle.outlineColor || '#000000'}
+                              onChange={(e) => handleStyleChange({ outlineColor: e.target.value, outline: true })}
+                              className="w-6 h-6 border-none rounded-full cursor-pointer p-0 bg-transparent" />
+                            <span className="text-xs text-neutral-500 font-mono">{(activeStyle.outlineColor || '#000000').toUpperCase()}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Formatting */}
+                      <div>
+                        <div className="text-[13px] text-neutral-500 mb-1.5">Formatting</div>
+                        <div className="flex gap-1">
+                          {[
+                            { key: 'bold', label: 'B', ariaLabel: 'Bold', active: activeStyle.fontWeight === '700', toggle: () => handleStyleChange({ fontWeight: activeStyle.fontWeight === '700' ? '400' : '700' }), bold: true },
+                            { key: 'caps', label: 'AA', ariaLabel: 'All caps', active: activeStyle.textCase === 'upper', toggle: () => handleStyleChange({ textCase: activeStyle.textCase === 'upper' ? 'default' : 'upper' }) },
+                            { key: 'outline', label: 'O', ariaLabel: 'Outline', active: !!activeStyle.outline, toggle: () => handleStyleChange({ outline: !activeStyle.outline }) },
+                          ].map(btn => (
+                            <IconButton key={btn.key} onClick={btn.toggle}
+                              variant={btn.active ? 'brand-secondary' : 'neutral-secondary'} size="small"
+                              icon={<span className={`text-xs ${btn.bold ? 'font-bold' : 'font-semibold'}`}>{btn.label}</span>}
+                              aria-label={btn.ariaLabel} />
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Alignment */}
+                      <div>
+                        <div className="text-[13px] text-neutral-500 mb-1.5">Alignment</div>
+                        <ToggleGroup value={activeStyle.textAlign || 'center'}
+                          onValueChange={(val) => handleStyleChange({ textAlign: val })}>
+                          <ToggleGroup.Item value="left" icon={<FeatherAlignLeft />}>{null}</ToggleGroup.Item>
+                          <ToggleGroup.Item value="center" icon={<FeatherAlignCenter />}>{null}</ToggleGroup.Item>
+                          <ToggleGroup.Item value="right" icon={<FeatherAlignRight />}>{null}</ToggleGroup.Item>
+                        </ToggleGroup>
+                      </div>
+
+                      {/* Text Overlays list */}
+                      <div className="pt-2 border-t border-neutral-800">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[13px] text-neutral-500">Text Overlays</span>
+                        </div>
+                        {textOverlays.length > 0 ? (
+                          <div className="flex flex-col gap-1.5">
+                            {textOverlays.map(overlay => (
+                              <div key={overlay.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${editingTextId === overlay.id ? 'bg-brand-600/20 border border-brand-600' : 'border border-neutral-800 hover:bg-neutral-800'}`}
+                                onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}>
+                                <span className="text-body font-body text-[#ffffffff] text-[12px] truncate flex-1">{overlay.text}</span>
+                                <IconButton size="small" variant="destructive-tertiary" icon={<FeatherTrash2 className="w-3 h-3" />} onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} aria-label="Remove" />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-[12px] text-neutral-500 text-center py-2">No text overlays yet</div>
+                        )}
+                      </div>
+
+                      {/* Crop */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-neutral-800">
+                        <span className="text-caption font-caption text-neutral-400">Crop</span>
+                        <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} className="flex-1 px-2 py-1.5 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[12px] outline-none">
+                          <option value="9:16">9:16 (Full)</option>
+                          <option value="4:3">4:3 (Crop)</option>
+                          <option value="1:1">1:1 (Crop)</option>
+                        </select>
+                      </div>
+                      {presets.length > 0 && (
+                        <div className="flex flex-col gap-1">
+                          <span className="text-caption font-caption text-neutral-400">Apply Preset</span>
+                          <select value={selectedPreset?.id || ''} onChange={(e) => { const preset = presets.find(p => p.id === e.target.value); if (preset) handleApplyPreset(preset); }}
+                            className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[13px] outline-none">
+                            <option value="">Choose a preset...</option>
+                            {presets.map(preset => (<option key={preset.id} value={preset.id}>{preset.name}</option>))}
+                          </select>
                         </div>
                       )}
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-caption font-caption text-neutral-400">Display Mode</span>
-                      <ToggleGroup value={textStyle.displayMode} onValueChange={(v) => setTextStyle(s => ({ ...s, displayMode: v }))}>
-                        <ToggleGroup.Item value="word">By word</ToggleGroup.Item>
-                        <ToggleGroup.Item value="buildLine">Build line</ToggleGroup.Item>
-                        <ToggleGroup.Item value="justify">Justify</ToggleGroup.Item>
-                      </ToggleGroup>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-caption font-caption text-neutral-400">Case</span>
-                      <ToggleGroup value={textStyle.textCase} onValueChange={(v) => setTextStyle(s => ({ ...s, textCase: v }))}>
-                        <ToggleGroup.Item value="default">Default</ToggleGroup.Item>
-                        <ToggleGroup.Item value="lower">lower</ToggleGroup.Item>
-                        <ToggleGroup.Item value="upper">UPPER</ToggleGroup.Item>
-                      </ToggleGroup>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-caption font-caption text-neutral-400">Crop</span>
-                      <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)} className="flex-1 px-2 py-1.5 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[12px] outline-none">
-                        <option value="9:16">9:16 (Full)</option>
-                        <option value="4:3">4:3 (Crop)</option>
-                        <option value="1:1">1:1 (Crop)</option>
-                      </select>
-                    </div>
-                    {presets.length > 0 && (
-                      <div className="flex flex-col gap-1">
-                        <span className="text-caption font-caption text-neutral-400">Apply Preset</span>
-                        <select value={selectedPreset?.id || ''} onChange={(e) => { const preset = presets.find(p => p.id === e.target.value); if (preset) handleApplyPreset(preset); }}
-                          className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-md text-[#ffffffff] text-[13px] outline-none">
-                          <option value="">Choose a preset...</option>
-                          {presets.map(preset => (<option key={preset.id} value={preset.id}>{preset.name}</option>))}
-                        </select>
-                      </div>
-                    )}
-                    {/* Per-overlay editing */}
-                    <div className="border-t border-neutral-800 pt-3">
-                      <Button variant="brand-secondary" size="small" icon={<FeatherPlus />} onClick={() => addTextOverlay()}>Add Text Overlay</Button>
-                      <div className="flex flex-col gap-1 mt-2">
-                        <span className="text-body-bold font-body-bold text-[#ffffffff] mb-1">Text Overlays</span>
-                        {textOverlays.length === 0 && <p className="text-[12px] text-neutral-500">No text overlays yet</p>}
-                        {textOverlays.map((overlay, idx) => {
-                          const isSelected = editingTextId === overlay.id;
-                          return (
-                            <div key={overlay.id} onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
-                              className={`p-2.5 rounded-lg cursor-pointer transition-all ${isSelected ? 'bg-brand-600/10 border border-brand-600/30' : 'bg-neutral-800/50 border border-neutral-800'}`}>
-                              <div className="flex justify-between items-center mb-1">
-                                <span className="text-[11px] text-neutral-400">
-                                  Overlay {idx + 1}
-                                  {overlay.startTime !== undefined && <span className="ml-1.5 text-[9px] text-neutral-500">{overlay.startTime.toFixed(1)}s – {overlay.endTime.toFixed(1)}s</span>}
-                                </span>
-                                <IconButton size="small" icon={<FeatherX />} aria-label="Remove overlay" onClick={(e) => { e.stopPropagation(); removeTextOverlay(overlay.id); }} />
-                              </div>
-                              {isSelected ? (
-                                <input value={editingTextValue} onChange={(e) => setEditingTextValue(e.target.value)}
-                                  onBlur={() => updateTextOverlay(overlay.id, { text: editingTextValue })}
-                                  onKeyDown={(e) => { if (e.key === 'Enter') { updateTextOverlay(overlay.id, { text: editingTextValue }); e.target.blur(); } }}
-                                  className="w-full px-2 py-1.5 rounded border border-brand-600/30 bg-black text-[#ffffffff] text-[13px] outline-none" autoFocus />
-                              ) : (
-                                <div className="text-[13px] text-[#ffffffff]">{overlay.text}</div>
-                              )}
-                              {isSelected && (
-                                <div className="mt-2 flex flex-col gap-1.5 pt-2 border-t border-neutral-800">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-[10px] text-neutral-400 min-w-[34px]">Font</span>
-                                    <select value={overlay.style.fontFamily} onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, fontFamily: e.target.value } })}
-                                      className="flex-1 px-1.5 py-0.5 rounded border border-neutral-800 bg-black text-[#ffffffff] text-[11px]">
-                                      <option value="Inter, sans-serif">Sans</option>
-                                      <option value="'Playfair Display', serif">Serif</option>
-                                      <option value="'Space Grotesk', sans-serif">Grotesk</option>
-                                      <option value="monospace">Mono</option>
-                                    </select>
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-[10px] text-neutral-400 min-w-[34px]">Size</span>
-                                    <button className="px-2 py-0.5 rounded border border-neutral-800 bg-neutral-800/50 text-[#ffffffff] text-[11px] cursor-pointer"
-                                      onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.max(16, overlay.style.fontSize - 4) } }); }}>A-</button>
-                                    <span className="text-[11px] text-[#ffffffff] min-w-[26px] text-center">{overlay.style.fontSize}</span>
-                                    <button className="px-2 py-0.5 rounded border border-neutral-800 bg-neutral-800/50 text-[#ffffffff] text-[11px] cursor-pointer"
-                                      onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, fontSize: Math.min(120, overlay.style.fontSize + 4) } }); }}>A+</button>
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-[10px] text-neutral-400 min-w-[34px]">Color</span>
-                                    <input type="color" value={overlay.style.color} onChange={(e) => updateTextOverlay(overlay.id, { style: { ...overlay.style, color: e.target.value } })} className="w-6 h-6 rounded border-0 cursor-pointer" />
-                                    <span className="text-[10px] text-neutral-400 ml-2">Outline</span>
-                                    <button className={`px-2 py-0.5 rounded border text-[10px] cursor-pointer ${overlay.style.outline ? 'bg-brand-600/20 border-brand-600 text-brand-400' : 'border-neutral-800 text-neutral-400'}`}
-                                      onClick={(e) => { e.stopPropagation(); updateTextOverlay(overlay.id, { style: { ...overlay.style, outline: !overlay.style.outline } }); }}>
-                                      {overlay.style.outline ? 'On' : 'Off'}
-                                    </button>
-                                  </div>
-                                  <div className="flex items-center gap-1 border-t border-neutral-800 pt-1.5 mt-0.5">
-                                    <span className="text-[10px] text-neutral-400">Save to:</span>
-                                    <button className="px-2 py-0.5 rounded border border-[#6366f1]/30 text-[#818cf8] text-[10px] cursor-pointer bg-transparent"
-                                      onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(1, overlay.text); toastSuccess('Saved to Bank A'); }}>Bank A</button>
-                                    <button className="px-2 py-0.5 rounded border border-amber-500/30 text-amber-500 text-[10px] cursor-pointer bg-transparent"
-                                      onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(2, overlay.text); toastSuccess('Saved to Bank B'); }}>Bank B</button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })())}
               </div>
             </div>
           )}

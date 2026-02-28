@@ -8,9 +8,10 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   getLibrary,
   getCollections,
+  getUserCollections,
   getCreatedContent,
-  deleteCreatedSlideshow,
-  deleteCreatedVideo,
+  deleteCreatedSlideshowAsync,
+  softDeleteCreatedVideoAsync,
   getProjectById,
   getProjectNiches,
   createNiche,
@@ -35,6 +36,8 @@ import {
   migrateThumbnails,
   updateProjectCaptionBank,
   updateProjectHashtagBank,
+  getRecentCollectionSnapshots,
+  getRecentCollectionRemovals,
 } from '../../services/libraryService';
 import { uploadFile, uploadFileWithQuota, getMediaDuration } from '../../services/firebaseStorage';
 import { convertImageIfNeeded } from '../../utils/imageConverter';
@@ -133,9 +136,17 @@ const ProjectWorkspace = ({
     setActiveNicheIdRaw(nicheId !== undefined ? nicheId : activeNicheId);
     setShowAllMediaRaw(!!allMedia);
     setShowCaptionPageRaw(!!captionPage);
-  }, [getCurrentNavState, activeNicheId]);
+    // Re-read library (for new uploads) but NOT collections (guarded by subscription)
+    if (artistId) {
+      setLibrary(getLibrary(artistId));
+    }
+  }, [getCurrentNavState, activeNicheId, artistId]);
 
   const navigateBack = useCallback(() => {
+    // Re-read library (for new uploads) but NOT collections (guarded by subscription)
+    if (artistId) {
+      setLibrary(getLibrary(artistId));
+    }
     // Pop history entries until we find a valid target (or exhaust stack)
     while (navHistoryRef.current.length > 0) {
       const prev = navHistoryRef.current.pop();
@@ -150,10 +161,16 @@ const ProjectWorkspace = ({
       return;
     }
     onBack();
-  }, [onBack, collections]);
+  }, [onBack, collections, artistId]);
 
-  // Convenience setters used by auto-select effect (no history push)
-  const setActiveNicheId = setActiveNicheIdRaw;
+  // Convenience setter — re-reads library (for new uploads) but NOT collections
+  // (collections are protected by the safeSetCollections guard from the subscription)
+  const setActiveNicheId = useCallback((id) => {
+    setActiveNicheIdRaw(id);
+    if (artistId) {
+      setLibrary(getLibrary(artistId));
+    }
+  }, [artistId]);
 
   // Import from library modal
   const [showImportModal, setShowImportModal] = useState(false);
@@ -172,9 +189,112 @@ const ProjectWorkspace = ({
     setCollections(getCollections(artistId));
     setLibrary(getLibrary(artistId));
     setCreatedContent(getCreatedContent(artistId));
+
+    // Safe setter: merges FOUR sources to prevent data loss from subscription race conditions.
+    // Sources: (1) previous React state, (2) new subscription data, (3) current localStorage,
+    // (4) recent collection writes (tracked by addToCollection/assignToBank).
+    // The subscription handler writes to localStorage BEFORE calling this callback,
+    // so localStorage may already be overwritten. Source (4) is the last resort —
+    // it captures what addToCollection/assignToBank wrote before the subscription handler
+    // could overwrite it.
+    const safeSetCollections = (newCols) => {
+      setCollections(prev => {
+        const prevUser = prev.filter(c => c.type !== 'smart' && !c.id?.startsWith('smart_'));
+        const newUser = newCols.filter(c => c.type !== 'smart' && !c.id?.startsWith('smart_'));
+        const smart = newCols.filter(c => c.type === 'smart' || c.id?.startsWith('smart_'));
+        const currentLocal = getUserCollections(artistId);
+        const recentWrites = getRecentCollectionSnapshots();
+        const recentRemovals = getRecentCollectionRemovals();
+
+        // Build merged result starting from subscription data
+        const result = newUser.map(col => {
+          const fromPrev = prevUser.find(p => p.id === col.id);
+          const fromLocal = currentLocal.find(l => l.id === col.id);
+          const fromRecent = recentWrites.get(col.id);
+          const removed = recentRemovals.get(col.id)?.removedIds;
+          // Union mediaIds from all four sources
+          let allMediaIds = [...new Set([
+            ...(col.mediaIds || []),
+            ...(fromPrev?.mediaIds || []),
+            ...(fromLocal?.mediaIds || []),
+            ...(fromRecent?.mediaIds || []),
+          ])];
+          // Subtract recent intentional removals
+          if (removed?.size > 0) {
+            allMediaIds = allMediaIds.filter(id => !removed.has(id));
+          }
+          // Union banks from all four sources
+          const maxBankLen = Math.max(
+            col.banks?.length || 0,
+            fromPrev?.banks?.length || 0,
+            fromLocal?.banks?.length || 0,
+            fromRecent?.banks?.length || 0
+          );
+          const mergedBanks = [];
+          for (let i = 0; i < maxBankLen; i++) {
+            mergedBanks.push([...new Set([
+              ...(col.banks?.[i] || []),
+              ...(fromPrev?.banks?.[i] || []),
+              ...(fromLocal?.banks?.[i] || []),
+              ...(fromRecent?.banks?.[i] || []),
+            ])]);
+          }
+          return {
+            ...col,
+            mediaIds: allMediaIds,
+            ...(maxBankLen > 0 ? { banks: mergedBanks } : {}),
+          };
+        });
+
+        // Add collections from prev/localStorage that aren't in subscription data
+        const resultIds = new Set(result.map(c => c.id));
+        const localIds = new Set(currentLocal.map(c => c.id));
+        let needsFix = false;
+        for (const p of prevUser) {
+          // Only preserve if still in localStorage (deleted collections are removed from localStorage)
+          if (!resultIds.has(p.id) && localIds.has(p.id)) {
+            log.warn('[ProjectWorkspace] Preserving collection missing from subscription:', p.name);
+            result.push(p);
+            resultIds.add(p.id);
+            needsFix = true;
+          }
+        }
+        for (const l of currentLocal) {
+          if (!resultIds.has(l.id)) {
+            result.push(l);
+            resultIds.add(l.id);
+            needsFix = true;
+          }
+        }
+
+        // Log guard results for each niche
+        const niches = result.filter(c => c.isPipeline);
+        for (const n of niches) {
+          const sub = newUser.find(c => c.id === n.id);
+          const prev = prevUser.find(c => c.id === n.id);
+          const loc = currentLocal.find(c => c.id === n.id);
+          const rec = recentWrites.get(n.id);
+          if (sub?.mediaIds?.length !== n.mediaIds?.length) {
+            log('[safeSetCollections]', n.name, '| sub:', sub?.mediaIds?.length || 0,
+              'prev:', prev?.mediaIds?.length || 0, 'local:', loc?.mediaIds?.length || 0,
+              'recent:', rec?.mediaIds?.length || '–', '→ result:', n.mediaIds?.length || 0);
+          }
+        }
+
+        // Check if subscription data was stale — if we added anything, fix localStorage
+        const subMediaTotal = newUser.reduce((s, c) => s + (c.mediaIds?.length || 0), 0);
+        const resultMediaTotal = result.reduce((s, c) => s + (c.mediaIds?.length || 0), 0);
+        if (needsFix || resultMediaTotal > subMediaTotal) {
+          saveCollections(artistId, result);
+        }
+
+        return [...smart, ...result];
+      });
+    };
+
     const unsubs = [];
     if (db) {
-      unsubs.push(subscribeToCollections(db, artistId, setCollections));
+      unsubs.push(subscribeToCollections(db, artistId, safeSetCollections));
       unsubs.push(subscribeToLibrary(db, artistId, setLibrary));
       unsubs.push(subscribeToCreatedContent(db, artistId, setCreatedContent));
     }
@@ -367,7 +487,28 @@ const ProjectWorkspace = ({
           imageItems.forEach(item => assignToBank(artistId, activeNicheId, item.id, bankIdx, db));
           pendingBankIndexRef.current = null;
         }
-        setCollections(getCollections(artistId));
+        // Merge localStorage changes into state safely (union, never lose data)
+        setCollections(prev => {
+          const freshLocal = getCollections(artistId);
+          const prevUser = prev.filter(c => c.type !== 'smart' && !c.id?.startsWith('smart_'));
+          const localUser = freshLocal.filter(c => c.type !== 'smart' && !c.id?.startsWith('smart_'));
+          const smart = freshLocal.filter(c => c.type === 'smart' || c.id?.startsWith('smart_'));
+          // Start from localStorage, union mediaIds/banks with prev state
+          const merged = localUser.map(col => {
+            const p = prevUser.find(pc => pc.id === col.id);
+            if (!p) return col;
+            return {
+              ...col,
+              mediaIds: [...new Set([...(col.mediaIds || []), ...(p.mediaIds || [])])],
+            };
+          });
+          // Add any prev collections missing from localStorage
+          const mergedIds = new Set(merged.map(c => c.id));
+          for (const p of prevUser) {
+            if (!mergedIds.has(p.id)) merged.push(p);
+          }
+          return [...smart, ...merged];
+        });
         toastSuccess(`${uploadedItems.length} item${uploadedItems.length > 1 ? 's' : ''} uploaded`);
       } else if (errors.length > 0) {
         toastError(`Upload failed: ${errors[0].error?.message || 'unknown error'}`);
@@ -439,9 +580,9 @@ const ProjectWorkspace = ({
       const nicheDrafts = [...(content.slideshows || []), ...(content.videos || [])].filter(d => d.collectionId === nicheId);
       for (const draft of nicheDrafts) {
         if (draft.slides) {
-          deleteCreatedSlideshow(artistId, draft.id);
+          deleteCreatedSlideshowAsync(db, artistId, draft.id).catch(log.error);
         } else {
-          deleteCreatedVideo(artistId, draft.id);
+          softDeleteCreatedVideoAsync(db, artistId, draft.id).catch(log.error);
         }
       }
       await deleteCollectionAsync(db, artistId, nicheId);
@@ -686,6 +827,7 @@ const ProjectWorkspace = ({
             library={library}
             createdContent={createdContent}
             projectAudio={projectAudio}
+            projectMedia={projectMedia}
             draggingMediaIds={[]}
             onOpenEditor={onOpenEditor}
             onViewDrafts={onViewDrafts}
@@ -703,8 +845,7 @@ const ProjectWorkspace = ({
             artistId={artistId}
             niche={activeNiche}
             library={library}
-            createdContent={createdContent}
-            projectAudio={projectAudio}
+            projectMedia={projectMedia}
             onMakeVideo={(format, nicheId, existingDraft, templateSettings, nicheSourceVideos) => {
               onOpenVideoEditor?.(format, nicheId, existingDraft, templateSettings, nicheSourceVideos);
             }}
