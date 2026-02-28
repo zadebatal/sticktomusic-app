@@ -2571,7 +2571,9 @@ const SlideshowEditor = ({
                 color: overlay.style.color, textAlign: overlay.style.textAlign,
                 textTransform: overlay.style.textTransform || 'none',
                 WebkitTextStroke: overlay.style.textStroke || undefined,
-                textShadow: overlay.style.outline ? `0 0 ${4 * previewScale}px ${overlay.style.outlineColor}` : 'none',
+                textShadow: overlay.style.outline
+                  ? `0 0 ${4 * previewScale}px ${overlay.style.outlineColor || '#000'}, ${1 * previewScale}px ${1 * previewScale}px ${2 * previewScale}px ${overlay.style.outlineColor || '#000'}, ${-1 * previewScale}px ${-1 * previewScale}px ${2 * previewScale}px ${overlay.style.outlineColor || '#000'}`
+                  : 'none',
                 cursor: isDragging ? 'grabbing' : 'grab',
                 border: isSelected ? '1px dashed rgba(99,102,241,0.8)' : '1px dashed transparent',
                 padding: '4px 8px', borderRadius: '4px',

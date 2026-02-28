@@ -638,7 +638,12 @@ const SlideshowNicheContent = ({
             // Package the niche preview state into an existingDraft for the editor
             const timestamp = Date.now();
             const slides = Array.from({ length: slideCount }).map((_, bankIdx) => {
-              const pickedId = previewPicks[bankIdx];
+              // Ensure every slide has an image pick (lazily picks weren't generated for unvisited slides)
+              let pickedId = previewPicks[bankIdx];
+              if (!pickedId) {
+                const bankIds = pipeline?.banks?.[bankIdx] || [];
+                if (bankIds.length > 0) pickedId = bankIds[Math.floor(Math.random() * bankIds.length)];
+              }
               const item = pickedId ? library.find(m => m.id === pickedId) : null;
               const imgUrl = item?.url || item?.thumbnailUrl || null;
               // Build text overlays from selected (or first) text bank entry + any overrides
