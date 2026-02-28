@@ -241,6 +241,7 @@ const SoloClipEditor = ({
     textAlign: 'center',
     textCase: 'default',
     displayMode: templateSettings?.textDisplayMode || 'word',
+    ...(existingVideo?.textStyle || {}),
     ...(templateSettings?.textStyle || {}),
   });
   const [activeTab, setActiveTab] = useState('caption');
@@ -374,12 +375,18 @@ const SoloClipEditor = ({
   // ── Video Text Banks (uses videoTextBank1/videoTextBank2, NOT textBank1/textBank2) ──
   const getVideoTextBanks = useCallback(() => {
     let videoTextBank1 = [], videoTextBank2 = [];
+    // Include niche text banks first
+    if (nicheTextBanks) {
+      const extractTexts = (bank) => (bank || []).map(e => typeof e === 'string' ? e : e?.text || '').filter(Boolean);
+      if (nicheTextBanks[0]?.length > 0) videoTextBank1 = [...extractTexts(nicheTextBanks[0])];
+      if (nicheTextBanks[1]?.length > 0) videoTextBank2 = [...extractTexts(nicheTextBanks[1])];
+    }
     for (const col of collections) {
       if (col.videoTextBank1?.length > 0) videoTextBank1 = [...videoTextBank1, ...col.videoTextBank1];
       if (col.videoTextBank2?.length > 0) videoTextBank2 = [...videoTextBank2, ...col.videoTextBank2];
     }
     return { videoTextBank1, videoTextBank2 };
-  }, [collections]);
+  }, [collections, nicheTextBanks]);
 
   const handleAddToVideoTextBank = useCallback((bankNum, text) => {
     if (!text.trim() || !artistId || collections.length === 0) return;
@@ -820,6 +827,7 @@ const SoloClipEditor = ({
       text: prefillText || 'Click to edit',
       style: getDefaultTextStyle(),
       position: { x: 50, y: 50, width: 80, height: 20 },
+      scope: 'full',
       startTime: start,
       endTime: end
     };
@@ -1864,7 +1872,7 @@ const SoloClipEditor = ({
                 {renderCollapsibleSection('text', 'Text Banks', (
                   <div className="flex flex-col gap-3">
                     <div>
-                      <div className="text-body-bold font-body-bold text-teal-400 mb-2">Text Bank A</div>
+                      <div className="text-body-bold font-body-bold mb-2" style={{ color: '#818cf8' }}>Text Bank A</div>
                       <div className="flex gap-1.5 mb-2">
                         <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
@@ -1880,7 +1888,7 @@ const SoloClipEditor = ({
                       {videoTextBank1.length === 0 && <div className="text-[11px] text-neutral-500">No text added yet</div>}
                     </div>
                     <div>
-                      <div className="text-body-bold font-body-bold text-amber-400 mb-2">Text Bank B</div>
+                      <div className="text-body-bold font-body-bold mb-2" style={{ color: '#fbbf24' }}>Text Bank B</div>
                       <div className="flex gap-1.5 mb-2">
                         <input value={newTextB} onChange={(e) => setNewTextB(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
@@ -1895,32 +1903,6 @@ const SoloClipEditor = ({
                       ))}
                       {videoTextBank2.length === 0 && <div className="text-[11px] text-neutral-500">No text added yet</div>}
                     </div>
-                    {/* Niche Text Banks */}
-                    {nicheTextBanks && nicheTextBanks.some(b => b?.length > 0) && (
-                      <div className="flex flex-col gap-3 pt-3 border-t border-neutral-800">
-                        <div className="text-body-bold font-body-bold text-neutral-300">Niche Banks</div>
-                        {nicheTextBanks.map((bank, bankIdx) => {
-                          if (!bank?.length) return null;
-                          const color = getBankColor(bankIdx);
-                          return (
-                            <div key={bankIdx}>
-                              <div className="text-[12px] font-semibold mb-1.5" style={{ color: color.primary }}>{getBankLabel(bankIdx)}</div>
-                              {bank.map((entry, entryIdx) => {
-                                const text = typeof entry === 'string' ? entry : entry?.text || '';
-                                if (!text) return null;
-                                return (
-                                  <div key={entryIdx} className="flex items-center px-2 py-1 rounded-md mb-0.5 cursor-pointer hover:bg-neutral-800/50"
-                                    style={{ borderLeft: `2px solid ${color.primary}` }}
-                                    onClick={() => addTextOverlay(text)}>
-                                    <span className="text-[12px] text-neutral-300 truncate">{text}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
                   </div>
                 ))}
 
@@ -2123,7 +2105,7 @@ const SoloClipEditor = ({
                                   </div>
                                   <div className="flex items-center gap-1 border-t border-neutral-800 pt-1.5 mt-0.5">
                                     <span className="text-[10px] text-neutral-400">Save to:</span>
-                                    <button className="px-2 py-0.5 rounded border border-teal-500/30 text-teal-500 text-[10px] cursor-pointer bg-transparent"
+                                    <button className="px-2 py-0.5 rounded border border-[#6366f1]/30 text-[#818cf8] text-[10px] cursor-pointer bg-transparent"
                                       onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(1, overlay.text); toastSuccess('Saved to Bank A'); }}>Bank A</button>
                                     <button className="px-2 py-0.5 rounded border border-amber-500/30 text-amber-500 text-[10px] cursor-pointer bg-transparent"
                                       onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(2, overlay.text); toastSuccess('Saved to Bank B'); }}>Bank B</button>

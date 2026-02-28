@@ -24,6 +24,7 @@ const SoloClipPreview = ({
   aspectRatio = '9:16',
   selectedTextA,
   selectedTextB,
+  onTextPositionsChange,
 }) => {
   // If allVideos provided, support cycling through them
   const videoPool = useMemo(() => {
@@ -50,6 +51,9 @@ const SoloClipPreview = ({
   // Text timing — start/end in seconds
   const [textTimingA, setTextTimingA] = useState({ start: 0, end: totalDuration });
   const [textTimingB, setTextTimingB] = useState({ start: 0, end: totalDuration });
+
+  // Report position changes to parent
+  useEffect(() => { onTextPositionsChange?.(textPosA, textPosB); }, [textPosA, textPosB, onTextPositionsChange]);
 
   // Sync video playback with audio
   useEffect(() => {

@@ -88,13 +88,24 @@ const VideoEditorModal = ({
 
   // ── Multi-video state (template + generated variations) ──
   // DEFAULT_TEXT_STYLE defined outside component for stable reference
+  // Convert niche textOverlays to words format for montage editor (preserve position)
+  const initialWords = existingVideo?.words?.length > 0
+    ? existingVideo.words
+    : (existingVideo?.textOverlays || []).map((ov, i) => ({
+        id: ov.id || `word-niche-${i}`,
+        text: ov.text,
+        startTime: 0,
+        duration: existingVideo?.duration || 30,
+        position: ov.position || null,
+        style: ov.style || null,
+      }));
   const [allVideos, setAllVideos] = useState([{
     id: 'template',
     name: existingVideo?.name || 'Template',
     clips: existingVideo?.clips || [],
     audio: existingVideo?.audio || null,
-    words: existingVideo?.words || [],
-    lyrics: existingVideo?.lyrics || '',
+    words: initialWords,
+    lyrics: existingVideo?.lyrics || initialWords.map(w => w.text).join(' '),
     textStyle: existingVideo?.textStyle || { ...DEFAULT_TEXT_STYLE },
     cropMode: '9:16',
     duration: existingVideo?.duration || 30,
@@ -300,15 +311,21 @@ const VideoEditorModal = ({
     return libraryVideos.filter(v => col.mediaIds.includes(v.id));
   }, [selectedCollection, libraryVideos, sidebarCollections, category?.videos]);
 
-  // Text banks from collections (shared with SlideshowEditor)
+  // Text banks from niche (video text banks) + collections (slideshow text banks)
   const getTextBanks = useCallback(() => {
     let textBank1 = [], textBank2 = [];
+    // Include niche text banks first
+    if (category?.nicheTextBanks) {
+      const extractTexts = (bank) => (bank || []).map(e => typeof e === 'string' ? e : e?.text || '').filter(Boolean);
+      if (category.nicheTextBanks[0]?.length > 0) textBank1 = [...extractTexts(category.nicheTextBanks[0])];
+      if (category.nicheTextBanks[1]?.length > 0) textBank2 = [...extractTexts(category.nicheTextBanks[1])];
+    }
     sidebarCollections.forEach(col => {
       if (col.textBank1?.length) textBank1 = [...textBank1, ...col.textBank1];
       if (col.textBank2?.length) textBank2 = [...textBank2, ...col.textBank2];
     });
     return { textBank1, textBank2 };
-  }, [sidebarCollections]);
+  }, [sidebarCollections, category?.nicheTextBanks]);
 
   const handleAddToTextBank = useCallback((bankNum, text) => {
     if (!text.trim() || !artistId || sidebarCollections.length === 0) return;
@@ -1335,10 +1352,11 @@ const VideoEditorModal = ({
     }
   }, [allVideos, existingVideo, bpm, onSave, clearAutoSave, toast, onClose, isSavingAll]);
 
-  // Get current visible text
-  const currentText = words.find(w =>
+  // Get current visible text(s) — multiple overlays can be visible simultaneously
+  const visibleTexts = words.filter(w =>
     currentTime >= w.startTime && currentTime < w.startTime + (w.duration || 0.5)
   );
+  const currentText = visibleTexts[0] || null;
 
   // Handlers
   const handleAudioSelect = (audio) => {
@@ -2544,20 +2562,33 @@ const VideoEditorModal = ({
                   </div>
                 )}
 
-                {/* Text Overlay */}
-                {currentText && (
-                  <div style={{
-                    position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', maxWidth: '90%',
-                    fontSize: `${textStyle.fontSize * 0.5}px`,
-                    fontFamily: textStyle.fontFamily,
-                    fontWeight: textStyle.fontWeight,
-                    color: textStyle.color,
-                    textTransform: textStyle.textCase === 'upper' ? 'uppercase' : textStyle.textCase === 'lower' ? 'lowercase' : 'none',
-                    textShadow: textStyle.outline ? `2px 2px 0 ${textStyle.outlineColor}, -2px -2px 0 ${textStyle.outlineColor}, 2px -2px 0 ${textStyle.outlineColor}, -2px 2px 0 ${textStyle.outlineColor}` : 'none'
-                  }}>
-                    {currentText.text}
-                  </div>
-                )}
+                {/* Text Overlays */}
+                {visibleTexts.map(vt => {
+                  const pos = vt.position;
+                  const ts = vt.style || textStyle;
+                  const scaledSize = ts.fontSize ? ts.fontSize * 0.35 : textStyle.fontSize * 0.5;
+                  return (
+                    <div key={vt.id} style={{
+                      position: 'absolute',
+                      ...(pos ? {
+                        left: `${pos.x}%`, top: `${pos.y}%`,
+                        transform: 'translate(-50%, -50%)',
+                      } : {
+                        top: '50%', left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                      }),
+                      textAlign: 'center', maxWidth: '90%',
+                      fontSize: `${scaledSize}px`,
+                      fontFamily: ts.fontFamily || textStyle.fontFamily,
+                      fontWeight: ts.fontWeight || textStyle.fontWeight,
+                      color: ts.color || textStyle.color,
+                      textTransform: (ts.textCase || textStyle.textCase) === 'upper' ? 'uppercase' : (ts.textCase || textStyle.textCase) === 'lower' ? 'lowercase' : 'none',
+                      textShadow: (ts.outline !== undefined ? ts.outline : textStyle.outline) ? `2px 2px 0 ${ts.outlineColor || textStyle.outlineColor}, -2px -2px 0 ${ts.outlineColor || textStyle.outlineColor}, 2px -2px 0 ${ts.outlineColor || textStyle.outlineColor}, -2px 2px 0 ${ts.outlineColor || textStyle.outlineColor}` : 'none'
+                    }}>
+                      {vt.text}
+                    </div>
+                  );
+                })}
 
                 {/* Crop Overlay */}
                 {cropMode === '4:3' && (
@@ -3219,7 +3250,7 @@ const VideoEditorModal = ({
                       return (
                         <>
                           <div>
-                            <div className="text-body-bold font-body-bold text-teal-400 mb-2">Text Bank A</div>
+                            <div className="text-body-bold font-body-bold mb-2" style={{ color: '#818cf8' }}>Text Bank A</div>
                             <div className="flex gap-1.5 mb-2">
                               <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)}
                                 onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToTextBank(1, newTextA); setNewTextA(''); } }}
@@ -3234,7 +3265,7 @@ const VideoEditorModal = ({
                             {textBank1.length === 0 && <div className="text-[11px] text-neutral-500">No text added yet</div>}
                           </div>
                           <div>
-                            <div className="text-body-bold font-body-bold text-amber-400 mb-2">Text Bank B</div>
+                            <div className="text-body-bold font-body-bold mb-2" style={{ color: '#fbbf24' }}>Text Bank B</div>
                             <div className="flex gap-1.5 mb-2">
                               <input value={newTextB} onChange={(e) => setNewTextB(e.target.value)}
                                 onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToTextBank(2, newTextB); setNewTextB(''); } }}

@@ -770,6 +770,7 @@ const PhotoMontageEditor = ({
       text: prefillText || 'Click to edit',
       style: getDefaultTextStyle(),
       position: { x: 50, y: 50, width: 80, height: 20 },
+      scope: 'full',
       startTime: start,
       endTime: end
     };
@@ -1910,19 +1911,20 @@ const PhotoMontageEditor = ({
                   {/* Niche Text Banks */}
                   {nicheTextBanks && nicheTextBanks.some(b => b?.length > 0) && (
                     <div className="flex flex-col gap-2 pt-2 border-t border-neutral-800">
-                      <span className="text-[12px] font-semibold text-neutral-300">Niche Banks</span>
                       {nicheTextBanks.map((bank, bankIdx) => {
                         if (!bank?.length) return null;
-                        const color = getBankColor(bankIdx);
+                        const bankLabel = bankIdx === 0 ? 'Text Bank A' : 'Text Bank B';
+                        const labelColor = bankIdx === 0 ? '#818cf8' : '#fbbf24';
+                        const borderColor = bankIdx === 0 ? '#6366f1' : '#f59e0b';
                         return (
                           <div key={bankIdx}>
-                            <div className="text-[11px] font-semibold mb-1" style={{ color: color.primary }}>{getBankLabel(bankIdx)}</div>
+                            <div className="text-[12px] font-semibold mb-1.5" style={{ color: labelColor }}>{bankLabel}</div>
                             {bank.map((entry, entryIdx) => {
                               const text = typeof entry === 'string' ? entry : entry?.text || '';
                               if (!text) return null;
                               return (
                                 <div key={entryIdx} className="flex items-center px-2 py-1 rounded-md mb-0.5 cursor-pointer hover:bg-neutral-800/50"
-                                  style={{ borderLeft: `2px solid ${color.primary}` }}
+                                  style={{ borderLeft: `2px solid ${borderColor}` }}
                                   onClick={() => addTextOverlay(text)}>
                                   <span className="text-[12px] text-neutral-300 truncate">{text}</span>
                                 </div>

@@ -30,6 +30,7 @@ const PhotoMontagePreview = ({
   onCutsApplied,
   selectedTextA,
   selectedTextB,
+  onTextPositionsChange,
 }) => {
   const [playlist, setPlaylist] = useState(() => [...images]);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -59,6 +60,9 @@ const PhotoMontagePreview = ({
   // Text timing — start/end in seconds
   const [textTimingA, setTextTimingA] = useState({ start: 0, end: totalDuration });
   const [textTimingB, setTextTimingB] = useState({ start: 0, end: totalDuration });
+
+  // Report position changes to parent
+  useEffect(() => { onTextPositionsChange?.(textPosA, textPosB); }, [textPosA, textPosB, onTextPositionsChange]);
 
   // Analyze audio for beat sync
   const analyzedUrlRef = useRef(null);

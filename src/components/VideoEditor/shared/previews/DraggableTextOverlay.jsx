@@ -93,8 +93,8 @@ const DraggableTextOverlay = ({
       if (!s) return;
       const dx = ((moveEvt.clientX - s.mouseX) / s.containerW) * 100;
       const dy = ((moveEvt.clientY - s.mouseY) / s.containerH) * 100;
-      const newX = Math.max(5, Math.min(95, s.startX + dx));
-      const newY = Math.max(5, Math.min(95, s.startY + dy));
+      const newX = Math.max(0, Math.min(100, s.startX + dx));
+      const newY = Math.max(0, Math.min(100, s.startY + dy));
       if (onPositionChange) onPositionChange({ ...position, x: newX, y: newY });
     };
 
@@ -125,7 +125,7 @@ const DraggableTextOverlay = ({
       const s = dragStartRef.current;
       if (!s) return;
       const dx = ((moveEvt.clientX - s.mouseX) / s.containerW) * 100;
-      const newWidth = Math.max(20, Math.min(100, s.startWidth + dx * 2));
+      const newWidth = Math.max(20, Math.min(300, s.startWidth + dx * 2));
       if (onPositionChange) onPositionChange({ ...position, width: newWidth });
     };
 
@@ -169,7 +169,8 @@ const DraggableTextOverlay = ({
         left: `${position.x}%`,
         top: `${position.y}%`,
         transform: 'translate(-50%, -50%)',
-        width: `${position.width || 80}%`,
+        width: 'fit-content',
+        maxWidth: '95%',
         padding: '4px',
         borderRadius: 4,
         background: selected ? `${color}1a` : 'transparent',
@@ -198,7 +199,7 @@ const DraggableTextOverlay = ({
             textTransform,
             textShadow,
             lineHeight: 1.2,
-            width: '100%',
+            minWidth: '60px',
             background: 'rgba(0,0,0,0.5)',
             border: `1px solid ${color}`,
             borderRadius: 3,
@@ -219,7 +220,7 @@ const DraggableTextOverlay = ({
           textTransform,
           textShadow,
           lineHeight: 1.2,
-          width: '100%',
+          whiteSpace: 'nowrap',
           pointerEvents: 'none',
           userSelect: 'none',
         }}>

@@ -269,6 +269,7 @@ const MultiClipEditor = ({
     textAlign: 'center',
     textCase: 'default',
     displayMode: templateSettings?.textDisplayMode || 'word',
+    ...(existingVideo?.textStyle || {}),
     ...(templateSettings?.textStyle || {}),
   });
 
@@ -393,12 +394,19 @@ const MultiClipEditor = ({
   // ── Video Text Banks ──
   const getVideoTextBanks = useCallback(() => {
     let videoTextBank1 = [], videoTextBank2 = [];
+    // Include niche text banks first
+    if (nicheTextBanks) {
+      const extractTexts = (bank) => (bank || []).map(e => typeof e === 'string' ? e : e?.text || '').filter(Boolean);
+      if (nicheTextBanks[0]?.length > 0) videoTextBank1 = [...extractTexts(nicheTextBanks[0])];
+      if (nicheTextBanks[1]?.length > 0) videoTextBank2 = [...extractTexts(nicheTextBanks[1])];
+    }
+    // Then add any editor-local bank entries from collections
     for (const col of collections) {
       if (col.videoTextBank1?.length > 0) videoTextBank1 = [...videoTextBank1, ...col.videoTextBank1];
       if (col.videoTextBank2?.length > 0) videoTextBank2 = [...videoTextBank2, ...col.videoTextBank2];
     }
     return { videoTextBank1, videoTextBank2 };
-  }, [collections]);
+  }, [collections, nicheTextBanks]);
 
   const handleAddToVideoTextBank = useCallback((bankNum, text) => {
     if (!text.trim() || !artistId || collections.length === 0) return;
@@ -734,15 +742,15 @@ const MultiClipEditor = ({
 
   // ── Text overlay CRUD ──
   const getDefaultTextStyle = useCallback(() => ({
-    fontSize: 48,
-    fontFamily: 'Inter, sans-serif',
-    fontWeight: '600',
-    color: '#ffffff',
-    outline: true,
-    outlineColor: '#000000',
-    textAlign: 'center',
-    textCase: 'default'
-  }), []);
+    fontSize: textStyle.fontSize,
+    fontFamily: textStyle.fontFamily,
+    fontWeight: textStyle.fontWeight,
+    color: textStyle.color,
+    outline: textStyle.outline,
+    outlineColor: textStyle.outlineColor,
+    textAlign: textStyle.textAlign,
+    textCase: textStyle.textCase
+  }), [textStyle]);
 
   // ── AI Transcription handler ──
   const handleTranscriptionComplete = useCallback((result) => {
@@ -906,11 +914,13 @@ const MultiClipEditor = ({
     const handleResizeEnd = () => {
       setClipResize({ active: false, clipIndex: -1, edge: null, startX: 0, startDuration: 0 });
     };
-    document.addEventListener('mousemove', handleResizeMove);
-    document.addEventListener('mouseup', handleResizeEnd);
+    document.addEventListener('pointermove', handleResizeMove);
+    document.addEventListener('pointerup', handleResizeEnd);
+    document.addEventListener('pointercancel', handleResizeEnd);
     return () => {
-      document.removeEventListener('mousemove', handleResizeMove);
-      document.removeEventListener('mouseup', handleResizeEnd);
+      document.removeEventListener('pointermove', handleResizeMove);
+      document.removeEventListener('pointerup', handleResizeEnd);
+      document.removeEventListener('pointercancel', handleResizeEnd);
     };
   }, [clipResize, pxPerSec, clips]);
 
@@ -1830,7 +1840,7 @@ const MultiClipEditor = ({
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                         <span style={{ fontSize: '11px', color: theme.text.muted }}>{visibleVideos.length} clips</span>
                         <button
-                          style={{ fontSize: '11px', color: '#14b8a6', background: 'none', border: 'none', cursor: 'pointer' }}
+                          style={{ fontSize: '11px', color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer' }}
                           onClick={() => { visibleVideos.forEach(v => addClipToTimeline(v)); }}
                         >Add All</button>
                       </div>
@@ -1925,7 +1935,7 @@ const MultiClipEditor = ({
                           <div style={{ borderTop: `1px solid ${theme.border.subtle}`, paddingTop: '10px' }}>
                             {/* Bank A */}
                             <div style={{ marginBottom: '12px' }}>
-                              <div style={{ fontSize: '12px', fontWeight: 600, color: '#14b8a6', marginBottom: '6px' }}>Text Bank A</div>
+                              <div style={{ fontSize: '12px', fontWeight: 600, color: '#6366f1', marginBottom: '6px' }}>Text Bank A</div>
                               <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
                                 <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} placeholder="Add text..." className="flex-1 px-2 py-1.5 rounded-md border border-neutral-800 bg-[#0a0a0aff] text-[#ffffffff] text-[12px] outline-none min-h-[44px]" />
                                 <IconButton variant="brand-primary" size="small" icon={<FeatherPlus />} aria-label="Add to Text Bank A" onClick={() => { if (newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }} />
@@ -2073,7 +2083,7 @@ const MultiClipEditor = ({
                                 <div className="flex items-center gap-1.5 flex-wrap border-t border-neutral-800 pt-1.5 mt-0.5">
                                   <span style={{ fontSize: '10px', color: theme.text.secondary }}>Save to:</span>
                                   <button
-                                    className="px-2 py-0.5 rounded border border-teal-500/30 bg-transparent text-teal-500 text-[10px] cursor-pointer transition-all min-h-[44px] px-2.5 py-1.5"
+                                    className="px-2 py-0.5 rounded border border-[#6366f1]/30 bg-transparent text-[#818cf8] text-[10px] cursor-pointer transition-all min-h-[44px] px-2.5 py-1.5"
                                     onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(1, overlay.text); toastSuccess('Saved to Bank A'); }}
                                   >Bank A</button>
                                   <button
@@ -2378,13 +2388,13 @@ const MultiClipEditor = ({
                               <div
                                 onPointerDown={(e) => { e.stopPropagation(); handleResizeStart(e, idx, 'right'); }}
                                 style={{
-                                  position: 'absolute', top: 0, right: 0, width: '8px', height: '100%',
+                                  position: 'absolute', top: 0, right: -2, width: '12px', height: '100%',
                                   cursor: 'col-resize', zIndex: 3,
-                                  background: 'linear-gradient(to left, rgba(167,139,250,0.4), transparent)',
-                                  opacity: 0, transition: 'opacity 0.15s',
+                                  background: 'linear-gradient(to left, rgba(167,139,250,0.5), transparent)',
+                                  opacity: 0.3, transition: 'opacity 0.15s',
                                 }}
                                 onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                                onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}
+                                onMouseLeave={(e) => e.currentTarget.style.opacity = '0.3'}
                               />
                             </div>
                           );
@@ -2556,7 +2566,7 @@ const MultiClipEditor = ({
                     <div className="flex items-center gap-2">
                       <CloudImportButton artistId={artistId} db={db} mediaType="video" compact
                         onImportMedia={(files) => { const newVids = files.map((f, i) => ({ id: `import_${Date.now()}_${i}`, name: f.name, url: f.url, localUrl: f.localUrl, type: 'video' })); setLibraryMedia(prev => [...prev, ...newVids]); }} />
-                      <button className="text-[11px] text-teal-400 bg-transparent border-none cursor-pointer"
+                      <button className="text-[11px] text-indigo-400 bg-transparent border-none cursor-pointer"
                         onClick={() => { visibleVideos.forEach(v => addClipToTimeline(v)); }}>Add All</button>
                     </div>
                   </div>
@@ -2660,7 +2670,7 @@ const MultiClipEditor = ({
                     return (
                       <>
                         <div>
-                          <span className="text-[12px] font-semibold text-teal-400 mb-2 block">Text Bank A</span>
+                          <span className="text-[12px] font-semibold mb-2 block" style={{ color: '#818cf8' }}>Text Bank A</span>
                           <div className="flex gap-1.5 mb-2">
                             <input value={newTextA} onChange={(e) => setNewTextA(e.target.value)}
                               onKeyDown={(e) => { if (e.key === 'Enter' && newTextA.trim()) { handleAddToVideoTextBank(1, newTextA); setNewTextA(''); } }}
@@ -2676,7 +2686,7 @@ const MultiClipEditor = ({
                           {bankA.length === 0 && <span className="text-[11px] text-neutral-600">No text added yet</span>}
                         </div>
                         <div>
-                          <span className="text-[12px] font-semibold text-amber-400 mb-2 block">Text Bank B</span>
+                          <span className="text-[12px] font-semibold mb-2 block" style={{ color: '#fbbf24' }}>Text Bank B</span>
                           <div className="flex gap-1.5 mb-2">
                             <input value={newTextB} onChange={(e) => setNewTextB(e.target.value)}
                               onKeyDown={(e) => { if (e.key === 'Enter' && newTextB.trim()) { handleAddToVideoTextBank(2, newTextB); setNewTextB(''); } }}
@@ -2694,32 +2704,6 @@ const MultiClipEditor = ({
                       </>
                     );
                   })()}
-                  {/* Niche Text Banks */}
-                  {nicheTextBanks && nicheTextBanks.some(b => b?.length > 0) && (
-                    <div className="flex flex-col gap-3 pt-3 border-t border-neutral-800">
-                      <div className="text-body-bold font-body-bold text-neutral-300">Niche Banks</div>
-                      {nicheTextBanks.map((bank, bankIdx) => {
-                        if (!bank?.length) return null;
-                        const color = getBankColor(bankIdx);
-                        return (
-                          <div key={bankIdx}>
-                            <div className="text-[12px] font-semibold mb-1.5" style={{ color: color.primary }}>{getBankLabel(bankIdx)}</div>
-                            {bank.map((entry, entryIdx) => {
-                              const text = typeof entry === 'string' ? entry : entry?.text || '';
-                              if (!text) return null;
-                              return (
-                                <div key={entryIdx} className="flex items-center px-2 py-1 rounded-md mb-0.5 cursor-pointer hover:bg-neutral-800/50"
-                                  style={{ borderLeft: `2px solid ${color.primary}` }}
-                                  onClick={() => addTextOverlay(text)}>
-                                  <span className="text-[12px] text-neutral-300 truncate">{text}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
                 </div>
               ))}
 
@@ -2922,7 +2906,7 @@ const MultiClipEditor = ({
                               {/* Save to Bank */}
                               <div className="flex items-center gap-1.5 border-t border-neutral-800 pt-1.5 mt-0.5">
                                 <span className="text-[10px] text-neutral-400">Save to:</span>
-                                <button className="px-2 py-0.5 rounded border border-teal-500/30 bg-transparent text-teal-500 text-[10px] cursor-pointer"
+                                <button className="px-2 py-0.5 rounded border border-[#6366f1]/30 bg-transparent text-[#818cf8] text-[10px] cursor-pointer"
                                   onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(1, overlay.text); toastSuccess('Saved to Bank A'); }}>Bank A</button>
                                 <button className="px-2 py-0.5 rounded border border-amber-500/30 bg-transparent text-amber-500 text-[10px] cursor-pointer"
                                   onClick={(e) => { e.stopPropagation(); handleAddToVideoTextBank(2, overlay.text); toastSuccess('Saved to Bank B'); }}>Bank B</button>

@@ -446,6 +446,7 @@ const VideoStudio = ({
   const [currentView, setCurrentViewState] = useState(urlWorkspaceId ? 'workspace' : (getInitialViewFromUrl() || savedSession?.currentView || 'home'));
   const [activePipelineId, setActivePipelineId] = useState(urlWorkspaceId);
   const [activePipelineIdForEditor, setActivePipelineIdForEditor] = useState(null);
+  const [pipelineCategoryVersion, setPipelineCategoryVersion] = useState(0);
   const [homeTab, setHomeTab] = useState(savedSession?.homeTab || 'production');
 
   // Project system state
@@ -530,12 +531,21 @@ const VideoStudio = ({
 
   // Pipeline category for video editor when opened from a pipeline
   const pipelineCategory = useMemo(() => {
+    void pipelineCategoryVersion; // dep used to force recompute when editor opens
     if (!activePipelineIdForEditor || !currentArtistId) return null;
     const cols = getUserCollections(currentArtistId);
     const pipeline = cols.find(c => c.id === activePipelineIdForEditor);
     if (!pipeline) return null;
     const lib = getLibrary(currentArtistId);
     const pipelineMedia = lib.filter(item => (pipeline.mediaIds || []).includes(item.id));
+    // textBanks = slideshow text banks (array of arrays), videoTextBank1/2 = video niche text banks
+    // Check length to avoid empty-array short-circuit ([] is truthy in JS)
+    const nicheTextBanks =
+      (Array.isArray(pipeline.textBanks) && pipeline.textBanks.length > 0)
+        ? pipeline.textBanks
+        : (pipeline.videoTextBank1?.length > 0 || pipeline.videoTextBank2?.length > 0)
+          ? [pipeline.videoTextBank1 || [], pipeline.videoTextBank2 || []]
+          : null;
     return {
       id: `pipeline-${pipeline.id}`,
       name: pipeline.name,
@@ -553,9 +563,9 @@ const VideoStudio = ({
       defaultPreset: null,
       captionTemplate: '',
       defaultHashtags: '',
-      nicheTextBanks: pipeline.textBanks || null,
+      nicheTextBanks,
     };
-  }, [activePipelineIdForEditor, currentArtistId]);
+  }, [activePipelineIdForEditor, currentArtistId, pipelineCategoryVersion]);
 
   // Load created content from Firestore on mount (ensures drafts persist across refreshes)
   useEffect(() => {
@@ -2682,6 +2692,7 @@ const VideoStudio = ({
                 setSelectedCategory(null); // Clear stale category so pipelineCategory is used
                 setActivePipelineIdForEditor(nicheId);
                 setPullFromCollection(nicheId);
+                setPipelineCategoryVersion(v => v + 1); // Force recompute to pick up latest text banks
               }
               setPendingTemplateSettings(templateSettings || null);
               setClipperSourceVideos(nicheSourceVideos || []);

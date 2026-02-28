@@ -2643,10 +2643,12 @@ export const saveCreatedContentAsync = async (db, artistId, content) => {
 
       // Clean clips (remove non-serializable fields)
       const cleanedClips = (video.clips || []).map(c => {
-        const { file, localUrl, thumbnail, ...clipData } = c;
+        const { file, localUrl, ...clipData } = c;
         const cleaned = {
           ...clipData,
-          url: c.url?.startsWith('blob:') ? null : c.url
+          url: c.url?.startsWith('blob:') ? null : c.url,
+          thumbnail: c.thumbnail?.startsWith('blob:') ? null : (c.thumbnail || null),
+          thumbnailUrl: c.thumbnailUrl || null
         };
         // Remove undefined fields
         Object.keys(cleaned).forEach(key => {
@@ -2658,7 +2660,7 @@ export const saveCreatedContentAsync = async (db, artistId, content) => {
       batch.set(docRef, {
         ...video,
         type: 'video',
-        thumbnail: null,
+        thumbnail: video.thumbnail?.startsWith('blob:') ? null : (video.thumbnail || null),
         clips: cleanedClips,
         updatedAt: serverTimestamp()
       }, { merge: true });
@@ -2687,7 +2689,7 @@ export const saveCreatedContentAsync = async (db, artistId, content) => {
       batch.set(docRef, {
         ...slideshow,
         type: 'slideshow',
-        thumbnail: null,
+        thumbnail: slideshow.thumbnail?.startsWith('blob:') ? null : (slideshow.thumbnail || null),
         audio: cleanedAudio,
         slides: (slideshow.slides || []).map(slide => ({
           ...slide,

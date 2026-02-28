@@ -44,6 +44,51 @@ const CASE_OPTIONS = [
   { label: 'aa', value: 'lower' },
 ];
 
+/** Custom dropdown that can style each option individually (fonts, weights). */
+const StyledSelect = ({ options, value, onChange, renderOption }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const selected = options.find(o => o.value === value) || options[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', handler);
+    return () => document.removeEventListener('pointerdown', handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1 rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-2 py-1 text-caption text-white outline-none cursor-pointer"
+      >
+        {renderOption ? renderOption(selected, true) : <span>{selected.label}</span>}
+        <FeatherChevronDown className="w-3 h-3 text-neutral-400 shrink-0" />
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 z-50 min-w-full rounded-md border border-neutral-700 bg-[#1a1a1aff] py-1 shadow-lg max-h-48 overflow-y-auto">
+          {options.map(opt => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+              className={`flex w-full items-center px-2.5 py-1.5 text-left text-caption cursor-pointer hover:bg-neutral-800 ${
+                opt.value === value ? 'text-brand-400 bg-brand-600/10' : 'text-white'
+              }`}
+            >
+              {renderOption ? renderOption(opt) : opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const SPEED_OPTIONS = [
   { label: '0.5x', value: 0.5 },
   { label: '1x', value: 1 },
@@ -502,13 +547,14 @@ const TemplateConfigurator = ({
           {/* Font */}
           <div className="flex w-full items-center justify-between">
             <span className="text-caption font-caption text-neutral-400">Font</span>
-            <select
-              className="rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-2 py-1 text-caption font-caption text-white outline-none cursor-pointer"
+            <StyledSelect
+              options={FONT_OPTIONS}
               value={ts.fontFamily || "'Inter', sans-serif"}
-              onChange={e => updateTextStyle('fontFamily', e.target.value)}
-            >
-              {FONT_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-            </select>
+              onChange={v => updateTextStyle('fontFamily', v)}
+              renderOption={(opt) => (
+                <span style={{ fontFamily: opt.value }}>{opt.label}</span>
+              )}
+            />
           </div>
 
           {/* Size + Weight */}
@@ -521,13 +567,14 @@ const TemplateConfigurator = ({
               className="w-14 rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-2 py-1 text-center text-caption font-caption text-white outline-none"
             />
             <span className="text-caption font-caption text-neutral-400">Weight</span>
-            <select
-              className="rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-2 py-1 text-caption font-caption text-white outline-none cursor-pointer"
+            <StyledSelect
+              options={WEIGHT_OPTIONS}
               value={ts.fontWeight || '600'}
-              onChange={e => updateTextStyle('fontWeight', e.target.value)}
-            >
-              {WEIGHT_OPTIONS.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
-            </select>
+              onChange={v => updateTextStyle('fontWeight', v)}
+              renderOption={(opt) => (
+                <span style={{ fontWeight: opt.value }}>{opt.label}</span>
+              )}
+            />
           </div>
 
           {/* Color + Case */}

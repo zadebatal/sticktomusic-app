@@ -2728,6 +2728,12 @@ const getPostThumb = (post) => {
     const url = clip.thumbnailUrl || clip.thumbnail;
     if (url && !url.startsWith('blob:')) return url;
   }
+  // PhotoMontage: try first montage photo
+  const photo = es.montagePhotos?.[0];
+  if (photo) {
+    const url = photo.thumbnailUrl || photo.url;
+    if (url && !url.startsWith('blob:')) return url;
+  }
   return null;
 };
 

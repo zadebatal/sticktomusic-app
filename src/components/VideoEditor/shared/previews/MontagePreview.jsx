@@ -26,6 +26,7 @@ const MontagePreview = ({
   onCutsApplied,
   selectedTextA,
   selectedTextB,
+  onTextPositionsChange,
 }) => {
   const [playlist, setPlaylist] = useState(() => [...media]);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -51,6 +52,9 @@ const MontagePreview = ({
   // Text timing — start/end in seconds
   const [textTimingA, setTextTimingA] = useState({ start: 0, end: 30 });
   const [textTimingB, setTextTimingB] = useState({ start: 0, end: 30 });
+
+  // Report position changes to parent
+  useEffect(() => { onTextPositionsChange?.(textPosA, textPosB); }, [textPosA, textPosB, onTextPositionsChange]);
 
   // Analyze audio for beats when audioUrl changes
   const analyzedUrlRef = useRef(null);

@@ -27,6 +27,7 @@ const MultiClipPreview = ({
   onCutsApplied,
   selectedTextA,
   selectedTextB,
+  onTextPositionsChange,
 }) => {
   const [playlist, setPlaylist] = useState(() => [...media]);
   const [showMomentumSelector, setShowMomentumSelector] = useState(false);
@@ -88,6 +89,9 @@ const MultiClipPreview = ({
   // Text timing — start/end in seconds
   const [textTimingA, setTextTimingA] = useState({ start: 0, end: totalDuration });
   const [textTimingB, setTextTimingB] = useState({ start: 0, end: totalDuration });
+
+  // Report position changes to parent
+  useEffect(() => { onTextPositionsChange?.(textPosA, textPosB); }, [textPosA, textPosB, onTextPositionsChange]);
 
   // Compute segment boundaries
   const segments = useMemo(() => {

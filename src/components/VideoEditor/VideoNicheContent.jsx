@@ -114,6 +114,7 @@ const VideoNicheContent = ({
   // Text bank preview overlay
   const [previewTextA, setPreviewTextA] = useState(null);
   const [previewTextB, setPreviewTextB] = useState(null);
+  const textPositionsRef = useRef({ a: { x: 50, y: 40, width: 80 }, b: { x: 50, y: 60, width: 80 } });
 
   // Drafts for this niche
   const nicheDrafts = useMemo(() =>
@@ -138,6 +139,14 @@ const VideoNicheContent = ({
   // Text banks (videoTextBank1 / videoTextBank2)
   const textBank1 = niche?.videoTextBank1 || [];
   const textBank2 = niche?.videoTextBank2 || [];
+
+  // Sync previewText with bank content so buildTextOverlays captures what's on screen
+  useEffect(() => {
+    if (textBank1.length > 0 && !previewTextA) setPreviewTextA(textBank1[0]);
+  }, [textBank1, previewTextA]);
+  useEffect(() => {
+    if (textBank2.length > 0 && !previewTextB) setPreviewTextB(textBank2[0]);
+  }, [textBank2, previewTextB]);
 
   const handleAddTextBank = useCallback((bankNum, text, setter) => {
     if (!text.trim() || !niche) return;
@@ -754,6 +763,7 @@ const VideoNicheContent = ({
                     onCutsApplied={(cuts) => { latestCutsRef.current = cuts; }}
                     selectedTextA={previewTextA}
                     selectedTextB={previewTextB}
+                    onTextPositionsChange={(posA, posB) => { textPositionsRef.current = { a: posA, b: posB }; }}
                   />
                 );
               case 'solo_clip':
@@ -772,6 +782,7 @@ const VideoNicheContent = ({
                     onCutsApplied={(cuts) => { latestCutsRef.current = cuts; }}
                     selectedTextA={previewTextA}
                     selectedTextB={previewTextB}
+                    onTextPositionsChange={(posA, posB) => { textPositionsRef.current = { a: posA, b: posB }; }}
                   />
                 );
               case 'multi_clip':
@@ -789,6 +800,7 @@ const VideoNicheContent = ({
                     onCutByWord={selectedAudio ? handleAutoTranscribe : undefined}
                     selectedTextA={previewTextA}
                     selectedTextB={previewTextB}
+                    onTextPositionsChange={(posA, posB) => { textPositionsRef.current = { a: posA, b: posB }; }}
                   />
                 );
               case 'photo_montage':
@@ -809,6 +821,7 @@ const VideoNicheContent = ({
                     onCutsApplied={(cuts) => { latestCutsRef.current = cuts; }}
                     selectedTextA={previewTextA}
                     selectedTextB={previewTextB}
+                    onTextPositionsChange={(posA, posB) => { textPositionsRef.current = { a: posA, b: posB }; }}
                   />
                 );
               default:
@@ -825,6 +838,7 @@ const VideoNicheContent = ({
                     onCutsApplied={(cuts) => { latestCutsRef.current = cuts; }}
                     selectedTextA={previewTextA}
                     selectedTextB={previewTextB}
+                    onTextPositionsChange={(posA, posB) => { textPositionsRef.current = { a: posA, b: posB }; }}
                   />
                 );
             }
@@ -841,6 +855,36 @@ const VideoNicheContent = ({
           if (!onMakeVideo) return;
           const formatId = activeFormat?.id;
 
+          // Build text overlays from preview state to carry into the editor
+          // Use templateTextStyle (the resolved style shown in the preview) as the overlay style
+          const resolvedTextStyle = templateSettings?.textStyle
+            ? { ...templateTextStyle, ...templateSettings.textStyle }
+            : { ...templateTextStyle };
+          const buildTextOverlays = () => {
+            const overlays = [];
+            const pos = textPositionsRef.current;
+            if (previewTextA) {
+              overlays.push({
+                id: `text_niche_a_${Date.now()}`,
+                text: previewTextA,
+                style: { ...resolvedTextStyle },
+                position: { height: 20, ...(pos.a || { x: 50, y: 40, width: 80 }) },
+                scope: 'full', startTime: 0, endTime: 9999
+              });
+            }
+            if (previewTextB) {
+              overlays.push({
+                id: `text_niche_b_${Date.now()}`,
+                text: previewTextB,
+                style: { ...resolvedTextStyle },
+                position: { height: 20, ...(pos.b || { x: 50, y: 60, width: 80 }) },
+                scope: 'full', startTime: 0, endTime: 9999
+              });
+            }
+            return overlays;
+          };
+          const nicheTextOverlays = buildTextOverlays();
+
           if (formatId === 'solo_clip') {
             // Solo = pass niche videos directly so SoloClipEditor doesn't depend on pipelineCategory
             const videos = nicheMedia.filter(m => m.type === 'video');
@@ -852,6 +896,8 @@ const VideoNicheContent = ({
                 thumbnailUrl: v.thumbnailUrl || v.thumbnail, name: v.name || 'Clip',
                 type: 'video'
               })),
+              textOverlays: nicheTextOverlays,
+              textStyle: resolvedTextStyle,
             };
             onMakeVideo(activeFormat, niche.id, draft, templateSettings);
 
@@ -869,6 +915,8 @@ const VideoNicheContent = ({
               clips: [],
               textBankA: textBank1,
               textBankB: textBank2,
+              textOverlays: nicheTextOverlays,
+              textStyle: resolvedTextStyle,
             };
             onMakeVideo(activeFormat, niche.id, draft, templateSettings);
 
@@ -914,6 +962,8 @@ const VideoNicheContent = ({
               clips,
               textBankA: textBank1,
               textBankB: textBank2,
+              textOverlays: nicheTextOverlays,
+              textStyle: resolvedTextStyle,
             };
             latestCutsRef.current = null;
             onMakeVideo(activeFormat, niche.id, draft, templateSettings);
