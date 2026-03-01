@@ -209,15 +209,27 @@ const SlideshowNicheContent = ({
 
   // Reroll the currently visible image
   const handleRerollPreview = useCallback(() => {
+    // Reroll image
     const ids = pipeline?.banks?.[previewSlideIdx] || [];
-    if (ids.length < 2) return;
-    setPreviewPicks(prev => {
-      const currentPick = prev[previewSlideIdx];
-      const candidates = ids.filter(id => id !== currentPick);
-      const newPick = candidates[Math.floor(Math.random() * candidates.length)];
-      return { ...prev, [previewSlideIdx]: newPick };
-    });
-  }, [pipeline, previewSlideIdx]);
+    if (ids.length >= 2) {
+      setPreviewPicks(prev => {
+        const currentPick = prev[previewSlideIdx];
+        const candidates = ids.filter(id => id !== currentPick);
+        const newPick = candidates[Math.floor(Math.random() * candidates.length)];
+        return { ...prev, [previewSlideIdx]: newPick };
+      });
+    }
+    // Reroll text
+    const texts = pipeline?.textBanks?.[previewSlideIdx] || [];
+    if (texts.length > 0) {
+      const currentIdx = selectedTextIdx[previewSlideIdx];
+      const candidateIdxs = texts.map((_, i) => i).filter(i => i !== currentIdx);
+      const pool = candidateIdxs.length > 0 ? candidateIdxs : texts.map((_, i) => i);
+      const newIdx = pool[Math.floor(Math.random() * pool.length)];
+      setSelectedTextIdx(prev => ({ ...prev, [previewSlideIdx]: newIdx }));
+      setTextOverrides(prev => { const next = { ...prev }; delete next[previewSlideIdx]; return next; });
+    }
+  }, [pipeline, previewSlideIdx, selectedTextIdx]);
 
   // Get the current preview image URL
   const currentPreviewUrl = useMemo(() => {
