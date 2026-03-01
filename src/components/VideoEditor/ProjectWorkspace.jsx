@@ -1640,9 +1640,12 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
   const handleAddHashtag = useCallback(() => {
     const raw = newHashtag.trim();
     if (!raw) return;
-    const tag = raw.startsWith('#') ? raw : `#${raw}`;
-    if (allHashtags.includes(tag)) return;
-    saveHashtags({ ...hashtags, [hashtagAddTier]: [...hashtags[hashtagAddTier], tag] });
+    // Split on # to support pasting multiple: "#folk #aesthetic #vibes"
+    const tags = raw.split('#').map(s => s.trim()).filter(Boolean).map(s => `#${s}`);
+    if (tags.length === 0) return;
+    const newTags = tags.filter(t => !allHashtags.includes(t));
+    if (newTags.length === 0) { setNewHashtag(''); return; }
+    saveHashtags({ ...hashtags, [hashtagAddTier]: [...hashtags[hashtagAddTier], ...newTags] });
     setNewHashtag('');
   }, [newHashtag, hashtags, hashtagAddTier, allHashtags, saveHashtags]);
 

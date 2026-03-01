@@ -17,8 +17,6 @@ import {
   getTextBankText,
   getTextBankStyle,
   getBankColor,
-  updateNicheCaptionBank,
-  updateNicheHashtagBank,
   MEDIA_TYPES,
   THUMB_MAX_SIZE,
   THUMB_QUALITY,
@@ -35,7 +33,7 @@ import { Badge } from '../../../ui/components/Badge';
 import { IconWithBackground } from '../../../ui/components/IconWithBackground';
 import {
   FeatherPlus, FeatherX, FeatherType, FeatherImage, FeatherMusic,
-  FeatherZap, FeatherUpload, FeatherHash, FeatherMessageSquare,
+  FeatherZap, FeatherUpload,
   FeatherFilm, FeatherPlay, FeatherLayers, FeatherCamera,
   FeatherUploadCloud, FeatherScissors, FeatherChevronDown, FeatherChevronUp, FeatherDownloadCloud,
 } from '@subframe/core';
@@ -91,8 +89,6 @@ const WizardStepBanks = ({ db, artistId, projectId, nicheMap, selectedFormats, o
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [textInputs, setTextInputs] = useState({}); // { `${nicheId}_${bankIdx}`: string }
-  const [captionInputs, setCaptionInputs] = useState({}); // { nicheId: string }
-  const [hashtagInputs, setHashtagInputs] = useState({}); // { nicheId: string }
   const [expandedNiches, setExpandedNiches] = useState(() => {
     // Expand all niches by default
     const expanded = {};
@@ -240,48 +236,6 @@ const WizardStepBanks = ({ db, artistId, projectId, nicheMap, selectedFormats, o
     setCollections(getCollections(artistId));
   }, [artistId, db]);
 
-  // Caption bank handlers
-  const handleAddCaption = useCallback((nicheId) => {
-    const text = (captionInputs[nicheId] || '').trim();
-    if (!text) return;
-    const niche = collections.find(c => c.id === nicheId);
-    const raw = niche?.captionBank;
-    const current = Array.isArray(raw) ? raw : [...(raw?.always || []), ...(raw?.pool || [])];
-    updateNicheCaptionBank(artistId, nicheId, [...current, text], db);
-    setCaptionInputs(prev => ({ ...prev, [nicheId]: '' }));
-    setCollections(getCollections(artistId));
-  }, [artistId, db, captionInputs, collections]);
-
-  const handleRemoveCaption = useCallback((nicheId, index) => {
-    const niche = collections.find(c => c.id === nicheId);
-    const raw = niche?.captionBank;
-    const current = Array.isArray(raw) ? [...raw] : [...(raw?.always || []), ...(raw?.pool || [])];
-    current.splice(index, 1);
-    updateNicheCaptionBank(artistId, nicheId, current, db);
-    setCollections(getCollections(artistId));
-  }, [artistId, db, collections]);
-
-  // Hashtag bank handlers
-  const handleAddHashtag = useCallback((nicheId) => {
-    let text = (hashtagInputs[nicheId] || '').trim();
-    if (!text) return;
-    if (!text.startsWith('#')) text = '#' + text;
-    const niche = collections.find(c => c.id === nicheId);
-    const raw = niche?.hashtagBank;
-    const current = Array.isArray(raw) ? raw : [...(raw?.always || []), ...(raw?.pool || [])];
-    updateNicheHashtagBank(artistId, nicheId, [...current, text], db);
-    setHashtagInputs(prev => ({ ...prev, [nicheId]: '' }));
-    setCollections(getCollections(artistId));
-  }, [artistId, db, hashtagInputs, collections]);
-
-  const handleRemoveHashtag = useCallback((nicheId, index) => {
-    const niche = collections.find(c => c.id === nicheId);
-    const raw = niche?.hashtagBank;
-    const current = Array.isArray(raw) ? [...raw] : [...(raw?.always || []), ...(raw?.pool || [])];
-    current.splice(index, 1);
-    updateNicheHashtagBank(artistId, nicheId, current, db);
-    setCollections(getCollections(artistId));
-  }, [artistId, db, collections]);
 
   const toggleNicheExpanded = useCallback((fmtId) => {
     setExpandedNiches(prev => ({ ...prev, [fmtId]: !prev[fmtId] }));
@@ -319,10 +273,6 @@ const WizardStepBanks = ({ db, artistId, projectId, nicheMap, selectedFormats, o
           const isExpanded = expandedNiches[fmt.id];
           const IconComp = FORMAT_ICONS[fmt.id] || FeatherImage;
           const fmtColor = VIDEO_FORMAT_COLORS[fmt.id] || '#6366f1';
-          const rawCaptions = niche?.captionBank;
-          const captions = Array.isArray(rawCaptions) ? rawCaptions : [...(rawCaptions?.always || []), ...(rawCaptions?.pool || [])];
-          const rawHashtags = niche?.hashtagBank;
-          const hashtags = Array.isArray(rawHashtags) ? rawHashtags : [...(rawHashtags?.always || []), ...(rawHashtags?.pool || [])];
 
           return (
             <div key={fmt.id} className="flex flex-col rounded-lg border border-solid border-neutral-800 bg-[#111111] overflow-hidden">
@@ -451,67 +401,6 @@ const WizardStepBanks = ({ db, artistId, projectId, nicheMap, selectedFormats, o
                       })}
                     </div>
                   )}
-
-                  {/* Caption & Hashtag banks (all niche types) */}
-                  <div className="flex gap-4 flex-col sm:flex-row">
-                    {/* Caption bank */}
-                    <div className="flex flex-col gap-2 flex-1 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-3">
-                      <div className="flex items-center gap-2">
-                        <FeatherMessageSquare className="text-blue-400" style={{ width: 14, height: 14 }} />
-                        <span className="text-caption-bold font-caption-bold text-neutral-300">Captions</span>
-                        {captions.length > 0 && <Badge variant="neutral">{captions.length}</Badge>}
-                      </div>
-                      <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto">
-                        {captions.map((cap, i) => (
-                          <div key={i} className="flex items-center gap-2 rounded-md bg-black px-2 py-1.5">
-                            <span className="grow text-caption font-caption text-[#ffffffff] truncate">{cap}</span>
-                            <IconButton variant="neutral-tertiary" size="small" icon={<FeatherX />} aria-label="Remove caption" onClick={() => handleRemoveCaption(nicheId, i)} />
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-2 rounded-md border border-solid border-neutral-800 bg-black px-2 py-1.5">
-                        <input
-                          className="grow bg-transparent text-caption font-caption text-white outline-none placeholder-neutral-500"
-                          placeholder="Add a caption..."
-                          value={captionInputs[nicheId] || ''}
-                          onChange={e => setCaptionInputs(prev => ({ ...prev, [nicheId]: e.target.value }))}
-                          onKeyDown={e => { if (e.key === 'Enter') handleAddCaption(nicheId); }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Hashtag bank */}
-                    <div className="flex flex-col gap-2 flex-1 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-3">
-                      <div className="flex items-center gap-2">
-                        <FeatherHash className="text-emerald-400" style={{ width: 14, height: 14 }} />
-                        <span className="text-caption-bold font-caption-bold text-neutral-300">Hashtags</span>
-                        {hashtags.length > 0 && <Badge variant="neutral">{hashtags.length}</Badge>}
-                      </div>
-                      <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
-                        {hashtags.map((tag, i) => (
-                          <div key={i} className="flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1">
-                            <span className="text-caption font-caption text-emerald-300">{tag}</span>
-                            <button
-                              className="text-emerald-400 hover:text-emerald-200 bg-transparent border-none cursor-pointer p-0"
-                              onClick={() => handleRemoveHashtag(nicheId, i)}
-                            >
-                              <FeatherX style={{ width: 10, height: 10 }} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-2 rounded-md border border-solid border-neutral-800 bg-black px-2 py-1.5">
-                        <span className="text-caption font-caption text-neutral-500">#</span>
-                        <input
-                          className="grow bg-transparent text-caption font-caption text-white outline-none placeholder-neutral-500"
-                          placeholder="Add hashtag..."
-                          value={hashtagInputs[nicheId] || ''}
-                          onChange={e => setHashtagInputs(prev => ({ ...prev, [nicheId]: e.target.value }))}
-                          onKeyDown={e => { if (e.key === 'Enter') handleAddHashtag(nicheId); }}
-                        />
-                      </div>
-                    </div>
-                  </div>
 
                   {/* Cross-pollination trigger */}
                   <Button
