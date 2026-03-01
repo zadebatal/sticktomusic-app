@@ -589,6 +589,7 @@ const ProjectWorkspace = ({
           id: `web_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           name: file.name,
           url: file.url,
+          thumbnailUrl: file.thumbnailUrl || (file.type === 'image' ? file.url : null),
           storagePath: file.storagePath,
           type: file.type || 'image',
           size: file.size,
