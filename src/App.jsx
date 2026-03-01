@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 // Shared UI Components
@@ -1201,15 +1201,21 @@ const StickToMusic = () => {
     } else {
       setUser(null);
     }
-    // Sync Firebase Auth photoURL to allowedUsers doc so other users can see it
-    if (currentAuthUser?.photoURL && db) {
-      const userEmail = currentAuthUser.email?.toLowerCase();
-      const existingDoc = allowedUsers.find(u => u.email?.toLowerCase() === userEmail);
-      if (existingDoc && existingDoc.photoURL !== currentAuthUser.photoURL) {
-        updateDoc(doc(db, 'allowedUsers', userEmail), { photoURL: currentAuthUser.photoURL }).catch(() => {});
-      }
-    }
   }, [authChecked, firestoreLoaded, currentAuthUser, allowedUsers]);
+
+  // Sync Firebase Auth photoURL to allowedUsers doc (once per session)
+  const photoSyncedRef = useRef(false);
+  useEffect(() => {
+    if (photoSyncedRef.current || !currentAuthUser?.photoURL || !db || !allowedUsers.length) return;
+    const userEmail = currentAuthUser.email?.toLowerCase();
+    const existingDoc = allowedUsers.find(u => u.email?.toLowerCase() === userEmail);
+    if (existingDoc && existingDoc.photoURL !== currentAuthUser.photoURL) {
+      photoSyncedRef.current = true;
+      updateDoc(doc(db, 'allowedUsers', userEmail), { photoURL: currentAuthUser.photoURL }).catch(() => {});
+    } else {
+      photoSyncedRef.current = true;
+    }
+  }, [currentAuthUser, allowedUsers]);
 
   // Restore saved page after user is authenticated (once only)
   const sessionRestoredRef = useRef(false);
@@ -1336,17 +1342,21 @@ const StickToMusic = () => {
   };
 
   // Helper to get visible artists — operators only see artists they own (ownerOperatorId)
-  // Enrich an artist object with photoURL from linked user if not on the artist doc
-  const enrichArtist = (a) => {
-    let photoURL = a.photoURL || null;
-    if (!photoURL) {
-      const linkedUser = allowedUsers.find(u =>
-        (u.linkedArtistId === a.id || u.artistId === a.id) && u.photoURL
-      );
-      if (linkedUser) photoURL = linkedUser.photoURL;
+  // Build stable photoURL lookup: artistId → photoURL from linked allowedUsers
+  const artistPhotoMap = useMemo(() => {
+    const map = {};
+    for (const u of allowedUsers) {
+      if (!u.photoURL) continue;
+      if (u.linkedArtistId) map[u.linkedArtistId] = u.photoURL;
+      if (u.artistId) map[u.artistId] = u.photoURL;
     }
+    return map;
+  }, [allowedUsers]);
+
+  const enrichArtist = useCallback((a) => {
+    const photoURL = a.photoURL || artistPhotoMap[a.id] || null;
     return { id: a.id, name: a.name, ownerOperatorId: a.ownerOperatorId || null, photoURL };
-  };
+  }, [artistPhotoMap]);
 
   const getVisibleArtists = () => {
     const allArtists = firestoreArtists.map(enrichArtist);
