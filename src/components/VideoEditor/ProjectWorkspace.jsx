@@ -1616,7 +1616,17 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
   const handleAddCaption = useCallback(() => {
     const text = newCaption.trim();
     if (!text) return;
-    saveCaptions({ ...captions, [captionAddTier]: [...captions[captionAddTier], text] });
+    // Detect numbered/bulleted lists and split into individual captions
+    // Matches: "1. ...", "1) ...", "- ...", "• ..."
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const isNumberedList = lines.length > 1 && lines.every(l => /^\d+[\.\)]\s/.test(l) || /^[-•]\s/.test(l));
+    const newItems = isNumberedList
+      ? lines.map(l => l.replace(/^\d+[\.\)]\s*/, '').replace(/^[-•]\s*/, '').trim()).filter(Boolean)
+      : [text];
+    const existing = captions[captionAddTier];
+    const unique = newItems.filter(item => !existing.includes(item));
+    if (unique.length === 0) { setNewCaption(''); return; }
+    saveCaptions({ ...captions, [captionAddTier]: [...existing, ...unique] });
     setNewCaption('');
   }, [newCaption, captions, captionAddTier, saveCaptions]);
 
