@@ -986,13 +986,14 @@ const ProjectWorkspace = ({
                     onClick={() => handleCreateNiche(fmt)}
                   >
                     {fmt.type === 'slideshow' ? (
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 flex-wrap">
                         {fmt.slideLabels.map((label, i) => (
                           <div
                             key={i}
-                            className="h-8 rounded"
+                            className="rounded"
                             style={{
-                              width: `${Math.max(24, 80 / fmt.slideCount)}px`,
+                              width: fmt.slideCount > 5 ? 18 : Math.max(24, 80 / fmt.slideCount),
+                              height: fmt.slideCount > 5 ? 24 : 32,
                               backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#a855f7', '#f43f5e'][i % 5] + '33',
                               border: `1px solid ${['#6366f1', '#10b981', '#f59e0b', '#a855f7', '#f43f5e'][i % 5]}55`,
                             }}
@@ -1040,10 +1041,11 @@ const ProjectWorkspace = ({
                   className="flex flex-col items-start gap-3 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-4 py-4 cursor-pointer hover:border-neutral-600 transition-colors"
                   onClick={() => handleCreateNiche(fmt)}
                 >
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 flex-wrap">
                     {fmt.slideLabels.map((label, i) => (
-                      <div key={i} className="h-8 rounded" style={{
-                        width: `${Math.max(24, 80 / fmt.slideCount)}px`,
+                      <div key={i} className="rounded" style={{
+                        width: fmt.slideCount > 5 ? 18 : Math.max(24, 80 / fmt.slideCount),
+                        height: fmt.slideCount > 5 ? 24 : 32,
                         backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#a855f7', '#f43f5e'][i % 5] + '33',
                         border: `1px solid ${['#6366f1', '#10b981', '#f59e0b', '#a855f7', '#f43f5e'][i % 5]}55`,
                       }} />
