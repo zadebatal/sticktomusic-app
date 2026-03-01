@@ -9,7 +9,7 @@ import {
   FeatherPlay, FeatherSquare, FeatherImage, FeatherFilm, FeatherLayers, FeatherCamera,
   FeatherPlus, FeatherX,
   FeatherType,
-  FeatherUpload, FeatherDownloadCloud, FeatherScissors,
+  FeatherUpload, FeatherDownloadCloud, FeatherScissors, FeatherLink,
   FeatherMusic,
   FeatherChevronDown, FeatherChevronRight,
 } from '@subframe/core';
@@ -55,6 +55,7 @@ const VideoNicheContent = ({
   onUploadAudio,
   onImport,
   onImportAudio,
+  onWebImport,
 }) => {
   const activeFormat = niche?.formats?.find(f => f.id === niche.activeFormatId) || niche?.formats?.[0];
   const IconComponent = FORMAT_ICONS[activeFormat?.id] || FeatherPlay;
@@ -457,6 +458,9 @@ const VideoNicheContent = ({
               <Button variant="neutral-secondary" size="large" icon={<FeatherDownloadCloud />} onClick={onImport}>
                 Import from Library
               </Button>
+              <Button variant="neutral-secondary" size="large" icon={<FeatherLink />} onClick={onWebImport}>
+                Import from Web
+              </Button>
             </div>
             <Button variant="neutral-tertiary" size="medium" icon={<FeatherPlay />}
               onClick={() => onMakeVideo && onMakeVideo(activeFormat, niche.id)}>
@@ -474,6 +478,7 @@ const VideoNicheContent = ({
               <div className="flex items-center gap-2">
                 <Button variant="brand-tertiary" size="small" icon={<FeatherUpload />} onClick={onUpload}>Upload</Button>
                 <Button variant="neutral-tertiary" size="small" icon={<FeatherDownloadCloud />} onClick={onImport}>Import</Button>
+                <Button variant="neutral-tertiary" size="small" icon={<FeatherLink />} onClick={onWebImport}>Web</Button>
                 <Button variant="neutral-tertiary" size="small" icon={<FeatherPlay />}
                   onClick={() => onMakeVideo && onMakeVideo(activeFormat, niche.id)}>
                   Create {activeFormat.name}

@@ -24,6 +24,8 @@ import {
   saveCollections,
   saveCollectionToFirestore,
   deleteCollectionAsync,
+  markCollectionPendingDeletion,
+  isCollectionPendingDeletion,
   subscribeToCollections,
   subscribeToLibrary,
   subscribeToCreatedContent,
@@ -58,6 +60,7 @@ import VideoNicheContent from './VideoNicheContent';
 import FinishedMediaNicheContent from './FinishedMediaNicheContent';
 import ClipperNicheContent from './ClipperNicheContent';
 import AllMediaContent from './AllMediaContent';
+import WebImportModal from './WebImportModal';
 import log from '../../utils/logger';
 
 const FORMAT_TO_EDITOR = {
@@ -183,6 +186,10 @@ const ProjectWorkspace = ({
   // Bank import: when user clicks "Import" in a bank, track which bank to assign after import
   const pendingImportBankRef = useRef(null);
 
+  // Web import modal
+  const [showWebImportModal, setShowWebImportModal] = useState(false);
+  const pendingWebImportBankRef = useRef(null);
+
   // Subscribe to data
   useEffect(() => {
     if (!artistId) return;
@@ -246,13 +253,18 @@ const ProjectWorkspace = ({
           };
         });
 
+        // Filter out any collections pending deletion (race condition guard)
+        const filtered = result.filter(c => !isCollectionPendingDeletion(c.id));
+        result.length = 0;
+        result.push(...filtered);
+
         // Add collections from prev/localStorage that aren't in subscription data
         const resultIds = new Set(result.map(c => c.id));
         const localIds = new Set(currentLocal.map(c => c.id));
         let needsFix = false;
         for (const p of prevUser) {
           // Only preserve if still in localStorage (deleted collections are removed from localStorage)
-          if (!resultIds.has(p.id) && localIds.has(p.id)) {
+          if (!resultIds.has(p.id) && localIds.has(p.id) && !isCollectionPendingDeletion(p.id)) {
             log.warn('[ProjectWorkspace] Preserving collection missing from subscription:', p.name);
             result.push(p);
             resultIds.add(p.id);
@@ -260,7 +272,7 @@ const ProjectWorkspace = ({
           }
         }
         for (const l of currentLocal) {
-          if (!resultIds.has(l.id)) {
+          if (!resultIds.has(l.id) && !isCollectionPendingDeletion(l.id)) {
             result.push(l);
             resultIds.add(l.id);
             needsFix = true;
@@ -550,6 +562,70 @@ const ProjectWorkspace = ({
     setShowImportModal(true);
   }, []);
 
+  // Web import: open modal targeting a specific bank
+  const handleWebImportToBank = useCallback((bankIndex) => {
+    pendingWebImportBankRef.current = bankIndex;
+    setShowWebImportModal(true);
+  }, []);
+
+  // Web import: open modal (no specific bank — for VideoNicheContent)
+  const handleWebImport = useCallback(() => {
+    pendingWebImportBankRef.current = null;
+    setShowWebImportModal(true);
+  }, []);
+
+  // Web import complete — files are already in Firebase Storage (uploaded by Railway backend)
+  const handleWebImportComplete = useCallback(async (files, bankIndex) => {
+    if (!files?.length || !activeNicheId) {
+      setShowWebImportModal(false);
+      return;
+    }
+
+    try {
+      const importedIds = [];
+      for (const file of files) {
+        // Create library item
+        const item = {
+          id: `web_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          name: file.name,
+          url: file.url,
+          storagePath: file.storagePath,
+          type: file.type || 'image',
+          size: file.size,
+          source: 'web-import',
+          createdAt: new Date().toISOString(),
+        };
+
+        await addToLibraryAsync(db, artistId, item);
+        await addToCollectionAsync(db, artistId, activeNicheId, item.id);
+        importedIds.push(item.id);
+
+        // Assign to bank if specified
+        const targetBank = bankIndex ?? pendingWebImportBankRef.current;
+        if (targetBank !== null && targetBank !== undefined) {
+          assignToBank(artistId, activeNicheId, [item.id], targetBank, db);
+        }
+      }
+
+      // Add to project pool
+      if (projectId) {
+        addToProjectPool(artistId, projectId, importedIds, db);
+      }
+
+      // Refresh data
+      setLibrary(getLibrary(artistId));
+      setCollections(getCollections(artistId));
+
+      toastSuccess(`Imported ${files.length} file${files.length !== 1 ? 's' : ''} from web`);
+    } catch (err) {
+      log.error('Web import complete error:', err);
+      toastError('Failed to add imported media to library');
+    }
+
+    setShowWebImportModal(false);
+    pendingWebImportBankRef.current = null;
+  }, [activeNicheId, artistId, projectId, db, toastSuccess, toastError]);
+
   // Import audio only — opens import modal filtered to audio
   const handleImportAudio = useCallback(() => {
     pendingImportBankRef.current = null;
@@ -575,6 +651,16 @@ const ProjectWorkspace = ({
     if (!niche) return;
     if (!window.confirm(`Delete "${niche.name}"? This cannot be undone.`)) return;
     try {
+      // Mark as pending deletion BEFORE async ops (prevents subscription race condition)
+      markCollectionPendingDeletion(nicheId);
+
+      // Immediately remove from local UI state
+      setCollections(prev => prev.filter(c => c.id !== nicheId));
+      if (activeNicheId === nicheId) {
+        const remaining = niches.filter(n => n.id !== nicheId);
+        setActiveNicheId(remaining.length > 0 ? remaining[0].id : null);
+      }
+
       // Cascade-delete drafts belonging to this niche
       const content = getCreatedContent(artistId);
       const nicheDrafts = [...(content.slideshows || []), ...(content.videos || [])].filter(d => d.collectionId === nicheId);
@@ -586,10 +672,6 @@ const ProjectWorkspace = ({
         }
       }
       await deleteCollectionAsync(db, artistId, nicheId);
-      if (activeNicheId === nicheId) {
-        const remaining = niches.filter(n => n.id !== nicheId);
-        setActiveNicheId(remaining.length > 0 ? remaining[0].id : null);
-      }
       toastSuccess(`"${niche.name}" deleted`);
     } catch (err) {
       toastError('Failed to delete niche');
@@ -834,6 +916,7 @@ const ProjectWorkspace = ({
 
             onUploadToBank={handleUploadToBank}
             onImportToBank={handleImportToBank}
+            onWebImportToBank={handleWebImportToBank}
             onUploadAudio={() => { pendingBankIndexRef.current = null; if (fileInputRef.current) { fileInputRef.current.accept = 'audio/*'; fileInputRef.current.click(); } }}
             onImportAudio={handleImportAudio}
           />
@@ -869,6 +952,7 @@ const ProjectWorkspace = ({
             onUploadAudio={() => { pendingBankIndexRef.current = null; if (fileInputRef.current) { fileInputRef.current.accept = 'audio/*'; fileInputRef.current.click(); } }}
             onImport={() => { pendingImportBankRef.current = null; setShowImportModal(true); }}
             onImportAudio={handleImportAudio}
+            onWebImport={handleWebImport}
           />
         )}
 
@@ -1020,6 +1104,17 @@ const ProjectWorkspace = ({
           />
         );
       })()}
+
+      {/* Web Import Modal */}
+      {showWebImportModal && (
+        <WebImportModal
+          onClose={() => { setShowWebImportModal(false); pendingWebImportBankRef.current = null; }}
+          onComplete={handleWebImportComplete}
+          defaultBankIndex={pendingWebImportBankRef.current ?? 0}
+          bankCount={activeNiche?.banks?.length || 1}
+          artistId={artistId}
+        />
+      )}
 
       {/* Upload progress banner */}
       {isUploading && uploadProgress && (
