@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Loader } from '../../ui/components/Loader';
 import { Button } from '../../ui/components/Button';
@@ -6,13 +6,46 @@ import { IconButton } from '../../ui/components/IconButton';
 import { FeatherX } from '@subframe/core';
 import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
 import { getStoredApiKey } from '../../services/whisperService';
+import { recognizeSong, fetchSyncedLyrics, parseLRC, lrcToWordTimeline } from '../../services/lyricsLookupService';
+import { trimAudio } from '../../utils/audioSnippet';
 import { loadLyricTemplate, saveLyricTemplate } from '../../services/storageService';
 import log from '../../utils/logger';
 
 /**
- * LyricAnalyzer - AI-powered lyric transcription with caching
- * Checks for cached lyrics before re-analyzing the same song
- * Supports trimming audio to a specific section before transcription
+ * Status step component — shows spinner → checkmark/x for each pipeline step.
+ */
+const StatusStep = ({ status, label, theme }) => {
+  const icon = status === 'pending' ? '○'
+    : status === 'active' ? null
+    : status === 'success' ? '✓'
+    : status === 'skipped' ? '—'
+    : '✗';
+
+  const color = status === 'pending' ? theme.text.muted
+    : status === 'active' ? theme.accent.primary
+    : status === 'success' ? '#22c55e'
+    : status === 'skipped' ? theme.text.muted
+    : '#ef4444';
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 0' }}>
+      <div style={{ width: '20px', display: 'flex', justifyContent: 'center' }}>
+        {status === 'active' ? (
+          <Loader size="small" />
+        ) : (
+          <span style={{ color, fontSize: '14px', fontWeight: '600' }}>{icon}</span>
+        )}
+      </div>
+      <span style={{ color, fontSize: '13px' }}>{label}</span>
+    </div>
+  );
+};
+
+/**
+ * LyricAnalyzer - Smart lyric transcription with song recognition + synced lyrics
+ *
+ * Flow: recognize song (AudD) → fetch synced lyrics (LRCLIB) → fall back to Whisper
+ * Checks cache first. Output format is identical regardless of source.
  */
 const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, onClose }) => {
   const { theme } = useTheme();
@@ -22,50 +55,41 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
   const [isTrimming, setIsTrimming] = useState(false);
   const { analyze, isAnalyzing, progress, error, hasApiKey } = useLyricAnalyzer();
 
-  // Check if we need to trim
+  // Smart lyrics pipeline state
+  const [isRunning, setIsRunning] = useState(false);
+  const [recognitionStatus, setRecognitionStatus] = useState('idle'); // idle | active | found | not_found | error
+  const [recognizedSong, setRecognizedSong] = useState(null);
+  const [lrcStatus, setLrcStatus] = useState('idle'); // idle | active | found | not_found
+  const [lrcLineCount, setLrcLineCount] = useState(0);
+  const [whisperStatus, setWhisperStatus] = useState('idle'); // idle | active | done
+  const [pipelineError, setPipelineError] = useState(null);
+
   const needsTrimming = typeof startTime === 'number' || typeof endTime === 'number';
 
-  // Format time as mm:ss
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Determine best audio source:
-  // 1. File object (direct upload) - always preferred
-  // 2. HTTPS URL (Firebase Storage) - can be fetched
-  // 3. Blob URL - NOT supported (expires)
   const getValidAudioSource = () => {
-    // Prefer File object if available
-    if (audioFile instanceof File || audioFile instanceof Blob) {
-      return audioFile;
-    }
-
-    // Check if URL is valid (not blob)
+    if (audioFile instanceof File || audioFile instanceof Blob) return audioFile;
     if (typeof audioUrl === 'string') {
-      if (audioUrl.startsWith('blob:')) {
-        return null; // Blob URLs expire, not supported
-      }
-      if (audioUrl.startsWith('http://') || audioUrl.startsWith('https://')) {
-        return audioUrl;
-      }
+      if (audioUrl.startsWith('blob:')) return null;
+      if (audioUrl.startsWith('http://') || audioUrl.startsWith('https://')) return audioUrl;
     }
-
     return null;
   };
 
   const audioSource = getValidAudioSource();
   const isBlobUrl = typeof audioUrl === 'string' && audioUrl.startsWith('blob:') && !audioFile;
 
-  // Check for cached lyrics on mount, and try shared key if no personal key
+  // Check for cached lyrics + API key on mount
   useEffect(() => {
     const storedKey = getStoredApiKey();
     if (storedKey) {
       setApiKey(storedKey);
     } else {
-      // BUG-011: Use 'team' sentinel to route through server proxy
-      // instead of fetching the actual API key to the browser
       (async () => {
         try {
           const { getAuth } = await import('firebase/auth');
@@ -82,7 +106,7 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
             if (response.ok) {
               const data = await response.json();
               if (data.configured) {
-                setApiKey('team'); // Proxy will add the real key server-side
+                setApiKey('team');
                 return;
               }
             }
@@ -94,156 +118,155 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       })();
     }
 
-    // Check if we have cached lyrics for this audio file
     if (audioSource) {
       const cached = loadLyricTemplate(audioSource);
-      if (cached) {
-        setCachedLyrics(cached);
-      }
+      if (cached) setCachedLyrics(cached);
     }
   }, [audioSource]);
 
-  // Trim audio to the specified section using Web Audio API
-  const trimAudio = async (source, start, end) => {
-    setIsTrimming(true);
-    try {
-      // Fetch the audio data
-      let arrayBuffer;
-      if (source instanceof File || source instanceof Blob) {
-        arrayBuffer = await source.arrayBuffer();
-      } else if (typeof source === 'string') {
-        const response = await fetch(source);
-        arrayBuffer = await response.arrayBuffer();
-      } else {
-        throw new Error('Invalid audio source');
-      }
-
-      // Decode the audio
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
-      // Calculate sample positions
-      const sampleRate = audioBuffer.sampleRate;
-      const startSample = Math.floor((start || 0) * sampleRate);
-      const endSample = end ? Math.floor(end * sampleRate) : audioBuffer.length;
-      const duration = endSample - startSample;
-
-      // Create a new buffer for the trimmed audio
-      const trimmedBuffer = audioContext.createBuffer(
-        audioBuffer.numberOfChannels,
-        duration,
-        sampleRate
-      );
-
-      // Copy the relevant portion
-      for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
-        const sourceData = audioBuffer.getChannelData(channel);
-        const destData = trimmedBuffer.getChannelData(channel);
-        for (let i = 0; i < duration; i++) {
-          destData[i] = sourceData[startSample + i];
-        }
-      }
-
-      // Convert to WAV blob
-      const wavBlob = audioBufferToWav(trimmedBuffer);
-      audioContext.close();
-
-      return new File([wavBlob], 'trimmed-audio.wav', { type: 'audio/wav' });
-    } finally {
-      setIsTrimming(false);
-    }
-  };
-
-  // Convert AudioBuffer to WAV format
-  const audioBufferToWav = (buffer) => {
-    const numChannels = buffer.numberOfChannels;
-    const sampleRate = buffer.sampleRate;
-    const format = 1; // PCM
-    const bitDepth = 16;
-
-    const bytesPerSample = bitDepth / 8;
-    const blockAlign = numChannels * bytesPerSample;
-    const dataLength = buffer.length * blockAlign;
-    const bufferLength = 44 + dataLength;
-
-    const arrayBuffer = new ArrayBuffer(bufferLength);
-    const view = new DataView(arrayBuffer);
-
-    // WAV header
-    const writeString = (offset, string) => {
-      for (let i = 0; i < string.length; i++) {
-        view.setUint8(offset + i, string.charCodeAt(i));
-      }
-    };
-
-    writeString(0, 'RIFF');
-    view.setUint32(4, bufferLength - 8, true);
-    writeString(8, 'WAVE');
-    writeString(12, 'fmt ');
-    view.setUint32(16, 16, true); // fmt chunk size
-    view.setUint16(20, format, true);
-    view.setUint16(22, numChannels, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * blockAlign, true);
-    view.setUint16(32, blockAlign, true);
-    view.setUint16(34, bitDepth, true);
-    writeString(36, 'data');
-    view.setUint32(40, dataLength, true);
-
-    // Write audio data
-    let offset = 44;
-    for (let i = 0; i < buffer.length; i++) {
-      for (let channel = 0; channel < numChannels; channel++) {
-        const sample = Math.max(-1, Math.min(1, buffer.getChannelData(channel)[i]));
-        const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
-        view.setInt16(offset, intSample, true);
-        offset += 2;
+  // Run Whisper as fallback
+  const runWhisper = useCallback(async (source, key) => {
+    setWhisperStatus('active');
+    let sourceToAnalyze = source;
+    if (needsTrimming && source) {
+      setIsTrimming(true);
+      try {
+        sourceToAnalyze = await trimAudio(source, startTime, endTime);
+      } finally {
+        setIsTrimming(false);
       }
     }
-
-    return new Blob([arrayBuffer], { type: 'audio/wav' });
-  };
+    const result = await analyze(sourceToAnalyze, key || undefined);
+    setWhisperStatus('done');
+    return result;
+  }, [analyze, needsTrimming, startTime, endTime]);
 
   const handleAnalyze = async () => {
     if (!apiKey && !hasApiKey) {
       setShowApiKeyInput(true);
       return;
     }
+
+    setIsRunning(true);
+    setPipelineError(null);
+    setRecognitionStatus('idle');
+    setLrcStatus('idle');
+    setWhisperStatus('idle');
+    setRecognizedSong(null);
+    setLrcLineCount(0);
+
     try {
-      // If we have trim times, trim the audio first
-      let sourceToAnalyze = audioSource;
-      if (needsTrimming && audioSource) {
-        sourceToAnalyze = await trimAudio(audioSource, startTime, endTime);
+      let result = null;
+
+      // Step 1: Try song recognition (skip if trimming — user selected a section, not a full song)
+      if (!needsTrimming && audioSource) {
+        setRecognitionStatus('active');
+        try {
+          const recognition = await recognizeSong(audioSource);
+          if (recognition.found) {
+            setRecognitionStatus('found');
+            setRecognizedSong(recognition);
+
+            // Step 2: Fetch synced lyrics from LRCLIB
+            setLrcStatus('active');
+            const lyrics = await fetchSyncedLyrics(recognition.artist, recognition.title);
+
+            if (lyrics?.syncedLyrics) {
+              const { lines } = parseLRC(lyrics.syncedLyrics);
+              setLrcLineCount(lines.length);
+              setLrcStatus('found');
+
+              // Get audio duration for last-line endTime calculation
+              let duration = 0;
+              try {
+                if (audioSource instanceof File || audioSource instanceof Blob) {
+                  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                  const buf = await ctx.decodeAudioData(await audioSource.arrayBuffer());
+                  duration = buf.duration;
+                  ctx.close();
+                } else if (typeof audioSource === 'string') {
+                  const resp = await fetch(audioSource);
+                  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                  const buf = await ctx.decodeAudioData(await resp.arrayBuffer());
+                  duration = buf.duration;
+                  ctx.close();
+                }
+              } catch {
+                // Duration fallback: use last line endTime
+                duration = lines.length > 0 ? lines[lines.length - 1].endTime + 5 : 0;
+              }
+
+              result = lrcToWordTimeline(lines, duration);
+            } else {
+              setLrcStatus('not_found');
+              // Fall through to Whisper
+            }
+          } else {
+            setRecognitionStatus('not_found');
+          }
+        } catch (err) {
+          log.warn('Song recognition failed, falling back to Whisper:', err.message);
+          setRecognitionStatus('error');
+        }
+      } else if (needsTrimming) {
+        // Skip recognition for trimmed sections
+        setRecognitionStatus('idle');
       }
 
-      const result = await analyze(sourceToAnalyze, apiKey || undefined);
+      // Step 3: Whisper fallback (if no LRC result)
+      if (!result) {
+        result = await runWhisper(audioSource, apiKey);
+      }
 
-      // Save the analyzed lyrics as a template for future use
+      // Cache + deliver result
       if (result && result.words && result.words.length > 0) {
         saveLyricTemplate(audioSource, result.text, result.words);
       }
 
       onComplete?.(result);
     } catch (err) {
-      // Show API key input on authentication errors (401) or if key is required
       if (err.message === 'API_KEY_REQUIRED' || err.message?.includes('401')) {
         setShowApiKeyInput(true);
-        setApiKey(''); // Clear invalid key so user can enter a new one
+        setApiKey('');
       }
+      setPipelineError(err.message);
+    } finally {
+      setIsRunning(false);
     }
   };
 
   const handleUseCached = () => {
     if (cachedLyrics) {
-      onComplete?.({
-        text: cachedLyrics.lyrics,
-        words: cachedLyrics.words
-      });
+      onComplete?.({ text: cachedLyrics.lyrics, words: cachedLyrics.words });
     }
   };
 
   const handleClearCache = () => {
     setCachedLyrics(null);
+  };
+
+  const isProcessing = isRunning || isAnalyzing || isTrimming;
+
+  // Determine step labels for the status feed
+  const getRecognitionLabel = () => {
+    if (recognitionStatus === 'active') return 'Identifying song...';
+    if (recognitionStatus === 'found' && recognizedSong) return `Found: ${recognizedSong.title} \u2014 ${recognizedSong.artist}`;
+    if (recognitionStatus === 'not_found') return 'Song not in database';
+    if (recognitionStatus === 'error') return 'Recognition unavailable';
+    return 'Identify song';
+  };
+
+  const getLrcLabel = () => {
+    if (lrcStatus === 'active') return 'Fetching synced lyrics...';
+    if (lrcStatus === 'found') return `Loaded ${lrcLineCount} synced lines`;
+    if (lrcStatus === 'not_found') return 'No synced lyrics available';
+    return 'Fetch synced lyrics';
+  };
+
+  const getWhisperLabel = () => {
+    if (whisperStatus === 'active') return isTrimming ? 'Trimming audio...' : (progress || 'Transcribing with AI...');
+    if (whisperStatus === 'done') return 'Transcription complete';
+    return 'Transcribe with AI';
   };
 
   const styles = {
@@ -388,17 +411,11 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       fontSize: '12px',
       color: '#22c55e'
     },
-    progress: {
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      gap: '16px',
-      padding: '32px'
-    },
-    progressText: {
-      color: theme.text.secondary,
-      fontSize: '14px',
-      margin: 0
+    statusFeed: {
+      padding: '16px',
+      backgroundColor: theme.bg.page,
+      borderRadius: '12px',
+      marginBottom: '16px'
     },
     error: {
       padding: '16px',
@@ -435,7 +452,6 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
       borderTop: `1px solid ${theme.bg.surface}`,
       backgroundColor: theme.bg.page
     },
-    // UI-40: Empty state styles
     emptyState: {
       display: 'flex',
       flexDirection: 'column',
@@ -461,16 +477,25 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
     }
   };
 
+  // Map status values to StatusStep status prop
+  const stepStatus = (s) => {
+    if (s === 'idle') return 'pending';
+    if (s === 'active') return 'active';
+    if (s === 'found' || s === 'done') return 'success';
+    if (s === 'not_found') return 'skipped';
+    if (s === 'error') return 'skipped';
+    return 'pending';
+  };
+
   return (
     <div style={styles.overlay}>
       <div style={styles.modal}>
         <div style={styles.header}>
-          <h2 style={styles.title}>🎤 Lyric Analyzer</h2>
+          <h2 style={styles.title}>Auto Transcribe</h2>
           <IconButton icon={<FeatherX />} onClick={onClose} aria-label="Close" />
         </div>
 
         <div style={styles.content}>
-          {/* UI-40: Empty state when no audio or blob URL issue */}
           {!audioSource ? (
             <div style={styles.emptyState}>
               <div style={styles.emptyIcon}>{isBlobUrl ? '⚠️' : '🎵'}</div>
@@ -492,7 +517,7 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
               <p style={styles.audioName}>{audioFile?.name || (typeof audioUrl === 'string' ? audioUrl.split('/').pop() : 'Audio file')}</p>
               <p style={styles.audioSize}>
                 {needsTrimming ? (
-                  <>✂️ Trimmed: {formatTime(startTime || 0)} - {formatTime(endTime || 0)}</>
+                  <>Trimmed: {formatTime(startTime || 0)} - {formatTime(endTime || 0)}</>
                 ) : audioFile ? (
                   `${(audioFile.size / (1024 * 1024)).toFixed(2)} MB`
                 ) : ''}
@@ -501,7 +526,7 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
           </div>
 
           {/* Cached Lyrics Found */}
-          {cachedLyrics && !isAnalyzing && (
+          {cachedLyrics && !isProcessing && (
             <div style={styles.cachedSection}>
               <div style={styles.cachedHeader}>
                 <span style={styles.cachedIcon}>✅</span>
@@ -522,8 +547,8 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
             </div>
           )}
 
-          {/* API Key Input (show if no key, error occurred, or user wants to change) */}
-          {(showApiKeyInput || error) && !cachedLyrics && (
+          {/* API Key Input */}
+          {(showApiKeyInput || error) && !cachedLyrics && !isProcessing && (
             <div style={styles.apiKeySection}>
               <label style={styles.label}>
                 OpenAI API Key
@@ -538,35 +563,53 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
                 placeholder="Enter your API key..."
                 style={styles.input}
               />
-              <p style={styles.cost}>✅ Whisper API • Max 25MB • ~$0.006/min</p>
+              <p style={styles.cost}>Needed as fallback for Whisper transcription</p>
             </div>
           )}
-          {/* Show button to change API key if one is stored but input is hidden */}
-          {!showApiKeyInput && !error && !cachedLyrics && apiKey && (
+          {!showApiKeyInput && !error && !cachedLyrics && apiKey && !isProcessing && (
             <Button variant="neutral-tertiary" size="small" onClick={() => setShowApiKeyInput(true)}>Change API Key</Button>
           )}
 
-          {/* Progress */}
-          {(isAnalyzing || isTrimming) && (
-            <div style={styles.progress}>
-              <Loader size="large" />
-              <p style={styles.progressText}>
-                {isTrimming ? '✂️ Trimming audio to selected section...' : progress}
-              </p>
+          {/* Live Status Feed — replaces "How it works" during processing */}
+          {isProcessing && (
+            <div style={styles.statusFeed}>
+              {!needsTrimming && (
+                <>
+                  <StatusStep
+                    status={stepStatus(recognitionStatus)}
+                    label={getRecognitionLabel()}
+                    theme={theme}
+                  />
+                  {(recognitionStatus === 'found' || lrcStatus !== 'idle') && (
+                    <StatusStep
+                      status={stepStatus(lrcStatus)}
+                      label={getLrcLabel()}
+                      theme={theme}
+                    />
+                  )}
+                </>
+              )}
+              {whisperStatus !== 'idle' && (
+                <StatusStep
+                  status={stepStatus(whisperStatus)}
+                  label={getWhisperLabel()}
+                  theme={theme}
+                />
+              )}
             </div>
           )}
 
           {/* Error */}
-          {error && <div style={styles.error}>❌ {error}</div>}
+          {(error || pipelineError) && <div style={styles.error}>{error || pipelineError}</div>}
 
-          {/* How it works (only if no cache) */}
-          {!isAnalyzing && !error && !cachedLyrics && (
+          {/* How it works (only when idle, no cache) */}
+          {!isProcessing && !error && !pipelineError && !cachedLyrics && (
             <div style={styles.info}>
               <h4 style={styles.infoTitle}>How it works:</h4>
               <ol style={styles.steps}>
-                <li>Your audio is sent to OpenAI Whisper</li>
-                <li>AI transcribes lyrics with word-level timestamps</li>
-                <li>Words load into the Word Timeline editor</li>
+                <li>Song is identified via audio fingerprint</li>
+                <li>If found, synced lyrics are loaded instantly</li>
+                <li>Otherwise, AI transcribes with word-level timestamps</li>
                 <li>Results are cached for future use</li>
               </ol>
             </div>
@@ -578,8 +621,13 @@ const LyricAnalyzer = ({ audioFile, audioUrl, startTime, endTime, onComplete, on
         <div style={styles.footer}>
           <Button variant="neutral-secondary" onClick={onClose}>Cancel</Button>
           {audioSource && !cachedLyrics && (
-            <Button variant="brand-primary" onClick={handleAnalyze} disabled={isAnalyzing || (!apiKey && !hasApiKey)} loading={isAnalyzing}>
-              {isAnalyzing ? 'Analyzing...' : 'Analyze Lyrics'}
+            <Button
+              variant="brand-primary"
+              onClick={handleAnalyze}
+              disabled={isProcessing || (!apiKey && !hasApiKey)}
+              loading={isProcessing}
+            >
+              {isProcessing ? 'Working...' : 'Analyze Lyrics'}
             </Button>
           )}
         </div>
