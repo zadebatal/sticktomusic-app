@@ -573,7 +573,9 @@ const SchedulingPage = ({
       const rawBank = c.hashtagBank || {};
       const platformOnly = (!Array.isArray(rawBank) && rawBank.platformOnly) || {};
       const platformExclude = (!Array.isArray(rawBank) && rawBank.platformExclude) || {};
-      const entry = { hashtags: allHashtags, caption: captions[0] || '', platformOnly, platformExclude };
+      const alwaysH = Array.isArray(c.hashtagBank) ? c.hashtagBank : (hb.always || []);
+      const poolH = Array.isArray(c.hashtagBank) ? [] : (hb.pool || []);
+      const entry = { hashtags: allHashtags, caption: captions[0] || '', captions, alwaysHashtags: alwaysH, poolHashtags: poolH, platformOnly, platformExclude };
       if (allHashtags.length > 0 || captions.length > 0 || Object.keys(platformOnly).length > 0) {
         if (c.id) map[c.id] = entry;
         if (c.name) map[c.name] = entry;
@@ -1972,8 +1974,10 @@ const SchedulingPage = ({
                     isPaused={queuePaused}
                     accounts={accounts}
                     lateAccountIds={lateAccountIds}
-                    alwaysOnHashtags={getPostBank(post).hashtags}
+                    alwaysOnHashtags={getPostBank(post).alwaysHashtags || getPostBank(post).hashtags}
+                    poolHashtags={getPostBank(post).poolHashtags || []}
                     alwaysOnCaption={getPostBank(post).caption}
+                    captionPool={getPostBank(post).captions || []}
                     onToggleSelect={() => togglePostSelection(post.id)}
                     onToggleExpand={() => setExpandedPostId(expandedPostId === post.id ? null : post.id)}
                     onUpdate={(updates) => handleUpdatePost(post.id, updates)}
@@ -2428,7 +2432,7 @@ const PostRow = ({
 // Normalize hashtags to array — handles both string and array formats
 const toHashtagArray = (h) => Array.isArray(h) ? h : (h || '').split(/\s+/).filter(Boolean);
 
-const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [], alwaysOnCaption = '', onUpdate, onTogglePlatform, onSetPlatformAccount, onEditDraft, onPublish, readOnly = false, isMobile = false }) => {
+const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [], poolHashtags = [], alwaysOnCaption = '', captionPool = [], onUpdate, onTogglePlatform, onSetPlatformAccount, onEditDraft, onPublish, readOnly = false, isMobile = false }) => {
   const { theme } = useTheme();
   const s = getS(theme);
   const [hashtags, setHashtags] = useState(toHashtagArray(post.hashtags).join(' '));
@@ -2559,6 +2563,22 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
               </div>
             </div>
           )}
+          {captionPool.length > 1 && (
+            <div style={{ marginTop: '6px' }}>
+              <span style={{ fontSize: '9px', color: '#52525b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Caption options (click to use)</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '3px', maxHeight: '120px', overflowY: 'auto' }}>
+                {captionPool.map((cap, i) => (
+                  <div
+                    key={i}
+                    onClick={() => { if (!readOnly) { setCaption(cap); onUpdate({ caption: cap }); } }}
+                    style={{ padding: '5px 8px', borderRadius: '5px', backgroundColor: caption === cap ? 'rgba(99,102,241,0.15)' : theme.bg.input, border: `1px solid ${caption === cap ? '#6366f1' : theme.border.default}`, fontSize: '11px', color: caption === cap ? '#a5b4fc' : theme.text.secondary, cursor: readOnly ? 'default' : 'pointer', lineHeight: '1.4' }}
+                  >
+                    {cap.length > 120 ? cap.slice(0, 120) + '...' : cap}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div style={{ marginTop: '12px' }} />
           <label style={s.drawerLabel}>Hashtags</label>
@@ -2571,6 +2591,43 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
                 {alwaysOnHashtags.map((tag, i) => (
                   <span key={i} style={s.alwaysOnPill}>{tag}</span>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Pool hashtags (click to add) */}
+          {poolHashtags.length > 0 && (
+            <div style={{ marginBottom: '6px' }}>
+              <span style={{ fontSize: '9px', color: '#52525b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pool (click to add)</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '3px' }}>
+                {poolHashtags.map((tag, i) => {
+                  const currentTags = toHashtagArray(post.hashtags);
+                  const isActive = currentTags.includes(tag);
+                  return (
+                    <span
+                      key={i}
+                      onClick={() => {
+                        if (readOnly) return;
+                        if (isActive) {
+                          const updated = currentTags.filter(t => t !== tag);
+                          setHashtags(updated.join(' '));
+                          onUpdate({ hashtags: updated });
+                        } else {
+                          const updated = [...currentTags, tag];
+                          setHashtags(updated.join(' '));
+                          onUpdate({ hashtags: updated });
+                        }
+                      }}
+                      style={{
+                        padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: '500',
+                        cursor: readOnly ? 'default' : 'pointer',
+                        backgroundColor: isActive ? 'rgba(99,102,241,0.2)' : 'rgba(63,63,70,0.3)',
+                        border: `1px solid ${isActive ? '#6366f1' : '#3f3f46'}`,
+                        color: isActive ? '#a5b4fc' : '#71717a',
+                      }}
+                    >{tag}</span>
+                  );
+                })}
               </div>
             </div>
           )}

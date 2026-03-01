@@ -1544,6 +1544,8 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
   const { success: toastSuccess } = useToast();
   const [newCaption, setNewCaption] = useState('');
   const [newHashtag, setNewHashtag] = useState('');
+  const [captionAddTier, setCaptionAddTier] = useState('always'); // 'always' | 'pool'
+  const [hashtagAddTier, setHashtagAddTier] = useState('always'); // 'always' | 'pool'
   const [scope, setScope] = useState('project'); // 'project' | niche ID
   const [showPlatformRules, setShowPlatformRules] = useState(false);
   const [newPlatformTag, setNewPlatformTag] = useState({});
@@ -1614,9 +1616,9 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
   const handleAddCaption = useCallback(() => {
     const text = newCaption.trim();
     if (!text) return;
-    saveCaptions({ ...captions, always: [...captions.always, text] });
+    saveCaptions({ ...captions, [captionAddTier]: [...captions[captionAddTier], text] });
     setNewCaption('');
-  }, [newCaption, captions, saveCaptions]);
+  }, [newCaption, captions, captionAddTier, saveCaptions]);
 
   const handleRemoveCaption = useCallback((tier, idx) => {
     const updated = { ...captions, [tier]: captions[tier].filter((_, i) => i !== idx) };
@@ -1640,9 +1642,9 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
     if (!raw) return;
     const tag = raw.startsWith('#') ? raw : `#${raw}`;
     if (allHashtags.includes(tag)) return;
-    saveHashtags({ ...hashtags, always: [...hashtags.always, tag] });
+    saveHashtags({ ...hashtags, [hashtagAddTier]: [...hashtags[hashtagAddTier], tag] });
     setNewHashtag('');
-  }, [newHashtag, hashtags, allHashtags, saveHashtags]);
+  }, [newHashtag, hashtags, hashtagAddTier, allHashtags, saveHashtags]);
 
   const handleRemoveHashtag = useCallback((tier, idx) => {
     const updated = { ...hashtags, [tier]: hashtags[tier].filter((_, i) => i !== idx) };
@@ -1787,15 +1789,21 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
           </div>
         )}
 
-        <div className="flex w-full gap-2">
-          <textarea
-            className="flex-1 min-h-[32px] max-h-[80px] rounded-md border border-solid border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500 resize-none"
-            placeholder="Add caption..."
-            value={newCaption}
-            onChange={e => setNewCaption(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddCaption(); } }}
-            rows={1}
-          />
+        <div className="flex w-full gap-2 items-end">
+          <div className="flex flex-col gap-1 flex-1">
+            <div className="flex items-center gap-1">
+              <button onClick={() => setCaptionAddTier('always')} className={`border-none cursor-pointer px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all ${captionAddTier === 'always' ? 'bg-green-500/20 text-green-400' : 'bg-transparent text-neutral-600'}`}>Always On</button>
+              <button onClick={() => setCaptionAddTier('pool')} className={`border-none cursor-pointer px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all ${captionAddTier === 'pool' ? 'bg-neutral-700 text-neutral-300' : 'bg-transparent text-neutral-600'}`}>Pool</button>
+            </div>
+            <textarea
+              className="min-h-[32px] max-h-[80px] rounded-md border border-solid border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500 resize-none"
+              placeholder={`Add to ${captionAddTier === 'always' ? 'always-on' : 'pool'}...`}
+              value={newCaption}
+              onChange={e => setNewCaption(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddCaption(); } }}
+              rows={1}
+            />
+          </div>
           <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add caption" onClick={handleAddCaption} />
         </div>
       </div>
@@ -1829,14 +1837,20 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], acc
           </div>
         )}
 
-        <div className="flex w-full gap-2">
-          <input
-            className="flex-1 rounded-md border border-solid border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500"
-            placeholder="#hashtag"
-            value={newHashtag}
-            onChange={e => setNewHashtag(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleAddHashtag(); }}
-          />
+        <div className="flex w-full gap-2 items-end">
+          <div className="flex flex-col gap-1 flex-1">
+            <div className="flex items-center gap-1">
+              <button onClick={() => setHashtagAddTier('always')} className={`border-none cursor-pointer px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all ${hashtagAddTier === 'always' ? 'bg-green-500/20 text-green-400' : 'bg-transparent text-neutral-600'}`}>Always On</button>
+              <button onClick={() => setHashtagAddTier('pool')} className={`border-none cursor-pointer px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all ${hashtagAddTier === 'pool' ? 'bg-neutral-700 text-neutral-300' : 'bg-transparent text-neutral-600'}`}>Pool</button>
+            </div>
+            <input
+              className="rounded-md border border-solid border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500"
+              placeholder={`#hashtag → ${hashtagAddTier === 'always' ? 'always-on' : 'pool'}`}
+              value={newHashtag}
+              onChange={e => setNewHashtag(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddHashtag(); }}
+            />
+          </div>
           <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add hashtag" onClick={handleAddHashtag} />
         </div>
       </div>
