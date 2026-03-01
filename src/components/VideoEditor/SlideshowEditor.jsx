@@ -3792,7 +3792,7 @@ const SlideshowEditor = ({
           {/* ─── CENTER AREA ─── */}
           {(!isMobile || mobilePanelTab === 'preview') && (
             <div style={{
-              flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0
+              flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0, position: 'relative'
             }}>
               {/* Canvas area - fills available vertical space */}
               <div ref={canvasAreaRef} style={{
@@ -3806,8 +3806,13 @@ const SlideshowEditor = ({
               {renderSlideNavRow()}
               {renderAudioPlayerBar()}
               {renderFilmstrip()}
-              {renderInlineTextEditor()}
               {renderHiddenInputs()}
+              {/* Inline text editor overlays bottom so it doesn't resize the preview */}
+              {editingTextId && (
+                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10 }}>
+                  {renderInlineTextEditor()}
+                </div>
+              )}
             </div>
           )}
 
