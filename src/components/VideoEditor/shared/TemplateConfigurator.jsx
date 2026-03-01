@@ -494,6 +494,16 @@ const TemplateConfigurator = ({
                 {projectAudio.length === 0 && (
                   <span className="text-caption font-caption text-neutral-500 px-2 py-1">No audio uploaded</span>
                 )}
+                <button
+                  className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition ${
+                    !selectedAudio ? 'bg-indigo-600' : 'hover:bg-neutral-800'
+                  }`}
+                  onClick={() => { onSelectAudio(null); setAudioPickerOpen(false); }}
+                >
+                  <FeatherX className="text-neutral-400 flex-none" style={{ width: 10, height: 10 }} />
+                  <span className="text-caption font-caption text-neutral-300">No Audio</span>
+                  {!selectedAudio && <FeatherCheck className="text-indigo-300 flex-none" style={{ width: 12, height: 12 }} />}
+                </button>
                 {onUploadAudio && (
                   <button
                     className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition hover:bg-neutral-800 border-b border-neutral-800 mb-0.5"

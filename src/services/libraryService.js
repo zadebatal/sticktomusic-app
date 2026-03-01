@@ -1664,6 +1664,7 @@ export const removeFromProjectPool = (artistId, projectId, mediaIds, db = null) 
   const removeSet = new Set(ids);
   project.mediaIds = project.mediaIds.filter(id => !removeSet.has(id));
   project.updatedAt = new Date().toISOString();
+  trackCollectionRemoval(projectId, ids);
   saveCollections(artistId, collections);
   if (db) saveCollectionToFirestore(db, artistId, project).catch(log.error);
 };

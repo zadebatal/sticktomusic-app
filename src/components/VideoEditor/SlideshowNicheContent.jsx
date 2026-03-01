@@ -163,9 +163,13 @@ const SlideshowNicheContent = ({
 
   const activeFormat = pipeline?.formats?.find(f => f.id === pipeline.activeFormatId) || pipeline?.formats?.[0];
 
-  // Per-niche audio selection
+  // Per-niche audio selection — null means explicitly "no audio"
   const selectedAudio = useMemo(
-    () => projectAudio.find(a => a.id === niche?.audioId) || projectAudio[0] || null,
+    () => {
+      if (niche?.audioId === null) return null; // explicitly cleared
+      if (niche?.audioId) return projectAudio.find(a => a.id === niche.audioId) || null;
+      return projectAudio[0] || null; // default to first track for new niches
+    },
     [projectAudio, niche?.audioId]
   );
   const audioUrl = useMemo(() => selectedAudio?.localUrl || selectedAudio?.url || null, [selectedAudio]);
