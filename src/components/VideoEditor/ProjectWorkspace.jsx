@@ -877,20 +877,16 @@ const ProjectWorkspace = ({
       {/* Centered Create bar — visible when a niche is active */}
       {!showAllMedia && !showCaptionPage && activeNiche && activeFormat?.id !== 'finished_media' && (
         <div className="flex items-center justify-center gap-3 px-4 py-3 border-b border-neutral-800">
-          <div className="flex items-center gap-0 rounded-md border border-neutral-700 bg-neutral-900 overflow-hidden">
+          <div style={{ display: 'flex', alignItems: 'center', borderRadius: 6, border: '1px solid #404040', backgroundColor: '#171717', overflow: 'hidden' }}>
             <button
-              className="flex items-center justify-center w-8 h-8 bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, background: 'none', border: 'none', cursor: 'pointer', color: '#a3a3a3', fontSize: 16 }}
               onClick={() => setCreateCount(c => Math.max(1, c - 1))}
-            >
-              <span style={{ fontSize: 16, lineHeight: 1 }}>−</span>
-            </button>
-            <span className="w-8 text-center" style={{ color: '#ffffff', fontSize: 14 }}>{createCount}</span>
+            >−</button>
+            <span style={{ width: 28, textAlign: 'center', color: '#ffffff', fontSize: 14, fontWeight: 600 }}>{createCount}</span>
             <button
-              className="flex items-center justify-center w-8 h-8 bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, background: 'none', border: 'none', cursor: 'pointer', color: '#a3a3a3', fontSize: 16 }}
               onClick={() => setCreateCount(c => Math.min(20, c + 1))}
-            >
-              <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
-            </button>
+            >+</button>
           </div>
           <Button
             variant="brand-primary"
