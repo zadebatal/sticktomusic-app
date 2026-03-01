@@ -883,7 +883,7 @@ const ProjectWorkspace = ({
             max={20}
             value={createCount}
             onChange={e => setCreateCount(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
-            className="w-14 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-center text-body font-body text-white outline-none focus:border-indigo-500"
+            className="w-14 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-center text-body font-body text-white outline-none focus:border-indigo-500 [color-scheme:dark]"
           />
           <Button
             variant="brand-primary"
