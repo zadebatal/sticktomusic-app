@@ -1350,8 +1350,15 @@ const StickToMusic = () => {
       if (u.linkedArtistId) map[u.linkedArtistId] = u.photoURL;
       if (u.artistId) map[u.artistId] = u.photoURL;
     }
+    // Current user's Firebase Auth photo (always available from Google sign-in)
+    // covers the case where allowedUsers doc hasn't been synced yet
+    if (currentAuthUser?.photoURL) {
+      const rec = allowedUsers.find(u => u.email?.toLowerCase() === currentAuthUser.email?.toLowerCase());
+      if (rec?.artistId && !map[rec.artistId]) map[rec.artistId] = currentAuthUser.photoURL;
+      if (rec?.linkedArtistId && !map[rec.linkedArtistId]) map[rec.linkedArtistId] = currentAuthUser.photoURL;
+    }
     return map;
-  }, [allowedUsers]);
+  }, [allowedUsers, currentAuthUser]);
 
   const enrichArtist = useCallback((a) => {
     const photoURL = a.photoURL || artistPhotoMap[a.id] || null;
