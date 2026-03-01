@@ -310,7 +310,10 @@ const SlideshowNicheContent = ({
     <div className="flex items-stretch overflow-hidden flex-1 self-stretch">
       {/* Center — Slide Banks + Audio */}
       <div className="flex grow shrink-0 basis-0 flex-col self-stretch overflow-hidden">
-        <div className={`flex items-stretch flex-1 min-h-0 overflow-x-auto overflow-y-hidden px-4 py-4 pr-1 ${slideCount > 5 ? 'gap-1.5' : 'gap-3'}`}>
+        <div className={slideCount > 5
+          ? 'grid grid-cols-4 gap-3 flex-1 min-h-0 overflow-y-auto px-4 py-4 pr-1'
+          : 'flex items-stretch flex-1 min-h-0 overflow-x-auto overflow-y-hidden px-4 py-4 pr-1 gap-3'
+        }>
         {Array.from({ length: slideCount }).map((_, bankIdx) => {
           const label = getPipelineBankLabel(pipeline, bankIdx);
           const headerColor = getBankHeaderColor(label, bankIdx);
@@ -319,17 +322,16 @@ const SlideshowNicheContent = ({
             .filter(Boolean);
           const textEntries = pipeline.textBanks?.[bankIdx] || [];
           const isDragOver = dragOverBank === bankIdx;
-          const compact = slideCount > 5;
 
           return (
-            <div key={bankIdx} className={`flex flex-col gap-2 flex-1 overflow-hidden ${compact ? 'min-w-[110px]' : 'min-w-[150px]'}`}>
+            <div key={bankIdx} className="flex flex-col gap-2 flex-1 overflow-hidden min-w-[150px]">
               {/* Column header */}
               <div
-                className={`flex w-full flex-none items-center justify-between rounded-t-lg ${compact ? 'px-2 py-1.5' : 'px-3 py-2'}`}
+                className="flex w-full flex-none items-center justify-between rounded-t-lg px-3 py-2"
                 style={{ backgroundColor: headerColor }}
               >
                 <div className="flex items-center gap-1.5 min-w-0">
-                  {!compact && <IconWithBackground variant={getBankIconVariant(label)} size="small" icon={getBankIcon(label)} square />}
+                  <IconWithBackground variant={getBankIconVariant(label)} size="small" icon={getBankIcon(label)} square />
                   <span className="text-caption-bold font-caption-bold text-[#ffffffff] truncate">{label}</span>
                 </div>
                 <Badge variant={getBankBadgeVariant(label)}>{bankImages.length}</Badge>
@@ -337,7 +339,7 @@ const SlideshowNicheContent = ({
 
               {/* Images section — capped height, scrolls internally */}
               <div
-                className={`flex w-full flex-col items-start gap-2 rounded-b-lg border bg-[#1a1a1aff] overflow-hidden transition-colors ${compact ? 'px-2 py-2' : 'px-3 py-3'} ${
+                className={`flex w-full flex-col items-start gap-2 rounded-b-lg border bg-[#1a1a1aff] overflow-hidden transition-colors px-3 py-3 ${
                   isDragOver ? 'border-indigo-500 bg-indigo-500/5' : 'border-solid border-neutral-800'
                 }`}
                 style={{ height: '45%', minHeight: '120px' }}
@@ -346,24 +348,24 @@ const SlideshowNicheContent = ({
                 onDrop={e => handleDrop(bankIdx, e)}
               >
                 <div className="flex w-full flex-none items-center justify-between">
-                  <span className="text-caption font-caption text-neutral-400">{compact ? '' : 'Images'}{bankImages.length > 0 ? bankImages.length : ''}</span>
+                  <span className="text-caption font-caption text-neutral-400">Images{bankImages.length > 0 ? ` ${bankImages.length}` : ''}</span>
                   <div className="flex items-center gap-1">
                     <button
                       className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
                       onClick={() => onImportToBank?.(bankIdx)}
-                    >{compact ? '⬇' : 'Import'}</button>
+                    >Import</button>
                     <button
                       className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
                       onClick={() => onUploadToBank?.(bankIdx)}
-                    >{compact ? '⬆' : 'Upload'}</button>
-                    {!compact && <button
+                    >Upload</button>
+                    <button
                       className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
                       onClick={() => onWebImportToBank?.(bankIdx)}
-                    >Web</button>}
+                    >Web</button>
                   </div>
                 </div>
                 <div className="w-full flex-1 min-h-0 overflow-y-auto">
-                  <div className={`w-full items-start gap-1.5 grid ${compact ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                  <div className="w-full items-start gap-1.5 grid grid-cols-3">
                     {bankImages.map(item => (
                       <img
                         key={item.id}
@@ -388,11 +390,11 @@ const SlideshowNicheContent = ({
 
               {/* Text bank section — fixed uniform height */}
               <div
-                className={`flex w-full flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] ${compact ? 'px-2 py-2' : 'px-3 py-3'}`}
+                className="flex w-full flex-col items-start gap-2 rounded-lg border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-3"
                 style={{ height: '45%', minHeight: '140px' }}
               >
                 <div className="flex w-full flex-none items-center justify-between">
-                  <span className="text-caption font-caption text-neutral-400 truncate">{compact ? 'Lines' : `${label} Lines`}</span>
+                  <span className="text-caption font-caption text-neutral-400 truncate">{`${label} Lines`}</span>
                   <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label="Add text" onClick={() => handleAddText(bankIdx)} />
                 </div>
                 <div className="flex w-full flex-col items-start gap-1.5 flex-1 min-h-0 overflow-y-auto">
@@ -436,7 +438,7 @@ const SlideshowNicheContent = ({
           );
         })}
         {/* Audio Bank — same column pattern as slide banks */}
-        <div className={`flex flex-col gap-2 flex-1 overflow-hidden ${slideCount > 5 ? 'min-w-[110px]' : 'min-w-[150px]'}`}>
+        <div className="flex flex-col gap-2 flex-1 overflow-hidden min-w-[150px]">
           {/* Column header */}
           <div className="flex w-full flex-none items-center justify-between rounded-t-lg px-3 py-2" style={{ backgroundColor: '#292524' }}>
             <div className="flex items-center gap-2">
