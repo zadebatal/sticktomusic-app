@@ -83,6 +83,7 @@ const SlideshowNicheContent = ({
   onViewDrafts,
   onUploadToBank,
   onImportToBank,
+  onWebImportToBank,
   onUploadAudio,
   onImportAudio,
 }) => {
@@ -344,6 +345,10 @@ const SlideshowNicheContent = ({
                       className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
                       onClick={() => onUploadToBank?.(bankIdx)}
                     >Upload</button>
+                    <button
+                      className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
+                      onClick={() => onWebImportToBank?.(bankIdx)}
+                    >Web</button>
                   </div>
                 </div>
                 <div className="w-full flex-1 min-h-0 overflow-y-auto">
