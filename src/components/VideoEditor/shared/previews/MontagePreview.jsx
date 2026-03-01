@@ -40,7 +40,7 @@ const MontagePreview = ({
   const [showMomentumSelector, setShowMomentumSelector] = useState(false);
   const [textSelected, setTextSelected] = useState(false);
 
-  const { beats, bpm, analyzeAudio } = useBeatDetection();
+  const { beats, bpm, isAnalyzing, analyzeAudio } = useBeatDetection();
   const { audioRef, currentTime, isPlaying, progress, toggle, seek } = usePreviewPlayback({
     audioUrl,
     duration: 30,
@@ -177,9 +177,10 @@ const MontagePreview = ({
 
   // BPM label
   const bpmLabel = useMemo(() => {
-    if (!beats.length) return audioUrl ? 'Analyzing...' : null;
+    if (isAnalyzing) return 'Analyzing...';
+    if (!beats.length) return null;
     return bpm ? `${Math.round(bpm)} BPM (${beats.length} beats)` : `${beats.length} beats`;
-  }, [beats, bpm, audioUrl]);
+  }, [beats, bpm, isAnalyzing]);
 
   // Reroll — always randomize both media AND text
   const handleReroll = useCallback(() => {

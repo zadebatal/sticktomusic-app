@@ -47,7 +47,7 @@ const MultiClipPreview = ({
   }, [playlist]);
 
   const containerRef = useRef(null);
-  const { beats, bpm, analyzeAudio } = useBeatDetection();
+  const { beats, bpm, isAnalyzing, analyzeAudio } = useBeatDetection();
   const { audioRef, currentTime, isPlaying, progress, toggle, seek } = usePreviewPlayback({
     audioUrl,
     duration: totalDuration,
@@ -231,9 +231,10 @@ const MultiClipPreview = ({
 
   // BPM label
   const bpmLabel = useMemo(() => {
-    if (!beats.length) return audioUrl ? 'Analyzing...' : null;
+    if (isAnalyzing) return 'Analyzing...';
+    if (!beats.length) return null;
     return bpm ? `${Math.round(bpm)} BPM (${beats.length} beats)` : `${beats.length} beats`;
-  }, [beats, bpm, audioUrl]);
+  }, [beats, bpm, isAnalyzing]);
 
   // Text track timing change
   const handleTextTrackChange = useCallback((trackId, changes) => {

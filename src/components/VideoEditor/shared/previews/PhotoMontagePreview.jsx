@@ -49,7 +49,7 @@ const PhotoMontagePreview = ({
   const photoDuration = speed;
 
   const containerRef = useRef(null);
-  const { beats, analyzeAudio } = useBeatDetection();
+  const { beats, isAnalyzing, analyzeAudio } = useBeatDetection();
   const { audioRef, currentTime, isPlaying, progress, toggle, seek } = usePreviewPlayback({
     audioUrl,
     duration: totalDuration,
@@ -215,12 +215,13 @@ const PhotoMontagePreview = ({
 
   // BPM label for transport
   const bpmLabel = useMemo(() => {
-    if (!beats.length) return audioUrl ? 'Analyzing...' : null;
+    if (isAnalyzing) return 'Analyzing...';
+    if (!beats.length) return null;
     const estimatedBpm = beats.length > 1
       ? Math.round(60 / ((beats[beats.length - 1] - beats[0]) / (beats.length - 1)))
       : null;
     return estimatedBpm ? `${estimatedBpm} BPM (${beats.length} beats)` : `${beats.length} beats`;
-  }, [beats, audioUrl]);
+  }, [beats, isAnalyzing]);
 
   // Reroll — always randomize both media AND text
   const handleReroll = useCallback(() => {
