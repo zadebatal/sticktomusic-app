@@ -70,6 +70,7 @@ const WebImportModal = ({
     try {
       const data = await analyzeUrl(trimmed);
       setMetadata(data);
+      if (data.itemCount < 0) setMaxItems(50); // unknown count (e.g. Pinterest search)
       setState(STATES.PREVIEW);
     } catch (err) {
       log.error('Analyze error:', err);
@@ -248,7 +249,7 @@ const WebImportModal = ({
                       {metadata.platform}
                     </Badge>
                     <span className="text-caption font-caption text-neutral-400">
-                      {metadata.type === 'video' ? '1 video' : `${metadata.itemCount}${metadata.itemCount >= 100 ? '+' : ''} image${metadata.itemCount !== 1 ? 's' : ''}`}
+                      {metadata.type === 'video' ? '1 video' : metadata.itemCount < 0 ? 'images' : `${metadata.itemCount}${metadata.itemCount >= 100 ? '+' : ''} image${metadata.itemCount !== 1 ? 's' : ''}`}
                     </span>
                     {metadata.duration && (
                       <span className="text-caption font-caption text-neutral-500">
@@ -290,12 +291,12 @@ const WebImportModal = ({
                 </div>
               )}
 
-              {/* Download cap — for galleries with many items */}
-              {metadata.type === 'gallery' && metadata.itemCount > 10 && (
+              {/* Download cap — for galleries with many or unknown items */}
+              {metadata.type === 'gallery' && (metadata.itemCount > 10 || metadata.itemCount < 0) && (
                 <div className="flex flex-col gap-2">
-                  <label className="text-caption font-caption text-neutral-400">How many to download?</label>
+                  <label className="text-caption font-caption text-neutral-400">How many to import?</label>
                   <div className="flex flex-wrap gap-2">
-                    {[10, 30, 50, 100].map(cap => (
+                    {(metadata.itemCount < 0 ? [50, 100, 150] : [10, 30, 50, 100]).map(cap => (
                       <button
                         key={cap}
                         onClick={() => setMaxItems(cap)}
@@ -325,7 +326,7 @@ const WebImportModal = ({
                   Back
                 </Button>
                 <Button variant="brand-primary" size="medium" icon={<FeatherDownload />} onClick={handleImport} disabled={metadata.type !== 'video' && metadata.itemCount === 0}>
-                  Import {metadata.type === 'video' ? 'Video' : `${metadata.type === 'gallery' && metadata.itemCount > 10 ? maxItems : metadata.itemCount} Image${(metadata.type === 'gallery' && metadata.itemCount > 10 ? maxItems : metadata.itemCount) !== 1 ? 's' : ''}`}
+                  Import {metadata.type === 'video' ? 'Video' : `${metadata.itemCount < 0 || metadata.itemCount > 10 ? maxItems : metadata.itemCount} Images`}
                 </Button>
               </div>
             </>
