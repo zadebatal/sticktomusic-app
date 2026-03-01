@@ -335,6 +335,16 @@ export default async function handler(req, res) {
         response = await fetchWithRetry(`${LATE_API_BASE}/accounts`, {
           headers: { 'Authorization': `Bearer ${accountsKey}` }
         });
+        // Debug: log first account's fields to see what Late.co returns
+        try {
+          const cloned = response.clone();
+          const debugData = await cloned.json();
+          const accounts = debugData.accounts || debugData.data || [];
+          if (accounts.length > 0) {
+            console.log('[Late DEBUG] Account fields:', Object.keys(accounts[0]));
+            console.log('[Late DEBUG] First account sample:', JSON.stringify(accounts[0]).slice(0, 500));
+          }
+        } catch (_) {}
         break;
 
       case 'posts':
