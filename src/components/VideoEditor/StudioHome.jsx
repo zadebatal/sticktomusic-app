@@ -62,6 +62,7 @@ import {
   migrateToFirestore,
   migrateThumbnails,
   migrateVideoThumbnails,
+  THUMB_VERSION,
   // Dynamic bank system
   migrateCollectionBanks,
   getBankColor,
@@ -333,9 +334,8 @@ const StudioHome = ({
   // Users can pick a collection from the CollectionPicker dropdown.
 
   // Background thumbnail migration for existing images
-  // THUMB_VERSION: bump this to force re-migration (e.g. after changing thumbnail size)
+  // Uses THUMB_VERSION from libraryService — bump there to force re-migration
   useEffect(() => {
-    const THUMB_VERSION = 4; // v4 = 50px @ 0.2 quality
     if (thumbMigrationRef.current || !artistId) return;
     if (library.length === 0) return;
 
@@ -373,22 +373,21 @@ const StudioHome = ({
   // Background thumbnail migration for existing videos (same pattern as images)
   const videoThumbMigrationRef = useRef(false);
   useEffect(() => {
-    const VID_THUMB_VERSION = 1; // v1 = 150px @ 0.5 quality
     if (videoThumbMigrationRef.current || !artistId) return;
     if (library.length === 0) return;
 
-    const versionKey = `stm_vidthumb_v${VID_THUMB_VERSION}_${artistId}`;
+    const versionKey = `stm_vidthumb_v${THUMB_VERSION}_${artistId}`;
     const alreadyDone = localStorage.getItem(versionKey);
     if (alreadyDone) return;
 
-    const videoItems = library.filter(item => item.type === 'video' && item.url && !item.thumbnailUrl);
+    const videoItems = library.filter(item => item.type === 'video' && item.url && (!item.thumbnailUrl || item.thumbVersion !== THUMB_VERSION));
     if (videoItems.length === 0) {
       localStorage.setItem(versionKey, Date.now().toString());
       return;
     }
     videoThumbMigrationRef.current = true;
 
-    log(`[VideoThumbMigration] v${VID_THUMB_VERSION}: ${videoItems.length} videos to process`);
+    log(`[VideoThumbMigration] v${THUMB_VERSION}: ${videoItems.length} videos to process`);
 
     const timer = setTimeout(async () => {
       try {
@@ -397,7 +396,7 @@ const StudioHome = ({
             setLibraryRefreshTrigger(prev => prev + 1);
           }
         });
-        log(`[VideoThumbMigration] v${VID_THUMB_VERSION} complete: ${result.generated} generated, ${result.failed} failed`);
+        log(`[VideoThumbMigration] v${THUMB_VERSION} complete: ${result.generated} generated, ${result.failed} failed`);
         localStorage.setItem(versionKey, Date.now().toString());
         if (result.generated > 0) {
           setLibraryRefreshTrigger(prev => prev + 1);
