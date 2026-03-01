@@ -331,9 +331,13 @@ const AnalyticsDashboard = ({
             <SubframeCore.DropdownMenu.Root>
               <SubframeCore.DropdownMenu.Trigger asChild>
                 <div className="flex items-center gap-2 rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2 cursor-pointer hover:bg-[#262626]">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-white text-xs font-semibold">
-                    {(currentArtistName || '?')[0].toUpperCase()}
-                  </div>
+                  {artists.find(a => a.id === currentArtistId)?.photoURL ? (
+                    <img src={artists.find(a => a.id === currentArtistId).photoURL} alt="" className="h-6 w-6 rounded-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600 text-white text-xs font-semibold">
+                      {(currentArtistName || '?')[0].toUpperCase()}
+                    </div>
+                  )}
                   <span className="text-body-bold font-body-bold text-[#ffffffff]">{currentArtistName}</span>
                   <FeatherChevronDown className="text-neutral-400" style={{ width: 14, height: 14 }} />
                 </div>
@@ -344,7 +348,10 @@ const AnalyticsDashboard = ({
                     {artists.map(artist => (
                       <DropdownMenu.DropdownItem
                         key={artist.id}
-                        icon={<FeatherUser />}
+                        icon={artist.photoURL
+                          ? <img src={artist.photoURL} alt="" className="w-5 h-5 rounded-full object-cover" referrerPolicy="no-referrer" />
+                          : <FeatherUser />
+                        }
                         onClick={() => handleArtistChange(artist.id)}
                       >
                         {artist.name}

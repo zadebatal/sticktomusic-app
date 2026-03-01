@@ -588,9 +588,13 @@ const PagesTab = ({
                     className={`cursor-pointer ${isMobile ? 'px-4 py-3 min-h-[56px]' : 'px-6 py-4'} flex items-center justify-between ${t.cardBg}`}
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shrink-0 bg-indigo-500/15 text-indigo-500">
-                        {artist.name?.[0]?.toUpperCase() || '?'}
-                      </div>
+                      {artist.photoURL ? (
+                        <img src={artist.photoURL} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shrink-0 bg-indigo-500/15 text-indigo-500">
+                          {artist.name?.[0]?.toUpperCase() || '?'}
+                        </div>
+                      )}
                       <div className="min-w-0 flex-1">
                         <h2 className={`font-bold ${isMobile ? 'text-base' : 'text-lg'} ${t.textPrimary} truncate`}>{artist.name}</h2>
                         <p className={`text-xs ${t.textSecondary}`}>

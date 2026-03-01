@@ -1622,9 +1622,13 @@ const SchedulingPage = ({
               <SubframeCore.DropdownMenu.Root>
                 <SubframeCore.DropdownMenu.Trigger asChild>
                   <div className="flex items-center gap-3 rounded-md border border-solid border-neutral-800 bg-[#1a1a1aff] px-3 py-2 cursor-pointer hover:bg-[#262626]">
-                    <div className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-brand-600 text-white text-xs font-semibold">
-                      {(visibleArtists.find(a => a.id === artistId)?.name || '?')[0].toUpperCase()}
-                    </div>
+                    {visibleArtists.find(a => a.id === artistId)?.photoURL ? (
+                      <img src={visibleArtists.find(a => a.id === artistId).photoURL} alt="" className="h-6 w-6 flex-none rounded-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-brand-600 text-white text-xs font-semibold">
+                        {(visibleArtists.find(a => a.id === artistId)?.name || '?')[0].toUpperCase()}
+                      </div>
+                    )}
                     <span className="text-body font-body text-[#ffffffff]">
                       {visibleArtists.find(a => a.id === artistId)?.name || 'Select Artist'}
                     </span>
@@ -1635,7 +1639,10 @@ const SchedulingPage = ({
                   <SubframeCore.DropdownMenu.Content side="bottom" align="start" sideOffset={4} asChild>
                     <DropdownMenu>
                       {visibleArtists.map(a => (
-                        <DropdownMenu.DropdownItem key={a.id} icon={<FeatherUser />} onClick={() => onArtistChange(a.id)}>
+                        <DropdownMenu.DropdownItem key={a.id} icon={a.photoURL
+                          ? <img src={a.photoURL} alt="" className="w-5 h-5 rounded-full object-cover" referrerPolicy="no-referrer" />
+                          : <FeatherUser />
+                        } onClick={() => onArtistChange(a.id)}>
                           {a.name}
                         </DropdownMenu.DropdownItem>
                       ))}
