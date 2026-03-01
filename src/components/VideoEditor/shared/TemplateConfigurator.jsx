@@ -671,6 +671,28 @@ const TemplateConfigurator = ({
               </>
             )}
           </div>
+
+          {/* Stroke */}
+          <div className="flex w-full items-center justify-between gap-2">
+            <span className="text-caption font-caption text-neutral-400">Stroke</span>
+            <button
+              className={`flex h-5 w-9 items-center rounded-full px-0.5 transition-colors cursor-pointer ${ts.textStroke ? 'bg-indigo-600' : 'bg-neutral-700'}`}
+              onClick={() => updateTextStyle('textStroke', ts.textStroke ? null : '0.5px #000000')}
+            >
+              <div className={`h-4 w-4 rounded-full bg-white transition-transform ${ts.textStroke ? 'translate-x-4' : 'translate-x-0'}`} />
+            </button>
+            {ts.textStroke && (
+              <>
+                <span className="text-caption font-caption text-neutral-400">Color</span>
+                <input
+                  type="color"
+                  value={(() => { const m = ts.textStroke.match(/([\d.]+)px\s+(.*)/); return m?.[2]?.startsWith('#') ? m[2] : '#000000'; })()}
+                  onChange={e => { const m = ts.textStroke.match(/([\d.]+)px\s+(.*)/); updateTextStyle('textStroke', `${m?.[1] || '0.5'}px ${e.target.value}`); }}
+                  className="h-6 w-6 rounded border border-neutral-700 cursor-pointer bg-transparent"
+                />
+              </>
+            )}
+          </div>
         </div>
       </div>
 

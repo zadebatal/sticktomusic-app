@@ -38,6 +38,15 @@ import useTimelineZoom from '../../hooks/useTimelineZoom';
 import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
 import { FeatherAlignLeft, FeatherAlignCenter, FeatherAlignRight } from '@subframe/core';
 
+// Stroke string helpers: parse "0.5px black" ↔ { width: 0.5, color: '#000000' }
+const parseStroke = (str) => {
+  if (!str) return { width: 0.5, color: '#000000' };
+  const match = str.match(/([\d.]+)px\s+(.*)/);
+  if (!match) return { width: 0.5, color: '#000000' };
+  return { width: parseFloat(match[1]) || 0.5, color: match[2] || '#000000' };
+};
+const buildStroke = (width, color) => `${width}px ${color}`;
+
 const AVAILABLE_FONTS = [
   { name: 'Inter', value: "'Inter', sans-serif" },
   { name: 'Arial', value: 'Arial, sans-serif' },
@@ -255,6 +264,7 @@ const SoloClipEditor = ({
     color: '#ffffff',
     outline: true,
     outlineColor: '#000000',
+    textStroke: null,
     textAlign: 'center',
     textCase: 'default',
     displayMode: templateSettings?.textDisplayMode || 'word',
@@ -711,6 +721,7 @@ const SoloClipEditor = ({
     color: textStyle.color,
     outline: textStyle.outline,
     outlineColor: textStyle.outlineColor,
+    textStroke: textStyle.textStroke,
     textAlign: textStyle.textAlign,
     textCase: textStyle.textCase
   }), [textStyle]);
@@ -908,22 +919,29 @@ const SoloClipEditor = ({
     toastSuccess(`Created ${newOverlays.length} timed word overlays`);
   }, [clipDuration, getDefaultTextStyle, setTextOverlays, toastSuccess]);
 
-  // ── Reroll: swap clip with random from visible videos (collection-aware) ──
+  // ── Reroll: always swap clip AND randomize text overlays ──
   const handleReroll = useCallback(() => {
+    // Reroll media
     const rerollPool = visibleVideos.length > 0 ? visibleVideos : availableVideos;
-    if (!rerollPool.length) {
-      toastError('No clips available to reroll from.');
-      return;
+    if (rerollPool.length > 0) {
+      const available = rerollPool.filter(v => v.id !== clip?.id);
+      if (available.length > 0) {
+        const randomClip = available[Math.floor(Math.random() * available.length)];
+        setClip(randomClip);
+      }
     }
-    const available = rerollPool.filter(v => v.id !== clip?.id);
-    if (available.length === 0) {
-      toastError('No other clips available to swap with.');
-      return;
+    // Reroll text overlays
+    const { videoTextBank1, videoTextBank2 } = getVideoTextBanks();
+    const allBankTexts = [...videoTextBank1, ...videoTextBank2].filter(Boolean);
+    if (allBankTexts.length > 0 && textOverlays.length > 0) {
+      setTextOverlays(prev => prev.map(o => {
+        const others = allBankTexts.filter(t => t !== o.text);
+        const pool = others.length > 0 ? others : allBankTexts;
+        return { ...o, text: pool[Math.floor(Math.random() * pool.length)] };
+      }));
     }
-    const randomClip = available[Math.floor(Math.random() * available.length)];
-    setClip(randomClip);
-    toastSuccess('Swapped clip');
-  }, [visibleVideos, availableVideos, clip, setClip, toastSuccess, toastError]);
+    toastSuccess('Rerolled');
+  }, [textOverlays, getVideoTextBanks, setTextOverlays, visibleVideos, availableVideos, clip, setClip, toastSuccess]);
 
   // ── Audio upload handler — route through trimmer ──
   const handleAudioUpload = useCallback((e) => {
@@ -1908,6 +1926,7 @@ const SoloClipEditor = ({
                   const handleStyleChange = (updates) => {
                     if (selOverlay) updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, ...updates } });
                   };
+                  const strokeInfo = activeStyle.textStroke ? parseStroke(activeStyle.textStroke) : { width: 0.5, color: '#000000' };
                   return (
                     <div className={`flex flex-col gap-4 ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
                       {disabled && <div className="text-xs text-neutral-400 italic mb-3">Click text on preview to edit</div>}
@@ -1972,6 +1991,32 @@ const SoloClipEditor = ({
                         </div>
                       </div>
 
+                      {/* Stroke Color + Width */}
+                      {activeStyle.textStroke && (
+                        <>
+                          <div className="flex gap-3">
+                            <div className="flex-1">
+                              <div className="text-[13px] text-neutral-500 mb-1.5">Stroke Color</div>
+                              <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-neutral-200 bg-neutral-50">
+                                <input type="color" value={strokeInfo.color.startsWith('#') ? strokeInfo.color : '#000000'}
+                                  onChange={(e) => handleStyleChange({ textStroke: buildStroke(strokeInfo.width, e.target.value) })}
+                                  className="w-6 h-6 border-none rounded-full cursor-pointer p-0 bg-transparent" />
+                                <span className="text-xs text-neutral-500 font-mono">{(strokeInfo.color.startsWith('#') ? strokeInfo.color : '#000000').toUpperCase()}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div>
+                            <div className="flex justify-between mb-1.5">
+                              <span className="text-[13px] text-neutral-500">Stroke Width</span>
+                              <span className="text-[13px] text-white">{strokeInfo.width}px</span>
+                            </div>
+                            <input type="range" min="0.1" max="10" step="0.1" value={strokeInfo.width}
+                              onChange={(e) => handleStyleChange({ textStroke: buildStroke(parseFloat(e.target.value), strokeInfo.color) })}
+                              className="w-full accent-brand-600" />
+                          </div>
+                        </>
+                      )}
+
                       {/* Formatting */}
                       <div>
                         <div className="text-[13px] text-neutral-500 mb-1.5">Formatting</div>
@@ -1980,6 +2025,7 @@ const SoloClipEditor = ({
                             { key: 'bold', label: 'B', ariaLabel: 'Bold', active: activeStyle.fontWeight === '700', toggle: () => handleStyleChange({ fontWeight: activeStyle.fontWeight === '700' ? '400' : '700' }), bold: true },
                             { key: 'caps', label: 'AA', ariaLabel: 'All caps', active: activeStyle.textCase === 'upper', toggle: () => handleStyleChange({ textCase: activeStyle.textCase === 'upper' ? 'default' : 'upper' }) },
                             { key: 'outline', label: 'O', ariaLabel: 'Outline', active: !!activeStyle.outline, toggle: () => handleStyleChange({ outline: !activeStyle.outline }) },
+                            { key: 'stroke', label: 'St', ariaLabel: 'Stroke', active: !!activeStyle.textStroke, toggle: () => handleStyleChange({ textStroke: activeStyle.textStroke ? null : buildStroke(0.5, '#000000') }) },
                           ].map(btn => (
                             <IconButton key={btn.key} onClick={btn.toggle}
                               variant={btn.active ? 'brand-secondary' : 'neutral-secondary'} size="small"

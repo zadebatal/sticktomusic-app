@@ -42,6 +42,7 @@ const PhotoMontagePreview = ({
   const [showMomentumSelector, setShowMomentumSelector] = useState(false);
   const [previewTextA, setPreviewTextA] = useState(() => textBankA[0] || '');
   const [previewTextB, setPreviewTextB] = useState(() => textBankB[0] || '');
+  const [textSelected, setTextSelected] = useState(false);
 
   // Timeline = full audio/30s duration; speed = seconds each photo is shown
   const totalDuration = 30;
@@ -221,21 +222,24 @@ const PhotoMontagePreview = ({
     return estimatedBpm ? `${estimatedBpm} BPM (${beats.length} beats)` : `${beats.length} beats`;
   }, [beats, audioUrl]);
 
-  // Reroll — swap the photo under the playhead + randomize text
+  // Reroll — always randomize both media AND text
   const handleReroll = useCallback(() => {
-    if (images.length < 2) return;
-    setPlaylist(prev => {
-      const playheadIdx = prev.length > 0 ? Math.min(Math.floor(progress * prev.length), prev.length - 1) : 0;
-      if (playheadIdx < 0) return prev;
-      const next = prev.slice(0, images.length);
-      const current = next[playheadIdx];
-      const candidates = images.filter(img => (img.id || img.url) !== (current?.id || current?.url));
-      if (candidates.length === 0) return prev;
-      next[playheadIdx] = candidates[Math.floor(Math.random() * candidates.length)];
-      return next;
-    });
-    setPreviewTextA(pickText(textBankA));
-    setPreviewTextB(pickText(textBankB));
+    // Reroll media
+    if (images.length >= 2) {
+      setPlaylist(prev => {
+        const playheadIdx = prev.length > 0 ? Math.min(Math.floor(progress * prev.length), prev.length - 1) : 0;
+        if (playheadIdx < 0) return prev;
+        const next = prev.slice(0, images.length);
+        const current = next[playheadIdx];
+        const candidates = images.filter(img => (img.id || img.url) !== (current?.id || current?.url));
+        if (candidates.length === 0) return prev;
+        next[playheadIdx] = candidates[Math.floor(Math.random() * candidates.length)];
+        return next;
+      });
+    }
+    // Reroll text
+    if (textBankA.length > 0) setPreviewTextA(pickText(textBankA));
+    if (textBankB.length > 0) setPreviewTextB(pickText(textBankB));
   }, [images, progress, pickText, textBankA, textBankB]);
 
   // Jump to photo from timeline cell (idx is into the expanded timeline)
@@ -310,6 +314,7 @@ const PhotoMontagePreview = ({
         ref={containerRef}
         className={`relative w-full overflow-hidden rounded-xl border border-solid border-neutral-700 ${isGallery ? 'bg-[#f5f5f5]' : 'bg-[#0a0a0f]'}`}
         style={{ aspectRatio: ASPECT_CSS[aspectRatio] || '9/16' }}
+        onClick={() => setTextSelected(false)}
       >
         {/* Pre-rendered photo stack — all loaded, visibility toggled via ref */}
         <div ref={layersRef} className="absolute inset-0">
@@ -345,6 +350,8 @@ const PhotoMontagePreview = ({
             color="#6366f1"
             position={textPosA}
             onPositionChange={setTextPosA}
+            isSelected={textSelected === 'A'}
+            onSelect={() => setTextSelected('A')}
             onTextChange={(newText) => { setPreviewTextA(newText); onTextAChange?.(newText); }}
             containerRef={containerRef}
           />
@@ -360,6 +367,8 @@ const PhotoMontagePreview = ({
             onPositionChange={setTextPosB}
             onTextChange={(newText) => { setPreviewTextB(newText); onTextBChange?.(newText); }}
             containerRef={containerRef}
+            isSelected={textSelected === 'B'}
+            onSelect={() => setTextSelected('B')}
           />
         )}
 

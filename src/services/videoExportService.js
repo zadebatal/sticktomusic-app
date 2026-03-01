@@ -421,6 +421,17 @@ const renderWithCanvas = async (videoData, onProgress = () => {}) => {
         ctx.strokeText(text, x, y);
       }
 
+      if (textStyle.textStroke) {
+        const match = textStyle.textStroke.match(/([\d.]+)px\s+(.*)/);
+        if (match) {
+          ctx.strokeStyle = match[2] || '#000000';
+          ctx.lineWidth = parseFloat(match[1]);
+          ctx.lineJoin = 'round';
+          ctx.miterLimit = 2;
+          for (let layer = 0; layer < 3; layer++) ctx.strokeText(text, x, y);
+        }
+      }
+
       ctx.fillStyle = textStyle.color || '#fff';
       ctx.fillText(text, x, y);
     }

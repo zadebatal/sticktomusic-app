@@ -36,6 +36,7 @@ const MultiClipPreview = ({
   const [showBeatSelector, setShowBeatSelector] = useState(false);
   const [previewTextA, setPreviewTextA] = useState(() => textBankA[0] || '');
   const [previewTextB, setPreviewTextB] = useState(() => textBankB[0] || '');
+  const [textSelected, setTextSelected] = useState(false);
 
   // Sync playlist when media changes
   useEffect(() => { setPlaylist([...media]); }, [media]);
@@ -165,21 +166,24 @@ const MultiClipPreview = ({
     }
   }, [isPlaying]);
 
-  // Reroll — swap the clip under the playhead + randomize text
+  // Reroll — always randomize both media AND text
   const handleReroll = useCallback(() => {
-    if (media.length < 2) return;
-    setPlaylist(prev => {
-      const playheadIdx = prev.length > 0 ? Math.min(Math.floor(progress * prev.length), prev.length - 1) : 0;
-      if (playheadIdx < 0) return prev;
-      const next = prev.slice(0, media.length);
-      const current = next[playheadIdx];
-      const candidates = media.filter(m => m.id !== current?.id);
-      if (candidates.length === 0) return prev;
-      next[playheadIdx] = candidates[Math.floor(Math.random() * candidates.length)];
-      return next;
-    });
-    setPreviewTextA(pickText(textBankA));
-    setPreviewTextB(pickText(textBankB));
+    // Reroll media
+    if (media.length >= 2) {
+      setPlaylist(prev => {
+        const playheadIdx = prev.length > 0 ? Math.min(Math.floor(progress * prev.length), prev.length - 1) : 0;
+        if (playheadIdx < 0) return prev;
+        const next = prev.slice(0, media.length);
+        const current = next[playheadIdx];
+        const candidates = media.filter(m => m.id !== current?.id);
+        if (candidates.length === 0) return prev;
+        next[playheadIdx] = candidates[Math.floor(Math.random() * candidates.length)];
+        return next;
+      });
+    }
+    // Reroll text
+    if (textBankA.length > 0) setPreviewTextA(pickText(textBankA));
+    if (textBankB.length > 0) setPreviewTextB(pickText(textBankB));
   }, [media, progress, pickText, textBankA, textBankB]);
 
   // Jump to segment from timeline cell
@@ -307,6 +311,7 @@ const MultiClipPreview = ({
         ref={containerRef}
         className="relative w-full overflow-hidden rounded-xl border border-solid border-neutral-700 bg-[#0a0a0f]"
         style={{ aspectRatio: ASPECT_CSS[aspectRatio] || '9/16' }}
+        onClick={() => setTextSelected(false)}
       >
         {seg && renderMedia(seg.item, styles.current)}
         {transProgress > 0 && nextSeg && renderMedia(nextSeg.item, styles.next)}
@@ -321,6 +326,8 @@ const MultiClipPreview = ({
             onPositionChange={setTextPosA}
             onTextChange={(newText) => { setPreviewTextA(newText); onTextAChange?.(newText); }}
             containerRef={containerRef}
+            isSelected={textSelected === 'A'}
+            onSelect={() => setTextSelected('A')}
           />
         )}
 
@@ -334,6 +341,8 @@ const MultiClipPreview = ({
             onPositionChange={setTextPosB}
             onTextChange={(newText) => { setPreviewTextB(newText); onTextBChange?.(newText); }}
             containerRef={containerRef}
+            isSelected={textSelected === 'B'}
+            onSelect={() => setTextSelected('B')}
           />
         )}
 

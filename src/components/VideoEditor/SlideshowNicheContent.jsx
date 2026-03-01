@@ -28,7 +28,7 @@ import { IconWithBackground } from '../../ui/components/IconWithBackground';
 import {
   FeatherPlus, FeatherX, FeatherType, FeatherPlay, FeatherSquare,
   FeatherImage, FeatherMusic, FeatherZap, FeatherTrash2,
-  FeatherRefreshCw, FeatherLock, FeatherUnlock,
+  FeatherRefreshCw,
   FeatherChevronDown, FeatherChevronRight, FeatherDatabase,
 } from '@subframe/core';
 
@@ -95,7 +95,6 @@ const SlideshowNicheContent = ({
   const previewContainerRef = useRef(null);
   const [textPositions, setTextPositions] = useState({});
   const [textOverrides, setTextOverrides] = useState({}); // { [bankIdx]: editedText } — preview-only, doesn't modify bank
-  const [lockedSlides, setLockedSlides] = useState({}); // { [bankIdx]: true } — locked text persists across generated timelines
   const [selectedTextIdx, setSelectedTextIdx] = useState({}); // { [bankIdx]: entryIdx | null } — which text entry is selected for preview
   const [liveSettings, setLiveSettings] = useState(null);
   const [lightboxItem, setLightboxItem] = useState(null);
@@ -607,22 +606,6 @@ const SlideshowNicheContent = ({
                     <span className="text-caption font-caption text-neutral-300">Reroll</span>
                   </button>
                 )}
-                {(pipeline?.textBanks?.[previewSlideIdx] || []).length > 0 && (
-                  <button
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border cursor-pointer transition-colors ${
-                      lockedSlides[previewSlideIdx]
-                        ? 'bg-indigo-500/15 border-indigo-500 text-indigo-400'
-                        : 'bg-neutral-800 hover:bg-neutral-700 border-neutral-700 text-neutral-400'
-                    }`}
-                    onClick={() => setLockedSlides(prev => ({ ...prev, [previewSlideIdx]: !prev[previewSlideIdx] }))}
-                  >
-                    {lockedSlides[previewSlideIdx]
-                      ? <FeatherLock className="text-indigo-400" style={{ width: 12, height: 12 }} />
-                      : <FeatherUnlock className="text-neutral-400" style={{ width: 12, height: 12 }} />
-                    }
-                    <span className="text-caption font-caption">{lockedSlides[previewSlideIdx] ? 'Text locked' : 'Lock text'}</span>
-                  </button>
-                )}
               </div>
             </> ) : currentBankHasImages ? (
               <div className="flex flex-col items-center gap-2">
@@ -690,7 +673,6 @@ const SlideshowNicheContent = ({
                 sourceBank: `image${bankIdx}`,
                 sourceImageId: pickedId || null,
                 textOverlays: textOverlayList,
-                keepText: !!lockedSlides[bankIdx],
                 duration: 3,
                 imageTransform: { scale: 1, offsetX: 0, offsetY: 0 },
               };
@@ -703,7 +685,6 @@ const SlideshowNicheContent = ({
               aspectRatio: templateSettings?.aspectRatio || '9:16',
               isTemplate: true,
               _nicheGenerateCount: generateCount,
-              _lockedSlides: { ...lockedSlides },
             };
             onOpenEditor(pipeline, generateCount, existingDraft, templateSettings);
           }}

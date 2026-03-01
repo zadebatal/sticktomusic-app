@@ -123,14 +123,7 @@ const SlideshowEditor = ({
   const [generateCount, setGenerateCount] = useState(nicheGenCount ? Math.max(nicheGenCount - 1, 1) : 10);
   const [isGenerating, setIsGenerating] = useState(false);
   // Keep-template-text: 'none' = pull from banks, 'all' = keep all, Set<number> = keep specific slide indices
-  const nicheLockedSlides = existingSlideshow?._lockedSlides;
-  const [keepTemplateText, setKeepTemplateText] = useState(() => {
-    if (nicheLockedSlides) {
-      const lockedIndices = Object.entries(nicheLockedSlides).filter(([, v]) => v).map(([k]) => parseInt(k));
-      if (lockedIndices.length > 0) return new Set(lockedIndices);
-    }
-    return 'none';
-  });
+  const [keepTemplateText, setKeepTemplateText] = useState('none');
 
   // Derived reads from active slideshow (existing code reads these unchanged)
   // Use stable empty array to prevent creating new [] reference every render
@@ -1026,21 +1019,6 @@ const SlideshowEditor = ({
     return bank;
   }, [currentSlide, categoryBankImages, collections, libraryImages, activeImages, migrateCollectionBanks]);
 
-  // Re-roll: Replace current slide's image with random different image from same bank
-  const handleReroll = useCallback(() => {
-    const bank = getRerollBank();
-    const otherImages = bank.filter(img => img.id !== currentSlide?.sourceImageId);
-    if (otherImages.length === 0) return;
-
-    const randomImage = otherImages[Math.floor(Math.random() * otherImages.length)];
-    setSlideBackground(
-      randomImage.url || randomImage.localUrl,
-      randomImage.url || randomImage.localUrl,
-      currentSlide.sourceBank,
-      randomImage.id
-    );
-  }, [currentSlide, getRerollBank, setSlideBackground]);
-
   // Gather text bank items from the active collection only (not merged across all)
   const textBanksCache = useMemo(() => {
     // Priority: 1) collection matching activeCollectionId (from source dropdown)
@@ -1099,6 +1077,24 @@ const SlideshowEditor = ({
       log.error('[SlideshowEditor] Text reroll error:', err);
     }
   }, [selectedSlideIndex, getTextBanks]);
+
+  // Re-roll: Replace current slide's image AND randomize text overlays
+  const handleReroll = useCallback(() => {
+    // Reroll media
+    const bank = getRerollBank();
+    const otherImages = bank.filter(img => img.id !== currentSlide?.sourceImageId);
+    if (otherImages.length > 0) {
+      const randomImage = otherImages[Math.floor(Math.random() * otherImages.length)];
+      setSlideBackground(
+        randomImage.url || randomImage.localUrl,
+        randomImage.url || randomImage.localUrl,
+        currentSlide.sourceBank,
+        randomImage.id
+      );
+    }
+    // Reroll text overlays
+    handleTextReroll();
+  }, [currentSlide, getRerollBank, setSlideBackground, handleTextReroll]);
 
   // Audio playback controls - just add audio directly, user can trim later
   const handleSelectAudio = useCallback((audio) => {
@@ -2114,7 +2110,6 @@ const SlideshowEditor = ({
           const templateOverlays = templateSlide.textOverlays || [];
           const slideTBank = textBanks[s] || textBanks[0] || [];
           const shouldKeepText =
-            templateSlide.keepText === true ||
             keepTemplateText === 'all' ||
             (keepTemplateText instanceof Set && keepTemplateText.has(s));
           if (i === 0 && s === 0) {
@@ -2694,7 +2689,7 @@ const SlideshowEditor = ({
 
       <div className="w-px h-5 bg-neutral-200" />
 
-      {/* Re-roll Image */}
+      {/* Re-roll (image + text) */}
       {currentSlide?.backgroundImage && (
         <Button
           variant="neutral-secondary"
@@ -2703,25 +2698,9 @@ const SlideshowEditor = ({
           onClick={handleReroll}
           disabled={getRerollBank().filter(img => img.id !== currentSlide?.sourceImageId).length === 0}
         >
-          Re-roll Image
+          Re-roll
         </Button>
       )}
-
-      {/* Re-roll Text */}
-      {currentSlide?.textOverlays?.length > 0 && (() => {
-        const tBanks = getTextBanks();
-        const hasTextBanks = tBanks.some(b => b?.length > 0);
-        return hasTextBanks ? (
-          <Button
-            variant="neutral-secondary"
-            size="small"
-            icon={<FeatherRefreshCw />}
-            onClick={() => handleTextReroll()}
-          >
-            Re-roll Text
-          </Button>
-        ) : null;
-      })()}
 
       <div className="flex-1" />
 
@@ -2851,19 +2830,6 @@ const SlideshowEditor = ({
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-neutral-300 text-lg font-semibold">{index + 1}</div>
                   )}
-                  {/* Per-slide keep-text toggle */}
-                  <button
-                    className={`absolute bottom-0.5 left-0.5 w-[18px] h-[18px] rounded-[3px] cursor-pointer flex items-center justify-center p-0 z-[2] text-[9px] font-bold ${
-                      slide.keepText
-                        ? 'bg-brand-600/85 border border-brand-600/90 text-white'
-                        : 'bg-black/50 border border-white/15 text-white/50'
-                    }`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSlides(prev => prev.map((s, i) => i === index ? { ...s, keepText: !s.keepText } : s));
-                    }}
-                    title={slide.keepText ? 'Keep text on generate (click to disable)' : 'Click to keep this slide\'s text on generate'}
-                  >T</button>
                   {slides.length > 1 && (
                     <button
                       className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-error-600/80 border-none text-white cursor-pointer flex items-center justify-center p-0 z-[2]"

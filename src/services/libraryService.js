@@ -33,6 +33,7 @@ import log from '../utils/logger';
 const pendingDeletionIds = new Set();
 export const markCollectionPendingDeletion = (id) => pendingDeletionIds.add(id);
 export const clearPendingDeletion = (id) => pendingDeletionIds.delete(id);
+export const isCollectionPendingDeletion = (id) => pendingDeletionIds.has(id);
 
 // ============================================================================
 // RECENT COLLECTION WRITES (protects against subscription overwriting fresh data)
@@ -1802,6 +1803,7 @@ export const getDefaultTemplateSettings = (formatId) => {
       textCase: 'default',
       outline: true,
       outlineColor: '#000000',
+      textStroke: null,
     },
   };
   switch (formatId) {

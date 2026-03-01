@@ -41,6 +41,15 @@ import usePixelTimeline from './shared/usePixelTimeline';
 import useTimelineZoom from '../../hooks/useTimelineZoom';
 import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
 
+// Stroke string helpers: parse "0.5px black" ↔ { width: 0.5, color: '#000000' }
+const parseStroke = (str) => {
+  if (!str) return { width: 0.5, color: '#000000' };
+  const match = str.match(/([\d.]+)px\s+(.*)/);
+  if (!match) return { width: 0.5, color: '#000000' };
+  return { width: parseFloat(match[1]) || 0.5, color: match[2] || '#000000' };
+};
+const buildStroke = (width, color) => `${width}px ${color}`;
+
 /**
  * PhotoMontageEditor — Turn photos into a fast-paced video with transitions.
  *
@@ -73,7 +82,7 @@ const PhotoMontageEditor = ({
   // ── Multi-video state (mirrors Solo/Multi allVideos pattern) ──
   const defaultTextStyle = {
     fontSize: 48, fontFamily: 'Inter, sans-serif', fontWeight: '600',
-    color: '#ffffff', outline: true, outlineColor: '#000000', textAlign: 'center', textCase: 'default',
+    color: '#ffffff', outline: true, outlineColor: '#000000', textStroke: null, textAlign: 'center', textCase: 'default',
     ...(templateSettings?.textStyle || {}),
   };
   const [allVideos, setAllVideos] = useState(() => {
@@ -758,32 +767,41 @@ const PhotoMontageEditor = ({
     });
   }, []);
 
-  // ── Re-roll: swap only the current expanded cell with a random from library ──
+  // ── Re-roll: always swap photo AND randomize text overlays ──
   const handleReroll = useCallback(() => {
-    if (photos.length === 0 || photoDurations.length === 0) return;
-    const currentPhoto = photos[currentExpandedIndex % photos.length];
-    const pool = libraryImages.filter(img => img.id !== currentPhoto?.id);
-    if (pool.length === 0) {
-      toastError('No other photos available to reroll from.');
-      return;
-    }
-    const pick = pool[Math.floor(Math.random() * pool.length)];
-    // If the expanded sequence is longer than base photos, materialize the full sequence first
-    setPhotos(prev => {
-      let expanded = prev;
-      if (photoDurations.length > prev.length) {
-        expanded = photoDurations.map((_, i) => prev[i % prev.length]);
+    // Reroll media
+    if (photos.length > 0 && photoDurations.length > 0) {
+      const currentPhoto = photos[currentExpandedIndex % photos.length];
+      const imgPool = libraryImages.filter(img => img.id !== currentPhoto?.id);
+      if (imgPool.length > 0) {
+        const pick = imgPool[Math.floor(Math.random() * imgPool.length)];
+        setPhotos(prev => {
+          let expanded = prev;
+          if (photoDurations.length > prev.length) {
+            expanded = photoDurations.map((_, i) => prev[i % prev.length]);
+          }
+          const updated = [...expanded];
+          updated[currentExpandedIndex] = {
+            id: pick.id, url: pick.url, name: pick.name,
+            thumbnailUrl: pick.thumbnailUrl || null,
+            libraryId: pick.id, isLocal: false
+          };
+          return updated;
+        });
       }
-      const updated = [...expanded];
-      updated[currentExpandedIndex] = {
-        id: pick.id, url: pick.url, name: pick.name,
-        thumbnailUrl: pick.thumbnailUrl || null,
-        libraryId: pick.id, isLocal: false
-      };
-      return updated;
-    });
-    toastSuccess('Rerolled cell');
-  }, [photos, photoDurations, currentExpandedIndex, libraryImages, setPhotos, toastSuccess, toastError]);
+    }
+    // Reroll text overlays
+    const banks = getTextBanks();
+    const allBankTexts = banks.flat().map(e => getTextBankText(e)).filter(Boolean);
+    if (allBankTexts.length > 0 && textOverlays.length > 0) {
+      setTextOverlays(prev => prev.map(o => {
+        const others = allBankTexts.filter(t => t !== o.text);
+        const pool = others.length > 0 ? others : allBankTexts;
+        return { ...o, text: pool[Math.floor(Math.random() * pool.length)] };
+      }));
+    }
+    toastSuccess('Rerolled');
+  }, [textOverlays, getTextBanks, setTextOverlays, photos, photoDurations, currentExpandedIndex, libraryImages, setPhotos, toastSuccess]);
 
   // ── Cut by beat — opens BeatSelector modal ──
   const handleCutByBeat = useCallback(() => {
@@ -823,6 +841,7 @@ const PhotoMontageEditor = ({
     color: textStyle.color,
     outline: textStyle.outline,
     outlineColor: textStyle.outlineColor,
+    textStroke: textStyle.textStroke,
     textAlign: textStyle.textAlign,
     textCase: textStyle.textCase
   }), [textStyle]);
@@ -1540,7 +1559,7 @@ const PhotoMontageEditor = ({
 
               {/* Re-roll Photo */}
               {photos.length > 0 && libraryImages.length > 1 && (
-                <Button variant="neutral-secondary" size="small" icon={<FeatherRefreshCw />} onClick={handleReroll}>Re-roll Photo</Button>
+                <Button variant="neutral-secondary" size="small" icon={<FeatherRefreshCw />} onClick={handleReroll}>Re-roll</Button>
               )}
 
               {/* Selected overlay edit bar */}
@@ -2155,6 +2174,7 @@ const PhotoMontageEditor = ({
                   const handleStyleChange = (updates) => {
                     if (selOverlay) updateTextOverlay(selOverlay.id, { style: { ...selOverlay.style, ...updates } });
                   };
+                  const strokeInfo = activeStyle.textStroke ? parseStroke(activeStyle.textStroke) : { width: 0.5, color: '#000000' };
                   return (
                     <div className={`flex flex-col gap-4 ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
                       {disabled && <div className="text-xs text-neutral-400 italic mb-3">Click text on preview to edit</div>}
@@ -2219,6 +2239,32 @@ const PhotoMontageEditor = ({
                         </div>
                       </div>
 
+                      {/* Stroke Color + Width */}
+                      {activeStyle.textStroke && (
+                        <>
+                          <div className="flex gap-3">
+                            <div className="flex-1">
+                              <div className="text-[13px] text-neutral-500 mb-1.5">Stroke Color</div>
+                              <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-neutral-200 bg-neutral-50">
+                                <input type="color" value={strokeInfo.color.startsWith('#') ? strokeInfo.color : '#000000'}
+                                  onChange={(e) => handleStyleChange({ textStroke: buildStroke(strokeInfo.width, e.target.value) })}
+                                  className="w-6 h-6 border-none rounded-full cursor-pointer p-0 bg-transparent" />
+                                <span className="text-xs text-neutral-500 font-mono">{(strokeInfo.color.startsWith('#') ? strokeInfo.color : '#000000').toUpperCase()}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div>
+                            <div className="flex justify-between mb-1.5">
+                              <span className="text-[13px] text-neutral-500">Stroke Width</span>
+                              <span className="text-[13px] text-white">{strokeInfo.width}px</span>
+                            </div>
+                            <input type="range" min="0.1" max="10" step="0.1" value={strokeInfo.width}
+                              onChange={(e) => handleStyleChange({ textStroke: buildStroke(parseFloat(e.target.value), strokeInfo.color) })}
+                              className="w-full accent-brand-600" />
+                          </div>
+                        </>
+                      )}
+
                       {/* Formatting */}
                       <div>
                         <div className="text-[13px] text-neutral-500 mb-1.5">Formatting</div>
@@ -2227,6 +2273,7 @@ const PhotoMontageEditor = ({
                             { key: 'bold', label: 'B', ariaLabel: 'Bold', active: activeStyle.fontWeight === '700', toggle: () => handleStyleChange({ fontWeight: activeStyle.fontWeight === '700' ? '400' : '700' }), bold: true },
                             { key: 'caps', label: 'AA', ariaLabel: 'All caps', active: activeStyle.textCase === 'upper', toggle: () => handleStyleChange({ textCase: activeStyle.textCase === 'upper' ? 'default' : 'upper' }) },
                             { key: 'outline', label: 'O', ariaLabel: 'Outline', active: !!activeStyle.outline, toggle: () => handleStyleChange({ outline: !activeStyle.outline }) },
+                            { key: 'stroke', label: 'St', ariaLabel: 'Stroke', active: !!activeStyle.textStroke, toggle: () => handleStyleChange({ textStroke: activeStyle.textStroke ? null : buildStroke(0.5, '#000000') }) },
                           ].map(btn => (
                             <IconButton key={btn.key} onClick={btn.toggle}
                               variant={btn.active ? 'brand-secondary' : 'neutral-secondary'} size="small"
