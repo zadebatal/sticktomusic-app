@@ -1089,11 +1089,28 @@ const ProjectWorkspace = ({
       {showImportModal && (() => {
         const closeImport = () => { setShowImportModal(false); setImportAudioOnly(false); };
         const filterAudio = (items) => importAudioOnly ? items.filter(i => i.type === 'audio') : items;
+        const importingToBank = pendingImportBankRef.current != null;
+        // When importing to a bank, show niche media so user can assign existing items to banks
+        const nicheMediaItems = activeNiche?.mediaIds?.length > 0
+          ? library.filter(item => activeNiche.mediaIds.includes(item.id))
+          : [];
+        const handleAssignToBank = (ids) => {
+          const bankIdx = pendingImportBankRef.current;
+          if (bankIdx != null && activeNicheId) {
+            ids.forEach(id => assignToBank(artistId, activeNicheId, id, bankIdx, db));
+            pendingImportBankRef.current = null;
+          }
+          setShowImportModal(false);
+          toastSuccess(`Added ${ids.length} item${ids.length !== 1 ? 's' : ''} to bank`);
+        };
         return (
           <ImportFromLibraryModal
             onClose={closeImport}
             title={importAudioOnly ? 'Import Audio' : 'Import Media'}
             sources={[
+              ...(importingToBank && filterAudio(nicheMediaItems).length > 0
+                ? [{ label: 'This Niche', items: filterAudio(nicheMediaItems), onImport: handleAssignToBank }]
+                : []),
               { label: 'Library', items: filterAudio(availableLibraryMedia), onImport: (ids) => { handleImportFromLibrary(ids); setImportAudioOnly(false); } },
               ...(filterAudio(availableProjectMedia).length > 0
                 ? [{ label: 'This Project', items: filterAudio(availableProjectMedia), onImport: (ids) => { handlePullFromProject(ids); setImportAudioOnly(false); } }]
