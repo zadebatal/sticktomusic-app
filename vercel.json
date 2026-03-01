@@ -2,9 +2,6 @@
   "functions": {
     "api/transcribe.js": {
       "maxDuration": 60
-    },
-    "api/web-import.js": {
-      "maxDuration": 60
     }
   },
   "headers": [
