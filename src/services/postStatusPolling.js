@@ -79,8 +79,8 @@ export async function pollOverduePosts(db, artistId, posts, onStatusChange) {
     const scheduledTime = new Date(p.scheduledTime);
     const minutesOverdue = (now - scheduledTime) / (60 * 1000);
 
-    // Only check posts that are 5+ minutes overdue (give Late.co time to process)
-    return minutesOverdue >= 5;
+    // Only check posts that are 1+ minutes overdue (give Late.co time to process)
+    return minutesOverdue >= 1;
   });
 
   if (overduePosts.length === 0) {
@@ -166,8 +166,8 @@ export function startPolling(db, artistId, getPosts, onStatusChange) {
   // Run immediately on start
   poll();
 
-  // Then every 5 minutes
-  intervalId = setInterval(poll, 5 * 60 * 1000);
+  // Then every 2 minutes
+  intervalId = setInterval(poll, 2 * 60 * 1000);
 
   // Return cleanup function
   return () => {

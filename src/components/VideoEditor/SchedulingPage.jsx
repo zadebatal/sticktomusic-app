@@ -12,7 +12,7 @@ import { getCreatedContent, getCollections, getCollectionHashtagBank, getCollect
 import { renderVideo } from '../../services/videoExportService';
 import { exportSlideshowAsImages, generateSlideThumbnail } from '../../services/slideshowExportService';
 import { uploadFile } from '../../services/firebaseStorage';
-import { startPolling } from '../../services/postStatusPolling';
+import { startPolling, pollOverduePosts } from '../../services/postStatusPolling';
 import { getAuth } from 'firebase/auth';
 import log from '../../utils/logger';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -29,7 +29,7 @@ import {
   FeatherTrash2, FeatherX, FeatherUser,
   FeatherGripVertical, FeatherEdit, FeatherEdit2, FeatherSend, FeatherRotateCcw,
   FeatherLock, FeatherUnlock, FeatherChevronUp, FeatherChevronLeft, FeatherChevronRight, FeatherImage, FeatherMusic,
-  FeatherUploadCloud,
+  FeatherUploadCloud, FeatherRefreshCw,
 } from '@subframe/core';
 import UploadFinishedMediaModal from './UploadFinishedMediaModal';
 import * as SubframeCore from '@subframe/core';
@@ -329,13 +329,14 @@ const SchedulingPage = ({
   }, [db, artistId]);
 
   // ── Backfill latePostId from Late.co for posts missing it ──
+  // Runs once per mount (re-runs if user navigates away and back)
   const backfillRanRef = useRef(false);
   useEffect(() => {
     if (backfillRanRef.current || loading || posts.length === 0 || !artistId) return;
     // Only run if some scheduled posts are missing latePostId
     const scheduled = posts.filter(p => p.status === 'scheduled' || p.status === 'partial');
     const missing = scheduled.filter(p => !p.latePostId);
-    if (missing.length === 0) return;
+    if (missing.length === 0) { backfillRanRef.current = true; return; }
     backfillRanRef.current = true;
 
     (async () => {
@@ -1848,6 +1849,16 @@ const SchedulingPage = ({
               </button>
             );
           })}
+          {/* Sync with Late.co — check status of all scheduled posts */}
+          <button
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-body font-body bg-transparent border-none cursor-pointer text-neutral-400 hover:text-neutral-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={handleSyncWithLate}
+            disabled={syncing}
+            title="Check Late.co for status updates on scheduled posts"
+          >
+            <FeatherRefreshCw className={syncing ? 'animate-spin' : ''} style={{ width: 14, height: 14 }} />
+            {syncing ? 'Syncing...' : 'Sync'}
+          </button>
         </div>
         <div className="flex w-full items-center justify-between">
           <div className="flex items-center gap-3">
