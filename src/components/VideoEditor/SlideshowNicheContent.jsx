@@ -100,6 +100,19 @@ const SlideshowNicheContent = ({
   const [lightboxItem, setLightboxItem] = useState(null);
   const [poolExpanded, setPoolExpanded] = useState(false);
 
+  // Reset preview state when switching niches
+  const nicheIdRef = useRef(niche?.id);
+  useEffect(() => {
+    if (niche?.id !== nicheIdRef.current) {
+      nicheIdRef.current = niche?.id;
+      setPreviewSlideIdx(0);
+      setPreviewPicks({});
+      setTextPositions({});
+      setTextOverrides({});
+      setSelectedTextIdx({});
+    }
+  }, [niche?.id]);
+
   // Project pool media NOT in this niche
   const poolOnlyMedia = useMemo(() => {
     if (!niche || !projectMedia.length) return [];
