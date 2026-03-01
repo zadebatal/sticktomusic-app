@@ -49,7 +49,7 @@ import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
 import { Badge } from '../../ui/components/Badge';
 import {
-  FeatherPlus, FeatherX, FeatherUploadCloud,
+  FeatherPlus, FeatherX, FeatherUploadCloud, FeatherSearch,
   FeatherArrowLeft, FeatherImage, FeatherMusic, FeatherPlay,
   FeatherCheck, FeatherFilm, FeatherLayers, FeatherCamera,
   FeatherHash, FeatherMessageSquare, FeatherTrash2, FeatherScissors,
@@ -1179,17 +1179,19 @@ const ImportFromLibraryModal = ({ items: defaultItems, onImport: defaultOnImport
 
   const onImport = activeSource.onImport;
 
+  const [searchQuery, setSearchQuery] = useState('');
   const [selected, setSelected] = useState(new Set());
   const gridRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
   const [rubberBand, setRubberBand] = useState(null);
 
-  // Clear selection and niche filter when switching sources
+  // Clear selection, search, and niche filter when switching sources
   const handleSwitchSource = (idx) => {
     setActiveSourceIdx(idx);
     setSelected(new Set());
     setNicheFilter(null);
+    setSearchQuery('');
   };
 
   const toggle = (id) => {
@@ -1202,19 +1204,21 @@ const ImportFromLibraryModal = ({ items: defaultItems, onImport: defaultOnImport
   };
 
   const selectAll = () => {
-    if (selected.size === items.length) setSelected(new Set());
-    else setSelected(new Set(items.map(i => i.id)));
+    if (selected.size === filteredItems.length) setSelected(new Set());
+    else setSelected(new Set(filteredItems.map(i => i.id)));
   };
 
-  const images = useMemo(() => items.filter(i => i.type === 'image'), [items]);
-  const videos = useMemo(() => items.filter(i => i.type === 'video'), [items]);
-  const audio = useMemo(() => items.filter(i => i.type === 'audio'), [items]);
+  const filteredItems = useMemo(() => {
+    if (!searchQuery.trim()) return items;
+    const q = searchQuery.toLowerCase();
+    return items.filter(i => i.name?.toLowerCase().includes(q));
+  }, [items, searchQuery]);
+  const images = useMemo(() => filteredItems.filter(i => i.type === 'image'), [filteredItems]);
+  const videos = useMemo(() => filteredItems.filter(i => i.type === 'video'), [filteredItems]);
+  const audio = useMemo(() => filteredItems.filter(i => i.type === 'audio'), [filteredItems]);
 
-  // Use full-quality URL: prefer v2 thumbnails (200px/40%), fall back to full URL for v1 or missing
-  const getImgSrc = useCallback((item) => {
-    if (item.thumbVersion >= 2 && item.thumbnailUrl) return item.thumbnailUrl;
-    return item.url;
-  }, []);
+  // Use full URL for better quality in the import modal (thumbnails are too small/compressed)
+  const getImgSrc = useCallback((item) => item.url || item.thumbnailUrl, []);
 
   // Rubber-band helpers
   const getIdsInRect = useCallback((rect) => {
@@ -1283,13 +1287,30 @@ const ImportFromLibraryModal = ({ items: defaultItems, onImport: defaultOnImport
           <div className="flex items-center justify-between px-6 py-4">
             <div className="flex flex-col gap-1">
               <span className="text-heading-2 font-heading-2 text-[#ffffffff]">{title}</span>
-              <span className="text-caption font-caption text-neutral-400">{subtitle || `${items.length} item${items.length !== 1 ? 's' : ''} available`}</span>
+              <span className="text-caption font-caption text-neutral-400">{subtitle || `${filteredItems.length} item${filteredItems.length !== 1 ? 's' : ''} available${searchQuery ? ` (filtered from ${items.length})` : ''}`}</span>
             </div>
             <div className="flex items-center gap-3">
               <Button variant="neutral-tertiary" size="small" onClick={selectAll}>
-                {selected.size === items.length ? 'Deselect All' : 'Select All'}
+                {selected.size === filteredItems.length ? 'Deselect All' : 'Select All'}
               </Button>
               <IconButton variant="neutral-tertiary" size="medium" icon={<FeatherX />} aria-label="Close" onClick={onClose} />
+            </div>
+          </div>
+          <div className="px-6 pb-3">
+            <div className="flex items-center gap-2 rounded-lg border border-neutral-700 bg-black px-3 py-2">
+              <FeatherSearch className="text-neutral-500 flex-none" style={{ width: 14, height: 14 }} />
+              <input
+                className="flex-1 bg-transparent text-body font-body text-white outline-none placeholder-neutral-500"
+                placeholder="Search by name..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                autoFocus
+              />
+              {searchQuery && (
+                <button className="text-neutral-500 hover:text-neutral-300 bg-transparent border-none cursor-pointer p-0" onClick={() => setSearchQuery('')}>
+                  <FeatherX style={{ width: 12, height: 12 }} />
+                </button>
+              )}
             </div>
           </div>
           {resolvedSources.length > 1 && (
