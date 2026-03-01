@@ -2531,7 +2531,7 @@ const VideoEditorModal = ({
         />
 
         {/* ═══ MAIN CONTENT ═══ */}
-        <div className="flex grow shrink-0 basis-0 self-stretch overflow-hidden">
+        <div className="flex grow basis-0 min-h-0 self-stretch overflow-hidden">
 
           {/* LEFT: Preview + Controls */}
           <div className="flex grow shrink-0 basis-0 flex-col items-center bg-black overflow-hidden">

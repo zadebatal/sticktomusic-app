@@ -36,6 +36,7 @@ const WebImportModal = ({
   bankCount = 1,
   artistId,
   mediaType = 'all', // 'image' | 'video' | 'all'
+  audioOnly = false,
 }) => {
   const [state, setState] = useState(STATES.INPUT);
   const [url, setUrl] = useState('');
@@ -89,13 +90,13 @@ const WebImportModal = ({
     setImportProgress({ status: 'Starting download...', progress: 0 });
 
     try {
-      const { jobId } = await startDownload(url.trim(), artistId, metadata?.type === 'gallery' ? maxItems : undefined);
+      const { jobId } = await startDownload(url.trim(), artistId, metadata?.type === 'gallery' ? maxItems : undefined, audioOnly);
 
       const files = await pollUntilComplete(jobId, (status) => {
         if (abortRef.current) return;
         const statusText = {
           pending: 'Waiting to start...',
-          downloading: 'Downloading media...',
+          downloading: audioOnly ? 'Extracting audio...' : 'Downloading media...',
           uploading: `Uploading to storage... ${status.progress}%`,
           complete: 'Complete!',
         }[status.status] || status.status;
@@ -147,7 +148,7 @@ const WebImportModal = ({
         <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-4">
           <div className="flex items-center gap-2">
             <FeatherLink className="text-neutral-400" style={{ width: 18, height: 18 }} />
-            <span className="text-body-bold font-body-bold text-[#ffffffff]">Import from Web</span>
+            <span className="text-body-bold font-body-bold text-[#ffffffff]">{audioOnly ? 'Import Audio from URL' : 'Import from Web'}</span>
           </div>
           <IconButton icon={<FeatherX />} size="small" onClick={handleClose} />
         </div>
@@ -260,8 +261,15 @@ const WebImportModal = ({
                 </div>
               </div>
 
+              {/* Audio note */}
+              {audioOnly && (
+                <div className="flex items-center gap-2 rounded-lg border border-indigo-900/40 bg-indigo-950/20 px-3 py-2">
+                  <span className="text-caption font-caption text-indigo-300">Audio will be extracted as MP3 from this video</span>
+                </div>
+              )}
+
               {/* Bank selector */}
-              {bankCount > 1 && (
+              {!audioOnly && bankCount > 1 && (
                 <div className="flex flex-col gap-2">
                   <label className="text-caption font-caption text-neutral-400">Add to slide bank</label>
                   <div className="flex flex-wrap gap-2">
@@ -326,7 +334,7 @@ const WebImportModal = ({
                   Back
                 </Button>
                 <Button variant="brand-primary" size="medium" icon={<FeatherDownload />} onClick={handleImport} disabled={metadata.type !== 'video' && metadata.itemCount === 0}>
-                  Import {metadata.type === 'video' ? 'Video' : `${metadata.itemCount < 0 || metadata.itemCount > 10 ? maxItems : metadata.itemCount} Images`}
+                  {audioOnly ? 'Extract Audio' : `Import ${metadata.type === 'video' ? 'Video' : `${metadata.itemCount < 0 || metadata.itemCount > 10 ? maxItems : metadata.itemCount} Images`}`}
                 </Button>
               </div>
             </>

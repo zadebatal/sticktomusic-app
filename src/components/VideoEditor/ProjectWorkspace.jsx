@@ -200,6 +200,9 @@ const ProjectWorkspace = ({
   const [showWebImportModal, setShowWebImportModal] = useState(false);
   const pendingWebImportBankRef = useRef(null);
 
+  // Audio web import modal
+  const [showAudioWebImport, setShowAudioWebImport] = useState(false);
+
   // Subscribe to data
   useEffect(() => {
     if (!artistId) return;
@@ -644,6 +647,61 @@ const ProjectWorkspace = ({
     setShowImportModal(true);
   }, []);
 
+  // Web import audio — opens WebImportModal in audioOnly mode
+  const handleWebImportAudio = useCallback(() => {
+    setShowAudioWebImport(true);
+  }, []);
+
+  const handleWebImportAudioComplete = useCallback(async (files) => {
+    if (!files?.length) {
+      setShowAudioWebImport(false);
+      return;
+    }
+
+    try {
+      const importedIds = [];
+      for (const file of files) {
+        // Fetch duration from the uploaded audio URL (required by addToLibraryAsync)
+        let duration = 0;
+        try {
+          duration = await getMediaDuration(file.url, 'audio');
+        } catch (e) {
+          log.warn('Could not get audio duration, using fallback:', e);
+        }
+
+        const item = {
+          id: `web_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          name: file.name,
+          url: file.url,
+          storagePath: file.storagePath,
+          type: 'audio',
+          size: file.size,
+          duration: duration || 60, // Fallback to 60s if duration fetch fails
+          source: 'web-import',
+          createdAt: new Date().toISOString(),
+        };
+
+        await addToLibraryAsync(db, artistId, item);
+        importedIds.push(item.id);
+      }
+
+      // Add to project pool (audio goes to pool, not banks)
+      if (projectId) {
+        addToProjectPool(artistId, projectId, importedIds, db);
+      }
+
+      // Refresh data
+      setLibrary(getLibrary(artistId));
+
+      toastSuccess(`Imported ${files.length} audio file${files.length !== 1 ? 's' : ''} from web`);
+    } catch (err) {
+      log.error('Web audio import complete error:', err);
+      toastError('Failed to add imported audio to library');
+    }
+
+    setShowAudioWebImport(false);
+  }, [artistId, projectId, db, toastSuccess, toastError]);
+
   // Create niche
   const handleCreateNiche = useCallback(async (format) => {
     try {
@@ -961,6 +1019,7 @@ const ProjectWorkspace = ({
             onWebImportToBank={handleWebImportToBank}
             onUploadAudio={() => { pendingBankIndexRef.current = null; if (fileInputRef.current) { fileInputRef.current.accept = 'audio/*'; fileInputRef.current.click(); } }}
             onImportAudio={handleImportAudio}
+            onWebImportAudio={handleWebImportAudio}
             onRemoveAudio={(audioId) => { removeFromProjectPool(artistId, projectId, [audioId], db); toastSuccess('Audio removed'); }}
           />
         )}
@@ -996,6 +1055,7 @@ const ProjectWorkspace = ({
             onImport={() => { pendingImportBankRef.current = null; setShowImportModal(true); }}
             onImportAudio={handleImportAudio}
             onWebImport={handleWebImport}
+            onWebImportAudio={handleWebImportAudio}
           />
         )}
 
@@ -1175,6 +1235,16 @@ const ProjectWorkspace = ({
           defaultBankIndex={pendingWebImportBankRef.current ?? 0}
           bankCount={activeNiche?.banks?.length || 1}
           artistId={artistId}
+        />
+      )}
+
+      {/* Audio Web Import Modal */}
+      {showAudioWebImport && (
+        <WebImportModal
+          onClose={() => setShowAudioWebImport(false)}
+          onComplete={handleWebImportAudioComplete}
+          artistId={artistId}
+          audioOnly
         />
       )}
 

@@ -79,7 +79,7 @@ export async function analyzeUrl(url) {
  * @param {number} [maxItems] - Max items to download for galleries (default: 100)
  * @returns {Promise<{ jobId: string }>}
  */
-export async function startDownload(url, artistId, maxItems) {
+export async function startDownload(url, artistId, maxItems, audioOnly = false) {
   const token = await getToken();
   const body = {
     url,
@@ -87,6 +87,7 @@ export async function startDownload(url, artistId, maxItems) {
     uploadPath: `artists/${artistId}/web-imports`,
   };
   if (maxItems) body.maxItems = maxItems;
+  if (audioOnly) body.audioOnly = true;
   const resp = await fetch(`${PROXY_URL}?action=download`, {
     method: 'POST',
     headers: {

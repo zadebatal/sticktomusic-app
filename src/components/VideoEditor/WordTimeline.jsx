@@ -4,7 +4,8 @@ import useIsMobile from '../../hooks/useIsMobile';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../ui/components/Button';
 import { IconButton } from '../../ui/components/IconButton';
-import { FeatherX, FeatherPlus, FeatherTrash2, FeatherScissors, FeatherSave } from '@subframe/core';
+import { ToggleGroup } from '../../ui/components/ToggleGroup';
+import { FeatherX, FeatherPlus, FeatherTrash2, FeatherScissors, FeatherSave, FeatherPlay, FeatherMusic } from '@subframe/core';
 
 /**
  * WordTimeline - Flowstage-inspired word timing editor
@@ -33,7 +34,11 @@ const WordTimeline = ({
   audioRef, // Add audioRef for direct time tracking
   loadedBankLyricId = null, // ID of lyric loaded from bank (if any)
   onSaveToBank, // Callback to save word timings back to bank (update existing)
-  onAddToBank // Callback to add new lyrics to bank (create new)
+  onAddToBank, // Callback to add new lyrics to bank (create new)
+  lines = [], // Line-level transcript data from LRC (optional)
+  beats = [], // Beat times array from beat analysis (for "Music" cell mode)
+  onApplyTextCells, // Callback to apply generated text overlays to editor
+  textStyle = null // Default text style from parent editor
 }) => {
   // Mobile responsive detection
   const { isMobile } = useIsMobile();
@@ -62,6 +67,7 @@ const WordTimeline = ({
   const [editText, setEditText] = useState(''); // Text being edited
   const [deleteConfirm, setDeleteConfirm] = useState({ show: false, index: -1, text: '' }); // Delete confirmation
   const [saveToBankPrompt, setSaveToBankPrompt] = useState({ show: false, name: '' }); // Save to bank prompt
+  const [cellMode, setCellMode] = useState('word'); // 'word' | 'line' | 'section'
   const [showWordPrompt, setShowWordPrompt] = useState(false);
   const [wordPromptValue, setWordPromptValue] = useState('');
   const [wordPromptTime, setWordPromptTime] = useState(0);
@@ -1084,6 +1090,135 @@ const WordTimeline = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [deleteConfirm.show, editingWordId]); // Only re-register when these state values change
 
+  // ── Build text cells based on cellMode ──
+  const buildTextCells = useCallback(() => {
+    const timestamp = Date.now();
+    const baseStyle = textStyle || {};
+    const basePosition = { x: 50, y: 50, width: 80, height: 20 };
+
+    if (cellMode === 'word') {
+      return words.map((w, i) => ({
+        id: `text_${timestamp}_${i}`,
+        text: w.text,
+        style: baseStyle,
+        position: basePosition,
+        startTime: w.startTime,
+        endTime: w.startTime + (w.duration || 0.5)
+      }));
+    }
+
+    if (cellMode === 'line') {
+      // Use lines prop if available (from LRC), else group words by >1s silence gap
+      if (lines.length > 0) {
+        return lines.map((line, i) => ({
+          id: `text_${timestamp}_${i}`,
+          text: line.text,
+          style: baseStyle,
+          position: basePosition,
+          startTime: line.startTime,
+          endTime: line.endTime
+        }));
+      }
+      // Derive lines from words by silence gaps > 1s
+      const grouped = [];
+      let currentGroup = [];
+      for (let i = 0; i < words.length; i++) {
+        currentGroup.push(words[i]);
+        const nextWord = words[i + 1];
+        const currentEnd = words[i].startTime + (words[i].duration || 0.5);
+        if (!nextWord || (nextWord.startTime - currentEnd) > 1) {
+          const startTime = currentGroup[0].startTime;
+          const lastW = currentGroup[currentGroup.length - 1];
+          grouped.push({
+            id: `text_${timestamp}_${grouped.length}`,
+            text: currentGroup.map(w => w.text).join(' '),
+            style: baseStyle,
+            position: basePosition,
+            startTime,
+            endTime: lastW.startTime + (lastW.duration || 0.5)
+          });
+          currentGroup = [];
+        }
+      }
+      return grouped;
+    }
+
+    if (cellMode === 'section') {
+      // Group lines (or words) by >3s silence gap
+      const lineItems = lines.length > 0 ? lines : (() => {
+        // Derive lines from words first (>1s gap)
+        const derived = [];
+        let group = [];
+        for (let i = 0; i < words.length; i++) {
+          group.push(words[i]);
+          const nextWord = words[i + 1];
+          const currentEnd = words[i].startTime + (words[i].duration || 0.5);
+          if (!nextWord || (nextWord.startTime - currentEnd) > 1) {
+            derived.push({
+              text: group.map(w => w.text).join(' '),
+              startTime: group[0].startTime,
+              endTime: group[group.length - 1].startTime + (group[group.length - 1].duration || 0.5)
+            });
+            group = [];
+          }
+        }
+        return derived;
+      })();
+
+      const sections = [];
+      let currentSection = [];
+      for (let i = 0; i < lineItems.length; i++) {
+        currentSection.push(lineItems[i]);
+        const nextLine = lineItems[i + 1];
+        if (!nextLine || (nextLine.startTime - lineItems[i].endTime) > 3) {
+          sections.push({
+            id: `text_${timestamp}_${sections.length}`,
+            text: currentSection.map(l => l.text).join('\n'),
+            style: baseStyle,
+            position: basePosition,
+            startTime: currentSection[0].startTime,
+            endTime: currentSection[currentSection.length - 1].endTime
+          });
+          currentSection = [];
+        }
+      }
+      return sections;
+    }
+
+    if (cellMode === 'music') {
+      // One overlay per beat interval, cycling through words
+      if (!beats.length) return [];
+      const overlays = [];
+      for (let i = 0; i < beats.length; i++) {
+        const startTime = beats[i];
+        const endTime = beats[i + 1] || duration;
+        // Gather words that fall within this beat interval
+        const beatWords = words.filter(w => w.startTime >= startTime && w.startTime < endTime);
+        const text = beatWords.length > 0
+          ? beatWords.map(w => w.text).join(' ')
+          : words[i % words.length]?.text || '';
+        if (!text) continue;
+        overlays.push({
+          id: `text_${timestamp}_${overlays.length}`,
+          text,
+          style: baseStyle,
+          position: basePosition,
+          startTime,
+          endTime
+        });
+      }
+      return overlays;
+    }
+
+    return [];
+  }, [cellMode, words, lines, beats, duration, textStyle]);
+
+  const handleApplyTextCells = useCallback(() => {
+    if (!onApplyTextCells) return;
+    const cells = buildTextCells();
+    onApplyTextCells(cells);
+  }, [onApplyTextCells, buildTextCells]);
+
   const selectedWord = selectedWordIndices.length > 0 ? words[selectedWordIndices[0]] : null;
   const effectiveIndex = getEffectiveWordIndex();
   const hasWordAtPlayhead = effectiveIndex >= 0;
@@ -1225,6 +1360,46 @@ const WordTimeline = ({
               </div>
             )}
           </div>
+          {/* Text Cell Mode + Apply button */}
+          {onApplyTextCells && words.length > 0 && (
+            <div style={styles.cellModeRow}>
+              <span style={{ fontSize: '13px', color: theme.text.secondary, whiteSpace: 'nowrap' }}>Text Cells:</span>
+              <ToggleGroup value={cellMode} onValueChange={(v) => v && setCellMode(v)}>
+                <ToggleGroup.Item value="word">Word</ToggleGroup.Item>
+                <ToggleGroup.Item value="line">Line</ToggleGroup.Item>
+                <ToggleGroup.Item value="section">Section</ToggleGroup.Item>
+                {beats.length > 0 && <ToggleGroup.Item value="music" icon={<FeatherMusic />}>Music</ToggleGroup.Item>}
+              </ToggleGroup>
+              <span style={{ fontSize: '12px', color: theme.text.muted }}>
+                {buildTextCells().length} overlay{buildTextCells().length !== 1 ? 's' : ''}
+              </span>
+              {/* Text style preview */}
+              {textStyle && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '4px 10px', backgroundColor: theme.bg.surface,
+                  borderRadius: '6px', border: `1px solid ${theme.bg.elevated}`
+                }}>
+                  <span style={{
+                    fontSize: '13px',
+                    fontFamily: textStyle.fontFamily || 'inherit',
+                    fontWeight: textStyle.fontWeight || 'normal',
+                    color: textStyle.color || '#fff',
+                    textTransform: textStyle.textCase === 'uppercase' ? 'uppercase' : textStyle.textCase === 'lowercase' ? 'lowercase' : 'none',
+                    WebkitTextStroke: textStyle.textStroke ? `${textStyle.textStroke}px ${textStyle.outlineColor || '#000'}` : 'none'
+                  }}>
+                    Aa
+                  </span>
+                  <span style={{ fontSize: '11px', color: theme.text.muted }}>
+                    {textStyle.fontFamily?.split(',')[0]?.replace(/['"]/g, '') || 'Default'} {textStyle.fontSize || 24}px
+                  </span>
+                </div>
+              )}
+              <Button variant="brand-primary" size="small" icon={<FeatherPlay />} onClick={handleApplyTextCells}>
+                Apply to Timeline
+              </Button>
+            </div>
+          )}
         </div>
 
         <div style={{
@@ -1692,6 +1867,7 @@ const getStyles = (theme) => ({
   totalTime: { fontSize: '16px', color: theme.text.muted, fontFamily: 'monospace' },
   originalTime: { fontSize: '12px', color: theme.text.muted, marginLeft: '8px' },
   toolbarButtons: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' },
+  cellModeRow: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' },
   zoomControl: { display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '8px', fontSize: '13px', color: theme.text.secondary },
   zoomSlider: { width: '80px', accentColor: theme.accent.primary },
   caseButtons: { display: 'flex', border: `1px solid ${theme.bg.elevated}`, borderRadius: '6px', overflow: 'hidden' },

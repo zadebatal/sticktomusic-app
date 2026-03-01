@@ -814,7 +814,10 @@ const MultiClipEditor = ({
     textCase: textStyle.textCase
   }), [textStyle]);
 
-  // ── AI Transcription handler ──
+  // ── Transcript lines state (line-level data from LRC for WordTimeline) ──
+  const [transcriptLines, setTranscriptLines] = useState([]);
+
+  // ── AI Transcription handler — stores words + opens WordTimeline ──
   const handleTranscriptionComplete = useCallback((result) => {
     if (!result?.words?.length) {
       toastError('No words detected in transcription.');
@@ -822,23 +825,21 @@ const MultiClipEditor = ({
       return;
     }
     const dur = totalDuration || 30;
-    result.words.forEach(w => {
-      const start = Math.min(w.startTime || 0, dur);
-      const end = Math.min(w.startTime + (w.duration || 0.5), dur);
-      const newOverlay = {
-        id: `text_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        text: w.text,
-        style: getDefaultTextStyle(),
-        position: { x: 50, y: 50, width: 80, height: 20 },
-        scope: 'full',
-        startTime: start,
-        endTime: end
-      };
-      setTextOverlays(prev => [...prev, newOverlay]);
-    });
-    toastSuccess(`Added ${result.words.length} text overlays from transcription`);
+    // Store words for WordTimeline
+    setWords(result.words.map((w, i) => ({
+      id: `word_${Date.now()}_${i}`,
+      text: w.text,
+      startTime: Math.min(w.startTime || 0, dur),
+      duration: w.duration || 0.5
+    })));
+    // Store lines if available (from LRC pipeline)
+    if (result.lines?.length) {
+      setTranscriptLines(result.lines);
+    }
     setShowTranscriber(false);
-  }, [totalDuration, getDefaultTextStyle, setTextOverlays, toastSuccess, toastError]);
+    // Open WordTimeline so user can choose text cell mode
+    setShowWordTimeline(true);
+  }, [totalDuration, setWords, toastError]);
 
   // ── Cut by word — creates one clip per word from random source clips ──
   const handleCutByWord = useCallback(() => {
@@ -1600,7 +1601,7 @@ const MultiClipEditor = ({
         />
 
         {/* ── Main Content — Center + Right Sidebar (BeatSync layout) ── */}
-        <div className={`flex grow shrink-0 basis-0 self-stretch overflow-hidden ${isMobile ? 'flex-col overflow-auto' : ''}`}>
+        <div className={`flex grow basis-0 min-h-0 self-stretch overflow-hidden ${isMobile ? 'flex-col overflow-auto' : ''}`}>
 
           {/* ── CENTER COLUMN ── */}
           <div className="flex flex-1 flex-col overflow-hidden min-w-0">
@@ -2946,6 +2947,13 @@ const MultiClipEditor = ({
             onAddToBank={(lyricData) => {
               if (onAddLyrics) onAddLyrics({ title: lyricData.title, content: lyricData.content, words: lyricData.words });
             }}
+            lines={transcriptLines}
+            beats={filteredBeats}
+            onApplyTextCells={(overlays) => {
+              setTextOverlays(overlays);
+              setShowWordTimeline(false);
+            }}
+            textStyle={getDefaultTextStyle()}
           />
         )}
 

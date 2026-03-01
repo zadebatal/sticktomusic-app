@@ -194,6 +194,9 @@ const PhotoMontageEditor = ({
   // ── Text editing state ──
   const [editingTextId, setEditingTextId] = useState(null);
   const [editingTextValue, setEditingTextValue] = useState('');
+  const [selectedTextIds, setSelectedTextIds] = useState(new Set());
+  const [textMarquee, setTextMarquee] = useState(null); // { startX, currentX }
+  const textTrackRef = useRef(null);
   const previewRef = useRef(null);
   const timelineRef = useRef(null);
   const wasPlayingBeforePlayheadDrag = useRef(false);
@@ -412,21 +415,28 @@ const PhotoMontageEditor = ({
     return library.filter(m => m.type === MEDIA_TYPES.IMAGE && m.url && !m.url.startsWith('blob:'));
   }, [library, category]);
 
-  // Auto-generate on mount when coming from niche preview (Create N flow)
+  // Auto-populate photos from library on mount (always when template is empty)
+  const autoPopulatedRef = useRef(false);
+  useEffect(() => {
+    if (autoPopulatedRef.current) return;
+    if (libraryImages.length === 0) return;
+    const template = allVideos[0];
+    if (template?.photos?.length > 0) return; // Already has photos
+    autoPopulatedRef.current = true;
+    setAllVideos(prev => {
+      const copy = [...prev];
+      copy[0] = { ...copy[0], photos: libraryImages };
+      return copy;
+    });
+  }, [allVideos, libraryImages]);
+
+  // Auto-generate additional timelines when coming from niche preview (Create N flow)
   const autoGenTriggeredRef = useRef(false);
   useEffect(() => {
     if (autoGenTriggeredRef.current || !nicheGenCount) return;
     if (libraryImages.length === 0) return;
     const template = allVideos[0];
-    // Auto-populate template with all library images if empty
-    if (!template?.photos?.length) {
-      setAllVideos(prev => {
-        const copy = [...prev];
-        copy[0] = { ...copy[0], photos: libraryImages };
-        return copy;
-      });
-      return; // Let re-render trigger this effect again with photos populated
-    }
+    if (!template?.photos?.length) return; // Wait for auto-populate above
     autoGenTriggeredRef.current = true;
     executeGeneration();
   }, [nicheGenCount, allVideos, libraryImages, executeGeneration]);
@@ -642,8 +652,12 @@ const PhotoMontageEditor = ({
     playbackRef.current = requestAnimationFrame(tick);
 
     if (audioRef.current && selectedAudio?.url) {
-      audioRef.current.currentTime = selectedAudio.startTime || 0;
-      audioRef.current.play().catch(() => {});
+      // Resume from current timeline position, not from the beginning
+      setCurrentTime(prev => {
+        audioRef.current.currentTime = (selectedAudio.startTime || 0) + prev;
+        audioRef.current.play().catch(() => {});
+        return prev;
+      });
     }
   }, [photos.length, totalDuration, selectedAudio]);
 
@@ -765,6 +779,22 @@ const PhotoMontageEditor = ({
     });
   }, []);
 
+  // ── Text bank helpers (must be before handleReroll which references getTextBanks) ──
+  const textBanksCache = useMemo(() => {
+    // Use niche text banks if available, otherwise derive from collection
+    if (nicheTextBanks && nicheTextBanks.some(b => b?.length > 0)) {
+      return nicheTextBanks.map(tb => tb?.length > 0 ? [...tb] : []);
+    }
+    const col = category?.id ? collections.find(c => c.id === category.id) : collections[0];
+    if (!col) return [[], []];
+    const migrated = migrateCollectionBanks(col);
+    const result = (migrated.textBanks || []).map(tb => tb?.length > 0 ? [...tb] : []);
+    while (result.length < 2) result.push([]);
+    return result;
+  }, [nicheTextBanks, category, collections]);
+
+  const getTextBanks = useCallback(() => textBanksCache, [textBanksCache]);
+
   // ── Re-roll: always swap photo AND randomize text overlays ──
   const handleReroll = useCallback(() => {
     // Reroll media
@@ -844,25 +874,14 @@ const PhotoMontageEditor = ({
     textCase: textStyle.textCase
   }), [textStyle]);
 
-  // ── Cut by word — creates timed text overlays from words ──
+  // ── Cut by word — opens WordTimeline for text cell mode selection ──
   const handleCutByWord = useCallback(() => {
     if (!words.length) {
       toastError('No words available. Use the Lyrics section to add words first.');
       return;
     }
-    const dur = totalDuration || 10;
-    const timestamp = Date.now();
-    const newOverlays = words.map((w, i) => ({
-      id: `text_${timestamp}_${i}`,
-      text: w.text,
-      style: getDefaultTextStyle(),
-      position: { x: 50, y: 50, width: 80, height: 20 },
-      startTime: Math.min(w.startTime || (i * dur / words.length), dur),
-      endTime: Math.min((w.startTime || (i * dur / words.length)) + (w.duration || dur / words.length), dur)
-    }));
-    setTextOverlays(newOverlays);
-    toastSuccess(`Created ${newOverlays.length} timed word overlays`);
-  }, [words, totalDuration, getDefaultTextStyle, setTextOverlays, toastSuccess, toastError]);
+    setShowWordTimeline(true);
+  }, [words, toastError]);
 
   // ── Drag handlers ──
   const handleDragStart = useCallback((index) => setDragIndex(index), []);
@@ -908,6 +927,43 @@ const PhotoMontageEditor = ({
     }
   }, [editingTextId]);
 
+  // ── Text track marquee selection ──
+  const handleTextTrackPointerDown = useCallback((e) => {
+    // Don't start marquee if clicking on overlay blocks (they handle their own clicks)
+    if (e.target.closest('[data-text-overlay]')) return;
+    if (!timelineRef.current || totalDuration <= 0) return;
+    e.preventDefault();
+    const pxPerSec = effectivePxPerSecHook;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const startX = e.clientX - rect.left + timelineRef.current.scrollLeft;
+    setTextMarquee({ startX, currentX: startX });
+    if (!e.shiftKey) {
+      setSelectedTextIds(new Set());
+      setEditingTextId(null);
+    }
+
+    const onMove = (me) => {
+      const cx = me.clientX - rect.left + timelineRef.current.scrollLeft;
+      setTextMarquee(prev => prev ? { ...prev, currentX: cx } : null);
+      // Compute which overlays are in range
+      const minX = Math.min(startX, cx);
+      const maxX = Math.max(startX, cx);
+      const ids = new Set();
+      textOverlays.forEach(o => {
+        const oLeft = (o.startTime ?? 0) * pxPerSec;
+        const oRight = oLeft + Math.max(20, ((o.endTime ?? totalDuration) - (o.startTime ?? 0)) * pxPerSec);
+        if (oRight >= minX && oLeft <= maxX) ids.add(o.id);
+      });
+      setSelectedTextIds(ids);
+    };
+    const onUp = () => {
+      setTextMarquee(null);
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  }, [totalDuration, textOverlays, effectivePxPerSecHook]);
 
   // ── Preset handler ──
   const handleApplyPreset = useCallback((preset) => {
@@ -1062,7 +1118,10 @@ const PhotoMontageEditor = ({
     }
   }, [externalAudioVolume]);
 
-  // ── AI Transcription handler — creates text overlays (matches SoloClipEditor) ──
+  // ── Transcript lines state (line-level data from LRC for WordTimeline) ──
+  const [transcriptLines, setTranscriptLines] = useState([]);
+
+  // ── AI Transcription handler — stores words + opens WordTimeline ──
   const handleTranscriptionComplete = useCallback((result) => {
     if (!result?.words?.length) {
       toastError('No words detected in transcription.');
@@ -1070,29 +1129,21 @@ const PhotoMontageEditor = ({
       return;
     }
     const dur = totalDuration || 30;
-    const newOverlays = result.words.map((w, i) => {
-      const start = Math.min(w.startTime || 0, dur);
-      const end = Math.min(start + (w.duration || 0.5), dur);
-      return {
-        id: `text_${Date.now()}_${i}`,
-        text: w.text,
-        style: getDefaultTextStyle(),
-        position: { x: 50, y: 50, width: 80, height: 20 },
-        startTime: start,
-        endTime: end
-      };
-    });
-    setTextOverlays(newOverlays);
-    // Also set words for WordTimeline
+    // Store words for WordTimeline
     setWords(result.words.map((w, i) => ({
       id: `word_${Date.now()}_${i}`,
       text: w.text,
       startTime: Math.min(w.startTime || 0, dur),
       duration: w.duration || 0.5
     })));
-    toastSuccess(`Added ${newOverlays.length} text overlays from transcription`);
+    // Store lines if available (from LRC pipeline)
+    if (result.lines?.length) {
+      setTranscriptLines(result.lines);
+    }
     setShowTranscriber(false);
-  }, [totalDuration, getDefaultTextStyle, toastSuccess, toastError]);
+    // Open WordTimeline so user can choose text cell mode
+    setShowWordTimeline(true);
+  }, [totalDuration, toastError]);
 
   // ── Lyrics as timed text overlays ──
   const addLyricsAsTimedOverlays = useCallback((lyricsText) => {
@@ -1262,22 +1313,6 @@ const PhotoMontageEditor = ({
     { name: 'TikTok Sans', value: "'TikTok Sans', sans-serif" },
   ];
 
-  // ── Text bank helpers ──
-  const textBanksCache = useMemo(() => {
-    // Use niche text banks if available, otherwise derive from collection
-    if (nicheTextBanks && nicheTextBanks.some(b => b?.length > 0)) {
-      return nicheTextBanks.map(tb => tb?.length > 0 ? [...tb] : []);
-    }
-    const col = category?.id ? collections.find(c => c.id === category.id) : collections[0];
-    if (!col) return [[], []];
-    const migrated = migrateCollectionBanks(col);
-    const result = (migrated.textBanks || []).map(tb => tb?.length > 0 ? [...tb] : []);
-    while (result.length < 2) result.push([]);
-    return result;
-  }, [nicheTextBanks, category, collections]);
-
-  const getTextBanks = useCallback(() => textBanksCache, [textBanksCache]);
-
   const handleAddToTextBank = useCallback((bankNum, text) => {
     const col = category?.id ? collections.find(c => c.id === category.id) : collections[0];
     if (!col) return;
@@ -1315,7 +1350,7 @@ const PhotoMontageEditor = ({
         />
 
         {/* ═══ MAIN CONTENT ═══ */}
-        <div className={`flex grow shrink-0 basis-0 self-stretch overflow-hidden ${isMobile ? 'flex-col overflow-auto' : ''}`}>
+        <div className={`flex grow basis-0 min-h-0 self-stretch overflow-hidden ${isMobile ? 'flex-col overflow-auto' : ''}`}>
 
           {/* ── LEFT PANEL — Photo List ── */}
           {!isMobile && (
@@ -1460,7 +1495,7 @@ const PhotoMontageEditor = ({
           )}
 
           {/* ── CENTER COLUMN ── */}
-          <div className="flex grow shrink-0 basis-0 flex-col items-center bg-black overflow-hidden">
+          <div className="flex grow basis-0 min-h-0 flex-col items-center bg-black overflow-hidden">
             <div className="flex w-full max-w-[448px] grow flex-col items-center gap-4 py-6 px-4 overflow-auto">
 
               {/* Photo Preview */}
@@ -1478,17 +1513,47 @@ const PhotoMontageEditor = ({
                       className="max-w-[80%] max-h-[85%] object-contain rounded-sm"
                       style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.1)' }}
                     />
-                  ) : (
-                    <img
-                      src={photos[currentPhotoIndex]?.url}
-                      alt=""
-                      style={{
-                        width: '100%', height: '100%', objectFit: 'cover', display: 'block',
-                        ...getKenBurnsStyle(currentPhotoIndex, currentPhotoProgress),
-                        transition: isPlaying ? 'none' : 'transform 0.3s ease'
-                      }}
-                    />
-                  )}
+                  ) : (() => {
+                    // Compute crossfade alpha (0.3s before end of each photo)
+                    const CROSSFADE_DUR = 0.3;
+                    let fadeProgress = 0;
+                    let nextIndex = -1;
+                    if (transition === 'crossfade' && photoDurations.length > 0 && currentExpandedIndex < photoDurations.length - 1) {
+                      let elapsed = 0;
+                      for (let i = 0; i < currentExpandedIndex; i++) elapsed += photoDurations[i];
+                      const slotEnd = elapsed + photoDurations[currentExpandedIndex];
+                      const timeUntilEnd = slotEnd - currentTime;
+                      if (timeUntilEnd < CROSSFADE_DUR && timeUntilEnd >= 0) {
+                        fadeProgress = 1 - (timeUntilEnd / CROSSFADE_DUR);
+                        nextIndex = (currentExpandedIndex + 1) % photos.length;
+                      }
+                    }
+                    return (
+                      <>
+                        <img
+                          src={photos[currentPhotoIndex]?.url}
+                          alt=""
+                          style={{
+                            width: '100%', height: '100%', objectFit: 'cover', display: 'block',
+                            opacity: fadeProgress > 0 ? 1 - fadeProgress : 1,
+                            ...getKenBurnsStyle(currentPhotoIndex, currentPhotoProgress),
+                            transition: isPlaying ? 'none' : 'transform 0.3s ease'
+                          }}
+                        />
+                        {fadeProgress > 0 && nextIndex >= 0 && (
+                          <img
+                            src={photos[nextIndex]?.url}
+                            alt=""
+                            style={{
+                              position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
+                              opacity: fadeProgress,
+                              ...getKenBurnsStyle(nextIndex, 0),
+                            }}
+                          />
+                        )}
+                      </>
+                    );
+                  })()}
 
                   {/* Text overlays on preview */}
                   {textOverlays.filter(o => currentTime >= (o.startTime ?? 0) && currentTime <= (o.endTime ?? totalDuration)).map((overlay) => (
@@ -1651,6 +1716,16 @@ const PhotoMontageEditor = ({
                     <Button variant="neutral-secondary" size="small" onClick={handleCutByWord}>Cut by word</Button>
                     <Button variant="neutral-secondary" size="small" onClick={handleCutByBeat}>Cut by beat</Button>
                     <Button variant="neutral-secondary" size="small" onClick={() => setShowMomentumSelector(true)}>Cut to music</Button>
+                    {selectedTextIds.size > 0 && (
+                      <>
+                        <span className="text-[11px] text-indigo-300 bg-indigo-500/20 px-2 py-0.5 rounded">{selectedTextIds.size} text selected</span>
+                        <Button variant="destructive-tertiary" size="small" icon={<FeatherTrash2 />} onClick={() => {
+                          setTextOverlays(prev => prev.filter(o => !selectedTextIds.has(o.id)));
+                          setSelectedTextIds(new Set());
+                          setEditingTextId(null);
+                        }}>Delete selected</Button>
+                      </>
+                    )}
                     <Badge variant="neutral">
                       {beatAnalyzing ? 'Analyzing beats...' : bpm ? `${Math.round(bpm)} BPM (${filteredBeats.length} beats)` : 'No beats detected'}
                     </Badge>
@@ -1787,25 +1862,57 @@ const PhotoMontageEditor = ({
 
                       {/* Text overlay rows — one row per overlay */}
                       {textOverlays.length > 0 && (
-                        <div style={{ position: 'relative', borderBottom: '1px solid #222' }}>
+                        <div style={{ position: 'relative', borderBottom: '1px solid #222', cursor: 'crosshair' }}
+                          onPointerDown={handleTextTrackPointerDown}
+                        >
+                          {/* Marquee selection box */}
+                          {textMarquee && (() => {
+                            const minX = Math.min(textMarquee.startX, textMarquee.currentX);
+                            const w = Math.abs(textMarquee.currentX - textMarquee.startX);
+                            return (
+                              <div style={{
+                                position: 'absolute', left: `${minX}px`, top: 0, bottom: 0, width: `${w}px`,
+                                backgroundColor: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.4)',
+                                zIndex: 10, pointerEvents: 'none'
+                              }} />
+                            );
+                          })()}
                           {textOverlays.map((overlay) => {
                             const start = overlay.startTime ?? 0;
                             const end = overlay.endTime ?? totalDuration;
                             const leftPx = start * effectivePxPerSec;
                             const widthPx = Math.max(20, (end - start) * effectivePxPerSec);
-                            const isSelected = editingTextId === overlay.id;
+                            const isEditing = editingTextId === overlay.id;
+                            const isMarqueeSelected = selectedTextIds.has(overlay.id);
+                            const isSelected = isEditing || isMarqueeSelected;
                             const overlayColor = isSelected ? '#818cf8' : '#6366f1';
                             return (
                               <div key={overlay.id} style={{ height: '24px', position: 'relative' }}>
                                 <div
+                                  data-text-overlay
                                   style={{
                                     position: 'absolute', left: `${leftPx}px`, width: `${widthPx}px`, top: 2, bottom: 2,
                                     backgroundColor: isSelected ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.2)',
-                                    border: `1px solid ${overlayColor}`,
+                                    border: isMarqueeSelected ? '2px solid #a78bfa' : `1px solid ${overlayColor}`,
                                     borderRadius: '4px', cursor: 'pointer', overflow: 'hidden',
                                     display: 'flex', alignItems: 'center', paddingLeft: '6px',
+                                    boxShadow: isMarqueeSelected ? '0 0 6px rgba(167,139,250,0.4)' : 'none',
                                   }}
-                                  onClick={() => { setEditingTextId(overlay.id); setEditingTextValue(overlay.text); }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (e.shiftKey) {
+                                      setSelectedTextIds(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(overlay.id)) next.delete(overlay.id);
+                                        else next.add(overlay.id);
+                                        return next;
+                                      });
+                                    } else {
+                                      setEditingTextId(overlay.id);
+                                      setEditingTextValue(overlay.text);
+                                      setSelectedTextIds(new Set());
+                                    }
+                                  }}
                                 >
                                   <span style={{ fontSize: '9px', color: '#c7d2fe', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', userSelect: 'none' }}>
                                     {overlay.text}
@@ -1902,6 +2009,26 @@ const PhotoMontageEditor = ({
                           </div>
                         );
                       })()}
+
+                      {/* Unified cut lines — span from photos row through audio waveform */}
+                      {photoDurations.length > 1 && (() => {
+                        let cumDur = 0;
+                        const boundaries = [];
+                        photoDurations.forEach((dur, idx) => {
+                          cumDur += dur;
+                          if (idx < photoDurations.length - 1) {
+                            boundaries.push({ px: cumDur * effectivePxPerSec, idx });
+                          }
+                        });
+                        return boundaries.map(({ px, idx }) => (
+                          <div key={`cut-${idx}`} style={{
+                            position: 'absolute', top: '24px', bottom: 0,
+                            left: `${px}px`, width: '1px',
+                            backgroundColor: 'rgba(255,255,255,0.35)',
+                            zIndex: 12, pointerEvents: 'none'
+                          }} />
+                        ));
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -1912,7 +2039,7 @@ const PhotoMontageEditor = ({
 
           {/* ── RIGHT SIDEBAR ── */}
           {!isMobile && (
-            <div className="flex w-96 flex-none flex-col border-l border-neutral-800 bg-[#1a1a1aff] overflow-auto">
+            <div className="w-96 flex-none flex flex-col border-l border-neutral-800 bg-[#1a1a1aff] overflow-y-auto">
 
               {renderCollapsibleSection('audio', 'Audio', (
                 <div className="flex flex-col gap-3">
@@ -2415,6 +2542,13 @@ const PhotoMontageEditor = ({
                 onAddLyrics({ title: lyricData.title, content: lyricData.content, words: lyricData.words });
               }
             }}
+            lines={transcriptLines}
+            beats={filteredBeats}
+            onApplyTextCells={(overlays) => {
+              setTextOverlays(overlays);
+              setShowWordTimeline(false);
+            }}
+            textStyle={getDefaultTextStyle()}
           />
         )}
 

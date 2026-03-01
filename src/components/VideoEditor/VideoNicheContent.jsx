@@ -51,6 +51,7 @@ const VideoNicheContent = ({
   onImport,
   onImportAudio,
   onWebImport,
+  onWebImportAudio,
 }) => {
   const activeFormat = niche?.formats?.find(f => f.id === niche.activeFormatId) || niche?.formats?.[0];
   const IconComponent = FORMAT_ICONS[activeFormat?.id] || FeatherPlay;
@@ -609,6 +610,10 @@ const VideoNicheContent = ({
                 className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
                 onClick={() => onUploadAudio?.()}
               >Upload</button>
+              <button
+                className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer px-1 py-0.5 rounded hover:bg-indigo-500/10 transition-colors"
+                onClick={() => onWebImportAudio?.()}
+              >Web</button>
             </div>
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto">

@@ -749,7 +749,10 @@ const SoloClipEditor = ({
     });
   }, [applyStyleToAll]);
 
-  // ── AI Transcription handler ──
+  // ── Transcript lines state (line-level data from LRC for WordTimeline) ──
+  const [transcriptLines, setTranscriptLines] = useState([]);
+
+  // ── AI Transcription handler — stores words + opens WordTimeline ──
   const handleTranscriptionComplete = useCallback((result) => {
     if (!result?.words?.length) {
       toastError('No words detected in transcription.');
@@ -757,50 +760,30 @@ const SoloClipEditor = ({
       return;
     }
     const dur = clipDuration || 30;
-    result.words.forEach(w => {
-      const start = Math.min(w.startTime || 0, dur);
-      const end = Math.min(w.startTime + (w.duration || 0.5), dur);
-      const newOverlay = {
-        id: `text_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        text: w.text,
-        style: getDefaultTextStyle(),
-        position: { x: 50, y: 50, width: 80, height: 20 },
-        startTime: start,
-        endTime: end
-      };
-      setTextOverlays(prev => [...prev, newOverlay]);
-    });
-    // Also set words for WordTimeline
+    // Store words for WordTimeline
     setWords(result.words.map((w, i) => ({
       id: `word_${Date.now()}_${i}`,
       text: w.text,
       startTime: Math.min(w.startTime || 0, dur),
       duration: w.duration || 0.5
     })));
-    toastSuccess(`Added ${result.words.length} text overlays from transcription`);
+    // Store lines if available (from LRC pipeline)
+    if (result.lines?.length) {
+      setTranscriptLines(result.lines);
+    }
     setShowTranscriber(false);
-  }, [clipDuration, getDefaultTextStyle, setTextOverlays, setWords, toastSuccess, toastError]);
+    // Open WordTimeline so user can choose text cell mode
+    setShowWordTimeline(true);
+  }, [clipDuration, setWords, toastError]);
 
-  // ── Cut by word — creates timed text overlays per word (Solo = single clip, so overlays not clips) ──
+  // ── Cut by word — opens WordTimeline for text cell mode selection ──
   const handleCutByWord = useCallback(() => {
     if (!words.length) {
       toastError('No words to cut by. Add lyrics first.');
       return;
     }
-
-    const dur = timelineDuration || clipDuration || 30;
-    const newOverlays = words.map((word, i) => ({
-      id: `text_${Date.now()}_${i}`,
-      text: word.text,
-      style: getDefaultTextStyle(),
-      position: { x: 50, y: 50, width: 80, height: 20 },
-      startTime: Math.min(word.startTime || 0, dur),
-      endTime: Math.min((word.startTime || 0) + (word.duration || 0.5), dur)
-    }));
-
-    setTextOverlays(newOverlays);
-    toastSuccess(`Created ${newOverlays.length} text overlays from words`);
-  }, [words, timelineDuration, clipDuration, getDefaultTextStyle, setTextOverlays, toastSuccess, toastError]);
+    setShowWordTimeline(true);
+  }, [words, toastError]);
 
   // ── Cut by beat — opens BeatSelector modal ──
   const handleCutByBeat = useCallback(() => {
@@ -1276,7 +1259,7 @@ const SoloClipEditor = ({
         />
 
         {/* ═══ MAIN CONTENT ═══ */}
-        <div className="flex grow shrink-0 basis-0 self-stretch overflow-hidden">
+        <div className="flex grow basis-0 min-h-0 self-stretch overflow-hidden">
 
           {/* LEFT: Preview + Controls */}
           <div className="flex grow shrink-0 basis-0 flex-col items-center bg-black overflow-hidden">
@@ -2195,6 +2178,13 @@ const SoloClipEditor = ({
                 onAddLyrics({ title: lyricData.title, content: lyricData.content, words: lyricData.words });
               }
             }}
+            lines={transcriptLines}
+            beats={filteredBeats}
+            onApplyTextCells={(overlays) => {
+              setTextOverlays(overlays);
+              setShowWordTimeline(false);
+            }}
+            textStyle={getDefaultTextStyle()}
           />
         )}
 

@@ -174,5 +174,5 @@ export function lrcToWordTimeline(lines, fullDuration) {
   }
 
   const text = allWords.map(w => w.text).join(' ');
-  return { text, words: allWords };
+  return { text, words: allWords, lines: adjustedLines };
 }
