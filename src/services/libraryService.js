@@ -1791,117 +1791,6 @@ export const updateMediaTrimPoints = (artistId, nicheId, mediaId, trimStart, tri
 };
 
 /**
- * Get default template settings for a given format
- */
-export const getDefaultTemplateSettings = (formatId) => {
-  const shared = {
-    aspectRatio: '9:16',
-    textPosition: 'center',
-    textStyle: {
-      fontFamily: "'Inter', sans-serif",
-      fontSize: 48,
-      fontWeight: '600',
-      color: '#ffffff',
-      textAlign: 'center',
-      textCase: 'default',
-      outline: true,
-      outlineColor: '#000000',
-      textStroke: null,
-    },
-  };
-  switch (formatId) {
-    case 'single':
-    case 'hook_lyrics':
-    case 'carousel':
-    case 'four_slide':
-    case 'hook_vibes_lyrics':
-      return { ...shared, slideDuration: 3 };
-    case 'solo_clip':
-      return { ...shared, textDisplayMode: 'word' };
-    case 'multi_clip':
-      return { ...shared, transition: 'cut' };
-    case 'montage':
-      return { ...shared };
-    case 'photo_montage':
-      return { ...shared, speed: 1, transition: 'cut', kenBurns: true, beatSync: false, displayMode: 'cover' };
-    default:
-      return shared;
-  }
-};
-
-/**
- * Built-in preset templates that ship with the app.
- * Keyed by formatId, each value is an array of template objects.
- * Built-in templates use `builtin_` prefix IDs and `builtIn: true` flag.
- */
-export const BUILT_IN_TEMPLATES = {
-  photo_montage: [
-    {
-      id: 'builtin_art_gallery',
-      name: 'Art Gallery',
-      description: 'Photos on a white background with shadow. Clean gallery look.',
-      builtIn: true,
-      settings: {
-        displayMode: 'gallery',
-        transition: 'cut',
-        kenBurns: false,
-        speed: 4 / 30,  // 4 frames at 30fps — rapid hard cuts
-        beatSync: false,
-        textStyle: {
-          fontFamily: "'Inter', sans-serif",
-          fontSize: 48,
-          fontWeight: '600',
-          color: '#1a1a1a',
-          textAlign: 'center',
-          textCase: 'default',
-          outline: false,
-          outlineColor: '#000000',
-        },
-      },
-    },
-  ],
-};
-
-/**
- * Save (create or update) a template on a niche
- */
-export const saveNicheTemplate = (artistId, nicheId, template, db = null) => {
-  const cols = getUserCollections(artistId);
-  const idx = cols.findIndex(c => c.id === nicheId);
-  if (idx === -1) return null;
-  const templates = [...(cols[idx].templates || [])];
-  const existingIdx = templates.findIndex(t => t.id === template.id);
-  const now = new Date().toISOString();
-  if (existingIdx !== -1) {
-    templates[existingIdx] = { ...template, updatedAt: now };
-  } else {
-    templates.push({ ...template, createdAt: now, updatedAt: now });
-  }
-  cols[idx].templates = templates;
-  cols[idx].activeTemplateId = template.id;
-  cols[idx].updatedAt = now;
-  saveCollections(artistId, cols);
-  if (db) saveCollectionToFirestore(db, artistId, cols[idx]).catch(log.error);
-  return template;
-};
-
-/**
- * Delete a template from a niche
- */
-export const deleteNicheTemplate = (artistId, nicheId, templateId, db = null) => {
-  const cols = getUserCollections(artistId);
-  const idx = cols.findIndex(c => c.id === nicheId);
-  if (idx === -1) return;
-  cols[idx].templates = (cols[idx].templates || []).filter(t => t.id !== templateId);
-  if (cols[idx].activeTemplateId === templateId) {
-    cols[idx].activeTemplateId = null;
-  }
-  cols[idx].updatedAt = new Date().toISOString();
-  saveCollections(artistId, cols);
-  if (db) saveCollectionToFirestore(db, artistId, cols[idx]).catch(log.error);
-};
-
-/**
  * Save (create or update) a clipper session on a niche
  */
 export const saveClipperSession = (artistId, nicheId, session, db = null) => {
@@ -1931,19 +1820,6 @@ export const deleteClipperSession = (artistId, nicheId, sessionId, db = null) =>
   const idx = cols.findIndex(c => c.id === nicheId);
   if (idx === -1) return;
   cols[idx].clipperSessions = (cols[idx].clipperSessions || []).filter(s => s.id !== sessionId);
-  cols[idx].updatedAt = new Date().toISOString();
-  saveCollections(artistId, cols);
-  if (db) saveCollectionToFirestore(db, artistId, cols[idx]).catch(log.error);
-};
-
-/**
- * Set the active template on a niche (null to deselect)
- */
-export const setNicheActiveTemplate = (artistId, nicheId, templateId, db = null) => {
-  const cols = getUserCollections(artistId);
-  const idx = cols.findIndex(c => c.id === nicheId);
-  if (idx === -1) return;
-  cols[idx].activeTemplateId = templateId;
   cols[idx].updatedAt = new Date().toISOString();
   saveCollections(artistId, cols);
   if (db) saveCollectionToFirestore(db, artistId, cols[idx]).catch(log.error);
@@ -4710,11 +4586,6 @@ export default {
   PIPELINE_COLORS,
   createPipeline,
   getPipelineBankLabel,
-  getDefaultTemplateSettings,
-  BUILT_IN_TEMPLATES,
-  saveNicheTemplate,
-  deleteNicheTemplate,
-  setNicheActiveTemplate,
 
   // Collections (Firestore async)
   getCollectionsAsync,

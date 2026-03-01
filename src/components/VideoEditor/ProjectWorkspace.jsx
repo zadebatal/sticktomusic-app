@@ -121,6 +121,9 @@ const ProjectWorkspace = ({
   // Show niche format picker
   const [showNichePicker, setShowNichePicker] = useState(false);
 
+  // Create count for the centered Create bar
+  const [createCount, setCreateCount] = useState(1);
+
   // Caption & Hashtag page
   const [showCaptionPage, setShowCaptionPageRaw] = useState(false);
 
@@ -871,6 +874,36 @@ const ProjectWorkspace = ({
         </button>
       </div>
 
+      {/* Centered Create bar — visible when a niche is active */}
+      {!showAllMedia && !showCaptionPage && activeNiche && activeFormat?.id !== 'finished_media' && (
+        <div className="flex items-center justify-center gap-3 px-4 py-3 border-b border-neutral-800">
+          <input
+            type="number"
+            min={1}
+            max={20}
+            value={createCount}
+            onChange={e => setCreateCount(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+            className="w-14 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-center text-body font-body text-white outline-none focus:border-indigo-500"
+          />
+          <Button
+            variant="brand-primary"
+            size="medium"
+            icon={<FeatherPlay />}
+            onClick={() => {
+              if (activeFormat?.type === 'slideshow') {
+                onOpenEditor?.(activeNiche, createCount, null, null);
+              } else if (activeFormat?.id === 'clipper') {
+                onOpenVideoEditor?.(activeFormat, activeNiche.id, null, null);
+              } else {
+                onOpenVideoEditor?.(activeFormat, activeNiche.id, null, null);
+              }
+            }}
+          >
+            Create {activeFormat?.name || 'Content'}
+          </Button>
+        </div>
+      )}
+
       {/* Hidden file input */}
       <input
         ref={setFileInputRef} type="file" multiple accept="image/*,audio/*,video/*"
@@ -909,13 +942,9 @@ const ProjectWorkspace = ({
             artistId={artistId}
             niche={activeNiche}
             library={library}
-            createdContent={createdContent}
             projectAudio={projectAudio}
             projectMedia={projectMedia}
             draggingMediaIds={[]}
-            onOpenEditor={onOpenEditor}
-            onViewDrafts={onViewDrafts}
-
             onUploadToBank={handleUploadToBank}
             onImportToBank={handleImportToBank}
             onWebImportToBank={handleWebImportToBank}
@@ -932,8 +961,8 @@ const ProjectWorkspace = ({
             niche={activeNiche}
             library={library}
             projectMedia={projectMedia}
-            onMakeVideo={(format, nicheId, existingDraft, templateSettings, nicheSourceVideos) => {
-              onOpenVideoEditor?.(format, nicheId, existingDraft, templateSettings, nicheSourceVideos);
+            onMakeVideo={(format, nicheId, existingDraft, _ts, nicheSourceVideos) => {
+              onOpenVideoEditor?.(format, nicheId, existingDraft, null, nicheSourceVideos);
             }}
             onUpload={() => { pendingBankIndexRef.current = null; if (fileInputRef.current) { fileInputRef.current.accept = 'video/*'; fileInputRef.current.click(); } }}
             onImport={() => { pendingImportBankRef.current = null; setShowImportModal(true); }}
@@ -948,8 +977,8 @@ const ProjectWorkspace = ({
             library={library}
             createdContent={createdContent}
             projectAudio={projectAudio}
-            onMakeVideo={(format, nicheId, existingDraft, templateSettings) => {
-              onOpenVideoEditor?.(format, nicheId, existingDraft, templateSettings);
+            onMakeVideo={(format, nicheId, existingDraft) => {
+              onOpenVideoEditor?.(format, nicheId, existingDraft, null);
             }}
             onUpload={() => { pendingBankIndexRef.current = null; if (fileInputRef.current) { fileInputRef.current.accept = 'image/*,audio/*,video/*'; fileInputRef.current.click(); } }}
             onUploadAudio={() => { pendingBankIndexRef.current = null; if (fileInputRef.current) { fileInputRef.current.accept = 'audio/*'; fileInputRef.current.click(); } }}

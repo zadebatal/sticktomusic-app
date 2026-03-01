@@ -3,7 +3,7 @@ import {
   subscribeToLibrary, subscribeToCollections, getCollections, getLibrary, getLyrics,
   incrementUseCount, MEDIA_TYPES, addToLibraryAsync,
   addCreatedVideo, saveCreatedContentAsync,
-  getBankColor, getBankLabel, BUILT_IN_TEMPLATES, getDefaultTemplateSettings,
+  getBankColor, getBankLabel,
   getTextBankText, getTextBankStyle, addToTextBank, removeFromTextBank,
   migrateCollectionBanks, addBankToCollection, removeBankFromCollection,
   saveCollectionToFirestore, MAX_BANKS, MIN_BANKS
@@ -62,7 +62,6 @@ const buildStroke = (width, color) => `${width}px ${color}`;
 const PhotoMontageEditor = ({
   category,
   existingVideo = null,
-  templateSettings = null,
   onSave,
   onClose,
   artistId = null,
@@ -83,7 +82,6 @@ const PhotoMontageEditor = ({
   const defaultTextStyle = {
     fontSize: 48, fontFamily: 'Inter, sans-serif', fontWeight: '600',
     color: '#ffffff', outline: true, outlineColor: '#000000', textStroke: null, textAlign: 'center', textCase: 'default',
-    ...(templateSettings?.textStyle || {}),
   };
   const [allVideos, setAllVideos] = useState(() => {
     if (existingVideo?.editorMode === 'photo-montage') {
@@ -180,16 +178,16 @@ const PhotoMontageEditor = ({
   const [isSavingAll, setIsSavingAll] = useState(false);
 
   // ── Settings state (global across all variations) ──
-  const [speed, setSpeed] = useState(existingVideo?.montageSpeed || templateSettings?.speed || 1);
-  const [transition, setTransition] = useState(existingVideo?.montageTransition || templateSettings?.transition || 'cut');
-  const [kenBurnsEnabled, setKenBurnsEnabled] = useState(existingVideo?.montageKenBurns !== undefined ? existingVideo.montageKenBurns !== false : (templateSettings?.kenBurns !== undefined ? templateSettings.kenBurns : true));
-  const [aspectRatio, setAspectRatio] = useState(existingVideo?.cropMode || templateSettings?.aspectRatio || '9:16');
-  const [displayMode, setDisplayMode] = useState(existingVideo?.montageDisplayMode || templateSettings?.displayMode || 'cover');
+  const [speed, setSpeed] = useState(existingVideo?.montageSpeed || 1);
+  const [transition, setTransition] = useState(existingVideo?.montageTransition || 'cut');
+  const [kenBurnsEnabled, setKenBurnsEnabled] = useState(existingVideo?.montageKenBurns !== undefined ? existingVideo.montageKenBurns !== false : true);
+  const [aspectRatio, setAspectRatio] = useState(existingVideo?.cropMode || '9:16');
+  const [displayMode, setDisplayMode] = useState(existingVideo?.montageDisplayMode || 'cover');
 
   // ── Audio state ──
   const [selectedAudio, setSelectedAudio] = useState(existingVideo?.audio || null);
   const [audioDuration, setAudioDuration] = useState(0);
-  const [beatSyncEnabled, setBeatSyncEnabled] = useState(existingVideo?.montageBeatSync || templateSettings?.beatSync || false);
+  const [beatSyncEnabled, setBeatSyncEnabled] = useState(existingVideo?.montageBeatSync || false);
   const audioRef = useRef(null);
   const audioFileInputRef = useRef(null);
 
@@ -1915,43 +1913,6 @@ const PhotoMontageEditor = ({
           {/* ── RIGHT SIDEBAR ── */}
           {!isMobile && (
             <div className="flex w-96 flex-none flex-col border-l border-neutral-800 bg-[#1a1a1aff] overflow-auto">
-
-              {/* Template Picker */}
-              {(() => {
-                const builtIns = BUILT_IN_TEMPLATES.photo_montage || [];
-                const nicheTemplates = category?.templates || [];
-                const allTmpl = [...builtIns, ...nicheTemplates];
-                if (allTmpl.length === 0) return null;
-                return (
-                  <div className="flex flex-col gap-2 px-4 py-3 border-b border-neutral-800">
-                    <span className="text-[12px] font-semibold text-white">Template</span>
-                    <select
-                      value=""
-                      onChange={(e) => {
-                        const tmpl = allTmpl.find(t => t.id === e.target.value);
-                        if (!tmpl?.settings) return;
-                        const s = tmpl.settings;
-                        if (s.speed !== undefined) setSpeed(s.speed);
-                        if (s.transition !== undefined) setTransition(s.transition);
-                        if (s.kenBurns !== undefined) setKenBurnsEnabled(s.kenBurns);
-                        if (s.beatSync !== undefined) setBeatSyncEnabled(s.beatSync);
-                        if (s.displayMode !== undefined) setDisplayMode(s.displayMode);
-                        if (s.aspectRatio !== undefined) setAspectRatio(s.aspectRatio);
-                        if (s.textStyle) setTextStyle(s.textStyle);
-                        toastSuccess(`Applied "${tmpl.name}" template`);
-                      }}
-                      className="w-full py-1.5 px-2 rounded-md bg-neutral-800 border border-neutral-700 text-[12px] text-white outline-none cursor-pointer"
-                    >
-                      <option value="">Apply a template...</option>
-                      {allTmpl.map(tmpl => (
-                        <option key={tmpl.id} value={tmpl.id}>
-                          {tmpl.name}{tmpl.builtIn ? ' (Preset)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                );
-              })()}
 
               {renderCollapsibleSection('audio', 'Audio', (
                 <div className="flex flex-col gap-3">

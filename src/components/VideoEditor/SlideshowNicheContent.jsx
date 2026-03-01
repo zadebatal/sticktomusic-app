@@ -15,8 +15,6 @@ import {
   getBankColor,
   updateNicheAudioId,
 } from '../../services/libraryService';
-import TemplateConfigurator from './shared/TemplateConfigurator';
-import DraggableTextOverlay from './shared/previews/DraggableTextOverlay';
 import LyricDistributor from './shared/LyricDistributor';
 import AudioClipSelector from './AudioClipSelector';
 import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
@@ -28,7 +26,6 @@ import { IconWithBackground } from '../../ui/components/IconWithBackground';
 import {
   FeatherPlus, FeatherX, FeatherType, FeatherPlay, FeatherSquare,
   FeatherImage, FeatherMusic, FeatherZap, FeatherTrash2,
-  FeatherRefreshCw,
   FeatherChevronDown, FeatherChevronRight, FeatherDatabase,
 } from '@subframe/core';
 
@@ -75,12 +72,9 @@ const SlideshowNicheContent = ({
   artistId,
   niche,
   library,
-  createdContent,
   projectAudio = [],
   projectMedia = [],
   draggingMediaIds,
-  onOpenEditor,
-  onViewDrafts,
   onUploadToBank,
   onImportToBank,
   onWebImportToBank,
@@ -90,29 +84,8 @@ const SlideshowNicheContent = ({
 }) => {
   const [textInputs, setTextInputs] = useState({});
   const [dragOverBank, setDragOverBank] = useState(null);
-  const [previewSlideIdx, setPreviewSlideIdx] = useState(0);
-  const [previewPicks, setPreviewPicks] = useState({}); // { [bankIdx]: imageId }
-  const [generateCount, setGenerateCount] = useState(10);
-  const previewContainerRef = useRef(null);
-  const [textPositions, setTextPositions] = useState({});
-  const [textOverrides, setTextOverrides] = useState({}); // { [bankIdx]: editedText } — preview-only, doesn't modify bank
-  const [selectedTextIdx, setSelectedTextIdx] = useState({}); // { [bankIdx]: entryIdx | null } — which text entry is selected for preview
-  const [liveSettings, setLiveSettings] = useState(null);
   const [lightboxItem, setLightboxItem] = useState(null);
   const [poolExpanded, setPoolExpanded] = useState(false);
-
-  // Reset preview state when switching niches
-  const nicheIdRef = useRef(niche?.id);
-  useEffect(() => {
-    if (niche?.id !== nicheIdRef.current) {
-      nicheIdRef.current = niche?.id;
-      setPreviewSlideIdx(0);
-      setPreviewPicks({});
-      setTextPositions({});
-      setTextOverrides({});
-      setSelectedTextIdx({});
-    }
-  }, [niche?.id]);
 
   // Project pool media NOT in this niche
   const poolOnlyMedia = useMemo(() => {
@@ -172,15 +145,7 @@ const SlideshowNicheContent = ({
     },
     [projectAudio, niche?.audioId]
   );
-  const audioUrl = useMemo(() => selectedAudio?.localUrl || selectedAudio?.url || null, [selectedAudio]);
-
   const slideCount = activeFormat?.slideCount || pipeline?.banks?.length || 2;
-
-  // Drafts for this niche
-  const nicheDrafts = useMemo(() =>
-    (createdContent?.slideshows || []).filter(s => s.collectionId === niche?.id && !s.isTemplate),
-    [createdContent, niche?.id]
-  );
 
   // Drag & drop to bank
   const handleDrop = useCallback((bankIndex, e) => {
@@ -204,63 +169,6 @@ const SlideshowNicheContent = ({
     if (!niche) return;
     removeFromTextBank(artistId, niche.id, bankIdx, entryIdx, db);
   }, [artistId, niche, db]);
-
-  // Pick one random image ID from a bank (stable until reroll)
-  const pickOneFromBank = useCallback((bankIdx) => {
-    const ids = pipeline?.banks?.[bankIdx] || [];
-    if (ids.length === 0) return null;
-    return ids[Math.floor(Math.random() * ids.length)];
-  }, [pipeline]);
-
-  // Ensure picks exist for a given bank (lazy init)
-  const ensurePicks = useCallback((bankIdx) => {
-    setPreviewPicks(prev => {
-      if (prev[bankIdx] !== undefined) return prev;
-      return { ...prev, [bankIdx]: pickOneFromBank(bankIdx) };
-    });
-  }, [pickOneFromBank]);
-
-  // Generate picks when slide changes
-  useEffect(() => {
-    ensurePicks(previewSlideIdx);
-  }, [previewSlideIdx, ensurePicks]);
-
-  // Reroll the currently visible image
-  const handleRerollPreview = useCallback(() => {
-    // Reroll image
-    const ids = pipeline?.banks?.[previewSlideIdx] || [];
-    if (ids.length >= 2) {
-      setPreviewPicks(prev => {
-        const currentPick = prev[previewSlideIdx];
-        const candidates = ids.filter(id => id !== currentPick);
-        const newPick = candidates[Math.floor(Math.random() * candidates.length)];
-        return { ...prev, [previewSlideIdx]: newPick };
-      });
-    }
-    // Reroll text
-    const texts = pipeline?.textBanks?.[previewSlideIdx] || [];
-    if (texts.length > 0) {
-      const currentIdx = selectedTextIdx[previewSlideIdx];
-      const candidateIdxs = texts.map((_, i) => i).filter(i => i !== currentIdx);
-      const pool = candidateIdxs.length > 0 ? candidateIdxs : texts.map((_, i) => i);
-      const newIdx = pool[Math.floor(Math.random() * pool.length)];
-      setSelectedTextIdx(prev => ({ ...prev, [previewSlideIdx]: newIdx }));
-      setTextOverrides(prev => { const next = { ...prev }; delete next[previewSlideIdx]; return next; });
-    }
-  }, [pipeline, previewSlideIdx, selectedTextIdx]);
-
-  // Get the current preview image URL
-  const currentPreviewUrl = useMemo(() => {
-    const pickedId = previewPicks[previewSlideIdx];
-    if (!pickedId) return null;
-    const item = library.find(m => m.id === pickedId);
-    return item?.url || item?.thumbnailUrl || null;
-  }, [previewPicks, previewSlideIdx, library]);
-
-  // Check if current bank has images
-  const currentBankHasImages = useMemo(() => {
-    return (pipeline?.banks?.[previewSlideIdx] || []).length > 0;
-  }, [pipeline, previewSlideIdx]);
 
   // Audio selection
   const handleSelectAudio = useCallback((audioId) => {
@@ -345,9 +253,8 @@ const SlideshowNicheContent = ({
             <div key={bankIdx} className="flex flex-col gap-2 flex-1 overflow-hidden min-w-[150px]">
               {/* Column header — click to preview this slide */}
               <div
-                className={`flex w-full flex-none items-center justify-between rounded-t-lg px-3 py-2 cursor-pointer transition-shadow ${previewSlideIdx === bankIdx ? 'ring-2 ring-white/30' : ''}`}
+                className="flex w-full flex-none items-center justify-between rounded-t-lg px-3 py-2"
                 style={{ backgroundColor: headerColor }}
-                onClick={() => setPreviewSlideIdx(bankIdx)}
               >
                 <div className="flex items-center gap-1.5 min-w-0">
                   <IconWithBackground variant={getBankIconVariant(label)} size="small" icon={getBankIcon(label)} square />
@@ -423,22 +330,11 @@ const SlideshowNicheContent = ({
                     return (
                       <div
                         key={entryIdx}
-                        className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 flex-none cursor-pointer transition-colors ${
-                          selectedTextIdx[bankIdx] === entryIdx
-                            ? 'bg-indigo-500/30 ring-1 ring-indigo-500'
-                            : 'bg-black hover:bg-black/60'
-                        }`}
-                        onClick={() => {
-                          setSelectedTextIdx(prev => ({
-                            ...prev,
-                            [bankIdx]: prev[bankIdx] === entryIdx ? null : entryIdx,
-                          }));
-                          setPreviewSlideIdx(bankIdx);
-                        }}
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 flex-none bg-black hover:bg-black/60 transition-colors"
                       >
                         <FeatherType className="text-caption font-caption flex-none" style={{ color: style?.color || getTextIconColor(label), width: 12, height: 12 }} />
                         <span className="grow text-caption font-caption text-[#ffffffff] truncate">{text}</span>
-                        <IconButton variant="neutral-tertiary" size="small" icon={<FeatherX />} aria-label="Remove text" onClick={(e) => { e.stopPropagation(); handleRemoveText(bankIdx, entryIdx); if (selectedTextIdx[bankIdx] === entryIdx) setSelectedTextIdx(prev => ({ ...prev, [bankIdx]: null })); }} />
+                        <IconButton variant="neutral-tertiary" size="small" icon={<FeatherX />} aria-label="Remove text" onClick={() => handleRemoveText(bankIdx, entryIdx)} />
                       </div>
                     );
                   })}
@@ -569,177 +465,6 @@ const SlideshowNicheContent = ({
         )}
         {/* Hidden audio element for preview playback */}
         <audio ref={audioPreviewRef} preload="none" style={{ display: 'none' }} onEnded={() => setPlayingAudioId(null)} />
-
-      </div>
-
-      {/* Right — Template Configurator + Banks */}
-      <div className="flex w-96 flex-none flex-col items-start self-stretch border-l border-solid border-neutral-800 bg-black overflow-y-auto">
-        {/* Template Configurator (inline — we render its pieces directly so captions/hashtags/lyrics stay below) */}
-        <TemplateConfigurator
-          niche={niche}
-          activeFormat={activeFormat}
-          artistId={artistId}
-          db={db}
-          onSettingsChange={setLiveSettings}
-          previewContent={
-            currentPreviewUrl ? (
-              <>
-              <div ref={previewContainerRef} className="relative w-full overflow-hidden rounded-xl border border-solid border-neutral-700 bg-[#0a0a0f]" style={{ aspectRatio: '9/16' }}>
-                <img className="absolute inset-0 w-full h-full object-cover" src={currentPreviewUrl} alt="Preview" />
-                {/* Draggable text overlay — only for current slide, editable via double-click */}
-                {(() => {
-                  const texts = pipeline?.textBanks?.[previewSlideIdx] || [];
-                  if (!texts.length) return null;
-                  const selIdx = selectedTextIdx[previewSlideIdx];
-                  const entry = selIdx != null && texts[selIdx] ? texts[selIdx] : texts[0];
-                  const bankText = getTextBankText(entry);
-                  if (!bankText) return null;
-                  const displayText = textOverrides[previewSlideIdx] ?? bankText;
-                  const bankLabel = getPipelineBankLabel(pipeline, previewSlideIdx);
-                  const color = getBankHeaderColor(bankLabel, previewSlideIdx);
-                  const pos = textPositions[previewSlideIdx] || { x: 50, y: 50, width: 80 };
-                  return (
-                    <>
-                      <DraggableTextOverlay
-                        key={previewSlideIdx}
-                        text={displayText}
-                        textStyle={{ ...(liveSettings?.textStyle || {}), ...(getTextBankStyle(entry) || {}) }}
-                        color={color}
-                        position={pos}
-                        onPositionChange={(newPos) => setTextPositions(prev => ({ ...prev, [previewSlideIdx]: newPos }))}
-                        onTextChange={(newText) => setTextOverrides(prev => ({ ...prev, [previewSlideIdx]: newText }))}
-                        containerRef={previewContainerRef}
-                      />
-                    </>
-                  );
-                })()}
-                {/* Slide dots */}
-                <div className="absolute bottom-2 left-0 right-0 flex items-center justify-center gap-2 z-10">
-                  {Array.from({ length: slideCount }).map((_, i) => {
-                    const hasImages = (pipeline?.banks?.[i] || []).length > 0;
-                    const isActive = previewSlideIdx === i;
-                    const color = getBankHeaderColor(getPipelineBankLabel(pipeline, i), i);
-                    return (
-                      <div
-                        key={i}
-                        className="flex h-2.5 w-2.5 flex-none rounded-full cursor-pointer transition-all"
-                        style={{
-                          backgroundColor: hasImages || isActive ? color : 'transparent',
-                          border: `2px solid ${color}`,
-                          opacity: isActive ? 1 : hasImages ? 0.6 : 0.3,
-                          transform: isActive ? 'scale(1.3)' : 'scale(1)',
-                        }}
-                        onClick={(e) => { e.stopPropagation(); setPreviewSlideIdx(i); }}
-                        title={`${getPipelineBankLabel(pipeline, i)}${hasImages ? '' : ' (empty)'}`}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-              {/* Controls below preview */}
-              <div className="flex items-center justify-center gap-3 mt-2">
-                {(pipeline?.banks?.[previewSlideIdx] || []).length >= 2 && (
-                  <button
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 cursor-pointer transition-colors"
-                    onClick={handleRerollPreview}
-                  >
-                    <FeatherRefreshCw className="text-neutral-300" style={{ width: 12, height: 12 }} />
-                    <span className="text-caption font-caption text-neutral-300">Reroll</span>
-                  </button>
-                )}
-              </div>
-            </> ) : currentBankHasImages ? (
-              <div className="flex flex-col items-center gap-2">
-                <FeatherImage className="text-neutral-600" style={{ width: 24, height: 24 }} />
-                <span className="text-caption font-caption text-neutral-500">Loading preview...</span>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2">
-                <FeatherImage className="text-neutral-600" style={{ width: 24, height: 24 }} />
-                <span className="text-caption font-caption text-neutral-500">No images yet</span>
-              </div>
-            )
-          }
-          createCount={generateCount}
-          onCreateCountChange={setGenerateCount}
-          onCreateClick={(templateSettings) => {
-            if (!onOpenEditor) return;
-            // Package the niche preview state into an existingDraft for the editor
-            const timestamp = Date.now();
-            const slides = Array.from({ length: slideCount }).map((_, bankIdx) => {
-              // Ensure every slide has an image pick (lazily picks weren't generated for unvisited slides)
-              let pickedId = previewPicks[bankIdx];
-              if (!pickedId) {
-                const bankIds = pipeline?.banks?.[bankIdx] || [];
-                if (bankIds.length > 0) pickedId = bankIds[Math.floor(Math.random() * bankIds.length)];
-              }
-              const item = pickedId ? library.find(m => m.id === pickedId) : null;
-              const imgUrl = item?.url || item?.thumbnailUrl || null;
-              // Build text overlays from selected (or first) text bank entry + any overrides
-              const texts = pipeline?.textBanks?.[bankIdx] || [];
-              const textOverlayList = [];
-              if (texts.length > 0) {
-                const selIdx = selectedTextIdx[bankIdx];
-                const entry = selIdx != null && texts[selIdx] ? texts[selIdx] : texts[0];
-                const bankText = getTextBankText(entry);
-                const displayText = textOverrides[bankIdx] ?? bankText;
-                if (displayText) {
-                  const pos = textPositions[bankIdx] || { x: 50, y: 50, width: 80 };
-                  // Merge template text style as base, then overlay bank entry style
-                  const baseStyle = templateSettings?.textStyle || liveSettings?.textStyle || {};
-                  const entryStyle = getTextBankStyle(entry) || {};
-                  textOverlayList.push({
-                    id: `text_${timestamp}_${bankIdx}_0`,
-                    text: displayText,
-                    style: {
-                      fontFamily: "'Inter', sans-serif",
-                      fontSize: 48,
-                      fontWeight: '600',
-                      color: '#ffffff',
-                      textAlign: 'center',
-                      outline: true,
-                      outlineColor: '#000000',
-                      ...baseStyle,
-                      ...entryStyle,
-                    },
-                    position: pos,
-                  });
-                }
-              }
-              return {
-                id: `slide_${timestamp}_${bankIdx}`,
-                index: bankIdx,
-                backgroundImage: imgUrl,
-                thumbnail: imgUrl,
-                sourceBank: `image${bankIdx}`,
-                sourceImageId: pickedId || null,
-                textOverlays: textOverlayList,
-                duration: 3,
-                imageTransform: { scale: 1, offsetX: 0, offsetY: 0 },
-              };
-            });
-            const existingDraft = {
-              id: `slideshow_niche_${timestamp}`,
-              name: pipeline?.name ? `${pipeline.name} #1` : 'Slideshow #1',
-              slides,
-              audio: selectedAudio ? { ...selectedAudio } : null,
-              aspectRatio: templateSettings?.aspectRatio || '9:16',
-              isTemplate: true,
-              _nicheGenerateCount: generateCount,
-            };
-            onOpenEditor(pipeline, generateCount, existingDraft, templateSettings);
-          }}
-          createLabel={`Create ${generateCount}`}
-          selectedAudio={selectedAudio}
-          projectAudio={projectAudio}
-          onSelectAudio={handleSelectAudio}
-          onUploadAudio={onUploadAudio}
-          onTrimAudio={() => setShowAudioTrimmer(true)}
-          onAutoTranscribe={handleAutoTranscribe}
-          isTranscribing={isAnalyzing}
-          draftCount={nicheDrafts.length}
-          onViewDrafts={() => onViewDrafts && onViewDrafts(pipeline)}
-        />
 
       </div>
 

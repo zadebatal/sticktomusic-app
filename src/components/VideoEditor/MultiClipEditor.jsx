@@ -94,7 +94,6 @@ const MultiClipEditor = ({
   presets = [],
   onSavePreset,
   nicheTextBanks = null,
-  templateSettings = null
 }) => {
   const { success: toastSuccess, error: toastError } = useToast();
   const { theme } = useTheme();
@@ -282,7 +281,7 @@ const MultiClipEditor = ({
   const animationRef = useRef(null);
 
   // ── Aspect ratio ──
-  const [aspectRatio, setAspectRatio] = useState(existingVideo?.cropMode || templateSettings?.aspectRatio || '9:16');
+  const [aspectRatio, setAspectRatio] = useState(existingVideo?.cropMode || '9:16');
 
   // ── Global text style (matches Montage editor pattern) ──
   const [textStyle, setTextStyle] = useState({
@@ -295,9 +294,8 @@ const MultiClipEditor = ({
     textStroke: null,
     textAlign: 'center',
     textCase: 'default',
-    displayMode: templateSettings?.textDisplayMode || 'word',
+    displayMode: 'word',
     ...(existingVideo?.textStyle || {}),
-    ...(templateSettings?.textStyle || {}),
   });
 
   // ── Text editing state ──

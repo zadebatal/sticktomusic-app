@@ -26,13 +26,8 @@ import {
 } from '../../services/libraryService';
 import useDragReorder from './shared/useDragReorder';
 import QuickTrimPopover from './shared/QuickTrimPopover';
-import TemplateConfigurator from './shared/TemplateConfigurator';
 import AudioClipSelector from './AudioClipSelector';
 import WordTimeline from './WordTimeline';
-import MontagePreview from './shared/previews/MontagePreview';
-import SoloClipPreview from './shared/previews/SoloClipPreview';
-import MultiClipPreview from './shared/previews/MultiClipPreview';
-import PhotoMontagePreview from './shared/previews/PhotoMontagePreview';
 import { useLyricAnalyzer } from '../../hooks/useLyricAnalyzer';
 import { useToast } from '../ui';
 
@@ -62,12 +57,7 @@ const VideoNicheContent = ({
   const [textBankInput1, setTextBankInput1] = useState('');
   const [textBankInput2, setTextBankInput2] = useState('');
   const [lightboxItem, setLightboxItem] = useState(null);
-  const [createCount, setCreateCount] = useState(1);
-  const [liveSettings, setLiveSettings] = useState(null);
   const [trimItemId, setTrimItemId] = useState(null);
-
-  // Track latest cut points from preview (Cut by beat / Cut to music)
-  const latestCutsRef = useRef(null);
 
   // Audio preview playback
   const [playingAudioId, setPlayingAudioId] = useState(null);
@@ -114,11 +104,6 @@ const VideoNicheContent = ({
   const [wtIsPlaying, setWtIsPlaying] = useState(false);
   const wtAnimRef = useRef(null);
 
-  // Text bank preview overlay
-  const [previewTextA, setPreviewTextA] = useState(null);
-  const [previewTextB, setPreviewTextB] = useState(null);
-  const textPositionsRef = useRef({ a: { x: 50, y: 40, width: 80 }, b: { x: 50, y: 60, width: 80 } });
-
   // Drafts for this niche
   const nicheDrafts = useMemo(() =>
     (createdContent?.videos || []).filter(v => v.collectionId === niche?.id),
@@ -136,20 +121,9 @@ const VideoNicheContent = ({
     updateNicheAudioId(artistId, niche.id, audioId, db);
   }, [artistId, niche, db]);
 
-  // Audio URL for preview components
-  const audioUrl = useMemo(() => selectedAudio?.localUrl || selectedAudio?.url || null, [selectedAudio]);
-
   // Text banks (videoTextBank1 / videoTextBank2)
   const textBank1 = niche?.videoTextBank1 || [];
   const textBank2 = niche?.videoTextBank2 || [];
-
-  // Sync previewText with bank content so buildTextOverlays captures what's on screen
-  useEffect(() => {
-    if (textBank1.length > 0 && !previewTextA) setPreviewTextA(textBank1[0]);
-  }, [textBank1, previewTextA]);
-  useEffect(() => {
-    if (textBank2.length > 0 && !previewTextB) setPreviewTextB(textBank2[0]);
-  }, [textBank2, previewTextB]);
 
   const handleAddTextBank = useCallback((bankNum, text, setter) => {
     if (!text.trim() || !niche) return;
@@ -347,28 +321,11 @@ const VideoNicheContent = ({
     setShowBankPicker(false);
   }, [pendingTranscription, artistId, niche, db]);
 
-  // Template text style for preview overlay
-  const templateTextStyle = useMemo(() => {
-    const tmpl = (niche?.templates || []).find(t => t.id === niche?.activeTemplateId);
-    const defaults = { fontFamily: 'Inter, sans-serif', fontSize: 48, fontWeight: '600',
-      color: '#ffffff', textAlign: 'center', textCase: 'default', outline: true, outlineColor: '#000000' };
-    return tmpl?.settings?.textStyle ? { ...defaults, ...tmpl.settings.textStyle } : defaults;
-  }, [niche]);
-
   // All niche media (images + videos) for the grid
   const nicheMedia = useMemo(() => {
     if (!niche) return [];
     return library.filter(item => (niche.mediaIds || []).includes(item.id) && item.type !== 'audio');
   }, [niche, library]);
-
-  // Niche images only (for photo_montage preview)
-  const nicheImages = useMemo(() => {
-    return nicheMedia.filter(item => item.type === 'image');
-  }, [nicheMedia]);
-
-  // First video for solo clip preview
-  const firstVideo = useMemo(() => nicheMedia.find(m => m.type === 'video'), [nicheMedia]);
-
 
   // Drag-to-reorder media
   const handleMediaReorder = useCallback((reordered) => {
@@ -462,10 +419,6 @@ const VideoNicheContent = ({
                 Import from Web
               </Button>
             </div>
-            <Button variant="neutral-tertiary" size="medium" icon={<FeatherPlay />}
-              onClick={() => onMakeVideo && onMakeVideo(activeFormat, niche.id)}>
-              Create {activeFormat.name}
-            </Button>
           </div>
         ) : (
           /* Media grid — images & videos in scrollable area */
@@ -479,10 +432,6 @@ const VideoNicheContent = ({
                 <Button variant="brand-tertiary" size="small" icon={<FeatherUpload />} onClick={onUpload}>Upload</Button>
                 <Button variant="neutral-tertiary" size="small" icon={<FeatherDownloadCloud />} onClick={onImport}>Import</Button>
                 <Button variant="neutral-tertiary" size="small" icon={<FeatherLink />} onClick={onWebImport}>Web</Button>
-                <Button variant="neutral-tertiary" size="small" icon={<FeatherPlay />}
-                  onClick={() => onMakeVideo && onMakeVideo(activeFormat, niche.id)}>
-                  Create {activeFormat.name}
-                </Button>
               </div>
             </div>
             <div className="w-full overflow-y-auto rounded-lg border border-solid border-neutral-800 bg-[#111118] p-2" style={{ maxHeight: 280 }}>
@@ -576,16 +525,13 @@ const VideoNicheContent = ({
                 {textBank1.map((text, idx) => (
                   <div
                     key={idx}
-                    className={`flex items-center gap-2 rounded-md px-2 py-1 min-w-0 group cursor-pointer transition-colors ${
-                      previewTextA === text ? 'bg-indigo-500/30 ring-1 ring-indigo-500' : 'bg-black/40 hover:bg-black/60'
-                    }`}
-                    onClick={() => setPreviewTextA(prev => prev === text ? null : text)}
+                    className="flex items-center gap-2 rounded-md px-2 py-1 min-w-0 group bg-black/40 hover:bg-black/60 transition-colors"
                   >
                     <FeatherType className="text-indigo-400 flex-none" style={{ width: 10, height: 10 }} />
                     <span className="grow text-caption font-caption text-neutral-300 truncate">{text}</span>
                     <button
                       className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={(e) => { e.stopPropagation(); handleRemoveTextBank(1, idx); if (previewTextA === text) setPreviewTextA(null); }}
+                      onClick={() => handleRemoveTextBank(1, idx)}
                     >
                       <FeatherX style={{ width: 10, height: 10 }} />
                     </button>
@@ -618,16 +564,13 @@ const VideoNicheContent = ({
                 {textBank2.map((text, idx) => (
                   <div
                     key={idx}
-                    className={`flex items-center gap-2 rounded-md px-2 py-1 min-w-0 group cursor-pointer transition-colors ${
-                      previewTextB === text ? 'bg-amber-500/30 ring-1 ring-amber-500' : 'bg-black/40 hover:bg-black/60'
-                    }`}
-                    onClick={() => setPreviewTextB(prev => prev === text ? null : text)}
+                    className="flex items-center gap-2 rounded-md px-2 py-1 min-w-0 group bg-black/40 hover:bg-black/60 transition-colors"
                   >
                     <FeatherType className="text-amber-400 flex-none" style={{ width: 10, height: 10 }} />
                     <span className="grow text-caption font-caption text-neutral-300 truncate">{text}</span>
                     <button
                       className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={(e) => { e.stopPropagation(); handleRemoveTextBank(2, idx); if (previewTextB === text) setPreviewTextB(null); }}
+                      onClick={() => handleRemoveTextBank(2, idx)}
                     >
                       <FeatherX style={{ width: 10, height: 10 }} />
                     </button>
@@ -748,264 +691,6 @@ const VideoNicheContent = ({
             </div>
           </div>
         )}
-
-      </div>
-
-      {/* Right — Template Configurator */}
-      <div className="flex w-96 flex-none flex-col items-start self-stretch border-l border-solid border-neutral-800 bg-black overflow-y-auto">
-      <TemplateConfigurator
-        niche={niche}
-        activeFormat={activeFormat}
-        artistId={artistId}
-        db={db}
-        onSettingsChange={setLiveSettings}
-        previewContent={
-          nicheMedia.length > 0 ? (() => {
-            const settings = liveSettings || {};
-            const ts = settings.textStyle || templateTextStyle;
-            const ar = settings.aspectRatio || '9:16';
-            const tp = settings.textPosition || 'center';
-            switch (activeFormat?.id) {
-              case 'montage':
-                return (
-                  <MontagePreview
-                    media={nicheMedia}
-                    audioUrl={audioUrl}
-                    textBankA={textBank1}
-                    textBankB={textBank2}
-                    textStyle={ts}
-                    textPosition={tp}
-                    aspectRatio={ar}
-                    onCutByWord={selectedAudio ? handleAutoTranscribe : undefined}
-                    onCutsApplied={(cuts) => { latestCutsRef.current = cuts; }}
-                    selectedTextA={previewTextA}
-                    selectedTextB={previewTextB}
-                    onTextPositionsChange={(posA, posB) => { textPositionsRef.current = { a: posA, b: posB }; }}
-                    onTextAChange={(newText) => setPreviewTextA(newText)}
-                    onTextBChange={(newText) => setPreviewTextB(newText)}
-                  />
-                );
-              case 'solo_clip':
-                return (
-                  <SoloClipPreview
-                    video={firstVideo}
-                    allVideos={nicheMedia.filter(m => m.type === 'video')}
-                    audioUrl={audioUrl}
-                    words={transcribedWords}
-                    textStyle={ts}
-                    textPosition={tp}
-                    textDisplayMode={settings.textDisplayMode || 'word'}
-                    textBankA={textBank1}
-                    textBankB={textBank2}
-                    aspectRatio={ar}
-                    onCutsApplied={(cuts) => { latestCutsRef.current = cuts; }}
-                    selectedTextA={previewTextA}
-                    selectedTextB={previewTextB}
-                    onTextPositionsChange={(posA, posB) => { textPositionsRef.current = { a: posA, b: posB }; }}
-                    onTextAChange={(newText) => setPreviewTextA(newText)}
-                    onTextBChange={(newText) => setPreviewTextB(newText)}
-                  />
-                );
-              case 'multi_clip':
-                return (
-                  <MultiClipPreview
-                    media={nicheMedia}
-                    audioUrl={audioUrl}
-                    textBankA={textBank1}
-                    textBankB={textBank2}
-                    textStyle={ts}
-                    textPosition={tp}
-                    transition={settings.transition || 'cut'}
-                    aspectRatio={ar}
-                    onCutsApplied={(cuts) => { latestCutsRef.current = cuts; }}
-                    onCutByWord={selectedAudio ? handleAutoTranscribe : undefined}
-                    selectedTextA={previewTextA}
-                    selectedTextB={previewTextB}
-                    onTextPositionsChange={(posA, posB) => { textPositionsRef.current = { a: posA, b: posB }; }}
-                    onTextAChange={(newText) => setPreviewTextA(newText)}
-                    onTextBChange={(newText) => setPreviewTextB(newText)}
-                  />
-                );
-              case 'photo_montage':
-                return (
-                  <PhotoMontagePreview
-                    images={nicheImages}
-                    audioUrl={audioUrl}
-                    textStyle={ts}
-                    textPosition={tp}
-                    kenBurns={settings.kenBurns !== false}
-                    transition={settings.transition || 'fade'}
-                    beatSync={!!settings.beatSync}
-                    speed={settings.speed || 1}
-                    displayMode={settings.displayMode || 'cover'}
-                    textBankA={textBank1}
-                    textBankB={textBank2}
-                    aspectRatio={ar}
-                    onCutByWord={selectedAudio ? handleAutoTranscribe : undefined}
-                    onCutsApplied={(cuts) => { latestCutsRef.current = cuts; }}
-                    selectedTextA={previewTextA}
-                    selectedTextB={previewTextB}
-                    onTextPositionsChange={(posA, posB) => { textPositionsRef.current = { a: posA, b: posB }; }}
-                    onTextAChange={(newText) => setPreviewTextA(newText)}
-                    onTextBChange={(newText) => setPreviewTextB(newText)}
-                  />
-                );
-              default:
-                return (
-                  <MontagePreview
-                    media={nicheMedia}
-                    audioUrl={audioUrl}
-                    textBankA={textBank1}
-                    textBankB={textBank2}
-                    textStyle={ts}
-                    textPosition={tp}
-                    aspectRatio={ar}
-                    onCutByWord={selectedAudio ? handleAutoTranscribe : undefined}
-                    onCutsApplied={(cuts) => { latestCutsRef.current = cuts; }}
-                    selectedTextA={previewTextA}
-                    selectedTextB={previewTextB}
-                    onTextPositionsChange={(posA, posB) => { textPositionsRef.current = { a: posA, b: posB }; }}
-                    onTextAChange={(newText) => setPreviewTextA(newText)}
-                    onTextBChange={(newText) => setPreviewTextB(newText)}
-                  />
-                );
-            }
-          })() : (
-            <div className="flex flex-col items-center gap-2 px-4">
-              <IconComponent className="text-neutral-600" style={{ width: 24, height: 24 }} />
-              <span className="text-caption font-caption text-neutral-500 text-center">Upload media to preview</span>
-            </div>
-          )
-        }
-        createCount={createCount}
-        onCreateCountChange={setCreateCount}
-        onCreateClick={(templateSettings) => {
-          if (!onMakeVideo) return;
-          const formatId = activeFormat?.id;
-
-          // Build text overlays from preview state to carry into the editor
-          // Use templateTextStyle (the resolved style shown in the preview) as the overlay style
-          const resolvedTextStyle = templateSettings?.textStyle
-            ? { ...templateTextStyle, ...templateSettings.textStyle }
-            : { ...templateTextStyle };
-          const buildTextOverlays = () => {
-            const overlays = [];
-            if (previewTextA) {
-              overlays.push({
-                id: `text_niche_a_${Date.now()}`,
-                text: previewTextA,
-                style: { ...resolvedTextStyle },
-                position: textPositionsRef.current?.a || { x: 50, y: 40, width: 80 }
-              });
-            }
-            if (previewTextB) {
-              overlays.push({
-                id: `text_niche_b_${Date.now()}`,
-                text: previewTextB,
-                style: { ...resolvedTextStyle },
-                position: textPositionsRef.current?.b || { x: 50, y: 60, width: 80 }
-              });
-            }
-            return overlays;
-          };
-          const nicheTextOverlays = buildTextOverlays();
-
-          if (formatId === 'solo_clip') {
-            // Solo = pass niche videos directly so SoloClipEditor doesn't depend on pipelineCategory
-            const videos = nicheMedia.filter(m => m.type === 'video');
-            const draft = {
-              editorMode: 'solo-clip',
-              ...(createCount > 1 ? { _nicheGenerateCount: createCount } : {}),
-              audio: selectedAudio ? { ...selectedAudio } : null,
-              _nicheVideos: videos.map(v => ({
-                id: v.id, url: v.url, localUrl: v.localUrl || v.url,
-                thumbnailUrl: v.thumbnailUrl || v.thumbnail, name: v.name || 'Clip',
-                type: 'video'
-              })),
-              textOverlays: nicheTextOverlays,
-              textStyle: resolvedTextStyle,
-            };
-            onMakeVideo(activeFormat, niche.id, draft, templateSettings);
-
-          } else if (formatId === 'photo_montage') {
-            // Photo Montage = images, not video clips
-            const draft = {
-              editorMode: 'photo-montage',
-              ...(createCount > 1 ? { _nicheGenerateCount: createCount } : {}),
-              audio: selectedAudio ? { ...selectedAudio } : null,
-              montagePhotos: nicheImages.map(img => ({
-                id: img.id, sourceImageId: img.id,
-                url: img.url, thumbnailUrl: img.thumbnailUrl || null,
-                name: img.name,
-              })),
-              clips: [],
-              textBankA: textBank1,
-              textBankB: textBank2,
-              textOverlays: nicheTextOverlays,
-              textStyle: resolvedTextStyle,
-            };
-            onMakeVideo(activeFormat, niche.id, draft, templateSettings);
-
-          } else {
-            // multi_clip + montage: all videos as clips
-            const editorMode = formatId === 'multi_clip' ? 'multi-clip' : 'montage';
-            const videos = nicheMedia.filter(m => m.type === 'video');
-            const cuts = latestCutsRef.current;
-            let clips;
-            if (cuts && cuts.length > 1 && videos.length > 0) {
-              clips = cuts.map((t, i) => {
-                const endTime = cuts[i + 1] != null ? cuts[i + 1] : (selectedAudio?.duration || 30);
-                const v = videos[i % videos.length];
-                return {
-                  id: `clip_${Date.now()}_${i}`,
-                  sourceId: v.id,
-                  url: v.url || v.localUrl,
-                  localUrl: v.localUrl || v.url,
-                  thumbnail: v.thumbnailUrl || v.thumbnail,
-                  startTime: t,
-                  duration: Math.max(0.1, endTime - t),
-                  locked: false,
-                  sourceOffset: 0,
-                };
-              });
-            } else {
-              clips = videos.map((v, i) => ({
-                id: `clip_${Date.now()}_${i}`,
-                sourceId: v.id,
-                url: v.url || v.localUrl,
-                localUrl: v.localUrl || v.url,
-                thumbnail: v.thumbnailUrl || v.thumbnail,
-                startTime: i * 2,
-                duration: 2,
-                locked: false,
-                sourceOffset: 0,
-              }));
-            }
-            const draft = {
-              editorMode,
-              ...(createCount > 1 ? { _nicheGenerateCount: createCount } : {}),
-              audio: selectedAudio ? { ...selectedAudio } : null,
-              clips,
-              textBankA: textBank1,
-              textBankB: textBank2,
-              textOverlays: nicheTextOverlays,
-              textStyle: resolvedTextStyle,
-            };
-            latestCutsRef.current = null;
-            onMakeVideo(activeFormat, niche.id, draft, templateSettings);
-          }
-        }}
-        createLabel={`Create ${createCount} ${activeFormat.name}${createCount > 1 ? 's' : ''}`}
-        selectedAudio={selectedAudio}
-        projectAudio={projectAudio}
-        onSelectAudio={handleSelectAudio}
-        onUploadAudio={onUploadAudio}
-        onTrimAudio={() => setShowAudioTrimmer(true)}
-        onAutoTranscribe={handleAutoTranscribe}
-        isTranscribing={isAnalyzing}
-        draftCount={nicheDrafts.length}
-        onOpenLatestDraft={nicheDrafts.length > 0 ? () => onMakeVideo && nicheDrafts[0] && onMakeVideo(activeFormat, niche.id, nicheDrafts[0]) : null}
-      />
 
       </div>
 

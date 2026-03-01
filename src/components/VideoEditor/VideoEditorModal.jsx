@@ -91,7 +91,6 @@ const VideoEditorModal = ({
   showTemplatePicker = false,
   schedulerEditMode = false,
   initialEditorMode = null,
-  templateSettings = null,
   clipperSourceVideos = [],
   clipperSession = null,
   onSaveClipperSession = null,
@@ -2427,7 +2426,7 @@ const VideoEditorModal = ({
       <SoloClipEditor
         category={category}
         existingVideo={existingVideo}
-        templateSettings={templateSettings}
+
         onSave={onSave}
         onClose={onClose}
         artistId={artistId}
@@ -2451,7 +2450,7 @@ const VideoEditorModal = ({
       <MultiClipEditor
         category={category}
         existingVideo={existingVideo}
-        templateSettings={templateSettings}
+
         onSave={onSave}
         onClose={onClose}
         artistId={artistId}
@@ -2475,7 +2474,7 @@ const VideoEditorModal = ({
       <PhotoMontageEditor
         category={category}
         existingVideo={existingVideo}
-        templateSettings={templateSettings}
+
         onSave={onSave}
         onClose={onClose}
         artistId={artistId}

@@ -58,7 +58,6 @@ const SlideshowEditor = ({
   onImportToBank,
   lateAccountIds = {},
   schedulerEditMode = false,
-  templateSettings = null
 }) => {
   // Mobile responsive detection
   const { isMobile } = useIsMobile();
@@ -178,7 +177,7 @@ const SlideshowEditor = ({
   }, [activeSlideshowIndex]);
 
   // Other slideshow state
-  const [aspectRatio, setAspectRatio] = useState(existingSlideshow?.aspectRatio || templateSettings?.aspectRatio || '9:16');
+  const [aspectRatio, setAspectRatio] = useState(existingSlideshow?.aspectRatio || '9:16');
   const [selectedSlideIndex, setSelectedSlideIndex] = useState(0);
   const [activeBank, setActiveBank] = useState('image0'); // 'image0' | 'image1' | ... | 'audio' | 'lyrics'
   const [libraryImages, setLibraryImages] = useState([]);

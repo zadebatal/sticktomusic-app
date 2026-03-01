@@ -995,7 +995,6 @@ const VideoStudio = ({
 
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [initialEditorMode, setInitialEditorMode] = useState(null);
-  const [pendingTemplateSettings, setPendingTemplateSettings] = useState(null);
 
   const handleMakeVideo = useCallback((existingVideo = null, editorMode = null) => {
     setEditingVideo(existingVideo);
@@ -1026,7 +1025,6 @@ const VideoStudio = ({
     setShowEditor(false);
     setEditingVideo(null);
     setInitialEditorMode(null);
-    setPendingTemplateSettings(null);
     // Clear library selection so stale clips don't appear next time
     setSelectedLibraryMedia({ videos: [], audio: null, images: [], lyrics: [] });
     setPullFromCollection(null);
@@ -2711,22 +2709,20 @@ const VideoStudio = ({
               setActiveProjectNicheId(null);
               setCurrentView('home');
             }}
-            onOpenEditor={(p, count, existingDraft, templateSettings) => {
+            onOpenEditor={(p, count, existingDraft) => {
               setSelectedCategory(null);
               setActivePipelineIdForEditor(p.id);
               setPullFromCollection(p.id);
               setPipelineCategoryVersion(v => v + 1);
-              setPendingTemplateSettings(templateSettings || null);
               handleMakeSlideshow(existingDraft || null);
             }}
-            onOpenVideoEditor={(format, nicheId, existingDraft, templateSettings, nicheSourceVideos) => {
+            onOpenVideoEditor={(format, nicheId, existingDraft, _templateSettings, nicheSourceVideos) => {
               if (nicheId) {
                 setSelectedCategory(null); // Clear stale category so pipelineCategory is used
                 setActivePipelineIdForEditor(nicheId);
                 setPullFromCollection(nicheId);
                 setPipelineCategoryVersion(v => v + 1); // Force recompute to pick up latest text banks
               }
-              setPendingTemplateSettings(templateSettings || null);
               setClipperSourceVideos(nicheSourceVideos || []);
               // Clipper: compute bank labels from niche + handle session objects
               if (format?.id === 'clipper' && nicheId && currentArtistId) {
@@ -2985,7 +2981,6 @@ const VideoStudio = ({
             showTemplatePicker={schedulerEditPostId ? false : showTemplatePicker}
             schedulerEditMode={!!schedulerEditPostId}
             initialEditorMode={initialEditorMode}
-            templateSettings={pendingTemplateSettings}
             clipperSourceVideos={clipperSourceVideos}
             clipperSession={clipperSession}
             onSaveClipperSession={handleSaveClipperSession}
@@ -3014,7 +3009,6 @@ const VideoStudio = ({
           initialLyrics={selectedLibraryMedia?.lyrics || []}
           initialSelectedBanks={selectedLibraryMedia?.selectedBanks || null}
           batchMode={slideshowBatchMode}
-          templateSettings={pendingTemplateSettings}
           onSave={handleSaveSlideshow}
           onClose={() => { handleCloseSlideshowEditor(); setSchedulerEditPostId(null); }}
           onSchedulePost={schedulerEditPostId ? null : onSchedulePost}
