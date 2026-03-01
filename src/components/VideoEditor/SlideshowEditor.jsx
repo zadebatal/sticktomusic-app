@@ -1027,17 +1027,19 @@ const SlideshowEditor = ({
   // Gather text bank items from the active collection only (not merged across all)
   const textBanksCache = useMemo(() => {
     // Priority: 1) collection matching activeCollectionId (from source dropdown)
-    // 2) category prop if it has textBanks (real collection passed from parent)
-    // 3) category.id match in collections (Firestore version has textBanks)
+    // 2) actual collection matching category.id (has proper banks/textBanks fields)
+    // 3) category prop if it has textBanks (synthetic pipelineCategory from parent)
     // 4) first collection as fallback
     const colFromSource = activeCollectionId ? collections.find(c => c.id === activeCollectionId) : null;
-    const catHasTextBanks = category && (category.textBanks || []).some(tb => tb?.length > 0);
     const colFromCategory = category?.id ? collections.find(c => c.id === category.id) : null;
-    const activeCol = colFromSource || (catHasTextBanks ? category : null) || colFromCategory || collections[0];
+    const catHasTextBanks = category && (category.textBanks || []).some(tb => tb?.length > 0);
+    const activeCol = colFromSource || colFromCategory || (catHasTextBanks ? category : null) || collections[0];
     if (!activeCol) { return [[], []]; }
     const migrated = migrateCollectionBanks(activeCol);
     const result = (migrated.textBanks || []).map(tb => tb?.length > 0 ? [...tb] : []);
-    while (result.length < 2) result.push([]);
+    // Extend to match the number of image banks (so every slide has a text bank row)
+    const bankCount = (migrated.banks || []).length;
+    while (result.length < Math.max(bankCount, 2)) result.push([]);
     return result;
   }, [category, activeCollectionId, collections, migrateCollectionBanks]);
   const getTextBanks = useCallback(() => textBanksCache, [textBanksCache]);

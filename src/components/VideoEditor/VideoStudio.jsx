@@ -553,6 +553,7 @@ const VideoStudio = ({
     return {
       id: pipeline.id,
       name: pipeline.name,
+      banks: pipeline.banks || [],
       videos: pipelineMedia
         .filter(v => v.type === MEDIA_TYPES.VIDEO)
         .map(v => ({ ...v, src: v.url, localUrl: v.localUrl || v.url, thumbnail: v.thumbnail || null, name: v.name || 'Clip' })),
