@@ -8,7 +8,7 @@ import {
 import { getTemplates, generateFromTemplate } from '../../services/contentTemplateService';
 
 import { useToast, ConfirmDialog } from '../ui';
-import { getCreatedContent, getCollections, getCollectionHashtagBank, getCollectionCaptionBank, getLibrary, getEffectiveHashtags } from '../../services/libraryService';
+import { getCreatedContent, getCollections, getCollectionHashtagBank, getCollectionCaptionBank, getLibrary, getEffectiveHashtags, getProjects, getProjectNiches, getProjectById } from '../../services/libraryService';
 import { renderVideo } from '../../services/videoExportService';
 import { exportSlideshowAsImages, generateSlideThumbnail } from '../../services/slideshowExportService';
 import { uploadFile } from '../../services/firebaseStorage';
@@ -1926,10 +1926,9 @@ const SchedulingPage = ({
       {/* ═══ BULK CAPTION/HASHTAG PANEL ═══ */}
       {hasSelection && (
         <BulkCaptionPanel
+          artistId={artistId}
           posts={posts}
           selectedPostIds={selectedPostIds}
-          nicheBankMap={nicheBankMap}
-          getPostBank={getPostBank}
           onUpdatePost={handleUpdatePost}
           toastSuccess={toastSuccess}
           readOnly={readOnly}
@@ -2440,33 +2439,44 @@ const PostRow = ({
 };
 
 // ═══════════════════════════════════════════════════
-// BulkCaptionPanel — Manage captions & hashtags for selected posts
+// BulkCaptionPanel — Studio bank browser for applying captions & hashtags
 // ═══════════════════════════════════════════════════
-const BulkCaptionPanel = ({ posts, selectedPostIds, nicheBankMap, getPostBank, onUpdatePost, toastSuccess, readOnly, theme }) => {
+const BulkCaptionPanel = ({ artistId, posts, selectedPostIds, onUpdatePost, toastSuccess, readOnly, theme }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [bulkCaption, setBulkCaption] = useState('');
-  const [bulkHashtags, setBulkHashtags] = useState('');
+  const [activeSource, setActiveSource] = useState(null); // null = auto-select first, or project/niche ID
 
   const selectedPosts = useMemo(() => posts.filter(p => selectedPostIds.has(p.id)), [posts, selectedPostIds]);
 
-  // Collect all unique bank entries across selected posts
-  const bankOptions = useMemo(() => {
-    const captionSet = new Set();
-    const alwaysSet = new Set();
-    const poolSet = new Set();
-    for (const post of selectedPosts) {
-      const bank = getPostBank(post);
-      if (bank.caption) captionSet.add(bank.caption);
-      (bank.captions || []).forEach(c => captionSet.add(c));
-      (bank.alwaysHashtags || bank.hashtags || []).forEach(h => alwaysSet.add(h));
-      (bank.poolHashtags || []).forEach(h => poolSet.add(h));
+  // Load all projects and their niches — this IS the Studio bank data
+  const bankSources = useMemo(() => {
+    if (!artistId) return [];
+    const projects = getProjects(artistId);
+    const sources = [];
+    for (const proj of projects) {
+      const projCB = getCollectionCaptionBank(proj);
+      const projHB = getCollectionHashtagBank(proj);
+      const projCaptions = Array.isArray(projCB) ? { always: projCB, pool: [] } : { always: projCB.always || [], pool: projCB.pool || [] };
+      const projHashtags = Array.isArray(projHB) ? { always: projHB, pool: [] } : { always: projHB.always || [], pool: projHB.pool || [] };
+      const hasProjData = projCaptions.always.length + projCaptions.pool.length + projHashtags.always.length + projHashtags.pool.length > 0;
+      if (hasProjData) {
+        sources.push({ id: proj.id, name: proj.name, type: 'project', captions: projCaptions, hashtags: projHashtags });
+      }
+      const niches = getProjectNiches(artistId, proj.id);
+      for (const niche of niches) {
+        const nicheCB = getCollectionCaptionBank(niche);
+        const nicheHB = getCollectionHashtagBank(niche);
+        const nicheCaptions = Array.isArray(nicheCB) ? { always: nicheCB, pool: [] } : { always: nicheCB.always || [], pool: nicheCB.pool || [] };
+        const nicheHashtags = Array.isArray(nicheHB) ? { always: nicheHB, pool: [] } : { always: nicheHB.always || [], pool: nicheHB.pool || [] };
+        const hasNicheData = nicheCaptions.always.length + nicheCaptions.pool.length + nicheHashtags.always.length + nicheHashtags.pool.length > 0;
+        if (hasNicheData) {
+          sources.push({ id: niche.id, name: `${proj.name} → ${niche.name}`, type: 'niche', captions: nicheCaptions, hashtags: nicheHashtags });
+        }
+      }
     }
-    return {
-      captions: [...captionSet],
-      alwaysHashtags: [...alwaysSet],
-      poolHashtags: [...poolSet],
-    };
-  }, [selectedPosts, getPostBank]);
+    return sources;
+  }, [artistId]);
+
+  const active = activeSource ? bankSources.find(s => s.id === activeSource) : bankSources[0] || null;
 
   const handleApplyCaption = useCallback(async (captionText) => {
     if (readOnly || !captionText.trim()) return;
@@ -2478,10 +2488,8 @@ const BulkCaptionPanel = ({ posts, selectedPostIds, nicheBankMap, getPostBank, o
     toastSuccess(`Caption applied to ${count} post${count !== 1 ? 's' : ''}`);
   }, [selectedPosts, onUpdatePost, toastSuccess, readOnly]);
 
-  const handleApplyHashtags = useCallback(async (hashtagStr) => {
-    if (readOnly) return;
-    const tags = hashtagStr.split(/[\s,]+/).filter(Boolean).map(h => h.startsWith('#') ? h : `#${h}`);
-    if (tags.length === 0) return;
+  const handleAddHashtags = useCallback(async (tags) => {
+    if (readOnly || tags.length === 0) return;
     let count = 0;
     for (const post of selectedPosts) {
       const existing = Array.isArray(post.hashtags) ? post.hashtags : (post.hashtags || '').split(/\s+/).filter(Boolean);
@@ -2496,13 +2504,11 @@ const BulkCaptionPanel = ({ posts, selectedPostIds, nicheBankMap, getPostBank, o
     if (readOnly) return;
     let count = 0;
     for (const post of selectedPosts) {
-      await onUpdatePost(post.id, { hashtags: tags });
+      await onUpdatePost(post.id, { hashtags: [...tags] });
       count++;
     }
     toastSuccess(`Hashtags set on ${count} post${count !== 1 ? 's' : ''}`);
   }, [selectedPosts, onUpdatePost, toastSuccess, readOnly]);
-
-  const hasBankData = bankOptions.captions.length > 0 || bankOptions.alwaysHashtags.length > 0 || bankOptions.poolHashtags.length > 0;
 
   return (
     <div style={{ borderBottom: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.surface }}>
@@ -2516,155 +2522,159 @@ const BulkCaptionPanel = ({ posts, selectedPostIds, nicheBankMap, getPostBank, o
         <FeatherEdit2 style={{ width: 14, height: 14, color: '#6366f1' }} />
         <span style={{ fontSize: '13px', fontWeight: '600' }}>Captions & Hashtags</span>
         <Badge variant="neutral">{selectedPostIds.size} selected</Badge>
-        {hasBankData && <Badge style={{ marginLeft: '4px' }}>Bank Available</Badge>}
+        {bankSources.length > 0 && (
+          <span style={{ fontSize: '11px', color: '#6366f1', fontWeight: '500' }}>{bankSources.length} bank{bankSources.length !== 1 ? 's' : ''}</span>
+        )}
         <span style={{ marginLeft: 'auto', fontSize: '11px', color: theme.text.secondary }}>{isExpanded ? '▲' : '▼'}</span>
       </button>
 
       {isExpanded && (
-        <div style={{ padding: '0 24px 16px', display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-          {/* Caption Section */}
-          <div style={{ flex: '1 1 320px', minWidth: 0 }}>
-            <label style={{ fontSize: '10px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#52525b', display: 'block', marginBottom: '6px' }}>Caption</label>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <textarea
-                value={bulkCaption}
-                onChange={(e) => setBulkCaption(e.target.value)}
-                placeholder="Type a caption to apply to all selected..."
-                rows={2}
-                style={{
-                  flex: 1, padding: '8px 10px', borderRadius: '6px',
-                  border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.input,
-                  color: theme.text.primary, fontSize: '12px', fontFamily: 'inherit', resize: 'vertical', lineHeight: '1.4',
-                }}
-              />
-              <button
-                onClick={() => handleApplyCaption(bulkCaption)}
-                disabled={!bulkCaption.trim()}
-                style={{
-                  padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: bulkCaption.trim() ? 'pointer' : 'default',
-                  backgroundColor: bulkCaption.trim() ? '#6366f1' : '#27272a', color: '#fff',
-                  fontSize: '11px', fontWeight: '600', alignSelf: 'flex-end', whiteSpace: 'nowrap', opacity: bulkCaption.trim() ? 1 : 0.5,
-                }}
-              >
-                Apply
-              </button>
+        <div style={{ padding: '0 24px 16px' }}>
+          {bankSources.length === 0 ? (
+            <div style={{ fontSize: '12px', color: '#52525b', fontStyle: 'italic', padding: '8px 0' }}>
+              No banks set up yet — add captions & hashtags in Studio → Captions & Hashtags
             </div>
+          ) : (
+            <>
+              {/* Source tabs */}
+              <div style={{ display: 'flex', gap: '4px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                {bankSources.map(src => (
+                  <button
+                    key={src.id}
+                    onClick={() => setActiveSource(src.id)}
+                    style={{
+                      padding: '4px 12px', borderRadius: '6px', border: 'none', cursor: 'pointer',
+                      fontSize: '11px', fontWeight: '600',
+                      backgroundColor: (active?.id === src.id) ? 'rgba(99,102,241,0.15)' : 'transparent',
+                      color: (active?.id === src.id) ? '#a5b4fc' : '#71717a',
+                    }}
+                  >
+                    {src.name}
+                  </button>
+                ))}
+              </div>
 
-            {/* Caption bank options */}
-            {bankOptions.captions.length > 0 && (
-              <div style={{ marginTop: '8px' }}>
-                <span style={{ fontSize: '9px', color: '#52525b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>From Bank (click to apply)</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '4px', maxHeight: '100px', overflowY: 'auto' }}>
-                  {bankOptions.captions.map((cap, i) => (
-                    <div
-                      key={i}
-                      onClick={() => { setBulkCaption(cap); handleApplyCaption(cap); }}
-                      style={{
-                        padding: '5px 8px', borderRadius: '5px', backgroundColor: theme.bg.input,
-                        border: `1px solid ${theme.border.default}`, fontSize: '11px', color: theme.text.secondary,
-                        cursor: 'pointer', lineHeight: '1.4',
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.color = '#a5b4fc'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = theme.border.default; e.currentTarget.style.color = theme.text.secondary; }}
-                    >
-                      {cap.length > 100 ? cap.slice(0, 100) + '...' : cap}
+              {active && (
+                <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                  {/* Captions */}
+                  <div style={{ flex: '1 1 300px', minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '10px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#52525b' }}>Captions</span>
+                      <span style={{ fontSize: '10px', color: '#52525b' }}>({active.captions.always.length + active.captions.pool.length})</span>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
 
-          {/* Hashtag Section */}
-          <div style={{ flex: '1 1 320px', minWidth: 0 }}>
-            <label style={{ fontSize: '10px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#52525b', display: 'block', marginBottom: '6px' }}>Hashtags</label>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <input
-                type="text"
-                value={bulkHashtags}
-                onChange={(e) => setBulkHashtags(e.target.value)}
-                placeholder="#tag1 #tag2 — adds to existing"
-                style={{
-                  flex: 1, padding: '8px 10px', borderRadius: '6px',
-                  border: `1px solid ${theme.border.default}`, backgroundColor: theme.bg.input,
-                  color: theme.text.primary, fontSize: '12px',
-                }}
-              />
-              <button
-                onClick={() => { handleApplyHashtags(bulkHashtags); setBulkHashtags(''); }}
-                disabled={!bulkHashtags.trim()}
-                style={{
-                  padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: bulkHashtags.trim() ? 'pointer' : 'default',
-                  backgroundColor: bulkHashtags.trim() ? '#6366f1' : '#27272a', color: '#fff',
-                  fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap', opacity: bulkHashtags.trim() ? 1 : 0.5,
-                }}
-              >
-                Add to All
-              </button>
-            </div>
+                    {active.captions.always.length > 0 && (
+                      <div style={{ marginBottom: '6px' }}>
+                        <span style={{ fontSize: '9px', color: '#22c55e', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Always On</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '3px', maxHeight: '120px', overflowY: 'auto' }}>
+                          {active.captions.always.map((cap, i) => (
+                            <div
+                              key={i}
+                              onClick={() => handleApplyCaption(cap)}
+                              style={{
+                                padding: '5px 8px', borderRadius: '5px', cursor: 'pointer', lineHeight: '1.4', fontSize: '11px',
+                                backgroundColor: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.2)', color: '#86efac',
+                              }}
+                              title="Click to apply to selected posts"
+                            >
+                              {cap.length > 120 ? cap.slice(0, 120) + '...' : cap}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-            {/* Always-on tags from bank */}
-            {bankOptions.alwaysHashtags.length > 0 && (
-              <div style={{ marginTop: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                  <span style={{ fontSize: '9px', color: '#22c55e', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Always On</span>
-                  <button
-                    onClick={() => handleSetHashtags(bankOptions.alwaysHashtags)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '10px', color: '#6366f1', fontWeight: '600' }}
-                  >
-                    Apply All
-                  </button>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-                  {bankOptions.alwaysHashtags.map((tag, i) => (
-                    <span
-                      key={i}
-                      onClick={() => handleApplyHashtags(tag)}
-                      style={{
-                        padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: '500', cursor: 'pointer',
-                        backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#4ade80',
-                      }}
-                      title="Click to add to all selected"
-                    >{tag}</span>
-                  ))}
-                </div>
-              </div>
-            )}
+                    {active.captions.pool.length > 0 && (
+                      <div>
+                        <span style={{ fontSize: '9px', color: '#52525b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pool</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '3px', maxHeight: '120px', overflowY: 'auto' }}>
+                          {active.captions.pool.map((cap, i) => (
+                            <div
+                              key={i}
+                              onClick={() => handleApplyCaption(cap)}
+                              style={{
+                                padding: '5px 8px', borderRadius: '5px', cursor: 'pointer', lineHeight: '1.4', fontSize: '11px',
+                                backgroundColor: theme.bg.input, border: `1px solid ${theme.border.default}`, color: theme.text.secondary,
+                              }}
+                              title="Click to apply to selected posts"
+                            >
+                              {cap.length > 120 ? cap.slice(0, 120) + '...' : cap}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-            {/* Pool tags from bank */}
-            {bankOptions.poolHashtags.length > 0 && (
-              <div style={{ marginTop: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                  <span style={{ fontSize: '9px', color: '#52525b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pool</span>
-                  <button
-                    onClick={() => handleApplyHashtags(bankOptions.poolHashtags.join(' '))}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '10px', color: '#6366f1', fontWeight: '600' }}
-                  >
-                    Add All
-                  </button>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-                  {bankOptions.poolHashtags.map((tag, i) => (
-                    <span
-                      key={i}
-                      onClick={() => handleApplyHashtags(tag)}
-                      style={{
-                        padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: '500', cursor: 'pointer',
-                        backgroundColor: 'rgba(63,63,70,0.3)', border: '1px solid #3f3f46', color: '#71717a',
-                      }}
-                      title="Click to add to all selected"
-                    >{tag}</span>
-                  ))}
-                </div>
-              </div>
-            )}
+                    {active.captions.always.length === 0 && active.captions.pool.length === 0 && (
+                      <div style={{ fontSize: '11px', color: '#52525b', fontStyle: 'italic' }}>No captions in this bank</div>
+                    )}
+                  </div>
 
-            {!hasBankData && (
-              <div style={{ marginTop: '8px', fontSize: '11px', color: '#52525b', fontStyle: 'italic' }}>
-                No bank data — add captions & hashtags in Studio → Captions & Hashtags
-              </div>
-            )}
-          </div>
+                  {/* Hashtags */}
+                  <div style={{ flex: '1 1 300px', minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '10px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#52525b' }}>Hashtags</span>
+                      <span style={{ fontSize: '10px', color: '#52525b' }}>({active.hashtags.always.length + active.hashtags.pool.length})</span>
+                    </div>
+
+                    {active.hashtags.always.length > 0 && (
+                      <div style={{ marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '9px', color: '#22c55e', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Always On</span>
+                          <button
+                            onClick={() => handleSetHashtags(active.hashtags.always)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '10px', color: '#6366f1', fontWeight: '600' }}
+                          >Apply All to Selected</button>
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {active.hashtags.always.map((tag, i) => (
+                            <span
+                              key={i}
+                              onClick={() => handleAddHashtags([tag])}
+                              style={{
+                                padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: '500', cursor: 'pointer',
+                                backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#4ade80',
+                              }}
+                              title="Click to add to selected posts"
+                            >{tag}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {active.hashtags.pool.length > 0 && (
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '9px', color: '#52525b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pool</span>
+                          <button
+                            onClick={() => handleAddHashtags(active.hashtags.pool)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '10px', color: '#6366f1', fontWeight: '600' }}
+                          >Add All to Selected</button>
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {active.hashtags.pool.map((tag, i) => (
+                            <span
+                              key={i}
+                              onClick={() => handleAddHashtags([tag])}
+                              style={{
+                                padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: '500', cursor: 'pointer',
+                                backgroundColor: 'rgba(63,63,70,0.3)', border: '1px solid #3f3f46', color: '#a1a1aa',
+                              }}
+                              title="Click to add to selected posts"
+                            >{tag}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {active.hashtags.always.length === 0 && active.hashtags.pool.length === 0 && (
+                      <div style={{ fontSize: '11px', color: '#52525b', fontStyle: 'italic' }}>No hashtags in this bank</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
