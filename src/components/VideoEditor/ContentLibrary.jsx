@@ -7,7 +7,7 @@ import { renderVideo } from '../../services/videoExportService';
 import { uploadFile } from '../../services/firebaseStorage';
 import { exportSlideshowAsImages } from '../../services/slideshowExportService';
 import { createScheduledPost, deleteScheduledPost, getScheduledPosts, POST_STATUS } from '../../services/scheduledPostsService';
-import { getLibrary, getLibraryAsync, getProjects, getProjectNiches, saveCreatedContentAsync, markContentScheduledAsync, unmarkContentScheduledAsync } from '../../services/libraryService';
+import { getLibrary, getLibraryAsync, getProjects, getProjectNiches, saveCreatedContentAsync, markContentScheduledAsync, unmarkContentScheduledAsync, resolveCollectionBanks } from '../../services/libraryService';
 import log from '../../utils/logger';
 import {
   initGoogleDrive, authenticate as driveAuth, isAuthenticated as isDriveAuth,
@@ -18,6 +18,7 @@ import {
   uploadFile as dbxUploadFile, ensureAppFolder as dbxEnsureAppFolder
 } from '../../services/dropboxService';
 import useIsMobile from '../../hooks/useIsMobile';
+import useMediaMultiSelect from './shared/useMediaMultiSelect';
 import { useTheme } from '../../contexts/ThemeContext';
 import CloudImportButton from './CloudImportButton';
 import { Button } from '../../ui/components/Button';
@@ -74,8 +75,6 @@ const ContentLibrary = ({
   const [dateRange, setDateRange] = useState('all');
   const [projectFilter, setProjectFilter] = useState('all');
   const [nicheFilter, setNicheFilter] = useState('all');
-  const [selectedVideoIds, setSelectedVideoIds] = useState(new Set());
-  const [lastSelectedIndex, setLastSelectedIndex] = useState(null);
   const [exportingVideo, setExportingVideo] = useState(null);
   const [previewingVideo, setPreviewingVideo] = useState(null);
   const [previewingSlideshow, setPreviewingSlideshow] = useState(null);
@@ -341,6 +340,10 @@ const ContentLibrary = ({
   // For backwards compatibility, also alias as videos for video-specific logic
   const videos = isSlideshow ? [] : items;
 
+  // Rubber-band multi-select — replaces manual selectedVideoIds + toggleItemSelection
+  const { selectedIds, isDragSelecting, rubberBand, gridRef, gridMouseHandlers, toggleSelect, selectAll, clearSelection } = useMediaMultiSelect(items);
+  const selectedVideoIds = selectedIds;
+
   const selectedItems = useMemo(() =>
     items.filter(v => selectedVideoIds.has(v.id)),
     [items, selectedVideoIds]
@@ -394,28 +397,6 @@ const ContentLibrary = ({
     } finally { setAssigningAudio(false); }
   }, [db, artistId, selectedVideoIds, items, category, toastSuccess, toastError]);
 
-  const toggleItemSelection = (itemId) => {
-    setSelectedVideoIds(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(itemId)) {
-        newSet.delete(itemId);
-      } else {
-        newSet.add(itemId);
-      }
-      return newSet;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    const allSelected = filteredItems.every(v => selectedVideoIds.has(v.id));
-    if (allSelected) {
-      setSelectedVideoIds(new Set());
-    } else {
-      setSelectedVideoIds(new Set(filteredItems.map(v => v.id)));
-    }
-  };
-
-  const clearSelection = () => setSelectedVideoIds(new Set());
 
   // Identify drafts that have been posted or scheduled via scheduled posts
   const postedContentIds = useMemo(() => {
@@ -481,24 +462,6 @@ const ContentLibrary = ({
   const filteredScheduledItems = useMemo(() => scheduledItems.filter(applyProjectNicheFilter), [scheduledItems, applyProjectNicheFilter]);
   const filteredPostedItems = useMemo(() => postedItems.filter(applyProjectNicheFilter), [postedItems, applyProjectNicheFilter]);
 
-  // Card-level click-to-select with shift-click range support
-  const handleCardSelect = useCallback((itemId, index, event) => {
-    if (event.shiftKey && lastSelectedIndex !== null) {
-      // Shift-click: select range
-      const start = Math.min(lastSelectedIndex, index);
-      const end = Math.max(lastSelectedIndex, index);
-      const rangeIds = filteredItems.slice(start, end + 1).map(item => item.id);
-      setSelectedVideoIds(prev => {
-        const newSet = new Set(prev);
-        rangeIds.forEach(id => newSet.add(id));
-        return newSet;
-      });
-    } else {
-      // Single click: toggle
-      toggleItemSelection(itemId);
-      setLastSelectedIndex(index);
-    }
-  }, [lastSelectedIndex, filteredItems, toggleItemSelection]);
 
   // Backwards compat alias
   const filteredVideos = isSlideshow ? [] : filteredItems;
@@ -575,7 +538,7 @@ const ContentLibrary = ({
           ].map(tab => (
             <button
               key={tab.key}
-              onClick={() => setDraftTab(tab.key)}
+              onClick={() => { setDraftTab(tab.key); clearSelection(); }}
               className={`border-none cursor-pointer transition-all duration-150 px-5 py-2.5 text-[13px] font-semibold ${draftTab === tab.key ? 'bg-indigo-500/15 text-indigo-400 border-b-2 border-b-brand-600' : 'bg-transparent text-neutral-500 border-b-2 border-b-transparent'}`}
             >
               {tab.label} ({tab.count})
@@ -603,7 +566,7 @@ const ContentLibrary = ({
               <input
                 type="checkbox"
                 checked={filteredItems.length > 0 && filteredItems.every(v => selectedVideoIds.has(v.id))}
-                onChange={toggleSelectAll}
+                onChange={selectAll}
                 className="w-5 h-5 accent-brand-600 cursor-pointer"
               />
               Select All ({filteredItems.length})
@@ -773,14 +736,27 @@ const ContentLibrary = ({
             </p>
           </div>
         ) : (
-          <div className={`grid gap-4 ${isMobile ? 'grid-cols-2 !gap-2.5' : 'grid-cols-[repeat(auto-fill,minmax(200px,1fr))]'}`}>
+          <div
+            ref={gridRef}
+            {...(!isMobile ? gridMouseHandlers : {})}
+            className={`grid gap-4 ${isMobile ? 'grid-cols-2 !gap-2.5' : 'grid-cols-[repeat(auto-fill,minmax(200px,1fr))]'}`}
+            style={{ position: 'relative', userSelect: isDragSelecting ? 'none' : undefined }}
+          >
+            {rubberBand && (
+              <div style={{
+                position: 'absolute', left: rubberBand.left, top: rubberBand.top,
+                width: rubberBand.width, height: rubberBand.height,
+                border: '1px solid #6366f1', backgroundColor: 'rgba(99,102,241,0.15)',
+                pointerEvents: 'none', zIndex: 10
+              }} />
+            )}
             {filteredItems.map((item, index) => (
               isSlideshow ? (
-                <div key={item.id} onClick={(e) => handleCardSelect(item.id, index, e)} style={{ cursor: 'pointer', contentVisibility: 'auto', containIntrinsicSize: '0 200px' }}>
+                <div key={item.id} data-media-id={item.id} onClick={(e) => toggleSelect(item.id, e)} style={{ cursor: 'pointer', contentVisibility: 'auto', containIntrinsicSize: '0 200px' }}>
                   <SlideshowCard
                     slideshow={item}
                     isSelected={selectedVideoIds.has(item.id)}
-                    onToggleSelect={() => toggleItemSelection(item.id)}
+                    onToggleSelect={() => toggleSelect(item.id)}
                     onPreview={() => setPreviewingSlideshow(item)}
                     onEdit={() => onEditSlideshow?.(item)}
                     onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
@@ -795,6 +771,8 @@ const ContentLibrary = ({
                       if (onViewScheduling && db && artistId) {
                         // Create a scheduled post and navigate to scheduling page
                         try {
+                          // Auto-populate caption + always-on hashtags from niche bank
+                          const banks = item.collectionId ? resolveCollectionBanks(artistId, item.collectionId) : null;
                           const post = await createScheduledPost(db, artistId, {
                             contentId: item.id,
                             contentType: 'slideshow',
@@ -802,7 +780,11 @@ const ContentLibrary = ({
                             thumbnail: item.thumbnail || item.slides?.[0]?.backgroundImage || item.slides?.[0]?.imageUrl || null,
                             cloudUrl: null,
                             audioUrl: item.audio?.url || item.audio?.localUrl || null,
+                            collectionId: item.collectionId || null,
                             collectionName: item.collectionName || item.collectionId || null,
+                            caption: banks?.caption || '',
+                            hashtags: banks?.alwaysHashtags || [],
+                            platformHashtags: banks?.platformOnly || {},
                             editorState: item,
                             status: POST_STATUS.DRAFT
                           });
@@ -825,11 +807,11 @@ const ContentLibrary = ({
                   />
                 </div>
               ) : (
-                <div key={item.id} onClick={(e) => handleCardSelect(item.id, index, e)} style={{ cursor: 'pointer', contentVisibility: 'auto', containIntrinsicSize: '0 200px' }}>
+                <div key={item.id} data-media-id={item.id} onClick={(e) => toggleSelect(item.id, e)} style={{ cursor: 'pointer', contentVisibility: 'auto', containIntrinsicSize: '0 200px' }}>
                   <VideoCard
                     video={item}
                     isSelected={selectedVideoIds.has(item.id)}
-                    onToggleSelect={() => toggleItemSelection(item.id)}
+                    onToggleSelect={() => toggleSelect(item.id)}
                     onEdit={() => onEditVideo(item)}
                     onDelete={() => setDeleteConfirm({ isOpen: true, videoId: item.id })}
                     isMobile={isMobile}
@@ -843,13 +825,19 @@ const ContentLibrary = ({
                       if (onViewScheduling && db && artistId) {
                         // Create a scheduled post and navigate to scheduling page
                         try {
+                          // Auto-populate caption + always-on hashtags from niche bank
+                          const banks = item.collectionId ? resolveCollectionBanks(artistId, item.collectionId) : null;
                           const post = await createScheduledPost(db, artistId, {
                             contentId: item.id,
                             contentType: 'video',
                             contentName: item.name || item.title || 'Untitled Video',
                             thumbnail: item.thumbnail || null,
                             cloudUrl: item.cloudUrl || null,
+                            collectionId: item.collectionId || null,
                             collectionName: item.collectionName || item.collectionId || null,
+                            caption: banks?.caption || '',
+                            hashtags: banks?.alwaysHashtags || [],
+                            platformHashtags: banks?.platformOnly || {},
                             editorState: item,
                             status: POST_STATUS.DRAFT
                           });
@@ -1031,7 +1019,7 @@ const ContentLibrary = ({
       {selectedItems.length > 0 && (
         <div className={`flex items-center justify-between px-6 py-4 bg-brand-600 mx-6 mb-4 rounded-xl shadow-[0_4px_20px_rgba(99,102,241,0.5)] ${isMobile ? '!flex-col !gap-3 !mx-3 !mb-3 !px-4 !py-3 !pb-[calc(12px+env(safe-area-inset-bottom,0px))]' : ''}`}>
           <div className="flex items-center gap-3">
-            <input type="checkbox" checked={filteredItems.every(v => selectedVideoIds.has(v.id))} onChange={toggleSelectAll} className="w-5 h-5 accent-brand-600 cursor-pointer" />
+            <input type="checkbox" checked={filteredItems.length > 0 && filteredItems.every(v => selectedVideoIds.has(v.id))} onChange={selectAll} className="w-5 h-5 accent-brand-600 cursor-pointer" />
             <span className="text-white text-sm font-medium">{selectedItems.length} selected</span>
           </div>
           <div className={`flex items-center gap-2 ${isMobile ? '!flex-wrap !justify-center !w-full' : ''}`}>
@@ -1057,15 +1045,22 @@ const ContentLibrary = ({
             <Button variant="brand-primary" size="small" icon={<FeatherCalendar />} onClick={async () => {
               if (onViewScheduling && db && artistId) {
                 try {
-                  const postsToCreate = selectedItems.map(item => ({
-                    contentId: item.id,
-                    contentType: isSlideshow ? 'slideshow' : 'video',
-                    contentName: item.name || item.title || (isSlideshow ? 'Untitled Slideshow' : 'Untitled Video'),
-                    thumbnail: item.thumbnail || (isSlideshow ? (item.slides?.[0]?.backgroundImage || item.slides?.[0]?.imageUrl) : null) || null,
-                    cloudUrl: item.cloudUrl || null,
-                    editorState: item,
-                    status: POST_STATUS.DRAFT
-                  }));
+                  const postsToCreate = selectedItems.map(item => {
+                    const banks = item.collectionId ? resolveCollectionBanks(artistId, item.collectionId) : null;
+                    return {
+                      contentId: item.id,
+                      contentType: isSlideshow ? 'slideshow' : 'video',
+                      contentName: item.name || item.title || (isSlideshow ? 'Untitled Slideshow' : 'Untitled Video'),
+                      thumbnail: item.thumbnail || (isSlideshow ? (item.slides?.[0]?.backgroundImage || item.slides?.[0]?.imageUrl) : null) || null,
+                      cloudUrl: item.cloudUrl || null,
+                      collectionId: item.collectionId || null,
+                      caption: banks?.caption || '',
+                      hashtags: banks?.alwaysHashtags || [],
+                      platformHashtags: banks?.platformOnly || {},
+                      editorState: item,
+                      status: POST_STATUS.DRAFT,
+                    };
+                  });
                   const { addManyScheduledPosts } = await import('../../services/scheduledPostsService');
                   await addManyScheduledPosts(db, artistId, postsToCreate);
                   toastSuccess(`Added ${postsToCreate.length} item(s) to schedule queue`);

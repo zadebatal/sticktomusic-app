@@ -8,7 +8,7 @@ import {
 import { getTemplates, generateFromTemplate } from '../../services/contentTemplateService';
 
 import { useToast, ConfirmDialog } from '../ui';
-import { getCreatedContent, getCollections, getCollectionHashtagBank, getCollectionCaptionBank, getLibrary } from '../../services/libraryService';
+import { getCreatedContent, getCollections, getCollectionHashtagBank, getCollectionCaptionBank, getLibrary, getEffectiveHashtags } from '../../services/libraryService';
 import { renderVideo } from '../../services/videoExportService';
 import { exportSlideshowAsImages, generateSlideThumbnail } from '../../services/slideshowExportService';
 import { uploadFile } from '../../services/firebaseStorage';
@@ -557,12 +557,11 @@ const SchedulingPage = ({
     setBatchStartDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
   }, []);
 
-  // Per-niche hashtag/caption bank map: collectionName → { hashtags: string[], caption: string }
+  // Per-niche hashtag/caption bank map: keyed by both collection ID and name
   const nicheBankMap = useMemo(() => {
     const map = {};
     const cols = getCollections(artistId);
     cols.forEach(c => {
-      if (!c.name) return;
       const hb = getCollectionHashtagBank(c);
       const cb = getCollectionCaptionBank(c);
       const hashtags = [...(hb.always || []), ...(hb.pool || [])];
@@ -571,20 +570,28 @@ const SchedulingPage = ({
       const flatCaptions = Array.isArray(c.captionBank) ? c.captionBank : [];
       const allHashtags = hashtags.length > 0 ? hashtags : flatHashtags;
       const captions = [...(cb.always || []), ...(cb.pool || []), ...flatCaptions];
-      if (allHashtags.length > 0 || captions.length > 0) {
-        map[c.name] = { hashtags: allHashtags, caption: captions[0] || '' };
+      const rawBank = c.hashtagBank || {};
+      const platformOnly = (!Array.isArray(rawBank) && rawBank.platformOnly) || {};
+      const platformExclude = (!Array.isArray(rawBank) && rawBank.platformExclude) || {};
+      const entry = { hashtags: allHashtags, caption: captions[0] || '', platformOnly, platformExclude };
+      if (allHashtags.length > 0 || captions.length > 0 || Object.keys(platformOnly).length > 0) {
+        if (c.id) map[c.id] = entry;
+        if (c.name) map[c.name] = entry;
       }
     });
     return map;
   }, [artistId]);
 
-  // Helper: get hashtags/caption for a post based on its collection
+  // Helper: get hashtags/caption for a post based on its collection (try ID first, then name)
   const getPostBank = useCallback((post) => {
+    if (post?.collectionId && nicheBankMap[post.collectionId]) {
+      return nicheBankMap[post.collectionId];
+    }
     if (post?.collectionName && nicheBankMap[post.collectionName]) {
       return nicheBankMap[post.collectionName];
     }
     // No niche match — return empty (don't merge all templates together)
-    return { hashtags: [], caption: '' };
+    return { hashtags: [], caption: '', platformOnly: {}, platformExclude: {} };
   }, [nicheBankMap]);
 
   // Load always-on hashtags/captions from content templates (global fallback)
@@ -1048,9 +1055,20 @@ const SchedulingPage = ({
     }
 
     const postHashtags = Array.isArray(post.hashtags) ? post.hashtags : (post.hashtags || '').split(/\s+/).filter(Boolean);
-    // Don't auto-merge always-on hashtags - let users control hashtags explicitly
-    const allHashtags = postHashtags;
-    const caption = [post.caption || '', allHashtags.join(' ')].filter(Boolean).join('\n\n');
+
+    // Build per-platform caption strings (merge base hashtags + platform-specific, filter excludes)
+    const bank = getPostBank(post);
+    const buildPlatformCaption = (platform) => {
+      const platformTags = post.platformHashtags?.[platform] || [];
+      const excluded = new Set(bank.platformExclude?.[platform] || []);
+      const mergedHashtags = [...postHashtags, ...platformTags].filter(t => !excluded.has(t));
+      // Deduplicate
+      const unique = [...new Set(mergedHashtags)];
+      return [post.caption || '', unique.join(' ')].filter(Boolean).join('\n\n');
+    };
+
+    // Default caption (no platform filtering)
+    const caption = [post.caption || '', postHashtags.join(' ')].filter(Boolean).join('\n\n');
 
     try {
       if (isSlideshow) {
@@ -1089,7 +1107,7 @@ const SchedulingPage = ({
 
           if (images) {
             const result = await onSchedulePost({
-              caption,
+              caption: buildPlatformCaption(entry.platform),
               platforms: [entry],
               scheduledFor: post.scheduledTime || new Date().toISOString(),
               type: 'carousel',
@@ -2603,6 +2621,34 @@ const ExpandedDrawer = ({ post, accounts, lateAccountIds, alwaysOnHashtags = [],
               </div>
             )}
           </div>
+
+          {/* Per-Platform Hashtags */}
+          {Object.keys(selectedPlatforms).length > 0 && (
+            <div style={{ marginTop: '14px' }}>
+              <span style={{ fontSize: '9px', color: '#52525b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Platform-Specific Tags</span>
+              {Object.keys(selectedPlatforms).map(platform => {
+                const platTags = (post.platformHashtags?.[platform] || []).join(' ');
+                return (
+                  <div key={platform} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                    <span style={{ fontSize: '11px', color: PLATFORM_COLORS[platform], fontWeight: '600', width: '70px', flexShrink: 0 }}>{PLATFORM_LABELS[platform]}</span>
+                    <input
+                      type="text"
+                      defaultValue={platTags}
+                      onBlur={(e) => {
+                        const tags = e.target.value.split(/[\s,]+/).filter(Boolean).map(h => h.startsWith('#') ? h : `#${h}`);
+                        const updated = { ...(post.platformHashtags || {}), [platform]: tags };
+                        onUpdate({ platformHashtags: updated });
+                      }}
+                      placeholder={`#${platform} tags...`}
+                      style={s.drawerInput}
+                      aria-label={`${PLATFORM_LABELS[platform]} hashtags`}
+                      readOnly={readOnly}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
         </div>
 

@@ -1265,6 +1265,138 @@ export const updateCollectionHashtagBank = (artistId, collectionId, hashtagBank,
 };
 
 // ============================================================================
+// PER-PLATFORM HASHTAG RESOLUTION
+// ============================================================================
+
+/**
+ * Resolve effective always/pool hashtag lists for a given platform.
+ * Merges global always/pool with platformOnly additions and filters platformExclude.
+ * Handles backward-compatible formats (flat array, { always, pool } without platform fields).
+ *
+ * @param {Object|Array} hashtagBank — bank data (flat array, or { always, pool, platformOnly?, platformExclude? })
+ * @param {string|null} platform — 'tiktok' | 'instagram' | 'youtube' | 'facebook' | null (null = no platform filtering)
+ * @returns {{ always: string[], pool: string[] }}
+ */
+export const getEffectiveHashtags = (hashtagBank, platform = null) => {
+  // Handle flat array (legacy format)
+  if (Array.isArray(hashtagBank)) {
+    return { always: hashtagBank, pool: [] };
+  }
+  if (!hashtagBank || typeof hashtagBank !== 'object') {
+    return { always: [], pool: [] };
+  }
+
+  let always = [...(hashtagBank.always || [])];
+  let pool = [...(hashtagBank.pool || [])];
+
+  if (platform) {
+    // Add platform-specific tags
+    const platformTags = hashtagBank.platformOnly?.[platform] || [];
+    always = [...always, ...platformTags];
+
+    // Remove excluded tags
+    const excluded = new Set(hashtagBank.platformExclude?.[platform] || []);
+    if (excluded.size > 0) {
+      always = always.filter(t => !excluded.has(t));
+      pool = pool.filter(t => !excluded.has(t));
+    }
+  }
+
+  return { always, pool };
+};
+
+/**
+ * One-call resolution of caption + hashtag banks for a collection/niche.
+ * Returns merged bank data ready for scheduling.
+ *
+ * @param {string} artistId
+ * @param {string} collectionId
+ * @returns {{ caption: string, alwaysHashtags: string[], poolHashtags: string[], alwaysCaptions: string[], poolCaptions: string[], platformOnly: Object, platformExclude: Object }}
+ */
+export const resolveCollectionBanks = (artistId, collectionId) => {
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+
+  const emptyCB = { always: [], pool: [] };
+  const emptyHB = { always: [], pool: [] };
+
+  const cb = collection ? getCollectionCaptionBank(collection) : emptyCB;
+  const hb = collection ? getCollectionHashtagBank(collection) : emptyHB;
+
+  // Handle flat array legacy formats
+  const alwaysCaptions = Array.isArray(cb) ? cb : (cb.always || []);
+  const poolCaptions = Array.isArray(cb) ? [] : (cb.pool || []);
+  const alwaysHashtags = Array.isArray(hb) ? hb : (hb.always || []);
+  const poolHashtags = Array.isArray(hb) ? [] : (hb.pool || []);
+
+  const rawBank = collection?.hashtagBank || {};
+  const platformOnly = (!Array.isArray(rawBank) && rawBank.platformOnly) || {};
+  const platformExclude = (!Array.isArray(rawBank) && rawBank.platformExclude) || {};
+
+  return {
+    caption: alwaysCaptions[0] || '',
+    alwaysHashtags,
+    poolHashtags,
+    alwaysCaptions,
+    poolCaptions,
+    platformOnly,
+    platformExclude,
+  };
+};
+
+/**
+ * Save platform-specific hashtag additions for a collection.
+ * @param {string} artistId
+ * @param {string} collectionId
+ * @param {Object} platformOnly — e.g. { tiktok: ['#fyp'], instagram: ['#reels'] }
+ * @param {Object|null} db
+ */
+export const updateCollectionPlatformHashtags = (artistId, collectionId, platformOnly, db = null) => {
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection) return;
+
+  // Ensure hashtagBank is object format
+  if (Array.isArray(collection.hashtagBank)) {
+    collection.hashtagBank = { always: collection.hashtagBank, pool: [] };
+  }
+  if (!collection.hashtagBank) {
+    collection.hashtagBank = { always: [], pool: [] };
+  }
+
+  collection.hashtagBank.platformOnly = platformOnly;
+  collection.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
+  if (db) saveCollectionToFirestore(db, artistId, collection).catch(log.error);
+};
+
+/**
+ * Save platform exclusion rules for a collection.
+ * @param {string} artistId
+ * @param {string} collectionId
+ * @param {Object} platformExclude — e.g. { instagram: ['#fyp'], facebook: ['#fyp'] }
+ * @param {Object|null} db
+ */
+export const updateCollectionPlatformExcludes = (artistId, collectionId, platformExclude, db = null) => {
+  const collections = getUserCollections(artistId);
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection) return;
+
+  // Ensure hashtagBank is object format
+  if (Array.isArray(collection.hashtagBank)) {
+    collection.hashtagBank = { always: collection.hashtagBank, pool: [] };
+  }
+  if (!collection.hashtagBank) {
+    collection.hashtagBank = { always: [], pool: [] };
+  }
+
+  collection.hashtagBank.platformExclude = platformExclude;
+  collection.updatedAt = new Date().toISOString();
+  saveCollections(artistId, collections);
+  if (db) saveCollectionToFirestore(db, artistId, collection).catch(log.error);
+};
+
+// ============================================================================
 // PIPELINE SYSTEM — Extended collections with formats & linked pages
 // ============================================================================
 
@@ -4580,6 +4712,10 @@ export default {
   getCollectionHashtagBank,
   updateCollectionCaptionBank,
   updateCollectionHashtagBank,
+  getEffectiveHashtags,
+  resolveCollectionBanks,
+  updateCollectionPlatformHashtags,
+  updateCollectionPlatformExcludes,
 
   // Niche / Format System
   FORMAT_TEMPLATES,

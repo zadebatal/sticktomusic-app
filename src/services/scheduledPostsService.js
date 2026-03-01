@@ -93,6 +93,7 @@ export async function createScheduledPost(db, artistId, data) {
     scheduledTime: data.scheduledTime || null,
     caption: data.caption || '',
     hashtags: data.hashtags || [],
+    platformHashtags: data.platformHashtags || {}, // Per-platform hashtag overrides: { tiktok: [...], instagram: [...] }
 
     // Status
     status: data.status || POST_STATUS.DRAFT,
@@ -100,6 +101,7 @@ export async function createScheduledPost(db, artistId, data) {
     locked: data.locked || false, // If true, reorder/shuffle will skip this post
 
     // Source context
+    collectionId: data.collectionId || null, // Originating collection/niche ID
     collectionName: data.collectionName || null, // Originating collection name
     nicheId: data.nicheId || null, // Originating niche ID (for finished media uploads)
     mediaType: data.mediaType || null, // 'video' | 'image' for uploaded media
@@ -297,9 +299,11 @@ export async function addManyScheduledPosts(db, artistId, posts) {
       scheduledTime: data.scheduledTime || null,
       caption: data.caption || '',
       hashtags: data.hashtags || [],
+      platformHashtags: data.platformHashtags || {},
       status: data.status || POST_STATUS.DRAFT,
       queuePosition: maxPosition,
       locked: data.locked || false,
+      collectionId: data.collectionId || null,
       collectionName: data.collectionName || null,
       editorState: data.editorState || null,
       postResults: {},

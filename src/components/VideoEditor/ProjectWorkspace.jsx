@@ -38,6 +38,12 @@ import {
   migrateThumbnails,
   updateProjectCaptionBank,
   updateProjectHashtagBank,
+  updateNicheCaptionBank,
+  updateNicheHashtagBank,
+  updateCollectionPlatformHashtags,
+  updateCollectionPlatformExcludes,
+  getCollectionCaptionBank,
+  getCollectionHashtagBank,
   getRecentCollectionSnapshots,
   getRecentCollectionRemovals,
   removeFromProjectPool,
@@ -936,6 +942,8 @@ const ProjectWorkspace = ({
             artistId={artistId}
             projectId={projectId}
             project={project}
+            niches={niches}
+            accounts={latePages}
           />
         )}
 
@@ -1525,99 +1533,260 @@ const ImportFromLibraryModal = ({ items: defaultItems, onImport: defaultOnImport
 };
 
 // ═══════════════════════════════════════════════════
-// ProjectCaptionPage — Project-level Captions & Hashtags
+// ProjectCaptionPage — Captions & Hashtags with Scope Tabs + Platform Rules
 // ═══════════════════════════════════════════════════
-const ProjectCaptionPage = ({ db, artistId, projectId, project }) => {
+
+const PLATFORM_COLORS_MAP = { instagram: '#E1306C', tiktok: '#00f2ea', youtube: '#FF0000', facebook: '#1877F2' };
+const PLATFORM_NAMES = { instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', facebook: 'Facebook' };
+const ALL_PLATFORMS = ['tiktok', 'instagram', 'youtube', 'facebook'];
+
+const ProjectCaptionPage = ({ db, artistId, projectId, project, niches = [], accounts = [] }) => {
   const { success: toastSuccess } = useToast();
   const [newCaption, setNewCaption] = useState('');
   const [newHashtag, setNewHashtag] = useState('');
+  const [scope, setScope] = useState('project'); // 'project' | niche ID
+  const [showPlatformRules, setShowPlatformRules] = useState(false);
+  const [newPlatformTag, setNewPlatformTag] = useState({});
 
-  // Read from project root
+  // Determine which entity we're editing
+  const isProjectScope = scope === 'project';
+  const activeNiche = !isProjectScope ? niches.find(n => n.id === scope) : null;
+  const target = isProjectScope ? project : activeNiche;
+
+  // Read banks from target
+  const rawCB = target ? getCollectionCaptionBank(target) : { always: [], pool: [] };
+  const rawHB = target ? getCollectionHashtagBank(target) : { always: [], pool: [] };
+
   const captions = useMemo(() => {
-    if (!project) return [];
-    return Array.isArray(project.captionBank)
-      ? project.captionBank
-      : [...(project.captionBank?.always || []), ...(project.captionBank?.pool || [])];
-  }, [project]);
+    if (Array.isArray(rawCB)) return { always: rawCB, pool: [] };
+    return { always: rawCB.always || [], pool: rawCB.pool || [] };
+  }, [rawCB]);
 
   const hashtags = useMemo(() => {
-    if (!project) return [];
-    return Array.isArray(project.hashtagBank)
-      ? project.hashtagBank
-      : [...(project.hashtagBank?.always || []), ...(project.hashtagBank?.pool || [])];
-  }, [project]);
+    if (Array.isArray(rawHB)) return { always: rawHB, pool: [] };
+    return { always: rawHB.always || [], pool: rawHB.pool || [] };
+  }, [rawHB]);
 
+  const platformOnly = useMemo(() => {
+    if (!target?.hashtagBank || Array.isArray(target.hashtagBank)) return {};
+    return target.hashtagBank.platformOnly || {};
+  }, [target]);
+
+  const platformExclude = useMemo(() => {
+    if (!target?.hashtagBank || Array.isArray(target.hashtagBank)) return {};
+    return target.hashtagBank.platformExclude || {};
+  }, [target]);
+
+  const allCaptions = [...captions.always, ...captions.pool];
+  const allHashtags = [...hashtags.always, ...hashtags.pool];
+
+  // Connected platforms from Late.co accounts
+  const connectedPlatforms = useMemo(() => {
+    const platforms = new Set();
+    accounts.forEach(acc => {
+      if (acc.platform) platforms.add(acc.platform);
+      // Late.co pages may not have explicit platform, check social_accounts
+      if (acc.social_accounts) {
+        acc.social_accounts.forEach(sa => { if (sa.platform) platforms.add(sa.platform); });
+      }
+    });
+    return platforms.size > 0 ? [...platforms] : ALL_PLATFORMS;
+  }, [accounts]);
+
+  // Save helpers
+  const saveCaptions = useCallback((newBank) => {
+    if (isProjectScope) {
+      updateProjectCaptionBank(artistId, projectId, newBank, db);
+    } else {
+      updateNicheCaptionBank(artistId, scope, newBank, db);
+    }
+  }, [db, artistId, projectId, scope, isProjectScope]);
+
+  const saveHashtags = useCallback((newBank) => {
+    if (isProjectScope) {
+      updateProjectHashtagBank(artistId, projectId, newBank, db);
+    } else {
+      updateNicheHashtagBank(artistId, scope, newBank, db);
+    }
+  }, [db, artistId, projectId, scope, isProjectScope]);
+
+  // Caption handlers
   const handleAddCaption = useCallback(() => {
     const text = newCaption.trim();
-    if (!text || !projectId) return;
-    updateProjectCaptionBank(artistId, projectId, [...captions, text], db);
+    if (!text) return;
+    saveCaptions({ ...captions, always: [...captions.always, text] });
     setNewCaption('');
-  }, [db, artistId, projectId, captions, newCaption]);
+  }, [newCaption, captions, saveCaptions]);
 
-  const handleRemoveCaption = useCallback((idx) => {
-    const updated = [...captions];
-    updated.splice(idx, 1);
-    updateProjectCaptionBank(artistId, projectId, updated, db);
-  }, [db, artistId, projectId, captions]);
+  const handleRemoveCaption = useCallback((tier, idx) => {
+    const updated = { ...captions, [tier]: captions[tier].filter((_, i) => i !== idx) };
+    saveCaptions(updated);
+  }, [captions, saveCaptions]);
 
+  const handleToggleCaptionTier = useCallback((fromTier, idx) => {
+    const toTier = fromTier === 'always' ? 'pool' : 'always';
+    const item = captions[fromTier][idx];
+    const updated = {
+      ...captions,
+      [fromTier]: captions[fromTier].filter((_, i) => i !== idx),
+      [toTier]: [...captions[toTier], item],
+    };
+    saveCaptions(updated);
+  }, [captions, saveCaptions]);
+
+  // Hashtag handlers
   const handleAddHashtag = useCallback(() => {
     const raw = newHashtag.trim();
-    if (!raw || !projectId) return;
+    if (!raw) return;
     const tag = raw.startsWith('#') ? raw : `#${raw}`;
-    if (hashtags.includes(tag)) return;
-    updateProjectHashtagBank(artistId, projectId, [...hashtags, tag], db);
+    if (allHashtags.includes(tag)) return;
+    saveHashtags({ ...hashtags, always: [...hashtags.always, tag] });
     setNewHashtag('');
-  }, [db, artistId, projectId, hashtags, newHashtag]);
+  }, [newHashtag, hashtags, allHashtags, saveHashtags]);
 
-  const handleRemoveHashtag = useCallback((idx) => {
-    const updated = [...hashtags];
-    updated.splice(idx, 1);
-    updateProjectHashtagBank(artistId, projectId, updated, db);
-  }, [db, artistId, projectId, hashtags]);
+  const handleRemoveHashtag = useCallback((tier, idx) => {
+    const updated = { ...hashtags, [tier]: hashtags[tier].filter((_, i) => i !== idx) };
+    saveHashtags(updated);
+  }, [hashtags, saveHashtags]);
+
+  const handleToggleHashtagTier = useCallback((fromTier, idx) => {
+    const toTier = fromTier === 'always' ? 'pool' : 'always';
+    const item = hashtags[fromTier][idx];
+    const updated = {
+      ...hashtags,
+      [fromTier]: hashtags[fromTier].filter((_, i) => i !== idx),
+      [toTier]: [...hashtags[toTier], item],
+    };
+    saveHashtags(updated);
+  }, [hashtags, saveHashtags]);
 
   const handleCopyAll = useCallback(() => {
-    if (hashtags.length === 0) return;
-    navigator.clipboard.writeText(hashtags.join(' '));
+    if (allHashtags.length === 0) return;
+    navigator.clipboard.writeText(allHashtags.join(' '));
     toastSuccess('Copied all hashtags');
-  }, [hashtags, toastSuccess]);
+  }, [allHashtags, toastSuccess]);
+
+  // Platform rule handlers
+  const targetId = isProjectScope ? projectId : scope;
+  const handleAddPlatformTag = useCallback((platform) => {
+    const raw = (newPlatformTag[platform] || '').trim();
+    if (!raw) return;
+    const tag = raw.startsWith('#') ? raw : `#${raw}`;
+    const current = platformOnly[platform] || [];
+    if (current.includes(tag)) return;
+    const updated = { ...platformOnly, [platform]: [...current, tag] };
+    updateCollectionPlatformHashtags(artistId, targetId, updated, db);
+    setNewPlatformTag(prev => ({ ...prev, [platform]: '' }));
+  }, [db, artistId, targetId, platformOnly, newPlatformTag]);
+
+  const handleRemovePlatformTag = useCallback((platform, idx) => {
+    const current = platformOnly[platform] || [];
+    const updated = { ...platformOnly, [platform]: current.filter((_, i) => i !== idx) };
+    updateCollectionPlatformHashtags(artistId, targetId, updated, db);
+  }, [db, artistId, targetId, platformOnly]);
+
+  const handleToggleExclude = useCallback((platform, tag) => {
+    const current = platformExclude[platform] || [];
+    const isExcluded = current.includes(tag);
+    const updated = {
+      ...platformExclude,
+      [platform]: isExcluded ? current.filter(t => t !== tag) : [...current, tag],
+    };
+    updateCollectionPlatformExcludes(artistId, targetId, updated, db);
+  }, [db, artistId, targetId, platformExclude]);
 
   if (!project) return null;
 
+  const renderHashtagPill = (tag, tier, idx) => {
+    const isAlways = tier === 'always';
+    return (
+      <div key={`${tier}-${idx}`} className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 group ${isAlways ? 'bg-green-500/10 border border-green-500/30' : 'bg-neutral-800 border border-neutral-700'}`}>
+        <span className={`text-caption font-caption ${isAlways ? 'text-green-400' : 'text-neutral-400'}`}>{tag}</span>
+        <button
+          className="text-neutral-500 hover:text-indigo-400 bg-transparent border-none cursor-pointer p-0 text-[9px] opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={() => handleToggleHashtagTier(tier, idx)}
+          title={isAlways ? 'Move to Pool' : 'Make Always-On'}
+        >
+          {isAlways ? '↓' : '↑'}
+        </button>
+        <button
+          className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={() => handleRemoveHashtag(tier, idx)}
+        >
+          <FeatherX style={{ width: 10, height: 10 }} />
+        </button>
+      </div>
+    );
+  };
+
   return (
-    <div className="flex flex-1 flex-col items-start self-stretch overflow-y-auto px-8 py-6 gap-8">
+    <div className="flex flex-1 flex-col items-start self-stretch overflow-y-auto px-8 py-6 gap-6">
       <div className="flex flex-col gap-1">
         <span className="text-heading-2 font-heading-2 text-[#ffffffff]">Captions & Hashtags</span>
         <span className="text-body font-body text-neutral-400">
-          Shared across all niches in this project
+          {isProjectScope ? 'Shared across all niches in this project' : `Niche: ${activeNiche?.name || scope}`}
         </span>
       </div>
 
-      {/* Captions */}
+      {/* Scope Tabs */}
+      <div className="flex items-center gap-1 border-b border-neutral-800 w-full">
+        <button
+          onClick={() => setScope('project')}
+          className={`border-none cursor-pointer px-4 py-2 text-[13px] font-semibold rounded-t-md transition-all ${isProjectScope ? 'bg-indigo-500/15 text-indigo-400 border-b-2 border-b-indigo-500' : 'bg-transparent text-neutral-500'}`}
+        >
+          Project-Wide
+        </button>
+        {niches.map(n => (
+          <button
+            key={n.id}
+            onClick={() => setScope(n.id)}
+            className={`border-none cursor-pointer px-4 py-2 text-[13px] font-semibold rounded-t-md transition-all ${scope === n.id ? 'bg-indigo-500/15 text-indigo-400 border-b-2 border-b-indigo-500' : 'bg-transparent text-neutral-500'}`}
+          >
+            {n.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Captions Section */}
       <div className="flex w-full flex-col gap-3 rounded-lg border border-solid border-neutral-800 bg-[#111111] p-5">
         <div className="flex items-center gap-2">
           <FeatherMessageSquare className="text-neutral-400" style={{ width: 14, height: 14 }} />
           <span className="text-body-bold font-body-bold text-[#ffffffff]">Captions</span>
-          <Badge variant="neutral">{captions.length}</Badge>
+          <Badge variant="neutral">{allCaptions.length}</Badge>
         </div>
-        {captions.length > 0 && (
-          <div className="flex flex-col gap-1.5 max-h-[300px] overflow-y-auto">
-            {captions.map((cap, idx) => (
-              <div key={idx} className="flex items-start gap-2 rounded-md bg-black px-2.5 py-1.5 group">
-                <span
-                  className="grow text-caption font-caption text-neutral-300 cursor-pointer hover:text-white line-clamp-3"
-                  title="Click to copy"
-                  onClick={() => { navigator.clipboard.writeText(cap); toastSuccess('Copied'); }}
-                >{cap}</span>
-                <button
-                  className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 flex-none opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={() => handleRemoveCaption(idx)}
-                >
-                  <FeatherTrash2 style={{ width: 12, height: 12 }} />
-                </button>
-              </div>
-            ))}
+
+        {/* Always-on captions */}
+        {captions.always.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold text-green-500 uppercase tracking-wider">Always On</span>
+            <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto">
+              {captions.always.map((cap, idx) => (
+                <div key={idx} className="flex items-start gap-2 rounded-md bg-green-500/5 border border-green-500/20 px-2.5 py-1.5 group">
+                  <span className="grow text-caption font-caption text-green-300 cursor-pointer hover:text-white line-clamp-3" title="Click to copy" onClick={() => { navigator.clipboard.writeText(cap); toastSuccess('Copied'); }}>{cap}</span>
+                  <button className="text-neutral-500 hover:text-indigo-400 bg-transparent border-none cursor-pointer p-0 text-[9px] opacity-0 group-hover:opacity-100" onClick={() => handleToggleCaptionTier('always', idx)} title="Move to Pool">↓</button>
+                  <button className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 flex-none opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleRemoveCaption('always', idx)}><FeatherTrash2 style={{ width: 12, height: 12 }} /></button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
+
+        {/* Pool captions */}
+        {captions.pool.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Pool</span>
+            <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto">
+              {captions.pool.map((cap, idx) => (
+                <div key={idx} className="flex items-start gap-2 rounded-md bg-black px-2.5 py-1.5 group">
+                  <span className="grow text-caption font-caption text-neutral-300 cursor-pointer hover:text-white line-clamp-3" title="Click to copy" onClick={() => { navigator.clipboard.writeText(cap); toastSuccess('Copied'); }}>{cap}</span>
+                  <button className="text-neutral-500 hover:text-indigo-400 bg-transparent border-none cursor-pointer p-0 text-[9px] opacity-0 group-hover:opacity-100" onClick={() => handleToggleCaptionTier('pool', idx)} title="Make Always-On">↑</button>
+                  <button className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 flex-none opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleRemoveCaption('pool', idx)}><FeatherTrash2 style={{ width: 12, height: 12 }} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex w-full gap-2">
           <textarea
             className="flex-1 min-h-[32px] max-h-[80px] rounded-md border border-solid border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500 resize-none"
@@ -1631,33 +1800,35 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project }) => {
         </div>
       </div>
 
-      {/* Hashtags */}
+      {/* Hashtags Section */}
       <div className="flex w-full flex-col gap-3 rounded-lg border border-solid border-neutral-800 bg-[#111111] p-5">
         <div className="flex items-center gap-2">
           <FeatherHash className="text-neutral-400" style={{ width: 14, height: 14 }} />
           <span className="text-body-bold font-body-bold text-[#ffffffff]">Hashtags</span>
-          <Badge variant="neutral">{hashtags.length}</Badge>
-          {hashtags.length > 0 && (
+          <Badge variant="neutral">{allHashtags.length}</Badge>
+          {allHashtags.length > 0 && (
             <button className="text-caption font-caption text-indigo-400 hover:text-indigo-300 bg-transparent border-none cursor-pointer ml-auto" onClick={handleCopyAll}>
               Copy All
             </button>
           )}
         </div>
-        {hashtags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 max-h-[200px] overflow-y-auto">
-            {hashtags.map((tag, idx) => (
-              <div key={idx} className="flex items-center gap-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 px-2.5 py-0.5 group">
-                <span className="text-caption font-caption text-indigo-300">{tag}</span>
-                <button
-                  className="text-indigo-400 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={() => handleRemoveHashtag(idx)}
-                >
-                  <FeatherX style={{ width: 10, height: 10 }} />
-                </button>
-              </div>
-            ))}
+
+        {/* Always-on hashtags */}
+        {hashtags.always.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold text-green-500 uppercase tracking-wider">Always On — auto-added to all posts</span>
+            <div className="flex flex-wrap gap-1.5">{hashtags.always.map((tag, idx) => renderHashtagPill(tag, 'always', idx))}</div>
           </div>
         )}
+
+        {/* Pool hashtags */}
+        {hashtags.pool.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Pool — available for manual pick</span>
+            <div className="flex flex-wrap gap-1.5">{hashtags.pool.map((tag, idx) => renderHashtagPill(tag, 'pool', idx))}</div>
+          </div>
+        )}
+
         <div className="flex w-full gap-2">
           <input
             className="flex-1 rounded-md border border-solid border-neutral-800 bg-black px-2.5 py-1.5 text-caption font-caption text-white outline-none placeholder-neutral-500"
@@ -1670,7 +1841,81 @@ const ProjectCaptionPage = ({ db, artistId, projectId, project }) => {
         </div>
       </div>
 
-      {captions.length === 0 && hashtags.length === 0 && (
+      {/* Platform Rules Section */}
+      <div className="flex w-full flex-col gap-3 rounded-lg border border-solid border-neutral-800 bg-[#111111] p-5">
+        <button
+          className="flex items-center gap-2 bg-transparent border-none cursor-pointer p-0 w-full"
+          onClick={() => setShowPlatformRules(!showPlatformRules)}
+        >
+          <FeatherHash className="text-neutral-400" style={{ width: 14, height: 14 }} />
+          <span className="text-body-bold font-body-bold text-[#ffffffff]">Platform Rules</span>
+          <Badge variant="neutral">{Object.values(platformOnly).flat().length + Object.values(platformExclude).flat().length}</Badge>
+          <span className="ml-auto text-neutral-500 text-xs">{showPlatformRules ? '▲' : '▼'}</span>
+        </button>
+
+        {showPlatformRules && (
+          <div className="flex flex-col gap-4 mt-2">
+            {connectedPlatforms.map(platform => {
+              const platTags = platformOnly[platform] || [];
+              const platExcludes = platformExclude[platform] || [];
+              return (
+                <div key={platform} className="flex flex-col gap-2 rounded-md p-3" style={{ border: `1px solid ${PLATFORM_COLORS_MAP[platform]}30` }}>
+                  <span className="text-[12px] font-semibold" style={{ color: PLATFORM_COLORS_MAP[platform] }}>{PLATFORM_NAMES[platform]}</span>
+
+                  {/* Platform-only tags */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-neutral-500 uppercase tracking-wider">Only for {PLATFORM_NAMES[platform]}</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {platTags.map((tag, idx) => (
+                        <div key={idx} className="flex items-center gap-1 rounded-full px-2 py-0.5 group" style={{ backgroundColor: `${PLATFORM_COLORS_MAP[platform]}15`, border: `1px solid ${PLATFORM_COLORS_MAP[platform]}40` }}>
+                          <span className="text-caption font-caption" style={{ color: PLATFORM_COLORS_MAP[platform] }}>{tag}</span>
+                          <button className="text-neutral-500 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 opacity-0 group-hover:opacity-100" onClick={() => handleRemovePlatformTag(platform, idx)}>
+                            <FeatherX style={{ width: 9, height: 9 }} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-1.5">
+                      <input
+                        className="flex-1 rounded-md border border-solid border-neutral-800 bg-black px-2 py-1 text-caption font-caption text-white outline-none placeholder-neutral-500"
+                        placeholder={`#${platform} tag...`}
+                        value={newPlatformTag[platform] || ''}
+                        onChange={e => setNewPlatformTag(prev => ({ ...prev, [platform]: e.target.value }))}
+                        onKeyDown={e => { if (e.key === 'Enter') handleAddPlatformTag(platform); }}
+                      />
+                      <IconButton variant="brand-tertiary" size="small" icon={<FeatherPlus />} aria-label={`Add ${PLATFORM_NAMES[platform]} tag`} onClick={() => handleAddPlatformTag(platform)} />
+                    </div>
+                  </div>
+
+                  {/* Excluded from this platform */}
+                  {hashtags.always.length > 0 && (
+                    <div className="flex flex-col gap-1 mt-1">
+                      <span className="text-[10px] text-neutral-500 uppercase tracking-wider">Exclude from {PLATFORM_NAMES[platform]}</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {hashtags.always.map((tag, idx) => {
+                          const isExcluded = platExcludes.includes(tag);
+                          return (
+                            <button
+                              key={idx}
+                              className={`rounded-full px-2 py-0.5 text-caption font-caption border cursor-pointer transition-all ${isExcluded ? 'bg-red-500/10 border-red-500/30 text-red-400 line-through' : 'bg-transparent border-neutral-700 text-neutral-500'}`}
+                              onClick={() => handleToggleExclude(platform, tag)}
+                              title={isExcluded ? 'Click to include' : 'Click to exclude'}
+                            >
+                              {tag}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {allCaptions.length === 0 && allHashtags.length === 0 && (
         <div className="flex flex-col items-center justify-center py-8 w-full text-neutral-500">
           <FeatherMessageSquare style={{ width: 28, height: 28 }} />
           <p className="mt-3 text-body font-body">Add your first caption or hashtag above</p>
