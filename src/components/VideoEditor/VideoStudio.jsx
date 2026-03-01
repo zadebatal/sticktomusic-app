@@ -551,7 +551,7 @@ const VideoStudio = ({
           ? [pipeline.videoTextBank1 || [], pipeline.videoTextBank2 || []]
           : null;
     return {
-      id: `pipeline-${pipeline.id}`,
+      id: pipeline.id,
       name: pipeline.name,
       videos: pipelineMedia
         .filter(v => v.type === MEDIA_TYPES.VIDEO)
@@ -568,6 +568,7 @@ const VideoStudio = ({
       captionTemplate: '',
       defaultHashtags: '',
       nicheTextBanks,
+      textBanks: nicheTextBanks,
     };
   }, [activePipelineIdForEditor, currentArtistId, pipelineCategoryVersion]);
 
