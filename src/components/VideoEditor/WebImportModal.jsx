@@ -42,6 +42,7 @@ const WebImportModal = ({
   const [error, setError] = useState(null);
   const [metadata, setMetadata] = useState(null);
   const [selectedBank, setSelectedBank] = useState(defaultBankIndex);
+  const [maxItems, setMaxItems] = useState(30);
   const [importProgress, setImportProgress] = useState({ status: '', progress: 0 });
   const inputRef = useRef(null);
   const abortRef = useRef(false);
@@ -87,7 +88,7 @@ const WebImportModal = ({
     setImportProgress({ status: 'Starting download...', progress: 0 });
 
     try {
-      const { jobId } = await startDownload(url.trim(), artistId);
+      const { jobId } = await startDownload(url.trim(), artistId, metadata?.type === 'gallery' ? maxItems : undefined);
 
       const files = await pollUntilComplete(jobId, (status) => {
         if (abortRef.current) return;
@@ -247,7 +248,7 @@ const WebImportModal = ({
                       {metadata.platform}
                     </Badge>
                     <span className="text-caption font-caption text-neutral-400">
-                      {metadata.type === 'video' ? '1 video' : `${metadata.itemCount} image${metadata.itemCount !== 1 ? 's' : ''}`}
+                      {metadata.type === 'video' ? '1 video' : `${metadata.itemCount}${metadata.itemCount >= 100 ? '+' : ''} image${metadata.itemCount !== 1 ? 's' : ''}`}
                     </span>
                     {metadata.duration && (
                       <span className="text-caption font-caption text-neutral-500">
@@ -289,6 +290,28 @@ const WebImportModal = ({
                 </div>
               )}
 
+              {/* Download cap — for galleries with many items */}
+              {metadata.type === 'gallery' && metadata.itemCount > 10 && (
+                <div className="flex flex-col gap-2">
+                  <label className="text-caption font-caption text-neutral-400">How many to download?</label>
+                  <div className="flex flex-wrap gap-2">
+                    {[10, 30, 50, 100].map(cap => (
+                      <button
+                        key={cap}
+                        onClick={() => setMaxItems(cap)}
+                        className={`rounded-lg border px-3 py-2 text-caption font-caption transition-colors cursor-pointer ${
+                          maxItems === cap
+                            ? 'border-indigo-500 bg-indigo-500/10 text-[#ffffffff]'
+                            : 'border-neutral-700 bg-transparent text-neutral-400 hover:border-neutral-600'
+                        }`}
+                      >
+                        {cap} images
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {error && (
                 <div className="flex items-start gap-2 rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2.5">
                   <FeatherAlertCircle className="mt-0.5 flex-none text-red-400" style={{ width: 14, height: 14 }} />
@@ -302,7 +325,7 @@ const WebImportModal = ({
                   Back
                 </Button>
                 <Button variant="brand-primary" size="medium" icon={<FeatherDownload />} onClick={handleImport}>
-                  Import {metadata.type === 'video' ? 'Video' : `${metadata.itemCount} Image${metadata.itemCount !== 1 ? 's' : ''}`}
+                  Import {metadata.type === 'video' ? 'Video' : `${metadata.type === 'gallery' && metadata.itemCount > 10 ? maxItems : metadata.itemCount} Image${(metadata.type === 'gallery' && metadata.itemCount > 10 ? maxItems : metadata.itemCount) !== 1 ? 's' : ''}`}
                 </Button>
               </div>
             </>

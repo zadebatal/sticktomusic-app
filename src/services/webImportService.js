@@ -76,21 +76,24 @@ export async function analyzeUrl(url) {
  * Start a download job — returns jobId for polling.
  * @param {string} url
  * @param {string} artistId
+ * @param {number} [maxItems] - Max items to download for galleries (default: 100)
  * @returns {Promise<{ jobId: string }>}
  */
-export async function startDownload(url, artistId) {
+export async function startDownload(url, artistId, maxItems) {
   const token = await getToken();
+  const body = {
+    url,
+    artistId,
+    uploadPath: `artists/${artistId}/web-imports`,
+  };
+  if (maxItems) body.maxItems = maxItems;
   const resp = await fetch(`${PROXY_URL}?action=download`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify({
-      url,
-      artistId,
-      uploadPath: `artists/${artistId}/web-imports`,
-    }),
+    body: JSON.stringify(body),
   });
 
   const data = await resp.json();
