@@ -324,7 +324,7 @@ const WebImportModal = ({
                 <Button variant="neutral-secondary" size="medium" onClick={() => { setState(STATES.INPUT); setMetadata(null); setError(null); }}>
                   Back
                 </Button>
-                <Button variant="brand-primary" size="medium" icon={<FeatherDownload />} onClick={handleImport}>
+                <Button variant="brand-primary" size="medium" icon={<FeatherDownload />} onClick={handleImport} disabled={metadata.type !== 'video' && metadata.itemCount === 0}>
                   Import {metadata.type === 'video' ? 'Video' : `${metadata.type === 'gallery' && metadata.itemCount > 10 ? maxItems : metadata.itemCount} Image${(metadata.type === 'gallery' && metadata.itemCount > 10 ? maxItems : metadata.itemCount) !== 1 ? 's' : ''}`}
                 </Button>
               </div>
