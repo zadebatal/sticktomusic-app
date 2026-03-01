@@ -2064,15 +2064,21 @@ const SlideshowEditor = ({
     try {
       // Gather image banks — respect selectedSource dropdown
       // If a specific collection is selected, only pull from that collection's banks
+      // If category is a niche (has banks), scope to that niche only to prevent cross-niche mixing
       const sourceColId = selectedSource.includes(':') ? selectedSource.split(':')[0] : null;
+      const categoryIsNiche = category?.id && category.id !== 'library-session' && (category.banks || []).length > 0;
       const sourceCollections = sourceColId
         ? collections.filter(c => c.id === sourceColId)
-        : collections;
+        : categoryIsNiche
+          ? collections.filter(c => c.id === category.id)
+          : collections;
 
       // Start with category banks
       const numBanks = Math.max(categoryBankImages.length, 2);
       const allBankImages = Array.from({ length: numBanks }, (_, idx) => [...(categoryBankImages[idx] || [])]);
-      if (sourceCollections.length > 0) {
+      // Only merge from collections if category banks are empty (avoids doubling niche images)
+      const categoryHasImages = categoryBankImages.some(b => (b || []).length > 0);
+      if (!categoryHasImages && sourceCollections.length > 0) {
         for (const col of sourceCollections) {
           const migrated = migrateCollectionBanks(col);
           const banks = migrated.banks || [];
