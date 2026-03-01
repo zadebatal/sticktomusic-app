@@ -4502,9 +4502,9 @@ const loadImageForCanvas = (url) => {
  * @param {Function} onProgress - callback(done, total, generated)
  * @returns {Promise<{generated: number, failed: number}>}
  */
-export const THUMB_VERSION = 2; // v1 = 50px/20%, v2 = 200px/40%
-export const THUMB_MAX_SIZE = 200;
-export const THUMB_QUALITY = 0.4;
+export const THUMB_VERSION = 3; // v1 = 50px/20%, v2 = 200px/40%, v3 = 400px/65%
+export const THUMB_MAX_SIZE = 400;
+export const THUMB_QUALITY = 0.65;
 
 export const migrateThumbnails = async (db, artistId, libraryItems, uploadFileFn, onProgress) => {
   const images = (libraryItems || []).filter(item =>
@@ -4565,7 +4565,7 @@ export const migrateThumbnails = async (db, artistId, libraryItems, uploadFileFn
  */
 export const migrateVideoThumbnails = async (db, artistId, libraryItems, uploadFileFn, onProgress) => {
   const videos = (libraryItems || []).filter(item =>
-    item.type === MEDIA_TYPES.VIDEO && item.url && !item.thumbnailUrl
+    item.type === MEDIA_TYPES.VIDEO && item.url && (!item.thumbnailUrl || item.thumbVersion !== THUMB_VERSION)
   );
 
   if (videos.length === 0) return { generated: 0, failed: 0 };
@@ -4610,7 +4610,7 @@ export const migrateVideoThumbnails = async (db, artistId, libraryItems, uploadF
       });
 
       // Draw frame to canvas
-      const maxSize = 150;
+      const maxSize = 400;
       const vw = video.videoWidth || 320;
       const vh = video.videoHeight || 180;
       const scale = Math.min(1, maxSize / Math.max(vw, vh));
@@ -4624,7 +4624,7 @@ export const migrateVideoThumbnails = async (db, artistId, libraryItems, uploadF
       if (videoUrl !== item.url) URL.revokeObjectURL(videoUrl);
 
       // Convert to JPEG
-      const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.5));
+      const thumbBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.7));
       if (!thumbBlob) throw new Error('Canvas toBlob returned null');
 
       // Upload
@@ -4632,7 +4632,7 @@ export const migrateVideoThumbnails = async (db, artistId, libraryItems, uploadF
       const { url: thumbnailUrl } = await uploadFileFn(thumbFile, 'thumbnails');
 
       // Update record
-      await updateLibraryItemAsync(db, artistId, item.id, { thumbnailUrl });
+      await updateLibraryItemAsync(db, artistId, item.id, { thumbnailUrl, thumbVersion: THUMB_VERSION });
 
       generated++;
       log(`[VideoThumbMigration] ✓ ${i + 1}/${videos.length} — ${item.name}`);
