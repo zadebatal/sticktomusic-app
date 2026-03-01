@@ -1342,29 +1342,6 @@ const StickToMusic = () => {
   };
 
   // Helper to get visible artists — operators only see artists they own (ownerOperatorId)
-  // Build stable photoURL lookup: artistId → photoURL from linked allowedUsers
-  const artistPhotoMap = useMemo(() => {
-    const map = {};
-    for (const u of allowedUsers) {
-      if (!u.photoURL) continue;
-      if (u.linkedArtistId) map[u.linkedArtistId] = u.photoURL;
-      if (u.artistId) map[u.artistId] = u.photoURL;
-    }
-    // Current user's Firebase Auth photo (always available from Google sign-in)
-    // covers the case where allowedUsers doc hasn't been synced yet
-    if (currentAuthUser?.photoURL) {
-      const rec = allowedUsers.find(u => u.email?.toLowerCase() === currentAuthUser.email?.toLowerCase());
-      if (rec?.artistId && !map[rec.artistId]) map[rec.artistId] = currentAuthUser.photoURL;
-      if (rec?.linkedArtistId && !map[rec.linkedArtistId]) map[rec.linkedArtistId] = currentAuthUser.photoURL;
-    }
-    return map;
-  }, [allowedUsers, currentAuthUser]);
-
-  const enrichArtist = useCallback((a) => {
-    const photoURL = a.photoURL || artistPhotoMap[a.id] || null;
-    return { id: a.id, name: a.name, ownerOperatorId: a.ownerOperatorId || null, photoURL };
-  }, [artistPhotoMap]);
-
   const getVisibleArtists = () => {
     const allArtists = firestoreArtists.map(enrichArtist);
 
@@ -1736,6 +1713,34 @@ const StickToMusic = () => {
     });
     return mapping;
   }, [latePages]);
+
+  // Build stable photoURL lookup: artistId → photoURL from allowedUsers, Auth, or Late pages
+  const artistPhotoMap = useMemo(() => {
+    const map = {};
+    // Source 1: allowedUsers docs (uploaded profile pictures)
+    for (const u of allowedUsers) {
+      if (!u.photoURL) continue;
+      if (u.linkedArtistId) map[u.linkedArtistId] = u.photoURL;
+      if (u.artistId) map[u.artistId] = u.photoURL;
+    }
+    // Source 2: Current user's Firebase Auth photo (Google sign-in)
+    if (currentAuthUser?.photoURL) {
+      const rec = allowedUsers.find(u => u.email?.toLowerCase() === currentAuthUser.email?.toLowerCase());
+      if (rec?.artistId && !map[rec.artistId]) map[rec.artistId] = currentAuthUser.photoURL;
+      if (rec?.linkedArtistId && !map[rec.linkedArtistId]) map[rec.linkedArtistId] = currentAuthUser.photoURL;
+    }
+    // Source 3: Late.co page profile images (most reliable for artists)
+    for (const page of latePages) {
+      if (!page.profileImage || !page.artistId) continue;
+      if (!map[page.artistId]) map[page.artistId] = page.profileImage;
+    }
+    return map;
+  }, [allowedUsers, currentAuthUser, latePages]);
+
+  const enrichArtist = useCallback((a) => {
+    const photoURL = a.photoURL || artistPhotoMap[a.id] || null;
+    return { id: a.id, name: a.name, ownerOperatorId: a.ownerOperatorId || null, photoURL };
+  }, [artistPhotoMap]);
 
   // Derive manual accounts from artist docs (auto-updates via onSnapshot)
   const manualAccountsByArtist = useMemo(() => {
