@@ -1203,17 +1203,29 @@ const StickToMusic = () => {
     }
   }, [authChecked, firestoreLoaded, currentAuthUser, allowedUsers]);
 
-  // Sync Firebase Auth photoURL to allowedUsers doc (once per session)
+  // Sync Firebase Auth photoURLs to allowedUsers docs (once per session)
   const photoSyncedRef = useRef(false);
   useEffect(() => {
-    if (photoSyncedRef.current || !currentAuthUser?.photoURL || !db || !allowedUsers.length) return;
-    const userEmail = currentAuthUser.email?.toLowerCase();
-    const existingDoc = allowedUsers.find(u => u.email?.toLowerCase() === userEmail);
-    if (existingDoc && existingDoc.photoURL !== currentAuthUser.photoURL) {
-      photoSyncedRef.current = true;
-      updateDoc(doc(db, 'allowedUsers', userEmail), { photoURL: currentAuthUser.photoURL }).catch(() => {});
-    } else {
-      photoSyncedRef.current = true;
+    if (photoSyncedRef.current || !currentAuthUser || !db || !allowedUsers.length) return;
+    photoSyncedRef.current = true;
+
+    // Sync current user's photo client-side
+    if (currentAuthUser.photoURL) {
+      const userEmail = currentAuthUser.email?.toLowerCase();
+      const existingDoc = allowedUsers.find(u => u.email?.toLowerCase() === userEmail);
+      if (existingDoc && existingDoc.photoURL !== currentAuthUser.photoURL) {
+        updateDoc(doc(db, 'allowedUsers', userEmail), { photoURL: currentAuthUser.photoURL }).catch(() => {});
+      }
+    }
+
+    // Conductors: server-side sync ALL users' photos from Firebase Auth
+    if (CONDUCTOR_EMAILS.includes(currentAuthUser.email?.toLowerCase())) {
+      currentAuthUser.getIdToken().then(token =>
+        fetch('/api/sync-photos', { headers: { Authorization: `Bearer ${token}` } })
+          .then(r => r.json())
+          .then(data => { if (data.synced > 0) log(`Synced ${data.synced} user photos`); })
+          .catch(() => {})
+      );
     }
   }, [currentAuthUser, allowedUsers]);
 
