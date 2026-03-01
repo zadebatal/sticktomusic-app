@@ -237,8 +237,8 @@ const ArtistDashboard = ({
       groups[groupKey].pages.push(page);
       groups[groupKey].handles.add(handle);
       groups[groupKey].totalFollowers += (page.followers || page.follower_count || 0);
-      if (!groups[groupKey].profilePic && page.profilePicture) {
-        groups[groupKey].profilePic = page.profilePicture;
+      if (!groups[groupKey].profilePic && page.profileImage) {
+        groups[groupKey].profilePic = page.profileImage;
       }
     });
     // Convert handle sets to arrays
