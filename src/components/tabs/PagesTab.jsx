@@ -572,6 +572,11 @@ const PagesTab = ({
                 sum + group.pages.reduce((s, p) => s + (p.followers || 0), 0), 0
               );
 
+              // Artist profile picture: from artist doc, linked user, or first Late page
+              const artistPhoto = artist.photoURL ||
+                handleEntries.flatMap(([, g]) => g.pages).find(p => p.profileImage)?.profileImage ||
+                null;
+
               // All platforms already connected (Late or manual) across all handles for this artist
               const allConnectedPlatforms = new Set();
               handleEntries.forEach(([, group]) => {
@@ -588,8 +593,8 @@ const PagesTab = ({
                     className={`cursor-pointer ${isMobile ? 'px-4 py-3 min-h-[56px]' : 'px-6 py-4'} flex items-center justify-between ${t.cardBg}`}
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      {artist.photoURL ? (
-                        <img src={artist.photoURL} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
+                      {artistPhoto ? (
+                        <img src={artistPhoto} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
                       ) : (
                         <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shrink-0 bg-indigo-500/15 text-indigo-500">
                           {artist.name?.[0]?.toUpperCase() || '?'}

@@ -1201,6 +1201,14 @@ const StickToMusic = () => {
     } else {
       setUser(null);
     }
+    // Sync Firebase Auth photoURL to allowedUsers doc so other users can see it
+    if (currentAuthUser?.photoURL && db) {
+      const userEmail = currentAuthUser.email?.toLowerCase();
+      const existingDoc = allowedUsers.find(u => u.email?.toLowerCase() === userEmail);
+      if (existingDoc && existingDoc.photoURL !== currentAuthUser.photoURL) {
+        updateDoc(doc(db, 'allowedUsers', userEmail), { photoURL: currentAuthUser.photoURL }).catch(() => {});
+      }
+    }
   }, [authChecked, firestoreLoaded, currentAuthUser, allowedUsers]);
 
   // Restore saved page after user is authenticated (once only)
@@ -1328,8 +1336,20 @@ const StickToMusic = () => {
   };
 
   // Helper to get visible artists — operators only see artists they own (ownerOperatorId)
+  // Enrich an artist object with photoURL from linked user if not on the artist doc
+  const enrichArtist = (a) => {
+    let photoURL = a.photoURL || null;
+    if (!photoURL) {
+      const linkedUser = allowedUsers.find(u =>
+        (u.linkedArtistId === a.id || u.artistId === a.id) && u.photoURL
+      );
+      if (linkedUser) photoURL = linkedUser.photoURL;
+    }
+    return { id: a.id, name: a.name, ownerOperatorId: a.ownerOperatorId || null, photoURL };
+  };
+
   const getVisibleArtists = () => {
-    const allArtists = firestoreArtists.map(a => ({ id: a.id, name: a.name, ownerOperatorId: a.ownerOperatorId || null }));
+    const allArtists = firestoreArtists.map(enrichArtist);
 
     if (isConductor(user)) return allArtists;
 
@@ -3290,7 +3310,7 @@ const StickToMusic = () => {
           user={user}
           onLogout={handleLogout}
           userRole={user?.role || 'artist'}
-          visibleArtists={[firestoreArtists.find(a => a.id === effectiveArtistId)].filter(Boolean)}
+          visibleArtists={[firestoreArtists.find(a => a.id === effectiveArtistId)].filter(Boolean).map(enrichArtist)}
           currentArtistId={effectiveArtistId}
           onArtistChange={() => {}}
         >
@@ -3302,7 +3322,7 @@ const StickToMusic = () => {
               db={db}
               user={user}
               onClose={() => { setArtistTab('dashboard'); }}
-              artists={[firestoreArtists.find(a => a.id === effectiveArtistId)].filter(Boolean)}
+              artists={[firestoreArtists.find(a => a.id === effectiveArtistId)].filter(Boolean).map(enrichArtist)}
               artistId={effectiveArtistId}
               onArtistChange={() => {}}
               lateAccountIds={derivedLateAccountIds}
@@ -3329,7 +3349,7 @@ const StickToMusic = () => {
                 }
               }}
               onBack={() => setArtistTab('dashboard')}
-              visibleArtists={[firestoreArtists.find(a => a.id === effectiveArtistId)].filter(Boolean)}
+              visibleArtists={[firestoreArtists.find(a => a.id === effectiveArtistId)].filter(Boolean).map(enrichArtist)}
               onArtistChange={() => {}}
             />
           ) : (
@@ -3355,7 +3375,7 @@ const StickToMusic = () => {
             {artistTab === 'analytics' && (
               <AnalyticsDashboard
                 artistId={effectiveArtistId}
-                artists={[firestoreArtists.find(a => a.id === effectiveArtistId)].filter(Boolean)}
+                artists={[firestoreArtists.find(a => a.id === effectiveArtistId)].filter(Boolean).map(enrichArtist)}
                 lateConnected={artistLateConnected}
                 onSyncLate={async () => {
                   const result = await lateApi.fetchScheduledPosts(1, effectiveArtistId);
@@ -3753,7 +3773,7 @@ const StickToMusic = () => {
                     currentUserId && artist.ownerOperatorId === currentUserId
                   );
                 }
-                return displayArtists;
+                return displayArtists.map(enrichArtist);
               })()}
               user={user}
               currentArtistId={currentArtistId}
