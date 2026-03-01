@@ -35,8 +35,11 @@ async function verifyConductor(req) {
   const token = authHeader.split('Bearer ')[1];
   const decoded = await adminAuth.verifyIdToken(token);
 
-  const conductorEmails = (process.env.REACT_APP_CONDUCTOR_EMAILS || 'zade@sticktomusic.com,zadebatal@gmail.com')
-    .split(',').map(e => e.trim().toLowerCase());
+  const conductorEmailsEnv = process.env.REACT_APP_CONDUCTOR_EMAILS;
+  if (!conductorEmailsEnv) {
+    throw new Error('REACT_APP_CONDUCTOR_EMAILS env var not configured');
+  }
+  const conductorEmails = conductorEmailsEnv.split(',').map(e => e.trim().toLowerCase());
 
   if (!conductorEmails.includes(decoded.email?.toLowerCase())) {
     throw new Error('Not a conductor');

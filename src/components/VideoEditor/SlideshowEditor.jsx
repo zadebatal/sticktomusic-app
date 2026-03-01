@@ -1574,9 +1574,11 @@ const SlideshowEditor = ({
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointercancel', handleMouseUp);
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointercancel', handleMouseUp);
     };
   }, [isDraggingImage, isResizingImage, imgDragStart, imgTransformStart, updateSlideTransform]);
 
@@ -1795,9 +1797,11 @@ const SlideshowEditor = ({
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointercancel', handleMouseUp);
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointercancel', handleMouseUp);
     };
   }, [draggingTextId, selectedSlideIndex]);
 
@@ -1832,9 +1836,11 @@ const SlideshowEditor = ({
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointercancel', handleMouseUp);
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointercancel', handleMouseUp);
     };
   }, [resizingTextId, selectedSlideIndex]);
 

@@ -104,6 +104,18 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Verify webhook secret (shared secret passed as query param or header)
+  const webhookSecret = process.env.LATE_WEBHOOK_SECRET;
+  if (webhookSecret) {
+    const providedSecret = req.query.secret || req.headers['x-webhook-secret'];
+    if (providedSecret !== webhookSecret) {
+      console.warn('[Late Webhook] Invalid or missing webhook secret');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+  } else {
+    console.warn('[Late Webhook] LATE_WEBHOOK_SECRET not configured — webhook is unprotected');
+  }
+
   try {
     const { event, post_id, published_at, platforms } = req.body;
 

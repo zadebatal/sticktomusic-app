@@ -107,10 +107,12 @@ const DraggableTextOverlay = ({
       dragStartRef.current = null;
       document.removeEventListener('pointermove', moveHandler);
       document.removeEventListener('pointerup', upHandler);
+      document.removeEventListener('pointercancel', upHandler);
     };
 
     document.addEventListener('pointermove', moveHandler);
     document.addEventListener('pointerup', upHandler);
+    document.addEventListener('pointercancel', upHandler);
   }, [position, getContainerRect, onPositionChange]);
 
   // Resize via corner handle
@@ -137,10 +139,12 @@ const DraggableTextOverlay = ({
       dragStartRef.current = null;
       document.removeEventListener('pointermove', moveHandler);
       document.removeEventListener('pointerup', upHandler);
+      document.removeEventListener('pointercancel', upHandler);
     };
 
     document.addEventListener('pointermove', moveHandler);
     document.addEventListener('pointerup', upHandler);
+    document.addEventListener('pointercancel', upHandler);
   }, [position, getContainerRect, onPositionChange]);
 
   const handleDoubleClick = useCallback((e) => {

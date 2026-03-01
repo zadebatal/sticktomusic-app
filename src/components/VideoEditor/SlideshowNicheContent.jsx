@@ -236,7 +236,7 @@ const SlideshowNicheContent = ({
   return (
     <div className="flex items-stretch overflow-hidden flex-1 self-stretch">
       {/* Center — Slide Banks + Audio */}
-      <div className="flex grow shrink-0 basis-0 flex-col self-stretch overflow-hidden">
+      <div className="flex grow basis-0 min-h-0 flex-col self-stretch overflow-hidden">
         <div className={slideCount > 5
           ? 'grid grid-cols-4 gap-3 flex-1 min-h-0 overflow-y-auto px-4 py-4 pr-1'
           : 'flex items-stretch flex-1 min-h-0 overflow-x-auto overflow-y-hidden px-4 py-4 pr-1 gap-3'

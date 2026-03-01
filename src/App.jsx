@@ -108,8 +108,6 @@ import {
 } from 'firebase/firestore';
 import log from './utils/logger';
 import { loadSettings, saveSettings, clearSettingsCache } from './services/settingsService';
-// ONE-TIME: granola.golk setup — remove after confirmed
-import { setupGranolaGolk } from './utils/setupGranolaGolk';
 
 // Firebase configuration - loaded from environment variables for security
 // Set these in .env.local for development or Vercel dashboard for production
@@ -132,9 +130,6 @@ if (getApps().length === 0) {
 const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
 const googleProvider = new GoogleAuthProvider();
-
-// ONE-TIME: Create granola.golk project under Boon — remove after confirmed
-setupGranolaGolk(db);
 
 // Stripe Configuration - loaded from environment variable for security
 const STRIPE_PUBLISHABLE_KEY = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY;
@@ -1230,7 +1225,7 @@ const StickToMusic = () => {
           .then(r => r.json())
           .then(data => { if (data.synced > 0) log(`Synced ${data.synced} user photos`); })
           .catch(() => {})
-      );
+      ).catch(() => {});
     }
   }, [currentAuthUser, allowedUsers]);
 

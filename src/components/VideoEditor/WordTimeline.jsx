@@ -998,7 +998,8 @@ const WordTimeline = ({
       handleUndo,
       selectAllWords,
       clearSelection,
-      nudgeSelectedWords
+      nudgeSelectedWords,
+      hasSelection: selectedWordIndices.length > 0
     };
   });
 
@@ -1046,7 +1047,7 @@ const WordTimeline = ({
           cancelDel?.();
         } else if (editingWordId) {
           cancelEdit?.();
-        } else if (selectedWordIndices.length > 0) {
+        } else if (callbacksRef.current.hasSelection) {
           clearSel?.();
         } else {
           close?.();
@@ -1365,13 +1366,13 @@ const WordTimeline = ({
             <div style={styles.cellModeRow}>
               <span style={{ fontSize: '13px', color: theme.text.secondary, whiteSpace: 'nowrap' }}>Text Cells:</span>
               <ToggleGroup value={cellMode} onValueChange={(v) => v && setCellMode(v)}>
-                <ToggleGroup.Item value="word">Word</ToggleGroup.Item>
-                <ToggleGroup.Item value="line">Line</ToggleGroup.Item>
-                <ToggleGroup.Item value="section">Section</ToggleGroup.Item>
+                <ToggleGroup.Item icon={null} value="word">Word</ToggleGroup.Item>
+                <ToggleGroup.Item icon={null} value="line">Line</ToggleGroup.Item>
+                <ToggleGroup.Item icon={null} value="section">Section</ToggleGroup.Item>
                 {beats.length > 0 && <ToggleGroup.Item value="music" icon={<FeatherMusic />}>Music</ToggleGroup.Item>}
               </ToggleGroup>
               <span style={{ fontSize: '12px', color: theme.text.muted }}>
-                {buildTextCells().length} overlay{buildTextCells().length !== 1 ? 's' : ''}
+                {(() => { const n = buildTextCells().length; return `${n} overlay${n !== 1 ? 's' : ''}`; })()}
               </span>
               {/* Text style preview */}
               {textStyle && (

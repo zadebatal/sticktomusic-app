@@ -575,9 +575,11 @@ const PhotoMontageEditor = ({
     };
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointercancel', handleMouseUp);
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointercancel', handleMouseUp);
       document.body.style.userSelect = '';
       document.body.style.WebkitUserSelect = '';
     };
@@ -960,9 +962,11 @@ const PhotoMontageEditor = ({
       setTextMarquee(null);
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
     };
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
   }, [totalDuration, textOverlays, effectivePxPerSecHook]);
 
   // ── Preset handler ──
@@ -1832,9 +1836,11 @@ const PhotoMontageEditor = ({
                           const onUp = () => {
                             document.removeEventListener('mousemove', onMove);
                             document.removeEventListener('mouseup', onUp);
+                            document.removeEventListener('pointercancel', onUp);
                           };
                           document.addEventListener('mousemove', onMove);
                           document.addEventListener('mouseup', onUp);
+                          document.addEventListener('pointercancel', onUp);
                         }}
                       >
                         {rulerTicks.map((tick, i) => {
@@ -1928,9 +1934,10 @@ const PhotoMontageEditor = ({
                                         const newStart = Math.max(0, Math.min(end - 0.5, origStart + dx));
                                         updateTextOverlay(overlay.id, { startTime: newStart });
                                       };
-                                      const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+                                      const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up); };
                                       document.addEventListener('pointermove', move);
                                       document.addEventListener('pointerup', up);
+                                      document.addEventListener('pointercancel', up);
                                     }}
                                   />
                                   <div
@@ -1944,9 +1951,10 @@ const PhotoMontageEditor = ({
                                         const newEnd = Math.max(start + 0.5, Math.min(totalDuration, origEnd + dx));
                                         updateTextOverlay(overlay.id, { endTime: newEnd });
                                       };
-                                      const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+                                      const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up); };
                                       document.addEventListener('pointermove', move);
                                       document.addEventListener('pointerup', up);
+                                      document.addEventListener('pointercancel', up);
                                     }}
                                   />
                                 </div>

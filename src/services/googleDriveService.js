@@ -160,8 +160,10 @@ export async function listFiles(folderId = 'root', options = {}) {
   await ensureAuth();
 
   const { pageSize = 20, pageToken, mimeType } = options;
-  let query = `'${folderId}' in parents and trashed = false`;
-  if (mimeType) {
+  // Validate folderId to prevent query injection (only alphanumeric, hyphens, underscores, or 'root')
+  const safeFolderId = (folderId === 'root' || /^[a-zA-Z0-9_-]+$/.test(folderId)) ? folderId : 'root';
+  let query = `'${safeFolderId}' in parents and trashed = false`;
+  if (mimeType && /^(image|video|audio|application)\/.+$/.test(mimeType)) {
     query += ` and mimeType = '${mimeType}'`;
   }
 

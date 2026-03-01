@@ -576,9 +576,11 @@ const SoloClipEditor = ({
     };
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointercancel', handleMouseUp);
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointercancel', handleMouseUp);
       document.body.style.userSelect = '';
       document.body.style.WebkitUserSelect = '';
     };
@@ -1259,10 +1261,10 @@ const SoloClipEditor = ({
         />
 
         {/* ═══ MAIN CONTENT ═══ */}
-        <div className="flex grow basis-0 min-h-0 self-stretch overflow-hidden">
+        <div className={`flex grow basis-0 min-h-0 self-stretch overflow-hidden ${isMobile ? 'flex-col overflow-auto' : ''}`}>
 
           {/* LEFT: Preview + Controls */}
-          <div className="flex grow shrink-0 basis-0 flex-col items-center bg-black overflow-hidden">
+          <div className="flex grow basis-0 min-h-0 flex-col items-center bg-black overflow-hidden">
             <div className="flex w-full max-w-[448px] grow flex-col items-center gap-4 py-6 px-4 overflow-auto">
               {/* Video Preview */}
               <div
@@ -1360,7 +1362,7 @@ const SoloClipEditor = ({
                       className="w-full px-3 py-2 bg-[#0a0a0aff] border border-neutral-800 rounded-lg text-[#ffffffff] text-[13px] outline-none cursor-pointer mb-2 min-h-[44px]">
                       <option value="category">Selected Clips</option>
                       <option value="all">All Videos (Library)</option>
-                      {collections.map(col => (<option key={col.id} value={col.id}>{col.name}</option>))}
+                      {collections.filter(c => !category?.projectId || c.projectId === category.projectId).map(col => (<option key={col.id} value={col.id}>{col.name}</option>))}
                     </select>
                     <div className="grid grid-cols-3 gap-2">
                       {visibleVideos.map((video, i) => (
@@ -1626,9 +1628,10 @@ const SoloClipEditor = ({
                                         const newStart = Math.max(0, Math.min(end - 0.5, origStart + dx));
                                         updateTextOverlay(overlay.id, { startTime: newStart });
                                       };
-                                      const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+                                      const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up); };
                                       document.addEventListener('pointermove', move);
                                       document.addEventListener('pointerup', up);
+                                      document.addEventListener('pointercancel', up);
                                     }}
                                   />
                                   {/* Right resize handle */}
@@ -1643,9 +1646,10 @@ const SoloClipEditor = ({
                                         const newEnd = Math.max(start + 0.5, Math.min(timelineDuration, origEnd + dx));
                                         updateTextOverlay(overlay.id, { endTime: newEnd });
                                       };
-                                      const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+                                      const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up); };
                                       document.addEventListener('pointermove', move);
                                       document.addEventListener('pointerup', up);
+                                      document.addEventListener('pointercancel', up);
                                     }}
                                   />
                                 </div>
@@ -1788,7 +1792,7 @@ const SoloClipEditor = ({
                       className="w-full px-3 py-2 bg-black border border-neutral-800 rounded-md text-[#ffffffff] text-[13px] outline-none cursor-pointer">
                       <option value="category">Selected Clips</option>
                       <option value="all">All Videos (Library)</option>
-                      {collections.map(col => (<option key={col.id} value={col.id}>{col.name}</option>))}
+                      {collections.filter(c => !category?.projectId || c.projectId === category.projectId).map(col => (<option key={col.id} value={col.id}>{col.name}</option>))}
                     </select>
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-2">

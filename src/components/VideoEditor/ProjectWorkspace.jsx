@@ -827,6 +827,16 @@ const ProjectWorkspace = ({
     toastSuccess(`Pulled ${newIds.length} item${newIds.length !== 1 ? 's' : ''} into niche`);
   }, [artistId, activeNicheId, projectId, project, db, toastSuccess]);
 
+  if (!artistId) {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-3">
+        <span className="text-neutral-400">No artist assigned to your account.</span>
+        <span className="text-neutral-500 text-sm">Ask your conductor to assign you to an artist in Settings → User Management.</span>
+        <Button variant="neutral-secondary" size="medium" onClick={onBack}>Go Back</Button>
+      </div>
+    );
+  }
+
   if (!project) {
     return (
       <div className="flex h-full w-full items-center justify-center">
@@ -1405,7 +1415,8 @@ const ImportFromLibraryModal = ({ items: defaultItems, onImport: defaultOnImport
     if (dragStart) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
-      return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
+      window.addEventListener('pointercancel', handleMouseUp);
+      return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('pointercancel', handleMouseUp); };
     }
   }, [dragStart, handleMouseMove, handleMouseUp]);
 

@@ -940,10 +940,12 @@ const ClipperEditor = ({
                             document.body.style.userSelect = '';
                             window.removeEventListener('mousemove', handleDragMove);
                             window.removeEventListener('mouseup', handleDragEnd);
+                            window.removeEventListener('pointercancel', handleDragEnd);
                             if (wasPlaying) { videoRef.current?.play()?.catch(() => {}); setIsPlaying(true); }
                           };
                           window.addEventListener('mousemove', handleDragMove);
                           window.addEventListener('mouseup', handleDragEnd);
+                          window.addEventListener('pointercancel', handleDragEnd);
                         }}
                       >
                         <div style={{ position: 'absolute', left: '-6px', right: '-6px', top: 0, bottom: 0, cursor: 'ew-resize' }} />

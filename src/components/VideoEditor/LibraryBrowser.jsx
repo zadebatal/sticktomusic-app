@@ -516,9 +516,11 @@ const LibraryBrowser = ({
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('pointercancel', handleMouseUp);
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('pointercancel', handleMouseUp);
     };
   }, [isDragSelecting, dragStart, onSelectMedia, selectedMediaIds]);
 

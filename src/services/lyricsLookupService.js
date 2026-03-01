@@ -142,7 +142,7 @@ export function parseLRC(lrcString) {
  */
 export function lrcToWordTimeline(lines, fullDuration) {
   if (!lines || lines.length === 0) {
-    return { text: '', words: [] };
+    return { text: '', words: [], lines: [] };
   }
 
   // Adjust last line endTime to full duration if available

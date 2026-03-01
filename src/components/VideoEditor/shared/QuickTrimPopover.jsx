@@ -75,10 +75,12 @@ const QuickTrimPopover = ({ item, initialTrimStart = 0, initialTrimEnd, onSave, 
       draggingRef.current = null;
       document.removeEventListener('pointermove', moveHandler);
       document.removeEventListener('pointerup', upHandler);
+      document.removeEventListener('pointercancel', upHandler);
     };
 
     document.addEventListener('pointermove', moveHandler);
     document.addEventListener('pointerup', upHandler);
+    document.addEventListener('pointercancel', upHandler);
   }, [trimStart, trimEnd, getEffectiveDuration]);
 
   // Preview trimmed region

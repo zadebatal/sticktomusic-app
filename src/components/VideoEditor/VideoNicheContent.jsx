@@ -395,7 +395,7 @@ const VideoNicheContent = ({
   return (
     <div className="flex items-stretch overflow-hidden flex-1 self-stretch">
       {/* Left/center — scrollable content */}
-      <div className="flex grow shrink-0 basis-0 flex-col items-center self-stretch overflow-y-auto">
+      <div className="flex grow basis-0 min-h-0 flex-col items-center self-stretch overflow-y-auto">
         {/* Media section */}
         {nicheMedia.length === 0 ? (
           /* Empty state — hero with upload/import */

@@ -62,6 +62,24 @@ export default async function handler(req, res) {
 
     const normalizedEmail = email.toLowerCase().trim();
 
+    // Basic email format validation
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    // Rate limit: max 5 applications per hour (across all emails)
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const recentApps = await db.collection('applications')
+      .where('submitterIp', '==', ip)
+      .where('submittedAt', '>=', oneHourAgo)
+      .limit(5)
+      .get();
+
+    if (recentApps.size >= 5) {
+      return res.status(429).json({ error: 'Too many applications. Please try again later.' });
+    }
+
     // Create application record in Firestore
     const application = {
       email: normalizedEmail,
@@ -71,6 +89,7 @@ export default async function handler(req, res) {
       role: role || 'artist',
       status: 'pending_review', // Conductor must approve before charging
       submittedAt: new Date().toISOString(),
+      submitterIp: ip,
     };
 
     // Check for existing pending application

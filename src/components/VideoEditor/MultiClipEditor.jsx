@@ -583,7 +583,7 @@ const MultiClipEditor = ({
         }
         audioRef.current.play().catch(() => {});
       }
-      videoRef.current.play();
+      videoRef.current.play().catch(() => {});
       animationRef.current = requestAnimationFrame(playbackLoop);
     }
     setIsPlaying(!isPlaying);
@@ -668,9 +668,11 @@ const MultiClipEditor = ({
     };
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointercancel', handleMouseUp);
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointercancel', handleMouseUp);
       document.body.style.userSelect = '';
       document.body.style.WebkitUserSelect = '';
     };
@@ -1012,9 +1014,11 @@ const MultiClipEditor = ({
     document.body.style.cursor = 'col-resize';
     document.addEventListener('mousemove', handleCutLineMove);
     document.addEventListener('mouseup', handleCutLineUp);
+    document.addEventListener('pointercancel', handleCutLineUp);
     return () => {
       document.removeEventListener('mousemove', handleCutLineMove);
       document.removeEventListener('mouseup', handleCutLineUp);
+      document.removeEventListener('pointercancel', handleCutLineUp);
       document.body.style.cursor = '';
     };
   }, [cutLineDrag, pxPerSec, setClips]);
@@ -1077,9 +1081,11 @@ const MultiClipEditor = ({
     document.body.style.cursor = 'ew-resize';
     document.addEventListener('mousemove', handleSlipMove);
     document.addEventListener('mouseup', handleSlipUp);
+    document.addEventListener('pointercancel', handleSlipUp);
     return () => {
       document.removeEventListener('mousemove', handleSlipMove);
       document.removeEventListener('mouseup', handleSlipUp);
+      document.removeEventListener('pointercancel', handleSlipUp);
       document.body.style.cursor = '';
     };
   }, [slipEdit, pxPerSec, setClips, clips, getClipUrl]);
@@ -1754,7 +1760,7 @@ const MultiClipEditor = ({
                       >
                         <option value="category">Selected Clips</option>
                         <option value="all">All Videos (Library)</option>
-                        {collections.map(col => (
+                        {collections.filter(c => !category?.projectId || c.projectId === category.projectId).map(col => (
                           <option key={col.id} value={col.id}>{col.name}</option>
                         ))}
                       </select>
@@ -2261,9 +2267,10 @@ const MultiClipEditor = ({
                                     const newStart = Math.max(0, Math.min(end - 0.5, origStart + dx));
                                     updateTextOverlay(overlay.id, { startTime: newStart });
                                   };
-                                  const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+                                  const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up); };
                                   document.addEventListener('pointermove', move);
                                   document.addEventListener('pointerup', up);
+                                  document.addEventListener('pointercancel', up);
                                 }}
                               />
                               {/* Right resize handle */}
@@ -2278,9 +2285,10 @@ const MultiClipEditor = ({
                                     const newEnd = Math.max(start + 0.5, Math.min(timelineDuration, origEnd + dx));
                                     updateTextOverlay(overlay.id, { endTime: newEnd });
                                   };
-                                  const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+                                  const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up); };
                                   document.addEventListener('pointermove', move);
                                   document.addEventListener('pointerup', up);
+                                  document.addEventListener('pointercancel', up);
                                 }}
                               />
                             </div>
@@ -2514,7 +2522,7 @@ const MultiClipEditor = ({
                     className="w-full px-3 py-2 bg-black border border-neutral-800 rounded-lg text-[#ffffffff] text-[13px] outline-none cursor-pointer">
                     <option value="category">Selected Clips</option>
                     <option value="all">All Videos (Library)</option>
-                    {collections.map(col => <option key={col.id} value={col.id}>{col.name}</option>)}
+                    {collections.filter(c => !category?.projectId || c.projectId === category.projectId).map(col => <option key={col.id} value={col.id}>{col.name}</option>)}
                   </select>
                   {/* Video grid */}
                   <div className="flex justify-between items-center">

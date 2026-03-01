@@ -72,10 +72,12 @@ const PreviewTransport = ({
       scrubbingRef.current = false;
       document.removeEventListener('pointermove', moveHandler);
       document.removeEventListener('pointerup', upHandler);
+      document.removeEventListener('pointercancel', upHandler);
     };
 
     document.addEventListener('pointermove', moveHandler);
     document.addEventListener('pointerup', upHandler);
+    document.addEventListener('pointercancel', upHandler);
   }, [getProgressFromEvent, onScrub, onCellClick, items.length, totalDuration, showPlayhead]);
 
   // --- Progress bar scrub ---
@@ -102,10 +104,12 @@ const PreviewTransport = ({
     const upHandler = () => {
       document.removeEventListener('pointermove', moveHandler);
       document.removeEventListener('pointerup', upHandler);
+      document.removeEventListener('pointercancel', upHandler);
     };
 
     document.addEventListener('pointermove', moveHandler);
     document.addEventListener('pointerup', upHandler);
+    document.addEventListener('pointercancel', upHandler);
   }, [onScrub, totalDuration]);
 
   // --- Text track edge drag ---
@@ -139,10 +143,12 @@ const PreviewTransport = ({
     const upHandler = () => {
       document.removeEventListener('pointermove', moveHandler);
       document.removeEventListener('pointerup', upHandler);
+      document.removeEventListener('pointercancel', upHandler);
     };
 
     document.addEventListener('pointermove', moveHandler);
     document.addEventListener('pointerup', upHandler);
+    document.addEventListener('pointercancel', upHandler);
   }, [textTracks, onTextTrackChange, totalDuration]);
 
   const stripRef = useRef(null);

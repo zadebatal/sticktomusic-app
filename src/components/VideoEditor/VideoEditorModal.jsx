@@ -879,10 +879,12 @@ const VideoEditorModal = ({
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointercancel', handleMouseUp);
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointercancel', handleMouseUp);
     };
   }, [progressDragging, trimmedDuration, handleSeek]);
 
@@ -914,10 +916,12 @@ const VideoEditorModal = ({
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointercancel', handleMouseUp);
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointercancel', handleMouseUp);
       document.body.style.userSelect = '';
       document.body.style.WebkitUserSelect = '';
     };
@@ -1937,9 +1941,11 @@ const VideoEditorModal = ({
 
     document.addEventListener('mousemove', handleResizeMove);
     document.addEventListener('mouseup', handleResizeEnd);
+    document.addEventListener('pointercancel', handleResizeEnd);
     return () => {
       document.removeEventListener('mousemove', handleResizeMove);
       document.removeEventListener('mouseup', handleResizeEnd);
+      document.removeEventListener('pointercancel', handleResizeEnd);
     };
   }, [clipResize, handleUpdateClipDuration, timelineScale]);
 
@@ -1982,9 +1988,11 @@ const VideoEditorModal = ({
     document.body.style.cursor = 'col-resize';
     document.addEventListener('mousemove', handleCutLineMove);
     document.addEventListener('mouseup', handleCutLineUp);
+    document.addEventListener('pointercancel', handleCutLineUp);
     return () => {
       document.removeEventListener('mousemove', handleCutLineMove);
       document.removeEventListener('mouseup', handleCutLineUp);
+      document.removeEventListener('pointercancel', handleCutLineUp);
       document.body.style.cursor = '';
     };
   }, [cutLineDrag, timelineScale, setClips]);
@@ -2056,10 +2064,12 @@ const VideoEditorModal = ({
     document.addEventListener('mousemove', handleSlipMove);
     document.addEventListener('mouseup', handleSlipUp);
     document.addEventListener('pointerup', handleSlipUp);
+    document.addEventListener('pointercancel', handleSlipUp);
     return () => {
       document.removeEventListener('mousemove', handleSlipMove);
       document.removeEventListener('mouseup', handleSlipUp);
       document.removeEventListener('pointerup', handleSlipUp);
+      document.removeEventListener('pointercancel', handleSlipUp);
       document.body.style.cursor = '';
     };
   }, [slipEdit, timelineScale, setClips, clips, getClipUrl]);
@@ -2534,7 +2544,7 @@ const VideoEditorModal = ({
         <div className="flex grow basis-0 min-h-0 self-stretch overflow-hidden">
 
           {/* LEFT: Preview + Controls */}
-          <div className="flex grow shrink-0 basis-0 flex-col items-center bg-black overflow-hidden">
+          <div className="flex grow basis-0 min-h-0 flex-col items-center bg-black overflow-hidden">
             <div className="flex w-full max-w-[448px] grow flex-col items-center gap-4 py-6 px-4 overflow-auto">
               {/* Video Preview */}
               <div ref={previewRef} className="flex items-center justify-center rounded-lg bg-[#1a1a1aff] border border-neutral-800 relative overflow-hidden" style={{ aspectRatio: '9/16', height: '50vh' }} onClick={() => setEditingTextId(null)}>
@@ -3013,9 +3023,10 @@ const VideoEditorModal = ({
                                       const newStart = Math.max(0, Math.min(end - 0.5, origStart + dx));
                                       updateTextOverlay(overlay.id, { startTime: newStart });
                                     };
-                                    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+                                    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up); };
                                     document.addEventListener('pointermove', move);
                                     document.addEventListener('pointerup', up);
+                                    document.addEventListener('pointercancel', up);
                                   }}
                                 />
                                 {/* Right resize handle */}
@@ -3030,9 +3041,10 @@ const VideoEditorModal = ({
                                       const newEnd = Math.max(start + 0.5, Math.min(timelineDuration, origEnd + dx));
                                       updateTextOverlay(overlay.id, { endTime: newEnd });
                                     };
-                                    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+                                    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up); };
                                     document.addEventListener('pointermove', move);
                                     document.addEventListener('pointerup', up);
+                                    document.addEventListener('pointercancel', up);
                                   }}
                                 />
                               </div>
